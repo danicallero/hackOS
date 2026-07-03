@@ -1,0 +1,15 @@
+{
+  "name": "@hackos/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./capabilities": "./src/capabilities.ts",
+    "./events": "./src/events.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "test": "echo 'no tests' && exit 0"
+  }
+}
