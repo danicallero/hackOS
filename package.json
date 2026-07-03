@@ -1,0 +1,22 @@
+{
+  "name": "hackos",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @hackos/api dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "migrate": "pnpm --filter @hackos/api migrate",
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.2",
+    "typescript": "^6.0.3"
+  }
+}
