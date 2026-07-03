@@ -1,0 +1,769 @@
+// hackOS ERD — mirrors backend/db/001_initial_schema.sql (the source of truth).
+// Render: paste into dbdiagram.io, or `npm i -g @dbml/cli && dbml2sql schema.dbml`.
+//
+// One platform, four legacy systems folded in:
+//   Directus    -> challenges (public view), schedule, announcements, enterprises (logo grid)
+//   Haku admin  -> applications, application_responses, accreditation (users.badge_id,
+//                  check_in_logs, time_logs, activity_logs, meal_entitlements, food_intolerances)
+//   FastTrack   -> rooms, queue_entries, room_queue_state, attempt_review (+ versions)
+//   Devpost     -> repos, submissions, devpost_* staging
+//
+// If this drifts from 001_initial_schema.sql, the SQL wins. Edit the SQL, reseed, then fix this.
+
+Project hackos {
+  database_type: 'PostgreSQL'
+}
+
+// ── identity ──────────────────────────────────────────────────────────────
+
+Table users {
+  id integer [pk, increment]
+  email text [not null, unique]
+  name text
+  surname text
+  phone text
+  dni text
+  password_hash text
+  badge_id text [unique, note: 'current accreditation QR; rotations append the old one to badge_id_history']
+  badge_id_history "text[]"
+  food_intolerances "integer[]" [note: 'ids into food_intolerances — array, no FK enforcement']
+  food_intolerance_notes text
+  university_id integer
+  shirt_size text
+  language text [not null, default: 'en', note: 'en | es | gl']
+  email_verified_at timestamptz [note: 'verified == not null; same pattern for secondary']
+  secondary_email text
+  secondary_email_verified_at timestamptz
+  notes text
+  created_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
+
+  Note: 'No role column. Role is derived at login from relationships (get_user_derived_role): admin > judge > sponsor > staff > participant > unregistered.'
+}
+
+Table permission_groups {
+  id integer [pk, increment]
+  name text [not null, unique]
+  description text
+}
+
+Table permission_group_members {
+  user_id integer [not null]
+  group_id integer [not null]
+  assigned_by integer
+  assigned_at timestamptz [default: `now()`]
+
+  indexes {
+    (user_id, group_id) [pk]
+  }
+}
+
+Table universities {
+  id integer [pk, increment]
+  name text [not null, unique]
+  proposed_by integer [not null]
+  created_at timestamptz [default: `now()`]
+}
+
+Table refresh_tokens {
+  id integer [pk, increment]
+  user_id integer [not null]
+  token_hash text [not null, unique]
+  used_at timestamptz [note: 'non-null = consumed (rotation); the timestamp itself feeds reuse detection']
+  expires_at timestamptz [not null]
+  created_at timestamptz [default: `now()`]
+}
+
+Table email_verification_tokens {
+  id integer [pk, increment]
+  token text [not null, unique]
+  type token_type [not null]
+  email text [not null]
+  user_id integer
+  enterprise_id integer [note: 'only for sponsor_invite']
+  expires_at timestamptz [not null]
+  used_at timestamptz
+  created_at timestamptz [default: `now()`]
+}
+
+Enum token_type {
+  primary_email
+  secondary_email
+  account_claim       // Devpost-imported person claims their account
+  password_reset
+  sponsor_invite
+  spot_confirmation   // accepted applicant confirms the spot
+}
+
+// ── sponsors (Directus: logo grid with tiers) ─────────────────────────────
+
+Table sponsor_tiers {
+  id integer [pk, increment]
+  name text [not null, unique]
+  description text
+  max_seats integer [not null, default: 1]
+  max_challenges integer [not null, default: 1]
+  max_judges integer [not null, default: 0]
+  logo_priority integer [not null, default: 0, note: 'ordering on the public logo grid']
+  created_at timestamptz [default: `now()`]
+}
+
+Table enterprises {
+  id integer [pk, increment]
+  name text [not null, unique]
+  logo_url text
+  website text
+  tier_id integer
+  director_id integer
+  created_at timestamptz [default: `now()`]
+}
+
+Table sponsors {
+  id integer [pk, increment]
+  enterprise_id integer [not null]
+  user_id integer
+  joined_at timestamptz [default: `now()`]
+}
+
+// ── challenges (Directus: retos + premios, timed reveal) ──────────────────
+
+Table challenges {
+  id integer [pk, increment]
+  author integer [not null, note: 'sponsors.id, not users.id']
+  title text [not null]
+  description text [not null, default: '', note: 'markdown']
+  criteria text [note: 'public-facing criteria text']
+  judging_panel_criteria jsonb [note: 'drives the dynamic judge scoring form — sponsor-defined']
+  prizes jsonb [note: 'name + link per prize']
+  devpost_tags jsonb [not null, default: '[]', note: 'Devpost "Opt-In Prize" aliases; the import matches against these so one prize export maps to an existing challenge instead of creating a duplicate']
+  status challenge_status [not null, default: 'draft']
+  max_presentation_seconds integer
+  auto_call_count integer [not null, default: 3]
+  visibility text [not null, default: 'hidden', note: 'visible | hidden']
+  available_from timestamptz [note: 'auto-reveal: hidden until this time on the public API (no spoilers)']
+  created_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
+}
+
+Enum challenge_status {
+  draft
+  active
+  published
+  archived
+}
+
+// ── rooms & queue (FastTrack replacement) ─────────────────────────────────
+
+Table rooms {
+  id integer [pk, increment]
+  name text [not null]
+  slug text [not null, unique]
+  location text
+  status text [not null, default: 'paused', note: 'active | paused']
+  created_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
+}
+
+Table room_challenges {
+  room_id integer [not null]
+  challenge_id integer [not null]
+  assigned_at timestamptz [default: `now()`]
+  assigned_by integer
+
+  indexes {
+    (room_id, challenge_id) [pk]
+  }
+
+  Note: 'N:M — a challenge spanning 5 rooms still has ONE logical queue, shared across them (the pump distributes).'
+}
+
+Table room_judges {
+  room_id integer [not null]
+  challenge_id integer [not null]
+  user_id integer [not null]
+  assigned_by integer
+  assigned_at timestamptz [default: `now()`]
+
+  indexes {
+    (room_id, challenge_id, user_id) [pk]
+  }
+}
+
+Table room_queue_state {
+  room_id integer [pk]
+  is_paused boolean [not null, default: false]
+  max_in_waiting_area integer [not null, default: 2, note: 'per-room cap on concurrent `called` entries; pump + CallNext both honour it']
+  desired_minutes_per_team integer [not null, default: 8]
+  started_at timestamptz
+  updated_at timestamptz [default: `now()`]
+}
+
+Table queue_settings {
+  id integer [pk, increment, note: 'singleton, id=1']
+  handoff_buffer_minutes integer [not null, default: 5]
+  schedule_start_at timestamptz
+  schedule_end_at timestamptz
+  pre_call_notification_eta_minutes integer [not null, default: 10]
+  requeue_prompt_default text [not null, default: 'ask', note: 'top | bottom | ask']
+}
+
+Table queue_entries {
+  id integer [pk, increment]
+  challenge_id integer [not null]
+  repo_id integer [not null]
+  assigned_room_id integer
+  status queue_status [not null, default: 'waiting']
+  position integer
+  priority integer [not null, default: 0]
+  call_count integer [not null, default: 0, note: 'no-show ladder']
+  called_at timestamptz
+  presentation_started_at timestamptz
+  completed_at timestamptz
+  created_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
+
+  indexes {
+    (challenge_id, repo_id) [unique, note: 'one entry per (challenge, repo) — makes FastTrack\'s duplicate-sibling bug structurally impossible']
+    (challenge_id, status)
+    (assigned_room_id, status)
+  }
+
+  Note: 'Partial unique index one_active_per_room: at most one entry per room in (in_room, presenting). Excludes `called` on purpose — that\'s the waiting-area buffer.'
+}
+
+Enum queue_status {
+  waiting
+  called              // sent to wait outside the room
+  in_room             // physically inside, project on screen, timer NOT running
+  presenting          // timer running
+  completed
+  returned_to_queue
+  no_show
+  skipped
+  cancelled
+  disqualified        // terminal; pump skips it; re_enter is manual + audited
+  standby             // legacy alias of in_room, dies after the E2-1 reseed
+}
+
+Table queue_history {
+  id integer [pk, increment]
+  queue_entry_id integer [not null]
+  actor_id integer [not null]
+  previous_status text [not null]
+  new_status text [not null]
+  action text [not null, note: 'also records no-transition actions like notify_enter']
+  reason text
+  metadata jsonb [note: 'e.g. requeue position top|bottom']
+  created_at timestamptz [default: `now()`]
+}
+
+// ── judging ───────────────────────────────────────────────────────────────
+
+Table attempt_review {
+  attempt_id integer [pk, note: '1:1 with queue_entries']
+  scores jsonb [not null, default: '{}', note: 'keys follow challenges.judging_panel_criteria']
+  notes text
+  status text [not null, default: 'draft', note: 'draft | submitted']
+  created_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
+
+  Note: 'Collaborative: all judges in the room edit the same row, field-level last-write-wins. History lives in attempt_review_versions.'
+}
+
+Table attempt_review_versions {
+  id integer [pk, increment]
+  attempt_id integer [not null]
+  author_id integer [not null]
+  changed_fields "text[]" [not null]
+  previous jsonb
+  new jsonb
+  created_at timestamptz [default: `now()`]
+
+  Note: 'One row per save. Answers "who changed this score" — the thing FastTrack couldn\'t.'
+}
+
+Table judging_session {
+  id integer [pk, increment]
+  judge_id integer [not null]
+  queue_entry_id integer [not null]
+  room_id integer
+  started_at timestamptz [default: `now()`]
+  submitted_at timestamptz
+  ended_at timestamptz
+}
+
+// ── repos & devpost (project intake) ──────────────────────────────────────
+
+Table repos {
+  id integer [pk, increment]
+  name text [not null]
+  description text [not null, default: '']
+  github_url text
+  devpost_url text
+  demo_url text
+  created_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
+
+  Note: 'A project/team. Deliberately independent from application_responses — registration teams and submission teams need not match.'
+}
+
+Table submissions {
+  repo_id integer [not null]
+  user_id integer [not null]
+  imported_from text [not null, default: 'manual', note: 'manual | devpost']
+  external_id text
+  created_at timestamptz [default: `now()`]
+
+  indexes {
+    (repo_id, user_id) [pk]
+  }
+}
+
+Table devpost_participants {
+  repo_id integer [not null]
+  email text [not null]
+  name text
+  surname text
+  devpost_username text
+  user_id integer [note: 'null until matched/claimed']
+  import_batch text [not null]
+  merge_status text [not null, default: 'unmatched', note: 'unmatched | auto_matched | manually_linked']
+  linked_by integer
+  linked_at timestamptz
+  claim_email_sent_at timestamptz
+  created_at timestamptz [default: `now()`]
+
+  indexes {
+    (repo_id, email) [pk]
+  }
+}
+
+Table devpost_prizes {
+  name text [pk]
+  last_batch text
+  created_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
+
+  Note: 'Every opt-in prize name ever seen in an import, so the challenge editor can autocomplete devpost_tags.'
+}
+
+Table repo_devpost_prizes {
+  repo_id integer [not null]
+  prize text [not null]
+  created_at timestamptz [default: `now()`]
+
+  indexes {
+    (repo_id, prize) [pk]
+  }
+
+  Note: 'Persisted at import time. Mapping a prize to a challenge later enqueues these repos without re-importing the CSV.'
+}
+
+// ── schedule (Directus: horario with timed publication) ───────────────────
+
+Table schedule {
+  id integer [pk, increment]
+  title text [not null]
+  description text [note: 'markdown']
+  location text
+  type text [note: 'meal | workshop | ceremony | activity | other']
+  starts_at timestamptz [not null]
+  ends_at timestamptz [not null]
+  visibility text [not null, default: 'hidden', note: 'shown | hidden']
+  publish_at timestamptz [note: 'timed reveal, e.g. sponsor activities appear at 10:00']
+  reminded_at timestamptz
+  created_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
+}
+
+// ── logistics (Haku: accreditation, presence, meals) ──────────────────────
+
+Table activities {
+  id integer [pk, increment]
+  name text [not null]
+  description text
+  category text [not null, default: 'general', note: 'meals are activities too — entitlements hang off this']
+  requires_scan boolean [default: false]
+  color text
+  created_at timestamptz [default: `now()`]
+}
+
+Table activity_logs {
+  id integer [pk, increment]
+  user_id integer [not null]
+  activity_id integer [not null]
+  notes text
+  logged_at timestamptz [default: `now()`]
+  logged_by integer [not null]
+
+  Note: 'One row per scan. Meal repeat count = count of rows for the meal activity; staff decides on seconds.'
+}
+
+Table check_in_logs {
+  id integer [pk, increment]
+  user_id integer [not null]
+  badge_id text [note: 'badge as scanned, kept even after rotation']
+  checked_in_at timestamptz [default: `now()`]
+  check_in_method text [not null, default: 'manual', note: 'manual | qr | nfc']
+  staff_id integer [not null]
+  notes text
+}
+
+Table time_logs {
+  id integer [pk, increment]
+  user_id integer [not null]
+  kind text [not null, note: 'in | out — presence hours are derived on read, never stored']
+  scanned_at timestamptz [default: `now()`]
+  scanned_by integer [not null]
+  location text
+  notes text
+}
+
+Table food_intolerances {
+  id integer [pk, increment]
+  label jsonb [not null, note: 'i18n: {en, es, gl}']
+  description jsonb
+  proposed_by integer [not null]
+  created_at timestamptz [default: `now()`]
+}
+
+Table meal_entitlements {
+  user_id integer [not null]
+  activity_id integer [not null]
+
+  indexes {
+    (user_id, activity_id) [pk]
+  }
+
+  Note: 'Row present = may redeem. First scan auto-redeems; staff +1 override is audited.'
+}
+
+// ── applications (Haku: forms, review, spot confirmation) ─────────────────
+
+Table applications {
+  id integer [pk, increment]
+  name text [not null]
+  type text [not null, note: 'participant | mentor | sponsor | volunteer']
+  template jsonb [not null, note: 'form schema — fields rendered dynamically']
+  description text
+  active boolean [default: true]
+  open_at timestamptz
+  close_at timestamptz
+  capacity integer [note: 'accepting past this is a 409 (invariant #7)']
+  confirmation_window_hours integer [not null, default: 168]
+  created_at timestamptz [default: `now()`]
+}
+
+Table application_responses {
+  id integer [pk, increment]
+  user_id integer [not null]
+  application_id integer [not null]
+  referrer_user_id integer
+  referrer_application_id integer [note: 'self-ref: who referred this applicant']
+  status app_response_status [not null, default: 'draft']
+  responses jsonb [not null, default: '{}']
+  staff_notes text [note: 'shared internal note; per-reviewer scoring lives in applicant_reviews']
+  confirmation_token_id integer
+  confirmed_at timestamptz
+  declined_at timestamptz
+  decision_sent_at timestamptz [note: 'decisions are internal until the batch email sets this']
+  submitted_at timestamptz
+  created_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
+
+  indexes {
+    (user_id, application_id) [unique]
+  }
+}
+
+Enum app_response_status {
+  draft
+  submitted
+  review
+  accepted    // internal until decision_sent_at
+  confirmed   // spot taken -> ticket issued
+  declined
+  rejected
+  expired     // confirmation window ran out
+}
+
+Table applicant_reviews {
+  response_id integer [not null]
+  author_id integer [not null]
+  score integer [note: '0..100']
+  notes text
+  created_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
+
+  indexes {
+    (response_id, author_id) [pk]
+  }
+}
+
+// ── tickets & wallet passes ───────────────────────────────────────────────
+
+Table tickets {
+  user_id integer [pk]
+  token text [not null, unique, note: 'signed QR payload; permanent, never voided (invariant #10)']
+  issued_at timestamptz [default: `now()`]
+}
+
+Table wallet_passes {
+  id integer [pk, increment]
+  user_id integer [not null]
+  purpose text [not null, note: 'ticket | badge']
+  platform text [not null, note: 'apple | google']
+  serial_number text [not null]
+  authentication_token text [not null]
+  google_object_id text
+  status text [not null, default: 'active', note: 'active | voided — badge passes void on badge rotation']
+  created_at timestamptz [default: `now()`]
+  last_updated_at timestamptz [default: `now()`]
+
+  indexes {
+    (user_id, purpose, platform) [unique]
+  }
+}
+
+Table wallet_pass_devices {
+  pass_id integer [not null]
+  device_library_identifier text [not null]
+  push_token text
+  registered_at timestamptz [default: `now()`]
+
+  indexes {
+    (pass_id, device_library_identifier) [pk]
+  }
+}
+
+// ── notifications & announcements (Directus anuncios -> multi-channel) ────
+
+Table notification_preferences {
+  user_id integer [not null]
+  category text [not null]
+  channel notification_channel [not null]
+  enabled boolean [not null, default: true]
+
+  indexes {
+    (user_id, category, channel) [pk]
+  }
+}
+
+Enum notification_channel {
+  in_app
+  email
+  discord
+  push
+}
+
+Table notification_outbox {
+  id integer [pk, increment]
+  user_id integer [not null]
+  category text [not null]
+  channel notification_channel [not null]
+  payload jsonb
+  status text [not null, default: 'queued', note: 'queued | sent | failed']
+  attempts integer [not null, default: 0]
+  last_error text
+  next_attempt_at timestamptz [default: `now()`, note: 'exponential backoff']
+  sent_at timestamptz
+  read_at timestamptz [note: 'doubles as the in-app inbox read marker']
+  created_at timestamptz [default: `now()`]
+}
+
+Table push_tokens {
+  id integer [pk, increment]
+  user_id integer [not null]
+  token text [not null, unique, note: 'Expo token — routes to APNs/FCM transparently']
+  platform text [note: 'ios | android, informational']
+  created_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
+}
+
+Table announcements {
+  id integer [pk, increment]
+  author_id integer [not null]
+  title text [not null]
+  body text [not null, note: 'markdown']
+  target_role text [note: 'null = everyone']
+  publish_at timestamptz [note: 'timed show/hide, same trick as schedule.publish_at']
+  created_at timestamptz [default: `now()`]
+}
+
+Table announcement_reads {
+  announcement_id integer [not null]
+  user_id integer [not null]
+  read_at timestamptz [default: `now()`]
+
+  indexes {
+    (announcement_id, user_id) [pk]
+  }
+}
+
+// ── audit ─────────────────────────────────────────────────────────────────
+
+Table audit_log {
+  id integer [pk, increment]
+  actor_id integer
+  entity_type text [not null]
+  entity_id text [not null]
+  action text [not null]
+  source text [note: 'email | web | admin | system']
+  before jsonb
+  after jsonb
+  reason text
+  ip text
+  user_agent text
+  created_at timestamptz [default: `now()`]
+
+  Note: 'Unified read view for admins. Domain history tables (queue_history, *_versions) stay the operational source.'
+}
+
+// ── refs ──────────────────────────────────────────────────────────────────
+
+Ref: users.university_id > universities.id
+Ref: universities.proposed_by > users.id
+Ref: permission_group_members.user_id > users.id [delete: cascade]
+Ref: permission_group_members.group_id > permission_groups.id [delete: cascade]
+Ref: permission_group_members.assigned_by > users.id
+Ref: refresh_tokens.user_id > users.id [delete: cascade]
+Ref: email_verification_tokens.user_id > users.id
+Ref: email_verification_tokens.enterprise_id > enterprises.id
+
+Ref: enterprises.tier_id > sponsor_tiers.id
+Ref: enterprises.director_id > users.id
+Ref: sponsors.enterprise_id > enterprises.id
+Ref: sponsors.user_id > users.id
+
+Ref: challenges.author > sponsors.id
+
+Ref: room_challenges.room_id > rooms.id
+Ref: room_challenges.challenge_id > challenges.id
+Ref: room_challenges.assigned_by > users.id
+Ref: room_judges.room_id > rooms.id
+Ref: room_judges.challenge_id > challenges.id
+Ref: room_judges.user_id > users.id
+Ref: room_judges.assigned_by > users.id
+Ref: room_queue_state.room_id - rooms.id [delete: cascade]
+
+Ref: queue_entries.challenge_id > challenges.id
+Ref: queue_entries.repo_id > repos.id
+Ref: queue_entries.assigned_room_id > rooms.id
+Ref: queue_history.queue_entry_id > queue_entries.id
+Ref: queue_history.actor_id > users.id
+
+Ref: attempt_review.attempt_id - queue_entries.id
+Ref: attempt_review_versions.attempt_id > queue_entries.id
+Ref: attempt_review_versions.author_id > users.id
+Ref: judging_session.judge_id > users.id
+Ref: judging_session.queue_entry_id > queue_entries.id
+Ref: judging_session.room_id > rooms.id
+
+Ref: submissions.repo_id > repos.id
+Ref: submissions.user_id > users.id
+Ref: devpost_participants.repo_id > repos.id
+Ref: devpost_participants.user_id > users.id
+Ref: devpost_participants.linked_by > users.id
+Ref: repo_devpost_prizes.repo_id > repos.id
+
+Ref: activity_logs.user_id > users.id
+Ref: activity_logs.activity_id > activities.id
+Ref: activity_logs.logged_by > users.id
+Ref: check_in_logs.user_id > users.id
+Ref: check_in_logs.staff_id > users.id
+Ref: time_logs.user_id > users.id
+Ref: time_logs.scanned_by > users.id
+Ref: food_intolerances.proposed_by > users.id
+Ref: meal_entitlements.user_id > users.id
+Ref: meal_entitlements.activity_id > activities.id
+
+Ref: application_responses.user_id > users.id
+Ref: application_responses.application_id > applications.id
+Ref: application_responses.referrer_user_id > users.id
+Ref: application_responses.referrer_application_id > application_responses.id
+Ref: application_responses.confirmation_token_id > email_verification_tokens.id
+Ref: applicant_reviews.response_id > application_responses.id
+Ref: applicant_reviews.author_id > users.id
+
+Ref: tickets.user_id - users.id
+Ref: wallet_passes.user_id > users.id
+Ref: wallet_pass_devices.pass_id > wallet_passes.id
+
+Ref: notification_preferences.user_id > users.id
+Ref: notification_outbox.user_id > users.id
+Ref: push_tokens.user_id > users.id [delete: cascade]
+Ref: announcements.author_id > users.id
+Ref: announcement_reads.announcement_id > announcements.id
+Ref: announcement_reads.user_id > users.id
+
+Ref: audit_log.actor_id > users.id
+
+// ── groups (dbdiagram clusters) ───────────────────────────────────────────
+
+TableGroup identity {
+  users
+  permission_groups
+  permission_group_members
+  universities
+  refresh_tokens
+  email_verification_tokens
+}
+
+TableGroup sponsor_portal {
+  sponsor_tiers
+  enterprises
+  sponsors
+  challenges
+}
+
+TableGroup queue_judging {
+  rooms
+  room_challenges
+  room_judges
+  room_queue_state
+  queue_settings
+  queue_entries
+  queue_history
+  attempt_review
+  attempt_review_versions
+  judging_session
+}
+
+TableGroup projects {
+  repos
+  submissions
+  devpost_participants
+  devpost_prizes
+  repo_devpost_prizes
+}
+
+TableGroup applications_flow {
+  applications
+  application_responses
+  applicant_reviews
+}
+
+TableGroup logistics {
+  activities
+  activity_logs
+  check_in_logs
+  time_logs
+  food_intolerances
+  meal_entitlements
+  schedule
+}
+
+TableGroup passes {
+  tickets
+  wallet_passes
+  wallet_pass_devices
+}
+
+TableGroup comms {
+  notification_preferences
+  notification_outbox
+  push_tokens
+  announcements
+  announcement_reads
+  audit_log
+}
