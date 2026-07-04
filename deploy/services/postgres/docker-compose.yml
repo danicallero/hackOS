@@ -36,7 +36,7 @@ services:
 networks:
   instance:
     external: true
-    name: "dokploy-network"
+    name: "${INSTANCE_NETWORK}"
 
 volumes:
   pgdata:
