@@ -17,8 +17,23 @@ const envSchema = z.object({
   S3_SECRET_KEY: z.string().default("hackos-secret"),
   S3_BUCKET: z.string().default("hackos"),
 
+  /**
+   * Mail provider (H52). DELTA(H52): the story says the provider is chosen
+   * "por base de datos"; per explicit user decision the provider is fixed at
+   * deploy time via env instead — switching Resend/SMTP/Postal is an ops
+   * change (redeploy/restart), not a runtime DB toggle. Defaults target the
+   * local Mailpit container (pnpm infra:up).
+   */
+  MAIL_PROVIDER: z.enum(["smtp", "resend", "postal"]).default("smtp"),
+  MAIL_FROM_ADDRESS: z.string().default("noreply@hackos.local"),
+  MAIL_FROM_NAME: z.string().default("hackOS"),
+  RESEND_API_KEY: z.string().optional(),
+  POSTAL_URL: z.string().optional(),
+  POSTAL_API_KEY: z.string().optional(),
   SMTP_HOST: z.string().default("localhost"),
   SMTP_PORT: z.coerce.number().default(1025),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
 
   /**
    * Run BullMQ workers inside the API process. Default on for dev/test;
