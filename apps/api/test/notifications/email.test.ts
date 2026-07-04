@@ -4,6 +4,10 @@ import { pool } from "../../src/db/pool.js";
 import type { MailConfig } from "../../src/modules/notifications/channels/email.js";
 import { sendEmail } from "../../src/modules/notifications/channels/email.js";
 import { drainOutboxOnce } from "../../src/modules/notifications/dispatcher.js";
+import {
+  emailLayoutSettingsFromConfig,
+  renderEmailTemplate,
+} from "../../src/modules/notifications/templates.js";
 import { notify } from "../../src/modules/notifications/service.js";
 import { createUser } from "../helpers.js";
 import { clearMailpit, getMailpitMessage, listMailpitMessages } from "./mailpit-helpers.js";
@@ -139,6 +143,26 @@ describe("SMTP via Mailpit (default dev provider)", () => {
     expect(messages[0]!.Subject).toBe("Verifica tu correo de hackOS"); // es, not en
     const detail = await getMailpitMessage(messages[0]!.ID);
     expect(detail.Text).toContain("http://verify");
+  });
+});
+
+describe("template renderer layout settings", () => {
+  it("supports build-time-style footer customization from settings (H52)", () => {
+    const customLayout = {
+      ...emailLayoutSettingsFromConfig(),
+      footerText:
+        "You are receiving this automated email because your account has notifications enabled.\nYou may request your data removal at privacy@hackos.example.",
+    };
+    const rendered = renderEmailTemplate(
+      { template: "generic", subject: "Subject", body: "Body text" },
+      "en",
+      customLayout,
+    );
+
+    expect(rendered.html).toContain(
+      "You are receiving this automated email because your account has notifications enabled.",
+    );
+    expect(rendered.html).toContain("You may request your data removal at privacy@hackos.example.");
   });
 });
 

@@ -1,6 +1,8 @@
 import "dotenv/config";
 import { z } from "zod";
 
+const hexColor = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().default(3000),
@@ -34,6 +36,23 @@ const envSchema = z.object({
   SMTP_PORT: z.coerce.number().default(1025),
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
+  /**
+   * Email layout theming (H52): build/deploy-time customization for the
+   * branded wrapper without changing templates in code.
+   */
+  MAIL_LAYOUT_BRAND_NAME: z.string().min(1).default("hackOS"),
+  MAIL_LAYOUT_HEADER_TEXT: z.string().min(1).default("hackOS"),
+  MAIL_LAYOUT_HEADER_SUBTEXT: z.string().default("Hackathon management platform"),
+  MAIL_LAYOUT_ACCENT_COLOR: z.string().regex(hexColor).default("#4f46e5"),
+  MAIL_LAYOUT_BG_COLOR: z.string().regex(hexColor).default("#eef1f5"),
+  MAIL_LAYOUT_CARD_COLOR: z.string().regex(hexColor).default("#ffffff"),
+  MAIL_LAYOUT_CARD_BORDER_COLOR: z.string().regex(hexColor).default("#dde3ee"),
+  MAIL_LAYOUT_TEXT_COLOR: z.string().regex(hexColor).default("#1f2430"),
+  MAIL_LAYOUT_MUTED_TEXT_COLOR: z.string().regex(hexColor).default("#667085"),
+  MAIL_LAYOUT_FOOTER_BG_COLOR: z.string().regex(hexColor).default("#f7f9fc"),
+  MAIL_LAYOUT_CARD_RADIUS: z.coerce.number().int().min(0).max(32).default(14),
+  MAIL_LAYOUT_MAX_WIDTH: z.coerce.number().int().min(360).max(720).default(560),
+  MAIL_FOOTER_TEXT: z.string().min(1).default("hackOS — this is an automated message."),
 
   /**
    * Run BullMQ workers inside the API process. Default on for dev/test;

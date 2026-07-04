@@ -92,6 +92,7 @@ with `deploy/scripts/gen-secrets.sh` and never reuse across instances.
 | `S3_BUCKET` | api, worker, minio-init | Default `hackos`. |
 | `MAIL_PROVIDER` | api, worker | `smtp` \| `resend` \| `postal`. |
 | `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME` | api, worker | |
+| `MAIL_FOOTER_TEXT`, `MAIL_LAYOUT_*` | api, worker | Optional email theming/footer text customization (header, colors, sizing, footer copy). |
 | `RESEND_API_KEY` 🔒 / `POSTAL_*` 🔒 / `SMTP_*` 🔒 | api, worker | Fill the block for your provider. |
 | `LOG_LEVEL` | api, worker | |
 

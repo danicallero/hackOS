@@ -1,3 +1,5 @@
+import { config } from "../../config.js";
+
 /**
  * Email template registry (H52). Every outbox row for channel=email carries
  * `payload = { template: string, vars?: Record<string, unknown>, subject?,
@@ -26,6 +28,22 @@ export interface RenderedEmail {
   text: string;
 }
 
+export interface EmailLayoutSettings {
+  brandName: string;
+  headerText: string;
+  headerSubtext: string;
+  accentColor: string;
+  backgroundColor: string;
+  cardColor: string;
+  cardBorderColor: string;
+  textColor: string;
+  mutedTextColor: string;
+  footerBackgroundColor: string;
+  cardRadius: number;
+  maxWidth: number;
+  footerText: string;
+}
+
 interface TemplateVariant {
   subject: string;
   /** Plain-text body; `\n\n` separates paragraphs. May contain {{vars}}. */
@@ -48,6 +66,10 @@ function escapeHtml(str: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+function footerTextToHtml(text: string): string {
+  return escapeHtml(text).replace(/\n/g, "<br/>");
 }
 
 const TEMPLATES: Record<string, TemplateDefinition> = {
@@ -101,15 +123,15 @@ const TEMPLATES: Record<string, TemplateDefinition> = {
   "queue.called": {
     en: {
       subject: "Your team was called",
-      body: "Hi {{name}},\n\nYour team {{teamName}} was called for {{challengeName}}. Please head to room {{roomName}} and wait there.",
+      body: "Hi {{name}},\n\nYour team {{teamName}} was called for {{challengeName}}. Please head to room {{roomName}} and wait at the door until you are called in.",
     },
     es: {
       subject: "Han llamado a tu equipo",
-      body: "Hola {{name}},\n\nHan llamado a tu equipo {{teamName}} para {{challengeName}}. Dirígete a la sala {{roomName}} y espera allí.",
+      body: "Hola {{name}},\n\nHan llamado a tu equipo {{teamName}} para {{challengeName}}. Dirígete a la sala {{roomName}} y espera en la puerta hasta que te llamen.",
     },
     gl: {
       subject: "Chamaron ao teu equipo",
-      body: "Ola {{name}},\n\nChamaron ao teu equipo {{teamName}} para {{challengeName}}. Diríxete á sala {{roomName}} e agarda alí.",
+      body: "Ola {{name}},\n\nChamaron ao teu equipo {{teamName}} para {{challengeName}}. Diríxete á sala {{roomName}} e agarda na porta ata que te chamen.",
     },
   },
   "application.decision": {
@@ -128,28 +150,54 @@ const TEMPLATES: Record<string, TemplateDefinition> = {
   },
 };
 
-function brandWrapHtml(subject: string, bodyHtml: string): string {
+export function emailLayoutSettingsFromConfig(): EmailLayoutSettings {
+  return {
+    brandName: config.MAIL_LAYOUT_BRAND_NAME,
+    headerText: config.MAIL_LAYOUT_HEADER_TEXT,
+    headerSubtext: config.MAIL_LAYOUT_HEADER_SUBTEXT,
+    accentColor: config.MAIL_LAYOUT_ACCENT_COLOR,
+    backgroundColor: config.MAIL_LAYOUT_BG_COLOR,
+    cardColor: config.MAIL_LAYOUT_CARD_COLOR,
+    cardBorderColor: config.MAIL_LAYOUT_CARD_BORDER_COLOR,
+    textColor: config.MAIL_LAYOUT_TEXT_COLOR,
+    mutedTextColor: config.MAIL_LAYOUT_MUTED_TEXT_COLOR,
+    footerBackgroundColor: config.MAIL_LAYOUT_FOOTER_BG_COLOR,
+    cardRadius: config.MAIL_LAYOUT_CARD_RADIUS,
+    maxWidth: config.MAIL_LAYOUT_MAX_WIDTH,
+    footerText: config.MAIL_FOOTER_TEXT,
+  };
+}
+
+function brandWrapHtml(
+  subject: string,
+  bodyHtml: string,
+  layout: EmailLayoutSettings = emailLayoutSettingsFromConfig(),
+): string {
+  const width = Math.max(360, Math.min(layout.maxWidth, 720));
+  const radius = Math.max(0, Math.min(layout.cardRadius, 32));
   return `<!doctype html>
 <html>
-  <body style="margin:0;padding:0;background:#0f1115;font-family:Helvetica,Arial,sans-serif;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0f1115;padding:24px 0;">
+  <body style="margin:0;padding:0;background:${layout.backgroundColor};font-family:Inter,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${layout.backgroundColor};padding:32px 16px;">
       <tr>
         <td align="center">
-          <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;">
+          <table role="presentation" width="${width}" cellpadding="0" cellspacing="0" style="width:100%;max-width:${width}px;background:${layout.cardColor};border-radius:${radius}px;overflow:hidden;border:1px solid ${layout.cardBorderColor};">
             <tr>
-              <td style="background:#4f46e5;padding:20px 24px;">
-                <span style="color:#ffffff;font-size:20px;font-weight:700;">hackOS</span>
+              <td style="background:${layout.accentColor};padding:22px 24px;">
+                <div style="color:#ffffff;font-size:20px;font-weight:700;line-height:1.2;">${escapeHtml(layout.headerText)}</div>
+                <div style="color:rgba(255,255,255,0.9);font-size:13px;margin-top:4px;line-height:1.4;">${escapeHtml(layout.headerSubtext)}</div>
               </td>
             </tr>
             <tr>
-              <td style="padding:24px;color:#1f2430;font-size:15px;line-height:1.5;">
-                <h1 style="font-size:18px;margin:0 0 16px;">${escapeHtml(subject)}</h1>
+              <td style="padding:28px 24px;color:${layout.textColor};font-size:15px;line-height:1.6;">
+                <h1 style="font-size:22px;line-height:1.3;font-weight:700;margin:0 0 18px;color:${layout.textColor};">${escapeHtml(subject)}</h1>
                 ${bodyHtml}
               </td>
             </tr>
             <tr>
-              <td style="padding:16px 24px;color:#8a93a6;font-size:12px;background:#f4f5f8;">
-                hackOS — this is an automated message.
+              <td style="padding:16px 24px;color:${layout.mutedTextColor};font-size:12px;line-height:1.5;background:${layout.footerBackgroundColor};border-top:1px solid ${layout.cardBorderColor};">
+                <div style="font-weight:600;margin-bottom:4px;">${escapeHtml(layout.brandName)}</div>
+                <div>${footerTextToHtml(layout.footerText)}</div>
               </td>
             </tr>
           </table>
@@ -190,7 +238,11 @@ export interface EmailPayload {
 }
 
 /** Renders subject/html/text for a template + language. Never throws — unknown template = generic. */
-export function renderEmailTemplate(payload: EmailPayload, language: Language): RenderedEmail {
+export function renderEmailTemplate(
+  payload: EmailPayload,
+  language: Language,
+  layout: EmailLayoutSettings = emailLayoutSettingsFromConfig(),
+): RenderedEmail {
   const templateName =
     payload.template && TEMPLATES[payload.template] ? payload.template : "generic";
   // TEMPLATES.generic always exists (defined above); noUncheckedIndexedAccess
@@ -204,7 +256,7 @@ export function renderEmailTemplate(payload: EmailPayload, language: Language): 
   };
   const subject = interpolate(variant.subject, vars);
   const text = interpolate(variant.body, vars);
-  const html = brandWrapHtml(subject, textToHtmlParagraphs(text));
+  const html = brandWrapHtml(subject, textToHtmlParagraphs(text), layout);
   return { subject, html, text };
 }
 
