@@ -1,0 +1,133 @@
+import { betterAuth } from "better-auth";
+import { config } from "../../config.js";
+import { pool } from "../../db/pool.js";
+import { enqueueAuthEmail } from "./outbox.js";
+
+/**
+ * Better Auth instance (H1-H5), mounted inside the Fastify API under
+ * /api/auth/* (src/modules/identity/index.ts). Design decisions:
+ *
+ * - `database: pool` — the raw `pg.Pool` shared with the rest of the app.
+ *   Better Auth detects it as a node-postgres pool (duck-typed on `.connect`)
+ *   and wraps it in its own Kysely PostgresDialect internally; we never hand
+ *   it a second connection pool.
+ * - `user.modelName: "users"` + `fields` — Better Auth's user model is NOT a
+ *   separate table. It's pointed at the EXISTING `users` table from
+ *   0001_initial.sql, camelCase fields mapped to our snake_case columns.
+ *   `additionalFields` covers only what Better Auth itself writes at
+ *   sign-up/verification time (surname, phone, language); shirt size, food
+ *   intolerances, dni, badge id etc. live on the same table but are only
+ *   ever touched by this module's own /me and staff routes (profile.ts),
+ *   never by Better Auth.
+ * - `advanced.database.generateId: "serial"` is the 1.6.x spelling of what
+ *   older Better Auth docs call `useNumberId: true` — it defers id
+ *   generation to Postgres's own `GENERATED ALWAYS AS IDENTITY`, matching
+ *   every other table in this schema instead of Better Auth's default
+ *   random-string ids.
+ * - `sessions` / `accounts` / `verifications` are hand-written in
+ *   db/migrations/0101_better_auth.sql; the `fields` maps below must match
+ *   that migration column-for-column.
+ * - `emailAndPassword.autoSignIn: false` is what turns on Better Auth's
+ *   built-in generic-duplicate-response path on sign-up (see
+ *   node_modules/better-auth dist/api/routes/sign-up.mjs
+ *   `shouldReturnGenericDuplicateResponse`): signing up with an email that
+ *   already exists returns the exact same `{ token: null, user }` shape as a
+ *   real sign-up, so the response never reveals whether the account existed
+ *   (H1). Same mechanism is built into `/request-password-reset` (H5) with
+ *   no configuration needed.
+ * - `revokeSessionsOnPasswordReset: true` is the whole of H5's "resetting my
+ *   password closes all my old sessions" requirement.
+ * - `sendVerificationEmail` / `sendResetPassword` never send mail directly:
+ *   they enqueue a `notification_outbox` row (outbox.ts) for the
+ *   notifications workstream to actually deliver.
+ * - `disabledPaths: ["/update-user"]` — profile edits go exclusively through
+ *   this module's own GET/PATCH /me and staff routes (H7), which apply
+ *   field-level restrictions, capability guards and audit() that Better
+ *   Auth's generic update-user endpoint doesn't know about.
+ */
+export const auth = betterAuth({
+  appName: "hackOS",
+  baseURL: config.BETTER_AUTH_URL,
+  basePath: "/api/auth",
+  secret: config.BETTER_AUTH_SECRET,
+  database: pool,
+  advanced: {
+    database: { generateId: "serial" },
+  },
+  disabledPaths: ["/update-user"],
+  user: {
+    modelName: "users",
+    fields: {
+      emailVerified: "email_verified",
+      createdAt: "created_at",
+      updatedAt: "updated_at",
+    },
+    additionalFields: {
+      surname: { type: "string", required: true, fieldName: "surname" },
+      phone: { type: "string", required: false, fieldName: "phone" },
+      language: {
+        type: "string",
+        required: false,
+        defaultValue: "en",
+        fieldName: "language",
+      },
+    },
+  },
+  session: {
+    modelName: "sessions",
+    fields: {
+      userId: "user_id",
+      expiresAt: "expires_at",
+      ipAddress: "ip_address",
+      userAgent: "user_agent",
+      createdAt: "created_at",
+      updatedAt: "updated_at",
+    },
+  },
+  account: {
+    modelName: "accounts",
+    fields: {
+      userId: "user_id",
+      accountId: "account_id",
+      providerId: "provider_id",
+      accessToken: "access_token",
+      refreshToken: "refresh_token",
+      idToken: "id_token",
+      accessTokenExpiresAt: "access_token_expires_at",
+      refreshTokenExpiresAt: "refresh_token_expires_at",
+      createdAt: "created_at",
+      updatedAt: "updated_at",
+    },
+  },
+  verification: {
+    modelName: "verifications",
+    fields: {
+      expiresAt: "expires_at",
+      createdAt: "created_at",
+      updatedAt: "updated_at",
+    },
+  },
+  emailAndPassword: {
+    enabled: true,
+    autoSignIn: false,
+    requireEmailVerification: false,
+    minPasswordLength: 8,
+    revokeSessionsOnPasswordReset: true,
+    sendResetPassword: async ({ user, url }) => {
+      await enqueueAuthEmail(pool, Number(user.id), "auth.reset", {
+        name: user.name,
+        resetUrl: url,
+      });
+    },
+  },
+  emailVerification: {
+    sendOnSignUp: true,
+    autoSignInAfterVerification: false,
+    sendVerificationEmail: async ({ user, url }) => {
+      await enqueueAuthEmail(pool, Number(user.id), "auth.verify", {
+        name: user.name,
+        verifyUrl: url,
+      });
+    },
+  },
+});
