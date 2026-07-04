@@ -10,6 +10,7 @@
     "start": "node dist/server.js",
     "migrate": "tsx scripts/migrate.ts",
     "seed": "tsx scripts/seed.ts",
+    "superadmin:create": "tsx scripts/create-superadmin.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
