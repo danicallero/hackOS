@@ -45,8 +45,17 @@ describe("foundation", () => {
 
     const json = await app.inject({ method: "GET", url: "/documentation/json" });
     expect(json.statusCode).toBe(200);
-    expect(json.json().openapi).toBe("3.0.3");
-    expect(json.json().info.title).toBe("hackOS API");
+    const spec = json.json();
+    expect(spec.openapi).toBe("3.0.3");
+    expect(spec.info.title).toBe("hackOS API");
+    expect(spec.components.securitySchemes.sessionToken.type).toBe("apiKey");
+    expect(spec.components.securitySchemes.bearerToken.type).toBe("http");
+    expect(spec.paths["/api/me"].get.tags).toEqual(["identity"]);
+    expect(spec.paths["/api/me"].get.security).toEqual([
+      { sessionToken: [] },
+      { bearerToken: [] },
+    ]);
+    expect(spec.paths["/healthz"].get.security).toBeUndefined();
 
     const ui = await app.inject({ method: "GET", url: "/documentation/" });
     expect(ui.statusCode).toBe(200);
