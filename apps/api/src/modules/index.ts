@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { registerIdentityModule } from "./identity/index.js";
 import { registerNotificationsModule } from "./notifications/index.js";
 import { registerProjectsModule } from "./projects/index.js";
+import { registerQueueModule } from "./queue/index.js";
 
 /**
  * Module registry. Each domain workstream ships a Fastify plugin under
@@ -14,5 +15,5 @@ export async function registerModules(app: FastifyInstance): Promise<void> {
   await registerIdentityModule(app); // WS-A1 (H1-H10)
   await registerNotificationsModule(app); // WS-F  (H50-H53)
   await registerProjectsModule(app); // WS-B1 (H16-H17)
-  // await registerQueueModule(app);          // WS-B2 (H29-H42)
+  await registerQueueModule(app); // WS-B2 (H29-H42)
 }

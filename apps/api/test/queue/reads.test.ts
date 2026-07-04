@@ -1,0 +1,230 @@
+import "./env.js";
+import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import type { App } from "../../src/app.js";
+import {
+  asUser,
+  buildTestApp,
+  createUser,
+  createUserWithCapabilities,
+  truncateAll,
+} from "../helpers.js";
+import {
+  assignChallengeToRoom,
+  broadcastCount,
+  createChallenge,
+  createRepoWithTeam,
+  createRoom,
+  enqueueRepo,
+} from "./fixtures.js";
+
+/** Read APIs: progress (H40), room/TV views (H41), participant status (H38), pace (H39), TV mode (H42). */
+
+let app: App;
+let operatorId: number;
+
+beforeEach(async () => {
+  await truncateAll();
+  const { valkey } = await import("../../src/lib/valkey.js");
+  await valkey.flushdb();
+  const { pool } = await import("../../src/db/pool.js");
+  await pool.query(`UPDATE queue_settings SET schedule_end_at = NULL WHERE id = 1`);
+  operatorId = await createUserWithCapabilities([CAPABILITIES.QUEUE_OPERATE]);
+  app ??= await buildTestApp();
+});
+
+afterAll(async () => {
+  await app?.close();
+  const { stopQueues } = await import("../../src/lib/queues.js");
+  const { closeValkey } = await import("../../src/lib/valkey.js");
+  const { pool } = await import("../../src/db/pool.js");
+  await stopQueues();
+  await closeValkey();
+  await pool.end();
+});
+
+describe("challenge progress (H40)", () => {
+  it("counts entries by status", async () => {
+    const challengeId = await createChallenge();
+    const { pool } = await import("../../src/db/pool.js");
+    const statuses = ["waiting", "waiting", "called", "presenting", "completed", "disqualified"];
+    for (const status of statuses) {
+      const { repoId } = await createRepoWithTeam();
+      await pool.query(
+        `INSERT INTO queue_entries (challenge_id, repo_id, status, position) VALUES ($1, $2, $3, 1)`,
+        [challengeId, repoId, status],
+      );
+    }
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/queue/challenges/${challengeId}/progress`,
+      headers: asUser(operatorId),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.waiting).toBe(2);
+    expect(body.called).toBe(1);
+    expect(body.inProgress).toBe(1);
+    expect(body.evaluated).toBe(1);
+    expect(body.disqualified).toBe(1);
+  });
+});
+
+describe("room view (H41)", () => {
+  it("returns presenting/called/next for a room; /api/tv/rooms is public", async () => {
+    const challengeId = await createChallenge();
+    const roomId = await createRoom({ maxInWaitingArea: 2 });
+    await assignChallengeToRoom(roomId, challengeId);
+    const { pool } = await import("../../src/db/pool.js");
+
+    const mk = async (status: string, position: number, room: number | null) => {
+      const { repoId } = await createRepoWithTeam();
+      await pool.query(
+        `INSERT INTO queue_entries (challenge_id, repo_id, status, position, assigned_room_id)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [challengeId, repoId, status, position, room],
+      );
+      return repoId;
+    };
+    await mk("presenting", 0, roomId);
+    await mk("called", 1, roomId);
+    await mk("waiting", 2, null);
+    await mk("waiting", 3, null);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/queue/rooms/${roomId}/view`,
+      headers: asUser(operatorId),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.active.status).toBe("presenting");
+    expect(body.called).toHaveLength(1);
+    expect(body.next).toHaveLength(2);
+
+    const tv = await app.inject({ method: "GET", url: "/api/tv/rooms" }); // no auth
+    expect(tv.statusCode).toBe(200);
+    expect(tv.json()).toHaveLength(1);
+    expect(tv.json()[0].active.status).toBe("presenting");
+  });
+});
+
+describe("participant view (H38)", () => {
+  it("shows status, position and ETA for each challenge of my repos", async () => {
+    const me = await createUser();
+    const challengeId = await createChallenge();
+    const roomId = await createRoom({ desiredMinutesPerTeam: 10 });
+    await assignChallengeToRoom(roomId, challengeId);
+
+    const { repoId: ahead } = await createRepoWithTeam();
+    await enqueueRepo(challengeId, ahead, 1);
+    const { repoId: mine } = await createRepoWithTeam([me]);
+    await enqueueRepo(challengeId, mine, 2);
+
+    const res = await app.inject({ method: "GET", url: "/api/queue/me", headers: asUser(me) });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body).toHaveLength(1);
+    expect(body[0].status).toBe("waiting");
+    expect(body[0].position).toBe(2); // one team ahead
+    expect(body[0].etaMinutes).toBe(20); // 2 slots x 10 min / 1 room
+    expect(res.statusCode).toBe(200);
+
+    const anon = await app.inject({ method: "GET", url: "/api/queue/me" });
+    expect(anon.statusCode).toBe(401);
+  });
+});
+
+describe("pace (H39)", () => {
+  it("flags insufficient time when desired pace does not fit the remaining schedule", async () => {
+    const challengeId = await createChallenge();
+    const roomId = await createRoom({ desiredMinutesPerTeam: 10 });
+    await assignChallengeToRoom(roomId, challengeId);
+    for (let i = 1; i <= 6; i++) {
+      const { repoId } = await createRepoWithTeam();
+      await enqueueRepo(challengeId, repoId, i);
+    }
+    const { pool } = await import("../../src/db/pool.js");
+    // 30 minutes left, 6 teams x 10 min = 60 needed
+    await pool.query(
+      `UPDATE queue_settings SET schedule_end_at = now() + interval '30 minutes' WHERE id = 1`,
+    );
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/queue/rooms/${roomId}/pace`,
+      headers: asUser(operatorId),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.pendingCount).toBe(6);
+    expect(body.requiredMinutes).toBe(60);
+    expect(body.insufficientTime).toBe(true);
+    expect(body.suggestedMinutesPerTeam).toBeLessThan(10);
+
+    // plenty of time -> no flag
+    await pool.query(
+      `UPDATE queue_settings SET schedule_end_at = now() + interval '10 hours' WHERE id = 1`,
+    );
+    const ok = await app.inject({
+      method: "GET",
+      url: `/api/queue/rooms/${roomId}/pace`,
+      headers: asUser(operatorId),
+    });
+    expect(ok.json().insufficientTime).toBe(false);
+  });
+});
+
+describe("TV mode (H42)", () => {
+  it("defaults to rooms, PATCH requires TV_CONTROL, changes persist in Valkey and broadcast on tv", async () => {
+    const initial = await app.inject({ method: "GET", url: "/api/tv/mode" }); // public
+    expect(initial.statusCode).toBe(200);
+    expect(initial.json()).toEqual({ mode: "rooms", payload: null });
+
+    const forbidden = await app.inject({
+      method: "PATCH",
+      url: "/api/tv/mode",
+      headers: asUser(operatorId),
+      payload: { mode: "wifi" },
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    const tvController = await createUserWithCapabilities([CAPABILITIES.TV_CONTROL]);
+    const before = await broadcastCount("tv");
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/api/tv/mode",
+      headers: asUser(tvController),
+      payload: { mode: "announcement", payload: { title: "Apertura", body: "¡Empezamos!" } },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(await broadcastCount("tv")).toBe(before + 1); // TV_MODE_CHANGED
+
+    const read = await app.inject({ method: "GET", url: "/api/tv/mode" });
+    expect(read.json()).toEqual({
+      mode: "announcement",
+      payload: { title: "Apertura", body: "¡Empezamos!" },
+    });
+
+    const { valkey } = await import("../../src/lib/valkey.js");
+    expect(await valkey.get("tv:mode")).not.toBeNull();
+  });
+});
+
+describe("SSE streams (H41/H42)", () => {
+  it("GET /api/queue/stream and /api/tv/stream open public event-streams", async () => {
+    // inject with payloadAsStream so the never-ending SSE body doesn't hang the test
+    for (const url of ["/api/queue/stream", "/api/tv/stream"]) {
+      const res = await app.inject({ method: "GET", url, payloadAsStream: true });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers["content-type"]).toBe("text/event-stream");
+      const firstChunk: Buffer = await new Promise((resolve, reject) => {
+        res.stream().once("data", resolve);
+        res.stream().once("error", reject);
+      });
+      expect(firstChunk.toString()).toContain(": connected");
+      res.stream().destroy();
+    }
+  });
+});

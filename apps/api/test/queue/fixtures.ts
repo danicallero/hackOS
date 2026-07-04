@@ -1,0 +1,123 @@
+import { pool } from "../../src/db/pool.js";
+import { createUser } from "../helpers.js";
+
+/** Queue-suite fixtures (WS-B2). Direct SQL inserts — other modules' routes are out of scope. */
+
+export async function createChallenge(
+  overrides: Partial<{
+    title: string;
+    judgingPanelCriteria: unknown;
+    devpostTags: string[];
+  }> = {},
+): Promise<number> {
+  const ownerId = await createUser();
+  const enterprise = await pool.query(`INSERT INTO enterprises (name) VALUES ($1) RETURNING id`, [
+    `ent-${crypto.randomUUID()}`,
+  ]);
+  const sponsor = await pool.query(
+    `INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2) RETURNING id`,
+    [enterprise.rows[0].id, ownerId],
+  );
+  const { rows } = await pool.query(
+    `INSERT INTO challenges (author, title, judging_panel_criteria, devpost_tags, status)
+     VALUES ($1, $2, $3, $4, 'active') RETURNING id`,
+    [
+      sponsor.rows[0].id,
+      overrides.title ?? `Challenge ${crypto.randomUUID().slice(0, 8)}`,
+      overrides.judgingPanelCriteria ? JSON.stringify(overrides.judgingPanelCriteria) : null,
+      JSON.stringify(overrides.devpostTags ?? []),
+    ],
+  );
+  return rows[0].id;
+}
+
+export async function createRoom(
+  overrides: Partial<{
+    name: string;
+    status: string;
+    isPaused: boolean;
+    maxInWaitingArea: number;
+    desiredMinutesPerTeam: number;
+  }> = {},
+): Promise<number> {
+  const name = overrides.name ?? `Room ${crypto.randomUUID().slice(0, 8)}`;
+  const { rows } = await pool.query(
+    `INSERT INTO rooms (name, slug, status) VALUES ($1, $2, $3) RETURNING id`,
+    [name, `room-${crypto.randomUUID()}`, overrides.status ?? "active"],
+  );
+  const roomId = rows[0].id;
+  await pool.query(
+    `INSERT INTO room_queue_state (room_id, is_paused, max_in_waiting_area, desired_minutes_per_team)
+     VALUES ($1, $2, $3, $4)`,
+    [
+      roomId,
+      overrides.isPaused ?? false,
+      overrides.maxInWaitingArea ?? 2,
+      overrides.desiredMinutesPerTeam ?? 8,
+    ],
+  );
+  return roomId;
+}
+
+export async function assignChallengeToRoom(roomId: number, challengeId: number): Promise<void> {
+  await pool.query(
+    `INSERT INTO room_challenges (room_id, challenge_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+    [roomId, challengeId],
+  );
+}
+
+/** Repo + submissions rows for each member (creates users when not given). */
+export async function createRepoWithTeam(
+  memberIds?: number[],
+  name?: string,
+): Promise<{ repoId: number; memberIds: number[] }> {
+  const members = memberIds ?? [await createUser()];
+  const { rows } = await pool.query(`INSERT INTO repos (name) VALUES ($1) RETURNING id`, [
+    name ?? `repo-${crypto.randomUUID().slice(0, 8)}`,
+  ]);
+  const repoId = rows[0].id;
+  for (const userId of members) {
+    await pool.query(`INSERT INTO submissions (repo_id, user_id) VALUES ($1, $2)`, [
+      repoId,
+      userId,
+    ]);
+  }
+  return { repoId, memberIds: members };
+}
+
+/** Direct waiting entry, bypassing the enqueue endpoint. */
+export async function enqueueRepo(
+  challengeId: number,
+  repoId: number,
+  position: number,
+): Promise<number> {
+  const { rows } = await pool.query(
+    `INSERT INTO queue_entries (challenge_id, repo_id, status, position)
+     VALUES ($1, $2, 'waiting', $3) RETURNING id`,
+    [challengeId, repoId, position],
+  );
+  return rows[0].id;
+}
+
+export async function getEntry(entryId: number) {
+  const { rows } = await pool.query(`SELECT * FROM queue_entries WHERE id = $1`, [entryId]);
+  return rows[0];
+}
+
+export async function historyRows(entryId: number, action?: string) {
+  const { rows } = await pool.query(
+    `SELECT * FROM queue_history WHERE queue_entry_id = $1 ${action ? "AND action = $2" : ""} ORDER BY id ASC`,
+    action ? [entryId, action] : [entryId],
+  );
+  return rows;
+}
+
+/**
+ * Broadcast counter: sse.ts INCRs `sse:seq:<topic>` once per broadcast, so
+ * the counter delta == number of broadcasts on that topic (invariant 5).
+ */
+export async function broadcastCount(topic: string): Promise<number> {
+  const { valkey } = await import("../../src/lib/valkey.js");
+  const v = await valkey.get(`sse:seq:${topic}`);
+  return v ? Number(v) : 0;
+}
