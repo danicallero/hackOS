@@ -1,6 +1,8 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
+import { z } from "zod";
+import { pool } from "../../db/pool.js";
 import { requireCapability } from "../../lib/capabilities.js";
 import { UnauthorizedError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
@@ -38,12 +40,48 @@ function actor(userId: number | null): number {
  */
 export function registerLogisticsRoutes(app: FastifyInstance): void {
   const typed = app.withTypeProvider<ZodTypeProvider>();
+  const publicActivitySchema = z.object({
+    id: z.number().int(),
+    title: z.string(),
+    description: z.string().nullable(),
+    location: z.string().nullable(),
+    type: z.string().nullable(),
+    startsAt: z.string(),
+    endsAt: z.string(),
+    publishAt: z.string().nullable(),
+  });
 
   const accredit = requireCapability(CAPABILITIES.ACCREDIT_SCAN);
   const presence = requireCapability(CAPABILITIES.PRESENCE_SCAN);
   const activity = requireCapability(CAPABILITIES.ACTIVITY_SCAN);
   const stats = requireCapability(CAPABILITIES.LOGISTICS_STATS);
   const scheduleManage = requireCapability(CAPABILITIES.SCHEDULE_MANAGE);
+
+  typed.get(
+    "/api/public/activities",
+    { schema: { response: { 200: z.object({ items: z.array(publicActivitySchema) }) } } },
+    async () => {
+      const { rows } = await pool.query(
+        `SELECT id, title, description, location, type, starts_at, ends_at, publish_at
+           FROM schedule
+          WHERE visibility = 'shown'
+            AND (publish_at IS NULL OR publish_at <= now())
+          ORDER BY starts_at ASC, id ASC`,
+      );
+      return {
+        items: rows.map((r: Record<string, unknown>) => ({
+          id: Number(r.id),
+          title: String(r.title),
+          description: (r.description as string | null) ?? null,
+          location: (r.location as string | null) ?? null,
+          type: (r.type as string | null) ?? null,
+          startsAt: (r.starts_at as Date).toISOString(),
+          endsAt: (r.ends_at as Date).toISOString(),
+          publishAt: r.publish_at instanceof Date ? r.publish_at.toISOString() : null,
+        })),
+      };
+    },
+  );
 
   // ── H22 accreditation ────────────────────────────────────────────────────
 

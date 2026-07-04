@@ -55,6 +55,10 @@ describe("foundation", () => {
       { sessionToken: [] },
       { bearerToken: [] },
     ]);
+    expect(spec.paths["/api/auth/sign-up/email"].post.tags).toEqual(["auth"]);
+    expect(spec.paths["/api/auth/sign-in/email"].post.tags).toEqual(["auth"]);
+    expect(spec.paths["/api/auth/get-session"].get.tags).toEqual(["auth"]);
+    expect(spec.paths["/api/auth/{*}"]).toBeUndefined();
     expect(spec.paths["/healthz"].get.security).toBeUndefined();
 
     const ui = await app.inject({ method: "GET", url: "/documentation/" });

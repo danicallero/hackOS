@@ -1,6 +1,7 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
+import { z } from "zod";
 import { requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import {
@@ -14,6 +15,8 @@ import {
 import {
   confirmImport,
   getRepo,
+  listPublicChallenges,
+  listPublicSponsors,
   linkParticipant,
   listRepos,
   listUnmatchedParticipants,
@@ -29,6 +32,42 @@ import {
  */
 export function registerProjectRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
+
+  const publicChallengeSchema = z.object({
+    id: z.number().int(),
+    title: z.string(),
+    description: z.string(),
+    criteria: z.string().nullable(),
+    prizes: z.unknown(),
+    availableFrom: z.string().nullable(),
+    enterprise: z.object({
+      id: z.number().int(),
+      name: z.string(),
+      logoUrl: z.string().nullable(),
+      website: z.string().nullable(),
+    }),
+  });
+
+  const publicSponsorSchema = z.object({
+    enterpriseId: z.number().int(),
+    name: z.string(),
+    logoUrl: z.string().nullable(),
+    website: z.string().nullable(),
+    priority: z.number().int(),
+    challengeCount: z.number().int(),
+  });
+
+  r.get(
+    "/api/public/challenges",
+    { schema: { response: { 200: z.object({ items: z.array(publicChallengeSchema) }) } } },
+    async () => ({ items: await listPublicChallenges() }),
+  );
+
+  r.get(
+    "/api/public/sponsors",
+    { schema: { response: { 200: z.object({ items: z.array(publicSponsorSchema) }) } } },
+    async () => ({ items: await listPublicSponsors() }),
+  );
 
   // ── H16: import ──────────────────────────────────────────────────────────
 

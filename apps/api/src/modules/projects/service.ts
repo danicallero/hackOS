@@ -518,3 +518,94 @@ export async function myProjects(userId: number): Promise<Array<Omit<RepoWithExt
   const withExtras = await attachMembersAndPrizes(rows);
   return withExtras.map(({ members: _members, ...rest }) => rest);
 }
+
+export interface PublicChallenge {
+  id: number;
+  title: string;
+  description: string;
+  criteria: string | null;
+  prizes: unknown;
+  availableFrom: string | null;
+  enterprise: {
+    id: number;
+    name: string;
+    logoUrl: string | null;
+    website: string | null;
+  };
+}
+
+export async function listPublicChallenges(): Promise<PublicChallenge[]> {
+  const { rows } = await pool.query(
+    `SELECT c.id,
+            c.title,
+            c.description,
+            c.criteria,
+            c.prizes,
+            c.available_from,
+            e.id AS enterprise_id,
+            e.name AS enterprise_name,
+            e.logo_url AS enterprise_logo_url,
+            e.website AS enterprise_website
+       FROM challenges c
+       JOIN sponsors s ON s.id = c.author
+       JOIN enterprises e ON e.id = s.enterprise_id
+      WHERE c.status = 'published'
+        AND c.visibility = 'visible'
+        AND (c.available_from IS NULL OR c.available_from <= now())
+      ORDER BY c.available_from NULLS FIRST, c.id ASC`,
+  );
+
+  return (rows as Array<Record<string, unknown>>).map((r) => ({
+    id: Number(r.id),
+    title: String(r.title),
+    description: String(r.description),
+    criteria: (r.criteria as string | null) ?? null,
+    prizes: r.prizes ?? [],
+    availableFrom:
+      r.available_from instanceof Date ? r.available_from.toISOString() : (r.available_from as null),
+    enterprise: {
+      id: Number(r.enterprise_id),
+      name: String(r.enterprise_name),
+      logoUrl: (r.enterprise_logo_url as string | null) ?? null,
+      website: (r.enterprise_website as string | null) ?? null,
+    },
+  }));
+}
+
+export interface PublicSponsor {
+  enterpriseId: number;
+  name: string;
+  logoUrl: string | null;
+  website: string | null;
+  priority: number;
+  challengeCount: number;
+}
+
+export async function listPublicSponsors(): Promise<PublicSponsor[]> {
+  const { rows } = await pool.query(
+    `SELECT e.id AS enterprise_id,
+            e.name,
+            e.logo_url,
+            e.website,
+            COALESCE(st.logo_priority, 9999) AS priority,
+            COUNT(DISTINCT c.id)::int AS challenge_count
+       FROM enterprises e
+       JOIN sponsors s ON s.enterprise_id = e.id
+       JOIN challenges c ON c.author = s.id
+       LEFT JOIN sponsor_tiers st ON st.id = e.tier_id
+      WHERE c.status = 'published'
+        AND c.visibility = 'visible'
+        AND (c.available_from IS NULL OR c.available_from <= now())
+      GROUP BY e.id, e.name, e.logo_url, e.website, st.logo_priority
+      ORDER BY priority ASC, e.name ASC`,
+  );
+
+  return (rows as Array<Record<string, unknown>>).map((r) => ({
+    enterpriseId: Number(r.enterprise_id),
+    name: String(r.name),
+    logoUrl: (r.logo_url as string | null) ?? null,
+    website: (r.website as string | null) ?? null,
+    priority: Number(r.priority),
+    challengeCount: Number(r.challenge_count),
+  }));
+}

@@ -21,6 +21,9 @@ export type App = FastifyInstance;
 
 const PUBLIC_OPERATIONS = new Set([
   "GET /healthz",
+  "GET /api/public/activities",
+  "GET /api/public/challenges",
+  "GET /api/public/sponsors",
   "GET /api/announcements/public",
   "GET /api/tv/mode",
   "GET /api/tv/rooms",
@@ -30,6 +33,7 @@ const PUBLIC_OPERATIONS = new Set([
 
 function docsTagFor(url: string): string {
   if (url === "/healthz") return "foundation";
+  if (url.startsWith("/api/public/")) return "public";
   if (url.startsWith("/api/auth/")) return "auth";
   if (url.startsWith("/api/me") || url.startsWith("/api/users") || url.startsWith("/api/permissions"))
     return "identity";
