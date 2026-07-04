@@ -81,43 +81,43 @@ const TEMPLATES: Record<string, TemplateDefinition> = {
   "auth.verify": {
     en: {
       subject: "Verify your hackOS email",
-      body: "Hi {{name}},\n\nConfirm your email address to unlock the rest of hackOS:\n{{verifyUrl}}\n\nIf you didn't request this, ignore this message.",
+      body: "Hi {{name}},\n\nConfirm your email address to unlock the rest of hackOS:\n\n[Verify email]({{verifyUrl}})\n\nIf you didn't request this, ignore this message.",
     },
     es: {
       subject: "Verifica tu correo de hackOS",
-      body: "Hola {{name}},\n\nConfirma tu dirección de correo para desbloquear el resto de hackOS:\n{{verifyUrl}}\n\nSi no lo has pedido tú, ignora este mensaje.",
+      body: "Hola {{name}},\n\nConfirma tu dirección de correo para desbloquear el resto de hackOS:\n\n[Verificar correo]({{verifyUrl}})\n\nSi no lo has pedido tú, ignora este mensaje.",
     },
     gl: {
       subject: "Verifica o teu correo de hackOS",
-      body: "Ola {{name}},\n\nConfirma o teu enderezo de correo para desbloquear o resto de hackOS:\n{{verifyUrl}}\n\nSe non o pediches ti, ignora esta mensaxe.",
+      body: "Ola {{name}},\n\nConfirma o teu enderezo de correo para desbloquear o resto de hackOS:\n\n[Verificar correo]({{verifyUrl}})\n\nSe non o pediches ti, ignora esta mensaxe.",
     },
   },
   "auth.reset": {
     en: {
       subject: "Reset your hackOS password",
-      body: "Hi {{name}},\n\nUse this link to set a new password:\n{{resetUrl}}\n\nIf you didn't request this, you can safely ignore this email — your password hasn't changed.",
+      body: "Hi {{name}},\n\nUse this button to set a new password:\n\n[Reset password]({{resetUrl}})\n\nIf you didn't request this, you can safely ignore this email — your password hasn't changed.",
     },
     es: {
       subject: "Restablece tu contraseña de hackOS",
-      body: "Hola {{name}},\n\nUsa este enlace para fijar una contraseña nueva:\n{{resetUrl}}\n\nSi no lo has pedido tú, puedes ignorar este correo — tu contraseña no ha cambiado.",
+      body: "Hola {{name}},\n\nUsa este botón para fijar una contraseña nueva:\n\n[Restablecer contraseña]({{resetUrl}})\n\nSi no lo has pedido tú, puedes ignorar este correo — tu contraseña no ha cambiado.",
     },
     gl: {
       subject: "Restablece o teu contrasinal de hackOS",
-      body: "Ola {{name}},\n\nUsa esta ligazón para fixar un contrasinal novo:\n{{resetUrl}}\n\nSe non o pediches ti, podes ignorar este correo — o teu contrasinal non cambiou.",
+      body: "Ola {{name}},\n\nUsa este botón para fixar un contrasinal novo:\n\n[Restablecer contrasinal]({{resetUrl}})\n\nSe non o pediches ti, podes ignorar este correo — o teu contrasinal non cambiou.",
     },
   },
   "auth.invite": {
     en: {
       subject: "You're invited to hackOS",
-      body: "Hi,\n\nCreate your account to continue:\n{{claimUrl}}\n\nSet your password, name and the rest of your details from there.",
+      body: "Hi,\n\nCreate your account to continue:\n\n[Create account]({{claimUrl}})\n\nSet your password, name and the rest of your details from there.",
     },
     es: {
       subject: "Te han invitado a hackOS",
-      body: "Hola,\n\nCrea tu cuenta para continuar:\n{{claimUrl}}\n\nDesde ahí fijas tu contraseña, nombre y el resto de tus datos.",
+      body: "Hola,\n\nCrea tu cuenta para continuar:\n\n[Crear cuenta]({{claimUrl}})\n\nDesde ahí fijas tu contraseña, nombre y el resto de tus datos.",
     },
     gl: {
       subject: "Convidáronte a hackOS",
-      body: "Ola,\n\nCrea a túa conta para continuar:\n{{claimUrl}}\n\nDende alí fixa o teu contrasinal, nome e o resto dos teus datos.",
+      body: "Ola,\n\nCrea a túa conta para continuar:\n\n[Crear conta]({{claimUrl}})\n\nDende alí fixa o teu contrasinal, nome e o resto dos teus datos.",
     },
   },
   "queue.called": {
@@ -175,27 +175,51 @@ function brandWrapHtml(
 ): string {
   const width = Math.max(360, Math.min(layout.maxWidth, 720));
   const radius = Math.max(0, Math.min(layout.cardRadius, 32));
+  // Force light rendering: the layout palette is light-themed, so we opt out of
+  // client auto-inversion (Apple Mail on iOS especially) which washes the card
+  // to an unreadable grey. `color-scheme: light` + a solid background keep the
+  // design consistent across light/dark devices.
   return `<!doctype html>
-<html>
-  <body style="margin:0;padding:0;background:${layout.backgroundColor};font-family:Inter,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${layout.backgroundColor};padding:32px 16px;">
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="x-apple-disable-message-reformatting" />
+    <meta name="color-scheme" content="light" />
+    <meta name="supported-color-schemes" content="light" />
+    <style>
+      :root { color-scheme: light; supported-color-schemes: light; }
+      body { margin:0; padding:0; width:100% !important; }
+      a { color:${layout.accentColor}; }
+      .email-body a { word-break:break-word; }
+      @media only screen and (max-width:600px) {
+        .email-pad { padding:24px 20px !important; }
+        .email-head { padding:20px 20px !important; }
+        .email-foot { padding:16px 20px !important; }
+        .email-title { font-size:20px !important; }
+        .email-btn a { display:block !important; text-align:center !important; }
+      }
+    </style>
+  </head>
+  <body style="margin:0;padding:0;background:${layout.backgroundColor};font-family:Inter,Segoe UI,Roboto,Helvetica,Arial,sans-serif;-webkit-text-size-adjust:100%;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${layout.backgroundColor};padding:32px 12px;">
       <tr>
         <td align="center">
           <table role="presentation" width="${width}" cellpadding="0" cellspacing="0" style="width:100%;max-width:${width}px;background:${layout.cardColor};border-radius:${radius}px;overflow:hidden;border:1px solid ${layout.cardBorderColor};">
             <tr>
-              <td style="background:${layout.accentColor};padding:22px 24px;">
+              <td class="email-head" style="background:${layout.accentColor};padding:22px 24px;">
                 <div style="color:#ffffff;font-size:20px;font-weight:700;line-height:1.2;">${escapeHtml(layout.headerText)}</div>
                 <div style="color:rgba(255,255,255,0.9);font-size:13px;margin-top:4px;line-height:1.4;">${escapeHtml(layout.headerSubtext)}</div>
               </td>
             </tr>
             <tr>
-              <td style="padding:28px 24px;color:${layout.textColor};font-size:15px;line-height:1.6;">
-                <h1 style="font-size:22px;line-height:1.3;font-weight:700;margin:0 0 18px;color:${layout.textColor};">${escapeHtml(subject)}</h1>
+              <td class="email-body email-pad" style="padding:28px 24px;color:${layout.textColor};font-size:15px;line-height:1.6;word-break:break-word;">
+                <h1 class="email-title" style="font-size:22px;line-height:1.3;font-weight:700;margin:0 0 18px;color:${layout.textColor};">${escapeHtml(subject)}</h1>
                 ${bodyHtml}
               </td>
             </tr>
             <tr>
-              <td style="padding:16px 24px;color:${layout.mutedTextColor};font-size:12px;line-height:1.5;background:${layout.footerBackgroundColor};border-top:1px solid ${layout.cardBorderColor};">
+              <td class="email-foot" style="padding:16px 24px;color:${layout.mutedTextColor};font-size:12px;line-height:1.5;background:${layout.footerBackgroundColor};border-top:1px solid ${layout.cardBorderColor};">
                 <div style="font-weight:600;margin-bottom:4px;">${escapeHtml(layout.brandName)}</div>
                 <div>${footerTextToHtml(layout.footerText)}</div>
               </td>
@@ -208,11 +232,59 @@ function brandWrapHtml(
 </html>`;
 }
 
-function textToHtmlParagraphs(text: string): string {
+// A whole line that is exactly a bare URL, or a [Label](url) markdown link.
+const BARE_URL_LINE = /^(https?:\/\/\S+)$/;
+const LABELED_LINK_LINE = /^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/;
+
+function ctaButton(url: string, label: string, layout: EmailLayoutSettings): string {
+  return `<table role="presentation" cellpadding="0" cellspacing="0" class="email-btn" style="margin:4px 0 20px;">
+  <tr><td style="border-radius:8px;background:${layout.accentColor};">
+    <a href="${escapeHtml(url)}" target="_blank" rel="noopener" style="display:inline-block;padding:13px 28px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:8px;">${escapeHtml(label)}</a>
+  </td></tr>
+</table>`;
+}
+
+/**
+ * Renders the plain-text body to email-safe HTML. Paragraphs are split on blank
+ * lines. A line that is a bare URL or a `[Label](url)` markdown link becomes a
+ * tappable CTA button (raw wrapping URLs looked terrible on phones); everything
+ * else is escaped text with `<br/>` for soft line breaks.
+ */
+function renderBodyHtml(text: string, layout: EmailLayoutSettings): string {
   return text
     .split(/\n\n+/)
-    .map((para) => `<p style="margin:0 0 12px;">${escapeHtml(para).replace(/\n/g, "<br/>")}</p>`)
+    .map((para) => {
+      let out = "";
+      let buffer: string[] = [];
+      const flush = () => {
+        if (buffer.length > 0) {
+          out += `<p style="margin:0 0 16px;">${buffer.join("<br/>")}</p>`;
+          buffer = [];
+        }
+      };
+      for (const rawLine of para.split("\n")) {
+        const line = rawLine.trim();
+        const labeled = line.match(LABELED_LINK_LINE);
+        const bare = line.match(BARE_URL_LINE);
+        if (labeled) {
+          flush();
+          out += ctaButton(labeled[2] as string, labeled[1] as string, layout);
+        } else if (bare) {
+          flush();
+          out += ctaButton(bare[1] as string, bare[1] as string, layout);
+        } else {
+          buffer.push(escapeHtml(rawLine));
+        }
+      }
+      flush();
+      return out;
+    })
     .join("\n");
+}
+
+/** Strips `[Label](url)` markdown links to `Label: url` for the plain-text part. */
+function bodyToPlainText(text: string): string {
+  return text.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, "$1: $2");
 }
 
 export interface EmailPayload {
@@ -255,8 +327,9 @@ export function renderEmailTemplate(
     ...payload.vars,
   };
   const subject = interpolate(variant.subject, vars);
-  const text = interpolate(variant.body, vars);
-  const html = brandWrapHtml(subject, textToHtmlParagraphs(text), layout);
+  const rendered = interpolate(variant.body, vars);
+  const html = brandWrapHtml(subject, renderBodyHtml(rendered, layout), layout);
+  const text = bodyToPlainText(rendered);
   return { subject, html, text };
 }
 
