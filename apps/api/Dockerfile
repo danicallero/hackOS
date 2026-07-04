@@ -1,8 +1,17 @@
-# Build from the repo root: docker build -f apps/api/Dockerfile .
+# hackOS API image. Build from the repo ROOT:
+#   docker build -f apps/api/Dockerfile -t hackos-api .
+#
+# One image, three run modes (override `command` in compose):
+#   node dist/server.js    HTTP API           (default CMD)
+#   node dist/worker.js    BullMQ worker       (no HTTP listener)
+#   node dist/migrate.js   one-shot migrations (advisory-locked; exits 0)
+
 FROM node:22-alpine AS base
 RUN corepack enable pnpm
 WORKDIR /repo
 
+# ── build: install all deps, compile to dist/, then produce a self-contained
+#    prod bundle via `pnpm deploy` (real node_modules, no workspace symlinks) ─
 FROM base AS build
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY packages ./packages
@@ -10,15 +19,28 @@ COPY apps/api/package.json ./apps/api/
 RUN pnpm install --frozen-lockfile --filter @hackos/api...
 COPY apps/api ./apps/api
 RUN pnpm --filter @hackos/api build
+# Copies the built package + only its production deps into /app, resolving
+# workspace deps to a flat, real node_modules that survives without the store.
+RUN pnpm --filter @hackos/api deploy --prod --legacy /app
 
+# ── deploy: minimal runtime, non-root ─────────────────────────────────────
 FROM base AS deploy
 ENV NODE_ENV=production
-COPY --from=build /repo /repo
-RUN pnpm prune --prod
-WORKDIR /repo/apps/api
+# tini gives us a real init (signal forwarding + zombie reaping) so SIGTERM
+# from the orchestrator reaches Node and triggers graceful shutdown.
+RUN apk add --no-cache tini
+COPY --from=build /app /app
+WORKDIR /app
 
-# Migrations run at container start, guarded by an advisory lock, so N
-# replicas can boot concurrently. Worker containers override CMD with
-# `node dist/worker.js`.
+# Drop root. node:alpine ships an unprivileged `node` user (uid 1000).
+USER node
+
 EXPOSE 3000
-CMD ["sh", "-c", "node dist/migrate.js && node dist/server.js"]
+
+# Liveness: the API's own /healthz pings Postgres + Valkey. Orchestrators
+# (Dokploy/Traefik) use this to gate traffic and restarts.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:3000/healthz || exit 1
+
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["node", "dist/server.js"]

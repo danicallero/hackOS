@@ -1,3 +1,12 @@
 packages:
   - apps/*
   - packages/*
+
+# pnpm 11 errors when a dependency's build script is ignored. esbuild (used by
+# tsup) needs to install its platform binary; the rest are optional native
+# accelerators we intentionally skip. Without this, `pnpm install
+# --frozen-lockfile` in the Docker build fails with ERR_PNPM_IGNORED_BUILDS.
+onlyBuiltDependencies:
+  - esbuild
+ignoredBuiltDependencies:
+  - msgpackr-extract
