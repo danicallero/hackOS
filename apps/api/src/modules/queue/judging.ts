@@ -1,3 +1,4 @@
+import { type Question, validateAnswers } from "@hackos/shared/questions";
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
 
@@ -9,14 +10,32 @@ import { BadRequestError, NotFoundError } from "../../lib/errors.js";
  * just needs to find the existing row.
  */
 
-async function criteriaKeys(client: Queryable, challengeId: number): Promise<Set<string> | null> {
+/**
+ * Load a challenge's judging panel. Returns typed questions when the panel was
+ * built with the question catalogue (H44); otherwise falls back to the legacy
+ * key set (["innovation", ...] or [{ key }, ...]) so pre-builder challenges
+ * still validate leniently.
+ */
+async function loadCriteria(
+  client: Queryable,
+  challengeId: number,
+): Promise<{ typed: Question[] | null; keys: Set<string> | null }> {
   const { rows } = await client.query(
     `SELECT judging_panel_criteria FROM challenges WHERE id = $1`,
     [challengeId],
   );
   const criteria = rows[0]?.judging_panel_criteria;
-  if (!Array.isArray(criteria)) return null; // no panel defined yet — lenient
-  // Accept both shapes: ["innovation", ...] and [{ key: "innovation", ... }, ...]
+  if (!Array.isArray(criteria)) return { typed: null, keys: null }; // no panel yet — lenient
+  const isTyped =
+    criteria.length > 0 &&
+    criteria.every(
+      (c: unknown) =>
+        c != null && typeof c === "object" && typeof (c as { kind?: unknown }).kind === "string",
+    );
+  if (isTyped) {
+    const typed = criteria as Question[];
+    return { typed, keys: new Set(typed.map((q) => q.key)) };
+  }
   const keys = criteria
     .map((c: unknown) =>
       typeof c === "string"
@@ -26,11 +45,11 @@ async function criteriaKeys(client: Queryable, challengeId: number): Promise<Set
           : undefined,
     )
     .filter((k: unknown): k is string => typeof k === "string");
-  return new Set(keys);
+  return { typed: null, keys: new Set(keys) };
 }
 
 export interface AttemptReviewPatch {
-  scores?: Record<string, number>;
+  scores?: Record<string, unknown>;
   notes?: string;
   submit?: boolean;
 }
@@ -56,9 +75,20 @@ export async function upsertAttemptReview(
     if (entryRes.rowCount === 0) throw new NotFoundError("Queue entry not found", { entryId });
     const challengeId = entryRes.rows[0].challenge_id;
 
+    const { typed, keys } =
+      patch.scores || patch.submit
+        ? await loadCriteria(client, challengeId)
+        : { typed: null, keys: null };
     if (patch.scores) {
-      const keys = await criteriaKeys(client, challengeId);
-      if (keys) {
+      if (typed) {
+        // Type/range-check the provided answers (unknown keys, wrong types).
+        const errors = validateAnswers(typed, patch.scores, { requireAll: false });
+        if (errors.length)
+          throw new BadRequestError(
+            `Invalid answers: ${errors.map((e) => `${e.key}: ${e.message}`).join("; ")}`,
+            { errors },
+          );
+      } else if (keys) {
         for (const k of Object.keys(patch.scores)) {
           if (!keys.has(k))
             throw new BadRequestError(`Unknown judging criterion "${k}"`, { criterion: k });
@@ -84,7 +114,8 @@ export async function upsertAttemptReview(
     let newScores = currentScores;
     if (patch.scores) {
       for (const [k, v] of Object.entries(patch.scores)) {
-        if (currentScores[k] !== v) {
+        // JSON-compare so identical multi_choice arrays don't spawn versions.
+        if (JSON.stringify(currentScores[k]) !== JSON.stringify(v)) {
           changedFields.push(`scores.${k}`);
           previous[`scores.${k}`] = currentScores[k] ?? null;
           next[`scores.${k}`] = v;
@@ -107,6 +138,18 @@ export async function upsertAttemptReview(
       previous.status = current.status;
       next.status = "submitted";
       newStatus = "submitted";
+    }
+
+    // On submit, every required question must be answered (H44). Validate the
+    // MERGED answers, not just this patch, so a submit that carries no new
+    // scores still checks what was saved across earlier partial saves.
+    if (patch.submit && typed) {
+      const errors = validateAnswers(typed, newScores, { requireAll: true });
+      if (errors.length)
+        throw new BadRequestError(
+          `Cannot submit: ${errors.map((e) => `${e.key}: ${e.message}`).join("; ")}`,
+          { errors },
+        );
     }
 
     if (changedFields.length === 0) return current; // no-op save, no version row

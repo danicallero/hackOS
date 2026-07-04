@@ -178,6 +178,20 @@ export async function roomPace(roomId: number) {
   const suggestedMinutesPerTeam =
     remainingMinutes !== null && pendingCount > 0 ? remainingMinutes / pendingCount : null;
 
+  // H39: honour the judging end time. When the desired pace won't fit every
+  // pending team before schedule_end_at, the effective time per team is
+  // squeezed down to what does fit — so judging finishes on time. Never
+  // stretches beyond the operator's desired pace.
+  //
+  // This is ADVISORY ONLY: `effectiveMinutesPerTeam` is the target the judge's
+  // timer counts down from. Going over it never auto-closes or force-ends an
+  // evaluation — the frontend just recolours the timer as an over-time cue.
+  // Nothing server-side ends a judging session on a clock.
+  const autoAdjusted = insufficientTime && suggestedMinutesPerTeam !== null;
+  const effectiveMinutesPerTeam = autoAdjusted
+    ? Math.min(state.desired_minutes_per_team, suggestedMinutesPerTeam as number)
+    : state.desired_minutes_per_team;
+
   return {
     roomId,
     desiredMinutesPerTeam: state.desired_minutes_per_team,
@@ -186,6 +200,8 @@ export async function roomPace(roomId: number) {
     requiredMinutes,
     insufficientTime,
     suggestedMinutesPerTeam,
+    effectiveMinutesPerTeam,
+    autoAdjusted,
   };
 }
 

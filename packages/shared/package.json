@@ -6,10 +6,14 @@
   "exports": {
     ".": "./src/index.ts",
     "./capabilities": "./src/capabilities.ts",
-    "./events": "./src/events.ts"
+    "./events": "./src/events.ts",
+    "./questions": "./src/questions.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",
     "test": "echo 'no tests' && exit 0"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
   }
 }

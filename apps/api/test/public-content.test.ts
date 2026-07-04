@@ -46,17 +46,26 @@ describe("public content catalog (H48, H49)", () => {
       `INSERT INTO sponsor_tiers (name, logo_priority) VALUES ('Standard', 2) RETURNING id`,
     );
 
+    // Enterprises are revealed by their OWN visibility window (H45), not by
+    // owning a published challenge.
     const entA = await pool.query(
-      `INSERT INTO enterprises (name, logo_url, website, tier_id) VALUES ($1, $2, $3, $4) RETURNING id`,
+      `INSERT INTO enterprises (name, logo_url, website, tier_id, visibility, available_from)
+       VALUES ($1, $2, $3, $4, 'visible', now() - interval '1 hour') RETURNING id`,
       ["Acme", "https://cdn.test/acme.png", "https://acme.test", tierPrimary.rows[0].id],
     );
     const entB = await pool.query(
-      `INSERT INTO enterprises (name, logo_url, website, tier_id) VALUES ($1, $2, $3, $4) RETURNING id`,
+      `INSERT INTO enterprises (name, logo_url, website, tier_id, visibility, available_from)
+       VALUES ($1, $2, $3, $4, 'visible', now() - interval '2 hours') RETURNING id`,
       ["Beta", "https://cdn.test/beta.png", "https://beta.test", tierStandard.rows[0].id],
     );
     const entHidden = await pool.query(
       `INSERT INTO enterprises (name, logo_url) VALUES ($1, $2) RETURNING id`,
       ["Hidden Corp", "https://cdn.test/hidden.png"],
+    );
+    // Visible but scheduled for the future — must NOT appear yet.
+    await pool.query(
+      `INSERT INTO enterprises (name, logo_url, visibility, available_from)
+       VALUES ('Future Corp', 'https://cdn.test/future.png', 'visible', now() + interval '2 hours')`,
     );
 
     const sponsorA = await pool.query(
@@ -95,10 +104,12 @@ describe("public content catalog (H48, H49)", () => {
     const challenges = await server.inject({ method: "GET", url: "/api/public/challenges" });
     expect(challenges.statusCode).toBe(200);
     expect(challenges.json().items).toHaveLength(2);
-    expect(challenges.json().items.map((c: { title: string }) => c.title).sort()).toEqual([
-      "AI Prize",
-      "Cloud Prize",
-    ]);
+    expect(
+      challenges
+        .json()
+        .items.map((c: { title: string }) => c.title)
+        .sort(),
+    ).toEqual(["AI Prize", "Cloud Prize"]);
     expect(challenges.json().items[0].enterprise.name).toBeTruthy();
 
     const sponsors = await server.inject({ method: "GET", url: "/api/public/sponsors" });

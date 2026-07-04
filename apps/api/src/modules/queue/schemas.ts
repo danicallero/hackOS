@@ -63,8 +63,13 @@ export const manualCallBody = z.object({
   reason: z.string().optional(),
 });
 
+// Answers are typed per the challenge's judging panel (H44): a scale is a
+// number, a boolean is a boolean, choices are a string / string[], text is a
+// string. Validated against the panel definition in upsertAttemptReview.
+const answerValue = z.union([z.number(), z.boolean(), z.string(), z.array(z.string())]);
+
 export const reviewPatchBody = z.object({
-  scores: z.record(z.string(), z.number()).optional(),
+  scores: z.record(z.string(), answerValue).optional(),
   notes: z.string().optional(),
   submit: z.boolean().optional(),
 });
