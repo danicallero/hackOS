@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { registerIntoleranceRoutes } from "./intolerances.js";
 import { registerLogisticsRoutes } from "./routes.js";
 
 /**
@@ -9,4 +10,5 @@ import { registerLogisticsRoutes } from "./routes.js";
  */
 export async function registerLogisticsModule(app: FastifyInstance): Promise<void> {
   registerLogisticsRoutes(app);
+  registerIntoleranceRoutes(app);
 }

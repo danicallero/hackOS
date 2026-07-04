@@ -15,9 +15,8 @@ import {
 import {
   confirmImport,
   getRepo,
-  listPublicChallenges,
-  listPublicSponsors,
   linkParticipant,
+  listPublicChallenges,
   listRepos,
   listUnmatchedParticipants,
   mapPrizeToChallenge,
@@ -48,26 +47,15 @@ export function registerProjectRoutes(app: FastifyInstance): void {
     }),
   });
 
-  const publicSponsorSchema = z.object({
-    enterpriseId: z.number().int(),
-    name: z.string(),
-    logoUrl: z.string().nullable(),
-    website: z.string().nullable(),
-    priority: z.number().int(),
-    challengeCount: z.number().int(),
-  });
-
   r.get(
     "/api/public/challenges",
     { schema: { response: { 200: z.object({ items: z.array(publicChallengeSchema) }) } } },
     async () => ({ items: await listPublicChallenges() }),
   );
 
-  r.get(
-    "/api/public/sponsors",
-    { schema: { response: { 200: z.object({ items: z.array(publicSponsorSchema) }) } } },
-    async () => ({ items: await listPublicSponsors() }),
-  );
+  // Public sponsors live in the sponsors module now: GET /api/public/sponsors
+  // reveals enterprises by their OWN visibility window (H45), no longer derived
+  // from published challenges.
 
   // ── H16: import ──────────────────────────────────────────────────────────
 

@@ -562,7 +562,9 @@ export async function listPublicChallenges(): Promise<PublicChallenge[]> {
     criteria: (r.criteria as string | null) ?? null,
     prizes: r.prizes ?? [],
     availableFrom:
-      r.available_from instanceof Date ? r.available_from.toISOString() : (r.available_from as null),
+      r.available_from instanceof Date
+        ? r.available_from.toISOString()
+        : (r.available_from as null),
     enterprise: {
       id: Number(r.enterprise_id),
       name: String(r.enterprise_name),
@@ -572,40 +574,5 @@ export async function listPublicChallenges(): Promise<PublicChallenge[]> {
   }));
 }
 
-export interface PublicSponsor {
-  enterpriseId: number;
-  name: string;
-  logoUrl: string | null;
-  website: string | null;
-  priority: number;
-  challengeCount: number;
-}
-
-export async function listPublicSponsors(): Promise<PublicSponsor[]> {
-  const { rows } = await pool.query(
-    `SELECT e.id AS enterprise_id,
-            e.name,
-            e.logo_url,
-            e.website,
-            COALESCE(st.logo_priority, 9999) AS priority,
-            COUNT(DISTINCT c.id)::int AS challenge_count
-       FROM enterprises e
-       JOIN sponsors s ON s.enterprise_id = e.id
-       JOIN challenges c ON c.author = s.id
-       LEFT JOIN sponsor_tiers st ON st.id = e.tier_id
-      WHERE c.status = 'published'
-        AND c.visibility = 'visible'
-        AND (c.available_from IS NULL OR c.available_from <= now())
-      GROUP BY e.id, e.name, e.logo_url, e.website, st.logo_priority
-      ORDER BY priority ASC, e.name ASC`,
-  );
-
-  return (rows as Array<Record<string, unknown>>).map((r) => ({
-    enterpriseId: Number(r.enterprise_id),
-    name: String(r.name),
-    logoUrl: (r.logo_url as string | null) ?? null,
-    website: (r.website as string | null) ?? null,
-    priority: Number(r.priority),
-    challengeCount: Number(r.challenge_count),
-  }));
-}
+// Public sponsors moved to the sponsors module (enterprise-driven reveal,
+// H45). See apps/api/src/modules/sponsors/service.ts#listPublicSponsors.

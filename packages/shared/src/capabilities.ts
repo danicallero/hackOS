@@ -32,6 +32,7 @@ export const CAPABILITIES = {
   PRESENCE_SCAN: "presence:scan", // door in/out
   ACTIVITY_SCAN: "activity:scan", // meals + registrable activities
   LOGISTICS_STATS: "logistics:stats", // H24/H27 panels
+  INTOLERANCES_MANAGE: "intolerances:manage", // maintain the food-intolerance dictionary
 
   // queue & judging (H29-H40)
   QUEUE_OPERATE: "queue:operate", // call/skip/no-show/pause/requeue

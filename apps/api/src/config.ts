@@ -18,6 +18,12 @@ const envSchema = z.object({
   S3_ACCESS_KEY: z.string().default("hackos"),
   S3_SECRET_KEY: z.string().default("hackos-secret"),
   S3_BUCKET: z.string().default("hackos"),
+  S3_REGION: z.string().default("us-east-1"),
+  /**
+   * Base URL objects are publicly served from. Defaults to path-style MinIO
+   * (S3_ENDPOINT/S3_BUCKET); set to a CDN / public bucket host in production.
+   */
+  S3_PUBLIC_URL: z.string().optional(),
 
   /**
    * Mail provider (H52). DELTA(H52): the story says the provider is chosen

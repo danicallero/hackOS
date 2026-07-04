@@ -68,6 +68,23 @@ export function requireCapability(capability: Capability): preHandlerHookHandler
   };
 }
 
+/**
+ * Route guard that passes if the caller holds ANY of the listed capabilities.
+ * Used where an action is legitimately reachable from more than one role-view
+ * (e.g. a judge-view action that operators can also perform).
+ */
+export function requireAnyCapability(...capabilities: Capability[]): preHandlerHookHandler {
+  return async (req: FastifyRequest, _reply: FastifyReply) => {
+    if (req.userId == null) throw new UnauthorizedError();
+    for (const cap of capabilities) {
+      if (await userHasCapability(req.userId, cap)) return;
+    }
+    throw new ForbiddenError(`Missing one of capabilities: ${capabilities.join(", ")}`, {
+      capabilities,
+    });
+  };
+}
+
 /** Guard that only requires a logged-in user (any capabilities). */
 export const requireAuth: preHandlerHookHandler = async (req) => {
   if (req.userId == null) throw new UnauthorizedError();
