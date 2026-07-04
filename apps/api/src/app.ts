@@ -1,6 +1,10 @@
 import cors from "@fastify/cors";
+import swagger from "@fastify/swagger";
+import swaggerUi from "@fastify/swagger-ui";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
+  jsonSchemaTransform,
+  jsonSchemaTransformObject,
   serializerCompiler,
   validatorCompiler,
   type ZodTypeProvider,
@@ -41,6 +45,20 @@ export async function buildApp(): Promise<App> {
   });
   await app.register(authContextPlugin);
   app.addHook("onSend", idempotencyOnSend);
+
+  await app.register(swagger, {
+    openapi: {
+      info: {
+        title: "hackOS API",
+        version: "0.0.0",
+        description: "Hackathon management API",
+      },
+      servers: [],
+    },
+    transform: jsonSchemaTransform,
+    transformObject: jsonSchemaTransformObject,
+  });
+  await app.register(swaggerUi, { routePrefix: "/documentation" });
 
   app.setErrorHandler((err, req, reply) => {
     if (err instanceof AppError) {

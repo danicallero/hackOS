@@ -40,6 +40,19 @@ describe("foundation", () => {
     expect(res.json()).toEqual({ status: "ok" });
   });
 
+  it("serves Swagger docs for the API", async () => {
+    app = await buildTestApp();
+
+    const json = await app.inject({ method: "GET", url: "/documentation/json" });
+    expect(json.statusCode).toBe(200);
+    expect(json.json().openapi).toBe("3.0.3");
+    expect(json.json().info.title).toBe("hackOS API");
+
+    const ui = await app.inject({ method: "GET", url: "/documentation/" });
+    expect(ui.statusCode).toBe(200);
+    expect(ui.headers["content-type"]).toContain("text/html");
+  });
+
   it("resolves capabilities through nested groups (H8)", async () => {
     const { pool } = await import("../src/db/pool.js");
     const { getEffectiveCapabilities, userHasCapability } = await import(
