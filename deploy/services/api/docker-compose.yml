@@ -86,7 +86,7 @@ services:
 networks:
   instance:
     external: true
-    name: "${INSTANCE_NETWORK}"
+    name: "${INSTANCE_NETWORK:-hackos-event2026-net}"
   edge:
     external: true
     name: "${PROXY_NETWORK:-dokploy-network}"
