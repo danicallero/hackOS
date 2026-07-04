@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { registerApplicationsModule } from "./applications/index.js";
 import { registerIdentityModule } from "./identity/index.js";
+import { registerLogisticsModule } from "./logistics/index.js";
 import { registerNotificationsModule } from "./notifications/index.js";
 import { registerProjectsModule } from "./projects/index.js";
 import { registerQueueModule } from "./queue/index.js";
@@ -12,8 +13,9 @@ import { registerQueueModule } from "./queue/index.js";
  * conflicts between parallel workstreams.
  */
 export async function registerModules(app: FastifyInstance): Promise<void> {
-  await registerApplicationsModule(app); // WS-A2 (H11-H15)
+  await registerApplicationsModule(app); // WS-A2 (H11-H15, H27)
   await registerIdentityModule(app); // WS-A1 (H1-H10)
+  await registerLogisticsModule(app); // WS-C  (H22-H27)
   await registerNotificationsModule(app); // WS-F  (H50-H53)
   await registerProjectsModule(app); // WS-B1 (H16-H17)
   await registerQueueModule(app); // WS-B2 (H29-H42)
