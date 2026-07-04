@@ -17,6 +17,7 @@ export type App = FastifyInstance;
 
 export async function buildApp(): Promise<App> {
   const app = Fastify({
+    trustProxy: config.trustProxy,
     logger: config.isTest
       ? false
       : {
@@ -28,7 +29,16 @@ export async function buildApp(): Promise<App> {
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
 
-  await app.register(cors, { origin: true, credentials: true });
+  // In production, restrict CORS to the configured origins (credentials are
+  // sent, so reflecting arbitrary origins would be unsafe). In dev, reflect
+  // any origin for convenience.
+  const corsOrigins = config.CORS_ORIGINS.split(",")
+    .map((o) => o.trim())
+    .filter(Boolean);
+  await app.register(cors, {
+    origin: config.isProd ? (corsOrigins.length > 0 ? corsOrigins : false) : true,
+    credentials: true,
+  });
   await app.register(authContextPlugin);
   app.addHook("onSend", idempotencyOnSend);
 

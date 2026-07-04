@@ -44,6 +44,23 @@ const envSchema = z.object({
     .optional()
     .transform((v) => (v === undefined ? undefined : v === "true")),
 
+  /**
+   * Trust X-Forwarded-* headers. Enable when the API sits behind a reverse
+   * proxy (Traefik/Dokploy) so the real client IP reaches the audit trail
+   * (H53) instead of the proxy's address. Never enable when directly exposed.
+   */
+  TRUST_PROXY: z
+    .string()
+    .optional()
+    .transform((v) => v === "true"),
+
+  /**
+   * Comma-separated list of allowed browser origins (the web/TV app URLs).
+   * In production CORS is restricted to exactly this list; in dev it reflects
+   * any origin. Credentials are always allowed, so a bare "*" is refused here.
+   */
+  CORS_ORIGINS: z.string().default(""),
+
   LOG_LEVEL: z.string().default("info"),
 });
 
@@ -54,6 +71,7 @@ export const config = {
   isTest: parsed.NODE_ENV === "test",
   isProd: parsed.NODE_ENV === "production",
   workersInline: parsed.WORKERS_INLINE ?? parsed.NODE_ENV !== "production",
+  trustProxy: parsed.TRUST_PROXY ?? parsed.NODE_ENV === "production",
 };
 
 export type Config = typeof config;
