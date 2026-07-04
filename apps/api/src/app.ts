@@ -50,6 +50,143 @@ function needsAuth(url: string, method: string): boolean {
   return !PUBLIC_OPERATIONS.has(`${method} ${url}`);
 }
 
+function addAuthOperation(
+  paths: Record<string, Record<string, unknown>>,
+  path: string,
+  method: "get" | "post",
+  operation: Record<string, unknown>,
+): void {
+  if (!paths[path]) paths[path] = {};
+  if (paths[path][method]) return;
+  paths[path][method] = operation;
+}
+
+function withAuthDocs(openapiObject: Record<string, unknown>): Record<string, unknown> {
+  const paths = ((openapiObject.paths as Record<string, Record<string, unknown>> | undefined) ??
+    {}) as Record<string, Record<string, unknown>>;
+
+  delete paths["/api/auth/{*}"];
+
+  addAuthOperation(paths, "/api/auth/sign-up/email", "post", {
+    tags: ["auth"],
+    summary: "Sign up (email/password)",
+    description: "Create an account and start an auth session.",
+    security: [],
+    requestBody: {
+      required: true,
+      content: {
+        "application/json": {
+          schema: {
+            type: "object",
+            required: ["email", "password", "name", "surname"],
+            properties: {
+              email: { type: "string", format: "email" },
+              password: { type: "string", minLength: 8 },
+              name: { type: "string" },
+              surname: { type: "string" },
+              language: { type: "string", enum: ["en", "es", "gl"] },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  addAuthOperation(paths, "/api/auth/sign-in/email", "post", {
+    tags: ["auth"],
+    summary: "Sign in (email/password)",
+    description: "Authenticate and set the session cookie.",
+    security: [],
+    requestBody: {
+      required: true,
+      content: {
+        "application/json": {
+          schema: {
+            type: "object",
+            required: ["email", "password"],
+            properties: {
+              email: { type: "string", format: "email" },
+              password: { type: "string" },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  addAuthOperation(paths, "/api/auth/sign-out", "post", {
+    tags: ["auth"],
+    summary: "Sign out",
+    description: "Invalidate the current session.",
+  });
+
+  addAuthOperation(paths, "/api/auth/get-session", "get", {
+    tags: ["auth"],
+    summary: "Get current session",
+    description: "Resolve the active session from cookies/headers.",
+    security: [{ sessionToken: [] }, { bearerToken: [] }],
+  });
+
+  addAuthOperation(paths, "/api/auth/request-password-reset", "post", {
+    tags: ["auth"],
+    summary: "Request password reset",
+    description: "Queue a reset email (enumeration-safe response).",
+    security: [],
+    requestBody: {
+      required: true,
+      content: {
+        "application/json": {
+          schema: {
+            type: "object",
+            required: ["email"],
+            properties: { email: { type: "string", format: "email" } },
+          },
+        },
+      },
+    },
+  });
+
+  addAuthOperation(paths, "/api/auth/reset-password", "post", {
+    tags: ["auth"],
+    summary: "Reset password",
+    description: "Reset password using a token from reset email.",
+    security: [],
+    requestBody: {
+      required: true,
+      content: {
+        "application/json": {
+          schema: {
+            type: "object",
+            required: ["token", "newPassword"],
+            properties: {
+              token: { type: "string" },
+              newPassword: { type: "string", minLength: 8 },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  addAuthOperation(paths, "/api/auth/verify-email", "get", {
+    tags: ["auth"],
+    summary: "Verify email",
+    description: "Confirm email ownership with verification token.",
+    security: [],
+    parameters: [
+      {
+        name: "token",
+        in: "query",
+        required: true,
+        schema: { type: "string" },
+      },
+    ],
+  });
+
+  openapiObject.paths = paths;
+  return openapiObject;
+}
+
 export async function buildApp(): Promise<App> {
   const app = Fastify({
     trustProxy: config.trustProxy,
@@ -105,6 +242,10 @@ export async function buildApp(): Promise<App> {
     transform: (input) => {
       const transformed = jsonSchemaTransform(input);
       const schema = (transformed.schema ?? {}) as Record<string, unknown>;
+      if (transformed.url === "/api/auth/{*}" || transformed.url === "/api/auth/*") {
+        schema.hide = true;
+        return { ...transformed, schema };
+      }
       const method =
         typeof input.route?.method === "string"
           ? input.route.method
@@ -121,7 +262,7 @@ export async function buildApp(): Promise<App> {
 
       return { ...transformed, schema };
     },
-    transformObject: jsonSchemaTransformObject,
+    transformObject: (input) => withAuthDocs(jsonSchemaTransformObject(input)),
   });
   await app.register(swaggerUi, {
     routePrefix: "/documentation",
