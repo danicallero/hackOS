@@ -4,5 +4,10 @@ coverage/
 *.log
 .env
 .env.local
+.env.*
+# keep the templates tracked; ignore any filled-in env files
+!.env.example
+!deploy/.env.shared.example
+!deploy/.env.instance.example
 .DS_Store
 .turbo/

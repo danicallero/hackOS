@@ -1,0 +1,42 @@
+# hackOS · postgres — one standalone Dokploy service.
+# Create as its own Compose service in Dokploy (or `docker compose -p
+# <instance>-postgres up -d`). Joins ONLY the per-instance private network and
+# publishes NO host ports, so it is reachable at hostname `postgres` by the
+# api/worker/migrate services on the same network and by nothing else.
+#
+# Env comes from the Dokploy project's Shared Environment (see deploy/README.md).
+
+services:
+  postgres:
+    image: "postgres:17-alpine"
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_DB: "${POSTGRES_DB}"
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      # explicit alias keeps the hostname stable regardless of project name
+      instance:
+        aliases: ["postgres"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: "${PG_MEM_LIMIT:-1g}"
+
+networks:
+  instance:
+    external: true
+    name: "${INSTANCE_NETWORK}"
+
+volumes:
+  pgdata:

@@ -1,0 +1,58 @@
+# hackOS · minio (S3 object storage) — one standalone Dokploy service.
+# Private network only, no host ports; reachable at hostname `minio` (S3 API on
+# :9000). A one-shot sidecar creates the bucket on first boot. The web console
+# is disabled by default (MINIO_BROWSER=off); to expose it, add Traefik labels
+# for a separate subdomain and set MINIO_BROWSER=on — never publish it raw.
+
+services:
+  minio:
+    image: "${MINIO_IMAGE:-minio/minio:latest}"
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: "${MINIO_ROOT_USER}"
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD}"
+      MINIO_BROWSER: "${MINIO_BROWSER:-off}"
+    volumes:
+      - miniodata:/data
+    networks:
+      instance:
+        aliases: ["minio"]
+    healthcheck:
+      test: ["CMD-SHELL", "mc ready local || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: "${MINIO_MEM_LIMIT:-1g}"
+
+  # Creates the bucket once, then exits. Safe to re-run on every redeploy.
+  minio-init:
+    image: "${MINIO_MC_IMAGE:-minio/mc:latest}"
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        mc alias set s3 http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}" &&
+        mc mb --ignore-existing "s3/$${S3_BUCKET}" &&
+        echo "bucket $${S3_BUCKET} ready"
+    environment:
+      MINIO_ROOT_USER: "${MINIO_ROOT_USER}"
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD}"
+      S3_BUCKET: "${S3_BUCKET:-hackos}"
+    networks: [instance]
+    restart: "no"
+
+networks:
+  instance:
+    external: true
+    name: "${INSTANCE_NETWORK}"
+
+volumes:
+  miniodata:

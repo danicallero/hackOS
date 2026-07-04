@@ -1,0 +1,243 @@
+# ─────────────────────────────────────────────────────────────────────────
+# hackOS — production stack (one deployable instance per hackathon/tenant).
+#
+# Designed for Dokploy (Compose app) but works with plain `docker compose`.
+# Deploy ONE stack per instance; isolation comes from a unique project name
+# (COMPOSE_PROJECT_NAME / Dokploy app name), which scopes volumes, the private
+# network, and the Traefik router names. See deploy/README.md.
+#
+# Every value is supplied by environment interpolation (${VAR}); Dokploy fills
+# these from its Environment panel, the CLI from --env-file. Split your env
+# into a shared, non-secret file and a per-instance secret file
+# (.env.shared.example + .env.instance.example are the templates).
+#
+# Networking model:
+#   private  (internal: true) — postgres, valkey, minio + app tier. No host
+#            ports; datastores are unreachable from outside the stack and have
+#            no internet egress.
+#   edge     (external, Dokploy's proxy net) — api (ingress via Traefik) and
+#            worker (egress for mail/push). Datastores never join it.
+# ─────────────────────────────────────────────────────────────────────────
+
+x-api-image: &api-image "${IMAGE_REPO:-hackos-api}:${IMAGE_TAG:-latest}"
+
+# App-tier env shared by api / worker / migrate. Anchored so the three stay
+# in lockstep — change a secret once, all three pick it up.
+x-app-env: &app-env
+  NODE_ENV: production
+  DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
+  VALKEY_URL: "redis://:${VALKEY_PASSWORD}@valkey:6379"
+  BETTER_AUTH_URL: "https://${API_DOMAIN}"
+  BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET}"
+  CORS_ORIGINS: "${CORS_ORIGINS:-}"
+  TRUST_PROXY: "true"
+  LOG_LEVEL: "${LOG_LEVEL:-info}"
+  S3_ENDPOINT: "http://minio:9000"
+  S3_ACCESS_KEY: "${S3_ACCESS_KEY}"
+  S3_SECRET_KEY: "${S3_SECRET_KEY}"
+  S3_BUCKET: "${S3_BUCKET:-hackos}"
+  MAIL_PROVIDER: "${MAIL_PROVIDER:-smtp}"
+  MAIL_FROM_ADDRESS: "${MAIL_FROM_ADDRESS}"
+  MAIL_FROM_NAME: "${MAIL_FROM_NAME:-hackOS}"
+  RESEND_API_KEY: "${RESEND_API_KEY:-}"
+  POSTAL_URL: "${POSTAL_URL:-}"
+  POSTAL_API_KEY: "${POSTAL_API_KEY:-}"
+  SMTP_HOST: "${SMTP_HOST:-}"
+  SMTP_PORT: "${SMTP_PORT:-587}"
+  SMTP_USER: "${SMTP_USER:-}"
+  SMTP_PASS: "${SMTP_PASS:-}"
+
+x-security: &hardening
+  security_opt:
+    - no-new-privileges:true
+  restart: unless-stopped
+
+services:
+  # ── datastores (private network only, never published) ─────────────────
+  postgres:
+    <<: *hardening
+    image: "postgres:17-alpine"
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_DB: "${POSTGRES_DB}"
+      # Data checksums catch silent corruption; cheap insurance for event data.
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [private]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: "${PG_MEM_LIMIT:-1g}"
+
+  valkey:
+    <<: *hardening
+    image: "valkey/valkey:8-alpine"
+    # requirepass so a stray container on the same net can't read the cache.
+    command: ["valkey-server", "--requirepass", "${VALKEY_PASSWORD}", "--save", "", "--appendonly", "no"]
+    # Password in env too so the healthcheck (valkey-cli -a "$VALKEY_PASSWORD")
+    # can authenticate from inside the container.
+    environment:
+      VALKEY_PASSWORD: "${VALKEY_PASSWORD}"
+    networks: [private]
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli -a $${VALKEY_PASSWORD} ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: "${VALKEY_MEM_LIMIT:-512m}"
+
+  minio:
+    <<: *hardening
+    image: "${MINIO_IMAGE:-minio/minio:latest}"
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: "${MINIO_ROOT_USER}"
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD}"
+      # keep the console off the public internet unless explicitly proxied
+      MINIO_BROWSER: "${MINIO_BROWSER:-off}"
+    volumes:
+      - miniodata:/data
+    networks: [private]
+    healthcheck:
+      test: ["CMD-SHELL", "mc ready local || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: "${MINIO_MEM_LIMIT:-1g}"
+
+  # ── one-shot: create the S3 bucket, then exit ──────────────────────────
+  minio-init:
+    image: "${MINIO_MC_IMAGE:-minio/mc:latest}"
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        mc alias set s3 http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}" &&
+        mc mb --ignore-existing "s3/$${S3_BUCKET}" &&
+        echo "bucket $${S3_BUCKET} ready"
+    environment:
+      MINIO_ROOT_USER: "${MINIO_ROOT_USER}"
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD}"
+      S3_BUCKET: "${S3_BUCKET:-hackos}"
+    networks: [private]
+    restart: "no"
+
+  # ── one-shot: apply DB migrations, then exit (advisory-locked) ──────────
+  migrate:
+    image: *api-image
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    command: ["node", "dist/migrate.js"]
+    environment: *app-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [private]
+    restart: "no"
+
+  # ── HTTP API (ingress via Traefik) ─────────────────────────────────────
+  api:
+    <<: *hardening
+    image: *api-image
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    command: ["node", "dist/server.js"]
+    environment: *app-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    networks: [private, edge]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: "${API_MEM_LIMIT:-512m}"
+    # List form (not map) so ${STACK_NAME} interpolates inside the label NAME —
+    # Compose only reliably interpolates label values, not map keys. Router,
+    # service and middleware names carry the stack prefix so multiple hackOS
+    # instances behind one Traefik never collide.
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${PROXY_NETWORK:-dokploy-network}"
+      - "traefik.http.routers.${STACK_NAME}-api.rule=Host(`${API_DOMAIN}`)"
+      - "traefik.http.routers.${STACK_NAME}-api.entrypoints=websecure"
+      - "traefik.http.routers.${STACK_NAME}-api.tls=true"
+      - "traefik.http.routers.${STACK_NAME}-api.tls.certresolver=${CERT_RESOLVER:-letsencrypt}"
+      - "traefik.http.routers.${STACK_NAME}-api.middlewares=${STACK_NAME}-sec@docker"
+      - "traefik.http.services.${STACK_NAME}-api.loadbalancer.server.port=3000"
+      # SSE (TV/queue streams) must not be buffered by the proxy.
+      - "traefik.http.services.${STACK_NAME}-api.loadbalancer.responseforwarding.flushinterval=-1"
+      - "traefik.http.middlewares.${STACK_NAME}-sec.headers.stsSeconds=31536000"
+      - "traefik.http.middlewares.${STACK_NAME}-sec.headers.stsIncludeSubdomains=true"
+      - "traefik.http.middlewares.${STACK_NAME}-sec.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.${STACK_NAME}-sec.headers.frameDeny=true"
+      - "traefik.http.middlewares.${STACK_NAME}-sec.headers.referrerPolicy=strict-origin-when-cross-origin"
+
+  # ── BullMQ worker (no ingress; edge only for mail/push egress) ─────────
+  worker:
+    <<: *hardening
+    image: *api-image
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    command: ["node", "dist/worker.js"]
+    environment:
+      <<: *app-env
+      WORKERS_INLINE: "false"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    networks: [private, edge]
+    # The image bakes an HTTP /healthz probe for the API; the worker serves no
+    # HTTP, so disable it. Liveness is process-based: on crash, restart kicks in.
+    healthcheck:
+      disable: true
+    deploy:
+      resources:
+        limits:
+          memory: "${WORKER_MEM_LIMIT:-512m}"
+
+networks:
+  # Private: datastores + app tier. internal:true => no host route, no egress.
+  private:
+    driver: bridge
+    internal: true
+  # Edge: the reverse-proxy network Dokploy already manages. Declared external
+  # so this stack attaches to it rather than creating its own.
+  edge:
+    external: true
+    name: "${PROXY_NETWORK:-dokploy-network}"
+
+volumes:
+  pgdata:
+  miniodata:

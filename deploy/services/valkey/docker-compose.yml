@@ -1,0 +1,41 @@
+# hackOS · valkey — one standalone Dokploy service.
+# Private network only, no host ports; reachable at hostname `valkey`.
+# Password-protected (requirepass) so nothing else on the network can read the
+# cache/queues. Persistence is off — Valkey holds only ephemeral queue/realtime
+# state; the source of truth is Postgres.
+
+services:
+  valkey:
+    image: "valkey/valkey:8-alpine"
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    command:
+      - "valkey-server"
+      - "--requirepass"
+      - "${VALKEY_PASSWORD}"
+      - "--save"
+      - ""
+      - "--appendonly"
+      - "no"
+    # Password is also placed in the container env so the healthcheck can
+    # authenticate (it runs valkey-cli -a "$VALKEY_PASSWORD" inside here).
+    environment:
+      VALKEY_PASSWORD: "${VALKEY_PASSWORD}"
+    networks:
+      instance:
+        aliases: ["valkey"]
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli -a $${VALKEY_PASSWORD} ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: "${VALKEY_MEM_LIMIT:-512m}"
+
+networks:
+  instance:
+    external: true
+    name: "${INSTANCE_NETWORK}"
