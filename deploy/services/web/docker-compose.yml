@@ -2,9 +2,16 @@
 #
 # The web frontend has its OWN Traefik router (${STACK_NAME}-web) and its OWN
 # domain (${WEB_DOMAIN}). It is NEVER served by, or routed together with, the
-# api service — deploy it separately. It joins ONLY the proxy (edge) network:
-# the browser talks to the api directly at NEXT_PUBLIC_API_URL, so the web tier
-# never needs the private datastore network.
+# api service — deploy it separately.
+#
+# Networks — it joins the SAME two the api joins, so whatever reaches the api
+# reaches the web the same way:
+#   edge      (dokploy-network) — Traefik ingress.
+#   instance  (${INSTANCE_NETWORK}) — the per-instance network. This is what
+#             lets a tunnel/sidecar address the container by service name:
+#             point it at http://web:3001 (mirror of the api's http://api:3000).
+# The web tier still never touches the datastores; it only needs to be
+# reachable by name.
 #
 # Add https://${WEB_DOMAIN} to the api's CORS_ORIGINS so credentialed requests
 # from the browser are allowed.
@@ -24,7 +31,9 @@ services:
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped
-    networks: [edge]
+    # Reachable by service name "web" on the instance network (tunnel target
+    # http://web:3001) and via Traefik on the edge network.
+    networks: [instance, edge]
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/ || exit 1"]
       interval: 15s
@@ -50,6 +59,9 @@ services:
       - "traefik.http.middlewares.${STACK_NAME}-web-sec.headers.referrerPolicy=strict-origin-when-cross-origin"
 
 networks:
+  instance:
+    external: true
+    name: "${INSTANCE_NETWORK:-hackos-event2026-net}"
   edge:
     external: true
     name: "${PROXY_NETWORK:-dokploy-network}"
