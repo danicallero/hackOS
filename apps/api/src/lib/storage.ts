@@ -22,6 +22,29 @@ const s3 = new S3Client({
 
 const PRESIGN_TTL_S = 300;
 
+/**
+ * Upload bytes to storage server-side and return the public URL. Used when the
+ * browser can't reach the object store directly (private MinIO behind the app
+ * network / a tunnel) — the client POSTs the file to the API, the API stores
+ * it here. `publicUrl` still governs where it's *served* from, so set
+ * S3_PUBLIC_URL to a browser-reachable host for the object to display.
+ */
+export async function putObject(
+  key: string,
+  body: Uint8Array | Buffer,
+  contentType: string,
+): Promise<string> {
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: config.S3_BUCKET,
+      Key: key,
+      Body: body,
+      ContentType: contentType,
+    }),
+  );
+  return publicUrl(key);
+}
+
 /** Public URL an object is served from once uploaded. */
 export function publicUrl(key: string): string {
   const base = config.S3_PUBLIC_URL ?? `${config.S3_ENDPOINT}/${config.S3_BUCKET}`;

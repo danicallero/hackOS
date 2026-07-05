@@ -114,7 +114,10 @@ describe("enterprise management (H43-H45)", () => {
     ]);
   });
 
-  it("presigns a logo upload and sets logo_url optimistically", async () => {
+  it("logo upload (multipart) requires enterprise edit access", async () => {
+    // The bytes go straight to the object store (putObject → MinIO), so the
+    // happy path is an integration concern. Here we assert the access guard,
+    // which runs before the file is read: an outsider is refused (403).
     const a = await getApp();
     const admin = await createUserWithCapabilities([CAPABILITIES.SPONSORS_MANAGE]);
     const created = await a.inject({
@@ -125,22 +128,13 @@ describe("enterprise management (H43-H45)", () => {
     });
     const entId = created.json().id;
 
+    const outsider = await createUserWithCapabilities([]);
     const res = await a.inject({
       method: "POST",
       url: `/api/enterprises/${entId}/logo`,
-      headers: asUser(admin),
-      payload: { contentType: "image/png" },
+      headers: asUser(outsider),
     });
-    expect(res.statusCode).toBe(200);
-    expect(res.json().uploadUrl).toContain(`enterprises/${entId}/logo-`);
-    expect(res.json().publicUrl).toBe(res.json().publicUrl);
-
-    const ent = await a.inject({
-      method: "GET",
-      url: `/api/enterprises/${entId}`,
-      headers: asUser(admin),
-    });
-    expect(ent.json().logo_url).toBe(res.json().publicUrl);
+    expect(res.statusCode).toBe(403);
   });
 
   it("rejects duplicate enterprise names", async () => {

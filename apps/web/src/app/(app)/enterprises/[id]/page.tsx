@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
+import { API_URL } from "@/lib/env";
 import { useCan } from "@/lib/session";
 import {
   type Enterprise,
@@ -46,7 +47,6 @@ import {
   initials,
   LOGO_ACCEPT,
   LOGO_CONTENT_TYPES,
-  type PresignedUpload,
   toDatetimeLocal,
 } from "../shared";
 
@@ -195,22 +195,25 @@ function LogoCard({
 
     setUploading(true);
     try {
-      // 1) Presign: POST returns a one-shot PUT URL; the API also sets logo_url
-      //    to the eventual public URL optimistically.
-      const presigned = await api.post<PresignedUpload>(`/api/enterprises/${enterprise.id}/logo`, {
-        contentType: file.type,
+      // POST the file to the API (multipart); the API stores it and sets
+      // logo_url server-side, so the browser never touches the object store.
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch(`${API_URL}/api/enterprises/${enterprise.id}/logo`, {
+        method: "POST",
+        credentials: "include",
+        body: fd,
       });
-      // 2) Upload the bytes straight to storage.
-      const res = await fetch(presigned.uploadUrl, {
-        method: "PUT",
-        body: file,
-        headers: { "content-type": file.type },
-      });
-      if (!res.ok) throw new Error(`Upload failed (${res.status})`);
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as {
+          error?: { message?: string };
+        } | null;
+        throw new Error(body?.error?.message ?? `Upload failed (${res.status})`);
+      }
       await onChanged();
       toast.success("Logo updated.");
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not upload the logo.");
+      toast.error(err instanceof Error ? err.message : "Could not upload the logo.");
     } finally {
       setUploading(false);
     }

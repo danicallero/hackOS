@@ -1,4 +1,5 @@
 import cors from "@fastify/cors";
+import multipart from "@fastify/multipart";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import Fastify, { type FastifyInstance } from "fastify";
@@ -228,6 +229,9 @@ export async function buildApp(): Promise<App> {
     // limit backoff (H3) and idempotent-replay signalling.
     exposedHeaders: ["retry-after", "idempotency-replayed"],
   });
+  // File uploads (H44 sponsor logos) proxied through the API so the browser
+  // never needs to reach the object store directly. 5 MB cap on a logo.
+  await app.register(multipart, { limits: { fileSize: 5 * 1024 * 1024, files: 1 } });
   await app.register(authContextPlugin);
   app.addHook("onSend", idempotencyOnSend);
 

@@ -10,6 +10,7 @@ import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { DateTimeInput } from "@/components/common/datetime-input";
 import { SectionCard } from "@/components/common/section-card";
 import { SubmitButton } from "@/components/common/submit-button";
 import {
@@ -175,7 +176,7 @@ export default function EventSettingsPage() {
               <FormItem>
                 <FormLabel>Hacking starts</FormLabel>
                 <FormControl>
-                  <Input type="datetime-local" {...field} />
+                  <DateTimeInput value={field.value} onChange={field.onChange} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -188,7 +189,7 @@ export default function EventSettingsPage() {
               <FormItem>
                 <FormLabel>Hacking ends</FormLabel>
                 <FormControl>
-                  <Input type="datetime-local" {...field} />
+                  <DateTimeInput value={field.value} onChange={field.onChange} />
                 </FormControl>
                 <FormDescription>Must be after the start time.</FormDescription>
                 <FormMessage />

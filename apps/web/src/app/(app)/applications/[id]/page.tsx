@@ -19,6 +19,7 @@ import {
   ArrowLeftIcon,
   ArrowUpIcon,
   ClipboardListIcon,
+  EyeIcon,
   FileTextIcon,
   ListChecksIcon,
   LockIcon,
@@ -35,6 +36,7 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 import { type Column, DataTable } from "@/components/common/data-table";
+import { DateTimeInput } from "@/components/common/datetime-input";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
 import { SectionCard } from "@/components/common/section-card";
@@ -393,7 +395,7 @@ function MetadataCard({ form, onSaved }: { form: ApplicationForm; onSaved: () =>
                 <FormItem>
                   <FormLabel>Opens</FormLabel>
                   <FormControl>
-                    <Input type="datetime-local" {...field} />
+                    <DateTimeInput value={field.value} onChange={field.onChange} />
                   </FormControl>
                   <FormDescription>Blank = open now.</FormDescription>
                   <FormMessage />
@@ -407,7 +409,7 @@ function MetadataCard({ form, onSaved }: { form: ApplicationForm; onSaved: () =>
                 <FormItem>
                   <FormLabel>Closes</FormLabel>
                   <FormControl>
-                    <Input type="datetime-local" {...field} />
+                    <DateTimeInput value={field.value} onChange={field.onChange} />
                   </FormControl>
                   <FormDescription>Blank = never closes.</FormDescription>
                   <FormMessage />
@@ -480,6 +482,7 @@ function newField(index: number): TemplateField {
 function QuestionsCard({ form, onSaved }: { form: ApplicationForm; onSaved: () => Promise<void> }) {
   const [fields, setFields] = useState<TemplateField[]>(form.template);
   const [saving, setSaving] = useState(false);
+  const [preview, setPreview] = useState(false);
 
   // Re-seed if the form reloads (e.g. after a metadata save).
   useEffect(() => {
@@ -568,10 +571,28 @@ function QuestionsCard({ form, onSaved }: { form: ApplicationForm; onSaved: () =
       title="Questions"
       description="Fields applicants fill in, in order. Labels carry all three locales (es/en/gl)."
       action={
-        <Button type="button" variant="outline" size="sm" onClick={add}>
-          <PlusIcon />
-          Add question
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setPreview(true)}
+            disabled={fields.length === 0}
+          >
+            <EyeIcon />
+            Preview
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={add}>
+            <PlusIcon />
+            Add question
+          </Button>
+          <FormPreviewModal
+            open={preview}
+            onOpenChange={setPreview}
+            name={form.name}
+            fields={fields}
+          />
+        </div>
       }
       footer={
         <SubmitButton type="button" pending={saving} onClick={save}>
@@ -603,6 +624,73 @@ function QuestionsCard({ form, onSaved }: { form: ApplicationForm; onSaved: () =
         </div>
       )}
     </SectionCard>
+  );
+}
+
+/** Read-only preview of the form as an applicant sees it (H11). */
+function FormPreviewModal({
+  open,
+  onOpenChange,
+  name,
+  fields,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  name: string;
+  fields: TemplateField[];
+}) {
+  return (
+    <Modal open={open} onOpenChange={onOpenChange} title={`Preview — ${name}`} size="lg">
+      <div className="space-y-4">
+        <p className="text-muted-foreground text-sm">
+          This is how applicants see the form (Spanish labels shown). Name, email and logistics are
+          collected separately.
+        </p>
+        {fields.map((f, i) => {
+          const label = pickText(f.label, "es") || f.key;
+          const opts = f.options ?? [];
+          return (
+            <div key={`${f.key}-${i}`} className="space-y-1.5">
+              <Label>
+                {label}
+                {f.required && <span className="text-destructive"> *</span>}
+              </Label>
+              {f.kind === "textarea" ? (
+                <Textarea disabled rows={2} placeholder="Applicant's answer" />
+              ) : f.kind === "checkbox" ? (
+                <div className="text-muted-foreground flex items-center gap-2 text-sm">
+                  <input type="checkbox" disabled /> Yes / No
+                </div>
+              ) : f.kind === "select" || f.kind === "multiselect" ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {opts.length === 0 ? (
+                    <span className="text-muted-foreground text-sm">No options defined</span>
+                  ) : (
+                    opts.map((o, oi) => (
+                      <span
+                        key={`${o.value}-${oi}`}
+                        className="border-input rounded-md border px-2 py-0.5 text-sm"
+                      >
+                        {pickText(o.label, "es") || o.value}
+                      </span>
+                    ))
+                  )}
+                  {f.kind === "multiselect" && (
+                    <span className="text-muted-foreground text-xs">(choose any)</span>
+                  )}
+                </div>
+              ) : (
+                <Input
+                  disabled
+                  type={f.kind === "number" ? "number" : f.kind === "date" ? "date" : "text"}
+                  placeholder={f.kind === "file-url" ? "https://… (link)" : "Applicant's answer"}
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </Modal>
   );
 }
 

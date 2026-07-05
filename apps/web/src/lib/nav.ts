@@ -2,6 +2,7 @@ import { CAPABILITIES, type Capability } from "@hackos/shared/capabilities";
 import {
   CalendarDaysIcon,
   ClipboardListIcon,
+  FileTextIcon,
   HandshakeIcon,
   LayoutDashboardIcon,
   ListOrderedIcon,
@@ -40,7 +41,11 @@ export interface NavSection {
  */
 export const NAV: NavSection[] = [
   {
-    items: [{ title: "Dashboard", href: "/dashboard", icon: LayoutDashboardIcon }],
+    items: [
+      { title: "Dashboard", href: "/dashboard", icon: LayoutDashboardIcon },
+      // Participant-facing: everyone can apply (H12-H15). No capability gate.
+      { title: "My applications", href: "/my-applications", icon: FileTextIcon },
+    ],
   },
   {
     label: "Operations",
