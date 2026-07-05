@@ -221,14 +221,18 @@ describe("review + decide (H13, H14)", () => {
     });
     expect((await getResponse(responseId)).status).toBe("accepted");
 
-    // revert after send is a 409
+    // revert after send now UN-SENDS back to an internal decision (M2 update):
+    // staff can pull a sent decision back to accepted_internal/rejected_internal.
     const afterSend = await a.inject({
       method: "POST",
       url: `/api/responses/${responseId}/revert-decision`,
       headers: asUser(decider),
       payload: { decision: "rejected" },
     });
-    expect(afterSend.statusCode).toBe(409);
+    expect(afterSend.statusCode).toBe(200);
+    const reverted = await getResponse(responseId);
+    expect(reverted.status).toBe("rejected_internal");
+    expect(reverted.decision_sent_at).toBeNull();
   });
 
   it("capacity guard: accepting past capacity is a 409", async () => {

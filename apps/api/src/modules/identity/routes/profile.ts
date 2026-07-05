@@ -34,6 +34,10 @@ const selfPatchSchema = z
     language: z.enum(LANGUAGES).optional(),
     image: z.string().max(2000).nullable().optional(),
     universityId: z.number().int().nullable().optional(),
+    // Logistics data a participant owns and manages on their own settings page.
+    foodIntolerances: z.array(z.number().int()).optional(),
+    foodIntoleranceNotes: z.string().max(2000).nullable().optional(),
+    shirtSize: z.string().max(10).nullable().optional(),
   })
   .strict();
 
@@ -42,9 +46,6 @@ const staffPatchSchema = selfPatchSchema
   .extend({
     dni: z.string().max(50).nullable().optional(),
     notes: z.string().max(4000).nullable().optional(),
-    foodIntolerances: z.array(z.number().int()).optional(),
-    foodIntoleranceNotes: z.string().max(2000).nullable().optional(),
-    shirtSize: z.string().max(10).nullable().optional(),
   })
   .strict();
 
@@ -233,22 +234,32 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     async (req) => {
       const userId = req.userId as number;
       // M1.5: once any application has been accepted, the participant can no
-      // longer change their own legal name (it's on their badge/certificate).
-      // Staff can still fix it via PATCH /api/users/:id. Statuses that count as
-      // "accepted": internally accepted, decision sent, and confirmed.
+      // longer CHANGE their own legal name (it's on their badge/certificate).
+      // We compare against the stored values so an unchanged name/surname
+      // (the settings form always submits them) doesn't block edits to other
+      // fields like shirt size or dietary info. Staff can still fix names via
+      // PATCH /api/users/:id. Locked statuses: internally accepted, sent, confirmed.
       if (req.body.name !== undefined || req.body.surname !== undefined) {
-        const { rows } = await pool.query(
-          `SELECT 1 FROM application_responses
-             WHERE user_id = $1
-               AND status IN ('accepted_internal', 'accepted', 'confirmed')
-             LIMIT 1`,
-          [userId],
-        );
-        if (rows.length > 0) {
-          throw new ConflictError(
-            "Your name is locked because an application has been accepted — ask staff to change it.",
-            { code: "name_locked" },
+        const { rows: cur } = await pool.query(`SELECT name, surname FROM users WHERE id = $1`, [
+          userId,
+        ]);
+        const changingName = req.body.name !== undefined && req.body.name !== cur[0]?.name;
+        const changingSurname =
+          req.body.surname !== undefined && req.body.surname !== cur[0]?.surname;
+        if (changingName || changingSurname) {
+          const { rows } = await pool.query(
+            `SELECT 1 FROM application_responses
+               WHERE user_id = $1
+                 AND status IN ('accepted_internal', 'accepted', 'confirmed')
+               LIMIT 1`,
+            [userId],
           );
+          if (rows.length > 0) {
+            throw new ConflictError(
+              "Your name is locked because an application has been accepted — ask staff to change it.",
+              { code: "name_locked" },
+            );
+          }
         }
       }
       const after = await applyUserPatch(userId, userId, req.body, "web");

@@ -1050,7 +1050,7 @@ function ApplicationTab({ userId }: { userId: number }) {
               {r.status.replace(/_/g, " ")}
             </StatusBadge>
             <Button asChild size="sm" variant="outline">
-              <Link href={`/applications/${r.application_id}`}>Open</Link>
+              <Link href={`/applications/${r.application_id}?response=${r.id}`}>Open</Link>
             </Button>
           </li>
         ))}

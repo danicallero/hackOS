@@ -55,6 +55,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -1010,6 +1012,21 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
     return () => clearTimeout(handle);
   }, [load]);
 
+  // Deep-link: `?response=<id>` (used by the profile Application tab) opens that
+  // specific response's review modal directly — the same view as clicking a row
+  // — instead of leaving the staff on the general responses list.
+  const [pendingResponseId, setPendingResponseId] = useState<number | null>(null);
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search).get("response");
+    if (p && /^\d+$/.test(p)) setPendingResponseId(Number(p));
+  }, []);
+  useEffect(() => {
+    if (pendingResponseId != null && rows.some((r) => r.id === pendingResponseId)) {
+      setSelectedId(pendingResponseId);
+      setPendingResponseId(null);
+    }
+  }, [rows, pendingResponseId]);
+
   const selected = useMemo(() => rows.find((r) => r.id === selectedId) ?? null, [rows, selectedId]);
 
   const columns: Column<ResponseRow>[] = [
@@ -1122,6 +1139,8 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
         <div className="flex items-center gap-2 rounded-lg border p-3">
           <span className="text-sm font-medium">{selectedIds.size} selected</span>
           <div className="ml-auto flex flex-wrap gap-2">
+            {/* Primary: decide + send. Everything else lives under "More" to keep
+                the bar uncluttered. */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button size="sm" variant="outline" disabled={batchBusy}>
@@ -1175,13 +1194,14 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
               <DropdownMenuTrigger asChild>
                 <Button size="sm" variant="outline" disabled={batchBusy}>
                   <RotateCcwIcon />
-                  Revert
+                  More
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                <DropdownMenuLabel>Revert</DropdownMenuLabel>
                 <DropdownMenuItem
                   onClick={() =>
-                    batchAction("Reverted to accepted.", () =>
+                    batchAction("Reverted to accepted (internal).", () =>
                       api.post("/api/responses/batch/revert-decision", {
                         response_ids: selectedArr.map((r) => r.id),
                         decision: "accepted",
@@ -1189,11 +1209,11 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
                     )
                   }
                 >
-                  Revert to accepted
+                  To accepted (unsend)
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() =>
-                    batchAction("Reverted to rejected.", () =>
+                    batchAction("Reverted to rejected (internal).", () =>
                       api.post("/api/responses/batch/revert-decision", {
                         response_ids: selectedArr.map((r) => r.id),
                         decision: "rejected",
@@ -1201,40 +1221,46 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
                     )
                   }
                 >
-                  Revert to rejected
+                  To rejected (unsend)
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() =>
+                    batchAction("Reverted to submitted.", () =>
+                      api.post("/api/responses/batch/revert-decision", {
+                        response_ids: selectedArr.map((r) => r.id),
+                        decision: "submitted",
+                      }),
+                    )
+                  }
+                >
+                  To submitted (re-review)
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() =>
+                    batchAction("Re-accepted.", () =>
+                      api.post("/api/responses/batch/re-accept", {
+                        response_ids: selectedArr.map((r) => r.id),
+                      }),
+                    )
+                  }
+                >
+                  Re-accept (declined/expired)
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  variant="destructive"
+                  onClick={() =>
+                    batchAction("Spots revoked.", () =>
+                      api.post("/api/responses/batch/revoke-spot", {
+                        response_ids: selectedArr.map((r) => r.id),
+                      }),
+                    )
+                  }
+                >
+                  Revoke spot
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={batchBusy}
-              onClick={() =>
-                batchAction("Re-accepted.", () =>
-                  api.post("/api/responses/batch/re-accept", {
-                    response_ids: selectedArr.map((r) => r.id),
-                  }),
-                )
-              }
-            >
-              <RotateCcwIcon />
-              Re-accept
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={batchBusy}
-              onClick={() =>
-                batchAction("Spots revoked.", () =>
-                  api.post("/api/responses/batch/revoke-spot", {
-                    response_ids: selectedArr.map((r) => r.id),
-                  }),
-                )
-              }
-            >
-              <XIcon />
-              Revoke spot
-            </Button>
             <Button
               size="sm"
               variant="ghost"
@@ -1757,6 +1783,22 @@ function ReviewModal({
                   }
                 >
                   Resend
+                </Button>
+              )}
+              {canDecide && ((st === "accepted" && sent) || st === "rejected") && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() =>
+                    run("Pulled back to internal (unsent).", () =>
+                      api.post(`/api/responses/${response.id}/revert-decision`, {
+                        decision: st === "accepted" ? "accepted" : "rejected",
+                      }),
+                    )
+                  }
+                >
+                  Unsend
                 </Button>
               )}
               {canDecide && (st === "rejected" || st === "declined" || st === "expired") && (

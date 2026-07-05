@@ -713,14 +713,13 @@ export async function revertDecision(
       return updated.rows[0];
     }
 
-    // accepted_internal / rejected_internal flip
-    if (resp.decision_sent_at) {
-      throw new ConflictError("Cannot revert a decision that has already been sent", {
-        status: resp.status,
-      });
-    }
-    if (resp.status !== "accepted_internal" && resp.status !== "rejected_internal") {
-      throw new ConflictError("Only internal decisions can be reverted", {
+    // Flip / un-send to an internal decision. Works from an unsent internal
+    // decision AND from an already-SENT one (accepted/rejected) — the latter is
+    // un-sent: decision_sent_at and any pending confirmation token are dropped
+    // so staff can re-decide before re-sending.
+    const revertable = ["accepted_internal", "rejected_internal", "accepted", "rejected"];
+    if (!revertable.includes(resp.status)) {
+      throw new ConflictError("Only a decided response can be reverted to an internal decision", {
         status: resp.status,
       });
     }
@@ -728,10 +727,10 @@ export async function revertDecision(
     const newInternalStatus =
       newDecision === "accepted" ? "accepted_internal" : "rejected_internal";
     if (resp.status === newInternalStatus) {
-      return resp; // idempotent — same decision
+      return resp; // idempotent — already this internal decision
     }
 
-    // If reverting to accepted, re-check capacity
+    // Re-check capacity when the result is an accepted slot (ignoring this row).
     if (newDecision === "accepted") {
       const { rows: appRows } = await client.query(
         `SELECT * FROM applications WHERE id = $1 FOR UPDATE`,
@@ -741,8 +740,9 @@ export async function revertDecision(
       if (app.capacity != null) {
         const { rows: countRows } = await client.query(
           `SELECT count(*)::int AS n FROM application_responses
-           WHERE application_id = $1 AND status IN ('accepted_internal', 'accepted', 'confirmed')`,
-          [resp.application_id],
+           WHERE application_id = $1 AND id <> $2
+             AND status IN ('accepted_internal', 'accepted', 'confirmed')`,
+          [resp.application_id, responseId],
         );
         if (countRows[0].n >= app.capacity) {
           throw new ConflictError("Capacity reached for this application", {
@@ -753,8 +753,19 @@ export async function revertDecision(
       }
     }
 
+    // If it had already been sent, un-send it: clear the sent marker, any
+    // pending confirmation token, and confirm/decline stamps.
+    if (resp.confirmation_token_id) {
+      await client.query(
+        `UPDATE email_verification_tokens SET used_at = now() WHERE id = $1 AND used_at IS NULL`,
+        [resp.confirmation_token_id],
+      );
+    }
     const updated = await client.query(
-      `UPDATE application_responses SET status = $2 WHERE id = $1 RETURNING *`,
+      `UPDATE application_responses
+         SET status = $2, decision_sent_at = NULL, confirmation_token_id = NULL,
+             confirmed_at = NULL, declined_at = NULL
+       WHERE id = $1 RETURNING *`,
       [responseId, newInternalStatus],
     );
     await audit(client, {
