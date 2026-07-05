@@ -32,7 +32,7 @@ COPY apps/web/public ./apps/web/public
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 ENV NEXT_TELEMETRY_DISABLED=1
-# Lint is CI-only; ignoreDuringBuilds: true in next.config.ts.
+ENV NEXT_LINT=false
 # Cache .next/cache across builds so Next's compilation step is incremental.
 RUN --mount=type=cache,id=next-cache,target=/repo/apps/web/.next/cache \
     pnpm --filter @hackos/web exec next build
