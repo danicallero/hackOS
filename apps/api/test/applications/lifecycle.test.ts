@@ -76,11 +76,6 @@ async function toAcceptedSent(appId: number): Promise<{ userId: number; response
   const { userId, responseId } = await submittedApplicant(appId);
   await a.inject({
     method: "POST",
-    url: `/api/responses/${responseId}/start-review`,
-    headers: asUser(reviewer),
-  });
-  await a.inject({
-    method: "POST",
     url: `/api/responses/${responseId}/decide`,
     headers: asUser(decider),
     payload: { decision: "accepted" },
@@ -94,7 +89,7 @@ async function toAcceptedSent(appId: number): Promise<{ userId: number; response
 }
 
 describe("review + decide (H13, H14)", () => {
-  it("submit auto-transitions to review; start-review is a no-op; decide works directly", async () => {
+  it("submit auto-transitions to review; decide works directly", async () => {
     const a = await getApp();
     const appId = await createApplication();
     const { responseId } = await submittedApplicant(appId);
@@ -102,15 +97,6 @@ describe("review + decide (H13, H14)", () => {
     // after submit the response is already in review
     const r = await getResponse(responseId);
     expect(r.status).toBe("review");
-
-    // start-review is idempotent on an already-reviewed response
-    const ok = await a.inject({
-      method: "POST",
-      url: `/api/responses/${responseId}/start-review`,
-      headers: asUser(reviewer),
-    });
-    expect(ok.statusCode).toBe(200);
-    expect(ok.json().status).toBe("review");
 
     // decide works directly after submit — no manual start-review needed
     const decided = await a.inject({
@@ -128,11 +114,6 @@ describe("review + decide (H13, H14)", () => {
     const appId = await createApplication();
     const { responseId } = await submittedApplicant(appId);
     const reviewer2 = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_REVIEW]);
-    await a.inject({
-      method: "POST",
-      url: `/api/responses/${responseId}/start-review`,
-      headers: asUser(reviewer),
-    });
 
     await a.inject({
       method: "PUT",
@@ -167,11 +148,6 @@ describe("review + decide (H13, H14)", () => {
     const a = await getApp();
     const appId = await createApplication();
     const { userId, responseId } = await submittedApplicant(appId);
-    await a.inject({
-      method: "POST",
-      url: `/api/responses/${responseId}/start-review`,
-      headers: asUser(reviewer),
-    });
     await a.inject({
       method: "POST",
       url: `/api/responses/${responseId}/decide`,
@@ -260,13 +236,6 @@ describe("review + decide (H13, H14)", () => {
     const appId = await createApplication({ capacity: 1 });
     const first = await submittedApplicant(appId);
     const second = await submittedApplicant(appId);
-    for (const id of [first.responseId, second.responseId]) {
-      await a.inject({
-        method: "POST",
-        url: `/api/responses/${id}/start-review`,
-        headers: asUser(reviewer),
-      });
-    }
     const ok = await a.inject({
       method: "POST",
       url: `/api/responses/${first.responseId}/decide`,
@@ -288,11 +257,6 @@ describe("review + decide (H13, H14)", () => {
     const a = await getApp();
     const appId = await createApplication();
     const { userId, responseId } = await submittedApplicant(appId);
-    await a.inject({
-      method: "POST",
-      url: `/api/responses/${responseId}/start-review`,
-      headers: asUser(reviewer),
-    });
     await a.inject({
       method: "POST",
       url: `/api/responses/${responseId}/decide`,
@@ -452,11 +416,6 @@ describe("confirm / decline (H15)", () => {
       [userId2, appB],
     );
     const respB = rows[0].id;
-    await a.inject({
-      method: "POST",
-      url: `/api/responses/${respB}/start-review`,
-      headers: asUser(reviewer),
-    });
     await a.inject({
       method: "POST",
       url: `/api/responses/${respB}/decide`,
@@ -746,11 +705,6 @@ describe("re-accept (admin)", () => {
 
     await a.inject({
       method: "POST",
-      url: `/api/responses/${responseId}/start-review`,
-      headers: asUser(reviewer),
-    });
-    await a.inject({
-      method: "POST",
       url: `/api/responses/${responseId}/decide`,
       headers: asUser(decider),
       payload: { decision: "rejected" },
@@ -788,33 +742,27 @@ describe("re-accept (admin)", () => {
     const a = await getApp();
     const appId = await createApplication({ capacity: 1 });
     const a1 = await toAcceptedSent(appId);
-    // fill the single slot
-    const a2 = await submittedApplicant(appId);
+    // confirm a1 then cancel, freeing the slot temporarily
     await a.inject({
       method: "POST",
-      url: `/api/responses/${a2.responseId}/start-review`,
-      headers: asUser(reviewer),
+      url: `/api/me/responses/${a1.responseId}/confirm`,
+      headers: asUser(a1.userId),
     });
-    await a.inject({
-      method: "POST",
-      url: `/api/responses/${a2.responseId}/decide`,
-      headers: asUser(decider),
-      payload: { decision: "accepted" },
-    });
-    await a.inject({
-      method: "POST",
-      url: `/api/responses/${a2.responseId}/send-decision`,
-      headers: asUser(decider),
-    });
-
-    // decline a1 first
     await a.inject({
       method: "POST",
       url: `/api/me/responses/${a1.responseId}/decline`,
       headers: asUser(a1.userId),
     });
 
-    // now re-accept should fail because a2 holds the only slot
+    // another applicant fills the slot
+    const a2 = await toAcceptedSent(appId);
+    await a.inject({
+      method: "POST",
+      url: `/api/me/responses/${a2.responseId}/confirm`,
+      headers: asUser(a2.userId),
+    });
+
+    // re-accept a1 should fail — a2 holds the only slot
     const res = await a.inject({
       method: "POST",
       url: `/api/responses/${a1.responseId}/re-accept`,

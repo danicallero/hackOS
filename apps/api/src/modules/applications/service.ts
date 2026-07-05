@@ -816,7 +816,7 @@ async function enqueueDecisionEmailRow(
 ): Promise<void> {
   const decisionDetails =
     decision === "accepted" && confirmToken
-      ? `[${app.confirmation_window_hours}h confirm link](${config.WEB_URL}/applications/confirm?token=${confirmToken})`
+      ? `\n\n[Confirm my spot](${config.WEB_URL}/applications/confirm?token=${confirmToken})\n\nYou have ${app.confirmation_window_hours}h to confirm before your spot is released.`
       : "";
   await client.query(
     `INSERT INTO notification_outbox (user_id, category, channel, payload)

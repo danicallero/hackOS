@@ -137,15 +137,15 @@ const TEMPLATES: Record<string, TemplateDefinition> = {
   "application.decision": {
     en: {
       subject: "A decision on your application",
-      body: "Hi {{name}},\n\nYour application to {{applicationName}} has been {{decision}}.\n{{decisionDetails}}",
+      body: "Hi {{name}},\n\nYour application to {{applicationName}} has been {{decision}}.{{decisionDetails}}",
     },
     es: {
       subject: "Una decisión sobre tu solicitud",
-      body: "Hola {{name}},\n\nTu solicitud a {{applicationName}} ha sido {{decision}}.\n{{decisionDetails}}",
+      body: "Hola {{name}},\n\nTu solicitud a {{applicationName}} ha sido {{decision}}.{{decisionDetails}}",
     },
     gl: {
       subject: "Unha decisión sobre a túa solicitude",
-      body: "Ola {{name}},\n\nA túa solicitude a {{applicationName}} foi {{decision}}.\n{{decisionDetails}}",
+      body: "Ola {{name}},\n\nA túa solicitude a {{applicationName}} foi {{decision}}.{{decisionDetails}}",
     },
   },
 };

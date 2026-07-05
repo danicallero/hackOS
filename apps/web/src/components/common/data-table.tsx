@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -48,6 +49,10 @@ interface DataTableProps<T> {
   loading?: boolean;
   empty?: { icon?: LucideIcon; title: string; description?: string };
   className?: string;
+  /** Enable row selection via checkboxes. */
+  selectable?: boolean;
+  selectedIds?: Set<string>;
+  onSelectionChange?: (ids: Set<string>) => void;
 }
 
 const alignClass = { left: "text-left", right: "text-right", center: "text-center" } as const;
@@ -73,6 +78,9 @@ export function DataTable<T>({
   loading,
   empty,
   className,
+  selectable,
+  selectedIds,
+  onSelectionChange,
 }: DataTableProps<T>) {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<{ id: string; dir: "asc" | "desc" } | null>(null);
@@ -106,7 +114,28 @@ export function DataTable<T>({
     );
 
   const showToolbar = Boolean(searchable || toolbar);
-  const colCount = columns.length + (rowActions ? 1 : 0);
+  const checkboxCol = selectable ? 1 : 0;
+  const colCount = columns.length + checkboxCol + (rowActions ? 1 : 0);
+
+  const allSelected =
+    selectable && selectedIds && data.length > 0 && data.every((r) => selectedIds.has(getRowId(r)));
+
+  const toggleAll = () => {
+    if (!onSelectionChange || !selectedIds) return;
+    if (allSelected) {
+      onSelectionChange(new Set());
+    } else {
+      onSelectionChange(new Set(data.map((r) => getRowId(r))));
+    }
+  };
+
+  const toggleOne = (id: string) => {
+    if (!onSelectionChange || !selectedIds) return;
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    onSelectionChange(next);
+  };
 
   return (
     <Card className={cn("gap-0 overflow-hidden py-0", className)}>
@@ -130,6 +159,15 @@ export function DataTable<T>({
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
+              {selectable && (
+                <TableHead className="w-10">
+                  <Checkbox
+                    checked={allSelected}
+                    onCheckedChange={toggleAll}
+                    aria-label="Select all"
+                  />
+                </TableHead>
+              )}
               {columns.map((col) => (
                 <TableHead
                   key={col.id}
@@ -182,27 +220,40 @@ export function DataTable<T>({
                 </TableCell>
               </TableRow>
             ) : (
-              rows.map((row) => (
-                <TableRow
-                  key={getRowId(row)}
-                  onClick={onRowClick ? () => onRowClick(row) : undefined}
-                  className={onRowClick ? "cursor-pointer" : undefined}
-                >
-                  {columns.map((col) => (
-                    <TableCell
-                      key={col.id}
-                      className={cn(alignClass[col.align ?? "left"], col.className)}
-                    >
-                      {col.cell(row)}
-                    </TableCell>
-                  ))}
-                  {rowActions && (
-                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                      {rowActions(row)}
-                    </TableCell>
-                  )}
-                </TableRow>
-              ))
+              rows.map((row) => {
+                const rowId = getRowId(row);
+                const checked = selectable && selectedIds?.has(rowId);
+                return (
+                  <TableRow
+                    key={rowId}
+                    onClick={onRowClick ? () => onRowClick(row) : undefined}
+                    className={cn(onRowClick && "cursor-pointer")}
+                  >
+                    {selectable && (
+                      <TableCell className="w-10" onClick={(e) => e.stopPropagation()}>
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={() => toggleOne(rowId)}
+                          aria-label="Select row"
+                        />
+                      </TableCell>
+                    )}
+                    {columns.map((col) => (
+                      <TableCell
+                        key={col.id}
+                        className={cn(alignClass[col.align ?? "left"], col.className)}
+                      >
+                        {col.cell(row)}
+                      </TableCell>
+                    ))}
+                    {rowActions && (
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                        {rowActions(row)}
+                      </TableCell>
+                    )}
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>

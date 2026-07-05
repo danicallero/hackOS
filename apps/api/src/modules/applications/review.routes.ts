@@ -5,7 +5,6 @@ import { pool } from "../../db/pool.js";
 import { requireCapability } from "../../lib/capabilities.js";
 import {
   batchDecideSchema,
-  batchIdsSchema,
   batchRevertDecisionSchema,
   batchSendDecisionsSchema,
   decideSchema,
@@ -28,7 +27,6 @@ import {
   sendDecision,
   sendDecisionsBatch,
   setStaffNotes,
-  startReview,
   upsertReview,
 } from "./service.js";
 
@@ -73,16 +71,6 @@ export function registerReviewRoutes(app: FastifyInstance): void {
       );
       return { responses: rows };
     },
-  );
-
-  // ── H13: submitted -> review ────────────────────────────────────────────────
-  r.post(
-    "/api/responses/:responseId/start-review",
-    {
-      preHandler: requireCapability(CAPABILITIES.APPLICATIONS_REVIEW),
-      schema: { params: responseIdParamSchema },
-    },
-    async (req) => startReview(req.userId as number, req.params.responseId),
   );
 
   // ── H13: per-reviewer score/notes (own row) ─────────────────────────────────
@@ -178,8 +166,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
       schema: { params: responseIdParamSchema, body: decideSchema },
     },
-    async (req) =>
-      revertDecision(req.userId as number, req.params.responseId, req.body.decision),
+    async (req) => revertDecision(req.userId as number, req.params.responseId, req.body.decision),
   );
 
   // ── H15: get confirm link with token ─────────────────────────────────────────
@@ -192,7 +179,10 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     async (req) => {
       const link = await getConfirmLink(req.params.responseId);
       if (!link) return { confirm_url: null };
-      return { confirm_url: `/applications/confirm?token=${link.token}`, expires_at: link.expiresAt };
+      return {
+        confirm_url: `/applications/confirm?token=${link.token}`,
+        expires_at: link.expiresAt,
+      };
     },
   );
 
@@ -203,8 +193,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
       schema: { body: batchDecideSchema },
     },
-    async (req) =>
-      batchDecide(req.userId as number, req.body.response_ids, req.body.decision),
+    async (req) => batchDecide(req.userId as number, req.body.response_ids, req.body.decision),
   );
 
   r.post(
@@ -213,8 +202,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
       schema: { body: batchSendDecisionsSchema },
     },
-    async (req) =>
-      batchSendDecisions(req.userId as number, req.body.response_ids),
+    async (req) => batchSendDecisions(req.userId as number, req.body.response_ids),
   );
 
   r.post(

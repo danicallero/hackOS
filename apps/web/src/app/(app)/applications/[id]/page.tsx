@@ -18,16 +18,19 @@ import {
   ArrowDownIcon,
   ArrowLeftIcon,
   ArrowUpIcon,
+  CheckCheckIcon,
   ClipboardListIcon,
   EyeIcon,
   FileTextIcon,
   ListChecksIcon,
   LockIcon,
   PlusIcon,
+  RotateCcwIcon,
   SendIcon,
   SettingsIcon,
   Trash2Icon,
   UsersIcon,
+  XIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -45,6 +48,12 @@ import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Form,
   FormControl,
@@ -245,20 +254,29 @@ function BackLink() {
 
 function StatsStrip({ stats }: { stats: ApplicationStats }) {
   const c = stats.counts_by_status;
-  const total = Object.values(c).reduce((a, b) => a + b, 0);
+  const nonDraft = Object.entries(c)
+    .filter(([s]) => s !== "draft")
+    .reduce((a, [, v]) => a + v, 0);
+  const accepted = (c.accepted_internal ?? 0) + (c.accepted ?? 0);
+  const acceptedUnsent = c.accepted_internal ?? 0;
+  const acceptedSent = c.accepted ?? 0;
+  const declined =
+    (c.rejected_internal ?? 0) + (c.rejected ?? 0) + (c.declined ?? 0) + (c.expired ?? 0);
+  const declinedUnsent = c.rejected_internal ?? 0;
+  const declinedSent = c.rejected ?? 0;
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      <StatCard label="Responses" value={String(total)} icon={UsersIcon} hint="All statuses" />
-      <StatCard label="Submitted" value={String(c.submitted ?? 0)} hint="Awaiting review" />
+      <StatCard label="Responses" value={String(nonDraft)} icon={UsersIcon} hint="Non-draft" />
       <StatCard
         label="Accepted"
-        value={String((c.accepted ?? 0) + (c.confirmed ?? 0))}
-        hint={`${stats.funnel.confirmed} confirmed`}
+        value={String(accepted)}
+        hint={`${acceptedUnsent} unsent · ${acceptedSent} sent`}
       />
+      <StatCard label="Confirmed" value={String(c.confirmed ?? 0)} />
       <StatCard
-        label="Rejected"
-        value={String(c.rejected ?? 0)}
-        hint={`${stats.funnel.declined} declined · ${stats.funnel.expired} expired`}
+        label="Declined"
+        value={String(declined)}
+        hint={`${declinedUnsent} unsent · ${declinedSent} sent · ${c.declined ?? 0} declined · ${c.expired ?? 0} expired`}
       />
     </div>
   );
@@ -893,7 +911,9 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
   const [statusFilter, setStatusFilter] = useState<string>(ALL);
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sendOpen, setSendOpen] = useState(false);
+  const [batchBusy, setBatchBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -908,6 +928,7 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
         },
       );
       setRows(responses);
+      setSelectedIds(new Set());
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Could not load responses.");
     } finally {
@@ -940,12 +961,13 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
       header: "Status",
       sortValue: (r) => r.status,
       cell: (r) => (
-        <div className="flex items-center gap-2">
-          <StatusBadge tone={statusTone(r.status)} className="capitalize">
-            {r.status}
-          </StatusBadge>
-          {r.decision_sent_at && <span className="text-muted-foreground text-xs">sent</span>}
-        </div>
+        <StatusBadge tone={statusTone(r.status)} className="capitalize">
+          {r.status === "accepted_internal"
+            ? "accepted (unsent)"
+            : r.status === "rejected_internal"
+              ? "rejected (unsent)"
+              : r.status}
+        </StatusBadge>
       ),
     },
     {
@@ -972,6 +994,24 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
       ),
     },
   ];
+
+  async function batchAction(label: string, fn: () => Promise<unknown>) {
+    setBatchBusy(true);
+    try {
+      await fn();
+      await load();
+      toast.success(label);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Batch action failed.");
+    } finally {
+      setBatchBusy(false);
+    }
+  }
+
+  const selectedArr = useMemo(
+    () => rows.filter((r) => selectedIds.has(String(r.id))),
+    [rows, selectedIds],
+  );
 
   return (
     <div className="space-y-4">
@@ -1003,12 +1043,115 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
         )}
       </div>
 
+      {canDecide && selectedIds.size > 0 && (
+        <div className="flex items-center gap-2 rounded-lg border p-3">
+          <span className="text-sm font-medium">{selectedIds.size} selected</span>
+          <div className="ml-auto flex flex-wrap gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline" disabled={batchBusy}>
+                  <CheckCheckIcon />
+                  Decide
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() =>
+                    batchAction("Decisions applied.", () =>
+                      api.post("/api/responses/batch/decide", {
+                        response_ids: selectedArr.map((r) => r.id),
+                        decision: "accepted",
+                      }),
+                    )
+                  }
+                >
+                  Accept
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() =>
+                    batchAction("Decisions applied.", () =>
+                      api.post("/api/responses/batch/decide", {
+                        response_ids: selectedArr.map((r) => r.id),
+                        decision: "rejected",
+                      }),
+                    )
+                  }
+                >
+                  Reject
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={batchBusy}
+              onClick={() =>
+                batchAction("Decisions sent.", () =>
+                  api.post("/api/responses/batch/send-decision", {
+                    response_ids: selectedArr.map((r) => r.id),
+                  }),
+                )
+              }
+            >
+              <SendIcon />
+              Send
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline" disabled={batchBusy}>
+                  <RotateCcwIcon />
+                  Revert
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() =>
+                    batchAction("Reverted to accepted.", () =>
+                      api.post("/api/responses/batch/revert-decision", {
+                        response_ids: selectedArr.map((r) => r.id),
+                        decision: "accepted",
+                      }),
+                    )
+                  }
+                >
+                  Revert to accepted
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() =>
+                    batchAction("Reverted to rejected.", () =>
+                      api.post("/api/responses/batch/revert-decision", {
+                        response_ids: selectedArr.map((r) => r.id),
+                        decision: "rejected",
+                      }),
+                    )
+                  }
+                >
+                  Revert to rejected
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={batchBusy}
+              onClick={() => setSelectedIds(new Set())}
+            >
+              <XIcon />
+              Clear
+            </Button>
+          </div>
+        </div>
+      )}
+
       <DataTable
         columns={columns}
         data={rows}
         getRowId={(r) => String(r.id)}
         loading={loading}
         onRowClick={(r) => setSelectedId(r.id)}
+        selectable={canDecide}
+        selectedIds={selectedIds}
+        onSelectionChange={setSelectedIds}
         pageSize={15}
         empty={{
           icon: FileTextIcon,
@@ -1075,6 +1218,7 @@ function ReviewModal({
 }) {
   const canReview = useCan(CAPABILITIES.APPLICATIONS_REVIEW);
   const canDecide = useCan(CAPABILITIES.APPLICATIONS_DECIDE);
+  const canOverride = useCan(CAPABILITIES.APPLICATIONS_CONFIRM_OVERRIDE);
 
   const [staffNotes, setStaffNotes] = useState(response.staff_notes ?? "");
   const [savingNotes, setSavingNotes] = useState(false);
@@ -1152,9 +1296,12 @@ function ReviewModal({
       <div className="max-h-[65vh] space-y-6 overflow-y-auto pr-1">
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge tone={statusTone(st)} className="capitalize">
-            {st}
+            {st === "accepted_internal"
+              ? "accepted (unsent)"
+              : st === "rejected_internal"
+                ? "rejected (unsent)"
+                : st}
           </StatusBadge>
-          {sent && <span className="text-muted-foreground text-xs">decision sent</span>}
           <span className="text-muted-foreground text-xs">
             avg {fmtScore(response.avg_score)} · {response.review_count}{" "}
             {response.review_count === 1 ? "review" : "reviews"}
@@ -1248,20 +1395,6 @@ function ReviewModal({
           <div className="border-border space-y-3 rounded-lg border p-4">
             <p className="text-sm font-medium">Decision</p>
             <div className="flex flex-wrap gap-2">
-              {canReview && st === "submitted" && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={busy}
-                  onClick={() =>
-                    run("Moved to review.", () =>
-                      api.post(`/api/responses/${response.id}/start-review`),
-                    )
-                  }
-                >
-                  Start review
-                </Button>
-              )}
               {canDecide && st === "review" && (
                 <>
                   <Button
@@ -1289,19 +1422,65 @@ function ReviewModal({
                   </Button>
                 </>
               )}
-              {canDecide && (st === "accepted" || st === "rejected") && !sent && (
-                <Button
-                  size="sm"
-                  disabled={busy}
-                  onClick={() =>
-                    run("Decision sent.", () =>
-                      api.post(`/api/responses/${response.id}/send-decision`),
-                    )
-                  }
-                >
-                  <SendIcon />
-                  Send decision
-                </Button>
+              {canDecide && st === "accepted_internal" && (
+                <>
+                  <Button
+                    size="sm"
+                    disabled={busy}
+                    onClick={() =>
+                      run("Decision sent.", () =>
+                        api.post(`/api/responses/${response.id}/send-decision`),
+                      )
+                    }
+                  >
+                    <SendIcon />
+                    Send decision
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() =>
+                      run("Reverted to rejected.", () =>
+                        api.post(`/api/responses/${response.id}/revert-decision`, {
+                          decision: "rejected",
+                        }),
+                      )
+                    }
+                  >
+                    Revert to rejected
+                  </Button>
+                </>
+              )}
+              {canDecide && st === "rejected_internal" && (
+                <>
+                  <Button
+                    size="sm"
+                    disabled={busy}
+                    onClick={() =>
+                      run("Decision sent.", () =>
+                        api.post(`/api/responses/${response.id}/send-decision`),
+                      )
+                    }
+                  >
+                    <SendIcon />
+                    Send decision
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() =>
+                      run("Reverted to accepted.", () =>
+                        api.post(`/api/responses/${response.id}/revert-decision`, {
+                          decision: "accepted",
+                        }),
+                      )
+                    }
+                  >
+                    Revert to accepted
+                  </Button>
+                </>
               )}
               {canDecide && ((st === "accepted" && sent) || st === "expired") && (
                 <Button
@@ -1317,7 +1496,7 @@ function ReviewModal({
                   Resend
                 </Button>
               )}
-              {canDecide && st === "accepted" && (
+              {canOverride && st === "accepted" && (
                 <>
                   <Button
                     size="sm"
@@ -1376,12 +1555,23 @@ function SendDecisionsModal({
     setBusy(true);
     try {
       // POST /api/applications/:id/send-decisions (APPLICATIONS_DECIDE) — sends
-      // every accepted (and optionally rejected) decision not yet sent (H14).
-      const { sent } = await api.post<{ sent: number }>(`/api/applications/${id}/send-decisions`, {
+      // every accepted_internal (and optionally rejected_internal) decision not
+      // yet sent (H14). Returns { sent, tokens }.
+      const { sent, tokens } = await api.post<{
+        sent: number;
+        tokens: Array<{ responseId: number; token: string | null }>;
+      }>(`/api/applications/${id}/send-decisions`, {
         include_rejected: includeRejected,
       });
       await onSent();
-      toast.success(sent === 0 ? "Nothing left to send." : `Sent ${sent} decision(s).`);
+      const tokenCount = tokens.filter((t) => t.token).length;
+      const msg =
+        sent === 0
+          ? "Nothing left to send."
+          : tokenCount > 0
+            ? `Sent ${sent} decision(s) (${tokenCount} with confirm links).`
+            : `Sent ${sent} decision(s).`;
+      toast.success(msg);
       onOpenChange(false);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Could not send decisions.");
