@@ -19,7 +19,7 @@ FROM base AS build
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY packages ./packages
 COPY apps/web/package.json ./apps/web/
-RUN pnpm install --frozen-lockfile --filter @hackos/web...
+RUN pnpm install --no-frozen-lockfile --filter @hackos/web...
 COPY apps/web ./apps/web
 
 ARG NEXT_PUBLIC_API_URL
