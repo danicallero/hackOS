@@ -1065,9 +1065,16 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
   async function batchAction(label: string, fn: () => Promise<unknown>) {
     setBatchBusy(true);
     try {
-      await fn();
+      const result = (await fn()) as { skipped?: { id: number; reason: string }[] } | undefined;
       await load();
-      toast.success(label);
+      // The batch endpoints now report which rows were skipped and why, so a
+      // partial batch is no longer silent (previously the flaky-looking case).
+      const skipped = result?.skipped ?? [];
+      if (skipped.length > 0) {
+        toast.warning(`${label} ${skipped.length} skipped (${skipped[0].reason}).`);
+      } else {
+        toast.success(label);
+      }
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Batch action failed.");
     } finally {
@@ -1197,6 +1204,36 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={batchBusy}
+              onClick={() =>
+                batchAction("Re-accepted.", () =>
+                  api.post("/api/responses/batch/re-accept", {
+                    response_ids: selectedArr.map((r) => r.id),
+                  }),
+                )
+              }
+            >
+              <RotateCcwIcon />
+              Re-accept
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={batchBusy}
+              onClick={() =>
+                batchAction("Spots revoked.", () =>
+                  api.post("/api/responses/batch/revoke-spot", {
+                    response_ids: selectedArr.map((r) => r.id),
+                  }),
+                )
+              }
+            >
+              <XIcon />
+              Revoke spot
+            </Button>
             <Button
               size="sm"
               variant="ghost"
@@ -1657,6 +1694,20 @@ function ReviewModal({
                   }
                 >
                   Re-accept
+                </Button>
+              )}
+              {canDecide && ((st === "accepted" && sent) || st === "confirmed") && (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  disabled={busy}
+                  onClick={() =>
+                    run("Spot revoked.", () =>
+                      api.post(`/api/responses/${response.id}/revoke-spot`),
+                    )
+                  }
+                >
+                  Revoke spot
                 </Button>
               )}
               {canOverride && st === "accepted" && (

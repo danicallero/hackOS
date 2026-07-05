@@ -5,6 +5,7 @@ import { pool } from "../../db/pool.js";
 import { requireCapability } from "../../lib/capabilities.js";
 import {
   batchDecideSchema,
+  batchIdsSchema,
   batchRevertDecisionSchema,
   batchSendDecisionsSchema,
   decideSchema,
@@ -19,7 +20,9 @@ import {
 } from "./schemas.js";
 import {
   batchDecide,
+  batchReAccept,
   batchRevertDecisions,
+  batchRevokeSpots,
   batchSendDecisions,
   decide,
   editResponse,
@@ -29,6 +32,7 @@ import {
   reAccept,
   resendDecision,
   revertDecision,
+  revokeSpot,
   sendDecision,
   sendDecisionsBatch,
   setStaffNotes,
@@ -164,6 +168,16 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     async (req) => reAccept(req.userId as number, req.params.responseId),
   );
 
+  // ── revoke an accepted/confirmed spot → rejected (works post-confirmation) ────
+  r.post(
+    "/api/responses/:responseId/revoke-spot",
+    {
+      preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
+      schema: { params: responseIdParamSchema },
+    },
+    async (req) => revokeSpot(req.userId as number, req.params.responseId),
+  );
+
   // ── decision pool (accepted/rejected/declined grouped for the review UI) ─────
   r.get(
     "/api/applications/:id/decision-pool",
@@ -248,5 +262,25 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     },
     async (req) =>
       batchRevertDecisions(req.userId as number, req.body.response_ids, req.body.decision),
+  );
+
+  // ── batch re-accept (declined/rejected/expired → accepted) ───────────────────
+  r.post(
+    "/api/responses/batch/re-accept",
+    {
+      preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
+      schema: { body: batchIdsSchema },
+    },
+    async (req) => batchReAccept(req.userId as number, req.body.response_ids),
+  );
+
+  // ── batch revoke spots (accepted/confirmed → rejected) ───────────────────────
+  r.post(
+    "/api/responses/batch/revoke-spot",
+    {
+      preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
+      schema: { body: batchIdsSchema },
+    },
+    async (req) => batchRevokeSpots(req.userId as number, req.body.response_ids),
   );
 }
