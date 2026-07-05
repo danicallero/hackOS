@@ -1250,7 +1250,12 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
 
 // ── Review + decision modal (H13/H14) ─────────────────────────────────────────
 
-function renderAnswer(field: TemplateField, value: unknown): string {
+function renderAnswer(
+  field: TemplateField,
+  value: unknown,
+  universities: { id: number; name: string }[],
+  lang: Language,
+): string {
   if (value === null || value === undefined || value === "") return "—";
   if (Array.isArray(value) && value.length === 0) return "—";
   switch (field.kind) {
@@ -1258,16 +1263,20 @@ function renderAnswer(field: TemplateField, value: unknown): string {
       return value === true ? "Yes" : "No";
     case "select": {
       const opt = field.options?.find((o) => o.value === String(value));
-      return opt ? pickText(opt.label, "es") : String(value);
+      return opt ? pickText(opt.label, lang) : String(value);
     }
     case "multiselect": {
       const vals = Array.isArray(value) ? value : [value];
       return vals
         .map((v) => {
           const opt = field.options?.find((o) => o.value === String(v));
-          return opt ? pickText(opt.label, "es") : String(v);
+          return opt ? pickText(opt.label, lang) : String(v);
         })
         .join(", ");
+    }
+    case "university": {
+      const uni = universities.find((u) => u.id === Number(value));
+      return uni ? uni.name : String(value);
     }
     default:
       return String(value);
@@ -1276,11 +1285,22 @@ function renderAnswer(field: TemplateField, value: unknown): string {
 
 /** Render a response value; file answers become a clickable link so staff (and
  *  anyone with the public URL) can open the uploaded file (H12). */
-function AnswerValue({ field, value }: { field: TemplateField; value: unknown }) {
+function AnswerValue({
+  field,
+  value,
+  universities,
+  lang,
+}: {
+  field: TemplateField;
+  value: unknown;
+  universities: { id: number; name: string }[];
+  lang: Language;
+}) {
   if ((field.kind === "file" || field.kind === "file-url") && typeof value === "string" && value) {
     return <FileLink value={value} />;
   }
-  return <>{renderAnswer(field, value)}</>;
+  const rendered = renderAnswer(field, value, universities, lang);
+  return <span className="whitespace-pre-wrap">{rendered}</span>;
 }
 
 function ReviewModal({
@@ -1306,11 +1326,16 @@ function ReviewModal({
   const [staffNotes, setStaffNotes] = useState(response.staff_notes ?? "");
   const [savingNotes, setSavingNotes] = useState(false);
   const [intolerances, setIntolerances] = useState<Intolerance[]>([]);
+  const [universities, setUniversities] = useState<{ id: number; name: string }[]>([]);
 
   useEffect(() => {
     api
       .get<{ intolerances: Intolerance[] }>("/api/public/food-intolerances")
       .then((res) => setIntolerances(res.intolerances))
+      .catch(() => {});
+    api
+      .get<{ universities: { id: number; name: string }[] }>("/api/public/universities")
+      .then((res) => setUniversities(res.universities))
       .catch(() => {});
   }, []);
   // No GET for a reviewer's own row exists — the score/notes inputs are
@@ -1477,7 +1502,12 @@ function ReviewModal({
                     {pickText(f.label, lang) || f.key}
                   </p>
                   <div className="text-sm">
-                    <AnswerValue field={f} value={response.responses[f.key]} />
+                    <AnswerValue
+                      field={f}
+                      value={response.responses[f.key]}
+                      universities={universities}
+                      lang={lang}
+                    />
                   </div>
                 </div>
               ))}
@@ -1489,7 +1519,7 @@ function ReviewModal({
                   <p className="text-muted-foreground mb-1 text-xs font-medium uppercase tracking-wide">
                     {k}
                   </p>
-                  <div className="text-sm">
+                  <div className="whitespace-pre-wrap text-sm">
                     {typeof v === "object" ? JSON.stringify(v) : String(v)}
                   </div>
                 </div>
