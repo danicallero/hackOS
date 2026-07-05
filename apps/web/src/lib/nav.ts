@@ -3,9 +3,9 @@ import {
   CalendarDaysIcon,
   ClipboardListIcon,
   FileTextIcon,
-  GraduationCapIcon,
   HandshakeIcon,
   LayoutDashboardIcon,
+  LibraryBigIcon,
   ListOrderedIcon,
   type LucideIcon,
   MegaphoneIcon,
@@ -14,7 +14,6 @@ import {
   ShieldCheckIcon,
   UserIcon,
   UsersIcon,
-  UtensilsIcon,
 } from "lucide-react";
 
 export interface NavItem {
@@ -108,15 +107,9 @@ export const NAV: NavSection[] = [
         capability: CAPABILITIES.SCHEDULE_MANAGE,
       },
       {
-        title: "Food intolerances",
-        href: "/settings/intolerances",
-        icon: UtensilsIcon,
-        capability: CAPABILITIES.INTOLERANCES_MANAGE,
-      },
-      {
-        title: "Universities",
-        href: "/settings/universities",
-        icon: GraduationCapIcon,
+        title: "Libraries",
+        href: "/settings/libraries",
+        icon: LibraryBigIcon,
         capability: CAPABILITIES.INTOLERANCES_MANAGE,
       },
       {

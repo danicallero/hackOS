@@ -84,6 +84,66 @@ export interface MyResponseDetail {
 /** A single response value, keyed by field.key in the responses object. */
 export type FieldValue = string | number | boolean | string[] | null | undefined;
 
+// ── client mirror of the API's enrichTemplate (service.ts) ────────────────────
+//
+// The public form endpoint serves the RAW template; the server appends shirt
+// size + dietary fields for participant/mentor forms only when returning a saved
+// response. To show them in the form from the first render — before any draft
+// exists — we mirror that enrichment here. The server re-enriches and validates
+// on submit (it stays the source of truth), so this only governs presentation.
+
+/** Application types that get shirt-size + dietary fields appended (H12). */
+export const SHIRT_TYPES = ["participant", "mentor"];
+
+const SHIRT_SIZE_FIELD: TemplateField = {
+  key: "shirt_size",
+  label: { en: "T-shirt size", es: "Talla de camiseta", gl: "Talla de camiseta" },
+  kind: "select",
+  required: true,
+  options: ["XS", "S", "M", "L", "XL", "XXL"].map((s) => ({
+    value: s,
+    label: { en: s, es: s, gl: s },
+  })),
+};
+
+const FOOD_NOTES_FIELD: TemplateField = {
+  key: "food_intolerance_notes",
+  label: { en: "Dietary notes", es: "Notas dietéticas", gl: "Notas dietéticas" },
+  kind: "textarea",
+  required: false,
+};
+
+/** Minimal shape of a food-intolerance dictionary entry (public endpoint). */
+export interface IntoleranceOption {
+  id: number;
+  label: I18nText;
+}
+
+export function enrichTemplate(
+  type: string,
+  template: TemplateField[],
+  intolerances: IntoleranceOption[],
+): TemplateField[] {
+  if (!SHIRT_TYPES.includes(type)) return template;
+  let out = template;
+  if (!out.some((f) => f.key === "shirt_size")) out = [...out, SHIRT_SIZE_FIELD];
+  if (!out.some((f) => f.key === "food_intolerances")) {
+    const foodField: TemplateField = {
+      key: "food_intolerances",
+      label: {
+        en: "Dietary restrictions",
+        es: "Restricciones dietéticas",
+        gl: "Restricións dietéticas",
+      },
+      kind: "multiselect",
+      required: false,
+      options: intolerances.map((i) => ({ value: String(i.id), label: i.label })),
+    };
+    out = [...out, foodField, FOOD_NOTES_FIELD];
+  }
+  return out;
+}
+
 // ── status presentation (the masked applicant-visible set) ────────────────────
 
 const STATUS_TONE: Record<string, Tone> = {

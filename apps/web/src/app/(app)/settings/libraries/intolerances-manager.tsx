@@ -1,8 +1,9 @@
 "use client";
 
-// Food-intolerance dictionary (H12/H25). Admins maintain the shared, i18n
-// catalogue rendered by the registration/profile pickers. There is no admin GET
-// — we list via the public endpoint — and mutate via the guarded
+// Food-intolerance dictionary manager (H12/H25), rendered inside the Libraries
+// page's tab. Admins maintain the shared, i18n catalogue used by the
+// registration/profile pickers and the application dietary field. There is no
+// admin GET — we list via the public endpoint — and mutate via the guarded
 // POST/PATCH/DELETE /api/food-intolerances (capability INTOLERANCES_MANAGE).
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -14,7 +15,6 @@ import { z } from "zod";
 import type { Column } from "@/components/common/data-table";
 import { DataTable } from "@/components/common/data-table";
 import { Modal } from "@/components/common/modal";
-import { PageHeader } from "@/components/common/page-header";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
 import {
@@ -76,7 +76,7 @@ const EMPTY: Values = {
   description: { en: "", es: "", gl: "" },
 };
 
-export default function IntolerancesSettingsPage() {
+export function IntolerancesManager() {
   const [entries, setEntries] = useState<Intolerance[]>([]);
   const [loading, setLoading] = useState(true);
   // `null` => closed; a partial with no id => create; with id => edit.
@@ -187,17 +187,17 @@ export default function IntolerancesSettingsPage() {
   ];
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Food intolerances"
-        description="The shared, translatable catalogue used by the registration and profile pickers."
-        actions={
-          <Button onClick={() => setEditing(null)}>
-            <PlusIcon />
-            New
-          </Button>
-        }
-      />
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-muted-foreground text-sm">
+          The shared, translatable catalogue used by the registration and profile pickers and the
+          application dietary field.
+        </p>
+        <Button onClick={() => setEditing(null)}>
+          <PlusIcon />
+          New
+        </Button>
+      </div>
 
       <DataTable
         columns={columns}

@@ -1,10 +1,10 @@
 "use client";
 
-// University directory (H12). The shared list backing the "university" application
-// field's autocomplete. Applicants can propose additions from the form; admins
-// curate them here. There is no admin GET — we list via the public search
-// endpoint — and mutate via the guarded POST/DELETE /api/universities
-// (capability INTOLERANCES_MANAGE, shared with the food-intolerance dictionary).
+// University directory manager (H12), rendered inside the Libraries page's tab.
+// The shared list backing the "university" application field's autocomplete.
+// Applicants can propose additions from the form; admins curate them here. There
+// is no admin GET — we list via the public search endpoint — and mutate via the
+// guarded POST/DELETE /api/universities (capability INTOLERANCES_MANAGE).
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { GraduationCapIcon, MoreHorizontalIcon, PlusIcon } from "lucide-react";
@@ -15,7 +15,6 @@ import { z } from "zod";
 import type { Column } from "@/components/common/data-table";
 import { DataTable } from "@/components/common/data-table";
 import { Modal } from "@/components/common/modal";
-import { PageHeader } from "@/components/common/page-header";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,7 +43,7 @@ const FORM_ID = "university-form";
 const schema = z.object({ name: z.string().min(1, "Required").max(200) });
 type Values = z.infer<typeof schema>;
 
-export default function UniversitiesSettingsPage() {
+export function UniversitiesManager() {
   const [entries, setEntries] = useState<University[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -116,17 +115,17 @@ export default function UniversitiesSettingsPage() {
   ];
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Universities"
-        description="The shared directory backing the university picker on application forms. Applicants can propose new ones; you curate them here."
-        actions={
-          <Button onClick={() => setCreateOpen(true)}>
-            <PlusIcon />
-            New
-          </Button>
-        }
-      />
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-muted-foreground text-sm">
+          The shared directory backing the university picker on application forms. Applicants can
+          propose new ones; you curate them here.
+        </p>
+        <Button onClick={() => setCreateOpen(true)}>
+          <PlusIcon />
+          New
+        </Button>
+      </div>
 
       <Input
         value={search}

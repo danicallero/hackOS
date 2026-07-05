@@ -18,42 +18,28 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/common/empty-state";
-import { FileUploadField } from "@/components/common/file-upload-field";
-import { MultiSelect } from "@/components/common/multi-select";
 import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
-import { UniversityPicker } from "@/components/common/university-picker";
+import { TemplateFieldControl } from "@/components/common/template-field-control";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
-import { pickText } from "@/lib/i18n";
 import { useMe } from "@/lib/session";
 import type { Language } from "@/lib/types";
 import {
+  enrichTemplate,
   type FieldValue,
   fmtDateTime,
+  type IntoleranceOption,
   type MyResponseDetail,
   type PublicForm,
+  SHIRT_TYPES,
   statusLabel,
   statusTone,
-  type TemplateField,
 } from "../lib";
-
-const NONE = "__none__";
 
 /** Extract the per-field errors the API returns on failed template validation. */
 function fieldErrorsFromApi(err: unknown): Record<string, string> {
@@ -72,6 +58,7 @@ export default function MyApplicationDetailPage() {
 
   const [form, setForm] = useState<PublicForm | null>(null);
   const [response, setResponse] = useState<MyResponseDetail | null>(null);
+  const [intolerances, setIntolerances] = useState<IntoleranceOption[]>([]);
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -83,16 +70,32 @@ export default function MyApplicationDetailPage() {
   const load = useCallback(async () => {
     setLoading(true);
     // The public form (template) is only served while the window is open; a
-    // closed form 404s but the applicant may still have a response to view.
-    const [formRes, respRes] = await Promise.allSettled([
+    // closed form 404s but the applicant may still have a response to view. The
+    // intolerance dictionary feeds the dietary field for participant/mentor forms.
+    const [formRes, respRes, intolRes] = await Promise.allSettled([
       api.get<PublicForm>(`/api/public/applications/${id}`),
       api.get<MyResponseDetail>(`/api/applications/${id}/response`),
+      api.get<{ intolerances: IntoleranceOption[] }>("/api/public/food-intolerances"),
     ]);
     const nextForm = formRes.status === "fulfilled" ? formRes.value : null;
     const nextResponse = respRes.status === "fulfilled" ? respRes.value : null;
     setForm(nextForm);
     setResponse(nextResponse);
-    setValues(nextResponse?.responses ?? {});
+    setIntolerances(intolRes.status === "fulfilled" ? intolRes.value.intolerances : []);
+    // Seed answers from the saved response, then prefill the appended shirt-size
+    // and dietary fields from the profile so the applicant doesn't re-enter data
+    // the API already knows (H12). Saved values always win over the profile.
+    const seeded: Record<string, unknown> = { ...(nextResponse?.responses ?? {}) };
+    if (nextForm && SHIRT_TYPES.includes(nextForm.type)) {
+      if (seeded.shirt_size == null && me?.shirtSize) seeded.shirt_size = me.shirtSize;
+      if (seeded.food_intolerances == null && me?.foodIntolerances?.length) {
+        seeded.food_intolerances = me.foodIntolerances.map(String);
+      }
+      if (seeded.food_intolerance_notes == null && me?.foodIntoleranceNotes) {
+        seeded.food_intolerance_notes = me.foodIntoleranceNotes;
+      }
+    }
+    setValues(seeded);
     setFieldErrors({});
     // Surface an unexpected error (not a plain 404 "no response / closed form").
     if (
@@ -104,13 +107,15 @@ export default function MyApplicationDetailPage() {
       toast.error(respRes.reason.message);
     }
     setLoading(false);
-  }, [id]);
+  }, [id, me]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const template = form?.template ?? [];
+  // Mirror the API's enrichment so shirt-size + dietary fields render in the form
+  // (participant/mentor) rather than being pulled silently from the profile (H12).
+  const template = form ? enrichTemplate(form.type, form.template, intolerances) : [];
   const status = response?.status; // already masked by the API
   // A form is only present here when its window is open, so a draft/new response
   // is editable exactly when we have the template and nothing past 'draft'.
@@ -166,15 +171,25 @@ export default function MyApplicationDetailPage() {
     try {
       // Persist the latest values first so a brand-new response exists to submit.
       await api.put<MyResponseDetail>(`/api/applications/${id}/response`, { responses: values });
-      // Sensitive/logistics data lives on the user row — pass the profile's
-      // current values so submit doesn't blank them (H12).
+      // Sensitive/logistics data lives on the user row. It's now filled in the
+      // form itself (enriched fields), so lift shirt size + dietary data from the
+      // answers — falling back to the profile if a field wasn't shown (H12).
+      const foodIds = Array.isArray(values.food_intolerances)
+        ? (values.food_intolerances as string[]).map(Number)
+        : (me?.foodIntolerances ?? []);
       const res = await api.post<{ response: MyResponseDetail; privacy_notice: string }>(
         `/api/applications/${id}/response/submit`,
         {
           responses: values,
-          food_intolerances: me?.foodIntolerances ?? [],
-          food_intolerance_notes: me?.foodIntoleranceNotes ?? null,
-          shirt_size: me?.shirtSize ?? null,
+          food_intolerances: foodIds,
+          food_intolerance_notes:
+            typeof values.food_intolerance_notes === "string"
+              ? values.food_intolerance_notes
+              : (me?.foodIntoleranceNotes ?? null),
+          shirt_size:
+            typeof values.shirt_size === "string" && values.shirt_size
+              ? values.shirt_size
+              : (me?.shirtSize ?? null),
         },
       );
       setResponse(res.response);
@@ -368,7 +383,7 @@ export default function MyApplicationDetailPage() {
 
         {template.length > 0 ? (
           template.map((field) => (
-            <FieldControl
+            <TemplateFieldControl
               key={field.key}
               field={field}
               applicationId={id}
@@ -393,168 +408,6 @@ export default function MyApplicationDetailPage() {
           Submitted {fmtDateTime(response.submitted_at)}
         </p>
       )}
-    </div>
-  );
-}
-
-/** Render a single template field by its kind (H12). */
-function FieldControl({
-  field,
-  applicationId,
-  value,
-  onChange,
-  disabled,
-  lang,
-  error,
-}: {
-  field: TemplateField;
-  applicationId: number;
-  value: FieldValue;
-  onChange: (value: FieldValue) => void;
-  disabled: boolean;
-  lang: Language;
-  error?: string;
-}) {
-  const label = pickText(field.label, lang);
-  const options = (field.options ?? []).map((o) => ({
-    value: o.value,
-    label: pickText(o.label, lang),
-  }));
-
-  let control: React.ReactNode;
-  switch (field.kind) {
-    case "textarea":
-      control = (
-        <Textarea
-          rows={4}
-          value={typeof value === "string" ? value : ""}
-          onChange={(e) => onChange(e.target.value)}
-          disabled={disabled}
-        />
-      );
-      break;
-    case "select": {
-      const current = typeof value === "string" && value ? value : NONE;
-      control = (
-        <Select
-          value={current}
-          onValueChange={(v) => onChange(v === NONE ? "" : v)}
-          disabled={disabled}
-        >
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder="Select…" />
-          </SelectTrigger>
-          <SelectContent>
-            {!field.required && <SelectItem value={NONE}>—</SelectItem>}
-            {options.map((o) => (
-              <SelectItem key={o.value} value={o.value}>
-                {o.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      );
-      break;
-    }
-    case "multiselect":
-      control = (
-        <MultiSelect
-          options={options}
-          value={Array.isArray(value) ? (value as string[]) : []}
-          onChange={(v) => onChange(v)}
-          disabled={disabled}
-        />
-      );
-      break;
-    case "checkbox":
-      control = (
-        <label className="flex items-center gap-2 text-sm">
-          <Checkbox
-            checked={value === true}
-            onCheckedChange={(c) => onChange(c === true)}
-            disabled={disabled}
-          />
-          <span>{label}</span>
-        </label>
-      );
-      break;
-    case "date":
-      control = (
-        <Input
-          type="date"
-          value={typeof value === "string" ? value : ""}
-          onChange={(e) => onChange(e.target.value)}
-          disabled={disabled}
-        />
-      );
-      break;
-    case "number":
-      control = (
-        <Input
-          type="number"
-          value={typeof value === "number" ? value : ""}
-          onChange={(e) => onChange(e.target.value === "" ? "" : Number(e.target.value))}
-          disabled={disabled}
-        />
-      );
-      break;
-    case "file-url":
-      control = (
-        <Input
-          type="url"
-          placeholder="https://…"
-          value={typeof value === "string" ? value : ""}
-          onChange={(e) => onChange(e.target.value)}
-          disabled={disabled}
-        />
-      );
-      break;
-    case "file":
-      control = (
-        <FileUploadField
-          applicationId={applicationId}
-          fieldKey={field.key}
-          value={typeof value === "string" ? value : ""}
-          onChange={(url) => onChange(url)}
-          allowedTypes={field.allowed_file_types}
-          maxSizeMb={field.max_file_size_mb}
-          disabled={disabled}
-        />
-      );
-      break;
-    case "university":
-      // The API stores/validates a university as a numeric id (validateResponses),
-      // while the picker works in string ids — convert on the way in and out.
-      control = (
-        <UniversityPicker
-          value={value != null && value !== "" ? String(value) : ""}
-          onChange={(v) => onChange(v ? Number(v) : null)}
-          disabled={disabled}
-        />
-      );
-      break;
-    default:
-      control = (
-        <Input
-          type="text"
-          value={typeof value === "string" ? value : ""}
-          onChange={(e) => onChange(e.target.value)}
-          disabled={disabled}
-        />
-      );
-  }
-
-  return (
-    <div className="space-y-2">
-      {/* The checkbox kind renders its own inline label. */}
-      {field.kind !== "checkbox" && (
-        <Label>
-          {label}
-          {field.required && <span className="text-destructive ml-0.5">*</span>}
-        </Label>
-      )}
-      {control}
-      {error && <p className="text-destructive text-sm">{error}</p>}
     </div>
   );
 }

@@ -24,6 +24,7 @@ import {
   FileTextIcon,
   ListChecksIcon,
   LockIcon,
+  PencilIcon,
   PlusIcon,
   RotateCcwIcon,
   SendIcon,
@@ -47,6 +48,7 @@ import { Spinner } from "@/components/common/spinner";
 import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
+import { type FieldValue, TemplateFieldControl } from "@/components/common/template-field-control";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -1283,6 +1285,7 @@ function ReviewModal({
   const canReview = useCan(CAPABILITIES.APPLICATIONS_REVIEW);
   const canDecide = useCan(CAPABILITIES.APPLICATIONS_DECIDE);
   const canOverride = useCan(CAPABILITIES.APPLICATIONS_CONFIRM_OVERRIDE);
+  const canEdit = useCan(CAPABILITIES.APPLICATIONS_EDIT_RESPONSE);
 
   const [staffNotes, setStaffNotes] = useState(response.staff_notes ?? "");
   const [savingNotes, setSavingNotes] = useState(false);
@@ -1292,6 +1295,32 @@ function ReviewModal({
   const [myNotes, setMyNotes] = useState("");
   const [savingReview, setSavingReview] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Staff edit of the applicant's answers (APPLICATIONS_EDIT_RESPONSE). Seeded
+  // from the current responses; the API replaces the whole object and re-validates
+  // against the enriched template, so we send every original key back untouched.
+  const [editing, setEditing] = useState(false);
+  const [editValues, setEditValues] = useState<Record<string, unknown>>(response.responses);
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  function startEdit() {
+    setEditValues({ ...response.responses });
+    setEditing(true);
+  }
+
+  async function saveEdit() {
+    setSavingEdit(true);
+    try {
+      // PUT /api/responses/:id (APPLICATIONS_EDIT_RESPONSE) — audited server-side.
+      await api.put(`/api/responses/${response.id}`, { responses: editValues });
+      await onChanged();
+      setEditing(false);
+      toast.success("Answers updated.");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not save the answers.");
+    } finally {
+      setSavingEdit(false);
+    }
+  }
 
   async function run(label: string, fn: () => Promise<unknown>) {
     setBusy(true);
@@ -1374,8 +1403,43 @@ function ReviewModal({
 
         {/* Answers */}
         <div className="space-y-3">
-          <p className="text-sm font-medium">Answers</p>
-          {template && template.length > 0 ? (
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-medium">Answers</p>
+            {canEdit && template && template.length > 0 && !editing && (
+              <Button size="sm" variant="outline" onClick={startEdit}>
+                <PencilIcon />
+                Edit answers
+              </Button>
+            )}
+          </div>
+          {editing && template ? (
+            <div className="space-y-4">
+              {template.map((f) => (
+                <TemplateFieldControl
+                  key={f.key}
+                  field={f}
+                  value={editValues[f.key] as FieldValue}
+                  onChange={(v) => setEditValues((prev) => ({ ...prev, [f.key]: v }))}
+                  lang="es"
+                  inDialog
+                />
+              ))}
+              <div className="flex justify-end gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={savingEdit}
+                  onClick={() => setEditing(false)}
+                >
+                  Cancel
+                </Button>
+                <Button size="sm" disabled={savingEdit} onClick={saveEdit}>
+                  {savingEdit && <Spinner />}
+                  Save answers
+                </Button>
+              </div>
+            </div>
+          ) : template && template.length > 0 ? (
             <dl className="space-y-3">
               {template.map((f) => (
                 <div key={f.key} className="grid gap-1 sm:grid-cols-[12rem_1fr] sm:gap-4">
