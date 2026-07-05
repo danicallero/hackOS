@@ -17,6 +17,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { ApiError, api } from "@/lib/api";
 import type { UserList, UserListItem } from "@/lib/types";
+import { ActiveInvitationsModal } from "./active-invitations-modal";
 import { InviteUserDialog } from "./invite-dialog";
 
 /** Initials for the avatar fallback, from name/surname or the email. */
@@ -135,6 +136,7 @@ export default function UsersPage() {
         }
         actions={
           <CapabilityGate capability={CAPABILITIES.INVITES_MANAGE}>
+            <ActiveInvitationsModal />
             <InviteUserDialog />
           </CapabilityGate>
         }

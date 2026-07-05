@@ -7,7 +7,6 @@ conflict, that file wins. Hard invariants live in `plan/07-datos-relevantes-ers.
 ## Layout
 
 - `apps/api` — Fastify 5 + BullMQ + Postgres + Valkey. The only app so far
-  (web/mobile come later; **no UI work now**).
 - `packages/shared` — capability catalogue (`capabilities.ts`) and SSE event
   contract (`events.ts`). Add new capability/event names THERE, never inline.
 - `packages/typescript-config` — shared tsconfig base.

@@ -450,7 +450,9 @@ export async function submitResponse(
           : ((merged.food_intolerances as number[] | undefined) ?? [])
       ).map(Number);
       foodNotes =
-        input.food_intolerance_notes ?? (merged.food_intolerance_notes as string | undefined) ?? null;
+        input.food_intolerance_notes ??
+        (merged.food_intolerance_notes as string | undefined) ??
+        null;
     }
 
     const enrichedTemplate = await enrichTemplate(app.type, app.template);
@@ -477,10 +479,9 @@ export async function submitResponse(
 
     if (invited) {
       // Auto-confirm: issue ticket, stamp confirmed_at, audit confirmed.
-      await client.query(
-        `UPDATE application_responses SET confirmed_at = now() WHERE id = $1`,
-        [existing.id],
-      );
+      await client.query(`UPDATE application_responses SET confirmed_at = now() WHERE id = $1`, [
+        existing.id,
+      ]);
       await issueTicket(client, userId);
       await audit(client, {
         actorId: userId,

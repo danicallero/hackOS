@@ -290,6 +290,136 @@ export function registerInviteRoutes(app: FastifyInstance): void {
     },
   );
 
+  // ── expire — immediately invalidate an invite ─────────────────────────
+
+  api.post(
+    "/api/invites/:id/expire",
+    {
+      preHandler: manage,
+      schema: {
+        params: z.object({ id: z.coerce.number().int() }),
+        response: { 200: z.object({ success: z.literal(true) }) },
+      },
+    },
+    async (req, reply) => {
+      const { id } = req.params;
+      await withTransaction(async (client) => {
+        const { rows } = await client.query(
+          `SELECT * FROM email_verification_tokens
+           WHERE id = $1 AND type IN ('sponsor_invite', 'account_claim') FOR UPDATE`,
+          [id],
+        );
+        const invite = rows[0] as TokenRow | undefined;
+        if (!invite) throw new NotFoundError("Invite not found", { id });
+        if (invite.user_id !== null) {
+          throw new ConflictError("Invite already accepted — cannot expire", { id });
+        }
+        await client.query(`UPDATE email_verification_tokens SET used_at = now() WHERE id = $1`, [
+          id,
+        ]);
+        await audit(client, {
+          actorId: req.userId,
+          entityType: "invite",
+          entityId: id,
+          action: "expire",
+          source: "admin",
+          before: { email: invite.email, kind: invite.kind },
+        });
+      });
+      return reply.code(200).send({ success: true });
+    },
+  );
+
+  // ── renew — extend the existing token's window ────────────────────────
+
+  api.post(
+    "/api/invites/:id/renew",
+    {
+      preHandler: manage,
+      schema: {
+        params: z.object({ id: z.coerce.number().int() }),
+        response: { 200: z.object({ expiresAt: z.string() }) },
+      },
+    },
+    async (req, reply) => {
+      const { id } = req.params;
+      const result = await withTransaction(async (client) => {
+        const { rows } = await client.query(
+          `SELECT * FROM email_verification_tokens
+           WHERE id = $1 AND type IN ('sponsor_invite', 'account_claim') FOR UPDATE`,
+          [id],
+        );
+        const invite = rows[0] as TokenRow | undefined;
+        if (!invite) throw new NotFoundError("Invite not found", { id });
+        if (invite.used_at !== null) {
+          throw new ConflictError("Invite already used — cannot renew", { id });
+        }
+        if (invite.user_id !== null) {
+          throw new ConflictError("Invite already accepted — cannot renew", { id });
+        }
+        const { rows: updated } = await client.query(
+          `UPDATE email_verification_tokens
+           SET expires_at = now() + make_interval(hours => $2)
+           WHERE id = $1
+           RETURNING expires_at`,
+          [id, INVITE_TTL_HOURS],
+        );
+        await audit(client, {
+          actorId: req.userId,
+          entityType: "invite",
+          entityId: id,
+          action: "renew",
+          source: "admin",
+          before: { email: invite.email, expiresAt: invite.expires_at.toISOString() },
+          after: { expiresAt: (updated[0] as { expires_at: Date }).expires_at.toISOString() },
+        });
+        return (updated[0] as { expires_at: Date }).expires_at;
+      });
+      return reply.code(200).send({ expiresAt: result.toISOString() });
+    },
+  );
+
+  // ── resend — re-queue the invite email with the same token ───────────
+
+  api.post(
+    "/api/invites/:id/resend",
+    {
+      preHandler: manage,
+      schema: {
+        params: z.object({ id: z.coerce.number().int() }),
+        response: { 200: z.object({ success: z.literal(true) }) },
+      },
+    },
+    async (req, reply) => {
+      const { id } = req.params;
+      await withTransaction(async (client) => {
+        const { rows } = await client.query(
+          `SELECT * FROM email_verification_tokens
+           WHERE id = $1 AND type IN ('sponsor_invite', 'account_claim') FOR UPDATE`,
+          [id],
+        );
+        const invite = rows[0] as TokenRow | undefined;
+        if (!invite) throw new NotFoundError("Invite not found", { id });
+        if (invite.used_at !== null) {
+          throw new ConflictError("Invite already used — cannot resend", { id });
+        }
+        if (invite.user_id !== null) {
+          throw new ConflictError("Invite already accepted — cannot resend", { id });
+        }
+        await enqueueInviteEmail(client, req.userId as number, invite.email, "en", invite.token);
+        await audit(client, {
+          actorId: req.userId,
+          entityType: "invite",
+          entityId: id,
+          action: "resend",
+          source: "admin",
+          before: { email: invite.email },
+        });
+      });
+      return reply.code(200).send({ success: true });
+    },
+  );
+
   // ── public: inspect an invite before accepting ───────────────────────────
 
   api.get(
@@ -388,7 +518,9 @@ export function registerInviteRoutes(app: FastifyInstance): void {
           throw new BadRequestError("Shirt size is required", { field: "shirtSize" });
         }
         if (!req.body.foodIntolerances || req.body.foodIntolerances.length === 0) {
-          throw new BadRequestError("Food intolerances are required", { field: "foodIntolerances" });
+          throw new BadRequestError("Food intolerances are required", {
+            field: "foodIntolerances",
+          });
         }
 
         const { rows: clash } = await client.query(`SELECT id FROM users WHERE email = $1`, [

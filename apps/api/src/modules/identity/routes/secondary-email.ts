@@ -32,7 +32,10 @@ import { enqueueAuthEmail } from "../outbox.js";
 
 const TOKEN_TTL_HOURS = 24;
 
-export async function assertSecondaryEmailAvailable(email: string, ownUserId: number): Promise<void> {
+export async function assertSecondaryEmailAvailable(
+  email: string,
+  ownUserId: number,
+): Promise<void> {
   const { rows: primaryClash } = await pool.query(`SELECT id FROM users WHERE email = $1 LIMIT 1`, [
     email,
   ]);
@@ -194,7 +197,9 @@ export function registerSecondaryEmailRoutes(app: FastifyInstance): void {
       const targetId = req.params.userId;
       const email = req.body.email.trim().toLowerCase();
 
-      const { rows: target } = await pool.query(`SELECT email FROM users WHERE id = $1`, [targetId]);
+      const { rows: target } = await pool.query(`SELECT email FROM users WHERE id = $1`, [
+        targetId,
+      ]);
       if (!target[0]) throw new NotFoundError("User not found", { userId: targetId });
       if ((target[0] as { email: string }).email === email) {
         throw new BadRequestError("Secondary email cannot equal the user's primary email");

@@ -94,6 +94,17 @@ export interface Invite {
   token: string | null;
 }
 
+/** GET /api/invites — active invitation list item. */
+export interface InviteListItem {
+  id: number;
+  email: string;
+  kind: InviteKind;
+  enterpriseId: number | null;
+  groupIds: number[];
+  expiresAt: string;
+  createdAt: string;
+}
+
 /** GET /api/invites/lookup — what the invitee sees before accepting. */
 export interface InviteLookup {
   email: string;

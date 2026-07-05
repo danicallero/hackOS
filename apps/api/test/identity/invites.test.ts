@@ -277,7 +277,13 @@ describe("H9/H10 invite acceptance", () => {
     const res = await a.inject({
       method: "POST",
       url: "/api/invites/accept",
-      payload: { ...ACCEPT_BASE, token: invite.token, language: "gl", foodIntolerances: [1], shirtSize: "M" },
+      payload: {
+        ...ACCEPT_BASE,
+        token: invite.token,
+        language: "gl",
+        foodIntolerances: [1],
+        shirtSize: "M",
+      },
     });
     expect(res.statusCode).toBe(201);
     const { userId } = res.json();
@@ -395,7 +401,13 @@ describe("H9/H10 invite acceptance", () => {
       a.inject({
         method: "POST",
         url: "/api/invites/accept",
-        payload: { ...ACCEPT_BASE, name: "Rival", token: invite.token, foodIntolerances: [1], shirtSize: "M" },
+        payload: {
+          ...ACCEPT_BASE,
+          name: "Rival",
+          token: invite.token,
+          foodIntolerances: [1],
+          shirtSize: "M",
+        },
       }),
     ]);
     const statuses = [r1.statusCode, r2.statusCode].sort();
@@ -443,7 +455,7 @@ describe("H9/H10 invite acceptance", () => {
     const late = await a.inject({
       method: "POST",
       url: "/api/invites/accept",
-      payload: { ...ACCEPT_BASE, token: expired.token },
+      payload: { ...ACCEPT_BASE, token: expired.token, foodIntolerances: [1], shirtSize: "M" },
     });
     expect(late.statusCode).toBe(409);
     expect(late.json().error.details.expired).toBe(true);
