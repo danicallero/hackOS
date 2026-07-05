@@ -11,12 +11,18 @@ import { enqueueAuthEmail } from "./outbox.js";
  * the same CORS_ORIGINS the proxy/CORS layer uses (so ops configure one list),
  * plus the API's own base URL and, in dev, the local Next server (:3001).
  */
+// Normalize to a bare origin (no trailing slash): Better Auth's callbackURL
+// check compares `trustedOrigins entry === new URL(callbackURL).origin`, so a
+// trailing slash in WEB_URL/CORS_ORIGINS would fail the match and 403 with
+// INVALID_CALLBACK_URL / Invalid origin.
+const stripSlash = (s: string) => s.replace(/\/+$/, "");
+const WEB_URL = stripSlash(config.WEB_URL);
 const webOrigins = config.CORS_ORIGINS.split(",")
-  .map((o) => o.trim())
+  .map((o) => stripSlash(o.trim()))
   .filter(Boolean);
 const trustedOrigins = [
   config.BETTER_AUTH_URL,
-  config.WEB_URL,
+  WEB_URL,
   ...webOrigins,
   ...(config.isProd ? [] : ["http://localhost:3001"]),
 ];
@@ -25,10 +31,11 @@ const trustedOrigins = [
  * Turn a Better Auth email link (which points at the API's verify endpoint)
  * into one that redirects the browser back to a real frontend page after the
  * action, instead of dumping a raw API JSON response. The token is preserved;
- * only the post-action `callbackURL` is set to the web app.
+ * only the post-action `callbackURL` is set to the web app (WEB_URL, which is
+ * in trustedOrigins above).
  */
 function withFrontendCallback(token: string, path: string): string {
-  const callbackURL = `${config.WEB_URL}${path}`;
+  const callbackURL = `${WEB_URL}${path}`;
   const params = new URLSearchParams({ token, callbackURL });
   return `${config.BETTER_AUTH_URL}/api/auth/verify-email?${params.toString()}`;
 }
