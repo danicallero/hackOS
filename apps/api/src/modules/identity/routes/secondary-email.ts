@@ -1,11 +1,12 @@
 import { randomBytes } from "node:crypto";
+import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { config } from "../../../config.js";
 import { pool, withTransaction } from "../../../db/pool.js";
 import { audit } from "../../../lib/audit.js";
-import { requireAuth } from "../../../lib/capabilities.js";
+import { requireAuth, requireCapability } from "../../../lib/capabilities.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../../lib/errors.js";
 import { enqueueAuthEmail } from "../outbox.js";
 
@@ -18,6 +19,10 @@ import { enqueueAuthEmail } from "../outbox.js";
  *   POST /api/me/secondary-email/verify   -> consumes the token, stamps
  *                                            users.secondary_email_verified_at
  *
+ * Admin route:
+ *   POST /api/users/:userId/secondary-email -> admin sets secondary email for
+ *                                              a user; triggers verification.
+ *
  * Uniqueness rule (H6: "cada dirección identifica a una única cuenta"):
  * a secondary email may not equal ANY user's primary email, nor another
  * user's VERIFIED secondary email. Checked both at request time and again at
@@ -27,7 +32,10 @@ import { enqueueAuthEmail } from "../outbox.js";
 
 const TOKEN_TTL_HOURS = 24;
 
-async function assertSecondaryEmailAvailable(email: string, ownUserId: number): Promise<void> {
+export async function assertSecondaryEmailAvailable(
+  email: string,
+  ownUserId: number,
+): Promise<void> {
   const { rows: primaryClash } = await pool.query(`SELECT id FROM users WHERE email = $1 LIMIT 1`, [
     email,
   ]);
@@ -63,11 +71,13 @@ export function registerSecondaryEmailRoutes(app: FastifyInstance): void {
       const userId = req.userId as number;
       const email = req.body.email.trim().toLowerCase();
 
-      const { rows: selfRows } = await pool.query(`SELECT email FROM users WHERE id = $1`, [
-        userId,
-      ]);
+      const { rows: selfRows } = await pool.query(
+        `SELECT email, name, surname FROM users WHERE id = $1`,
+        [userId],
+      );
       if (!selfRows[0]) throw new NotFoundError("User not found");
-      if ((selfRows[0] as { email: string }).email === email) {
+      const self = selfRows[0] as { email: string; name: string | null; surname: string | null };
+      if (self.email === email) {
         throw new BadRequestError("Secondary email cannot equal your own primary email");
       }
       await assertSecondaryEmailAvailable(email, userId);
@@ -180,6 +190,66 @@ export function registerSecondaryEmailRoutes(app: FastifyInstance): void {
         });
         return { status: true as const, alreadyVerified: false };
       });
+    },
+  );
+
+  // ── admin: set secondary email for a user (C) ───────────────────────────
+  api.post(
+    "/api/users/:userId/secondary-email",
+    {
+      preHandler: requireCapability(CAPABILITIES.USERS_WRITE),
+      schema: {
+        params: z.object({ userId: z.coerce.number().int() }),
+        body: z.object({ email: z.string().email() }),
+        response: { 200: z.object({ status: z.literal(true) }) },
+      },
+    },
+    async (req) => {
+      const targetId = req.params.userId;
+      const email = req.body.email.trim().toLowerCase();
+
+      const { rows: target } = await pool.query(
+        `SELECT email, name, surname FROM users WHERE id = $1`,
+        [targetId],
+      );
+      if (!target[0]) throw new NotFoundError("User not found", { userId: targetId });
+      const tgt = target[0] as { email: string; name: string | null; surname: string | null };
+      if (tgt.email === email) {
+        throw new BadRequestError("Secondary email cannot equal the user's primary email");
+      }
+      await assertSecondaryEmailAvailable(email, targetId);
+
+      const token = randomBytes(32).toString("base64url");
+      await withTransaction(async (client) => {
+        await client.query(
+          `UPDATE email_verification_tokens SET used_at = now()
+           WHERE user_id = $1 AND type = 'secondary_email' AND used_at IS NULL`,
+          [targetId],
+        );
+        await client.query(
+          `INSERT INTO email_verification_tokens (token, type, email, user_id, expires_at)
+           VALUES ($1, 'secondary_email', $2, $3, now() + make_interval(hours => $4))`,
+          [token, email, targetId, TOKEN_TTL_HOURS],
+        );
+        await client.query(
+          `UPDATE users SET secondary_email = $2, secondary_email_verified_at = NULL WHERE id = $1`,
+          [targetId, email],
+        );
+        await enqueueAuthEmail(client, targetId, "auth.verify", {
+          recipient: email,
+          name: tgt.name ?? "",
+          verifyUrl: `${config.WEB_URL}/verify-secondary-email?token=${token}`,
+        });
+        await audit(client, {
+          actorId: req.userId,
+          entityType: "user",
+          entityId: targetId,
+          action: "secondary_email_admin_set",
+          source: "admin",
+          after: { secondary_email: email },
+        });
+      });
+      return { status: true as const };
     },
   );
 }

@@ -62,7 +62,9 @@ export function registerReviewRoutes(app: FastifyInstance): void {
         filters.push(`(u.name ILIKE $${params.length} OR u.email ILIKE $${params.length})`);
       }
       const { rows } = await pool.query(
-        `SELECT r.id, r.user_id, u.name, u.email, u.shirt_size, r.status, r.responses,
+        `SELECT r.id, r.user_id, u.name, u.email, u.shirt_size,
+                u.food_intolerances, u.food_intolerance_notes,
+                r.status, r.responses,
                 r.staff_notes, r.submitted_at, r.decision_sent_at,
                 COALESCE(avg(ar.score), NULL) AS avg_score,
                 count(ar.author_id)::int AS review_count
@@ -70,7 +72,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
          JOIN users u ON u.id = r.user_id
          LEFT JOIN applicant_reviews ar ON ar.response_id = r.id
          WHERE ${filters.join(" AND ")}
-         GROUP BY r.id, u.name, u.email, u.shirt_size
+         GROUP BY r.id, u.name, u.email, u.shirt_size, u.food_intolerances, u.food_intolerance_notes
          ORDER BY r.id`,
         params,
       );

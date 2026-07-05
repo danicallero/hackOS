@@ -47,6 +47,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -54,6 +55,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
@@ -412,6 +414,9 @@ function StaffEditForm({
     description: i.description ? pickText(i.description, lang) : undefined,
   }));
 
+  const [secEmail, setSecEmail] = useState("");
+  const [secSending, setSecSending] = useState(false);
+
   async function onSubmit(values: EditValues) {
     try {
       // PATCH /api/users/:id (USERS_WRITE) — staff-editable field set. Audited
@@ -431,6 +436,22 @@ function StaffEditForm({
       toast.success("Profile updated.");
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Could not save this profile.");
+    }
+  }
+
+  async function handleSetSecondaryEmail() {
+    setSecSending(true);
+    try {
+      await api.post(`/api/users/${user.id}/secondary-email`, {
+        email: secEmail.trim().toLowerCase(),
+      });
+      toast.success("Secondary email set. The user needs to verify it.");
+      setSecEmail("");
+      await onUpdated();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not set secondary email.");
+    } finally {
+      setSecSending(false);
     }
   }
 
@@ -590,6 +611,37 @@ function StaffEditForm({
               </FormItem>
             )}
           />
+          <Separator className="my-4" />
+          <div className="space-y-4">
+            <h4 className="text-sm font-medium">Secondary email</h4>
+            {user.secondaryEmail && (
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground">Current: {user.secondaryEmail}</span>
+                <StatusBadge tone={user.secondaryEmailVerified ? "success" : "warning"} dot={false}>
+                  {user.secondaryEmailVerified ? "Verified" : "Pending"}
+                </StatusBadge>
+              </div>
+            )}
+            <div className="flex items-end gap-2">
+              <div className="flex-1 space-y-2">
+                <Label htmlFor="admin-sec-email">Set secondary email</Label>
+                <Input
+                  id="admin-sec-email"
+                  type="email"
+                  value={secEmail}
+                  onChange={(e) => setSecEmail(e.target.value)}
+                  placeholder={user.secondaryEmail ?? "email@example.com"}
+                />
+              </div>
+              <Button
+                variant="outline"
+                disabled={!secEmail.includes("@") || secSending}
+                onClick={handleSetSecondaryEmail}
+              >
+                {secSending ? "Sending…" : user.secondaryEmail ? "Change" : "Set email"}
+              </Button>
+            </div>
+          </div>
         </SectionCard>
       </form>
     </Form>

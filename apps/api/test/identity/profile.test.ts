@@ -110,34 +110,47 @@ describe("GET /api/me (H7)", () => {
 });
 
 describe("PATCH /api/me (H7)", () => {
-  it("updates own restricted fields", async () => {
+  it("updates own restricted fields (A: food/shirt are staff-only now)", async () => {
+    const a = await getApp();
+    const userId = await createUser();
+    // shirtSize was removed from self-edit — it's staff-only now.
+    const res = await a.inject({
+      method: "PATCH",
+      url: "/api/me",
+      headers: asUser(userId),
+      payload: { phone: "+34600000000", language: "gl" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().phone).toBe("+34600000000");
+    expect(res.json().language).toBe("gl");
+  });
+
+  it("staff can still edit food/shirt via PATCH /api/users/:id", async () => {
+    const a = await getApp();
+    const userId = await createUser();
+    const staff = await createUserWithCapabilities([CAPABILITIES.USERS_WRITE]);
+
+    const res = await a.inject({
+      method: "PATCH",
+      url: `/api/users/${userId}`,
+      headers: asUser(staff),
+      payload: { shirtSize: "L", foodIntolerances: [1, 2] },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().shirtSize).toBe("L");
+    expect(res.json().foodIntolerances).toEqual([1, 2]);
+  });
+
+  it("self-edit of food/shirt is rejected (400)", async () => {
     const a = await getApp();
     const userId = await createUser();
     const res = await a.inject({
       method: "PATCH",
       url: "/api/me",
       headers: asUser(userId),
-      payload: { phone: "+34600000000", language: "gl", shirtSize: "M" },
+      payload: { shirtSize: "L" },
     });
-    expect(res.statusCode).toBe(200);
-    expect(res.json().phone).toBe("+34600000000");
-    expect(res.json().language).toBe("gl");
-    expect(res.json().shirtSize).toBe("M");
-  });
-
-  it("persists language + shirt size + food intolerances and loads them back via GET /api/me", async () => {
-    const a = await getApp();
-    const userId = await createUser();
-    await a.inject({
-      method: "PATCH",
-      url: "/api/me",
-      headers: asUser(userId),
-      payload: { language: "en", shirtSize: "L", foodIntolerances: [1, 2] },
-    });
-    const me = await a.inject({ method: "GET", url: "/api/me", headers: asUser(userId) });
-    expect(me.json().language).toBe("en");
-    expect(me.json().shirtSize).toBe("L");
-    expect(me.json().foodIntolerances).toEqual([1, 2]);
+    expect(res.statusCode).toBe(400);
   });
 
   it("rejects restricted/system fields on self-edit (email, badge, dni, notes)", async () => {

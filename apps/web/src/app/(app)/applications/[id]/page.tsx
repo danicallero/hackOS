@@ -80,7 +80,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
 import { pickText } from "@/lib/i18n";
-import { useCan } from "@/lib/session";
+import { useCan, useMe } from "@/lib/session";
+import type { Intolerance, Language } from "@/lib/types";
 import {
   APPLICATION_TYPES,
   type ApplicationForm,
@@ -1249,7 +1250,12 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
 
 // ── Review + decision modal (H13/H14) ─────────────────────────────────────────
 
-function renderAnswer(field: TemplateField, value: unknown): string {
+function renderAnswer(
+  field: TemplateField,
+  value: unknown,
+  universities: { id: number; name: string }[],
+  lang: Language,
+): string {
   if (value === null || value === undefined || value === "") return "—";
   if (Array.isArray(value) && value.length === 0) return "—";
   switch (field.kind) {
@@ -1257,16 +1263,20 @@ function renderAnswer(field: TemplateField, value: unknown): string {
       return value === true ? "Yes" : "No";
     case "select": {
       const opt = field.options?.find((o) => o.value === String(value));
-      return opt ? pickText(opt.label, "es") : String(value);
+      return opt ? pickText(opt.label, lang) : String(value);
     }
     case "multiselect": {
       const vals = Array.isArray(value) ? value : [value];
       return vals
         .map((v) => {
           const opt = field.options?.find((o) => o.value === String(v));
-          return opt ? pickText(opt.label, "es") : String(v);
+          return opt ? pickText(opt.label, lang) : String(v);
         })
         .join(", ");
+    }
+    case "university": {
+      const uni = universities.find((u) => u.id === Number(value));
+      return uni ? uni.name : String(value);
     }
     default:
       return String(value);
@@ -1275,11 +1285,22 @@ function renderAnswer(field: TemplateField, value: unknown): string {
 
 /** Render a response value; file answers become a clickable link so staff (and
  *  anyone with the public URL) can open the uploaded file (H12). */
-function AnswerValue({ field, value }: { field: TemplateField; value: unknown }) {
+function AnswerValue({
+  field,
+  value,
+  universities,
+  lang,
+}: {
+  field: TemplateField;
+  value: unknown;
+  universities: { id: number; name: string }[];
+  lang: Language;
+}) {
   if ((field.kind === "file" || field.kind === "file-url") && typeof value === "string" && value) {
     return <FileLink value={value} />;
   }
-  return <>{renderAnswer(field, value)}</>;
+  const rendered = renderAnswer(field, value, universities, lang);
+  return <span className="whitespace-pre-wrap">{rendered}</span>;
 }
 
 function ReviewModal({
@@ -1299,9 +1320,24 @@ function ReviewModal({
   const canDecide = useCan(CAPABILITIES.APPLICATIONS_DECIDE);
   const canOverride = useCan(CAPABILITIES.APPLICATIONS_CONFIRM_OVERRIDE);
   const canEdit = useCan(CAPABILITIES.APPLICATIONS_EDIT_RESPONSE);
+  const me = useMe();
+  const lang = (me?.language ?? "es") as Language;
 
   const [staffNotes, setStaffNotes] = useState(response.staff_notes ?? "");
   const [savingNotes, setSavingNotes] = useState(false);
+  const [intolerances, setIntolerances] = useState<Intolerance[]>([]);
+  const [universities, setUniversities] = useState<{ id: number; name: string }[]>([]);
+
+  useEffect(() => {
+    api
+      .get<{ intolerances: Intolerance[] }>("/api/public/food-intolerances")
+      .then((res) => setIntolerances(res.intolerances))
+      .catch(() => {});
+    api
+      .get<{ universities: { id: number; name: string }[] }>("/api/public/universities")
+      .then((res) => setUniversities(res.universities))
+      .catch(() => {});
+  }, []);
   // No GET for a reviewer's own row exists — the score/notes inputs are
   // write-only (blank each open); the list column shows the average + count.
   const [myScore, setMyScore] = useState("");
@@ -1439,7 +1475,7 @@ function ReviewModal({
                   applicationId={applicationId}
                   value={editValues[f.key] as FieldValue}
                   onChange={(v) => setEditValues((prev) => ({ ...prev, [f.key]: v }))}
-                  lang="es"
+                  lang={lang}
                   inDialog
                 />
               ))}
@@ -1459,33 +1495,74 @@ function ReviewModal({
               </div>
             </div>
           ) : template && template.length > 0 ? (
-            <dl className="space-y-3">
+            <div className="divide-border divide-y">
               {template.map((f) => (
-                <div key={f.key} className="grid gap-1 sm:grid-cols-[12rem_1fr] sm:gap-4">
-                  <dt className="text-muted-foreground text-sm">
-                    {pickText(f.label, "es") || f.key}
-                  </dt>
-                  <dd className="text-sm">
-                    <AnswerValue field={f} value={response.responses[f.key]} />
-                  </dd>
+                <div key={f.key} className="py-3 first:pt-0 last:pb-0">
+                  <p className="text-muted-foreground mb-1 text-xs font-medium uppercase tracking-wide">
+                    {pickText(f.label, lang) || f.key}
+                  </p>
+                  <div className="text-sm">
+                    <AnswerValue
+                      field={f}
+                      value={response.responses[f.key]}
+                      universities={universities}
+                      lang={lang}
+                    />
+                  </div>
                 </div>
               ))}
-            </dl>
+            </div>
           ) : Object.keys(response.responses).length > 0 ? (
-            <dl className="space-y-3">
+            <div className="divide-border divide-y">
               {Object.entries(response.responses).map(([k, v]) => (
-                <div key={k} className="grid gap-1 sm:grid-cols-[12rem_1fr] sm:gap-4">
-                  <dt className="text-muted-foreground font-mono text-xs">{k}</dt>
-                  <dd className="text-sm">
+                <div key={k} className="py-3 first:pt-0 last:pb-0">
+                  <p className="text-muted-foreground mb-1 text-xs font-medium uppercase tracking-wide">
+                    {k}
+                  </p>
+                  <div className="whitespace-pre-wrap text-sm">
                     {typeof v === "object" ? JSON.stringify(v) : String(v)}
-                  </dd>
+                  </div>
                 </div>
               ))}
-            </dl>
+            </div>
           ) : (
             <p className="text-muted-foreground text-sm">No answers recorded.</p>
           )}
         </div>
+
+        {/* Dietary info (from user row) */}
+        {(response.food_intolerances?.length > 0 || response.food_intolerance_notes) && (
+          <div className="space-y-3">
+            <p className="text-sm font-medium">Dietary info</p>
+            <div className="divide-border divide-y">
+              {response.food_intolerances?.length > 0 && (
+                <div className="py-3 first:pt-0">
+                  <p className="text-muted-foreground mb-1 text-xs font-medium uppercase tracking-wide">
+                    Dietary restrictions
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {response.food_intolerances.map((id) => {
+                      const intol = intolerances.find((i) => i.id === id);
+                      return intol ? (
+                        <StatusBadge key={id} tone="neutral" dot={false}>
+                          {pickText(intol.label, lang)}
+                        </StatusBadge>
+                      ) : null;
+                    })}
+                  </div>
+                </div>
+              )}
+              {response.food_intolerance_notes && (
+                <div className="py-3 first:pt-0">
+                  <p className="text-muted-foreground mb-1 text-xs font-medium uppercase tracking-wide">
+                    Dietary notes
+                  </p>
+                  <p className="text-sm whitespace-pre-wrap">{response.food_intolerance_notes}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Shared staff notes (H13) */}
         {canReview && (

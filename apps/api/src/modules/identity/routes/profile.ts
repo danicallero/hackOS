@@ -33,9 +33,6 @@ const selfPatchSchema = z
     phone: z.string().max(50).nullable().optional(),
     language: z.enum(LANGUAGES).optional(),
     image: z.string().max(2000).nullable().optional(),
-    foodIntolerances: z.array(z.number().int()).optional(),
-    foodIntoleranceNotes: z.string().max(2000).nullable().optional(),
-    shirtSize: z.string().max(10).nullable().optional(),
     universityId: z.number().int().nullable().optional(),
   })
   .strict();
@@ -45,6 +42,9 @@ const staffPatchSchema = selfPatchSchema
   .extend({
     dni: z.string().max(50).nullable().optional(),
     notes: z.string().max(4000).nullable().optional(),
+    foodIntolerances: z.array(z.number().int()).optional(),
+    foodIntoleranceNotes: z.string().max(2000).nullable().optional(),
+    shirtSize: z.string().max(10).nullable().optional(),
   })
   .strict();
 
@@ -648,4 +648,120 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       return { passes, checkIns, doorScans };
     },
   );
+
+  // A user's application responses (D): what the admin panel's "Applications" tab
+  // shows. Returns the same shape as the response-detail endpoint but scoped to
+  // one user, without food/shirt data (those go on the general profile tab).
+  api.get(
+    "/api/users/:id/responses",
+    {
+      preHandler: requireCapability(CAPABILITIES.USERS_READ),
+      schema: {
+        params: z.object({ id: z.coerce.number().int() }),
+        response: {
+          200: z.object({
+            responses: z.array(
+              z.object({
+                id: z.number(),
+                applicationId: z.number(),
+                applicationName: z.string(),
+                applicationType: z.string(),
+                status: z.string(),
+                submittedAt: z.string().nullable(),
+                confirmedAt: z.string().nullable(),
+                declinedAt: z.string().nullable(),
+                responses: z.record(z.string(), z.unknown()),
+                staffNotes: z.string().nullable(),
+                reviews: z.array(
+                  z.object({
+                    authorId: z.number(),
+                    score: z.number().nullable(),
+                    notes: z.string().nullable(),
+                  }),
+                ),
+                availableActions: z.array(z.string()),
+              }),
+            ),
+          }),
+        },
+      },
+    },
+    async (req) => {
+      const userId = req.params.id;
+      // Verify user exists
+      await fetchUser(userId);
+
+      const { rows: responseRows } = await pool.query(
+        `SELECT r.*, a.name AS app_name, a.type AS app_type
+         FROM application_responses r
+         JOIN applications a ON a.id = r.application_id
+         WHERE r.user_id = $1
+         ORDER BY r.id DESC`,
+        [userId],
+      );
+
+      const responses = await Promise.all(
+        responseRows.map(async (row: Record<string, unknown>) => {
+          const { rows: reviews } = await pool.query(
+            `SELECT author_id, score, notes FROM applicant_reviews WHERE response_id = $1 ORDER BY author_id`,
+            [row.id],
+          );
+          return {
+            id: row.id as number,
+            applicationId: row.application_id as number,
+            applicationName: row.app_name as string,
+            applicationType: row.app_type as string,
+            status: row.status as string,
+            submittedAt: row.submitted_at ? (row.submitted_at as Date).toISOString() : null,
+            confirmedAt: row.confirmed_at ? (row.confirmed_at as Date).toISOString() : null,
+            declinedAt: row.declined_at ? (row.declined_at as Date).toISOString() : null,
+            responses: row.responses as Record<string, unknown>,
+            staffNotes: (row.staff_notes as string | null) ?? null,
+            reviews: reviews.map(
+              (r: { author_id: number; score: number | null; notes: string | null }) => ({
+                authorId: r.author_id,
+                score: r.score,
+                notes: r.notes,
+              }),
+            ),
+            availableActions: computeAvailableActions(row.status as string),
+          };
+        }),
+      );
+
+      return { responses };
+    },
+  );
+}
+
+// Compute available staff actions for a response based on its status.
+// Duplicated from applications/service.ts to avoid cross-module import of a
+// pure function. Only USERS_READ-visible; the action names align with the
+// admin panel's button rendering logic.
+function computeAvailableActions(status: string): string[] {
+  const actions: string[] = ["staff-notes"];
+  switch (status) {
+    case "submitted":
+    case "review":
+      actions.push("my-review");
+      break;
+    case "accepted_internal":
+    case "rejected_internal":
+      actions.push("decide", "revert-decision", "send-decision");
+      break;
+    case "accepted":
+      actions.push("resend-decision", "revert-decision", "confirm-link", "decline-override");
+      break;
+    case "rejected":
+      actions.push("re-accept", "resend-decision", "revert-decision");
+      break;
+    case "confirmed":
+      actions.push("decline-override");
+      break;
+    case "declined":
+    case "expired":
+      actions.push("re-accept");
+      break;
+  }
+  return actions;
 }

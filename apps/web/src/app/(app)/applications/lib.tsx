@@ -94,6 +94,10 @@ export interface ResponseRow {
   email: string;
   /** Logistics shirt size, from the user row (H12). */
   shirt_size: string | null;
+  /** Food intolerance ids, from the user row. */
+  food_intolerances: number[];
+  /** Free-text dietary notes, from the user row. */
+  food_intolerance_notes: string | null;
   status: string;
   responses: Record<string, unknown>;
   staff_notes: string | null;
