@@ -50,10 +50,10 @@ services:
       timeout: 5s
       retries: 5
 
-  # One-shot provisioner: create the bucket and make it publicly readable so the
-  # app's plain object URLs (publicUrl(), no presigned GET) resolve. Idempotent —
-  # `mb --ignore-existing` + `anonymous set download` are safe to re-run on every
-  # `up`, so a fresh Dokploy deploy is self-provisioning with no manual `mc`.
+  # One-shot provisioner: create the bucket and set access. Only the enterprises/
+  # prefix (sponsor logos) is public; uploads/ (application files) stay private
+  # and are served via the API's presigned-download route. Idempotent — safe to
+  # re-run on every `up`, so a fresh deploy self-provisions with no manual `mc`.
   minio-init:
     image: minio/mc:latest
     depends_on:
@@ -69,8 +69,9 @@ services:
       - >
         mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}" &&
         mc mb --ignore-existing "local/$${S3_BUCKET}" &&
-        mc anonymous set download "local/$${S3_BUCKET}" &&
-        echo "MinIO bucket '$${S3_BUCKET}' ready (public download)."
+        mc anonymous set none "local/$${S3_BUCKET}" &&
+        mc anonymous set download "local/$${S3_BUCKET}/enterprises" &&
+        echo "MinIO bucket '$${S3_BUCKET}' ready (enterprises/ public, uploads/ private)."
     restart: "no"
 
   mailpit:

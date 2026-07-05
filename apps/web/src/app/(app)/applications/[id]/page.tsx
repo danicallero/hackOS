@@ -42,6 +42,7 @@ import { z } from "zod";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { EmptyState } from "@/components/common/empty-state";
+import { FileLink } from "@/components/common/file-link";
 import { Modal } from "@/components/common/modal";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
@@ -1276,17 +1277,7 @@ function renderAnswer(field: TemplateField, value: unknown): string {
  *  anyone with the public URL) can open the uploaded file (H12). */
 function AnswerValue({ field, value }: { field: TemplateField; value: unknown }) {
   if ((field.kind === "file" || field.kind === "file-url") && typeof value === "string" && value) {
-    return (
-      <a
-        href={value}
-        target="_blank"
-        rel="noreferrer"
-        className="inline-flex items-center gap-1 underline underline-offset-4"
-      >
-        <FileTextIcon className="size-3.5" />
-        View file
-      </a>
-    );
+    return <FileLink value={value} />;
   }
   return <>{renderAnswer(field, value)}</>;
 }

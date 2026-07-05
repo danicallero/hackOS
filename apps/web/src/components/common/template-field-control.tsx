@@ -7,6 +7,7 @@
 // multiselect, boolean for checkbox. The university id is kept numeric here so
 // callers never have to remember the string↔number dance.
 
+import { FileLink } from "@/components/common/file-link";
 import { FileUploadField } from "@/components/common/file-upload-field";
 import { MultiSelect } from "@/components/common/multi-select";
 import { UniversityPicker } from "@/components/common/university-picker";
@@ -176,14 +177,7 @@ export function TemplateFieldControl({
             disabled={disabled}
           />
         ) : value ? (
-          <a
-            href={String(value)}
-            target="_blank"
-            rel="noreferrer"
-            className="text-sm underline underline-offset-4"
-          >
-            View uploaded file
-          </a>
+          <FileLink value={String(value)} />
         ) : (
           <p className="text-muted-foreground text-sm">No file uploaded.</p>
         );

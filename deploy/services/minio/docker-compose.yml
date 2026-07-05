@@ -30,7 +30,10 @@ services:
         limits:
           memory: "${MINIO_MEM_LIMIT:-1g}"
 
-  # Creates the bucket once, then exits. Safe to re-run on every redeploy.
+  # Creates the bucket and sets access once, then exits. Idempotent — safe to
+  # re-run on every redeploy. Only the enterprises/ prefix (sponsor logos, H44)
+  # is publicly readable; uploads/ (application files, H12) stay private and are
+  # served through the API's presigned-download route, gated by owner-or-staff.
   minio-init:
     image: "${MINIO_MC_IMAGE:-minio/mc:latest}"
     depends_on:
@@ -41,7 +44,9 @@ services:
       - >
         mc alias set s3 http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}" &&
         mc mb --ignore-existing "s3/$${S3_BUCKET}" &&
-        echo "bucket $${S3_BUCKET} ready"
+        mc anonymous set none "s3/$${S3_BUCKET}" &&
+        mc anonymous set download "s3/$${S3_BUCKET}/enterprises" &&
+        echo "bucket $${S3_BUCKET} ready (enterprises/ public, uploads/ private)"
     environment:
       MINIO_ROOT_USER: "${MINIO_ROOT_USER}"
       MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD}"

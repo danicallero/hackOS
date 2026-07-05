@@ -9,6 +9,7 @@
 import { FileIcon, PaperclipIcon, UploadIcon, XIcon } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { toast } from "sonner";
+import { FileLink } from "@/components/common/file-link";
 import { Spinner } from "@/components/common/spinner";
 import { Button } from "@/components/ui/button";
 import { API_URL } from "@/lib/env";
@@ -63,7 +64,8 @@ export function FileUploadField({
           (payload as { error?: { message?: string } })?.error?.message ?? "Upload failed",
         );
       }
-      onChange((payload as { url: string }).url);
+      // Store the private object key; reads resolve to a presigned URL on demand.
+      onChange((payload as { key: string }).key);
       toast.success("File uploaded.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not upload the file.");
@@ -92,14 +94,9 @@ export function FileUploadField({
       {value ? (
         <div className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
           <FileIcon className="text-muted-foreground size-4 shrink-0" />
-          <a
-            href={value}
-            target="_blank"
-            rel="noreferrer"
-            className="flex-1 truncate hover:underline"
-          >
-            {fileName}
-          </a>
+          <FileLink value={value} className="min-w-0 flex-1 truncate">
+            <span className="truncate">{fileName}</span>
+          </FileLink>
           {!disabled && (
             <Button
               type="button"

@@ -1,16 +1,19 @@
+import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { pool } from "../../db/pool.js";
-import { requireAuth } from "../../lib/capabilities.js";
-import { BadRequestError, NotFoundError } from "../../lib/errors.js";
-import { putObject } from "../../lib/storage.js";
+import { requireAuth, userHasCapability } from "../../lib/capabilities.js";
+import { BadRequestError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import { presignDownload, putObject } from "../../lib/storage.js";
 import type { TemplateField } from "./schemas.js";
 
 const uploadParamsSchema = z.object({
   applicationId: z.coerce.number().int().positive(),
   fieldKey: z.string().min(1),
 });
+
+const downloadQuerySchema = z.object({ key: z.string().min(1) });
 
 /**
  * File upload endpoint for application form file fields (kind: "file"). The
@@ -72,9 +75,39 @@ export function registerUploadRoutes(app: FastifyInstance): void {
       }
 
       const key = `uploads/${applicationId}/${userId}/${fieldKey}-${Date.now()}${ext}`;
-      const url = await putObject(key, bytes, file.mimetype);
+      // The bucket's uploads/ prefix is private (H12): store the KEY in the
+      // response, not a public URL. Reads go through the presigned-download
+      // route below, gated by owner-or-staff.
+      await putObject(key, bytes, file.mimetype);
 
-      return { key, url };
+      return { key, url: await presignDownload(key) };
+    },
+  );
+
+  // Presigned download of a private application upload (H12). Only the file's
+  // owner (encoded in the key path uploads/<appId>/<userId>/…) or staff who can
+  // review applications may fetch it; the returned URL is short-lived.
+  r.get(
+    "/api/files/download",
+    { preHandler: requireAuth, schema: { querystring: downloadQuerySchema } },
+    async (req) => {
+      const { key } = req.query;
+      if (!key.startsWith("uploads/") || key.includes("..")) {
+        throw new BadRequestError("Not a downloadable file key");
+      }
+      const ownerId = Number(key.split("/")[2]);
+      if (!Number.isInteger(ownerId)) throw new BadRequestError("Malformed file key");
+
+      const userId = req.userId as number;
+      const isOwner = userId === ownerId;
+      const isStaff = isOwner
+        ? false
+        : await userHasCapability(userId, CAPABILITIES.APPLICATIONS_REVIEW);
+      if (!isOwner && !isStaff) {
+        throw new ForbiddenError("You don't have access to this file");
+      }
+
+      return { url: await presignDownload(key) };
     },
   );
 }
