@@ -35,7 +35,11 @@ function docsTagFor(url: string): string {
   if (url === "/healthz") return "foundation";
   if (url.startsWith("/api/public/")) return "public";
   if (url.startsWith("/api/auth/")) return "auth";
-  if (url.startsWith("/api/me") || url.startsWith("/api/users") || url.startsWith("/api/permissions"))
+  if (
+    url.startsWith("/api/me") ||
+    url.startsWith("/api/users") ||
+    url.startsWith("/api/permissions")
+  )
     return "identity";
   if (url.startsWith("/api/invites") || url.startsWith("/api/profile")) return "identity";
   if (url.startsWith("/api/applications")) return "applications";
@@ -214,6 +218,15 @@ export async function buildApp(): Promise<App> {
   await app.register(cors, {
     origin: config.isProd ? (corsOrigins.length > 0 ? corsOrigins : false) : true,
     credentials: true,
+    // @fastify/cors defaults to GET,HEAD,POST only — the web app also uses
+    // PATCH (profile, H7), PUT and DELETE (permissions, H8), so they must be
+    // allowed explicitly or the browser preflight blocks them.
+    methods: ["GET", "HEAD", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+    // Custom request headers the app sends (idempotency on critical mutations).
+    allowedHeaders: ["content-type", "idempotency-key"],
+    // Response headers the browser must be able to read cross-origin: rate
+    // limit backoff (H3) and idempotent-replay signalling.
+    exposedHeaders: ["retry-after", "idempotency-replayed"],
   });
   await app.register(authContextPlugin);
   app.addHook("onSend", idempotencyOnSend);
