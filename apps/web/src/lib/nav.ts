@@ -2,6 +2,7 @@ import { CAPABILITIES, type Capability } from "@hackos/shared/capabilities";
 import {
   CalendarDaysIcon,
   ClipboardListIcon,
+  ComponentIcon,
   HandshakeIcon,
   LayoutDashboardIcon,
   ListOrderedIcon,
@@ -108,6 +109,9 @@ export const NAV: NavSection[] = [
   },
   {
     label: "Account",
-    items: [{ title: "My profile", href: "/settings/profile", icon: UserIcon }],
+    items: [
+      { title: "My profile", href: "/settings/profile", icon: UserIcon },
+      { title: "Components", href: "/components", icon: ComponentIcon },
+    ],
   },
 ];

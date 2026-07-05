@@ -90,6 +90,10 @@ variant, wrap it in `components/common/`.
 App-level building blocks used across every screen. Reuse these instead of
 re-implementing:
 
+Each is a **single canonical component configured by props** (fields, layout,
+tone/colors, slots) — never fork a second version. See `/components` in the
+running app for a live gallery of every one with variations.
+
 | Component | Use for |
 |---|---|
 | `Brand` | The hackOS wordmark/lockup. |
@@ -99,10 +103,25 @@ re-implementing:
 | `PageHeader` | Title + description + actions on authed pages. |
 | `ThemeToggle` | Light / dark / system switch. |
 | `CapabilityGate` | Render children only if the user holds a capability. |
+| `SectionCard` | Bordered section: icon + title + description, divider, body, footer. **The** form/detail container. |
+| `StatCard` | Metric tile: value, label, hint, icon, delta, footer slot (meter/sparkline). |
+| `StatusBadge` | Status pill; `tone` prop picks the color (see `lib/tones.ts`). |
+| `EmptyState` | Zero/empty states: icon + title + description + action. |
+| `UsageMeter` | Labeled progress meter (`value`/`max`/`tone`). |
+| `DataTable<T>` | Generic table: declarative `columns`, search, sort, pagination, row actions, loading/empty. |
+| `Modal` | Reusable dialog: `title`/`icon`/`size`/`footer`, controlled or with a `trigger`. |
+| `TrendChart` | Area/line time-series, one or many tone-colored series. |
+| `DonutChart` | Distribution donut with optional centered label/value. |
+
+**Tones & colors.** `lib/tones.ts` maps semantic tones
+(`success`/`warning`/`danger`/`info`/`brand`/`neutral`) to theme-token classes.
+Badges, meters and charts all take a `tone` — so a color means the same thing
+everywhere. Never hardcode a hex; pick a tone (or pass `className`).
 
 ### 3. Layout — `components/layout/*`
 
-`AppSidebar`, `UserMenu`, `AuthGuard`, `VerificationBanner` — the authed shell.
+`AppSidebar`, `UserMenu`, `AuthGuard`, `VerificationBanner`, `HeaderTitle` — the
+authed shell.
 
 ## Conventions (match the backend's discipline)
 
