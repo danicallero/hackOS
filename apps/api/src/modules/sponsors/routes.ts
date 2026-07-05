@@ -6,18 +6,24 @@ import { BadRequestError, ForbiddenError, UnauthorizedError } from "../../lib/er
 import { putObject } from "../../lib/storage.js";
 import { assertCanEditEnterprise } from "./access.js";
 import {
+  addMemberBody,
   CONTENT_TYPE_EXT,
   createEnterpriseBody,
   enterpriseIdParam,
+  memberParams,
   OWNER_EDITABLE_KEYS,
   updateEnterpriseBody,
 } from "./schemas.js";
 import {
+  addEnterpriseMember,
   createEnterprise,
   getEnterprise,
+  listEnterpriseMembers,
   listEnterprises,
   listPublicSponsors,
+  listUserEnterprises,
   myEnterprise,
+  removeEnterpriseMember,
   setEnterpriseLogo,
   updateEnterprise,
 } from "./service.js";
@@ -83,6 +89,42 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
       }
       return updateEnterprise(req.params.id, req.body, req.userId);
     },
+  );
+
+  // ── M4: enterprise membership (the affiliated users) ────────────────────────
+  r.get(
+    "/api/enterprises/:id/members",
+    { preHandler: manage, schema: { params: enterpriseIdParam } },
+    async (req) => ({ members: await listEnterpriseMembers(req.params.id) }),
+  );
+
+  r.post(
+    "/api/enterprises/:id/members",
+    { preHandler: manage, schema: { params: enterpriseIdParam, body: addMemberBody } },
+    async (req, reply) => {
+      const member = await addEnterpriseMember(req.params.id, req.body.userId, req.userId);
+      reply.code(201);
+      return member;
+    },
+  );
+
+  r.delete(
+    "/api/enterprises/:id/members/:userId",
+    { preHandler: manage, schema: { params: memberParams } },
+    async (req) => {
+      await removeEnterpriseMember(req.params.id, req.params.userId, req.userId);
+      return { removed: true as const };
+    },
+  );
+
+  // A user's enterprise affiliations — for the profile's Enterprise view.
+  r.get(
+    "/api/users/:id/enterprises",
+    {
+      preHandler: requireCapability(CAPABILITIES.USERS_READ),
+      schema: { params: enterpriseIdParam },
+    },
+    async (req) => ({ enterprises: await listUserEnterprises(req.params.id) }),
   );
 
   // Logo upload (H44 object storage) — the client POSTs the file as multipart;

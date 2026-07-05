@@ -127,6 +127,113 @@ export async function setEnterpriseLogo(id: number, logoUrl: string, actorId: nu
   return rows[0];
 }
 
+// ── enterprise membership (M4: the sponsors table IS the user↔enterprise link) ─
+
+export interface EnterpriseMember {
+  sponsorId: number;
+  userId: number;
+  name: string | null;
+  email: string;
+  joinedAt: Date;
+}
+
+/** Users affiliated with an enterprise (its `sponsors` rows joined to users). */
+export async function listEnterpriseMembers(enterpriseId: number): Promise<EnterpriseMember[]> {
+  await getEnterprise(enterpriseId); // 404 if it doesn't exist
+  const { rows } = await pool.query(
+    `SELECT s.id AS sponsor_id, s.user_id, u.name, u.email, s.joined_at
+       FROM sponsors s
+       JOIN users u ON u.id = s.user_id
+      WHERE s.enterprise_id = $1
+      ORDER BY u.name NULLS LAST, u.email`,
+    [enterpriseId],
+  );
+  return rows.map((r: Record<string, unknown>) => ({
+    sponsorId: Number(r.sponsor_id),
+    userId: Number(r.user_id),
+    name: (r.name as string | null) ?? null,
+    email: String(r.email),
+    joinedAt: r.joined_at as Date,
+  }));
+}
+
+/** Enterprises a user is affiliated with (for the profile's Enterprise view). */
+export async function listUserEnterprises(userId: number) {
+  const { rows } = await pool.query(
+    `SELECT ${COLUMNS} FROM enterprises
+      WHERE id IN (SELECT enterprise_id FROM sponsors WHERE user_id = $1)
+      ORDER BY name`,
+    [userId],
+  );
+  return rows;
+}
+
+/** Affiliate a user with an enterprise. Idempotent-safe: 409 if already linked. */
+export async function addEnterpriseMember(
+  enterpriseId: number,
+  userId: number,
+  actorId: number | null,
+): Promise<EnterpriseMember> {
+  await getEnterprise(enterpriseId); // 404 if the enterprise is missing
+  const { rows: userRows } = await pool.query(`SELECT id FROM users WHERE id = $1`, [userId]);
+  if (!userRows[0]) throw new NotFoundError("User not found", { userId });
+
+  const { rows: existing } = await pool.query(
+    `SELECT id FROM sponsors WHERE enterprise_id = $1 AND user_id = $2`,
+    [enterpriseId, userId],
+  );
+  if (existing[0]) {
+    throw new ConflictError("User is already affiliated with this enterprise", {
+      enterpriseId,
+      userId,
+    });
+  }
+  const { rows } = await pool.query(
+    `INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2) RETURNING id, joined_at`,
+    [enterpriseId, userId],
+  );
+  await audit(pool, {
+    actorId,
+    entityType: "enterprise",
+    entityId: enterpriseId,
+    action: "member_added",
+    after: { userId },
+  });
+  const { rows: u } = await pool.query(`SELECT name, email FROM users WHERE id = $1`, [userId]);
+  return {
+    sponsorId: Number(rows[0].id),
+    userId,
+    name: (u[0].name as string | null) ?? null,
+    email: String(u[0].email),
+    joinedAt: rows[0].joined_at as Date,
+  };
+}
+
+/** Remove a user's affiliation with an enterprise. */
+export async function removeEnterpriseMember(
+  enterpriseId: number,
+  userId: number,
+  actorId: number | null,
+): Promise<void> {
+  const { rowCount } = await pool.query(
+    `DELETE FROM sponsors WHERE enterprise_id = $1 AND user_id = $2`,
+    [enterpriseId, userId],
+  );
+  if (!rowCount) {
+    throw new NotFoundError("User is not affiliated with this enterprise", {
+      enterpriseId,
+      userId,
+    });
+  }
+  await audit(pool, {
+    actorId,
+    entityType: "enterprise",
+    entityId: enterpriseId,
+    action: "member_removed",
+    after: { userId },
+  });
+}
+
 export interface PublicSponsor {
   enterpriseId: number;
   name: string;

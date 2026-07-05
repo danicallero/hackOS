@@ -154,7 +154,157 @@ export default function EnterpriseDetailPage() {
 
       <LogoCard enterprise={enterprise} onChanged={load} />
       <EditCard enterprise={enterprise} onSaved={load} />
+      <MembersCard enterpriseId={enterprise.id} />
     </div>
+  );
+}
+
+// ── M4: affiliated users (the sponsors linked to this enterprise) ────────────
+
+interface Member {
+  sponsorId: number;
+  userId: number;
+  name: string | null;
+  email: string;
+  joinedAt: string;
+}
+interface UserSearchResult {
+  id: number;
+  name: string | null;
+  email: string;
+}
+
+function MembersCard({ enterpriseId }: { enterpriseId: number }) {
+  const [members, setMembers] = useState<Member[] | null>(null);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<UserSearchResult[]>([]);
+  const [busy, setBusy] = useState(false);
+
+  const loadMembers = useCallback(async () => {
+    try {
+      const r = await api.get<{ members: Member[] }>(`/api/enterprises/${enterpriseId}/members`);
+      setMembers(r.members);
+    } catch {
+      setMembers([]);
+    }
+  }, [enterpriseId]);
+
+  useEffect(() => {
+    loadMembers();
+  }, [loadMembers]);
+
+  async function search() {
+    if (!query.trim()) return;
+    try {
+      const r = await api.get<{ users: UserSearchResult[] }>("/api/users", {
+        query: { q: query.trim(), limit: 8 },
+      });
+      setResults(r.users);
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError && err.status === 403
+          ? "You need users:read to search users."
+          : "Search failed.",
+      );
+    }
+  }
+
+  async function add(userId: number) {
+    setBusy(true);
+    try {
+      await api.post(`/api/enterprises/${enterpriseId}/members`, { userId });
+      setQuery("");
+      setResults([]);
+      await loadMembers();
+      toast.success("User affiliated.");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not add this user.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(userId: number) {
+    setBusy(true);
+    try {
+      await api.delete(`/api/enterprises/${enterpriseId}/members/${userId}`);
+      await loadMembers();
+      toast.success("Affiliation removed.");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not remove this user.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <SectionCard
+      icon={Building2Icon}
+      title="Affiliated users"
+      description="People linked to this enterprise (sponsor representatives)."
+    >
+      <div className="space-y-4">
+        <div className="flex flex-wrap gap-2">
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                search();
+              }
+            }}
+            placeholder="Search a user by name or email…"
+            className="h-9 max-w-xs"
+          />
+          <Button variant="outline" size="sm" onClick={search} disabled={busy}>
+            Search
+          </Button>
+        </div>
+
+        {results.length > 0 && (
+          <ul className="divide-border divide-y rounded-md border">
+            {results.map((u) => (
+              <li key={u.id} className="flex items-center gap-3 px-3 py-2">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{u.name ?? u.email}</p>
+                  <p className="text-muted-foreground truncate text-xs">{u.email}</p>
+                </div>
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => add(u.id)}>
+                  Add
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {members === null ? (
+          <div className="flex justify-center py-6">
+            <Spinner className="size-5" />
+          </div>
+        ) : members.length === 0 ? (
+          <EmptyState
+            icon={Building2Icon}
+            title="No affiliated users yet"
+            description="Search above to affiliate someone with this enterprise."
+          />
+        ) : (
+          <ul className="divide-border divide-y">
+            {members.map((m) => (
+              <li key={m.sponsorId} className="flex items-center gap-3 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{m.name ?? m.email}</p>
+                  <p className="text-muted-foreground truncate text-xs">{m.email}</p>
+                </div>
+                <Button size="sm" variant="ghost" disabled={busy} onClick={() => remove(m.userId)}>
+                  Remove
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </SectionCard>
   );
 }
 
