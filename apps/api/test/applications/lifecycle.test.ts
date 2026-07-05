@@ -179,7 +179,7 @@ describe("review + decide (H13, H14)", () => {
     expect(after.json().status).toBe("accepted");
   });
 
-  it("revert flips accepted_internal <-> rejected_internal; cannot revert after send", async () => {
+  it("revert flips unsent decisions and sends decided responses back to review", async () => {
     const a = await getApp();
     const appId = await createApplication();
     const { responseId } = await submittedApplicant(appId);
@@ -221,18 +221,19 @@ describe("review + decide (H13, H14)", () => {
     });
     expect((await getResponse(responseId)).status).toBe("accepted");
 
-    // revert after send now UN-SENDS back to an internal decision (M2 update):
-    // staff can pull a sent decision back to accepted_internal/rejected_internal.
+    // sent decisions can go back to review for re-review; the confirmation
+    // token is invalidated and decision timestamps are cleared.
     const afterSend = await a.inject({
       method: "POST",
       url: `/api/responses/${responseId}/revert-decision`,
       headers: asUser(decider),
-      payload: { decision: "rejected" },
+      payload: { decision: "review" },
     });
     expect(afterSend.statusCode).toBe(200);
     const reverted = await getResponse(responseId);
-    expect(reverted.status).toBe("rejected_internal");
+    expect(reverted.status).toBe("review");
     expect(reverted.decision_sent_at).toBeNull();
+    expect(reverted.confirmation_token_id).toBeNull();
   });
 
   it("capacity guard: accepting past capacity is a 409", async () => {
@@ -560,7 +561,11 @@ describe("confirm / decline (H15)", () => {
   it("decline via public token transitions from accepted and preserves ticket", async () => {
     const a = await getApp();
     const appId = await createApplication();
-    const { responseId } = await toAcceptedSent(appId);
+    const { responseId, userId } = await toAcceptedSent(appId);
+    await pool.query(`INSERT INTO tickets (user_id, token) VALUES ($1, $2)`, [
+      userId,
+      `existing-${crypto.randomUUID()}`,
+    ]);
     const { rows } = await pool.query(
       `SELECT t.token FROM email_verification_tokens t
        JOIN application_responses r ON r.confirmation_token_id = t.id
@@ -580,7 +585,11 @@ describe("confirm / decline (H15)", () => {
 
     const r = await getResponse(responseId);
     expect(r.status).toBe("declined");
-    expect(r.ticket_id).not.toBeNull(); // invariant 10
+    const { rows: tickets } = await pool.query(
+      `SELECT count(*)::int AS n FROM tickets WHERE user_id = $1`,
+      [userId],
+    );
+    expect(tickets[0].n).toBe(1); // invariant 10
   });
 
   it("decline via public token is idempotent", async () => {
@@ -882,8 +891,8 @@ describe("batch send resends already-sent decisions", () => {
   });
 });
 
-describe("revert to submitted", () => {
-  it("reverts accepted_internal to submitted", async () => {
+describe("revert to review", () => {
+  it("reverts accepted_internal to review", async () => {
     const a = await getApp();
     const appId = await createApplication();
     const { responseId } = await submittedApplicant(appId);
@@ -899,13 +908,13 @@ describe("revert to submitted", () => {
       method: "POST",
       url: `/api/responses/${responseId}/revert-decision`,
       headers: asUser(decider),
-      payload: { decision: "submitted" },
+      payload: { decision: "review" },
     });
     expect(res.statusCode).toBe(200);
-    expect((await getResponse(responseId)).status).toBe("submitted");
+    expect((await getResponse(responseId)).status).toBe("review");
   });
 
-  it("reverts already-sent accepted back to submitted, clearing tokens", async () => {
+  it("reverts already-sent accepted back to review, clearing tokens", async () => {
     const a = await getApp();
     const appId = await createApplication();
     const { responseId } = await toAcceptedSent(appId);
@@ -916,12 +925,39 @@ describe("revert to submitted", () => {
       method: "POST",
       url: `/api/responses/${responseId}/revert-decision`,
       headers: asUser(decider),
-      payload: { decision: "submitted" },
+      payload: { decision: "review" },
     });
     expect(res.statusCode).toBe(200);
     const r = await getResponse(responseId);
-    expect(r.status).toBe("submitted");
+    expect(r.status).toBe("review");
     expect(r.confirmation_token_id).toBeNull();
+  });
+
+  it("batch reverts internal and sent decisions to review", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const internal = await submittedApplicant(appId);
+    await a.inject({
+      method: "POST",
+      url: `/api/responses/${internal.responseId}/decide`,
+      headers: asUser(decider),
+      payload: { decision: "rejected" },
+    });
+    const sent = await toAcceptedSent(appId);
+
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/responses/batch/revert-decision",
+      headers: asUser(decider),
+      payload: {
+        response_ids: [internal.responseId, sent.responseId],
+        decision: "review",
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().processed).toBe(2);
+    expect((await getResponse(internal.responseId)).status).toBe("review");
+    expect((await getResponse(sent.responseId)).status).toBe("review");
   });
 });
 
@@ -929,7 +965,7 @@ describe("decision pool", () => {
   it("returns grouped counts for accepted/rejected/declined", async () => {
     const a = await getApp();
     const appId = await createApplication();
-    const { responseId } = await toAcceptedSent(appId);
+    await toAcceptedSent(appId);
 
     const res = await a.inject({
       method: "GET",
@@ -959,7 +995,6 @@ describe("decision pool", () => {
 
 describe("email countdown", () => {
   it("decision email contains a human-readable countdown", async () => {
-    const a = await getApp();
     const appId = await createApplication();
     const { userId } = await toAcceptedSent(appId);
 

@@ -18,8 +18,9 @@ import { NAV, type NavItem } from "@/lib/nav";
 import { useSessionContext } from "@/lib/session";
 
 function useVisible() {
-  const { can, canAny } = useSessionContext();
+  const { can, canAny, me } = useSessionContext();
   return (item: NavItem) => {
+    if (item.sponsorVisible && me?.role === "sponsor") return true;
     if (item.capability) return can(item.capability);
     if (item.anyCapability) return canAny(...item.anyCapability);
     return true;
