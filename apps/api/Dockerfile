@@ -21,7 +21,7 @@ COPY apps/api/package.json ./apps/api/
 # Dokploy runs on a single-architecture host (arm64), so a plain cache ID is fine.
 ENV PNPM_HOME=/root/.local/share/pnpm
 RUN --mount=type=cache,id=pnpm-store,target=${PNPM_HOME}/store/v10 \
-    pnpm install --frozen-lockfile --filter @hackos/api...
+    pnpm install --filter @hackos/api...
 COPY apps/api/tsup.config.ts ./apps/api/
 # Copy source + SQL migrations (migrate.ts reads db/migrations/ at runtime)
 COPY apps/api/src ./apps/api/src
