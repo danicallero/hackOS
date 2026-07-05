@@ -396,4 +396,115 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       return { deleted: true as const };
     },
   );
+
+  // A user's physical history (H24-H26): activity/meal passes, badge check-ins
+  // and door in/out scans — what the profile's "Activity" tab shows. Meals are
+  // activities (activity.category = 'meal'), so a repeated meal shows as
+  // multiple passes. Staff read (USERS_READ).
+  api.get(
+    "/api/users/:id/activity",
+    {
+      preHandler: requireCapability(CAPABILITIES.USERS_READ),
+      schema: {
+        params: z.object({ id: z.coerce.number().int() }),
+        response: {
+          200: z.object({
+            passes: z.array(
+              z.object({
+                id: z.number(),
+                activityName: z.string(),
+                category: z.string(),
+                loggedAt: z.string(),
+                notes: z.string().nullable(),
+              }),
+            ),
+            checkIns: z.array(
+              z.object({
+                id: z.number(),
+                badgeId: z.string().nullable(),
+                method: z.string(),
+                checkedInAt: z.string(),
+              }),
+            ),
+            doorScans: z.array(
+              z.object({
+                id: z.number(),
+                kind: z.string(),
+                location: z.string().nullable(),
+                scannedAt: z.string(),
+              }),
+            ),
+          }),
+        },
+      },
+    },
+    async (req) => {
+      const id = req.params.id;
+      await fetchUser(id); // 404 if the user doesn't exist
+      const [passes, checkIns, doorScans] = await Promise.all([
+        pool
+          .query(
+            `SELECT al.id, a.name AS activity_name, a.category, al.logged_at, al.notes
+               FROM activity_logs al JOIN activities a ON a.id = al.activity_id
+              WHERE al.user_id = $1 ORDER BY al.logged_at DESC LIMIT 500`,
+            [id],
+          )
+          .then((r) =>
+            r.rows.map(
+              (x: {
+                id: number;
+                activity_name: string;
+                category: string;
+                logged_at: Date;
+                notes: string | null;
+              }) => ({
+                id: x.id,
+                activityName: x.activity_name,
+                category: x.category,
+                loggedAt: x.logged_at.toISOString(),
+                notes: x.notes,
+              }),
+            ),
+          ),
+        pool
+          .query(
+            `SELECT id, badge_id, check_in_method, checked_in_at
+               FROM check_in_logs WHERE user_id = $1 ORDER BY checked_in_at DESC LIMIT 200`,
+            [id],
+          )
+          .then((r) =>
+            r.rows.map(
+              (x: {
+                id: number;
+                badge_id: string | null;
+                check_in_method: string;
+                checked_in_at: Date;
+              }) => ({
+                id: x.id,
+                badgeId: x.badge_id,
+                method: x.check_in_method,
+                checkedInAt: x.checked_in_at.toISOString(),
+              }),
+            ),
+          ),
+        pool
+          .query(
+            `SELECT id, kind, location, scanned_at
+               FROM time_logs WHERE user_id = $1 ORDER BY scanned_at DESC LIMIT 200`,
+            [id],
+          )
+          .then((r) =>
+            r.rows.map(
+              (x: { id: number; kind: string; location: string | null; scanned_at: Date }) => ({
+                id: x.id,
+                kind: x.kind,
+                location: x.location,
+                scannedAt: x.scanned_at.toISOString(),
+              }),
+            ),
+          ),
+      ]);
+      return { passes, checkIns, doorScans };
+    },
+  );
 }
