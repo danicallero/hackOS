@@ -3,13 +3,14 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { CheckCircle2Icon, MailIcon } from "lucide-react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Form,
@@ -21,6 +22,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { ApiError, api } from "@/lib/api";
+import { useSessionContext } from "@/lib/session";
 
 const schema = z.object({ email: z.string().email("Enter a valid email") });
 type Values = z.infer<typeof schema>;
@@ -43,8 +45,13 @@ function messageForError(error: string | null): { title: string; body: string } 
 
 function VerifyEmailInner() {
   const params = useSearchParams();
-  const verified = params.get("verified") !== null || params.get("status") === "verified";
+  const router = useRouter();
+  const { refresh } = useSessionContext();
+  // On failure Better Auth appends `error` to the same callback URL (which
+  // already carries verified=1), so an error must take precedence.
   const errorInfo = messageForError(params.get("error"));
+  const verified =
+    !errorInfo && (params.get("verified") !== null || params.get("status") === "verified");
   const [cooldown, setCooldown] = useState(0);
 
   const form = useForm<Values>({
@@ -57,6 +64,12 @@ function VerifyEmailInner() {
     const t = setInterval(() => setCooldown((c) => Math.max(0, c - 1)), 1000);
     return () => clearInterval(t);
   }, [cooldown]);
+
+  // Verification auto-signs-in (autoSignInAfterVerification): pick up the new
+  // session so the user is logged in without a second sign-in.
+  useEffect(() => {
+    if (verified) void refresh();
+  }, [verified, refresh]);
 
   async function onSubmit(values: Values) {
     try {
@@ -83,11 +96,15 @@ function VerifyEmailInner() {
             <CheckCircle2Icon className="size-6" />
           </div>
           <CardTitle>Email verified</CardTitle>
-          <CardDescription>Your address is confirmed. You can sign in now.</CardDescription>
+          <CardDescription>Your address is confirmed and you&apos;re signed in.</CardDescription>
         </CardHeader>
-        <CardContent className="text-center">
-          <Link href="/login" className="text-sm underline underline-offset-4">
-            Continue to sign in
+        <CardContent className="flex flex-col gap-2 text-center">
+          <Button onClick={() => router.push("/dashboard")}>Continue to dashboard</Button>
+          <Link
+            href="/login"
+            className="text-muted-foreground text-sm underline underline-offset-4"
+          >
+            Sign in with a different account
           </Link>
         </CardContent>
       </Card>
