@@ -40,6 +40,14 @@ export const updateEnterpriseBody = z
 
 export const OWNER_EDITABLE_KEYS = ["website", "logoUrl", "description"] as const;
 
+/** M4: affiliate a user with an enterprise. */
+export const addMemberBody = z.object({ userId: z.number().int().positive() }).strict();
+
+export const memberParams = z.object({
+  id: z.coerce.number().int().positive(),
+  userId: z.coerce.number().int().positive(),
+});
+
 const LOGO_CONTENT_TYPES = [
   "image/png",
   "image/jpeg",

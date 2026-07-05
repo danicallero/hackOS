@@ -157,3 +157,117 @@ describe("enterprise management (H43-H45)", () => {
     expect(second.statusCode).toBe(409);
   });
 });
+
+describe("enterprise membership (M4)", () => {
+  async function makeEnterprise(adminId: number, name = "MemberCo"): Promise<number> {
+    const a = await getApp();
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/enterprises",
+      headers: asUser(adminId),
+      payload: { name },
+    });
+    return res.json().id;
+  }
+
+  it("admin adds, lists and removes affiliated users; duplicates 409", async () => {
+    const a = await getApp();
+    const admin = await createUserWithCapabilities([CAPABILITIES.SPONSORS_MANAGE]);
+    const entId = await makeEnterprise(admin);
+    const member = await createUserWithCapabilities([CAPABILITIES.SPONSOR_PORTAL]);
+
+    // add
+    const add = await a.inject({
+      method: "POST",
+      url: `/api/enterprises/${entId}/members`,
+      headers: asUser(admin),
+      payload: { userId: member },
+    });
+    expect(add.statusCode).toBe(201);
+    expect(add.json().userId).toBe(member);
+
+    // duplicate → 409
+    expect(
+      (
+        await a.inject({
+          method: "POST",
+          url: `/api/enterprises/${entId}/members`,
+          headers: asUser(admin),
+          payload: { userId: member },
+        })
+      ).statusCode,
+    ).toBe(409);
+
+    // list
+    const list = await a.inject({
+      method: "GET",
+      url: `/api/enterprises/${entId}/members`,
+      headers: asUser(admin),
+    });
+    expect(list.json().members).toHaveLength(1);
+    expect(list.json().members[0].userId).toBe(member);
+
+    // the user's own enterprises reflect the link
+    const reader = await createUserWithCapabilities([CAPABILITIES.USERS_READ]);
+    const mine = await a.inject({
+      method: "GET",
+      url: `/api/users/${member}/enterprises`,
+      headers: asUser(reader),
+    });
+    expect(mine.json().enterprises).toHaveLength(1);
+
+    // remove
+    const del = await a.inject({
+      method: "DELETE",
+      url: `/api/enterprises/${entId}/members/${member}`,
+      headers: asUser(admin),
+    });
+    expect(del.statusCode).toBe(200);
+    expect(del.json().removed).toBe(true);
+    const after = await a.inject({
+      method: "GET",
+      url: `/api/enterprises/${entId}/members`,
+      headers: asUser(admin),
+    });
+    expect(after.json().members).toHaveLength(0);
+  });
+
+  it("requires SPONSORS_MANAGE to add members; 404 for unknown user/enterprise", async () => {
+    const a = await getApp();
+    const admin = await createUserWithCapabilities([CAPABILITIES.SPONSORS_MANAGE]);
+    const entId = await makeEnterprise(admin, "GuardCo");
+    const pleb = await createUserWithCapabilities([CAPABILITIES.SPONSOR_PORTAL]);
+
+    expect(
+      (
+        await a.inject({
+          method: "POST",
+          url: `/api/enterprises/${entId}/members`,
+          headers: asUser(pleb),
+          payload: { userId: pleb },
+        })
+      ).statusCode,
+    ).toBe(403);
+
+    expect(
+      (
+        await a.inject({
+          method: "POST",
+          url: `/api/enterprises/${entId}/members`,
+          headers: asUser(admin),
+          payload: { userId: 999999 },
+        })
+      ).statusCode,
+    ).toBe(404);
+
+    expect(
+      (
+        await a.inject({
+          method: "DELETE",
+          url: `/api/enterprises/${entId}/members/999999`,
+          headers: asUser(admin),
+        })
+      ).statusCode,
+    ).toBe(404);
+  });
+});

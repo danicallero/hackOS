@@ -9,6 +9,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   ArrowLeftIcon,
+  Building2Icon,
   ClipboardListIcon,
   ClockIcon,
   FileTextIcon,
@@ -307,10 +308,56 @@ function OverviewTab({
   onUpdated: () => Promise<void>;
 }) {
   const canWrite = useCan(CAPABILITIES.USERS_WRITE);
-  return canWrite ? (
-    <StaffEditForm user={user} intolerances={intolerances} onUpdated={onUpdated} />
-  ) : (
-    <ReadOnlyOverview user={user} intolerances={intolerances} />
+  return (
+    <div className="space-y-6">
+      {canWrite ? (
+        <StaffEditForm user={user} intolerances={intolerances} onUpdated={onUpdated} />
+      ) : (
+        <ReadOnlyOverview user={user} intolerances={intolerances} />
+      )}
+      <EnterpriseMemberships userId={user.id} />
+    </div>
+  );
+}
+
+// M4.1: a user's enterprise affiliations, surfaced on their profile. Adding a
+// link is done from the enterprise's own page (Affiliated users); here we show
+// the memberships read-only with a jump to each enterprise.
+function EnterpriseMemberships({ userId }: { userId: number }) {
+  const [enterprises, setEnterprises] = useState<{ id: number; name: string }[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get<{ enterprises: { id: number; name: string }[] }>(`/api/users/${userId}/enterprises`)
+      .then((r) => {
+        if (!cancelled) setEnterprises(r.enterprises);
+      })
+      .catch(() => {
+        if (!cancelled) setEnterprises([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  if (enterprises === null || enterprises.length === 0) return null;
+  return (
+    <SectionCard
+      icon={Building2Icon}
+      title="Enterprises"
+      description="Enterprises this user is affiliated with."
+    >
+      <ul className="flex flex-wrap gap-2">
+        {enterprises.map((e) => (
+          <li key={e.id}>
+            <Button asChild size="sm" variant="outline">
+              <Link href={`/enterprises/${e.id}`}>{e.name}</Link>
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </SectionCard>
   );
 }
 
