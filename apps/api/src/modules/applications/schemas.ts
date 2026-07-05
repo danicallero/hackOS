@@ -132,3 +132,25 @@ export const listResponsesQuerySchema = z.object({
 export const statsQuerySchema = z.object({
   field: z.string().optional(),
 });
+
+// ── batch operations ─────────────────────────────────────────────────────────
+
+export const batchIdsSchema = z.object({
+  response_ids: z.array(z.number().int().positive()).min(1).max(100),
+});
+
+export const batchDecideSchema = batchIdsSchema.extend({
+  decision: z.enum(["accepted", "rejected"]),
+});
+
+export const batchSendDecisionsSchema = batchIdsSchema;
+
+export const batchRevertDecisionSchema = batchIdsSchema.extend({
+  decision: z.enum(["accepted", "rejected"]),
+});
+
+// ── confirm link retrieval ───────────────────────────────────────────────────
+
+export const getConfirmLinkSchema = z.object({
+  params: responseIdParamSchema,
+});
