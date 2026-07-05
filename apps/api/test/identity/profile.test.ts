@@ -141,16 +141,19 @@ describe("PATCH /api/me (H7)", () => {
     expect(res.json().foodIntolerances).toEqual([1, 2]);
   });
 
-  it("self-edit of food/shirt is rejected (400)", async () => {
+  it("self-edit of food/shirt/dietary notes is allowed (a participant owns their logistics data)", async () => {
     const a = await getApp();
     const userId = await createUser();
     const res = await a.inject({
       method: "PATCH",
       url: "/api/me",
       headers: asUser(userId),
-      payload: { shirtSize: "L" },
+      payload: { shirtSize: "L", foodIntolerances: [1, 2], foodIntoleranceNotes: "no nuts" },
     });
-    expect(res.statusCode).toBe(400);
+    expect(res.statusCode).toBe(200);
+    expect(res.json().shirtSize).toBe("L");
+    expect(res.json().foodIntolerances).toEqual([1, 2]);
+    expect(res.json().foodIntoleranceNotes).toBe("no nuts");
   });
 
   it("rejects restricted/system fields on self-edit (email, badge, dni, notes)", async () => {
