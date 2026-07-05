@@ -8,6 +8,8 @@ import { z } from "zod";
  *
  * Kinds:
  *   scale         — integer slider, default 0..10 (configurable per question)
+ *   integer       — whole number input
+ *   float         — decimal number input
  *   boolean       — yes / no
  *   single_choice — pick exactly one option (radio / multiple choice)
  *   multi_choice  — pick zero or more options (checkboxes)
@@ -21,6 +23,8 @@ import { z } from "zod";
 
 export const QUESTION_KINDS = [
   "scale",
+  "integer",
+  "float",
   "boolean",
   "single_choice",
   "multi_choice",
@@ -61,6 +65,18 @@ export const questionSchema = z.discriminatedUnion("kind", [
     min: z.number().int().default(0),
     max: z.number().int().default(10),
   }),
+  z.object({
+    ...baseShape,
+    kind: z.literal("integer"),
+    min: z.number().int().optional(),
+    max: z.number().int().optional(),
+  }),
+  z.object({
+    ...baseShape,
+    kind: z.literal("float"),
+    min: z.number().optional(),
+    max: z.number().optional(),
+  }),
   z.object({ ...baseShape, kind: z.literal("boolean") }),
   z.object({
     ...baseShape,
@@ -97,10 +113,15 @@ export const questionnaireSchema = z.array(questionSchema).superRefine((question
       });
     }
     seen.add(q.key);
-    if (q.kind === "scale" && q.max <= q.min) {
+    if (
+      (q.kind === "scale" || q.kind === "integer" || q.kind === "float") &&
+      q.max != null &&
+      q.min != null &&
+      q.max <= q.min
+    ) {
       ctx.addIssue({
         code: "custom",
-        message: "scale max must be greater than min",
+        message: "max must be greater than min",
         path: [i, "max"],
       });
     }
@@ -147,6 +168,24 @@ export function validateAnswers(
       case "scale":
         if (typeof v !== "number" || !Number.isInteger(v) || v < q.min || v > q.max)
           errors.push({ key: q.key, message: `must be an integer between ${q.min} and ${q.max}` });
+        break;
+      case "integer":
+        if (
+          typeof v !== "number" ||
+          !Number.isInteger(v) ||
+          (q.min != null && v < q.min) ||
+          (q.max != null && v > q.max)
+        )
+          errors.push({ key: q.key, message: "must be an integer within the configured range" });
+        break;
+      case "float":
+        if (
+          typeof v !== "number" ||
+          !Number.isFinite(v) ||
+          (q.min != null && v < q.min) ||
+          (q.max != null && v > q.max)
+        )
+          errors.push({ key: q.key, message: "must be a number within the configured range" });
         break;
       case "boolean":
         if (typeof v !== "boolean") errors.push({ key: q.key, message: "must be a boolean" });

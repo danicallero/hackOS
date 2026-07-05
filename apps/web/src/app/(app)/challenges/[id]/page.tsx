@@ -1,12 +1,13 @@
 "use client";
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import type { Question } from "@hackos/shared/questions";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowLeftIcon, EyeIcon, EyeOffIcon, TrophyIcon } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { type UseFormReturn, useForm } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 import { EmptyState } from "@/components/common/empty-state";
@@ -29,12 +30,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
 import { useSessionContext } from "@/lib/session";
 import {
+  JudgingPanelBuilder,
+  normalizePrizes,
+  normalizeQuestions,
+  PrizeBuilder,
+} from "../builders";
+import {
   type Challenge,
   challengeTone,
   fromDatetimeLocal,
-  parseJsonField,
+  type Prize,
   toDatetimeLocal,
-  toJsonText,
   visibilityTone,
 } from "../shared";
 
@@ -46,8 +52,6 @@ const editSchema = z.object({
   title: z.string().min(1, "Required"),
   description: z.string().max(6000),
   criteria: z.string().max(6000),
-  prizes: z.string().min(1),
-  judgingPanelCriteria: z.string().min(1),
   maxPresentationSeconds: optionalPositiveInt,
 });
 type EditValues = z.infer<typeof editSchema>;
@@ -62,11 +66,17 @@ function toFormValues(challenge: Challenge): EditValues {
     title: challenge.title,
     description: challenge.description ?? "",
     criteria: challenge.criteria ?? "",
-    prizes: toJsonText(challenge.prizes, []),
-    judgingPanelCriteria: toJsonText(challenge.judging_panel_criteria, []),
     maxPresentationSeconds:
       challenge.max_presentation_seconds != null ? String(challenge.max_presentation_seconds) : "",
   };
+}
+
+function asPrizes(value: Prize[] | null): Prize[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function asQuestions(value: Question[] | null): Question[] {
+  return Array.isArray(value) ? value : [];
 }
 
 export default function ChallengeDetailPage() {
@@ -236,6 +246,10 @@ function PublishCard({
 }
 
 function EditCard({ challenge, onSaved }: { challenge: Challenge; onSaved: () => Promise<void> }) {
+  const [prizes, setPrizes] = useState<Prize[]>(asPrizes(challenge.prizes));
+  const [questions, setQuestions] = useState<Question[]>(
+    asQuestions(challenge.judging_panel_criteria),
+  );
   const form = useForm<EditValues>({
     resolver: zodResolver(editSchema),
     defaultValues: toFormValues(challenge),
@@ -244,16 +258,19 @@ function EditCard({ challenge, onSaved }: { challenge: Challenge; onSaved: () =>
 
   useEffect(() => {
     reset(toFormValues(challenge));
+    setPrizes(asPrizes(challenge.prizes));
+    setQuestions(asQuestions(challenge.judging_panel_criteria));
   }, [challenge, reset]);
 
   async function onSubmit(values: EditValues) {
     try {
+      const normalizedQuestions = normalizeQuestions(questions);
       await api.patch<Challenge>(`/api/challenges/${challenge.id}`, {
         title: values.title,
         description: values.description,
         criteria: values.criteria || null,
-        prizes: parseJsonField(values.prizes, []),
-        judgingPanelCriteria: parseJsonField(values.judgingPanelCriteria, []),
+        prizes: normalizePrizes(prizes),
+        judgingPanelCriteria: normalizedQuestions,
         maxPresentationSeconds: values.maxPresentationSeconds
           ? Number(values.maxPresentationSeconds)
           : null,
@@ -261,7 +278,7 @@ function EditCard({ challenge, onSaved }: { challenge: Challenge; onSaved: () =>
       await onSaved();
       toast.success("Challenge updated.");
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not save challenge.");
+      toast.error(err instanceof Error ? err.message : "Check the builder fields and try again.");
     }
   }
 
@@ -313,9 +330,24 @@ function EditCard({ challenge, onSaved }: { challenge: Challenge; onSaved: () =>
               </FormItem>
             )}
           />
-          <div className="grid gap-5 lg:grid-cols-2">
-            <JsonField form={form} name="prizes" label="Prizes JSON" />
-            <JsonField form={form} name="judgingPanelCriteria" label="Judging panel JSON" />
+          <div className="space-y-3 rounded-lg border p-4">
+            <div>
+              <h3 className="font-medium">Prizes</h3>
+              <p className="text-muted-foreground text-sm text-pretty">
+                Add one or more prize labels with optional public links.
+              </p>
+            </div>
+            <PrizeBuilder value={prizes} onChange={setPrizes} />
+          </div>
+          <div className="space-y-3 rounded-lg border p-4">
+            <div>
+              <h3 className="font-medium">Judging panel builder</h3>
+              <p className="text-muted-foreground text-sm text-pretty">
+                Build the typed form judges will use. Spanish and Galician labels default to
+                English.
+              </p>
+            </div>
+            <JudgingPanelBuilder value={questions} onChange={setQuestions} />
           </div>
           <FormField
             control={form.control}
@@ -333,31 +365,5 @@ function EditCard({ challenge, onSaved }: { challenge: Challenge; onSaved: () =>
         </SectionCard>
       </form>
     </Form>
-  );
-}
-
-function JsonField({
-  name,
-  label,
-  form,
-}: {
-  name: "prizes" | "judgingPanelCriteria";
-  label: string;
-  form: UseFormReturn<EditValues>;
-}) {
-  return (
-    <FormField
-      control={form.control}
-      name={name}
-      render={({ field }) => (
-        <FormItem>
-          <FormLabel>{label}</FormLabel>
-          <FormControl>
-            <Textarea rows={10} className="font-mono text-sm" {...field} />
-          </FormControl>
-          <FormMessage />
-        </FormItem>
-      )}
-    />
   );
 }

@@ -1,7 +1,13 @@
+import type { I18nText, Question } from "@hackos/shared/questions";
 import type { Tone } from "@/lib/tones";
 
 export type ChallengeStatus = "draft" | "active" | "published" | "archived";
 export type Visibility = "visible" | "hidden";
+
+export interface Prize {
+  name: string;
+  link?: string | null;
+}
 
 export interface Challenge {
   id: number;
@@ -9,8 +15,8 @@ export interface Challenge {
   title: string;
   description: string;
   criteria: string | null;
-  prizes: unknown;
-  judging_panel_criteria: unknown;
+  prizes: Prize[] | null;
+  judging_panel_criteria: Question[] | null;
   max_presentation_seconds: number | null;
   status: ChallengeStatus;
   visibility: Visibility;
@@ -37,6 +43,15 @@ export function toJsonText(value: unknown, fallback: unknown): string {
 export function parseJsonField(value: string, fallback: unknown): unknown {
   if (!value.trim()) return fallback;
   return JSON.parse(value);
+}
+
+export function i18nWithEnglishFallback(value: Partial<I18nText>): I18nText {
+  const en = value.en?.trim() ?? "";
+  return {
+    en,
+    es: value.es?.trim() || en,
+    gl: value.gl?.trim() || en,
+  };
 }
 
 export function toDatetimeLocal(iso: string | null): string {

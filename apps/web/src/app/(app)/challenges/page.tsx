@@ -1,6 +1,7 @@
 "use client";
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import type { Question } from "@hackos/shared/questions";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { LockIcon, PlusIcon, TrophyIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -29,7 +30,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
 import { useSessionContext } from "@/lib/session";
 import type { EnterpriseSummary } from "@/lib/types";
-import { type Challenge, challengeTone, parseJsonField, visibilityTone } from "./shared";
+import { JudgingPanelBuilder, normalizePrizes, normalizeQuestions, PrizeBuilder } from "./builders";
+import { type Challenge, challengeTone, type Prize, visibilityTone } from "./shared";
 
 const optionalPositiveInt = z
   .string()
@@ -40,8 +42,6 @@ const createSchema = z.object({
   title: z.string().min(1, "Required"),
   description: z.string().max(6000),
   criteria: z.string().max(6000),
-  prizes: z.string().min(1),
-  judgingPanelCriteria: z.string().min(1),
   maxPresentationSeconds: optionalPositiveInt,
 });
 type CreateValues = z.infer<typeof createSchema>;
@@ -187,6 +187,8 @@ function CreateChallengeModal({
   onCreated: (created: Challenge) => void | Promise<void>;
 }) {
   const [enterprises, setEnterprises] = useState<EnterpriseSummary[]>([]);
+  const [prizes, setPrizes] = useState<Prize[]>([]);
+  const [questions, setQuestions] = useState<Question[]>([]);
   const form = useForm<CreateValues>({
     resolver: zodResolver(createSchema),
     defaultValues: {
@@ -194,8 +196,6 @@ function CreateChallengeModal({
       title: "",
       description: "",
       criteria: "",
-      prizes: "[]",
-      judgingPanelCriteria: "[]",
       maxPresentationSeconds: "",
     },
   });
@@ -204,6 +204,8 @@ function CreateChallengeModal({
   useEffect(() => {
     if (!open) return;
     reset();
+    setPrizes([]);
+    setQuestions([]);
     api
       .get<{ enterprises: EnterpriseSummary[] }>("/api/enterprises")
       .then((res) => setEnterprises(res.enterprises))
@@ -214,13 +216,14 @@ function CreateChallengeModal({
 
   async function onSubmit(values: CreateValues) {
     try {
+      const normalizedQuestions = normalizeQuestions(questions);
       const created = await api.post<Challenge>("/api/challenges", {
         enterpriseId: Number(values.enterpriseId),
         title: values.title,
         description: values.description || undefined,
         criteria: values.criteria || null,
-        prizes: parseJsonField(values.prizes, []),
-        judgingPanelCriteria: parseJsonField(values.judgingPanelCriteria, []),
+        prizes: normalizePrizes(prizes),
+        judgingPanelCriteria: normalizedQuestions,
         maxPresentationSeconds: values.maxPresentationSeconds
           ? Number(values.maxPresentationSeconds)
           : null,
@@ -228,7 +231,7 @@ function CreateChallengeModal({
       toast.success("Challenge created.");
       await onCreated(created);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not create challenge.");
+      toast.error(err instanceof Error ? err.message : "Check the builder fields and try again.");
     }
   }
 
@@ -312,9 +315,23 @@ function CreateChallengeModal({
               </FormItem>
             )}
           />
-          <div className="grid gap-5 md:grid-cols-2">
-            <JsonField name="prizes" label="Prizes JSON" form={form} />
-            <JsonField name="judgingPanelCriteria" label="Judging panel JSON" form={form} />
+          <div className="space-y-3 rounded-lg border p-4">
+            <div>
+              <h3 className="font-medium">Prizes</h3>
+              <p className="text-muted-foreground text-sm text-pretty">
+                Stored as JSON with a label and optional link for each prize.
+              </p>
+            </div>
+            <PrizeBuilder value={prizes} onChange={setPrizes} />
+          </div>
+          <div className="space-y-3 rounded-lg border p-4">
+            <div>
+              <h3 className="font-medium">Judging panel</h3>
+              <p className="text-muted-foreground text-sm text-pretty">
+                Define the fields judges will fill in for this challenge.
+              </p>
+            </div>
+            <JudgingPanelBuilder value={questions} onChange={setQuestions} />
           </div>
           <FormField
             control={form.control}
@@ -332,31 +349,5 @@ function CreateChallengeModal({
         </form>
       </Form>
     </Modal>
-  );
-}
-
-function JsonField({
-  name,
-  label,
-  form,
-}: {
-  name: "prizes" | "judgingPanelCriteria";
-  label: string;
-  form: ReturnType<typeof useForm<CreateValues>>;
-}) {
-  return (
-    <FormField
-      control={form.control}
-      name={name}
-      render={({ field }) => (
-        <FormItem>
-          <FormLabel>{label}</FormLabel>
-          <FormControl>
-            <Textarea rows={8} className="font-mono text-sm" {...field} />
-          </FormControl>
-          <FormMessage />
-        </FormItem>
-      )}
-    />
   );
 }

@@ -54,6 +54,14 @@ describe("questionnaireSchema", () => {
     expect(res.success).toBe(false);
   });
 
+  it("accepts integer and float number fields", () => {
+    const parsed = questionnaireSchema.parse([
+      { key: "count", kind: "integer", label: i18n("Count"), min: 0, max: 100 },
+      { key: "ratio", kind: "float", label: i18n("Ratio"), min: 0, max: 1 },
+    ]);
+    expect(parsed.map((q) => q.kind)).toEqual(["integer", "float"]);
+  });
+
   it("requires choice questions to have options", () => {
     const res = questionnaireSchema.safeParse([
       { key: "a", kind: "single_choice", label: i18n("A"), options: [] },
@@ -82,6 +90,20 @@ describe("validateAnswers", () => {
     });
     const keys = errors.map((e) => e.key).sort();
     expect(keys).toEqual(["impact", "note", "tags", "track", "works"]);
+  });
+
+  it("validates integer and float answers", () => {
+    const numberPanel: Question[] = [
+      { key: "count", kind: "integer", label: i18n("Count"), required: true, min: 0, max: 10 },
+      { key: "ratio", kind: "float", label: i18n("Ratio"), required: true, min: 0, max: 1 },
+    ];
+    expect(validateAnswers(numberPanel, { count: 3, ratio: 0.5 }, { requireAll: true })).toEqual(
+      [],
+    );
+    expect(validateAnswers(numberPanel, { count: 3.2, ratio: 2 }).map((e) => e.key)).toEqual([
+      "count",
+      "ratio",
+    ]);
   });
 
   it("rejects unknown keys", () => {
