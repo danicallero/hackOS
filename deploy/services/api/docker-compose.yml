@@ -21,9 +21,10 @@ x-app-env: &app-env
   S3_ACCESS_KEY: "${S3_ACCESS_KEY}"
   S3_SECRET_KEY: "${S3_SECRET_KEY}"
   S3_BUCKET: "${S3_BUCKET:-hackos}"
-  # Browser-facing base for object URLs AND the host presigned download URLs are
-  # signed against (must be the public S3 domain, incl. bucket). Without this the
-  # app falls back to the internal http://minio:9000 host, which the browser
+  # Public https base sponsor LOGOS are served from (the enterprises/ prefix is
+  # the only public part of the bucket, incl. bucket in the path). Application
+  # uploads are private and proxied by the API, so they don't need this. Without
+  # it, logo URLs fall back to the internal http://minio:9000 host the browser
   # can't reach. e.g. https://s3-hackos.example.com/hackos
   S3_PUBLIC_URL: "${S3_PUBLIC_URL:-}"
   MAIL_PROVIDER: "${MAIL_PROVIDER:-smtp}"

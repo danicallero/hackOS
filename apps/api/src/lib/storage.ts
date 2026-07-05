@@ -1,4 +1,9 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  GetObjectCommand,
+  type GetObjectCommandOutput,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { config } from "../config.js";
 
@@ -21,41 +26,15 @@ const s3 = new S3Client({
 });
 
 const PRESIGN_TTL_S = 300;
-const DOWNLOAD_TTL_S = 1800;
 
 /**
- * Separate client whose endpoint is the BROWSER-facing host, used only to SIGN
- * URLs the browser will open (presigned GET of private objects). SigV4 bakes the
- * host into the signature, so a URL signed against the internal endpoint would
- * 403 when fetched via the public domain. Derived from S3_PUBLIC_URL's origin;
- * falls back to S3_ENDPOINT (dev, where the browser reaches MinIO directly).
+ * Fetch a PRIVATE object's bytes server-side. Downloads of application uploads
+ * are PROXIED through the API rather than presigned, so the owner-or-staff check
+ * runs on every request against the caller's session — a copied link grants
+ * nothing to anyone who isn't authorised (H12).
  */
-const publicSignEndpoint = config.S3_PUBLIC_URL
-  ? new URL(config.S3_PUBLIC_URL).origin
-  : config.S3_ENDPOINT;
-
-const s3Public = new S3Client({
-  region: config.S3_REGION,
-  endpoint: publicSignEndpoint,
-  forcePathStyle: true,
-  credentials: {
-    accessKeyId: config.S3_ACCESS_KEY,
-    secretAccessKey: config.S3_SECRET_KEY,
-  },
-});
-
-/**
- * Presign a GET so an authorised browser can fetch a PRIVATE object directly for
- * a short window. Access control happens at the API (owner-or-staff) BEFORE this
- * is handed out; the signed URL is the temporary, unguessable credential (H12).
- */
-export async function presignDownload(
-  key: string,
-  expiresInSeconds = DOWNLOAD_TTL_S,
-): Promise<string> {
-  return getSignedUrl(s3Public, new GetObjectCommand({ Bucket: config.S3_BUCKET, Key: key }), {
-    expiresIn: expiresInSeconds,
-  });
+export async function getObject(key: string): Promise<GetObjectCommandOutput> {
+  return s3.send(new GetObjectCommand({ Bucket: config.S3_BUCKET, Key: key }));
 }
 
 /**

@@ -1,3 +1,4 @@
+import type { Readable } from "node:stream";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
@@ -5,7 +6,7 @@ import { z } from "zod";
 import { pool } from "../../db/pool.js";
 import { requireAuth, userHasCapability } from "../../lib/capabilities.js";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
-import { presignDownload, putObject } from "../../lib/storage.js";
+import { getObject, putObject } from "../../lib/storage.js";
 import type { TemplateField } from "./schemas.js";
 
 const uploadParamsSchema = z.object({
@@ -14,6 +15,13 @@ const uploadParamsSchema = z.object({
 });
 
 const downloadQuerySchema = z.object({ key: z.string().min(1) });
+
+/** Keep the applicant's original filename but strip anything path-unsafe, so the
+ *  stored key's last segment is a clean, human name (not timestamped gibberish). */
+function safeFilename(name: string): string {
+  const base = name.split(/[\\/]/).pop() ?? name;
+  return base.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^[-.]+/, "").slice(0, 120);
+}
 
 /**
  * File upload endpoint for application form file fields (kind: "file"). The
@@ -74,23 +82,26 @@ export function registerUploadRoutes(app: FastifyInstance): void {
         throw new BadRequestError(`File exceeds maximum size of ${maxSizeMb}MB`);
       }
 
-      const key = `uploads/${applicationId}/${userId}/${fieldKey}-${Date.now()}${ext}`;
+      // Key: uploads/<appId>/<userId>/<fieldKey>/<ts>/<original-name>. The unique
+      // timestamp is a hidden path segment so the LAST segment is the clean
+      // original filename (shown in the UI); the userId segment drives authz.
+      const key = `uploads/${applicationId}/${userId}/${fieldKey}/${Date.now()}/${safeFilename(name)}`;
       // The bucket's uploads/ prefix is private (H12): store the KEY in the
-      // response, not a public URL. Reads go through the presigned-download
-      // route below, gated by owner-or-staff.
+      // response, not a URL. Reads are proxied by the owner-or-staff route below.
       await putObject(key, bytes, file.mimetype);
 
-      return { key, url: await presignDownload(key) };
+      return { key, filename: safeFilename(name) };
     },
   );
 
-  // Presigned download of a private application upload (H12). Only the file's
-  // owner (encoded in the key path uploads/<appId>/<userId>/…) or staff who can
-  // review applications may fetch it; the returned URL is short-lived.
+  // Download a private application upload (H12). The bytes are PROXIED (not
+  // presigned), so the owner-or-staff check runs on THIS request's session:
+  // copying the link gives nothing to anyone who isn't the owner (userId encoded
+  // in the key path uploads/<appId>/<userId>/…) or staff who can review.
   r.get(
     "/api/files/download",
     { preHandler: requireAuth, schema: { querystring: downloadQuerySchema } },
-    async (req) => {
+    async (req, reply) => {
       const { key } = req.query;
       if (!key.startsWith("uploads/") || key.includes("..")) {
         throw new BadRequestError("Not a downloadable file key");
@@ -107,7 +118,21 @@ export function registerUploadRoutes(app: FastifyInstance): void {
         throw new ForbiddenError("You don't have access to this file");
       }
 
-      return { url: await presignDownload(key) };
+      let obj: Awaited<ReturnType<typeof getObject>>;
+      try {
+        obj = await getObject(key);
+      } catch {
+        throw new NotFoundError("File not found");
+      }
+      if (!obj.Body) throw new NotFoundError("File not found");
+
+      const filename = (key.split("/").pop() ?? "file").replace(/["\\]/g, "");
+      reply.header("content-type", obj.ContentType ?? "application/octet-stream");
+      if (obj.ContentLength != null) reply.header("content-length", String(obj.ContentLength));
+      reply.header("content-disposition", `inline; filename="${filename}"`);
+      // Never let a shared proxy/CDN cache a private file.
+      reply.header("cache-control", "private, no-store");
+      return reply.send(obj.Body as Readable);
     },
   );
 }
