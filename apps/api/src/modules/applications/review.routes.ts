@@ -29,6 +29,7 @@ import {
   getConfirmLink,
   getDecisionPool,
   getResponseDetail,
+  listUserResponsesForStaff,
   reAccept,
   resendDecision,
   revertDecision,
@@ -176,6 +177,16 @@ export function registerReviewRoutes(app: FastifyInstance): void {
       schema: { params: responseIdParamSchema },
     },
     async (req) => revokeSpot(req.userId as number, req.params.responseId),
+  );
+
+  // ── M3.3: one user's responses for their profile Application tab ─────────────
+  r.get(
+    "/api/users/:id/applications",
+    {
+      preHandler: requireCapability(CAPABILITIES.APPLICATIONS_REVIEW),
+      schema: { params: idParamSchema },
+    },
+    async (req) => ({ responses: await listUserResponsesForStaff(req.params.id) }),
   );
 
   // ── decision pool (accepted/rejected/declined grouped for the review UI) ─────
