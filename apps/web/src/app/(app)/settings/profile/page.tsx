@@ -1,13 +1,13 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { UserIcon } from "lucide-react";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
-import { PageHeader } from "@/components/common/page-header";
+import { SectionCard } from "@/components/common/section-card";
 import { SubmitButton } from "@/components/common/submit-button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Form,
   FormControl,
@@ -92,147 +92,125 @@ export default function ProfileSettingsPage() {
   if (!me) return null;
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="My profile"
-        description="Keep your details current so accreditation and catering work with the right data."
-      />
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Personal details</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Name</FormLabel>
-                      <FormControl>
-                        <Input {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="surname"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Surname</FormLabel>
-                      <FormControl>
-                        <Input {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <SectionCard
+          icon={UserIcon}
+          title="Personal details"
+          description="Keep your details current so accreditation and catering use the right data."
+          footer={<SubmitButton pending={form.formState.isSubmitting}>Save changes</SubmitButton>}
+        >
+          <FormField
+            control={form.control}
+            name="name"
+            render={({ field }) => (
               <FormItem>
-                <FormLabel>Email</FormLabel>
+                <FormLabel>First name</FormLabel>
                 <FormControl>
-                  <Input value={me.email} disabled readOnly />
+                  <Input autoComplete="given-name" {...field} />
                 </FormControl>
-                <FormDescription>
-                  Contact the organization to change your primary email.
-                </FormDescription>
+                <FormMessage />
               </FormItem>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="phone"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Phone</FormLabel>
-                      <FormControl>
-                        <Input type="tel" autoComplete="tel" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="language"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Language</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger className="w-full">
-                            <SelectValue />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="es">Castellano</SelectItem>
-                          <SelectItem value="gl">Galego</SelectItem>
-                          <SelectItem value="en">English</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormDescription>Applies to emails and screens.</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Logistics</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <FormField
-                control={form.control}
-                name="shirtSize"
-                render={({ field }) => (
-                  <FormItem className="max-w-xs">
-                    <FormLabel>Shirt size</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Not set" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value={NONE}>Not set</SelectItem>
-                        {SHIRT_SIZES.map((s) => (
-                          <SelectItem key={s} value={s}>
-                            {s}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="foodIntoleranceNotes"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Food intolerance notes</FormLabel>
-                    <FormControl>
-                      <Textarea rows={3} placeholder="Anything catering should know…" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </CardContent>
-          </Card>
-
-          <div className="flex justify-end">
-            <SubmitButton pending={form.formState.isSubmitting}>Save changes</SubmitButton>
-          </div>
-        </form>
-      </Form>
-    </div>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="surname"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Last name</FormLabel>
+                <FormControl>
+                  <Input autoComplete="family-name" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormItem>
+            <FormLabel>Email</FormLabel>
+            <FormControl>
+              <Input value={me.email} disabled readOnly />
+            </FormControl>
+            <FormDescription>
+              Contact the organization to change your primary email.
+            </FormDescription>
+          </FormItem>
+          <FormField
+            control={form.control}
+            name="phone"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Phone</FormLabel>
+                <FormControl>
+                  <Input type="tel" autoComplete="tel" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="language"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Language</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl>
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="es">Castellano</SelectItem>
+                    <SelectItem value="gl">Galego</SelectItem>
+                    <SelectItem value="en">English</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormDescription>Applies to emails and screens.</FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="shirtSize"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Shirt size</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Not set" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value={NONE}>Not set</SelectItem>
+                    {SHIRT_SIZES.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {s}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="foodIntoleranceNotes"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Food intolerance notes</FormLabel>
+                <FormControl>
+                  <Textarea rows={3} placeholder="Anything catering should know…" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </SectionCard>
+      </form>
+    </Form>
   );
 }
