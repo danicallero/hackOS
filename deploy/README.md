@@ -77,7 +77,7 @@ with `deploy/scripts/gen-secrets.sh` and never reuse across instances.
 | `INSTANCE_NETWORK` | all | The private network name, e.g. `hackos-event2026-net`. Create it first (below). |
 | `PROXY_NETWORK` | api, web | Traefik network. Dokploy default `dokploy-network`. |
 | `API_DOMAIN` | api, worker, web | API public hostname. `worker` uses it for `BETTER_AUTH_URL`; `web` bakes it into `NEXT_PUBLIC_API_URL` at build. |
-| `WEB_DOMAIN` | web | Frontend public hostname, **distinct from `API_DOMAIN`**. The web app has its OWN Traefik router (`${STACK_NAME}-web`) and is never served by the api. |
+| `WEB_DOMAIN` | web, api | Frontend public hostname, **distinct from `API_DOMAIN`**. The web app has its OWN Traefik router (`${STACK_NAME}-web`); the api uses it to build `WEB_URL` so auth emails link back to the web app. |
 | `CORS_ORIGINS` | api | Comma-separated allowed browser origins. **Must include `https://${WEB_DOMAIN}`** so the frontend's credentialed calls are allowed. |
 | `CERT_RESOLVER` | api, web | Traefik ACME resolver name (default `letsencrypt`). |
 | `IMAGE_REPO`, `IMAGE_TAG` | api, worker | The built api image. Ignored if Dokploy builds from source. |

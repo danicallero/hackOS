@@ -28,6 +28,7 @@ x-app-env: &app-env
   DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
   VALKEY_URL: "redis://:${VALKEY_PASSWORD}@valkey:6379"
   BETTER_AUTH_URL: "https://${API_DOMAIN}"
+  WEB_URL: "https://${WEB_DOMAIN}"
   BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET}"
   CORS_ORIGINS: "${CORS_ORIGINS:-}"
   TRUST_PROXY: "true"

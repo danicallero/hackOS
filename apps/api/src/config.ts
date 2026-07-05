@@ -14,6 +14,14 @@ const envSchema = z.object({
   BETTER_AUTH_URL: z.string().default("http://localhost:3000"),
   BETTER_AUTH_SECRET: z.string().default("dev-only-secret-change-me"),
 
+  /**
+   * Public origin of the web frontend. Auth emails (verification, reset) link
+   * back to the API but redirect the browser here afterwards, so links land on
+   * a real page instead of a raw API response. Also trusted for auth
+   * (trustedOrigins). Defaults to the local Next dev server.
+   */
+  WEB_URL: z.string().default("http://localhost:3001"),
+
   S3_ENDPOINT: z.string().default("http://localhost:9000"),
   S3_ACCESS_KEY: z.string().default("hackos"),
   S3_SECRET_KEY: z.string().default("hackos-secret"),

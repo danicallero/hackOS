@@ -16,9 +16,22 @@ const webOrigins = config.CORS_ORIGINS.split(",")
   .filter(Boolean);
 const trustedOrigins = [
   config.BETTER_AUTH_URL,
+  config.WEB_URL,
   ...webOrigins,
   ...(config.isProd ? [] : ["http://localhost:3001"]),
 ];
+
+/**
+ * Turn a Better Auth email link (which points at the API's verify endpoint)
+ * into one that redirects the browser back to a real frontend page after the
+ * action, instead of dumping a raw API JSON response. The token is preserved;
+ * only the post-action `callbackURL` is set to the web app.
+ */
+function withFrontendCallback(token: string, path: string): string {
+  const callbackURL = `${config.WEB_URL}${path}`;
+  const params = new URLSearchParams({ token, callbackURL });
+  return `${config.BETTER_AUTH_URL}/api/auth/verify-email?${params.toString()}`;
+}
 
 /**
  * Better Auth instance (H1-H5), mounted inside the Fastify API under
@@ -148,11 +161,15 @@ export const auth = betterAuth({
   },
   emailVerification: {
     sendOnSignUp: true,
-    autoSignInAfterVerification: false,
-    sendVerificationEmail: async ({ user, url }) => {
+    // Clicking the verification link establishes a session and lands the user
+    // logged in — they don't have to sign in again after verifying.
+    autoSignInAfterVerification: true,
+    sendVerificationEmail: async ({ user, token }) => {
+      // Point the browser at the web app's /verify-email page after the API
+      // verifies the token (shows a real success page, logged in).
       await enqueueAuthEmail(pool, Number(user.id), "auth.verify", {
         name: user.name,
-        verifyUrl: url,
+        verifyUrl: withFrontendCallback(token, "/verify-email?verified=1"),
       });
     },
   },
