@@ -3,7 +3,7 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
-import { requireCapability } from "../../lib/capabilities.js";
+import { requireAnyCapability, requireCapability } from "../../lib/capabilities.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import { createApplicationSchema, idParamSchema, updateApplicationSchema } from "./schemas.js";
 import { isWindowOpen } from "./service.js";
@@ -38,7 +38,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
   // ── manage (H11) ────────────────────────────────────────────────────────────
   r.get(
     "/api/applications",
-    { preHandler: requireCapability(CAPABILITIES.APPLICATIONS_MANAGE) },
+    { preHandler: requireAnyCapability(CAPABILITIES.APPLICATIONS_MANAGE, CAPABILITIES.APPLICATIONS_REVIEW) },
     async () => {
       const { rows } = await pool.query(`SELECT ${COLUMNS} FROM applications ORDER BY id`);
       return { applications: rows };
@@ -48,7 +48,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
   r.get(
     "/api/applications/:id",
     {
-      preHandler: requireCapability(CAPABILITIES.APPLICATIONS_MANAGE),
+      preHandler: requireAnyCapability(CAPABILITIES.APPLICATIONS_MANAGE, CAPABILITIES.APPLICATIONS_REVIEW),
       schema: { params: idParamSchema },
     },
     async (req) => {
