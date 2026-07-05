@@ -17,15 +17,17 @@ import {
   ShieldIcon,
   UserIcon,
   UsersIcon,
+  XIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { EmptyState } from "@/components/common/empty-state";
+import { Modal } from "@/components/common/modal";
 import { MultiSelect } from "@/components/common/multi-select";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
@@ -34,6 +36,7 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
@@ -57,7 +60,13 @@ import { ApiError, api } from "@/lib/api";
 import { pickText } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import type { Tone } from "@/lib/tones";
-import type { DerivedRole, Intolerance, Language, UserDetail } from "@/lib/types";
+import type {
+  DerivedRole,
+  Intolerance,
+  Language,
+  PermissionGroupSummary,
+  UserDetail,
+} from "@/lib/types";
 
 const SHIRT_SIZES = ["XS", "S", "M", "L", "XL", "XXL"] as const;
 const LANGS: Language[] = ["es", "gl", "en"];
@@ -158,7 +167,7 @@ export default function UserProfilePage() {
           <OverviewTab user={user} intolerances={intolerances} onUpdated={load} />
         </TabsContent>
         <TabsContent value="permissions" className="pt-2">
-          <PermissionsTab user={user} />
+          <PermissionsTab user={user} onChanged={load} />
         </TabsContent>
         <TabsContent value="presence" className="pt-2">
           <PresenceTab userId={user.id} />
@@ -219,7 +228,57 @@ function ProfileHeader({ user }: { user: UserDetail }) {
           )}
         </div>
       </div>
+      <div className="ml-auto">
+        <DeleteAccountButton user={user} />
+      </div>
     </div>
+  );
+}
+
+/** Delete an account — superadmin only (ADMIN_ALL); confirm before removing. */
+function DeleteAccountButton({ user }: { user: UserDetail }) {
+  const router = useRouter();
+  const canDelete = useCan(CAPABILITIES.ADMIN_ALL);
+  const [open, setOpen] = useState(false);
+  const [pending, setPending] = useState(false);
+  if (!canDelete) return null;
+
+  async function remove() {
+    setPending(true);
+    try {
+      await api.delete(`/api/users/${user.id}`);
+      toast.success("Account deleted.");
+      router.push("/users");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not delete this account.");
+      setPending(false);
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onOpenChange={setOpen}
+      trigger={
+        <Button variant="outline" size="sm" className="text-destructive">
+          Delete account
+        </Button>
+      }
+      title="Delete this account?"
+      description={`This permanently removes ${fullName(user)} (${user.email}). Accounts with activity (audit, scans, evaluations) can't be hard-deleted.`}
+      footer={
+        <>
+          <Button variant="outline" onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
+          <SubmitButton variant="destructive" pending={pending} onClick={remove}>
+            Delete
+          </SubmitButton>
+        </>
+      }
+    >
+      <p className="text-muted-foreground text-sm">This can&apos;t be undone.</p>
+    </Modal>
   );
 }
 
@@ -526,13 +585,70 @@ function StaffEditForm({
 
 // ── Permissions (H8) ─────────────────────────────────────────────────────────
 
-function PermissionsTab({ user }: { user: UserDetail }) {
+function PermissionsTab({ user, onChanged }: { user: UserDetail; onChanged: () => void }) {
+  const canManage = useCan(CAPABILITIES.PERMISSIONS_MANAGE);
+  const [allGroups, setAllGroups] = useState<PermissionGroupSummary[]>([]);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!canManage) return;
+    api
+      .get<PermissionGroupSummary[]>("/api/permission-groups")
+      .then(setAllGroups)
+      .catch(() => setAllGroups([]));
+  }, [canManage]);
+
+  const memberIds = new Set(user.groups.map((g) => g.id));
+  const addable = allGroups.filter((g) => !memberIds.has(g.id));
+
+  async function addToGroup(groupId: string) {
+    setBusy(true);
+    try {
+      await api.post(`/api/permission-groups/${groupId}/members`, { userId: user.id });
+      toast.success("Added to group.");
+      onChanged();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not add to group.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeFromGroup(groupId: number) {
+    setBusy(true);
+    try {
+      await api.delete(`/api/permission-groups/${groupId}/members/${user.id}`);
+      toast.success("Removed from group.");
+      onChanged();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not remove from group.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <SectionCard
         icon={UsersIcon}
         title="Permission groups"
-        description="Effective access is the union of the capabilities granted by these groups (H8). Assign or edit groups from Permissions."
+        description="Effective access is the union of the capabilities granted by these groups (H8)."
+        action={
+          canManage && addable.length > 0 ? (
+            <Select value="" onValueChange={addToGroup} disabled={busy}>
+              <SelectTrigger className="w-52">
+                <SelectValue placeholder="Add to group…" />
+              </SelectTrigger>
+              <SelectContent>
+                {addable.map((g) => (
+                  <SelectItem key={g.id} value={String(g.id)}>
+                    {g.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : undefined
+        }
       >
         {user.groups.length === 0 ? (
           <p className="text-muted-foreground text-sm">
@@ -541,12 +657,26 @@ function PermissionsTab({ user }: { user: UserDetail }) {
         ) : (
           <div className="flex flex-wrap gap-2">
             {user.groups.map((g) => (
-              <Link key={g.id} href={`/permissions/${g.id}`}>
-                <Badge variant="outline" className="cursor-pointer gap-1.5">
+              <Badge key={g.id} variant="outline" className="gap-1.5 py-1 pr-1">
+                <Link
+                  href={`/permissions/${g.id}`}
+                  className="inline-flex items-center gap-1.5 hover:underline"
+                >
                   <ShieldIcon className="size-3" />
                   {g.name}
-                </Badge>
-              </Link>
+                </Link>
+                {canManage && (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => removeFromGroup(g.id)}
+                    className="hover:bg-muted text-muted-foreground hover:text-foreground rounded p-0.5"
+                    aria-label={`Remove from ${g.name}`}
+                  >
+                    <XIcon className="size-3" />
+                  </button>
+                )}
+              </Badge>
             ))}
           </div>
         )}

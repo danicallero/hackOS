@@ -4,10 +4,12 @@
 // profile. Search is server-side (GET /api/users?q=) so it covers the whole
 // table, not just the first page — the endpoint paginates (limit ≤ 200).
 
+import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { UsersIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { CapabilityGate } from "@/components/common/capability-gate";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { PageHeader } from "@/components/common/page-header";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -15,6 +17,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { ApiError, api } from "@/lib/api";
 import type { UserList, UserListItem } from "@/lib/types";
+import { InviteUserDialog } from "./invite-dialog";
 
 /** Initials for the avatar fallback, from name/surname or the email. */
 function initials(u: UserListItem): string {
@@ -129,6 +132,11 @@ export default function UsersPage() {
                 total > users.length ? ` — showing first ${users.length}, refine your search` : ""
               }`
             : "Browse everyone registered in hackOS."
+        }
+        actions={
+          <CapabilityGate capability={CAPABILITIES.INVITES_MANAGE}>
+            <InviteUserDialog />
+          </CapabilityGate>
         }
       />
 
