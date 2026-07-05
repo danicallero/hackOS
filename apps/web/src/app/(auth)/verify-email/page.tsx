@@ -78,7 +78,7 @@ function VerifyEmailInner() {
   if (verified) {
     return (
       <Card>
-        <CardHeader className="items-center text-center">
+        <CardHeader className="items-center justify-items-center text-center">
           <div className="bg-success/10 text-success mb-2 grid size-12 place-items-center rounded-full">
             <CheckCircle2Icon className="size-6" />
           </div>
@@ -96,7 +96,7 @@ function VerifyEmailInner() {
 
   return (
     <Card>
-      <CardHeader className="items-center text-center">
+      <CardHeader className="items-center justify-items-center text-center">
         <div className="bg-muted text-muted-foreground mb-2 grid size-12 place-items-center rounded-full">
           <MailIcon className="size-6" />
         </div>
