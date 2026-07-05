@@ -234,6 +234,36 @@ describe("staff user routes (H7)", () => {
     expect(Array.isArray(res.json().groups)).toBe(true);
   });
 
+  it("DELETE /api/users/:id — superadmin only, blocks self, removes a fresh account", async () => {
+    const a = await getApp();
+    const admin = await createUserWithCapabilities(["*"]);
+    const staff = await createUserWithCapabilities([CAPABILITIES.USERS_WRITE]);
+    const victim = await createUser({ name: "Deletable" });
+
+    // Even USERS_WRITE isn't enough — only ADMIN_ALL.
+    expect(
+      (await a.inject({ method: "DELETE", url: `/api/users/${victim}`, headers: asUser(staff) }))
+        .statusCode,
+    ).toBe(403);
+    // Can't delete yourself.
+    expect(
+      (await a.inject({ method: "DELETE", url: `/api/users/${admin}`, headers: asUser(admin) }))
+        .statusCode,
+    ).toBe(400);
+    // Admin removes a fresh account.
+    const ok = await a.inject({
+      method: "DELETE",
+      url: `/api/users/${victim}`,
+      headers: asUser(admin),
+    });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json().deleted).toBe(true);
+    expect(
+      (await a.inject({ method: "GET", url: `/api/users/${victim}`, headers: asUser(admin) }))
+        .statusCode,
+    ).toBe(404);
+  });
+
   it("PATCH /api/users/:id requires USERS_WRITE, can fix dni/notes, and is audited (H53)", async () => {
     const a = await getApp();
     const target = await createUser();

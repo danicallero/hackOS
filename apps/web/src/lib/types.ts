@@ -79,3 +79,31 @@ export interface EventConfig {
   hackingStartsAt: string | null;
   hackingEndsAt: string | null;
 }
+
+export type InviteKind = "staff" | "sponsor" | "participant";
+
+/** POST /api/invites response. */
+export interface Invite {
+  id: number;
+  email: string;
+  kind: InviteKind;
+  enterpriseId: number | null;
+  groupIds: number[];
+  expiresAt: string;
+  usedAt: string | null;
+  token: string | null;
+}
+
+/** GET /api/invites/lookup — what the invitee sees before accepting. */
+export interface InviteLookup {
+  email: string;
+  kind: InviteKind;
+  enterpriseName?: string | null;
+  expired?: boolean;
+}
+
+/** Minimal enterprise shape for the sponsor-invite picker (GET /api/enterprises). */
+export interface EnterpriseSummary {
+  id: number;
+  name: string;
+}

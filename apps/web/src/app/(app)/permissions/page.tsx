@@ -217,6 +217,7 @@ export default function PermissionsPage() {
                   <FormLabel>Capabilities</FormLabel>
                   <FormControl>
                     <MultiSelect
+                      inDialog
                       options={CAPABILITY_OPTIONS}
                       value={field.value}
                       onChange={field.onChange}

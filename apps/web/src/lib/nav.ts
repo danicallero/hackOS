@@ -74,8 +74,8 @@ export const NAV: NavSection[] = [
         soon: true,
       },
       {
-        title: "Sponsors",
-        href: "/sponsors",
+        title: "Enterprises",
+        href: "/enterprises",
         icon: HandshakeIcon,
         anyCapability: [CAPABILITIES.SPONSORS_MANAGE, CAPABILITIES.SPONSOR_PORTAL],
         soon: true,

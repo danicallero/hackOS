@@ -6,10 +6,11 @@ import { pool, withTransaction } from "../../../db/pool.js";
 import { audit } from "../../../lib/audit.js";
 import {
   getEffectiveCapabilities,
+  invalidateCapabilities,
   requireAuth,
   requireCapability,
 } from "../../../lib/capabilities.js";
-import { BadRequestError, NotFoundError } from "../../../lib/errors.js";
+import { BadRequestError, ConflictError, NotFoundError } from "../../../lib/errors.js";
 import { computeDerivedRole } from "../role.js";
 
 /**
@@ -342,6 +343,57 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     async (req) => {
       const after = await applyUserPatch(req.params.id, req.userId as number, req.body, "admin");
       return serializeUser(after);
+    },
+  );
+
+  // Hard-delete an account — superadmin only (ADMIN_ALL). Most references to
+  // users have no ON DELETE CASCADE (audit trail, scans, evaluations…), so a
+  // user who has *done* anything cannot be hard-deleted without corrupting
+  // history: we surface a clear 409 in that case (H54 anonymization is the
+  // proper path for those). Fresh/inactive accounts delete cleanly (sessions,
+  // accounts and group memberships cascade).
+  api.delete(
+    "/api/users/:id",
+    {
+      preHandler: requireCapability(CAPABILITIES.ADMIN_ALL),
+      schema: {
+        params: z.object({ id: z.coerce.number().int() }),
+        response: { 200: z.object({ deleted: z.literal(true) }) },
+      },
+    },
+    async (req) => {
+      const targetId = req.params.id;
+      if (targetId === req.userId) {
+        throw new BadRequestError("You can't delete your own account");
+      }
+      const target = await fetchUser(targetId);
+      try {
+        await withTransaction(async (client) => {
+          await audit(client, {
+            actorId: req.userId,
+            entityType: "user",
+            entityId: targetId,
+            action: "delete",
+            source: "admin",
+            before: { email: target.email },
+          });
+          await client.query(`DELETE FROM users WHERE id = $1`, [targetId]);
+        });
+      } catch (err) {
+        if (
+          typeof err === "object" &&
+          err !== null &&
+          (err as { code?: string }).code === "23503"
+        ) {
+          throw new ConflictError(
+            "This account has activity (audit, scans, evaluations…) and can't be hard-deleted. Anonymize its personal data instead.",
+            { userId: targetId },
+          );
+        }
+        throw err;
+      }
+      await invalidateCapabilities(targetId);
+      return { deleted: true as const };
     },
   );
 }

@@ -39,6 +39,8 @@ const inviteResponse = z.object({
   email: z.string(),
   kind: inviteKind,
   enterpriseId: z.number().nullable(),
+  // Capability groups the invitee is added to on acceptance (H8/H10).
+  groupIds: z.array(z.number()),
   expiresAt: z.string(),
   usedAt: z.string().nullable(),
   // token returned to the admin so the link can also be handed over manually
@@ -55,10 +57,13 @@ interface TokenRow {
   expires_at: Date;
   used_at: Date | null;
   kind: string | null;
+  group_ids: number[];
 }
 
 function claimUrl(token: string): string {
-  return `${config.BETTER_AUTH_URL}/claim-account?token=${token}`;
+  // Link to the WEB app's claim page (not the API host); it looks up the
+  // invite and lets the person create their account.
+  return `${config.WEB_URL}/claim-account?token=${token}`;
 }
 
 async function enqueueInviteEmail(
@@ -98,13 +103,15 @@ export function registerInviteRoutes(app: FastifyInstance): void {
           email: z.string().email(),
           kind: inviteKind,
           enterpriseId: z.number().int().optional(),
+          // Capability groups pre-assigned on acceptance (H8/H10).
+          groupIds: z.array(z.number().int()).default([]),
         }),
         response: { 201: inviteResponse },
       },
     },
     async (req, reply) => {
       const email = req.body.email.trim().toLowerCase();
-      const { kind, enterpriseId } = req.body;
+      const { kind, enterpriseId, groupIds } = req.body;
 
       if (kind === "sponsor" && enterpriseId === undefined) {
         throw new BadRequestError("Sponsor invites require enterpriseId");
@@ -133,10 +140,10 @@ export function registerInviteRoutes(app: FastifyInstance): void {
 
       const row = await withTransaction(async (client) => {
         const { rows } = await client.query(
-          `INSERT INTO email_verification_tokens (token, type, email, enterprise_id, kind, expires_at)
-           VALUES ($1, $2::token_type, $3, $4, $5, now() + make_interval(hours => $6))
+          `INSERT INTO email_verification_tokens (token, type, email, enterprise_id, kind, group_ids, expires_at)
+           VALUES ($1, $2::token_type, $3, $4, $5, $6, now() + make_interval(hours => $7))
            RETURNING *`,
-          [token, type, email, enterpriseId ?? null, kind, INVITE_TTL_HOURS],
+          [token, type, email, enterpriseId ?? null, kind, groupIds, INVITE_TTL_HOURS],
         );
         const created = rows[0] as TokenRow;
         await enqueueInviteEmail(client, req.userId as number, email, "en", token);
@@ -146,7 +153,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
           entityId: created.id,
           action: "create",
           source: "admin",
-          after: { email, kind, enterpriseId: enterpriseId ?? null },
+          after: { email, kind, enterpriseId: enterpriseId ?? null, groupIds },
         });
         return created;
       });
@@ -156,6 +163,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
         email: row.email,
         kind,
         enterpriseId: row.enterprise_id,
+        groupIds: row.group_ids,
         expiresAt: row.expires_at.toISOString(),
         usedAt: null,
         token,
@@ -199,10 +207,18 @@ export function registerInviteRoutes(app: FastifyInstance): void {
 
         const token = randomBytes(32).toString("base64url");
         const { rows: newRows } = await client.query(
-          `INSERT INTO email_verification_tokens (token, type, email, enterprise_id, kind, expires_at)
-           VALUES ($1, $2::token_type, $3, $4, $5, now() + make_interval(hours => $6))
+          `INSERT INTO email_verification_tokens (token, type, email, enterprise_id, kind, group_ids, expires_at)
+           VALUES ($1, $2::token_type, $3, $4, $5, $6, now() + make_interval(hours => $7))
            RETURNING *`,
-          [token, old.type, old.email, old.enterprise_id, old.kind, INVITE_TTL_HOURS],
+          [
+            token,
+            old.type,
+            old.email,
+            old.enterprise_id,
+            old.kind,
+            old.group_ids,
+            INVITE_TTL_HOURS,
+          ],
         );
         const created = newRows[0] as TokenRow;
         await enqueueInviteEmail(client, req.userId as number, old.email, "en", token);
@@ -223,6 +239,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
         email: result.created.email,
         kind: (result.created.kind ?? "staff") as z.infer<typeof inviteKind>,
         enterpriseId: result.created.enterprise_id,
+        groupIds: result.created.group_ids,
         expiresAt: result.created.expires_at.toISOString(),
         usedAt: null,
         token: result.token,
@@ -384,13 +401,25 @@ export function registerInviteRoutes(app: FastifyInstance): void {
           ]);
         }
 
+        // H8/H10: pre-assigned capability groups. Skip ids for groups deleted
+        // since the invite was issued (WHERE EXISTS avoids an FK violation).
+        for (const groupId of invite.group_ids ?? []) {
+          await client.query(
+            `INSERT INTO permission_group_members (user_id, group_id, assigned_by)
+             SELECT $1, $2, NULL
+             WHERE EXISTS (SELECT 1 FROM permission_groups WHERE id = $2)
+             ON CONFLICT DO NOTHING`,
+            [userId, groupId],
+          );
+        }
+
         await audit(client, {
           actorId: userId,
           entityType: "invite",
           entityId: invite.id,
           action: "accept",
           source: "email",
-          after: { userId, kind, enterpriseId: invite.enterprise_id },
+          after: { userId, kind, enterpriseId: invite.enterprise_id, groupIds: invite.group_ids },
         });
 
         return { userId, email: invite.email, kind };
