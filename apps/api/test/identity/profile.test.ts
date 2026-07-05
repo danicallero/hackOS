@@ -46,6 +46,16 @@ describe("GET /api/me (H7)", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().name).toBe("Grace");
     expect(res.json().role).toBe("participant");
+    // H8/H55: /api/me carries the effective capabilities for UI gating.
+    expect(res.json().capabilities).toEqual([]);
+  });
+
+  it("exposes effective capabilities for UI gating (H8/H55)", async () => {
+    const a = await getApp();
+    const admin = await createUserWithCapabilities(["*"]);
+    const res = await a.inject({ method: "GET", url: "/api/me", headers: asUser(admin) });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().capabilities).toContain("*");
   });
 
   it("derives the illustrative role: admin > judge > sponsor > staff > participant", async () => {

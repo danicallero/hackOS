@@ -4,7 +4,11 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { pool, withTransaction } from "../../../db/pool.js";
 import { audit } from "../../../lib/audit.js";
-import { requireAuth, requireCapability } from "../../../lib/capabilities.js";
+import {
+  getEffectiveCapabilities,
+  requireAuth,
+  requireCapability,
+} from "../../../lib/capabilities.js";
 import { BadRequestError, NotFoundError } from "../../../lib/errors.js";
 import { computeDerivedRole } from "../role.js";
 
@@ -197,6 +201,10 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         response: {
           200: userResponseSchema.extend({
             role: z.enum(["admin", "judge", "sponsor", "staff", "participant"]),
+            // Effective capabilities (H8) so the web/mobile UI can gate by
+            // capability, never by the illustrative role (H55). Authoritative
+            // enforcement still happens on every guarded route server-side.
+            capabilities: z.array(z.string()),
           }),
         },
       },
@@ -204,8 +212,11 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     async (req) => {
       const userId = req.userId as number;
       const row = await fetchUser(userId);
-      const role = await computeDerivedRole(pool, userId);
-      return { ...serializeUser(row), role };
+      const [role, capabilities] = await Promise.all([
+        computeDerivedRole(pool, userId),
+        getEffectiveCapabilities(userId),
+      ]);
+      return { ...serializeUser(row), role, capabilities: [...capabilities] };
     },
   );
 

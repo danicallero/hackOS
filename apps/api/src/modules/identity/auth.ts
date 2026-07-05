@@ -4,6 +4,23 @@ import { pool } from "../../db/pool.js";
 import { enqueueAuthEmail } from "./outbox.js";
 
 /**
+ * Origins Better Auth accepts on state-changing auth requests. This is a
+ * SEPARATE check from CORS: even with permissive CORS, Better Auth 403s a
+ * sign-in whose Origin isn't trusted ("Invalid origin"). The web app runs on a
+ * different origin than the API, so it must be listed here. We derive it from
+ * the same CORS_ORIGINS the proxy/CORS layer uses (so ops configure one list),
+ * plus the API's own base URL and, in dev, the local Next server (:3001).
+ */
+const webOrigins = config.CORS_ORIGINS.split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+const trustedOrigins = [
+  config.BETTER_AUTH_URL,
+  ...webOrigins,
+  ...(config.isProd ? [] : ["http://localhost:3001"]),
+];
+
+/**
  * Better Auth instance (H1-H5), mounted inside the Fastify API under
  * /api/auth/* (src/modules/identity/index.ts). Design decisions:
  *
@@ -51,8 +68,17 @@ export const auth = betterAuth({
   basePath: "/api/auth",
   secret: config.BETTER_AUTH_SECRET,
   database: pool,
+  trustedOrigins,
   advanced: {
     database: { generateId: "serial" },
+    // In production the web app and API live on different origins (and often
+    // different sites), so the session cookie must be cross-site: SameSite=None
+    // requires Secure, which the HTTPS proxy provides. In dev everything is
+    // http://localhost, where None+Secure wouldn't be stored — keep the Lax
+    // default there.
+    ...(config.isProd
+      ? { defaultCookieAttributes: { sameSite: "none" as const, secure: true } }
+      : {}),
   },
   disabledPaths: ["/update-user"],
   user: {
