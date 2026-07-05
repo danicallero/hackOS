@@ -3,6 +3,7 @@ import {
   CalendarDaysIcon,
   ClipboardListIcon,
   FileTextIcon,
+  GraduationCapIcon,
   HandshakeIcon,
   LayoutDashboardIcon,
   ListOrderedIcon,
@@ -110,6 +111,12 @@ export const NAV: NavSection[] = [
         title: "Food intolerances",
         href: "/settings/intolerances",
         icon: UtensilsIcon,
+        capability: CAPABILITIES.INTOLERANCES_MANAGE,
+      },
+      {
+        title: "Universities",
+        href: "/settings/universities",
+        icon: GraduationCapIcon,
         capability: CAPABILITIES.INTOLERANCES_MANAGE,
       },
       {

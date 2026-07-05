@@ -18,6 +18,8 @@ export const FIELD_KINDS = [
   "date",
   "number",
   "file-url",
+  "file",
+  "university",
 ] as const;
 export type FieldKind = (typeof FIELD_KINDS)[number];
 
@@ -32,6 +34,9 @@ export interface TemplateField {
   kind: FieldKind;
   required: boolean;
   options?: FieldOption[];
+  /** For kind "file": allowed extensions (".pdf") and size cap in MB (H12). */
+  allowed_file_types?: string[];
+  max_file_size_mb?: number;
 }
 
 /** GET /api/public/applications[/:id] — an open form the applicant can render. */

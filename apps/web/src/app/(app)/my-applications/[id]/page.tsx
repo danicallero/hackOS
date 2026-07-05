@@ -18,12 +18,14 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/common/empty-state";
+import { FileUploadField } from "@/components/common/file-upload-field";
 import { MultiSelect } from "@/components/common/multi-select";
 import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
+import { UniversityPicker } from "@/components/common/university-picker";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -369,6 +371,7 @@ export default function MyApplicationDetailPage() {
             <FieldControl
               key={field.key}
               field={field}
+              applicationId={id}
               value={values[field.key] as FieldValue}
               onChange={(v) => setValue(field.key, v)}
               disabled={!editable}
@@ -397,6 +400,7 @@ export default function MyApplicationDetailPage() {
 /** Render a single template field by its kind (H12). */
 function FieldControl({
   field,
+  applicationId,
   value,
   onChange,
   disabled,
@@ -404,6 +408,7 @@ function FieldControl({
   error,
 }: {
   field: TemplateField;
+  applicationId: number;
   value: FieldValue;
   onChange: (value: FieldValue) => void;
   disabled: boolean;
@@ -500,6 +505,30 @@ function FieldControl({
           placeholder="https://…"
           value={typeof value === "string" ? value : ""}
           onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
+        />
+      );
+      break;
+    case "file":
+      control = (
+        <FileUploadField
+          applicationId={applicationId}
+          fieldKey={field.key}
+          value={typeof value === "string" ? value : ""}
+          onChange={(url) => onChange(url)}
+          allowedTypes={field.allowed_file_types}
+          maxSizeMb={field.max_file_size_mb}
+          disabled={disabled}
+        />
+      );
+      break;
+    case "university":
+      // The API stores/validates a university as a numeric id (validateResponses),
+      // while the picker works in string ids — convert on the way in and out.
+      control = (
+        <UniversityPicker
+          value={value != null && value !== "" ? String(value) : ""}
+          onChange={(v) => onChange(v ? Number(v) : null)}
           disabled={disabled}
         />
       );

@@ -32,6 +32,8 @@ export const FIELD_KINDS = [
   "date",
   "number",
   "file-url",
+  "file",
+  "university",
 ] as const;
 export type FieldKind = (typeof FIELD_KINDS)[number];
 
@@ -44,10 +46,15 @@ export const FIELD_KIND_LABEL: Record<FieldKind, string> = {
   date: "Date",
   number: "Number",
   "file-url": "File URL",
+  file: "File upload",
+  university: "University",
 };
 
 /** Kinds that require a non-empty options array (server refine). */
 export const OPTION_KINDS: FieldKind[] = ["select", "multiselect"];
+
+/** Kind that carries upload restrictions (allowed_file_types, max_file_size_mb). */
+export const FILE_KIND: FieldKind = "file";
 
 export interface FieldOption {
   value: string;
@@ -60,6 +67,9 @@ export interface TemplateField {
   kind: FieldKind;
   required: boolean;
   options?: FieldOption[];
+  /** For kind "file": allowed extensions (".pdf") and size cap in MB (H12). */
+  allowed_file_types?: string[];
+  max_file_size_mb?: number;
 }
 
 export interface ApplicationForm {

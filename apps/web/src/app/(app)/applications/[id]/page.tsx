@@ -84,6 +84,7 @@ import {
   type ApplicationStats,
   FIELD_KIND_LABEL,
   FIELD_KINDS,
+  FILE_KIND,
   type FieldKind,
   fmtDateTime,
   fmtScore,
@@ -572,6 +573,14 @@ function QuestionsCard({ form, onSaved }: { form: ApplicationForm; onSaved: () =
           kind: f.kind,
           required: f.required,
           ...(OPTION_KINDS.includes(f.kind) ? { options: f.options } : {}),
+          ...(f.kind === FILE_KIND
+            ? {
+                ...(f.allowed_file_types?.length
+                  ? { allowed_file_types: f.allowed_file_types }
+                  : {}),
+                ...(f.max_file_size_mb ? { max_file_size_mb: f.max_file_size_mb } : {}),
+              }
+            : {}),
         })),
       });
       await onSaved();
@@ -701,7 +710,15 @@ function FormPreviewModal({
                 <Input
                   disabled
                   type={f.kind === "number" ? "number" : f.kind === "date" ? "date" : "text"}
-                  placeholder={f.kind === "file-url" ? "https://… (link)" : "Applicant's answer"}
+                  placeholder={
+                    f.kind === "file-url"
+                      ? "https://… (link)"
+                      : f.kind === "file"
+                        ? "File upload"
+                        : f.kind === "university"
+                          ? "University picker"
+                          : "Applicant's answer"
+                  }
                 />
               )}
             </div>
@@ -820,6 +837,8 @@ function FieldEditor({
         <OptionsEditor options={field.options ?? []} onChange={setOptions} />
       )}
 
+      {field.kind === FILE_KIND && <FileRestrictionsEditor field={field} onChange={onChange} />}
+
       <div className="flex items-center gap-2">
         <Switch
           checked={field.required}
@@ -896,6 +915,51 @@ function OptionsEditor({
           </Button>
         </div>
       ))}
+    </div>
+  );
+}
+
+/** Upload restrictions for a "file" field: allowed extensions + size cap (H12). */
+function FileRestrictionsEditor({
+  field,
+  onChange,
+}: {
+  field: TemplateField;
+  onChange: (patch: Partial<TemplateField>) => void;
+}) {
+  return (
+    <div className="border-border grid gap-4 rounded-md border border-dashed p-3 sm:grid-cols-2">
+      <div className="space-y-1.5">
+        <Label className="text-muted-foreground text-xs uppercase">Allowed file types</Label>
+        <Input
+          value={(field.allowed_file_types ?? []).join(", ")}
+          onChange={(e) =>
+            onChange({
+              allowed_file_types: e.target.value
+                .split(",")
+                .map((s) => s.trim().toLowerCase())
+                .filter(Boolean),
+            })
+          }
+          placeholder=".pdf, .png, .jpg"
+        />
+        <p className="text-muted-foreground text-xs">
+          Comma-separated extensions. Blank = pdf/doc/images.
+        </p>
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-muted-foreground text-xs uppercase">Max size (MB)</Label>
+        <Input
+          type="number"
+          min={1}
+          value={field.max_file_size_mb ?? ""}
+          onChange={(e) =>
+            onChange({ max_file_size_mb: e.target.value ? Number(e.target.value) : undefined })
+          }
+          placeholder="10"
+        />
+        <p className="text-muted-foreground text-xs">Blank = 10 MB.</p>
+      </div>
     </div>
   );
 }
@@ -1494,6 +1558,20 @@ function ReviewModal({
                   }
                 >
                   Resend
+                </Button>
+              )}
+              {canDecide && (st === "rejected" || st === "declined" || st === "expired") && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() =>
+                    run("Re-accepted (unsent).", () =>
+                      api.post(`/api/responses/${response.id}/re-accept`),
+                    )
+                  }
+                >
+                  Re-accept
                 </Button>
               )}
               {canOverride && st === "accepted" && (
