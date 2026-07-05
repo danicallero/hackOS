@@ -41,12 +41,6 @@ COPY --from=build /repo/apps/web/.next/standalone ./
 COPY --from=build /repo/apps/web/.next/static ./apps/web/.next/static
 COPY --from=build /repo/apps/web/public ./apps/web/public
 
-USER node
-EXPOSE 3001
-
-HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
-  CMD wget -qO- http://127.0.0.1:3001/ || exit 1
-
 # Start script that picks the correct server.js path produced by Next's
 # standalone output. If missing, it prints directory listings to aid debugging.
 RUN cat > /usr/local/bin/start-server.sh <<'SH'
@@ -68,5 +62,11 @@ else
 fi
 SH
 RUN chmod +x /usr/local/bin/start-server.sh
+
+USER node
+EXPOSE 3001
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:3001/ || exit 1
 
 ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/start-server.sh"]
