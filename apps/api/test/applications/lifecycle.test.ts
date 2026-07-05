@@ -968,3 +968,117 @@ describe("email countdown", () => {
     expect(details).toMatch(/to confirm/);
   });
 });
+
+describe("revoke spot + batch actions (M2)", () => {
+  async function confirm(userId: number): Promise<void> {
+    const a = await getApp();
+    const token = await latestConfirmationToken(userId);
+    await a.inject({ method: "POST", url: "/api/applications/confirm", payload: { token } });
+  }
+
+  it("revokes an already-CONFIRMED spot back to rejected and wipes sensitive data", async () => {
+    const a = await getApp();
+    const appId = await createApplication({ capacity: 1 });
+    const { userId, responseId } = await toAcceptedSent(appId);
+    await confirm(userId);
+    expect((await getResponse(responseId)).status).toBe("confirmed");
+
+    const res = await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/revoke-spot`,
+      headers: asUser(decider),
+    });
+    expect(res.statusCode).toBe(200);
+    expect((await getResponse(responseId)).status).toBe("rejected");
+    // H12: revoking a confirmed spot frees the retained sensitive data.
+    const sensitive = await getUserSensitive(userId);
+    expect(sensitive.food_intolerances).toEqual([]);
+    expect(sensitive.food_intolerance_notes).toBeNull();
+
+    // The freed capacity slot lets someone else be accepted.
+    const other = await toAcceptedSent(appId);
+    expect((await getResponse(other.responseId)).status).toBe("accepted");
+  });
+
+  it("revoke-spot rejects responses that aren't accepted/confirmed (409)", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { responseId } = await submittedApplicant(appId); // still 'review'
+    const res = await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/revoke-spot`,
+      headers: asUser(decider),
+    });
+    expect(res.statusCode).toBe(409);
+  });
+
+  it("batch re-accepts declined/rejected/expired and reports skips for the rest", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+
+    // One rejected (revoked), one still in review (should be skipped).
+    const revoked = await toAcceptedSent(appId);
+    await a.inject({
+      method: "POST",
+      url: `/api/responses/${revoked.responseId}/revoke-spot`,
+      headers: asUser(decider),
+    });
+    const inReview = await submittedApplicant(appId);
+
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/responses/batch/re-accept",
+      headers: asUser(decider),
+      payload: { response_ids: [revoked.responseId, inReview.responseId] },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().processed).toBe(1);
+    expect(res.json().skipped).toHaveLength(1);
+    expect(res.json().skipped[0].id).toBe(inReview.responseId);
+    expect((await getResponse(revoked.responseId)).status).toBe("accepted");
+  });
+
+  it("batch revoke-spot moves accepted/confirmed → rejected in one call", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const one = await toAcceptedSent(appId);
+    const two = await toAcceptedSent(appId);
+    await confirm(two.userId);
+
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/responses/batch/revoke-spot",
+      headers: asUser(decider),
+      payload: { response_ids: [one.responseId, two.responseId] },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().processed).toBe(2);
+    expect((await getResponse(one.responseId)).status).toBe("rejected");
+    expect((await getResponse(two.responseId)).status).toBe("rejected");
+  });
+
+  it("requires APPLICATIONS_DECIDE for revoke + batch routes", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { responseId } = await toAcceptedSent(appId);
+    expect(
+      (
+        await a.inject({
+          method: "POST",
+          url: `/api/responses/${responseId}/revoke-spot`,
+          headers: asUser(reviewer),
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (
+        await a.inject({
+          method: "POST",
+          url: "/api/responses/batch/re-accept",
+          headers: asUser(reviewer),
+          payload: { response_ids: [responseId] },
+        })
+      ).statusCode,
+    ).toBe(403);
+  });
+});
