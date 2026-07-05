@@ -49,7 +49,24 @@ HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
 
 # Start script that picks the correct server.js path produced by Next's
 # standalone output. If missing, it prints directory listings to aid debugging.
-RUN cat > /usr/local/bin/start-server.sh <<'SH'\n#!/bin/sh\nset -e\n# Prefer absolute paths under /repo (WORKDIR) to avoid surprises\nif [ -f /repo/server.js ]; then\n  exec node /repo/server.js\nelif [ -f /repo/apps/web/server.js ]; then\n  exec node /repo/apps/web/server.js\nelif [ -f server.js ]; then\n  exec node server.js\nelse\n  echo "server.js not found, listing /repo:" >&2\n  ls -al /repo || true\n  echo "listing /repo/apps/web:" >&2\n  ls -al /repo/apps/web || true\n  exit 1\nfi\nSH
+RUN cat > /usr/local/bin/start-server.sh <<'SH'
+#!/bin/sh
+set -e
+# Prefer absolute paths under /repo (WORKDIR) to avoid surprises
+if [ -f /repo/server.js ]; then
+  exec node /repo/server.js
+elif [ -f /repo/apps/web/server.js ]; then
+  exec node /repo/apps/web/server.js
+elif [ -f server.js ]; then
+  exec node server.js
+else
+  echo "server.js not found, listing /repo:" >&2
+  ls -al /repo || true
+  echo "listing /repo/apps/web:" >&2
+  ls -al /repo/apps/web || true
+  exit 1
+fi
+SH
 RUN chmod +x /usr/local/bin/start-server.sh
 
 ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/start-server.sh"]
