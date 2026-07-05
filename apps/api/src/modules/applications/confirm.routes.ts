@@ -65,7 +65,7 @@ export function registerConfirmRoutes(app: FastifyInstance): void {
   r.post(
     "/api/responses/:responseId/confirm",
     {
-      preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
+      preHandler: requireCapability(CAPABILITIES.APPLICATIONS_CONFIRM_OVERRIDE),
       schema: { params: responseIdParamSchema },
     },
     async (req) => {
@@ -85,7 +85,7 @@ export function registerConfirmRoutes(app: FastifyInstance): void {
   r.post(
     "/api/responses/:responseId/decline",
     {
-      preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
+      preHandler: requireCapability(CAPABILITIES.APPLICATIONS_CONFIRM_OVERRIDE),
       schema: { params: responseIdParamSchema },
     },
     async (req) => {
