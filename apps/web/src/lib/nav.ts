@@ -9,9 +9,11 @@ import {
   type LucideIcon,
   MegaphoneIcon,
   ScrollTextIcon,
+  SettingsIcon,
   ShieldCheckIcon,
   UserIcon,
   UsersIcon,
+  UtensilsIcon,
 } from "lucide-react";
 
 export interface NavItem {
@@ -85,18 +87,28 @@ export const NAV: NavSection[] = [
     label: "Administration",
     items: [
       {
-        title: "People",
-        href: "/people",
+        title: "Users",
+        href: "/users",
         icon: UsersIcon,
         capability: CAPABILITIES.USERS_READ,
-        soon: true,
       },
       {
         title: "Permissions",
         href: "/permissions",
         icon: ShieldCheckIcon,
         capability: CAPABILITIES.PERMISSIONS_MANAGE,
-        soon: true,
+      },
+      {
+        title: "Event settings",
+        href: "/settings/event",
+        icon: SettingsIcon,
+        capability: CAPABILITIES.SCHEDULE_MANAGE,
+      },
+      {
+        title: "Food intolerances",
+        href: "/settings/intolerances",
+        icon: UtensilsIcon,
+        capability: CAPABILITIES.INTOLERANCES_MANAGE,
       },
       {
         title: "Audit log",

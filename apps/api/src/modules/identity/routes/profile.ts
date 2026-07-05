@@ -237,17 +237,95 @@ export function registerProfileRoutes(app: FastifyInstance): void {
   );
 
   api.get(
+    "/api/users",
+    {
+      preHandler: requireCapability(CAPABILITIES.USERS_READ),
+      schema: {
+        querystring: z.object({
+          q: z.string().optional(),
+          limit: z.coerce.number().int().min(1).max(200).default(50),
+          offset: z.coerce.number().int().min(0).default(0),
+        }),
+        response: {
+          200: z.object({
+            users: z.array(
+              z.object({
+                id: z.number(),
+                email: z.string(),
+                emailVerified: z.boolean(),
+                name: z.string().nullable(),
+                surname: z.string().nullable(),
+                badgeId: z.string().nullable(),
+                createdAt: z.string(),
+              }),
+            ),
+            total: z.number(),
+          }),
+        },
+      },
+    },
+    async (req) => {
+      // H8/H10: staff directory. `q` matches name/surname/email (ILIKE).
+      const { q, limit, offset } = req.query;
+      const filter = q?.trim() ? `%${q.trim()}%` : null;
+      const where = filter ? `WHERE name ILIKE $1 OR surname ILIKE $1 OR email ILIKE $1` : "";
+      const args = filter ? [filter, limit, offset] : [limit, offset];
+      const p = filter ? 2 : 1;
+      const { rows } = await pool.query(
+        `SELECT id, email, email_verified, name, surname, badge_id, created_at
+           FROM users ${where}
+           ORDER BY created_at DESC LIMIT $${p} OFFSET $${p + 1}`,
+        args,
+      );
+      const { rows: countRows } = await pool.query(
+        `SELECT count(*)::int AS n FROM users ${where}`,
+        filter ? [filter] : [],
+      );
+      return {
+        users: rows.map((r: UserRow) => ({
+          id: r.id,
+          email: r.email,
+          emailVerified: r.email_verified,
+          name: r.name,
+          surname: r.surname,
+          badgeId: r.badge_id,
+          createdAt: r.created_at.toISOString(),
+        })),
+        total: countRows[0].n as number,
+      };
+    },
+  );
+
+  api.get(
     "/api/users/:id",
     {
       preHandler: requireCapability(CAPABILITIES.USERS_READ),
       schema: {
         params: z.object({ id: z.coerce.number().int() }),
-        response: { 200: userResponseSchema },
+        response: {
+          200: userResponseSchema.extend({
+            role: z.enum(["admin", "judge", "sponsor", "staff", "participant"]),
+            capabilities: z.array(z.string()),
+            groups: z.array(z.object({ id: z.number(), name: z.string() })),
+          }),
+        },
       },
     },
     async (req) => {
       const row = await fetchUser(req.params.id);
-      return serializeUser(row);
+      const [role, capabilities, groups] = await Promise.all([
+        computeDerivedRole(pool, req.params.id),
+        getEffectiveCapabilities(req.params.id),
+        pool
+          .query(
+            `SELECT g.id, g.name FROM permission_group_members m
+               JOIN permission_groups g ON g.id = m.group_id
+              WHERE m.user_id = $1 ORDER BY g.name`,
+            [req.params.id],
+          )
+          .then((r) => r.rows as { id: number; name: string }[]),
+      ]);
+      return { ...serializeUser(row), role, capabilities: [...capabilities], groups };
     },
   );
 

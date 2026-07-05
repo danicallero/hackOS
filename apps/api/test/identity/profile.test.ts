@@ -178,6 +178,47 @@ describe("staff user routes (H7)", () => {
     expect(ok.json().name).toBe("Target");
   });
 
+  it("GET /api/users lists and searches users (USERS_READ)", async () => {
+    const a = await getApp();
+    await createUser({ name: "Ada", email: "ada@example.test" });
+    await createUser({ name: "Grace", email: "grace@example.test" });
+    const reader = await createUserWithCapabilities([CAPABILITIES.USERS_READ]);
+    const pleb = await createUser();
+
+    expect(
+      (await a.inject({ method: "GET", url: "/api/users", headers: asUser(pleb) })).statusCode,
+    ).toBe(403);
+
+    const all = await a.inject({ method: "GET", url: "/api/users", headers: asUser(reader) });
+    expect(all.statusCode).toBe(200);
+    expect(all.json().total).toBeGreaterThanOrEqual(3);
+    expect(Array.isArray(all.json().users)).toBe(true);
+
+    const search = await a.inject({
+      method: "GET",
+      url: "/api/users?q=grace",
+      headers: asUser(reader),
+    });
+    expect(search.json().users.map((u: { email: string }) => u.email)).toContain(
+      "grace@example.test",
+    );
+  });
+
+  it("GET /api/users/:id includes role, capabilities and groups", async () => {
+    const a = await getApp();
+    const target = await createUserWithCapabilities([CAPABILITIES.ACCREDIT_SCAN]);
+    const reader = await createUserWithCapabilities([CAPABILITIES.USERS_READ]);
+    const res = await a.inject({
+      method: "GET",
+      url: `/api/users/${target}`,
+      headers: asUser(reader),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().role).toBe("staff");
+    expect(res.json().capabilities).toContain(CAPABILITIES.ACCREDIT_SCAN);
+    expect(Array.isArray(res.json().groups)).toBe(true);
+  });
+
   it("PATCH /api/users/:id requires USERS_WRITE, can fix dni/notes, and is audited (H53)", async () => {
     const a = await getApp();
     const target = await createUser();

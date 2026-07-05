@@ -2,10 +2,11 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { UserIcon } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { MultiSelect } from "@/components/common/multi-select";
 import { SectionCard } from "@/components/common/section-card";
 import { SubmitButton } from "@/components/common/submit-button";
 import {
@@ -27,10 +28,12 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
+import { pickText } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
-import type { Me } from "@/lib/types";
+import type { Intolerance, Language, Me } from "@/lib/types";
 
 const SHIRT_SIZES = ["XS", "S", "M", "L", "XL", "XXL"] as const;
+const LANGS: Language[] = ["es", "gl", "en"];
 
 const schema = z.object({
   name: z.string().min(1, "Required").max(200),
@@ -38,6 +41,7 @@ const schema = z.object({
   phone: z.string().max(50),
   language: z.enum(["en", "es", "gl"]),
   shirtSize: z.string(),
+  foodIntolerances: z.array(z.string()),
   foodIntoleranceNotes: z.string().max(2000),
 });
 
@@ -47,6 +51,9 @@ const NONE = "__none__";
 
 export default function ProfileSettingsPage() {
   const { me, refresh } = useSessionContext();
+  const [intolerances, setIntolerances] = useState<Intolerance[]>([]);
+  const lang = (me?.language as Language) ?? "es";
+
   const form = useForm<Values>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -55,10 +62,19 @@ export default function ProfileSettingsPage() {
       phone: "",
       language: "es",
       shirtSize: NONE,
+      foodIntolerances: [],
       foodIntoleranceNotes: "",
     },
   });
   const { reset } = form;
+
+  // Dictionary options for the picker (H12/H25).
+  useEffect(() => {
+    api
+      .get<{ intolerances: Intolerance[] }>("/api/public/food-intolerances")
+      .then((r) => setIntolerances(r.intolerances))
+      .catch(() => setIntolerances([]));
+  }, []);
 
   useEffect(() => {
     if (!me) return;
@@ -66,8 +82,10 @@ export default function ProfileSettingsPage() {
       name: me.name ?? "",
       surname: me.surname ?? "",
       phone: me.phone ?? "",
-      language: (me.language as Values["language"]) ?? "es",
+      // Coerce to a known locale — stray/empty values would leave the select blank.
+      language: (LANGS.includes(me.language as Language) ? me.language : "es") as Language,
       shirtSize: me.shirtSize ?? NONE,
+      foodIntolerances: (me.foodIntolerances ?? []).map(String),
       foodIntoleranceNotes: me.foodIntoleranceNotes ?? "",
     });
   }, [me, reset]);
@@ -80,6 +98,7 @@ export default function ProfileSettingsPage() {
         phone: values.phone || null,
         language: values.language,
         shirtSize: values.shirtSize === NONE ? null : values.shirtSize,
+        foodIntolerances: values.foodIntolerances.map(Number),
         foodIntoleranceNotes: values.foodIntoleranceNotes || null,
       });
       await refresh();
@@ -90,6 +109,12 @@ export default function ProfileSettingsPage() {
   }
 
   if (!me) return null;
+
+  const intoleranceOptions = intolerances.map((i) => ({
+    value: String(i.id),
+    label: pickText(i.label, lang),
+    description: i.description ? pickText(i.description, lang) : undefined,
+  }));
 
   return (
     <Form {...form}>
@@ -198,12 +223,33 @@ export default function ProfileSettingsPage() {
           />
           <FormField
             control={form.control}
+            name="foodIntolerances"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Food intolerances</FormLabel>
+                <FormControl>
+                  <MultiSelect
+                    options={intoleranceOptions}
+                    value={field.value}
+                    onChange={field.onChange}
+                    placeholder="Select any that apply…"
+                    searchPlaceholder="Search intolerances…"
+                    emptyText="No intolerances in the dictionary yet."
+                  />
+                </FormControl>
+                <FormDescription>From the shared catalogue maintained by the org.</FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
             name="foodIntoleranceNotes"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Food intolerance notes</FormLabel>
+                <FormLabel>Other dietary notes</FormLabel>
                 <FormControl>
-                  <Textarea rows={3} placeholder="Anything catering should know…" {...field} />
+                  <Textarea rows={3} placeholder="Anything else catering should know…" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
