@@ -11,6 +11,7 @@
     "migrate": "tsx scripts/migrate.ts",
     "seed": "tsx scripts/seed.ts",
     "superadmin:create": "tsx scripts/create-superadmin.ts",
+    "superadmin:grant": "node scripts/grant-superadmin.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

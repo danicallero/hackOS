@@ -236,6 +236,9 @@ another.
 
 - **Migrations**: automatic on `api` deploy. To run manually:
   `docker compose -f deploy/services/api/docker-compose.yml -p <proj>-api run --rm migrate`.
+- **Grant superadmin to an existing account (H8)** from the API container shell:
+  `node scripts/grant-superadmin.mjs --email user@example.com`.
+  Add `--allow-existing-admin` if you intentionally want more than one superadmin.
 - **Backups**: snapshot the `pgdata` volume (or `pg_dump` on a schedule) and the
   `miniodata` volume. These are the only stateful pieces; Valkey is ephemeral.
 - **Scaling**: run more `worker` replicas for notification/queue throughput

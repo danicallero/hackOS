@@ -17,6 +17,7 @@ Este directorio deja listo el arranque de desarrollo en otro repositorio/directo
 6. `schema-boceto.dbml`: esquema inicial a revisar y ajustar contra las historias.
 7. `06-schema-punto-de-partida.md`: criterios y checklist de revisión del esquema.
 8. `07-datos-relevantes-ers.md`: invariantes y reglas operativas incorporadas desde ERS.
+9. `08-despliegue-e-infraestructura.md`: guía paso a paso de despliegue por servicios, entornos y operación local sin Docker.
 
 ## Cómo usarlo en otro directorio
 
