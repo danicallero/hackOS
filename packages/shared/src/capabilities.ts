@@ -44,7 +44,7 @@ export const CAPABILITIES = {
 
   // sponsors (H43-H46)
   SPONSORS_MANAGE: "sponsors:manage", // org-side: enterprises, tiers, invites
-  SPONSOR_PORTAL: "sponsor:portal", // sponsor-side: own enterprise/challenge/judges
+  SPONSOR_PORTAL: "sponsor:portal", // staff-side: manage/grant sponsor portal access
 
   // content (H45, H47-H50)
   SCHEDULE_MANAGE: "schedule:manage",

@@ -71,7 +71,7 @@ async function startJudging(): Promise<void> {
 describe("judging panel builder (H44)", () => {
   it("lets the owning sponsor build and preview the panel, and versions it", async () => {
     const a = await getApp();
-    const owner = await createUserWithCapabilities([CAPABILITIES.SPONSOR_PORTAL]);
+    const owner = await createUser();
     const challengeId = await seedChallenge(owner);
 
     const res = await a.inject({
@@ -125,7 +125,7 @@ describe("judging panel builder (H44)", () => {
     const a = await getApp();
     const owner = await createUser();
     const challengeId = await seedChallenge(owner);
-    const stranger = await createUserWithCapabilities([CAPABILITIES.SPONSOR_PORTAL]);
+    const stranger = await createUser();
     // stranger is a sponsor, but of a different enterprise
     const otherEnt = await pool.query(`INSERT INTO enterprises (name) VALUES ($1) RETURNING id`, [
       `other-${crypto.randomUUID()}`,
