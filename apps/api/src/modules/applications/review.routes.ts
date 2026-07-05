@@ -4,6 +4,10 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool } from "../../db/pool.js";
 import { requireCapability } from "../../lib/capabilities.js";
 import {
+  batchDecideSchema,
+  batchIdsSchema,
+  batchRevertDecisionSchema,
+  batchSendDecisionsSchema,
   decideSchema,
   idParamSchema,
   listResponsesQuerySchema,
@@ -13,8 +17,14 @@ import {
   staffNotesSchema,
 } from "./schemas.js";
 import {
+  batchDecide,
+  batchRevertDecisions,
+  batchSendDecisions,
   decide,
+  getConfirmLink,
+  reAccept,
   resendDecision,
+  revertDecision,
   sendDecision,
   sendDecisionsBatch,
   setStaffNotes,
@@ -149,5 +159,71 @@ export function registerReviewRoutes(app: FastifyInstance): void {
       schema: { params: responseIdParamSchema },
     },
     async (req) => resendDecision(req.userId as number, req.params.responseId),
+  );
+
+  // ── re-accept a declined/rejected/expired response ───────────────────────────
+  r.post(
+    "/api/responses/:responseId/re-accept",
+    {
+      preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
+      schema: { params: responseIdParamSchema },
+    },
+    async (req) => reAccept(req.userId as number, req.params.responseId),
+  );
+
+  // ── H14: revert internal decision ────────────────────────────────────────────
+  r.post(
+    "/api/responses/:responseId/revert-decision",
+    {
+      preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
+      schema: { params: responseIdParamSchema, body: decideSchema },
+    },
+    async (req) =>
+      revertDecision(req.userId as number, req.params.responseId, req.body.decision),
+  );
+
+  // ── H15: get confirm link with token ─────────────────────────────────────────
+  r.get(
+    "/api/responses/:responseId/confirm-link",
+    {
+      preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
+      schema: { params: responseIdParamSchema },
+    },
+    async (req) => {
+      const link = await getConfirmLink(req.params.responseId);
+      if (!link) return { confirm_url: null };
+      return { confirm_url: `/applications/confirm?token=${link.token}`, expires_at: link.expiresAt };
+    },
+  );
+
+  // ── batch operations ─────────────────────────────────────────────────────────
+  r.post(
+    "/api/responses/batch/decide",
+    {
+      preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
+      schema: { body: batchDecideSchema },
+    },
+    async (req) =>
+      batchDecide(req.userId as number, req.body.response_ids, req.body.decision),
+  );
+
+  r.post(
+    "/api/responses/batch/send-decision",
+    {
+      preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
+      schema: { body: batchSendDecisionsSchema },
+    },
+    async (req) =>
+      batchSendDecisions(req.userId as number, req.body.response_ids),
+  );
+
+  r.post(
+    "/api/responses/batch/revert-decision",
+    {
+      preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
+      schema: { body: batchRevertDecisionSchema },
+    },
+    async (req) =>
+      batchRevertDecisions(req.userId as number, req.body.response_ids, req.body.decision),
   );
 }
