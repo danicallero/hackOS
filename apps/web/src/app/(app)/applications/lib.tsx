@@ -92,6 +92,8 @@ export interface ResponseRow {
   user_id: number;
   name: string | null;
   email: string;
+  /** Logistics shirt size, from the user row (H12). */
+  shirt_size: string | null;
   status: string;
   responses: Record<string, unknown>;
   staff_notes: string | null;

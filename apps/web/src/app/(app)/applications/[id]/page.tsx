@@ -1232,6 +1232,7 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
       {selected && (
         <ReviewModal
           response={selected}
+          applicationId={id}
           template={template}
           onClose={() => setSelectedId(null)}
           onChanged={load}
@@ -1271,13 +1272,34 @@ function renderAnswer(field: TemplateField, value: unknown): string {
   }
 }
 
+/** Render a response value; file answers become a clickable link so staff (and
+ *  anyone with the public URL) can open the uploaded file (H12). */
+function AnswerValue({ field, value }: { field: TemplateField; value: unknown }) {
+  if ((field.kind === "file" || field.kind === "file-url") && typeof value === "string" && value) {
+    return (
+      <a
+        href={value}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex items-center gap-1 underline underline-offset-4"
+      >
+        <FileTextIcon className="size-3.5" />
+        View file
+      </a>
+    );
+  }
+  return <>{renderAnswer(field, value)}</>;
+}
+
 function ReviewModal({
   response,
+  applicationId,
   template,
   onClose,
   onChanged,
 }: {
   response: ResponseRow;
+  applicationId: number;
   template: TemplateField[] | null;
   onClose: () => void;
   onChanged: () => Promise<void>;
@@ -1399,6 +1421,11 @@ function ReviewModal({
             avg {fmtScore(response.avg_score)} · {response.review_count}{" "}
             {response.review_count === 1 ? "review" : "reviews"}
           </span>
+          {response.shirt_size && (
+            <StatusBadge tone="neutral" dot={false}>
+              T-shirt {response.shirt_size}
+            </StatusBadge>
+          )}
         </div>
 
         {/* Answers */}
@@ -1418,6 +1445,7 @@ function ReviewModal({
                 <TemplateFieldControl
                   key={f.key}
                   field={f}
+                  applicationId={applicationId}
                   value={editValues[f.key] as FieldValue}
                   onChange={(v) => setEditValues((prev) => ({ ...prev, [f.key]: v }))}
                   lang="es"
@@ -1446,7 +1474,9 @@ function ReviewModal({
                   <dt className="text-muted-foreground text-sm">
                     {pickText(f.label, "es") || f.key}
                   </dt>
-                  <dd className="text-sm">{renderAnswer(f, response.responses[f.key])}</dd>
+                  <dd className="text-sm">
+                    <AnswerValue field={f} value={response.responses[f.key]} />
+                  </dd>
                 </div>
               ))}
             </dl>

@@ -62,15 +62,15 @@ export function registerReviewRoutes(app: FastifyInstance): void {
         filters.push(`(u.name ILIKE $${params.length} OR u.email ILIKE $${params.length})`);
       }
       const { rows } = await pool.query(
-        `SELECT r.id, r.user_id, u.name, u.email, r.status, r.responses, r.staff_notes,
-                r.submitted_at, r.decision_sent_at,
+        `SELECT r.id, r.user_id, u.name, u.email, u.shirt_size, r.status, r.responses,
+                r.staff_notes, r.submitted_at, r.decision_sent_at,
                 COALESCE(avg(ar.score), NULL) AS avg_score,
                 count(ar.author_id)::int AS review_count
          FROM application_responses r
          JOIN users u ON u.id = r.user_id
          LEFT JOIN applicant_reviews ar ON ar.response_id = r.id
          WHERE ${filters.join(" AND ")}
-         GROUP BY r.id, u.name, u.email
+         GROUP BY r.id, u.name, u.email, u.shirt_size
          ORDER BY r.id`,
         params,
       );
