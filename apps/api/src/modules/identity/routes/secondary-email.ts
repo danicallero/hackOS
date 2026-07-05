@@ -71,11 +71,13 @@ export function registerSecondaryEmailRoutes(app: FastifyInstance): void {
       const userId = req.userId as number;
       const email = req.body.email.trim().toLowerCase();
 
-      const { rows: selfRows } = await pool.query(`SELECT email FROM users WHERE id = $1`, [
-        userId,
-      ]);
+      const { rows: selfRows } = await pool.query(
+        `SELECT email, name, surname FROM users WHERE id = $1`,
+        [userId],
+      );
       if (!selfRows[0]) throw new NotFoundError("User not found");
-      if ((selfRows[0] as { email: string }).email === email) {
+      const self = selfRows[0] as { email: string; name: string | null; surname: string | null };
+      if (self.email === email) {
         throw new BadRequestError("Secondary email cannot equal your own primary email");
       }
       await assertSecondaryEmailAvailable(email, userId);
@@ -99,9 +101,8 @@ export function registerSecondaryEmailRoutes(app: FastifyInstance): void {
           [userId, email],
         );
         await enqueueAuthEmail(client, userId, "auth.verify", {
-          name: "",
-          // Link to the WEB app (a real page), not the API host. The page
-          // POSTs the token to /api/me/secondary-email/verify while signed in.
+          recipient: email,
+          name: self.name ?? "",
           verifyUrl: `${config.WEB_URL}/verify-secondary-email?token=${token}`,
         });
       });
@@ -197,11 +198,13 @@ export function registerSecondaryEmailRoutes(app: FastifyInstance): void {
       const targetId = req.params.userId;
       const email = req.body.email.trim().toLowerCase();
 
-      const { rows: target } = await pool.query(`SELECT email FROM users WHERE id = $1`, [
-        targetId,
-      ]);
+      const { rows: target } = await pool.query(
+        `SELECT email, name, surname FROM users WHERE id = $1`,
+        [targetId],
+      );
       if (!target[0]) throw new NotFoundError("User not found", { userId: targetId });
-      if ((target[0] as { email: string }).email === email) {
+      const tgt = target[0] as { email: string; name: string | null; surname: string | null };
+      if (tgt.email === email) {
         throw new BadRequestError("Secondary email cannot equal the user's primary email");
       }
       await assertSecondaryEmailAvailable(email, targetId);
@@ -223,7 +226,8 @@ export function registerSecondaryEmailRoutes(app: FastifyInstance): void {
           [targetId, email],
         );
         await enqueueAuthEmail(client, targetId, "auth.verify", {
-          name: "",
+          recipient: email,
+          name: tgt.name ?? "",
           verifyUrl: `${config.WEB_URL}/verify-secondary-email?token=${token}`,
         });
         await audit(client, {
