@@ -1,7 +1,14 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.0.0/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.5.2/schema.json",
   "files": {
-    "includes": ["**", "!**/dist", "!**/node_modules", "!plan"]
+    "includes": [
+      "**",
+      "!**/dist",
+      "!**/node_modules",
+      "!**/.next",
+      "!apps/web/src/components/ui",
+      "!plan"
+    ]
   },
   "formatter": {
     "enabled": true,
@@ -25,6 +32,11 @@
     "formatter": {
       "quoteStyle": "double",
       "trailingCommas": "all"
+    }
+  },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
     }
   }
 }

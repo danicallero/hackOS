@@ -7,7 +7,9 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "pnpm --filter @hackos/api dev",
+    "dev": "pnpm --parallel --filter @hackos/api --filter @hackos/web dev",
+    "dev:api": "pnpm --filter @hackos/api dev",
+    "dev:web": "pnpm --filter @hackos/web dev",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "lint": "biome check .",
