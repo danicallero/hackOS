@@ -4,3 +4,8 @@
 **/.env.local
 .git
 plan
+.claude/
+.turbo/
+coverage/
+*.tsbuildinfo
+apps/web/.next/

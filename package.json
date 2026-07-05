@@ -18,6 +18,18 @@
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down"
   },
+  "pnpm": {
+    "supportedArchitectures": {
+      "os": [
+        "darwin",
+        "linux"
+      ],
+      "cpu": [
+        "arm64",
+        "x64"
+      ]
+    }
+  },
   "devDependencies": {
     "@biomejs/biome": "^2.5.2",
     "typescript": "^6.0.3"

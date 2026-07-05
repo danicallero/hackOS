@@ -17,8 +17,12 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY packages ./packages
 COPY apps/api/package.json ./apps/api/
 RUN pnpm install --frozen-lockfile --filter @hackos/api...
-COPY apps/api ./apps/api
-RUN pnpm --filter @hackos/api build
+# Copy source (only what's needed for build — skip test/ and config files)
+COPY apps/api/src ./apps/api/src
+COPY apps/api/scripts ./apps/api/scripts
+COPY apps/api/tsup.config.ts ./apps/api/
+# Build with just tsup (skip tsc typecheck to save memory on constrained hosts)
+RUN pnpm --filter @hackos/api exec tsup
 # Copies the built package + only its production deps into /app, resolving
 # workspace deps to a flat, real node_modules that survives without the store.
 RUN pnpm --filter @hackos/api deploy --prod --legacy /app
