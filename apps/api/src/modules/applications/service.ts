@@ -1078,7 +1078,13 @@ async function enqueueDecisionEmailRow(
 
 export interface ResponseDetail {
   response: ResponseRow;
-  user: { name: string | null; email: string; shirt_size: string | null };
+  user: {
+    name: string | null;
+    email: string;
+    shirt_size: string | null;
+    food_intolerances: number[];
+    food_intolerance_notes: string | null;
+  };
   application: { id: number; name: string; type: ApplicationType; template: TemplateField[] };
   reviews: Array<{ author_id: number; score: number | null; notes: string | null }>;
   available_actions: string[];
@@ -1116,6 +1122,7 @@ function computeAvailableActions(status: string): string[] {
 export async function getResponseDetail(responseId: number): Promise<ResponseDetail> {
   const { rows } = await pool.query(
     `SELECT r.*, u.name, u.email, u.shirt_size,
+            u.food_intolerances, u.food_intolerance_notes,
             a.id AS app_id, a.name AS app_name, a.type AS app_type, a.template
      FROM application_responses r
      JOIN users u ON u.id = r.user_id
@@ -1124,7 +1131,18 @@ export async function getResponseDetail(responseId: number): Promise<ResponseDet
     [responseId],
   );
   if (!rows[0]) throw new NotFoundError("Response not found");
-  const { name, email, shirt_size, app_id, app_name, app_type, template, ...response } = rows[0];
+  const {
+    name,
+    email,
+    shirt_size,
+    food_intolerances,
+    food_intolerance_notes,
+    app_id,
+    app_name,
+    app_type,
+    template,
+    ...response
+  } = rows[0];
 
   const { rows: reviews } = await pool.query(
     `SELECT author_id, score, notes FROM applicant_reviews WHERE response_id = $1 ORDER BY author_id`,
@@ -1134,7 +1152,7 @@ export async function getResponseDetail(responseId: number): Promise<ResponseDet
   const enriched = await enrichTemplate(app_type, template);
   return {
     response,
-    user: { name, email, shirt_size },
+    user: { name, email, shirt_size, food_intolerances, food_intolerance_notes },
     application: {
       id: app_id,
       name: app_name,
