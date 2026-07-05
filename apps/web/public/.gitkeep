@@ -1,0 +1,2 @@
+# Keeps the Next.js public/ dir in git so the Docker build's COPY succeeds
+# even when there are no static assets yet. Drop real assets here as needed.
