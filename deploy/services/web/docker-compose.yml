@@ -1,0 +1,55 @@
+# hackOS · web — one standalone Dokploy service (Next.js frontend).
+#
+# The web frontend has its OWN Traefik router (${STACK_NAME}-web) and its OWN
+# domain (${WEB_DOMAIN}). It is NEVER served by, or routed together with, the
+# api service — deploy it separately. It joins ONLY the proxy (edge) network:
+# the browser talks to the api directly at NEXT_PUBLIC_API_URL, so the web tier
+# never needs the private datastore network.
+#
+# Add https://${WEB_DOMAIN} to the api's CORS_ORIGINS so credentialed requests
+# from the browser are allowed.
+#
+# NEXT_PUBLIC_API_URL is baked into the client bundle at build time; each
+# domain builds its own image (Dokploy build from source, or a prebuilt image
+# per instance).
+
+services:
+  web:
+    image: "${WEB_IMAGE_REPO:-hackos-web}:${IMAGE_TAG:-latest}"
+    build:
+      context: ../../..
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: "https://${API_DOMAIN}"
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    networks: [edge]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: "${WEB_MEM_LIMIT:-256m}"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${PROXY_NETWORK:-dokploy-network}"
+      - "traefik.http.routers.${STACK_NAME}-web.rule=Host(`${WEB_DOMAIN}`)"
+      - "traefik.http.routers.${STACK_NAME}-web.entrypoints=websecure"
+      - "traefik.http.routers.${STACK_NAME}-web.tls=true"
+      - "traefik.http.routers.${STACK_NAME}-web.tls.certresolver=${CERT_RESOLVER:-letsencrypt}"
+      - "traefik.http.routers.${STACK_NAME}-web.middlewares=${STACK_NAME}-web-sec@docker"
+      - "traefik.http.services.${STACK_NAME}-web.loadbalancer.server.port=3001"
+      - "traefik.http.middlewares.${STACK_NAME}-web-sec.headers.stsSeconds=31536000"
+      - "traefik.http.middlewares.${STACK_NAME}-web-sec.headers.stsIncludeSubdomains=true"
+      - "traefik.http.middlewares.${STACK_NAME}-web-sec.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.${STACK_NAME}-web-sec.headers.referrerPolicy=strict-origin-when-cross-origin"
+
+networks:
+  edge:
+    external: true
+    name: "${PROXY_NETWORK:-dokploy-network}"

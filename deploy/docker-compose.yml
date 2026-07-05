@@ -199,6 +199,41 @@ services:
       - "traefik.http.middlewares.${STACK_NAME}-sec.headers.frameDeny=true"
       - "traefik.http.middlewares.${STACK_NAME}-sec.headers.referrerPolicy=strict-origin-when-cross-origin"
 
+  # ── web frontend (Next.js, ingress via Traefik on its OWN router) ──────
+  # Separate service, separate domain, separate Traefik router
+  # (${STACK_NAME}-web). It is NEVER served by or routed with the api; the
+  # browser reaches the api directly at NEXT_PUBLIC_API_URL, so remember to add
+  # https://${WEB_DOMAIN} to the api's CORS_ORIGINS. Edge-only: the web tier
+  # never touches the private datastores.
+  web:
+    <<: *hardening
+    image: "${WEB_IMAGE_REPO:-hackos-web}:${IMAGE_TAG:-latest}"
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: "https://${API_DOMAIN}"
+    networks: [edge]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: "${WEB_MEM_LIMIT:-256m}"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${PROXY_NETWORK:-dokploy-network}"
+      - "traefik.http.routers.${STACK_NAME}-web.rule=Host(`${WEB_DOMAIN}`)"
+      - "traefik.http.routers.${STACK_NAME}-web.entrypoints=websecure"
+      - "traefik.http.routers.${STACK_NAME}-web.tls=true"
+      - "traefik.http.routers.${STACK_NAME}-web.tls.certresolver=${CERT_RESOLVER:-letsencrypt}"
+      - "traefik.http.routers.${STACK_NAME}-web.middlewares=${STACK_NAME}-sec@docker"
+      - "traefik.http.services.${STACK_NAME}-web.loadbalancer.server.port=3001"
+
   # ── BullMQ worker (no ingress; edge only for mail/push egress) ─────────
   worker:
     <<: *hardening

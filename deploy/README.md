@@ -73,13 +73,15 @@ with `deploy/scripts/gen-secrets.sh` and never reuse across instances.
 
 | Variable | Read by | Notes |
 |---|---|---|
-| `STACK_NAME` | api | Unique per instance; namespaces Traefik routers. Also use as the Dokploy project name / `-p`. |
+| `STACK_NAME` | api, web | Unique per instance; namespaces Traefik routers (`…-api`, `…-web`). Also use as the Dokploy project name / `-p`. |
 | `INSTANCE_NETWORK` | all | The private network name, e.g. `hackos-event2026-net`. Create it first (below). |
-| `PROXY_NETWORK` | api | Traefik network. Dokploy default `dokploy-network`. |
-| `API_DOMAIN` | api, worker | Public hostname. `worker` uses it only to build `BETTER_AUTH_URL`. |
-| `CORS_ORIGINS` | api | Comma-separated allowed browser origins. |
-| `CERT_RESOLVER` | api | Traefik ACME resolver name (default `letsencrypt`). |
-| `IMAGE_REPO`, `IMAGE_TAG` | api, worker | The built image. Ignored if Dokploy builds from source. |
+| `PROXY_NETWORK` | api, web | Traefik network. Dokploy default `dokploy-network`. |
+| `API_DOMAIN` | api, worker, web | API public hostname. `worker` uses it for `BETTER_AUTH_URL`; `web` bakes it into `NEXT_PUBLIC_API_URL` at build. |
+| `WEB_DOMAIN` | web | Frontend public hostname, **distinct from `API_DOMAIN`**. The web app has its OWN Traefik router (`${STACK_NAME}-web`) and is never served by the api. |
+| `CORS_ORIGINS` | api | Comma-separated allowed browser origins. **Must include `https://${WEB_DOMAIN}`** so the frontend's credentialed calls are allowed. |
+| `CERT_RESOLVER` | api, web | Traefik ACME resolver name (default `letsencrypt`). |
+| `IMAGE_REPO`, `IMAGE_TAG` | api, worker | The built api image. Ignored if Dokploy builds from source. |
+| `WEB_IMAGE_REPO`, `IMAGE_TAG` | web | The built web image. Ignored if Dokploy builds from source. |
 | `BETTER_AUTH_SECRET` 🔒 | api, worker | 32+ random bytes. |
 | `POSTGRES_USER` | postgres, api, worker | Also part of `DATABASE_URL`. |
 | `POSTGRES_PASSWORD` 🔒 | postgres, api, worker | Must match everywhere. |
