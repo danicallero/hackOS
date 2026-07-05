@@ -950,6 +950,56 @@ export async function reAccept(
   });
 }
 
+/**
+ * Revoke an already-sent acceptance — the "reject / decline spot" action that
+ * must work EVEN AFTER the participant has confirmed (M2). Moves accepted or
+ * confirmed → rejected: invalidates any pending confirmation token, frees the
+ * capacity slot, wipes now-orphaned sensitive data (H12) and notifies the
+ * applicant. A revoked spot is a normal `rejected` row, so it can later be
+ * re-accepted like any other. Admin operation (APPLICATIONS_DECIDE).
+ */
+export async function revokeSpot(actorId: number, responseId: number): Promise<ResponseRow> {
+  return withTransaction(async (client) => {
+    const resp = await lockResponse(client, responseId);
+    if (resp.status !== "accepted" && resp.status !== "confirmed") {
+      throw new ConflictError("Only accepted or confirmed spots can be revoked", {
+        status: resp.status,
+      });
+    }
+    const app = await requireApplication(client, resp.application_id);
+
+    if (resp.confirmation_token_id) {
+      await client.query(
+        `UPDATE email_verification_tokens SET used_at = now() WHERE id = $1 AND used_at IS NULL`,
+        [resp.confirmation_token_id],
+      );
+    }
+    const updated = await client.query(
+      `UPDATE application_responses
+       SET status = 'rejected', decision_sent_at = now(),
+           confirmation_token_id = NULL, confirmed_at = NULL, declined_at = NULL
+       WHERE id = $1 RETURNING *`,
+      [responseId],
+    );
+    // A confirmed applicant kept their sensitive data; revoking frees it (H12).
+    await wipeSensitiveDataIfOrphan(client, resp.user_id, responseId);
+
+    const user = await loadUserComms(client, resp.user_id);
+    await enqueueDecisionEmailRow(client, resp.user_id, user, app, "rejected", null);
+
+    await audit(client, {
+      actorId,
+      entityType: "application_response",
+      entityId: responseId,
+      action: "spot_revoked",
+      before: { status: resp.status },
+      after: { status: "rejected" },
+      reason: resp.status === "confirmed" ? "revoked after confirmation" : "revoked before confirm",
+    });
+    return updated.rows[0];
+  });
+}
+
 // ── decision pool (review dashboard) ─────────────────────────────────────────
 
 export interface DecisionPoolRow {
@@ -1015,36 +1065,77 @@ export async function getDecisionPool(applicationId: number): Promise<DecisionPo
 
 // ── batch operations ─────────────────────────────────────────────────────────
 
+export interface BatchResult {
+  processed: number;
+  // Per-id failures with their reason. Previously batches silently swallowed
+  // these (the "flaky batch" symptom): callers saw a count and couldn't tell
+  // which rows were skipped or why. Surfacing them makes batches observable.
+  skipped: Array<{ id: number; reason: string }>;
+}
+
+/**
+ * Run a per-response operation over a batch: deterministic id order, one row's
+ * failure never aborts the rest, and every skip is reported with its reason.
+ */
+async function runBatch(
+  responseIds: number[],
+  op: (id: number) => Promise<unknown>,
+): Promise<BatchResult> {
+  const sorted = [...responseIds].sort((a, b) => a - b);
+  let processed = 0;
+  const skipped: Array<{ id: number; reason: string }> = [];
+  for (const id of sorted) {
+    try {
+      await op(id);
+      processed++;
+    } catch (err) {
+      skipped.push({ id, reason: err instanceof Error ? err.message : "failed" });
+    }
+  }
+  return { processed, skipped };
+}
+
 export async function batchDecide(
   actorId: number,
   responseIds: number[],
   decision: "accepted" | "rejected",
-): Promise<{ processed: number }> {
-  let processed = 0;
-  const sorted = [...responseIds].sort((a, b) => a - b);
-  for (const id of sorted) {
-    try {
-      await decide(actorId, id, decision);
-      processed++;
-    } catch {
-      // skip individual failures so the rest proceed
-    }
-  }
-  return { processed };
+): Promise<BatchResult> {
+  return runBatch(responseIds, (id) => decide(actorId, id, decision));
+}
+
+/** Batch re-accept declined/rejected/expired responses (M2). */
+export async function batchReAccept(actorId: number, responseIds: number[]): Promise<BatchResult> {
+  return runBatch(responseIds, (id) => reAccept(actorId, id));
+}
+
+/** Batch revoke accepted/confirmed spots → rejected (M2). */
+export async function batchRevokeSpots(
+  actorId: number,
+  responseIds: number[],
+): Promise<BatchResult> {
+  return runBatch(responseIds, (id) => revokeSpot(actorId, id));
 }
 
 export async function batchSendDecisions(
   actorId: number,
   responseIds: number[],
-): Promise<{ sent: number; tokens: Array<{ responseId: number; token: string | null }> }> {
+): Promise<{
+  sent: number;
+  tokens: Array<{ responseId: number; token: string | null }>;
+  skipped: Array<{ id: number; reason: string }>;
+}> {
   const tokens: Array<{ responseId: number; token: string | null }> = [];
+  const skipped: Array<{ id: number; reason: string }> = [];
   const sorted = [...responseIds].sort((a, b) => a - b);
   for (const id of sorted) {
     try {
       const { rows } = await pool.query(`SELECT status FROM application_responses WHERE id = $1`, [
         id,
       ]);
-      if (!rows[0]) continue;
+      if (!rows[0]) {
+        skipped.push({ id, reason: "not found" });
+        continue;
+      }
       const status = rows[0].status;
       if (status === "accepted_internal" || status === "rejected_internal") {
         const result = await sendDecision(actorId, id);
@@ -1056,12 +1147,14 @@ export async function batchSendDecisions(
         // re-send a rejected decision: just re-enqueue the email
         await resendRejectedDecision(actorId, id);
         tokens.push({ responseId: id, token: null });
+      } else {
+        skipped.push({ id, reason: `nothing to send from status ${status}` });
       }
-    } catch {
-      // skip individual failures so the rest proceed
+    } catch (err) {
+      skipped.push({ id, reason: err instanceof Error ? err.message : "failed" });
     }
   }
-  return { sent: tokens.length, tokens };
+  return { sent: tokens.length, tokens, skipped };
 }
 
 async function resendRejectedDecision(actorId: number, responseId: number): Promise<void> {
@@ -1093,18 +1186,8 @@ export async function batchRevertDecisions(
   actorId: number,
   responseIds: number[],
   newDecision: "accepted" | "rejected" | "submitted",
-): Promise<{ processed: number }> {
-  let processed = 0;
-  const sorted = [...responseIds].sort((a, b) => a - b);
-  for (const id of sorted) {
-    try {
-      await revertDecision(actorId, id, newDecision);
-      processed++;
-    } catch {
-      // skip individual failures
-    }
-  }
-  return { processed };
+): Promise<BatchResult> {
+  return runBatch(responseIds, (id) => revertDecision(actorId, id, newDecision));
 }
 
 // ── confirm link retrieval (H15) ────────────────────────────────────────────
@@ -1532,6 +1615,52 @@ export async function expireDueConfirmations(): Promise<{ expired: number }> {
 export function maskStatus(status: string, _decisionSentAt: Date | null): string {
   if (status === "accepted_internal" || status === "rejected_internal") return "review";
   return status;
+}
+
+/**
+ * Staff-facing list of one user's application responses (M3.3 — the profile's
+ * Application tab). Unlike listMyResponses this keeps the REAL status (staff see
+ * accepted_internal/rejected_internal), and includes the sent flag so the UI can
+ * link straight into the review view for a modifiable, permission-guarded form.
+ */
+export async function listUserResponsesForStaff(userId: number): Promise<
+  Array<{
+    id: number;
+    application_id: number;
+    application_name: string;
+    application_type: ApplicationType;
+    status: string;
+    decision_sent: boolean;
+    submitted_at: Date | null;
+  }>
+> {
+  const { rows } = await pool.query(
+    `SELECT r.id, r.application_id, a.name AS application_name, a.type AS application_type,
+            r.status, r.decision_sent_at, r.submitted_at
+     FROM application_responses r
+     JOIN applications a ON a.id = r.application_id
+     WHERE r.user_id = $1 ORDER BY r.id DESC`,
+    [userId],
+  );
+  return rows.map(
+    (r: {
+      id: number;
+      application_id: number;
+      application_name: string;
+      application_type: ApplicationType;
+      status: string;
+      decision_sent_at: Date | null;
+      submitted_at: Date | null;
+    }) => ({
+      id: r.id,
+      application_id: r.application_id,
+      application_name: r.application_name,
+      application_type: r.application_type,
+      status: r.status,
+      decision_sent: r.decision_sent_at !== null,
+      submitted_at: r.submitted_at,
+    }),
+  );
 }
 
 export async function listMyResponses(userId: number): Promise<
