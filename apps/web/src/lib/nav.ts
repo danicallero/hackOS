@@ -57,7 +57,6 @@ export const NAV: NavSection[] = [
         href: "/applications",
         icon: ClipboardListIcon,
         anyCapability: [CAPABILITIES.APPLICATIONS_REVIEW, CAPABILITIES.APPLICATIONS_MANAGE],
-        soon: true,
       },
       {
         title: "Schedule",
@@ -78,7 +77,6 @@ export const NAV: NavSection[] = [
         href: "/enterprises",
         icon: HandshakeIcon,
         anyCapability: [CAPABILITIES.SPONSORS_MANAGE, CAPABILITIES.SPONSOR_PORTAL],
-        soon: true,
       },
     ],
   },

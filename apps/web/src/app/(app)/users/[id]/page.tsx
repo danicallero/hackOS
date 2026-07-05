@@ -353,6 +353,19 @@ function ReadOnlyOverview({
       bodyClassName="space-y-4"
     >
       <dl className="space-y-4">
+        <Field
+          label="Secondary email"
+          value={
+            user.secondaryEmail ? (
+              <span className="inline-flex items-center gap-2">
+                {user.secondaryEmail}
+                <StatusBadge tone={user.secondaryEmailVerified ? "success" : "warning"} dot={false}>
+                  {user.secondaryEmailVerified ? "Verified" : "Pending"}
+                </StatusBadge>
+              </span>
+            ) : null
+          }
+        />
         <Field label="Phone" value={user.phone} />
         <Field label="Language" value={LANG_LABEL[user.language] ?? user.language} />
         <Field label="Shirt size" value={user.shirtSize} />
@@ -815,7 +828,239 @@ function PresenceTab({ userId }: { userId: number }) {
   );
 }
 
-// ── Activity (H53 audit, capability audit:read) ──────────────────────────────
+// ── Activity ─────────────────────────────────────────────────────────────────
+// Two distinct things live here: the user's *physical* history (activity/meal
+// passes, badge check-ins, door in/out scans — H24-H26) from
+// GET /api/users/:id/activity (USERS_READ, always available on this page), and
+// the *audit log* of record changes (H53) from GET /api/audit (AUDIT_READ).
+
+interface ActivityPass {
+  id: number;
+  activityName: string;
+  category: string;
+  loggedAt: string;
+  notes: string | null;
+}
+interface CheckInRow {
+  id: number;
+  badgeId: string | null;
+  method: string;
+  checkedInAt: string;
+}
+interface DoorScanRow {
+  id: number;
+  kind: string;
+  location: string | null;
+  scannedAt: string;
+}
+interface UserActivity {
+  passes: ActivityPass[];
+  checkIns: CheckInRow[];
+  doorScans: DoorScanRow[];
+}
+
+function ActivityTab({ userId }: { userId: number }) {
+  return (
+    <div className="space-y-6">
+      <PhysicalActivity userId={userId} />
+      <AuditLogSection userId={userId} />
+    </div>
+  );
+}
+
+/** Physical passes/check-ins/door scans (H24-H26), gated only by USERS_READ. */
+function PhysicalActivity({ userId }: { userId: number }) {
+  const [data, setData] = useState<UserActivity | null>(null);
+  const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+
+  useEffect(() => {
+    let cancelled = false;
+    setState("loading");
+    api
+      .get<UserActivity>(`/api/users/${userId}/activity`)
+      .then((r) => {
+        if (cancelled) return;
+        setData(r);
+        setState("ready");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setState("error");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  if (state === "loading") {
+    return (
+      <div className="flex justify-center py-12">
+        <Spinner className="size-5" />
+      </div>
+    );
+  }
+  if (state === "error" || !data) {
+    return (
+      <EmptyState
+        icon={ClipboardListIcon}
+        title="Could not load activity"
+        description="This user's passes, check-ins and scans are unavailable right now."
+      />
+    );
+  }
+
+  const passColumns: Column<ActivityPass>[] = [
+    {
+      id: "activity",
+      header: "Activity",
+      cell: (p) => <span className="text-sm">{p.activityName}</span>,
+    },
+    {
+      id: "type",
+      header: "Type",
+      cell: (p) => (
+        <StatusBadge tone={p.category === "meal" ? "success" : "info"} dot={false}>
+          {p.category === "meal" ? "Meal" : "Workshop"}
+        </StatusBadge>
+      ),
+    },
+    {
+      id: "when",
+      header: "When",
+      sortValue: (p) => p.loggedAt,
+      cell: (p) => <span className="text-sm">{timeFmt.format(new Date(p.loggedAt))}</span>,
+    },
+    {
+      id: "notes",
+      header: "Notes",
+      cell: (p) =>
+        p.notes ? (
+          <span className="text-sm">{p.notes}</span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
+    },
+  ];
+
+  const checkInColumns: Column<CheckInRow>[] = [
+    {
+      id: "badge",
+      header: "Badge",
+      cell: (c) =>
+        c.badgeId ? (
+          <span className="font-mono text-xs">{c.badgeId}</span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
+    },
+    {
+      id: "method",
+      header: "Method",
+      cell: (c) => (
+        <Badge variant="outline" className="capitalize">
+          {c.method}
+        </Badge>
+      ),
+    },
+    {
+      id: "when",
+      header: "When",
+      sortValue: (c) => c.checkedInAt,
+      cell: (c) => <span className="text-sm">{timeFmt.format(new Date(c.checkedInAt))}</span>,
+    },
+  ];
+
+  const doorScanColumns: Column<DoorScanRow>[] = [
+    {
+      id: "kind",
+      header: "Direction",
+      cell: (d) => (
+        <StatusBadge tone={d.kind === "in" ? "success" : "neutral"} dot={false}>
+          {d.kind === "in" ? "In" : "Out"}
+        </StatusBadge>
+      ),
+    },
+    {
+      id: "location",
+      header: "Location",
+      cell: (d) =>
+        d.location ? (
+          <span className="text-sm">{d.location}</span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
+    },
+    {
+      id: "when",
+      header: "When",
+      sortValue: (d) => d.scannedAt,
+      cell: (d) => <span className="text-sm">{timeFmt.format(new Date(d.scannedAt))}</span>,
+    },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <SectionCard
+        icon={ClipboardListIcon}
+        title="Activity passes"
+        description="Food and workshop passes logged from activity scans (H25)."
+        bodyClassName="p-0"
+      >
+        <DataTable
+          columns={passColumns}
+          data={data.passes}
+          getRowId={(p) => String(p.id)}
+          pageSize={10}
+          empty={{
+            icon: ClipboardListIcon,
+            title: "No passes yet",
+            description: "Meal and workshop passes will appear here as they're scanned.",
+          }}
+        />
+      </SectionCard>
+
+      <SectionCard
+        icon={UserIcon}
+        title="Check-ins"
+        description="Badge check-ins recorded at the venue (H26)."
+        bodyClassName="p-0"
+      >
+        <DataTable
+          columns={checkInColumns}
+          data={data.checkIns}
+          getRowId={(c) => String(c.id)}
+          pageSize={10}
+          empty={{
+            icon: UserIcon,
+            title: "No check-ins yet",
+            description: "This user hasn't been checked in yet.",
+          }}
+        />
+      </SectionCard>
+
+      <SectionCard
+        icon={ClockIcon}
+        title="Door scans"
+        description="In/out scans at the venue doors (H24)."
+        bodyClassName="p-0"
+      >
+        <DataTable
+          columns={doorScanColumns}
+          data={data.doorScans}
+          getRowId={(d) => String(d.id)}
+          pageSize={10}
+          empty={{
+            icon: ClockIcon,
+            title: "No door scans yet",
+            description: "Entry and exit scans will appear here.",
+          }}
+        />
+      </SectionCard>
+    </div>
+  );
+}
+
+// ── Audit log (H53, capability audit:read) ───────────────────────────────────
 
 interface AuditRow {
   id: number;
@@ -827,7 +1072,7 @@ interface AuditRow {
   created_at: string;
 }
 
-function ActivityTab({ userId }: { userId: number }) {
+function AuditLogSection({ userId }: { userId: number }) {
   const canAudit = useCan(CAPABILITIES.AUDIT_READ);
   const [items, setItems] = useState<AuditRow[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "forbidden" | "error">("loading");
@@ -862,8 +1107,8 @@ function ActivityTab({ userId }: { userId: number }) {
     return (
       <EmptyState
         icon={FileTextIcon}
-        title="Activity unavailable"
-        description="You need the audit:read capability to view this user's activity log."
+        title="Audit log unavailable"
+        description="You need the audit:read capability to view this user's audit log."
       />
     );
   }
@@ -878,7 +1123,7 @@ function ActivityTab({ userId }: { userId: number }) {
     return (
       <EmptyState
         icon={FileTextIcon}
-        title="Could not load activity"
+        title="Could not load audit log"
         description="The audit log is unavailable right now."
       />
     );
@@ -920,16 +1165,23 @@ function ActivityTab({ userId }: { userId: number }) {
   ];
 
   return (
-    <DataTable
-      columns={columns}
-      data={items}
-      getRowId={(r) => String(r.id)}
-      pageSize={15}
-      empty={{
-        icon: FileTextIcon,
-        title: "No activity yet",
-        description: "Staff edits and other audited changes to this user will appear here.",
-      }}
-    />
+    <SectionCard
+      icon={FileTextIcon}
+      title="Audit log"
+      description="Staff edits and other audited changes to this user's record (H53)."
+      bodyClassName="p-0"
+    >
+      <DataTable
+        columns={columns}
+        data={items}
+        getRowId={(r) => String(r.id)}
+        pageSize={15}
+        empty={{
+          icon: FileTextIcon,
+          title: "No audit entries yet",
+          description: "Staff edits and other audited changes to this user will appear here.",
+        }}
+      />
+    </SectionCard>
   );
 }

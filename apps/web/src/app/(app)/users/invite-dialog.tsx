@@ -137,7 +137,17 @@ export function InviteUserDialog() {
           </div>
           <div className="space-y-2">
             <Label>Account type</Label>
-            <Select value={kind} onValueChange={(v) => setKind(v as InviteKind)}>
+            <Select
+              value={kind}
+              onValueChange={(v) => {
+                const next = v as InviteKind;
+                setKind(next);
+                // Only staff accounts carry capability groups (H8). Clear any
+                // stale selection when switching to sponsor/participant so a
+                // hidden, previously-picked group isn't sent on submit.
+                if (next !== "staff") setGroupIds([]);
+              }}
+            >
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
@@ -168,21 +178,27 @@ export function InviteUserDialog() {
               </p>
             </div>
           )}
-          <div className="space-y-2">
-            <Label>Capability groups</Label>
-            <MultiSelect
-              inDialog
-              options={groups.map((g) => ({ value: String(g.id), label: g.name }))}
-              value={groupIds}
-              onChange={setGroupIds}
-              placeholder="Optional — pre-assign permission groups"
-              searchPlaceholder="Search groups…"
-              emptyText="No permission groups yet."
-            />
-            <p className="text-muted-foreground text-xs">
-              The account holds these permissions the moment they join.
-            </p>
-          </div>
+          {/* Capability groups are staff-only (H8): sponsors control just their
+              own enterprise/challenge through the sponsors→enterprise ownership
+              link created on accept, not via capabilities; participants need no
+              staff capabilities. groupIds is still POSTed (empty []) for them. */}
+          {kind === "staff" && (
+            <div className="space-y-2">
+              <Label>Capability groups</Label>
+              <MultiSelect
+                inDialog
+                options={groups.map((g) => ({ value: String(g.id), label: g.name }))}
+                value={groupIds}
+                onChange={setGroupIds}
+                placeholder="Optional — pre-assign permission groups"
+                searchPlaceholder="Search groups…"
+                emptyText="No permission groups yet."
+              />
+              <p className="text-muted-foreground text-xs">
+                The account holds these permissions the moment they join.
+              </p>
+            </div>
+          )}
         </div>
       )}
     </Modal>
