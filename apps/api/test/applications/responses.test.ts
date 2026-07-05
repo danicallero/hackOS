@@ -134,6 +134,35 @@ describe("application responses (H12)", () => {
     expect(sensitive.shirt_size).toBe("L");
   });
 
+  it("M1: mirrors a DNI form answer onto users.dni (case-insensitive key)", async () => {
+    const a = await getApp();
+    const appId = await createApplication({
+      type: "participant",
+      template: [
+        {
+          key: "DNI",
+          label: { en: "National ID", es: "DNI", gl: "DNI" },
+          kind: "text",
+          required: true,
+        },
+      ],
+    });
+    const user = await createUser({ emailVerified: true });
+    await saveDraft(a, appId, user, { DNI: "12345678Z" });
+
+    const res = await a.inject({
+      method: "POST",
+      url: `/api/applications/${appId}/response/submit`,
+      headers: asUser(user),
+      payload: { food_intolerances: [], shirt_size: "M" },
+    });
+    expect(res.statusCode).toBe(200);
+
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows } = await pool.query(`SELECT dni FROM users WHERE id = $1`, [user]);
+    expect(rows[0].dni).toBe("12345678Z");
+  });
+
   it("rejects editing a draft after it has been submitted", async () => {
     const a = await getApp();
     const appId = await createApplication({ type: "sponsor" });

@@ -68,6 +68,10 @@ describe("H6 secondary email", () => {
       [userId],
     );
     expect(outbox).toHaveLength(1);
+    // H6 regression: the verification email must be addressed to the NEW
+    // secondary address, never the user's primary (payload.recipient overrides
+    // users.email in the email channel adapter).
+    expect(outbox[0].payload.recipient).toBe("devpost-me@example.com");
 
     const token = await latestToken(userId);
     const verify = await a.inject({

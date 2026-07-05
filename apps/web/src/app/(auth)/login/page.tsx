@@ -2,7 +2,8 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { PasswordInput } from "@/components/common/password-input";
@@ -28,8 +29,16 @@ const schema = z.object({
 
 type Values = z.infer<typeof schema>;
 
-export default function LoginPage() {
+/** Only allow same-origin relative paths as a post-login destination — never
+ * an absolute URL or protocol-relative `//host` (open-redirect guard). */
+function safeNext(next: string | null): string {
+  if (next && next.startsWith("/") && !next.startsWith("//")) return next;
+  return "/dashboard";
+}
+
+function LoginInner() {
   const router = useRouter();
+  const next = safeNext(useSearchParams().get("next"));
   const { refresh } = useSessionContext();
   const form = useForm<Values>({
     resolver: zodResolver(schema),
@@ -50,7 +59,8 @@ export default function LoginPage() {
       return;
     }
     await refresh();
-    router.push("/dashboard");
+    // M1.1: honour ?next (e.g. an invited participant sent to /my-applications).
+    router.push(next);
   }
 
   const emailValue = form.watch("email");
@@ -119,5 +129,13 @@ export default function LoginPage() {
         </Link>
       </div>
     </Card>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginInner />
+    </Suspense>
   );
 }

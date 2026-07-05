@@ -100,11 +100,21 @@ export function registerSecondaryEmailRoutes(app: FastifyInstance): void {
           `UPDATE users SET secondary_email = $2, secondary_email_verified_at = NULL WHERE id = $1`,
           [userId, email],
         );
-        await enqueueAuthEmail(client, userId, "auth.verify", {
-          recipient: email,
-          name: self.name ?? "",
-          verifyUrl: `${config.WEB_URL}/verify-secondary-email?token=${token}`,
-        });
+        await enqueueAuthEmail(
+          client,
+          userId,
+          "auth.verify",
+          {
+            name: "",
+            // Link to the WEB app (a real page), not the API host. The page
+            // POSTs the token to /api/me/secondary-email/verify while signed in.
+            verifyUrl: `${config.WEB_URL}/verify-secondary-email?token=${token}`,
+          },
+          // H6: the verification MUST reach the newly added secondary address,
+          // not the user's primary email (without this override the email
+          // channel falls back to users.email — the reported bug).
+          { recipient: email },
+        );
       });
       return { status: true as const };
     },

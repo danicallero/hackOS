@@ -15,10 +15,18 @@ export async function enqueueAuthEmail(
   userId: number,
   template: string,
   vars: Record<string, unknown>,
+  // `recipient` overrides users.email in the email channel adapter — required
+  // whenever the email must go somewhere other than the primary address, e.g.
+  // a secondary-email verification (H6) that must reach the NEW address, never
+  // the primary one. `language` overrides users.language when known.
+  opts: { recipient?: string; language?: string } = {},
 ): Promise<void> {
+  const payload: Record<string, unknown> = { template, vars };
+  if (opts.recipient) payload.recipient = opts.recipient;
+  if (opts.language) payload.language = opts.language;
   await db.query(
     `INSERT INTO notification_outbox (user_id, category, channel, payload)
      VALUES ($1, 'auth', 'email', $2::jsonb)`,
-    [userId, JSON.stringify({ template, vars })],
+    [userId, JSON.stringify(payload)],
   );
 }

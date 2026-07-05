@@ -81,6 +81,19 @@ function isEmpty(value: unknown): boolean {
 }
 
 /**
+ * Pull the national-ID answer out of a response object regardless of the exact
+ * key casing the form template used ("dni", "DNI", "Dni"…). Returns a trimmed
+ * string, or null when absent/blank so a COALESCE keeps the prior value.
+ */
+export function extractDni(responses: Record<string, unknown>): string | null {
+  for (const [key, value] of Object.entries(responses)) {
+    if (key.toLowerCase() !== "dni") continue;
+    if (typeof value === "string" && value.trim() !== "") return value.trim();
+  }
+  return null;
+}
+
+/**
  * Validate a response object against the form template. Required fields are
  * only enforced here (called at submit, never while drafting — H12). Also
  * type-checks each provided value against its field kind.
@@ -455,6 +468,12 @@ export async function submitResponse(
         null;
     }
 
+    // If the form carries a national-ID question (key "dni", any case), mirror
+    // its answer onto users.dni — a first-class identity field, like shirt size
+    // and food intolerances above (M1: the "DNI" sync; "DNA" in the brief was a
+    // typo for DNI). Only non-empty string answers overwrite an existing value.
+    const dni = extractDni(merged);
+
     const enrichedTemplate = await enrichTemplate(app.type, app.template);
     validateResponses(enrichedTemplate, merged);
 
@@ -463,9 +482,10 @@ export async function submitResponse(
       `UPDATE users
        SET food_intolerances = $2,
            food_intolerance_notes = $3,
-           shirt_size = COALESCE($4, shirt_size)
+           shirt_size = COALESCE($4, shirt_size),
+           dni = COALESCE($5, dni)
        WHERE id = $1`,
-      [userId, foodIntolerances, foodNotes, shirtSize ?? null],
+      [userId, foodIntolerances, foodNotes, shirtSize ?? null, dni],
     );
 
     const updated = await client.query(

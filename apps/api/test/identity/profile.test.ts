@@ -325,4 +325,176 @@ describe("staff user routes (H7)", () => {
     });
     expect(res.statusCode).toBe(404);
   });
+
+  it("PATCH /api/users/:id/email — USERS_WRITE updates primary email, rejects collisions, audited (M5.1)", async () => {
+    const a = await getApp();
+    const editor = await createUserWithCapabilities([CAPABILITIES.USERS_WRITE]);
+    const reader = await createUserWithCapabilities([CAPABILITIES.USERS_READ]);
+    const target = await createUser({ email: "old@example.test" });
+    const other = await createUser({ email: "taken@example.test" });
+
+    // Needs USERS_WRITE.
+    expect(
+      (
+        await a.inject({
+          method: "PATCH",
+          url: `/api/users/${target}/email`,
+          headers: asUser(reader),
+          payload: { email: "new@example.test" },
+        })
+      ).statusCode,
+    ).toBe(403);
+
+    // Can't take another account's primary email.
+    expect(
+      (
+        await a.inject({
+          method: "PATCH",
+          url: `/api/users/${target}/email`,
+          headers: asUser(editor),
+          payload: { email: "taken@example.test" },
+        })
+      ).statusCode,
+    ).toBe(409);
+
+    // Happy path: updates the column (lower-cased) and marks it verified.
+    const ok = await a.inject({
+      method: "PATCH",
+      url: `/api/users/${target}/email`,
+      headers: asUser(editor),
+      payload: { email: "New@Example.test" },
+    });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json().email).toBe("new@example.test");
+    expect(ok.json().emailVerified).toBe(true);
+
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows } = await pool.query(
+      `SELECT before, after FROM audit_log
+         WHERE entity_type = 'user' AND entity_id = $1 AND action = 'primary_email_changed'`,
+      [String(target)],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].before.email).toBe("old@example.test");
+    expect(rows[0].after.email).toBe("new@example.test");
+    void other;
+  });
+
+  it("M1.5: locks own name/surname once an application is accepted; staff can still fix it", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const user = await createUser({ name: "Ada" });
+    const editor = await createUserWithCapabilities([CAPABILITIES.USERS_WRITE]);
+
+    const { rows: appRows } = await pool.query(
+      `INSERT INTO applications (name, type, template, description, active, confirmation_window_hours)
+       VALUES ('F', 'participant', '[]'::jsonb, '', true, 168) RETURNING id`,
+    );
+    const appId = appRows[0].id;
+
+    // While still in review, the participant may edit their own name.
+    await pool.query(
+      `INSERT INTO application_responses (user_id, application_id, status, responses)
+       VALUES ($1, $2, 'review', '{}'::jsonb)`,
+      [user, appId],
+    );
+    expect(
+      (
+        await a.inject({
+          method: "PATCH",
+          url: "/api/me",
+          headers: asUser(user),
+          payload: { name: "Ada Lovelace" },
+        })
+      ).statusCode,
+    ).toBe(200);
+
+    // Once accepted, self-edits of name/surname are locked (409 name_locked)…
+    await pool.query(`UPDATE application_responses SET status = 'accepted' WHERE user_id = $1`, [
+      user,
+    ]);
+    const locked = await a.inject({
+      method: "PATCH",
+      url: "/api/me",
+      headers: asUser(user),
+      payload: { surname: "Byron" },
+    });
+    expect(locked.statusCode).toBe(409);
+    expect(locked.json().error.details.code).toBe("name_locked");
+
+    // …but non-name fields still work, and staff can still change the name.
+    expect(
+      (
+        await a.inject({
+          method: "PATCH",
+          url: "/api/me",
+          headers: asUser(user),
+          payload: { phone: "555" },
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await a.inject({
+          method: "PATCH",
+          url: `/api/users/${user}`,
+          headers: asUser(editor),
+          payload: { surname: "Byron" },
+        })
+      ).statusCode,
+    ).toBe(200);
+  });
+
+  it("POST /api/users/:id/anonymize — scrubs PII, revokes access, blocks self, ADMIN_ALL (M5.3/H54)", async () => {
+    const a = await getApp();
+    const admin = await createUserWithCapabilities(["*"]);
+    const staff = await createUserWithCapabilities([CAPABILITIES.USERS_WRITE]);
+    const target = await createUser({ name: "Real Person", email: "person@example.test" });
+
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `UPDATE users SET surname = 'Doe', phone = '555', dni = '00000000T' WHERE id = $1`,
+      [target],
+    );
+
+    // USERS_WRITE isn't enough — needs ADMIN_ALL.
+    expect(
+      (
+        await a.inject({
+          method: "POST",
+          url: `/api/users/${target}/anonymize`,
+          headers: asUser(staff),
+        })
+      ).statusCode,
+    ).toBe(403);
+    // Can't anonymize yourself.
+    expect(
+      (
+        await a.inject({
+          method: "POST",
+          url: `/api/users/${admin}/anonymize`,
+          headers: asUser(admin),
+        })
+      ).statusCode,
+    ).toBe(400);
+
+    const ok = await a.inject({
+      method: "POST",
+      url: `/api/users/${target}/anonymize`,
+      headers: asUser(admin),
+    });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json().anonymized).toBe(true);
+
+    const { rows } = await pool.query(
+      `SELECT email, name, surname, phone, dni, email_verified FROM users WHERE id = $1`,
+      [target],
+    );
+    expect(rows[0].email).toBe(`anonymized+${target}@deleted.invalid`);
+    expect(rows[0].name).toBe("Anonymized");
+    expect(rows[0].surname).toBeNull();
+    expect(rows[0].phone).toBeNull();
+    expect(rows[0].dni).toBeNull();
+    expect(rows[0].email_verified).toBe(false);
+  });
 });
