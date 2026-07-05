@@ -7,7 +7,8 @@
 #   node dist/migrate.js   one-shot migrations (advisory-locked; exits 0)
 
 FROM node:22-alpine AS base
-RUN corepack enable pnpm
+# Pre-install pnpm to avoid corepack's lazy download on every build
+RUN corepack enable && corepack install --global pnpm@10.19.0 && pnpm --version
 WORKDIR /repo
 
 # ── build: install all deps, compile to dist/, then produce a self-contained
@@ -16,7 +17,11 @@ FROM base AS build
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY packages ./packages
 COPY apps/api/package.json ./apps/api/
-RUN pnpm install --frozen-lockfile --filter @hackos/api...
+# Cache pnpm store across builds — avoids re-downloading all packages each time.
+# Dokploy runs on a single-architecture host (arm64), so a plain cache ID is fine.
+ENV PNPM_HOME=/root/.local/share/pnpm
+RUN --mount=type=cache,id=pnpm-store,target=${PNPM_HOME}/store/v10 \
+    pnpm install --frozen-lockfile --filter @hackos/api...
 COPY apps/api/tsup.config.ts ./apps/api/
 # Copy source + SQL migrations (migrate.ts reads db/migrations/ at runtime)
 COPY apps/api/src ./apps/api/src
