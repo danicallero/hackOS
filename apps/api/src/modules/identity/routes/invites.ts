@@ -58,6 +58,7 @@ interface TokenRow {
   used_at: Date | null;
   kind: string | null;
   group_ids: number[];
+  created_at: Date;
 }
 
 function claimUrl(token: string): string {
@@ -168,6 +169,48 @@ export function registerInviteRoutes(app: FastifyInstance): void {
         usedAt: null,
         token,
       });
+    },
+  );
+
+  // ── list active invites (H9/H10 — admin overview) ────────────────────────
+
+  api.get(
+    "/api/invites",
+    {
+      preHandler: manage,
+      schema: {
+        response: {
+          200: z.array(
+            z.object({
+              id: z.number(),
+              email: z.string(),
+              kind: inviteKind,
+              enterpriseId: z.number().nullable(),
+              groupIds: z.array(z.number()),
+              expiresAt: z.string(),
+              createdAt: z.string(),
+            }),
+          ),
+        },
+      },
+    },
+    async () => {
+      const { rows } = await pool.query(
+        `SELECT * FROM email_verification_tokens
+         WHERE type IN ('sponsor_invite', 'account_claim')
+           AND used_at IS NULL
+           AND expires_at > now()
+         ORDER BY created_at DESC`,
+      );
+      return rows.map((row: TokenRow) => ({
+        id: row.id,
+        email: row.email,
+        kind: (row.kind ?? "staff") as z.infer<typeof inviteKind>,
+        enterpriseId: row.enterprise_id,
+        groupIds: row.group_ids,
+        expiresAt: row.expires_at.toISOString(),
+        createdAt: row.created_at.toISOString(),
+      }));
     },
   );
 

@@ -8,6 +8,7 @@ import { scheduleExpirer } from "./expirer.js";
 import { registerMeRoutes } from "./me.routes.js";
 import { registerReviewRoutes } from "./review.routes.js";
 import { registerStatsRoutes } from "./stats.routes.js";
+import { registerUploadRoutes } from "./upload.routes.js";
 
 /**
  * WS-A2: inscripción / applications (H11-H15, H27). Routes plus the spot
@@ -20,6 +21,7 @@ export async function registerApplicationsModule(app: FastifyInstance): Promise<
   registerMeRoutes(app);
   registerReviewRoutes(app);
   registerConfirmRoutes(app);
+  registerUploadRoutes(app);
   registerStatsRoutes(app);
 
   await scheduleExpirer();

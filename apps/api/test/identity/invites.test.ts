@@ -159,6 +159,115 @@ describe("H10 invite creation", () => {
   });
 });
 
+describe("GET /api/invites — list active invites", () => {
+  it("requires INVITES_MANAGE", async () => {
+    const a = await getApp();
+    const pleb = await createUser();
+    const res = await a.inject({
+      method: "GET",
+      url: "/api/invites",
+      headers: asUser(pleb),
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("returns only active (unused + not expired) invites", async () => {
+    const a = await getApp();
+    const actor = await inviter();
+    const { pool } = await import("../../src/db/pool.js");
+
+    // active staff invite
+    await createInvite(a, actor, { email: "active@example.com", kind: "staff" });
+    // expired invite
+    const expired = await createInvite(a, actor, {
+      email: "expired@example.com",
+      kind: "participant",
+    });
+    await pool.query(
+      `UPDATE email_verification_tokens SET expires_at = now() - interval '1 hour' WHERE id = $1`,
+      [expired.id],
+    );
+    // used invite
+    const used = await createInvite(a, actor, { email: "used@example.com", kind: "staff" });
+    await pool.query(`UPDATE email_verification_tokens SET used_at = now() WHERE id = $1`, [
+      used.id,
+    ]);
+    // active sponsor invite
+    const entId = await createEnterprise("ListCo");
+    await createInvite(a, actor, {
+      email: "sponsor@example.com",
+      kind: "sponsor",
+      enterpriseId: entId,
+    });
+
+    const res = await a.inject({
+      method: "GET",
+      url: "/api/invites",
+      headers: asUser(actor),
+    });
+    expect(res.statusCode).toBe(200);
+    const invites = res.json();
+    expect(invites).toHaveLength(2);
+    expect(invites.map((i: { email: string }) => i.email).sort()).toEqual([
+      "active@example.com",
+      "sponsor@example.com",
+    ]);
+  });
+
+  it("lists fields correctly including enterpriseId and groupIds", async () => {
+    const a = await getApp();
+    const actor = await inviter();
+    const entId = await createEnterprise("DetailCo");
+
+    const created = await createInvite(a, actor, {
+      email: "detail@example.com",
+      kind: "sponsor",
+      enterpriseId: entId,
+      groupIds: [],
+    });
+
+    const res = await a.inject({
+      method: "GET",
+      url: "/api/invites",
+      headers: asUser(actor),
+    });
+    expect(res.statusCode).toBe(200);
+    const invites = res.json();
+    expect(invites).toHaveLength(1);
+    const invite = invites[0];
+    expect(invite.id).toBe(created.id);
+    expect(invite.email).toBe("detail@example.com");
+    expect(invite.kind).toBe("sponsor");
+    expect(invite.enterpriseId).toBe(entId);
+    expect(invite.groupIds).toEqual([]);
+    expect(invite.expiresAt).toBeDefined();
+    expect(invite.createdAt).toBeDefined();
+    expect(typeof invite.expiresAt).toBe("string");
+    expect(typeof invite.createdAt).toBe("string");
+  });
+
+  it("returns empty array when no active invites exist", async () => {
+    const a = await getApp();
+    const actor = await inviter();
+    const { pool } = await import("../../src/db/pool.js");
+
+    // only expired
+    const inv = await createInvite(a, actor, { email: "old@example.com", kind: "staff" });
+    await pool.query(
+      `UPDATE email_verification_tokens SET expires_at = now() - interval '1 hour' WHERE id = $1`,
+      [inv.id],
+    );
+
+    const res = await a.inject({
+      method: "GET",
+      url: "/api/invites",
+      headers: asUser(actor),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([]);
+  });
+});
+
 describe("H9/H10 invite acceptance", () => {
   it("staff acceptance creates a verified Better Auth account the person can sign in with", async () => {
     const a = await getApp();

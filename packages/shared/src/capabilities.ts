@@ -22,6 +22,7 @@ export const CAPABILITIES = {
   APPLICATIONS_REVIEW: "applications:review", // read + score submitted responses
   APPLICATIONS_DECIDE: "applications:decide", // accept/reject, send decisions
   APPLICATIONS_CONFIRM_OVERRIDE: "applications:confirm-override", // admin confirm/decline override (H15)
+  APPLICATIONS_EDIT_RESPONSE: "applications:edit-response", // edit any response's form data
 
   // projects / devpost (H16-H17, H21)
   PROJECTS_READ: "projects:read",

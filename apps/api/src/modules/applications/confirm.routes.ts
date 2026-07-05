@@ -4,7 +4,12 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { confirmTokenSchema, responseIdParamSchema } from "./schemas.js";
-import { confirmByResponseId, confirmByToken, declineByResponseId } from "./service.js";
+import {
+  confirmByResponseId,
+  confirmByToken,
+  declineByResponseId,
+  declineByToken,
+} from "./service.js";
 
 /**
  * H15: confirm/decline a spot via three audited routes —
@@ -28,6 +33,20 @@ export function registerConfirmRoutes(app: FastifyInstance): void {
         status: res.status,
         already_confirmed: res.alreadyConfirmed,
         ticket_token: res.ticketToken,
+      };
+    },
+  );
+
+  // ── public decline via email link ──────────────────────────────────────────
+  r.post(
+    "/api/applications/decline",
+    { preHandler: idempotencyGuard, schema: { body: confirmTokenSchema } },
+    async (req) => {
+      const res = await declineByToken(req.body.token);
+      return {
+        status: res.status,
+        already_declined: res.alreadyDeclined,
+        sensitive_wiped: res.wiped,
       };
     },
   );

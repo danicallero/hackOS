@@ -4,7 +4,13 @@ import { pool } from "../../db/pool.js";
 import { requireAuth } from "../../lib/capabilities.js";
 import { NotFoundError } from "../../lib/errors.js";
 import { idParamSchema, saveDraftSchema, submitSchema } from "./schemas.js";
-import { listMyResponses, maskStatus, saveDraft, submitResponse } from "./service.js";
+import {
+  enrichTemplate,
+  listMyResponses,
+  maskStatus,
+  saveDraft,
+  submitResponse,
+} from "./service.js";
 
 /**
  * H12 (authenticated): fill in a form, save a draft, submit, and check status.
@@ -25,12 +31,26 @@ export function registerMeRoutes(app: FastifyInstance): void {
     { preHandler: requireAuth, schema: { params: idParamSchema } },
     async (req) => {
       const { rows } = await pool.query(
-        `SELECT * FROM application_responses WHERE user_id = $1 AND application_id = $2`,
+        `SELECT a.template, a.type, r.* FROM application_responses r
+         JOIN applications a ON a.id = r.application_id
+         WHERE r.user_id = $1 AND r.application_id = $2`,
         [req.userId, req.params.id],
       );
       if (!rows[0]) throw new NotFoundError("No response yet for this application");
-      const row = rows[0];
-      return { ...row, status: maskStatus(row.status, row.decision_sent_at) };
+      const { template, type, ...row } = rows[0];
+      const enriched = await enrichTemplate(type, template);
+      const { rows: userRows } = await pool.query(
+        `SELECT shirt_size, food_intolerances, food_intolerance_notes FROM users WHERE id = $1`,
+        [req.userId],
+      );
+      return {
+        ...row,
+        status: maskStatus(row.status, row.decision_sent_at),
+        template: enriched,
+        shirt_size: userRows[0]?.shirt_size ?? null,
+        food_intolerances: userRows[0]?.food_intolerances ?? [],
+        food_intolerance_notes: userRows[0]?.food_intolerance_notes ?? null,
+      };
     },
   );
 

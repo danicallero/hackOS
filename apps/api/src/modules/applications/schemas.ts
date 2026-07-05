@@ -23,6 +23,8 @@ export const FIELD_KINDS = [
   "date",
   "number",
   "file-url",
+  "file",
+  "university",
 ] as const;
 
 const i18nSchema = z.object({
@@ -46,6 +48,8 @@ export const templateFieldSchema = z
     kind: z.enum(FIELD_KINDS),
     required: z.boolean().default(false),
     options: z.array(optionSchema).optional(),
+    allowed_file_types: z.array(z.string()).optional(),
+    max_file_size_mb: z.number().int().positive().optional(),
   })
   .refine(
     (f) => !(f.kind === "select" || f.kind === "multiselect") || (f.options?.length ?? 0) > 0,
@@ -146,7 +150,11 @@ export const batchDecideSchema = batchIdsSchema.extend({
 export const batchSendDecisionsSchema = batchIdsSchema;
 
 export const batchRevertDecisionSchema = batchIdsSchema.extend({
-  decision: z.enum(["accepted", "rejected"]),
+  decision: z.enum(["accepted", "rejected", "submitted"]),
+});
+
+export const revertDecisionSchema = z.object({
+  decision: z.enum(["accepted", "rejected", "submitted"]),
 });
 
 // ── confirm link retrieval ───────────────────────────────────────────────────

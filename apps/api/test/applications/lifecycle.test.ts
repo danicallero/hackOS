@@ -492,9 +492,8 @@ describe("confirm / decline (H15)", () => {
   });
 
   it("decision email contains an absolute confirmation URL", async () => {
-    const a = await getApp();
     const appId = await createApplication();
-    const { userId, responseId } = await toAcceptedSent(appId);
+    const { userId } = await toAcceptedSent(appId);
 
     const { rows: outbox } = await pool.query(
       `SELECT payload FROM notification_outbox WHERE user_id = $1`,
@@ -503,6 +502,8 @@ describe("confirm / decline (H15)", () => {
     expect(outbox).toHaveLength(1);
     const details = outbox[0].payload.vars.decisionDetails;
     expect(details).toMatch(/http:\/\/localhost:3001\/applications\/confirm\?token=/);
+    expect(details).toMatch(/http:\/\/localhost:3001\/applications\/decline\?token=/);
+    expect(details).toMatch(/please let us know/);
   });
 
   it("batch decide + batch send processes multiple responses", async () => {
@@ -550,6 +551,54 @@ describe("confirm / decline (H15)", () => {
       userId,
     ]);
     expect(rows[0].n).toBe(1);
+  });
+
+  it("decline via public token transitions from accepted and preserves ticket", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { responseId } = await toAcceptedSent(appId);
+    const { rows } = await pool.query(
+      `SELECT t.token FROM email_verification_tokens t
+       JOIN application_responses r ON r.confirmation_token_id = t.id
+       WHERE r.id = $1`,
+      [responseId],
+    );
+    const token = rows[0].token;
+
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/applications/decline",
+      payload: { token },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().status).toBe("declined");
+    expect(res.json().already_declined).toBe(false);
+
+    const r = await getResponse(responseId);
+    expect(r.status).toBe("declined");
+    expect(r.ticket_id).not.toBeNull(); // invariant 10
+  });
+
+  it("decline via public token is idempotent", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { userId } = await toAcceptedSent(appId);
+    const token = await latestConfirmationToken(userId);
+
+    const r1 = await a.inject({
+      method: "POST",
+      url: "/api/applications/decline",
+      payload: { token },
+    });
+    expect(r1.statusCode).toBe(200);
+
+    const r2 = await a.inject({
+      method: "POST",
+      url: "/api/applications/decline",
+      payload: { token },
+    });
+    expect(r2.statusCode).toBe(200);
+    expect(r2.json().already_declined).toBe(true);
   });
 });
 
@@ -701,7 +750,7 @@ describe("re-accept (admin)", () => {
   it("re-accepts a rejected response (sent)", async () => {
     const a = await getApp();
     const appId = await createApplication();
-    const { userId, responseId } = await submittedApplicant(appId);
+    const { responseId } = await submittedApplicant(appId);
 
     await a.inject({
       method: "POST",
@@ -783,5 +832,139 @@ describe("re-accept (admin)", () => {
       headers: asUser(decider),
     });
     expect(res.statusCode).toBe(409);
+  });
+});
+
+describe("batch send resends already-sent decisions", () => {
+  it("batch send resends an already-sent accepted response", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { userId, responseId } = await toAcceptedSent(appId);
+
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/responses/batch/send-decision",
+      headers: asUser(decider),
+      payload: { response_ids: [responseId] },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().sent).toBe(1);
+    expect(res.json().tokens[0].token).toBeTruthy();
+
+    // a fresh email was enqueued
+    const { rows: outbox } = await pool.query(
+      `SELECT count(*)::int AS n FROM notification_outbox WHERE user_id = $1`,
+      [userId],
+    );
+    expect(outbox[0].n).toBeGreaterThanOrEqual(2);
+  });
+
+  it("batch send resends an expired response (second chance)", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { responseId } = await toAcceptedSent(appId);
+    await expireConfirmationWindow(responseId);
+
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/responses/batch/send-decision",
+      headers: asUser(decider),
+      payload: { response_ids: [responseId] },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().sent).toBe(1);
+    const r = await getResponse(responseId);
+    expect(r.status).toBe("accepted"); // resend flipped it back
+  });
+});
+
+describe("revert to submitted", () => {
+  it("reverts accepted_internal to submitted", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { responseId } = await submittedApplicant(appId);
+    await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/decide`,
+      headers: asUser(decider),
+      payload: { decision: "accepted" },
+    });
+    expect((await getResponse(responseId)).status).toBe("accepted_internal");
+
+    const res = await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/revert-decision`,
+      headers: asUser(decider),
+      payload: { decision: "submitted" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect((await getResponse(responseId)).status).toBe("submitted");
+  });
+
+  it("reverts already-sent accepted back to submitted, clearing tokens", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { responseId } = await toAcceptedSent(appId);
+    expect((await getResponse(responseId)).status).toBe("accepted");
+    expect((await getResponse(responseId)).confirmation_token_id).not.toBeNull();
+
+    const res = await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/revert-decision`,
+      headers: asUser(decider),
+      payload: { decision: "submitted" },
+    });
+    expect(res.statusCode).toBe(200);
+    const r = await getResponse(responseId);
+    expect(r.status).toBe("submitted");
+    expect(r.confirmation_token_id).toBeNull();
+  });
+});
+
+describe("decision pool", () => {
+  it("returns grouped counts for accepted/rejected/declined", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { responseId } = await toAcceptedSent(appId);
+
+    const res = await a.inject({
+      method: "GET",
+      url: `/api/applications/${appId}/decision-pool`,
+      headers: asUser(reviewer),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().accepted.sent).toHaveLength(1);
+    expect(res.json().accepted.unsent).toHaveLength(0);
+    expect(res.json().rejected.sent).toHaveLength(0);
+    expect(res.json().rejected.unsent).toHaveLength(0);
+    expect(res.json().declined.manual).toHaveLength(0);
+    expect(res.json().declined.expired).toHaveLength(0);
+  });
+
+  it("403 without APPLICATIONS_REVIEW", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+
+    const res = await a.inject({
+      method: "GET",
+      url: `/api/applications/${appId}/decision-pool`,
+    });
+    expect(res.statusCode).toBe(401);
+  });
+});
+
+describe("email countdown", () => {
+  it("decision email contains a human-readable countdown", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { userId } = await toAcceptedSent(appId);
+
+    const { rows: outbox } = await pool.query(
+      `SELECT payload FROM notification_outbox WHERE user_id = $1`,
+      [userId],
+    );
+    const details = outbox[0].payload.vars.decisionDetails;
+    expect(details).toMatch(/You have /);
+    expect(details).toMatch(/to confirm/);
   });
 });

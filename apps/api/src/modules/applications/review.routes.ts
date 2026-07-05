@@ -11,7 +11,9 @@ import {
   idParamSchema,
   listResponsesQuerySchema,
   responseIdParamSchema,
+  revertDecisionSchema,
   reviewUpsertSchema,
+  saveDraftSchema,
   sendDecisionsSchema,
   staffNotesSchema,
 } from "./schemas.js";
@@ -20,7 +22,10 @@ import {
   batchRevertDecisions,
   batchSendDecisions,
   decide,
+  editResponse,
   getConfirmLink,
+  getDecisionPool,
+  getResponseDetail,
   reAccept,
   resendDecision,
   revertDecision,
@@ -159,12 +164,22 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     async (req) => reAccept(req.userId as number, req.params.responseId),
   );
 
-  // ── H14: revert internal decision ────────────────────────────────────────────
+  // ── decision pool (accepted/rejected/declined grouped for the review UI) ─────
+  r.get(
+    "/api/applications/:id/decision-pool",
+    {
+      preHandler: requireCapability(CAPABILITIES.APPLICATIONS_REVIEW),
+      schema: { params: idParamSchema },
+    },
+    async (req) => getDecisionPool(req.params.id),
+  );
+
+  // ── H14: revert internal decision (or to submitted for re-review) ────────────
   r.post(
     "/api/responses/:responseId/revert-decision",
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
-      schema: { params: responseIdParamSchema, body: decideSchema },
+      schema: { params: responseIdParamSchema, body: revertDecisionSchema },
     },
     async (req) => revertDecision(req.userId as number, req.params.responseId, req.body.decision),
   );
@@ -184,6 +199,26 @@ export function registerReviewRoutes(app: FastifyInstance): void {
         expires_at: link.expiresAt,
       };
     },
+  );
+
+  // ── single response detail with available actions ────────────────────────────
+  r.get(
+    "/api/responses/:responseId",
+    {
+      preHandler: requireCapability(CAPABILITIES.APPLICATIONS_REVIEW),
+      schema: { params: responseIdParamSchema },
+    },
+    async (req) => getResponseDetail(req.params.responseId),
+  );
+
+  // ── staff edit response form data ────────────────────────────────────────────
+  r.put(
+    "/api/responses/:responseId",
+    {
+      preHandler: requireCapability(CAPABILITIES.APPLICATIONS_EDIT_RESPONSE),
+      schema: { params: responseIdParamSchema, body: saveDraftSchema },
+    },
+    async (req) => editResponse(req.userId as number, req.params.responseId, req.body.responses),
   );
 
   // ── batch operations ─────────────────────────────────────────────────────────

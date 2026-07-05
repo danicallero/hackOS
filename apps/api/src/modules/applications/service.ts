@@ -1,10 +1,10 @@
 import { randomBytes } from "node:crypto";
 import type pg from "pg";
+import { config } from "../../config.js";
 import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
-import { config } from "../../config.js";
 import { type ApplicationType, SHIRT_TYPES, type TemplateField } from "./schemas.js";
 
 /**
@@ -118,6 +118,12 @@ export function validateResponses(
         if (!allowed.has(String(value))) errors[field.key] = "invalid option";
         break;
       }
+      case "file":
+        if (typeof value !== "string") errors[field.key] = "must be a string";
+        break;
+      case "university":
+        if (typeof value !== "number") errors[field.key] = "must be a number";
+        break;
       default:
         if (typeof value !== "string") errors[field.key] = "must be a string";
     }
@@ -125,6 +131,69 @@ export function validateResponses(
   if (Object.keys(errors).length > 0) {
     throw new BadRequestError("Response fails template validation", { fields: errors });
   }
+}
+
+const SHIRT_SIZE_FIELD: TemplateField = {
+  key: "shirt_size",
+  label: { en: "T-shirt size", es: "Talla de camiseta", gl: "Talla de camiseta" },
+  kind: "select",
+  required: true,
+  options: [
+    { value: "XS", label: { en: "XS", es: "XS", gl: "XS" } },
+    { value: "S", label: { en: "S", es: "S", gl: "S" } },
+    { value: "M", label: { en: "M", es: "M", gl: "M" } },
+    { value: "L", label: { en: "L", es: "L", gl: "L" } },
+    { value: "XL", label: { en: "XL", es: "XL", gl: "XL" } },
+    { value: "XXL", label: { en: "XXL", es: "XXL", gl: "XXL" } },
+  ],
+};
+
+/** If the application type requires a shirt size, append the field to the template. */
+export function augmentTemplate(
+  appType: ApplicationType,
+  template: TemplateField[],
+): TemplateField[] {
+  if (!SHIRT_TYPES.includes(appType)) return template;
+  if (template.some((f) => f.key === "shirt_size")) return template;
+  return [...template, SHIRT_SIZE_FIELD];
+}
+
+const FOOD_NOTES_FIELD: TemplateField = {
+  key: "food_intolerance_notes",
+  label: { en: "Dietary notes", es: "Notas dietéticas", gl: "Notas dietéticas" },
+  kind: "textarea",
+  required: false,
+};
+
+/**
+ * Enrich the template with dynamically-loaded fields (food intolerances) when
+ * the application type requires them. Async because it queries the DB for the
+ * current set of food-intolerance options.
+ */
+export async function enrichTemplate(
+  appType: ApplicationType,
+  template: TemplateField[],
+): Promise<TemplateField[]> {
+  let enriched = augmentTemplate(appType, template);
+  if (SHIRT_TYPES.includes(appType) && !enriched.some((f) => f.key === "food_intolerances")) {
+    const { rows } = await pool.query(`SELECT id, label FROM food_intolerances ORDER BY id`);
+    const intolerances: TemplateField = {
+      key: "food_intolerances",
+      label: {
+        en: "Dietary restrictions",
+        es: "Restricciones dietéticas",
+        gl: "Restricións dietéticas",
+      },
+      kind: "multiselect",
+      required: false,
+      options: rows.map((r: { id: number; label: { en: string } }) => ({
+        value: String(r.id),
+        label: { en: r.label.en, es: r.label.en, gl: r.label.en },
+      })),
+    };
+    enriched = [...enriched, intolerances, FOOD_NOTES_FIELD];
+  }
+  return enriched;
 }
 
 // ── privacy notice (H12) ─────────────────────────────────────────────────────
@@ -165,6 +234,22 @@ export async function wipeSensitiveDataIfOrphan(
     [userId],
   );
   return true;
+}
+
+// ── countdown formatting ──────────────────────────────────────────────────────
+
+function formatRemainingTime(expiresAt: Date): string {
+  const remainingMs = expiresAt.getTime() - Date.now();
+  if (remainingMs <= 0) return "";
+  const totalMinutes = Math.floor(remainingMs / 60_000);
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+  const parts: string[] = [];
+  if (days > 0) parts.push(`${days} ${days === 1 ? "day" : "days"}`);
+  if (hours > 0) parts.push(`${hours} ${hours === 1 ? "hour" : "hours"}`);
+  if (minutes > 0) parts.push(`${minutes} ${minutes === 1 ? "minute" : "minutes"}`);
+  return parts.length > 0 ? `You have ${parts.join(", ")} to confirm.` : "";
 }
 
 // ── tokens / tickets / emails ─────────────────────────────────────────────────
@@ -311,13 +396,26 @@ export async function submitResponse(
     }
 
     const merged = { ...existing.responses, ...(input.responses ?? {}) };
-    validateResponses(app.template, merged);
+    const shirtSize = input.shirt_size ?? (merged.shirt_size as string | undefined);
+    if (input.shirt_size) merged.shirt_size = input.shirt_size;
 
-    if (SHIRT_TYPES.includes(app.type) && !input.shirt_size) {
+    if (SHIRT_TYPES.includes(app.type) && !shirtSize) {
       throw new BadRequestError("Shirt size is required for this application type", {
         code: "shirt_size_required",
       });
     }
+
+    // Extract food data from responses if not provided as top-level fields
+    const foodIntolerances = (
+      input.food_intolerances.length > 0
+        ? input.food_intolerances
+        : ((merged.food_intolerances as number[] | undefined) ?? [])
+    ).map(Number);
+    const foodNotes =
+      input.food_intolerance_notes ?? (merged.food_intolerance_notes as string | undefined) ?? null;
+
+    const enrichedTemplate = await enrichTemplate(app.type, app.template);
+    validateResponses(enrichedTemplate, merged);
 
     // Sensitive/logistics data lives on the user row, not the response (H12).
     await client.query(
@@ -326,12 +424,7 @@ export async function submitResponse(
            food_intolerance_notes = $3,
            shirt_size = COALESCE($4, shirt_size)
        WHERE id = $1`,
-      [
-        userId,
-        input.food_intolerances,
-        input.food_intolerance_notes ?? null,
-        input.shirt_size ?? null,
-      ],
+      [userId, foodIntolerances, foodNotes, shirtSize ?? null],
     );
 
     const updated = await client.query(
@@ -360,7 +453,10 @@ export async function startReview(actorId: number, responseId: number): Promise<
     const resp = await lockResponse(client, responseId);
     if (resp.status === "review") return resp; // idempotent
     if (resp.status !== "submitted") {
-      throw new ConflictError("Responses move to review automatically on submit; cannot start review from this status", { status: resp.status });
+      throw new ConflictError(
+        "Responses move to review automatically on submit; cannot start review from this status",
+        { status: resp.status },
+      );
     }
     const updated = await client.query(
       `UPDATE application_responses SET status = 'review' WHERE id = $1 RETURNING *`,
@@ -485,17 +581,55 @@ export async function decide(
 }
 
 /**
- * Revert an internal decision — flip between accepted_internal and
- * rejected_internal. Only allowed when the decision hasn't been sent yet.
+ * Revert a decision — flip between accepted_internal and
+ * rejected_internal, or send it back to submitted for re-review.
  * Reverting to accepted re-checks capacity. (H14)
  */
 export async function revertDecision(
   actorId: number,
   responseId: number,
-  newDecision: "accepted" | "rejected",
+  newDecision: "accepted" | "rejected" | "submitted",
 ): Promise<ResponseRow> {
   return withTransaction(async (client) => {
     const resp = await lockResponse(client, responseId);
+
+    if (newDecision === "submitted") {
+      if (
+        resp.status !== "accepted_internal" &&
+        resp.status !== "rejected_internal" &&
+        resp.status !== "accepted" &&
+        resp.status !== "rejected"
+      ) {
+        throw new ConflictError("Only decided responses can be reverted to submitted", {
+          status: resp.status,
+        });
+      }
+      // Invalidate any pending confirmation token
+      if (resp.confirmation_token_id) {
+        await client.query(
+          `UPDATE email_verification_tokens SET used_at = now() WHERE id = $1 AND used_at IS NULL`,
+          [resp.confirmation_token_id],
+        );
+      }
+      const updated = await client.query(
+        `UPDATE application_responses
+         SET status = 'submitted', decision_sent_at = NULL, confirmation_token_id = NULL,
+             confirmed_at = NULL, declined_at = NULL
+         WHERE id = $1 RETURNING *`,
+        [responseId],
+      );
+      await audit(client, {
+        actorId,
+        entityType: "application_response",
+        entityId: responseId,
+        action: "reverted_to_submitted",
+        before: { status: resp.status },
+        after: { status: "submitted" },
+      });
+      return updated.rows[0];
+    }
+
+    // accepted_internal / rejected_internal flip
     if (resp.decision_sent_at) {
       throw new ConflictError("Cannot revert a decision that has already been sent", {
         status: resp.status,
@@ -732,6 +866,69 @@ export async function reAccept(
   });
 }
 
+// ── decision pool (review dashboard) ─────────────────────────────────────────
+
+export interface DecisionPoolRow {
+  id: number;
+  user_id: number;
+  name: string | null;
+  email: string;
+  status: string;
+  decision_sent_at: Date | null;
+  declined_at: Date | null;
+  submitted_at: Date | null;
+  avg_score: number | null;
+  review_count: number;
+}
+
+export interface DecisionPool {
+  accepted: { unsent: DecisionPoolRow[]; sent: DecisionPoolRow[] };
+  rejected: { unsent: DecisionPoolRow[]; sent: DecisionPoolRow[] };
+  declined: { manual: DecisionPoolRow[]; expired: DecisionPoolRow[] };
+}
+
+async function loadDecisionPoolRows(
+  client: pg.PoolClient,
+  applicationId: number,
+  statuses: string[],
+): Promise<DecisionPoolRow[]> {
+  const { rows } = await client.query(
+    `SELECT r.id, r.user_id, u.name, u.email, r.status, r.decision_sent_at,
+            r.declined_at, r.submitted_at,
+            COALESCE(avg(ar.score), NULL) AS avg_score,
+            count(ar.author_id)::int AS review_count
+     FROM application_responses r
+     JOIN users u ON u.id = r.user_id
+     LEFT JOIN applicant_reviews ar ON ar.response_id = r.id
+     WHERE r.application_id = $1 AND r.status = ANY($2)
+     GROUP BY r.id, u.name, u.email
+     ORDER BY r.id`,
+    [applicationId, statuses],
+  );
+  return rows;
+}
+
+export async function getDecisionPool(applicationId: number): Promise<DecisionPool> {
+  const { rows } = await pool.query(`SELECT id FROM applications WHERE id = $1`, [applicationId]);
+  if (!rows[0]) throw new NotFoundError("Application not found");
+
+  const [acceptedUns, acceptedSent, rejectedUns, rejectedSent, declinedManual, declinedExpired] =
+    await Promise.all([
+      loadDecisionPoolRows(pool as unknown as pg.PoolClient, applicationId, ["accepted_internal"]),
+      loadDecisionPoolRows(pool as unknown as pg.PoolClient, applicationId, ["accepted"]),
+      loadDecisionPoolRows(pool as unknown as pg.PoolClient, applicationId, ["rejected_internal"]),
+      loadDecisionPoolRows(pool as unknown as pg.PoolClient, applicationId, ["rejected"]),
+      loadDecisionPoolRows(pool as unknown as pg.PoolClient, applicationId, ["declined"]),
+      loadDecisionPoolRows(pool as unknown as pg.PoolClient, applicationId, ["expired"]),
+    ]);
+
+  return {
+    accepted: { unsent: acceptedUns, sent: acceptedSent },
+    rejected: { unsent: rejectedUns, sent: rejectedSent },
+    declined: { manual: declinedManual, expired: declinedExpired },
+  };
+}
+
 // ── batch operations ─────────────────────────────────────────────────────────
 
 export async function batchDecide(
@@ -756,25 +953,62 @@ export async function batchSendDecisions(
   actorId: number,
   responseIds: number[],
 ): Promise<{ sent: number; tokens: Array<{ responseId: number; token: string | null }> }> {
-  return withTransaction(async (client) => {
-    const tokens: Array<{ responseId: number; token: string | null }> = [];
-    const sorted = [...responseIds].sort((a, b) => a - b);
-    for (const id of sorted) {
-      const resp = await lockResponse(client, id);
-      if (resp.status !== "accepted_internal" && resp.status !== "rejected_internal") continue;
-      if (resp.decision_sent_at) continue;
-      const app = await requireApplication(client, resp.application_id);
-      const token = await sendOne(client, actorId, resp, app);
-      tokens.push({ responseId: id, token });
+  const tokens: Array<{ responseId: number; token: string | null }> = [];
+  const sorted = [...responseIds].sort((a, b) => a - b);
+  for (const id of sorted) {
+    try {
+      const { rows } = await pool.query(`SELECT status FROM application_responses WHERE id = $1`, [
+        id,
+      ]);
+      if (!rows[0]) continue;
+      const status = rows[0].status;
+      if (status === "accepted_internal" || status === "rejected_internal") {
+        const result = await sendDecision(actorId, id);
+        tokens.push({ responseId: id, token: result.confirmationToken });
+      } else if (status === "accepted" || status === "expired") {
+        const result = await resendDecision(actorId, id);
+        tokens.push({ responseId: id, token: result.confirmationToken });
+      } else if (status === "rejected") {
+        // re-send a rejected decision: just re-enqueue the email
+        await resendRejectedDecision(actorId, id);
+        tokens.push({ responseId: id, token: null });
+      }
+    } catch {
+      // skip individual failures so the rest proceed
     }
-    return { sent: tokens.length, tokens };
+  }
+  return { sent: tokens.length, tokens };
+}
+
+async function resendRejectedDecision(actorId: number, responseId: number): Promise<void> {
+  return withTransaction(async (client) => {
+    const resp = await lockResponse(client, responseId);
+    if (resp.status !== "rejected") {
+      throw new ConflictError("Only rejected responses can be resent via this path", {
+        status: resp.status,
+      });
+    }
+    const app = await requireApplication(client, resp.application_id);
+    const user = await loadUserComms(client, resp.user_id);
+    await client.query(`UPDATE application_responses SET decision_sent_at = now() WHERE id = $1`, [
+      resp.id,
+    ]);
+    await enqueueDecisionEmailRow(client, resp.user_id, user, app, "rejected", null);
+    await audit(client, {
+      actorId,
+      entityType: "application_response",
+      entityId: resp.id,
+      action: "decision_resent",
+      before: { status: resp.status },
+      after: { status: "rejected" },
+    });
   });
 }
 
 export async function batchRevertDecisions(
   actorId: number,
   responseIds: number[],
-  newDecision: "accepted" | "rejected",
+  newDecision: "accepted" | "rejected" | "submitted",
 ): Promise<{ processed: number }> {
   let processed = 0;
   const sorted = [...responseIds].sort((a, b) => a - b);
@@ -814,9 +1048,13 @@ async function enqueueDecisionEmailRow(
   decision: "accepted" | "rejected",
   confirmToken: string | null,
 ): Promise<void> {
+  const countdown =
+    decision === "accepted" && confirmToken
+      ? formatRemainingTime(new Date(Date.now() + app.confirmation_window_hours * 3_600_000))
+      : "";
   const decisionDetails =
     decision === "accepted" && confirmToken
-      ? `\n\n[Confirm my spot](${config.WEB_URL}/applications/confirm?token=${confirmToken})\n\nYou have ${app.confirmation_window_hours}h to confirm before your spot is released.`
+      ? `\n\nYou have been accepted. Please confirm your spot, or if you can't make it please let us know so we can give your spot to someone else:\n\n[Accept my spot](${config.WEB_URL}/applications/confirm?token=${confirmToken})\n[No, I can't make it](${config.WEB_URL}/applications/decline?token=${confirmToken})\n\n${countdown}\n\nAfter that time your spot will be automatically released.`
       : "";
   await client.query(
     `INSERT INTO notification_outbox (user_id, category, channel, payload)
@@ -836,6 +1074,116 @@ async function enqueueDecisionEmailRow(
       }),
     ],
   );
+}
+
+export interface ResponseDetail {
+  response: ResponseRow;
+  user: { name: string | null; email: string; shirt_size: string | null };
+  application: { id: number; name: string; type: ApplicationType; template: TemplateField[] };
+  reviews: Array<{ author_id: number; score: number | null; notes: string | null }>;
+  available_actions: string[];
+}
+
+/** Available staff actions for a response based on its current status. */
+function computeAvailableActions(status: string): string[] {
+  const actions: string[] = ["staff-notes"];
+  switch (status) {
+    case "submitted":
+    case "review":
+      actions.push("my-review");
+      break;
+    case "accepted_internal":
+    case "rejected_internal":
+      actions.push("decide", "revert-decision", "send-decision");
+      break;
+    case "accepted":
+      actions.push("resend-decision", "revert-decision", "confirm-link", "decline-override");
+      break;
+    case "rejected":
+      actions.push("re-accept", "resend-decision", "revert-decision");
+      break;
+    case "confirmed":
+      actions.push("decline-override");
+      break;
+    case "declined":
+    case "expired":
+      actions.push("re-accept");
+      break;
+  }
+  return actions;
+}
+
+export async function getResponseDetail(responseId: number): Promise<ResponseDetail> {
+  const { rows } = await pool.query(
+    `SELECT r.*, u.name, u.email, u.shirt_size,
+            a.id AS app_id, a.name AS app_name, a.type AS app_type, a.template
+     FROM application_responses r
+     JOIN users u ON u.id = r.user_id
+     JOIN applications a ON a.id = r.application_id
+     WHERE r.id = $1`,
+    [responseId],
+  );
+  if (!rows[0]) throw new NotFoundError("Response not found");
+  const { name, email, shirt_size, app_id, app_name, app_type, template, ...response } = rows[0];
+
+  const { rows: reviews } = await pool.query(
+    `SELECT author_id, score, notes FROM applicant_reviews WHERE response_id = $1 ORDER BY author_id`,
+    [responseId],
+  );
+
+  const enriched = await enrichTemplate(app_type, template);
+  return {
+    response,
+    user: { name, email, shirt_size },
+    application: {
+      id: app_id,
+      name: app_name,
+      type: app_type,
+      template: enriched,
+    },
+    reviews,
+    available_actions: computeAvailableActions(response.status),
+  };
+}
+
+export async function editResponse(
+  actorId: number,
+  responseId: number,
+  responses: Record<string, unknown>,
+): Promise<ResponseRow> {
+  const { rows } = await pool.query(
+    `SELECT r.*, a.type, a.template FROM application_responses r
+     JOIN applications a ON a.id = r.application_id
+     WHERE r.id = $1`,
+    [responseId],
+  );
+  if (!rows[0]) throw new NotFoundError("Response not found");
+  const { type, template } = rows[0];
+  const enriched = await enrichTemplate(type, template);
+  validateResponses(enriched, responses);
+
+  return withTransaction(async (client) => {
+    const { rows: locked } = await client.query(
+      `SELECT id FROM application_responses WHERE id = $1 FOR UPDATE`,
+      [responseId],
+    );
+    if (!locked[0]) throw new NotFoundError("Response not found");
+
+    const updated = await client.query(
+      `UPDATE application_responses SET responses = $2::jsonb WHERE id = $1 RETURNING *`,
+      [responseId, JSON.stringify(responses)],
+    );
+
+    await audit(client, {
+      actorId,
+      entityType: "application_response",
+      entityId: responseId,
+      action: "edited",
+      source: "web",
+    });
+
+    return updated.rows[0];
+  });
 }
 
 // ── confirm / decline (H15) ──────────────────────────────────────────────────
@@ -978,6 +1326,26 @@ export async function confirmByResponseId(
       throw new ForbiddenError("Not your application");
     }
     return doConfirm(client, resp, via, actorId);
+  });
+}
+
+export async function declineByToken(token: string): Promise<{
+  status: string;
+  alreadyDeclined: boolean;
+  wiped: boolean;
+}> {
+  return withTransaction(async (client) => {
+    const { rows } = await client.query(
+      `SELECT r.* FROM email_verification_tokens t
+       JOIN application_responses r ON r.id =
+         (SELECT id FROM application_responses WHERE confirmation_token_id = t.id)
+       WHERE t.token = $1 AND t.type = 'spot_confirmation'
+       FOR UPDATE OF r`,
+      [token],
+    );
+    const resp = rows[0] as ResponseRow | undefined;
+    if (!resp) throw new NotFoundError("Invalid decline token");
+    return doDecline(client, resp, "email_link", resp.user_id);
   });
 }
 

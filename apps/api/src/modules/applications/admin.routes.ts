@@ -38,7 +38,12 @@ export function registerAdminRoutes(app: FastifyInstance): void {
   // ── manage (H11) ────────────────────────────────────────────────────────────
   r.get(
     "/api/applications",
-    { preHandler: requireAnyCapability(CAPABILITIES.APPLICATIONS_MANAGE, CAPABILITIES.APPLICATIONS_REVIEW) },
+    {
+      preHandler: requireAnyCapability(
+        CAPABILITIES.APPLICATIONS_MANAGE,
+        CAPABILITIES.APPLICATIONS_REVIEW,
+      ),
+    },
     async () => {
       const { rows } = await pool.query(`SELECT ${COLUMNS} FROM applications ORDER BY id`);
       return { applications: rows };
@@ -48,7 +53,10 @@ export function registerAdminRoutes(app: FastifyInstance): void {
   r.get(
     "/api/applications/:id",
     {
-      preHandler: requireAnyCapability(CAPABILITIES.APPLICATIONS_MANAGE, CAPABILITIES.APPLICATIONS_REVIEW),
+      preHandler: requireAnyCapability(
+        CAPABILITIES.APPLICATIONS_MANAGE,
+        CAPABILITIES.APPLICATIONS_REVIEW,
+      ),
       schema: { params: idParamSchema },
     },
     async (req) => {
