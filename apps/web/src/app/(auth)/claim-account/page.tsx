@@ -29,6 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
 import { pickText } from "@/lib/i18n";
 import type { Intolerance, InviteKind, Language } from "@/lib/types";
@@ -43,6 +44,8 @@ const schema = z.object({
   language: z.enum(["en", "es", "gl"]),
   shirtSize: z.string(),
   foodIntolerances: z.array(z.string()),
+  // Optional free-text dietary notes (M1.3). Optional here and everywhere else.
+  foodIntoleranceNotes: z.string().max(2000),
 });
 type Values = z.infer<typeof schema>;
 const NONE = "__none__";
@@ -66,6 +69,7 @@ function ClaimInner() {
       language: "es",
       shirtSize: NONE,
       foodIntolerances: [],
+      foodIntoleranceNotes: "",
     },
   });
 
@@ -103,6 +107,9 @@ function ClaimInner() {
         language: values.language,
         ...(values.shirtSize !== NONE ? { shirtSize: values.shirtSize } : {}),
         foodIntolerances: values.foodIntolerances.map(Number),
+        ...(values.foodIntoleranceNotes.trim()
+          ? { foodIntoleranceNotes: values.foodIntoleranceNotes.trim() }
+          : {}),
       });
       setDone(true);
     } catch (err) {
@@ -141,6 +148,8 @@ function ClaimInner() {
     );
   }
 
+  const invitedAsParticipant = lookup.kind === "participant";
+
   if (done) {
     return (
       <Card>
@@ -149,16 +158,31 @@ function ClaimInner() {
             <CheckCircle2Icon className="size-6" />
           </div>
           <CardTitle>Account created</CardTitle>
-          <CardDescription>You can sign in now with your email and password.</CardDescription>
+          <CardDescription>
+            {invitedAsParticipant
+              ? "Sign in and we'll take you straight to your application."
+              : "You can sign in now with your email and password."}
+          </CardDescription>
         </CardHeader>
         <CardContent className="text-center">
-          <SubmitButton onClick={() => router.push("/login")}>Continue to sign in</SubmitButton>
+          <SubmitButton
+            onClick={() =>
+              // M1.1: an invited participant lands directly on the application
+              // form after signing in (login honours the `next` param).
+              router.push(
+                invitedAsParticipant
+                  ? `/login?next=${encodeURIComponent("/my-applications")}`
+                  : "/login",
+              )
+            }
+          >
+            Continue to sign in
+          </SubmitButton>
         </CardContent>
       </Card>
     );
   }
 
-  const isParticipant = lookup.kind === "participant";
   const intoleranceOptions = intolerances.map((i) => ({
     value: String(i.id),
     label: pickText(i.label, form.watch("language") as Language),
@@ -248,7 +272,7 @@ function ClaimInner() {
               name="shirtSize"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Shirt size{isParticipant ? "" : " (optional)"}</FormLabel>
+                  <FormLabel>Shirt size{invitedAsParticipant ? "" : " (optional)"}</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger className="w-full">
@@ -282,6 +306,23 @@ function ClaimInner() {
                       placeholder="Select any that apply…"
                       searchPlaceholder="Search…"
                       emptyText="None in the catalogue yet."
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="foodIntoleranceNotes"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Dietary notes (optional)</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      rows={3}
+                      placeholder="Anything else the kitchen should know (allergies severity, preferences…)"
+                      {...field}
                     />
                   </FormControl>
                   <FormMessage />

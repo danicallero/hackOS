@@ -232,6 +232,25 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const userId = req.userId as number;
+      // M1.5: once any application has been accepted, the participant can no
+      // longer change their own legal name (it's on their badge/certificate).
+      // Staff can still fix it via PATCH /api/users/:id. Statuses that count as
+      // "accepted": internally accepted, decision sent, and confirmed.
+      if (req.body.name !== undefined || req.body.surname !== undefined) {
+        const { rows } = await pool.query(
+          `SELECT 1 FROM application_responses
+             WHERE user_id = $1
+               AND status IN ('accepted_internal', 'accepted', 'confirmed')
+             LIMIT 1`,
+          [userId],
+        );
+        if (rows.length > 0) {
+          throw new ConflictError(
+            "Your name is locked because an application has been accepted — ask staff to change it.",
+            { code: "name_locked" },
+          );
+        }
+      }
       const after = await applyUserPatch(userId, userId, req.body, "web");
       return serializeUser(after);
     },
