@@ -1535,6 +1535,52 @@ export function maskStatus(status: string, _decisionSentAt: Date | null): string
   return status;
 }
 
+/**
+ * Staff-facing list of one user's application responses (M3.3 — the profile's
+ * Application tab). Unlike listMyResponses this keeps the REAL status (staff see
+ * accepted_internal/rejected_internal), and includes the sent flag so the UI can
+ * link straight into the review view for a modifiable, permission-guarded form.
+ */
+export async function listUserResponsesForStaff(userId: number): Promise<
+  Array<{
+    id: number;
+    application_id: number;
+    application_name: string;
+    application_type: ApplicationType;
+    status: string;
+    decision_sent: boolean;
+    submitted_at: Date | null;
+  }>
+> {
+  const { rows } = await pool.query(
+    `SELECT r.id, r.application_id, a.name AS application_name, a.type AS application_type,
+            r.status, r.decision_sent_at, r.submitted_at
+     FROM application_responses r
+     JOIN applications a ON a.id = r.application_id
+     WHERE r.user_id = $1 ORDER BY r.id DESC`,
+    [userId],
+  );
+  return rows.map(
+    (r: {
+      id: number;
+      application_id: number;
+      application_name: string;
+      application_type: ApplicationType;
+      status: string;
+      decision_sent_at: Date | null;
+      submitted_at: Date | null;
+    }) => ({
+      id: r.id,
+      application_id: r.application_id,
+      application_name: r.application_name,
+      application_type: r.application_type,
+      status: r.status,
+      decision_sent: r.decision_sent_at !== null,
+      submitted_at: r.submitted_at,
+    }),
+  );
+}
+
 export async function listMyResponses(userId: number): Promise<
   Array<{
     id: number;

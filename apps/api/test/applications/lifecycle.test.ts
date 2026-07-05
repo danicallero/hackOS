@@ -1057,6 +1057,42 @@ describe("revoke spot + batch actions (M2)", () => {
     expect((await getResponse(two.responseId)).status).toBe("rejected");
   });
 
+  it("lists a user's applications for staff with real status (M3.3)", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { userId, responseId } = await submittedApplicant(appId);
+    // internal accept — applicant would see 'review', staff must see the truth.
+    await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/decide`,
+      headers: asUser(decider),
+      payload: { decision: "accepted" },
+    });
+
+    const reader = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_REVIEW]);
+    const res = await a.inject({
+      method: "GET",
+      url: `/api/users/${userId}/applications`,
+      headers: asUser(reader),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().responses).toHaveLength(1);
+    expect(res.json().responses[0].status).toBe("accepted_internal");
+    expect(res.json().responses[0].application_id).toBe(appId);
+
+    // Without applications:review it's forbidden (the tab shows a gated state).
+    const pleb = await createUser();
+    expect(
+      (
+        await a.inject({
+          method: "GET",
+          url: `/api/users/${userId}/applications`,
+          headers: asUser(pleb),
+        })
+      ).statusCode,
+    ).toBe(403);
+  });
+
   it("requires APPLICATIONS_DECIDE for revoke + batch routes", async () => {
     const a = await getApp();
     const appId = await createApplication();

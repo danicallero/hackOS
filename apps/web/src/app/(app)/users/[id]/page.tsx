@@ -158,7 +158,7 @@ export default function UserProfilePage() {
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="permissions">Permissions</TabsTrigger>
           <TabsTrigger value="presence">Presence</TabsTrigger>
-          <TabsTrigger value="activity">Activity</TabsTrigger>
+          <TabsTrigger value="activity">Logs</TabsTrigger>
           <TabsTrigger value="application">Application</TabsTrigger>
           <TabsTrigger value="projects">Projects</TabsTrigger>
         </TabsList>
@@ -170,17 +170,16 @@ export default function UserProfilePage() {
           <PermissionsTab user={user} onChanged={load} />
         </TabsContent>
         <TabsContent value="presence" className="pt-2">
-          <PresenceTab userId={user.id} />
+          <div className="space-y-6">
+            <PresenceTab userId={user.id} />
+            <PhysicalActivity userId={user.id} />
+          </div>
         </TabsContent>
         <TabsContent value="activity" className="pt-2">
-          <ActivityTab userId={user.id} />
+          <LogsTab userId={user.id} />
         </TabsContent>
         <TabsContent value="application" className="pt-2">
-          <EmptyState
-            icon={ClipboardListIcon}
-            title="No application data yet"
-            description="Available once the applications module lands — a participant's form responses will surface here."
-          />
+          <ApplicationTab userId={user.id} />
         </TabsContent>
         <TabsContent value="projects" className="pt-2">
           <EmptyState
@@ -841,12 +840,6 @@ interface ActivityPass {
   loggedAt: string;
   notes: string | null;
 }
-interface CheckInRow {
-  id: number;
-  badgeId: string | null;
-  method: string;
-  checkedInAt: string;
-}
 interface DoorScanRow {
   id: number;
   kind: string;
@@ -855,17 +848,125 @@ interface DoorScanRow {
 }
 interface UserActivity {
   passes: ActivityPass[];
-  checkIns: CheckInRow[];
   doorScans: DoorScanRow[];
 }
 
-function ActivityTab({ userId }: { userId: number }) {
+// M3.1/M3.2: the "Logs" tab is the audit trail; physical presence (passes +
+// door scans) now lives under the unified Presence tab, and the standalone
+// "check-ins" concept is gone (a badge assignment is just the first door scan).
+function LogsTab({ userId }: { userId: number }) {
+  return <AuditLogSection userId={userId} />;
+}
+
+interface UserApplicationRow {
+  id: number;
+  application_id: number;
+  application_name: string;
+  application_type: string;
+  status: string;
+  decision_sent: boolean;
+  submitted_at: string | null;
+}
+
+// M3.3: the profile Application tab now connects to the applications module.
+// It lists the user's responses (real staff-side status) and links each into
+// the review view, which renders the same TemplateFieldControl component and
+// enforces the applications:review / :edit_response capabilities server-side.
+function ApplicationTab({ userId }: { userId: number }) {
+  const [rows, setRows] = useState<UserApplicationRow[] | null>(null);
+  const [state, setState] = useState<"loading" | "ready" | "forbidden" | "error">("loading");
+
+  useEffect(() => {
+    let cancelled = false;
+    setState("loading");
+    api
+      .get<{ responses: UserApplicationRow[] }>(`/api/users/${userId}/applications`)
+      .then((r) => {
+        if (cancelled) return;
+        setRows(r.responses);
+        setState("ready");
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setState(err instanceof ApiError && err.status === 403 ? "forbidden" : "error");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  if (state === "loading") {
+    return (
+      <div className="flex justify-center py-12">
+        <Spinner className="size-5" />
+      </div>
+    );
+  }
+  if (state === "forbidden") {
+    return (
+      <EmptyState
+        icon={ClipboardListIcon}
+        title="Applications hidden"
+        description="You need the applications:review capability to see this user's applications."
+      />
+    );
+  }
+  if (state === "error" || !rows) {
+    return (
+      <EmptyState
+        icon={ClipboardListIcon}
+        title="Could not load applications"
+        description="This user's applications are unavailable right now."
+      />
+    );
+  }
+  if (rows.length === 0) {
+    return (
+      <EmptyState
+        icon={ClipboardListIcon}
+        title="No applications yet"
+        description="This user hasn't started any application form."
+      />
+    );
+  }
   return (
-    <div className="space-y-6">
-      <PhysicalActivity userId={userId} />
-      <AuditLogSection userId={userId} />
-    </div>
+    <SectionCard
+      icon={ClipboardListIcon}
+      title="Applications"
+      description="Every form this user has responded to. Open one to review or edit it."
+    >
+      <ul className="divide-border divide-y">
+        {rows.map((r) => (
+          <li key={r.id} className="flex items-center gap-3 py-3">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium">{r.application_name}</p>
+              <p className="text-muted-foreground text-xs capitalize">
+                {r.application_type}
+                {r.submitted_at
+                  ? ` · submitted ${new Date(r.submitted_at).toLocaleDateString()}`
+                  : " · draft"}
+              </p>
+            </div>
+            <StatusBadge tone={statusTone(r.status)} dot={false}>
+              {r.status.replace(/_/g, " ")}
+            </StatusBadge>
+            <Button asChild size="sm" variant="outline">
+              <Link href={`/applications/${r.application_id}`}>Open</Link>
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </SectionCard>
   );
+}
+
+/** Maps an application response status to a StatusBadge tone. */
+function statusTone(status: string): "success" | "warning" | "danger" | "neutral" {
+  if (status === "confirmed" || status === "accepted") return "success";
+  if (status === "accepted_internal") return "warning";
+  if (status === "rejected" || status === "rejected_internal" || status === "declined")
+    return "danger";
+  return "neutral";
 }
 
 /** Physical passes/check-ins/door scans (H24-H26), gated only by USERS_READ. */
@@ -942,34 +1043,6 @@ function PhysicalActivity({ userId }: { userId: number }) {
     },
   ];
 
-  const checkInColumns: Column<CheckInRow>[] = [
-    {
-      id: "badge",
-      header: "Badge",
-      cell: (c) =>
-        c.badgeId ? (
-          <span className="font-mono text-xs">{c.badgeId}</span>
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        ),
-    },
-    {
-      id: "method",
-      header: "Method",
-      cell: (c) => (
-        <Badge variant="outline" className="capitalize">
-          {c.method}
-        </Badge>
-      ),
-    },
-    {
-      id: "when",
-      header: "When",
-      sortValue: (c) => c.checkedInAt,
-      cell: (c) => <span className="text-sm">{timeFmt.format(new Date(c.checkedInAt))}</span>,
-    },
-  ];
-
   const doorScanColumns: Column<DoorScanRow>[] = [
     {
       id: "kind",
@@ -1015,25 +1088,6 @@ function PhysicalActivity({ userId }: { userId: number }) {
             icon: ClipboardListIcon,
             title: "No passes yet",
             description: "Meal and workshop passes will appear here as they're scanned.",
-          }}
-        />
-      </SectionCard>
-
-      <SectionCard
-        icon={UserIcon}
-        title="Check-ins"
-        description="Badge check-ins recorded at the venue (H26)."
-        bodyClassName="p-0"
-      >
-        <DataTable
-          columns={checkInColumns}
-          data={data.checkIns}
-          getRowId={(c) => String(c.id)}
-          pageSize={10}
-          empty={{
-            icon: UserIcon,
-            title: "No check-ins yet",
-            description: "This user hasn't been checked in yet.",
           }}
         />
       </SectionCard>
