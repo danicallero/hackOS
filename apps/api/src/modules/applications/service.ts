@@ -312,6 +312,26 @@ async function loadUserComms(client: pg.PoolClient, userId: number): Promise<Use
   return rows[0];
 }
 
+// ── invited-participant check (E) ───────────────────────────────────────────
+
+/**
+ * Check whether a user was created via a participant invitation
+ * (kind=participant account_claim). Invited participants bypass the
+ * application window and auto-confirm on submit.
+ */
+async function isInvitedParticipant(
+  client: import("pg").PoolClient,
+  userId: number,
+): Promise<boolean> {
+  const { rows } = await client.query(
+    `SELECT 1 FROM email_verification_tokens
+     WHERE user_id = $1 AND type = 'account_claim' AND kind = 'participant' AND used_at IS NOT NULL
+     LIMIT 1`,
+    [userId],
+  );
+  return rows.length > 0;
+}
+
 // ── create / update draft (H12) ──────────────────────────────────────────────
 
 export async function saveDraft(
@@ -321,6 +341,8 @@ export async function saveDraft(
 ): Promise<ResponseRow> {
   return withTransaction(async (client) => {
     const app = await requireApplication(client, applicationId);
+    const invited = await isInvitedParticipant(client, userId);
+
     const { rows } = await client.query(
       `SELECT * FROM application_responses WHERE user_id = $1 AND application_id = $2 FOR UPDATE`,
       [userId, applicationId],
@@ -328,8 +350,9 @@ export async function saveDraft(
     const existing = rows[0] as ResponseRow | undefined;
 
     if (!existing) {
-      // 409 if the window is closed for a brand-new draft (H12).
-      if (!isWindowOpen(app)) {
+      // 409 if the window is closed for a brand-new draft (H12), unless the
+      // user is an invited participant (E: they can always create drafts).
+      if (!isWindowOpen(app) && !invited) {
         throw new ConflictError("Applications are closed for this form", { applicationId });
       }
       const inserted = await client.query(
@@ -399,20 +422,36 @@ export async function submitResponse(
     const shirtSize = input.shirt_size ?? (merged.shirt_size as string | undefined);
     if (input.shirt_size) merged.shirt_size = input.shirt_size;
 
-    if (SHIRT_TYPES.includes(app.type) && !shirtSize) {
+    const invited = await isInvitedParticipant(client, userId);
+
+    // Invited participants already gave shirt & food at invite accept; skip
+    // the required check and preserve existing values when not re-submitted.
+    if (!invited && SHIRT_TYPES.includes(app.type) && !shirtSize) {
       throw new BadRequestError("Shirt size is required for this application type", {
         code: "shirt_size_required",
       });
     }
 
-    // Extract food data from responses if not provided as top-level fields
-    const foodIntolerances = (
-      input.food_intolerances.length > 0
-        ? input.food_intolerances
-        : ((merged.food_intolerances as number[] | undefined) ?? [])
-    ).map(Number);
-    const foodNotes =
-      input.food_intolerance_notes ?? (merged.food_intolerance_notes as string | undefined) ?? null;
+    // Extract food data from responses if not provided as top-level fields.
+    // For invited participants fall back to their existing user row data.
+    let foodIntolerances: number[];
+    let foodNotes: string | null;
+    if (invited && input.food_intolerances.length === 0 && !merged.food_intolerances) {
+      const { rows: userFood } = await client.query(
+        `SELECT food_intolerances, food_intolerance_notes FROM users WHERE id = $1`,
+        [userId],
+      );
+      foodIntolerances = userFood[0]?.food_intolerances ?? [];
+      foodNotes = userFood[0]?.food_intolerance_notes ?? null;
+    } else {
+      foodIntolerances = (
+        input.food_intolerances.length > 0
+          ? input.food_intolerances
+          : ((merged.food_intolerances as number[] | undefined) ?? [])
+      ).map(Number);
+      foodNotes =
+        input.food_intolerance_notes ?? (merged.food_intolerance_notes as string | undefined) ?? null;
+    }
 
     const enrichedTemplate = await enrichTemplate(app.type, app.template);
     validateResponses(enrichedTemplate, merged);
@@ -429,10 +468,30 @@ export async function submitResponse(
 
     const updated = await client.query(
       `UPDATE application_responses
-       SET responses = $3::jsonb, status = 'review', submitted_at = now()
+       SET responses = $3::jsonb,
+           status = $4,
+           submitted_at = now()
        WHERE id = $1 AND user_id = $2 RETURNING *`,
-      [existing.id, userId, JSON.stringify(merged)],
+      [existing.id, userId, JSON.stringify(merged), invited ? "confirmed" : "review"],
     );
+
+    if (invited) {
+      // Auto-confirm: issue ticket, stamp confirmed_at, audit confirmed.
+      await client.query(
+        `UPDATE application_responses SET confirmed_at = now() WHERE id = $1`,
+        [existing.id],
+      );
+      await issueTicket(client, userId);
+      await audit(client, {
+        actorId: userId,
+        entityType: "application_response",
+        entityId: existing.id,
+        action: "confirmed",
+        source: "web",
+        before: { status: "draft" },
+        after: { status: "confirmed" },
+      });
+    }
 
     await audit(client, {
       actorId: userId,
@@ -440,9 +499,13 @@ export async function submitResponse(
       entityId: existing.id,
       action: "submitted",
       source: "web",
+      after: { status: invited ? "confirmed" : "review" },
     });
 
-    return { response: updated.rows[0], privacyNotice: privacyNotice(userRows[0].language) };
+    return {
+      response: { ...updated.rows[0], status: invited ? "confirmed" : "review" },
+      privacyNotice: privacyNotice(userRows[0].language),
+    };
   });
 }
 

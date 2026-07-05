@@ -277,7 +277,7 @@ describe("H9/H10 invite acceptance", () => {
     const res = await a.inject({
       method: "POST",
       url: "/api/invites/accept",
-      payload: { ...ACCEPT_BASE, token: invite.token, language: "gl", foodIntolerances: [] },
+      payload: { ...ACCEPT_BASE, token: invite.token, language: "gl", foodIntolerances: [1], shirtSize: "M" },
     });
     expect(res.statusCode).toBe(201);
     const { userId } = res.json();
@@ -334,7 +334,7 @@ describe("H9/H10 invite acceptance", () => {
     const res = await a.inject({
       method: "POST",
       url: "/api/invites/accept",
-      payload: { ...ACCEPT_BASE, token: invite.token },
+      payload: { ...ACCEPT_BASE, token: invite.token, foodIntolerances: [1], shirtSize: "M" },
     });
     expect(res.statusCode).toBe(201);
     const { userId } = res.json();
@@ -369,7 +369,7 @@ describe("H9/H10 invite acceptance", () => {
         ...ACCEPT_BASE,
         token: invite.token,
         shirtSize: "L",
-        foodIntolerances: [],
+        foodIntolerances: [1],
         foodIntoleranceNotes: "no nuts",
       },
     });
@@ -390,12 +390,12 @@ describe("H9/H10 invite acceptance", () => {
       a.inject({
         method: "POST",
         url: "/api/invites/accept",
-        payload: { ...ACCEPT_BASE, token: invite.token },
+        payload: { ...ACCEPT_BASE, token: invite.token, foodIntolerances: [1], shirtSize: "M" },
       }),
       a.inject({
         method: "POST",
         url: "/api/invites/accept",
-        payload: { ...ACCEPT_BASE, name: "Rival", token: invite.token },
+        payload: { ...ACCEPT_BASE, name: "Rival", token: invite.token, foodIntolerances: [1], shirtSize: "M" },
       }),
     ]);
     const statuses = [r1.statusCode, r2.statusCode].sort();
@@ -416,21 +416,21 @@ describe("H9/H10 invite acceptance", () => {
     const first = await a.inject({
       method: "POST",
       url: "/api/invites/accept",
-      payload: { ...ACCEPT_BASE, token: invite.token },
+      payload: { ...ACCEPT_BASE, token: invite.token, foodIntolerances: [1], shirtSize: "M" },
     });
     expect(first.statusCode).toBe(201);
 
     const reuse = await a.inject({
       method: "POST",
       url: "/api/invites/accept",
-      payload: { ...ACCEPT_BASE, token: invite.token },
+      payload: { ...ACCEPT_BASE, token: invite.token, foodIntolerances: [1], shirtSize: "M" },
     });
     expect(reuse.statusCode).toBe(409);
 
     const unknown = await a.inject({
       method: "POST",
       url: "/api/invites/accept",
-      payload: { ...ACCEPT_BASE, token: "no-such-token" },
+      payload: { ...ACCEPT_BASE, token: "no-such-token", foodIntolerances: [1], shirtSize: "M" },
     });
     expect(unknown.statusCode).toBe(404);
 
@@ -481,7 +481,7 @@ describe("H9 invite regeneration", () => {
     const old = await a.inject({
       method: "POST",
       url: "/api/invites/accept",
-      payload: { ...ACCEPT_BASE, token: original.token },
+      payload: { ...ACCEPT_BASE, token: original.token, foodIntolerances: [1], shirtSize: "M" },
     });
     expect(old.statusCode).toBe(409);
 
@@ -489,7 +489,7 @@ describe("H9 invite regeneration", () => {
     const accept = await a.inject({
       method: "POST",
       url: "/api/invites/accept",
-      payload: { ...ACCEPT_BASE, token: fresh.token },
+      payload: { ...ACCEPT_BASE, token: fresh.token, foodIntolerances: [1], shirtSize: "M" },
     });
     expect(accept.statusCode).toBe(201);
     const { rows } = await pool.query(`SELECT * FROM sponsors WHERE user_id = $1`, [
@@ -505,7 +505,7 @@ describe("H9 invite regeneration", () => {
     await a.inject({
       method: "POST",
       url: "/api/invites/accept",
-      payload: { ...ACCEPT_BASE, token: invite.token },
+      payload: { ...ACCEPT_BASE, token: invite.token, foodIntolerances: [1], shirtSize: "M" },
     });
     const regen = await a.inject({
       method: "POST",
@@ -530,7 +530,7 @@ describe("H9 invite regeneration", () => {
     await a.inject({
       method: "POST",
       url: "/api/invites/accept",
-      payload: { ...ACCEPT_BASE, token: invite.token, shirtSize: "S" },
+      payload: { ...ACCEPT_BASE, token: invite.token, shirtSize: "S", foodIntolerances: [1] },
     });
     const after = await a.inject({
       method: "GET",
