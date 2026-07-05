@@ -397,6 +397,128 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     },
   );
 
+  // Change a user's PRIMARY email — staff utility (USERS_WRITE). `users.email`
+  // is a plain UNIQUE column, NOT a foreign key target: credential login keys
+  // the accounts row on user_id (accounts.account_id is the user id as text),
+  // and sessions/accounts reference users(id). So this is a single-column
+  // update — no cascading FK work — guarded only by the uniqueness rules that
+  // also protect secondary emails (H6): the address may not already be another
+  // account's primary, nor another account's VERIFIED secondary. Audited (H53).
+  api.patch(
+    "/api/users/:id/email",
+    {
+      preHandler: requireCapability(CAPABILITIES.USERS_WRITE),
+      schema: {
+        params: z.object({ id: z.coerce.number().int() }),
+        body: z.object({ email: z.string().email() }).strict(),
+        response: { 200: userResponseSchema },
+      },
+    },
+    async (req) => {
+      const targetId = req.params.id;
+      const email = req.body.email.trim().toLowerCase();
+      const after = await withTransaction(async (client) => {
+        const { rows: beforeRows } = await client.query(
+          `SELECT * FROM users WHERE id = $1 FOR UPDATE`,
+          [targetId],
+        );
+        if (!beforeRows[0]) throw new NotFoundError("User not found", { userId: targetId });
+        const before = beforeRows[0] as UserRow;
+        if (before.email === email) return before; // idempotent no-op
+
+        const { rows: primaryClash } = await client.query(
+          `SELECT id FROM users WHERE email = $1 AND id <> $2 LIMIT 1`,
+          [email, targetId],
+        );
+        if (primaryClash.length > 0) {
+          throw new ConflictError("That email already belongs to another account", { email });
+        }
+        const { rows: secondaryClash } = await client.query(
+          `SELECT id FROM users
+             WHERE secondary_email = $1 AND secondary_email_verified_at IS NOT NULL AND id <> $2
+             LIMIT 1`,
+          [email, targetId],
+        );
+        if (secondaryClash.length > 0) {
+          throw new ConflictError("That email is another account's verified secondary email", {
+            email,
+          });
+        }
+
+        // The admin is asserting the corrected address, so it counts as verified
+        // (mirrors how staff-set contact data is trusted elsewhere in H7).
+        const { rows: afterRows } = await client.query(
+          `UPDATE users SET email = $2, email_verified = true WHERE id = $1 RETURNING *`,
+          [targetId, email],
+        );
+        await audit(client, {
+          actorId: req.userId,
+          entityType: "user",
+          entityId: targetId,
+          action: "primary_email_changed",
+          source: "admin",
+          before: { email: before.email },
+          after: { email },
+        });
+        return afterRows[0] as UserRow;
+      });
+      return serializeUser(after);
+    },
+  );
+
+  // Anonymize an account — H54 "borrado de datos personales". This is the path
+  // the DELETE 409 above points to: accounts that have done things (audit,
+  // scans, evaluations…) can't be hard-deleted without corrupting history, so
+  // instead we scrub every PII column in place (keeping the row + its FK
+  // references intact) and revoke all access (sessions + credential accounts).
+  // Superadmin only (ADMIN_ALL); irreversible; audited (H53).
+  api.post(
+    "/api/users/:id/anonymize",
+    {
+      preHandler: requireCapability(CAPABILITIES.ADMIN_ALL),
+      schema: {
+        params: z.object({ id: z.coerce.number().int() }),
+        response: { 200: z.object({ anonymized: z.literal(true) }) },
+      },
+    },
+    async (req) => {
+      const targetId = req.params.id;
+      if (targetId === req.userId) {
+        throw new BadRequestError("You can't anonymize your own account");
+      }
+      await withTransaction(async (client) => {
+        const { rows } = await client.query(`SELECT email FROM users WHERE id = $1 FOR UPDATE`, [
+          targetId,
+        ]);
+        if (!rows[0]) throw new NotFoundError("User not found", { userId: targetId });
+        const anonEmail = `anonymized+${targetId}@deleted.invalid`;
+        await client.query(
+          `UPDATE users
+             SET email = $2, email_verified = false, name = 'Anonymized', surname = NULL,
+                 phone = NULL, dni = NULL, image = NULL,
+                 secondary_email = NULL, secondary_email_verified_at = NULL,
+                 food_intolerances = '{}', food_intolerance_notes = NULL, notes = NULL
+           WHERE id = $1`,
+          [targetId, anonEmail],
+        );
+        // Revoke all access. Both cascade on user delete anyway, but we remove
+        // them explicitly so the anonymized row can no longer authenticate.
+        await client.query(`DELETE FROM sessions WHERE user_id = $1`, [targetId]);
+        await client.query(`DELETE FROM accounts WHERE user_id = $1`, [targetId]);
+        await audit(client, {
+          actorId: req.userId,
+          entityType: "user",
+          entityId: targetId,
+          action: "anonymized",
+          source: "admin",
+          before: { email: rows[0].email },
+        });
+      });
+      await invalidateCapabilities(targetId);
+      return { anonymized: true as const };
+    },
+  );
+
   // A user's physical history (H24-H26): activity/meal passes, badge check-ins
   // and door in/out scans — what the profile's "Activity" tab shows. Meals are
   // activities (activity.category = 'meal'), so a repeated meal shows as
