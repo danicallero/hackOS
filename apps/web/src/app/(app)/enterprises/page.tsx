@@ -40,7 +40,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
-import { useCan } from "@/lib/session";
+import { useCan, useMe } from "@/lib/session";
 import { type Enterprise, initials, visibilityTone } from "./shared";
 
 // Optional URL: allow blank, otherwise must be a valid URL.
@@ -116,6 +116,7 @@ const columns: Column<Enterprise>[] = [
 export default function EnterprisesPage() {
   const router = useRouter();
   const canManage = useCan(CAPABILITIES.SPONSORS_MANAGE);
+  const me = useMe();
   const [enterprises, setEnterprises] = useState<Enterprise[]>([]);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
@@ -134,9 +135,45 @@ export default function EnterprisesPage() {
   }, []);
 
   useEffect(() => {
-    if (canManage) void load();
-    else setLoading(false);
-  }, [canManage, load]);
+    if (canManage) {
+      void load();
+      return;
+    }
+    if (me?.role !== "sponsor") {
+      setLoading(false);
+      return;
+    }
+    let alive = true;
+    setLoading(true);
+    api
+      .get<Enterprise>("/api/enterprises/mine")
+      .then((enterprise) => {
+        if (alive) router.replace(`/enterprises/${enterprise.id}`);
+      })
+      .catch((err) => {
+        if (!alive) return;
+        toast.error(err instanceof ApiError ? err.message : "Could not load your enterprise.");
+        setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [canManage, load, me?.role, router]);
+
+  if (!canManage && me?.role === "sponsor" && loading) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="My enterprise" />
+        <DataTable
+          columns={columns}
+          data={[]}
+          getRowId={(e) => String(e.id)}
+          loading
+          empty={{ icon: Building2Icon, title: "Loading enterprise" }}
+        />
+      </div>
+    );
+  }
 
   if (!canManage) {
     return (

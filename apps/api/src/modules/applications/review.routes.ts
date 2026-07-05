@@ -201,7 +201,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     async (req) => getDecisionPool(req.params.id),
   );
 
-  // ── H14: revert internal decision (or to submitted for re-review) ────────────
+  // ── H14: revert a decision to review, or flip an unsent internal decision ────
   r.post(
     "/api/responses/:responseId/revert-decision",
     {

@@ -679,11 +679,11 @@ function FormPreviewModal({
           This is how applicants see the form (Spanish labels shown). Name, email and logistics are
           collected separately.
         </p>
-        {fields.map((f, i) => {
+        {fields.map((f) => {
           const label = pickText(f.label, "es") || f.key;
           const opts = f.options ?? [];
           return (
-            <div key={`${f.key}-${i}`} className="space-y-1.5">
+            <div key={f.key} className="space-y-1.5">
               <Label>
                 {label}
                 {f.required && <span className="text-destructive"> *</span>}
@@ -699,9 +699,9 @@ function FormPreviewModal({
                   {opts.length === 0 ? (
                     <span className="text-muted-foreground text-sm">No options defined</span>
                   ) : (
-                    opts.map((o, oi) => (
+                    opts.map((o) => (
                       <span
-                        key={`${o.value}-${oi}`}
+                        key={o.value}
                         className="border-input rounded-md border px-2 py-0.5 text-sm"
                       >
                         {pickText(o.label, "es") || o.value}
@@ -1225,15 +1225,15 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() =>
-                    batchAction("Reverted to submitted.", () =>
+                    batchAction("Moved back to review.", () =>
                       api.post("/api/responses/batch/revert-decision", {
                         response_ids: selectedArr.map((r) => r.id),
-                        decision: "submitted",
+                        decision: "review",
                       }),
                     )
                   }
                 >
-                  To submitted (re-review)
+                  Back to review
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
@@ -1730,14 +1730,14 @@ function ReviewModal({
                     variant="outline"
                     disabled={busy}
                     onClick={() =>
-                      run("Reverted to rejected.", () =>
+                      run("Moved back to review.", () =>
                         api.post(`/api/responses/${response.id}/revert-decision`, {
-                          decision: "rejected",
+                          decision: "review",
                         }),
                       )
                     }
                   >
-                    Revert to rejected
+                    Back to review
                   </Button>
                 </>
               )}
@@ -1760,14 +1760,14 @@ function ReviewModal({
                     variant="outline"
                     disabled={busy}
                     onClick={() =>
-                      run("Reverted to accepted.", () =>
+                      run("Moved back to review.", () =>
                         api.post(`/api/responses/${response.id}/revert-decision`, {
-                          decision: "accepted",
+                          decision: "review",
                         }),
                       )
                     }
                   >
-                    Revert to accepted
+                    Back to review
                   </Button>
                 </>
               )}
@@ -1785,20 +1785,20 @@ function ReviewModal({
                   Resend
                 </Button>
               )}
-              {canDecide && ((st === "accepted" && sent) || st === "rejected") && (
+              {canDecide && (st === "accepted" || st === "rejected") && (
                 <Button
                   size="sm"
                   variant="outline"
                   disabled={busy}
                   onClick={() =>
-                    run("Pulled back to internal (unsent).", () =>
+                    run("Moved back to review.", () =>
                       api.post(`/api/responses/${response.id}/revert-decision`, {
-                        decision: st === "accepted" ? "accepted" : "rejected",
+                        decision: "review",
                       }),
                     )
                   }
                 >
-                  Unsend
+                  Back to review
                 </Button>
               )}
               {canDecide && (st === "rejected" || st === "declined" || st === "expired") && (

@@ -86,6 +86,7 @@ export async function createFoodIntolerance(label: string, proposedBy: number): 
 }
 
 export async function getResponse(id: number): Promise<{
+  user_id: number;
   status: string;
   confirmed_at: Date | null;
   declined_at: Date | null;
@@ -93,7 +94,7 @@ export async function getResponse(id: number): Promise<{
   confirmation_token_id: number | null;
 }> {
   const { rows } = await pool.query(
-    `SELECT status, confirmed_at, declined_at, decision_sent_at, confirmation_token_id
+    `SELECT user_id, status, confirmed_at, declined_at, decision_sent_at, confirmation_token_id
      FROM application_responses WHERE id = $1`,
     [id],
   );

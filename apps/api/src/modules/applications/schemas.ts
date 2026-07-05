@@ -150,11 +150,11 @@ export const batchDecideSchema = batchIdsSchema.extend({
 export const batchSendDecisionsSchema = batchIdsSchema;
 
 export const batchRevertDecisionSchema = batchIdsSchema.extend({
-  decision: z.enum(["accepted", "rejected", "submitted"]),
+  decision: z.enum(["accepted", "rejected", "review"]),
 });
 
 export const revertDecisionSchema = z.object({
-  decision: z.enum(["accepted", "rejected", "submitted"]),
+  decision: z.enum(["accepted", "rejected", "review"]),
 });
 
 // ── confirm link retrieval ───────────────────────────────────────────────────

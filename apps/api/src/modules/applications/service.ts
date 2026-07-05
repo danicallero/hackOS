@@ -666,25 +666,25 @@ export async function decide(
 
 /**
  * Revert a decision — flip between accepted_internal and
- * rejected_internal, or send it back to submitted for re-review.
+ * rejected_internal, or send it back to review for re-review.
  * Reverting to accepted re-checks capacity. (H14)
  */
 export async function revertDecision(
   actorId: number,
   responseId: number,
-  newDecision: "accepted" | "rejected" | "submitted",
+  newDecision: "accepted" | "rejected" | "review",
 ): Promise<ResponseRow> {
   return withTransaction(async (client) => {
     const resp = await lockResponse(client, responseId);
 
-    if (newDecision === "submitted") {
+    if (newDecision === "review") {
       if (
         resp.status !== "accepted_internal" &&
         resp.status !== "rejected_internal" &&
         resp.status !== "accepted" &&
         resp.status !== "rejected"
       ) {
-        throw new ConflictError("Only decided responses can be reverted to submitted", {
+        throw new ConflictError("Only decided responses can be reverted to review", {
           status: resp.status,
         });
       }
@@ -697,7 +697,7 @@ export async function revertDecision(
       }
       const updated = await client.query(
         `UPDATE application_responses
-         SET status = 'submitted', decision_sent_at = NULL, confirmation_token_id = NULL,
+         SET status = 'review', decision_sent_at = NULL, confirmation_token_id = NULL,
              confirmed_at = NULL, declined_at = NULL
          WHERE id = $1 RETURNING *`,
         [responseId],
@@ -706,9 +706,9 @@ export async function revertDecision(
         actorId,
         entityType: "application_response",
         entityId: responseId,
-        action: "reverted_to_submitted",
+        action: "reverted_to_review",
         before: { status: resp.status },
-        after: { status: "submitted" },
+        after: { status: "review" },
       });
       return updated.rows[0];
     }
@@ -1196,7 +1196,7 @@ async function resendRejectedDecision(actorId: number, responseId: number): Prom
 export async function batchRevertDecisions(
   actorId: number,
   responseIds: number[],
-  newDecision: "accepted" | "rejected" | "submitted",
+  newDecision: "accepted" | "rejected" | "review",
 ): Promise<BatchResult> {
   return runBatch(responseIds, (id) => revertDecision(actorId, id, newDecision));
 }

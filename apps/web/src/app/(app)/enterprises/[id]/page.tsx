@@ -7,7 +7,7 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowLeftIcon, Building2Icon, ImageIcon, LockIcon, UploadIcon } from "lucide-react";
+import { ArrowLeftIcon, Building2Icon, ImageIcon, UploadIcon } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -102,23 +102,9 @@ export default function EnterpriseDetailPage() {
   }, [id]);
 
   useEffect(() => {
-    if (!canManage) return;
     if (Number.isFinite(id)) void load();
     else setStatus("error");
-  }, [id, canManage, load]);
-
-  if (!canManage) {
-    return (
-      <div className="space-y-6">
-        <BackLink />
-        <EmptyState
-          icon={LockIcon}
-          title="You can't manage sponsors"
-          description="You need the sponsors:manage capability to edit enterprises."
-        />
-      </div>
-    );
-  }
+  }, [id, load]);
 
   if (status === "loading") {
     return (
@@ -153,8 +139,8 @@ export default function EnterpriseDetailPage() {
       </div>
 
       <LogoCard enterprise={enterprise} onChanged={load} />
-      <EditCard enterprise={enterprise} onSaved={load} />
-      <MembersCard enterpriseId={enterprise.id} />
+      <EditCard enterprise={enterprise} canManage={canManage} onSaved={load} />
+      {canManage && <MembersCard enterpriseId={enterprise.id} />}
     </div>
   );
 }
@@ -414,9 +400,11 @@ function LogoCard({
 
 function EditCard({
   enterprise,
+  canManage,
   onSaved,
 }: {
   enterprise: Enterprise;
+  canManage: boolean;
   onSaved: () => Promise<void>;
 }) {
   const form = useForm<EditValues>({
@@ -432,18 +420,26 @@ function EditCard({
 
   async function onSubmit(values: EditValues) {
     try {
-      // PATCH /api/enterprises/:id (updateEnterpriseBody). Full editable set;
-      // empty strings map to null so optional fields clear correctly.
-      await api.patch<Enterprise>(`/api/enterprises/${enterprise.id}`, {
-        name: values.name,
+      const ownerPatch = {
         website: values.website || null,
         logoUrl: values.logoUrl || null,
         description: values.description || null,
-        tierId: values.tierId ? Number(values.tierId) : null,
-        displayPriority: values.displayPriority ? Number(values.displayPriority) : null,
-        visibility: values.visibility,
-        availableFrom: fromDatetimeLocal(values.availableFrom),
-      });
+      };
+      // Admins may edit the full reveal/identity surface. Sponsor reps submit
+      // only OWNER_EDITABLE_KEYS enforced by the API.
+      await api.patch<Enterprise>(
+        `/api/enterprises/${enterprise.id}`,
+        canManage
+          ? {
+              ...ownerPatch,
+              name: values.name,
+              tierId: values.tierId ? Number(values.tierId) : null,
+              displayPriority: values.displayPriority ? Number(values.displayPriority) : null,
+              visibility: values.visibility,
+              availableFrom: fromDatetimeLocal(values.availableFrom),
+            }
+          : ownerPatch,
+      );
       await onSaved();
       toast.success("Enterprise updated.");
     } catch (err) {
@@ -467,8 +463,11 @@ function EditCard({
               <FormItem>
                 <FormLabel>Name</FormLabel>
                 <FormControl>
-                  <Input {...field} />
+                  <Input disabled={!canManage} {...field} />
                 </FormControl>
+                {!canManage && (
+                  <FormDescription>Contact staff to change the legal name.</FormDescription>
+                )}
                 <FormMessage />
               </FormItem>
             )}
@@ -515,76 +514,80 @@ function EditCard({
               </FormItem>
             )}
           />
-          <div className="grid gap-5 sm:grid-cols-2">
-            <FormField
-              control={form.control}
-              name="tierId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Tier ID</FormLabel>
-                  <FormControl>
-                    <Input inputMode="numeric" {...field} />
-                  </FormControl>
-                  <FormDescription>Sponsor tier reference.</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="displayPriority"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Display priority</FormLabel>
-                  <FormControl>
-                    <Input inputMode="numeric" {...field} />
-                  </FormControl>
-                  <FormDescription>Lower shows first in the reveal.</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-          <FormField
-            control={form.control}
-            name="visibility"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Visibility</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="hidden">Hidden</SelectItem>
-                    <SelectItem value="visible">Visible</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormDescription>
-                  Only visible enterprises appear in the public sponsor reveal (H45).
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="availableFrom"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Reveal from</FormLabel>
-                <FormControl>
-                  <Input type="datetime-local" {...field} />
-                </FormControl>
-                <FormDescription>
-                  Optional scheduled reveal — leave blank to reveal immediately once visible.
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          {canManage && (
+            <>
+              <div className="grid gap-5 sm:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="tierId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Tier ID</FormLabel>
+                      <FormControl>
+                        <Input inputMode="numeric" {...field} />
+                      </FormControl>
+                      <FormDescription>Sponsor tier reference.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="displayPriority"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Display priority</FormLabel>
+                      <FormControl>
+                        <Input inputMode="numeric" {...field} />
+                      </FormControl>
+                      <FormDescription>Lower shows first in the reveal.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <FormField
+                control={form.control}
+                name="visibility"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Visibility</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="hidden">Hidden</SelectItem>
+                        <SelectItem value="visible">Visible</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      Only visible enterprises appear in the public sponsor reveal (H45).
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="availableFrom"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Reveal from</FormLabel>
+                    <FormControl>
+                      <Input type="datetime-local" {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      Optional scheduled reveal — leave blank to reveal immediately once visible.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </>
+          )}
         </SectionCard>
       </form>
     </Form>

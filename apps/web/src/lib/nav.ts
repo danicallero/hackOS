@@ -12,6 +12,7 @@ import {
   ScrollTextIcon,
   SettingsIcon,
   ShieldCheckIcon,
+  TrophyIcon,
   UserIcon,
   UsersIcon,
 } from "lucide-react";
@@ -24,6 +25,8 @@ export interface NavItem {
   capability?: Capability;
   /** Visible to any of these capabilities. */
   anyCapability?: Capability[];
+  /** Visible to linked sponsor representatives (association-based portal). */
+  sponsorVisible?: boolean;
   /** Not built yet — shown disabled with a "Soon" badge. */
   soon?: boolean;
 }
@@ -81,7 +84,15 @@ export const NAV: NavSection[] = [
         title: "Enterprises",
         href: "/enterprises",
         icon: HandshakeIcon,
-        anyCapability: [CAPABILITIES.SPONSORS_MANAGE, CAPABILITIES.SPONSOR_PORTAL],
+        capability: CAPABILITIES.SPONSORS_MANAGE,
+        sponsorVisible: true,
+      },
+      {
+        title: "Challenges",
+        href: "/challenges",
+        icon: TrophyIcon,
+        anyCapability: [CAPABILITIES.SPONSORS_MANAGE, CAPABILITIES.QUEUE_ADMIN],
+        sponsorVisible: true,
       },
     ],
   },
