@@ -16,8 +16,9 @@ export async function ownsEnterprise(userId: number, enterpriseId: number): Prom
 }
 
 /**
- * H43-H44: org admins (SPONSORS_MANAGE) manage every enterprise; sponsor reps
- * (SPONSOR_PORTAL) may edit the profile of the enterprise they belong to.
+ * H43-H44: org admins (SPONSORS_MANAGE) manage every enterprise; linked sponsor
+ * reps may edit the profile of the enterprise they belong to. The sponsor row
+ * is the access grant; SPONSOR_PORTAL is not required for the rep themselves.
  * Returns how access was granted so the caller can restrict which fields an
  * owner (vs. an admin) is allowed to change.
  */
@@ -30,11 +31,6 @@ export async function assertCanEditEnterprise(
   if (rowCount === 0) throw new NotFoundError("Enterprise not found", { enterpriseId });
 
   if (await userHasCapability(userId, CAPABILITIES.SPONSORS_MANAGE)) return "admin";
-  if (
-    (await userHasCapability(userId, CAPABILITIES.SPONSOR_PORTAL)) &&
-    (await ownsEnterprise(userId, enterpriseId))
-  ) {
-    return "owner";
-  }
+  if (await ownsEnterprise(userId, enterpriseId)) return "owner";
   throw new ForbiddenError("Not allowed to edit this enterprise", { enterpriseId });
 }

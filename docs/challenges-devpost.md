@@ -57,19 +57,30 @@ Key facts that drive every design decision below:
 
 ### 1.2 Challenges module (`apps/api/src/modules/challenges/`)
 
-Challenges are authored by sponsors (H43 creates the enterprise + its challenge;
-H44 edits it), so the module intentionally exposes **read + edit + history +
-panel**, not generic create/delete. Deleting or hand-creating a challenge outside
-the sponsor lifecycle is not a story and is not exposed.
+Challenges are owned through the sponsor lifecycle: an admin creates a challenge
+template bound to an enterprise, and sponsor rows on that enterprise grant the
+representatives access to their own challenge and enterprise even if they hold no
+explicit portal capability. Admins control publication/reveal; sponsors edit the
+challenge content and judging panel under the H44/H45 rules below.
 
 | Method & path | Capability | Story | Behaviour |
 |---|---|---|---|
 | `GET /api/challenges` | `sponsors:manage` OR `queue:admin` | H44/H46 | admin-wide list |
-| `GET /api/challenges/mine` | `sponsor:portal` | H44/H46 | challenges owned by the caller's enterprise |
+| `POST /api/challenges` | `sponsors:manage` OR `queue:admin` | H43/H44 | create hidden draft template bound to an enterprise |
+| `GET /api/challenges/mine` | authenticated + sponsor row | H44/H46 | challenges owned by the caller's enterprise |
 | `GET /api/challenges/:id` | ownership check | H44 | single challenge |
 | `PATCH /api/challenges/:id` | ownership check | H44 | partial edit + version snapshot + audit |
+| `POST /api/challenges/:id/publish` | `sponsors:manage` OR `queue:admin` | H45 | publish immediately or schedule reveal |
+| `POST /api/challenges/:id/unpublish` | `sponsors:manage` OR `queue:admin` | H45 | hide a mistakenly published challenge |
 | `GET /api/challenges/:id/panel/preview` | ownership check | H44 | typed judging panel + lock state |
 | `GET /api/challenges/:id/versions` | ownership check | H44 | immutable edit history |
+
+`POST /api/challenges` resolves the supplied `enterpriseId` to the existing
+`sponsors` ownership model. If the enterprise has no sponsor row yet, the service
+creates a nullable-user sponsor anchor (`sponsors.user_id IS NULL`) so
+`challenges.author` can still point at that enterprise without inventing a new
+table or migration. Later reps gain access through their own sponsor rows on the
+same enterprise.
 
 **Edit safety (H44).** `updateChallenge` runs `SELECT … FOR UPDATE`, writes one
 immutable `challenge_versions` snapshot and one `audit` row inside the same
@@ -80,7 +91,10 @@ is frozen once judging starts**: `panelIsLocked()` compares now against
 (`code: panel_locked`). This is the "restrict editing critical evaluation
 criteria once paired with judging" rule from the brief — realised through the
 judging clock, which is the deadline the stories actually name, not through a
-"has submissions" heuristic.
+"has submissions" heuristic. Once a challenge is published or archived, sponsor
+owners can still update the judging panel until that judging deadline, but the
+public/general fields (`title`, `description`, `criteria`, `prizes`,
+`max_presentation_seconds`) are admin-only.
 
 ### 1.3 Projects module (`apps/api/src/modules/projects/`)
 
@@ -219,12 +233,9 @@ implemented:
    creation and participant self-service (H18/H19) are explicitly marked
    *post-MVP*. Building a participant-facing selection/limit/lock flow would
    contradict the story, so the participant surface stays read-only.
-2. **Generic challenge Create/Delete CRUD.** Challenges are created and owned
-   through the sponsor lifecycle (H43/H44), not an admin CRUD table. The module
-   exposes read/edit/versions/panel; there is no create or delete endpoint, and
-   the "prevent delete when linked" rule is moot because deletion isn't a story.
+2. **Generic challenge Delete CRUD.** Challenges are created and owned through
+   the sponsor lifecycle (H43/H44), and publication is an admin-controlled
+   status/visibility transition. There is still no delete endpoint; the "prevent
+   delete when linked" rule is moot because deletion isn't a story.
 3. **`is_active` filter.** No such column exists. Activation is `status` +
    `visibility` + `available_from` (H45). Public/list reads filter on those.
-
-The genuinely-additive request that *was* actionable — this architecture
-document — is what you are reading.

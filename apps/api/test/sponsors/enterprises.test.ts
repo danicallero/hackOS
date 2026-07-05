@@ -3,7 +3,13 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
 import { pool } from "../../src/db/pool.js";
-import { asUser, buildTestApp, createUserWithCapabilities, truncateAll } from "../helpers.js";
+import {
+  asUser,
+  buildTestApp,
+  createUser,
+  createUserWithCapabilities,
+  truncateAll,
+} from "../helpers.js";
 
 /** H43-H45: enterprise management, owner-limited edits, logo presign, reveal. */
 
@@ -50,7 +56,7 @@ describe("enterprise management (H43-H45)", () => {
     expect(created.statusCode).toBe(201);
     const entId = created.json().id;
 
-    const owner = await createUserWithCapabilities([CAPABILITIES.SPONSOR_PORTAL]);
+    const owner = await createUser();
     await linkSponsor(owner, entId);
 
     // Owner may edit description/website/logo…

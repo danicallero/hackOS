@@ -29,12 +29,22 @@ async function ensureExists(challengeId: number): Promise<void> {
   if (rowCount === 0) throw new NotFoundError("Challenge not found", { challengeId });
 }
 
+/** True when `userId` is an org admin over challenges (QUEUE_ADMIN or SPONSORS_MANAGE). */
+export async function isChallengeAdmin(userId: number): Promise<boolean> {
+  return (
+    (await userHasCapability(userId, CAPABILITIES.QUEUE_ADMIN)) ||
+    (await userHasCapability(userId, CAPABILITIES.SPONSORS_MANAGE))
+  );
+}
+
 /**
  * H44/H8: editing a challenge (description, prizes, judging panel) is allowed
- * for org admins (QUEUE_ADMIN or SPONSORS_MANAGE) and for sponsor reps
- * (SPONSOR_PORTAL) of the owning enterprise. Challenge existence is public, so
+ * for org admins (QUEUE_ADMIN or SPONSORS_MANAGE) and for sponsor reps of the
+ * owning enterprise. Ownership alone grants a rep access — no SPONSOR_PORTAL
+ * capability is required, so a rep can always reach their own challenge
+ * regardless of what perms they were granted. Challenge existence is public, so
  * a missing challenge 404s before any permission check. Returns how access was
- * granted.
+ * granted (the publish-gate on general fields is applied by the service).
  */
 export async function assertCanEditChallenge(
   userId: number | null,
@@ -43,18 +53,8 @@ export async function assertCanEditChallenge(
   if (userId == null) throw new UnauthorizedError();
   await ensureExists(challengeId);
 
-  if (
-    (await userHasCapability(userId, CAPABILITIES.QUEUE_ADMIN)) ||
-    (await userHasCapability(userId, CAPABILITIES.SPONSORS_MANAGE))
-  ) {
-    return "admin";
-  }
-  if (
-    (await userHasCapability(userId, CAPABILITIES.SPONSOR_PORTAL)) &&
-    (await ownsChallenge(userId, challengeId))
-  ) {
-    return "owner";
-  }
+  if (await isChallengeAdmin(userId)) return "admin";
+  if (await ownsChallenge(userId, challengeId)) return "owner";
   throw new ForbiddenError("Not allowed to edit this challenge", { challengeId });
 }
 
@@ -77,11 +77,6 @@ export async function assertCanViewPanel(
   ) {
     return;
   }
-  if (
-    (await userHasCapability(userId, CAPABILITIES.SPONSOR_PORTAL)) &&
-    (await ownsChallenge(userId, challengeId))
-  ) {
-    return;
-  }
+  if (await ownsChallenge(userId, challengeId)) return;
   throw new ForbiddenError("Not allowed to view this panel", { challengeId });
 }

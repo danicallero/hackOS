@@ -1,7 +1,7 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import { requireCapability } from "../../lib/capabilities.js";
+import { requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { BadRequestError, ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
 import { putObject } from "../../lib/storage.js";
 import { assertCanEditEnterprise } from "./access.js";
@@ -55,10 +55,8 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
   );
 
   // Sponsor rep's own enterprise (H44).
-  r.get(
-    "/api/enterprises/mine",
-    { preHandler: requireCapability(CAPABILITIES.SPONSOR_PORTAL) },
-    async (req) => myEnterprise(actor(req.userId)),
+  r.get("/api/enterprises/mine", { preHandler: requireAuth }, async (req) =>
+    myEnterprise(actor(req.userId)),
   );
 
   r.get("/api/enterprises/:id", { schema: { params: enterpriseIdParam } }, async (req) => {

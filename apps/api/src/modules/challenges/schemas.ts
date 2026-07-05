@@ -28,3 +28,48 @@ export const updateChallengeBody = z
   .refine((b) => Object.keys(b).length > 0, { message: "no fields to update" });
 
 export type UpdateChallengeBody = z.infer<typeof updateChallengeBody>;
+
+/**
+ * Fields on the "public" surface of a challenge — everything except the judging
+ * panel. Once a challenge is published these are frozen for sponsor owners (only
+ * admins keep editing them); the judging panel stays owner-editable regardless,
+ * until judging starts. See updateChallenge().
+ */
+export const CHALLENGE_GENERAL_FIELDS = [
+  "title",
+  "description",
+  "criteria",
+  "prizes",
+  "maxPresentationSeconds",
+] as const;
+
+/**
+ * Admin-only creation of a challenge template bound to an enterprise (the
+ * sponsor lifecycle, H43/H44). Starts life as draft + hidden; an admin later
+ * publishes it to the public route.
+ */
+export const createChallengeBody = z
+  .object({
+    enterpriseId: z.number().int().positive(),
+    title: z.string().min(1),
+    description: z.string().optional(),
+    criteria: z.string().nullable().optional(),
+    prizes: z.array(prizeSchema).nullable().optional(),
+    judgingPanelCriteria: questionnaireSchema.optional(),
+    maxPresentationSeconds: z.number().int().positive().nullable().optional(),
+  })
+  .strict();
+
+export type CreateChallengeBody = z.infer<typeof createChallengeBody>;
+
+/**
+ * Publishing a challenge (H45). `availableFrom` schedules the reveal: the public
+ * route stays quiet until then. Omit it (or null) to reveal immediately.
+ */
+export const publishChallengeBody = z
+  .object({
+    availableFrom: z.coerce.date().nullish(),
+  })
+  .strict();
+
+export type PublishChallengeBody = z.infer<typeof publishChallengeBody>;

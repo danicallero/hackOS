@@ -1,10 +1,42 @@
 import type { Question } from "@hackos/shared/questions";
+import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
-import { ConflictError, NotFoundError } from "../../lib/errors.js";
-import type { UpdateChallengeBody } from "./schemas.js";
+import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import type { ChallengeAccess } from "./access.js";
+import {
+  CHALLENGE_GENERAL_FIELDS,
+  type CreateChallengeBody,
+  type PublishChallengeBody,
+  type UpdateChallengeBody,
+} from "./schemas.js";
+
+/** Published (or archived) challenges are frozen for sponsor owners. */
+function isFrozenForOwner(status: string): boolean {
+  return status === "published" || status === "archived";
+}
+
+/** Snapshot of the editable surface, written to challenge_versions on every change. */
+function snapshotOf(row: Record<string, unknown>) {
+  return {
+    title: row.title,
+    description: row.description,
+    criteria: row.criteria,
+    prizes: row.prizes,
+    judging_panel_criteria: row.judging_panel_criteria,
+    max_presentation_seconds: row.max_presentation_seconds,
+  };
+}
 
 const EDITABLE_COLUMNS = `id, title, description, criteria, prizes,
+  judging_panel_criteria, max_presentation_seconds, status, visibility,
+  available_from, created_at, updated_at`;
+
+const EDITABLE_COLUMNS_FROM_CHALLENGE = `c.id, c.title, c.description, c.criteria, c.prizes,
+  c.judging_panel_criteria, c.max_presentation_seconds, c.status, c.visibility,
+  c.available_from, c.created_at, c.updated_at`;
+
+const CREATE_RETURNING_COLUMNS = `id, author, title, description, criteria, prizes,
   judging_panel_criteria, max_presentation_seconds, status, visibility,
   available_from, created_at, updated_at`;
 
@@ -35,7 +67,7 @@ export async function getChallenge(challengeId: number) {
 /** Challenges owned by the enterprise `userId` is a sponsor of (H44/H46). */
 export async function listOwnedChallenges(userId: number) {
   const { rows } = await pool.query(
-    `SELECT ${EDITABLE_COLUMNS}
+    `SELECT ${EDITABLE_COLUMNS_FROM_CHALLENGE}
        FROM challenges c
        JOIN sponsors author ON author.id = c.author
        JOIN sponsors mine ON mine.enterprise_id = author.enterprise_id
@@ -51,6 +83,168 @@ export async function listAllChallenges() {
   return rows;
 }
 
+async function ensureEnterpriseSponsorAnchor(db: Queryable, enterpriseId: number): Promise<number> {
+  const enterprise = await db.query(`SELECT id FROM enterprises WHERE id = $1`, [enterpriseId]);
+  if (!enterprise.rows[0]) throw new NotFoundError("Enterprise not found", { enterpriseId });
+
+  const existing = await db.query(
+    `SELECT id
+       FROM sponsors
+      WHERE enterprise_id = $1
+      ORDER BY (user_id IS NOT NULL), id
+      LIMIT 1`,
+    [enterpriseId],
+  );
+  if (existing.rows[0]) return Number(existing.rows[0].id);
+
+  const created = await db.query(
+    `INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, NULL) RETURNING id`,
+    [enterpriseId],
+  );
+  return Number(created.rows[0].id);
+}
+
+/** Admin-created challenge template bound to an enterprise (H43/H44). */
+export async function createChallenge(input: CreateChallengeBody, actorId: number) {
+  return withTransaction(async (client) => {
+    const authorId = await ensureEnterpriseSponsorAnchor(client, input.enterpriseId);
+    const { rows } = await client.query(
+      `INSERT INTO challenges
+         (author, title, description, criteria, prizes, judging_panel_criteria,
+          max_presentation_seconds, status, visibility)
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, 'draft', 'hidden')
+       RETURNING ${CREATE_RETURNING_COLUMNS}`,
+      [
+        authorId,
+        input.title,
+        input.description ?? "",
+        input.criteria ?? null,
+        input.prizes === undefined ? null : JSON.stringify(input.prizes),
+        input.judgingPanelCriteria === undefined
+          ? null
+          : JSON.stringify(input.judgingPanelCriteria),
+        input.maxPresentationSeconds ?? null,
+      ],
+    );
+    const created = rows[0];
+
+    await client.query(
+      `INSERT INTO challenge_versions (challenge_id, editor_id, snapshot)
+       VALUES ($1, $2, $3::jsonb)`,
+      [created.id, actorId, JSON.stringify(snapshotOf(created))],
+    );
+
+    await audit(client, {
+      actorId,
+      entityType: "challenge",
+      entityId: created.id,
+      action: "created",
+      after: {
+        enterpriseId: input.enterpriseId,
+        title: created.title,
+        status: created.status,
+        visibility: created.visibility,
+      },
+    });
+
+    return created;
+  });
+}
+
+/** Admin-only publication to the public catalog (H45). */
+export async function publishChallenge(
+  challengeId: number,
+  actorId: number,
+  input: PublishChallengeBody,
+) {
+  return withTransaction(async (client) => {
+    const beforeRes = await client.query(
+      `SELECT ${EDITABLE_COLUMNS} FROM challenges WHERE id = $1 FOR UPDATE`,
+      [challengeId],
+    );
+    const before = beforeRes.rows[0];
+    if (!before) throw new NotFoundError("Challenge not found", { challengeId });
+
+    const availableFrom = input.availableFrom ?? null;
+    const updated = await client.query(
+      `UPDATE challenges
+          SET status = 'published',
+              visibility = 'visible',
+              available_from = $2,
+              updated_at = now()
+        WHERE id = $1
+        RETURNING ${EDITABLE_COLUMNS}`,
+      [challengeId, availableFrom],
+    );
+    const after = updated.rows[0];
+
+    await client.query(
+      `INSERT INTO challenge_versions (challenge_id, editor_id, snapshot)
+       VALUES ($1, $2, $3::jsonb)`,
+      [challengeId, actorId, JSON.stringify(snapshotOf(after))],
+    );
+
+    await audit(client, {
+      actorId,
+      entityType: "challenge",
+      entityId: challengeId,
+      action: "published",
+      before: {
+        status: before.status,
+        visibility: before.visibility,
+        available_from: before.available_from,
+      },
+      after: {
+        status: after.status,
+        visibility: after.visibility,
+        available_from: after.available_from,
+      },
+    });
+
+    return after;
+  });
+}
+
+/** Admin-only hide/unpublish for correcting accidental reveals. */
+export async function unpublishChallenge(challengeId: number, actorId: number) {
+  return withTransaction(async (client) => {
+    const beforeRes = await client.query(
+      `SELECT ${EDITABLE_COLUMNS} FROM challenges WHERE id = $1 FOR UPDATE`,
+      [challengeId],
+    );
+    const before = beforeRes.rows[0];
+    if (!before) throw new NotFoundError("Challenge not found", { challengeId });
+
+    const updated = await client.query(
+      `UPDATE challenges
+          SET status = 'draft',
+              visibility = 'hidden',
+              updated_at = now()
+        WHERE id = $1
+        RETURNING ${EDITABLE_COLUMNS}`,
+      [challengeId],
+    );
+    const after = updated.rows[0];
+
+    await client.query(
+      `INSERT INTO challenge_versions (challenge_id, editor_id, snapshot)
+       VALUES ($1, $2, $3::jsonb)`,
+      [challengeId, actorId, JSON.stringify(snapshotOf(after))],
+    );
+
+    await audit(client, {
+      actorId,
+      entityType: "challenge",
+      entityId: challengeId,
+      action: "unpublished",
+      before: { status: before.status, visibility: before.visibility },
+      after: { status: after.status, visibility: after.visibility },
+    });
+
+    return after;
+  });
+}
+
 /**
  * Apply a partial edit (H44). Editing the judging panel after judging has
  * started is rejected. Every successful edit writes one immutable snapshot to
@@ -61,6 +255,7 @@ export async function updateChallenge(
   challengeId: number,
   editorId: number,
   patch: UpdateChallengeBody,
+  access: ChallengeAccess = "owner",
 ) {
   if (patch.judgingPanelCriteria !== undefined && (await panelIsLocked())) {
     throw new ConflictError("Judging panel is locked: judging has already started", {
@@ -75,6 +270,16 @@ export async function updateChallenge(
     );
     const before = currentRows[0];
     if (!before) throw new NotFoundError("Challenge not found", { challengeId });
+
+    const touchesGeneralField = CHALLENGE_GENERAL_FIELDS.some(
+      (field) => patch[field] !== undefined,
+    );
+    if (access === "owner" && isFrozenForOwner(before.status) && touchesGeneralField) {
+      throw new ForbiddenError("Published challenges can only be edited by admins", {
+        challengeId,
+        status: before.status,
+      });
+    }
 
     const sets: string[] = [];
     const values: unknown[] = [];
@@ -102,18 +307,10 @@ export async function updateChallenge(
     );
     const after = updatedRows[0];
 
-    const snapshot = {
-      title: after.title,
-      description: after.description,
-      criteria: after.criteria,
-      prizes: after.prizes,
-      judging_panel_criteria: after.judging_panel_criteria,
-      max_presentation_seconds: after.max_presentation_seconds,
-    };
     await client.query(
       `INSERT INTO challenge_versions (challenge_id, editor_id, snapshot)
        VALUES ($1, $2, $3::jsonb)`,
-      [challengeId, editorId, JSON.stringify(snapshot)],
+      [challengeId, editorId, JSON.stringify(snapshotOf(after))],
     );
 
     await audit(client, {
