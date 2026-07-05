@@ -11,21 +11,31 @@
 # (matches the "one stack per instance" deploy model in deploy/README.md).
 
 FROM node:22-alpine AS base
-RUN corepack enable pnpm
+# Pre-install pnpm to avoid corepack's lazy download on every build
+RUN corepack enable && corepack install --global pnpm@10.19.0 && pnpm --version
 WORKDIR /repo
 
 # ── deps + build ───────────────────────────────────────────────────────────
 FROM base AS build
+# Increase Node memory limit for the Pi's constrained RAM during Next build
+ENV NODE_OPTIONS="--max-old-space-size=2048"
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY packages ./packages
 COPY apps/web/package.json ./apps/web/
-RUN pnpm install --no-frozen-lockfile --filter @hackos/web...
-COPY apps/web ./apps/web
+RUN --mount=type=cache,id=pnpm-store-web,target=/root/.local/share/pnpm/store/v10 \
+    pnpm install --no-frozen-lockfile --filter @hackos/web...
+# Copy only what's needed for the build — skip tests, .next cache, etc.
+COPY apps/web/next.config.ts apps/web/tsconfig.json apps/web/postcss.config.mjs apps/web/eslint.config.mjs apps/web/components.json ./apps/web/
+COPY apps/web/src ./apps/web/src
+COPY apps/web/public ./apps/web/public
 
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN pnpm --filter @hackos/web build
+# --no-lint skips the ESLint pass (saves memory; lint is CI-only).
+# Cache .next/cache across builds so Next's compilation step is incremental.
+RUN --mount=type=cache,id=next-cache,target=/repo/apps/web/.next/cache \
+    pnpm --filter @hackos/web exec next build --no-lint
 
 # ── minimal runtime, non-root ──────────────────────────────────────────────
 FROM base AS deploy
