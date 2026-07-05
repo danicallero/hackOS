@@ -367,6 +367,71 @@ describe("staff user routes (H7)", () => {
     void other;
   });
 
+  it("M1.5: locks own name/surname once an application is accepted; staff can still fix it", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const user = await createUser({ name: "Ada" });
+    const editor = await createUserWithCapabilities([CAPABILITIES.USERS_WRITE]);
+
+    const { rows: appRows } = await pool.query(
+      `INSERT INTO applications (name, type, template, description, active, confirmation_window_hours)
+       VALUES ('F', 'participant', '[]'::jsonb, '', true, 168) RETURNING id`,
+    );
+    const appId = appRows[0].id;
+
+    // While still in review, the participant may edit their own name.
+    await pool.query(
+      `INSERT INTO application_responses (user_id, application_id, status, responses)
+       VALUES ($1, $2, 'review', '{}'::jsonb)`,
+      [user, appId],
+    );
+    expect(
+      (
+        await a.inject({
+          method: "PATCH",
+          url: "/api/me",
+          headers: asUser(user),
+          payload: { name: "Ada Lovelace" },
+        })
+      ).statusCode,
+    ).toBe(200);
+
+    // Once accepted, self-edits of name/surname are locked (409 name_locked)…
+    await pool.query(`UPDATE application_responses SET status = 'accepted' WHERE user_id = $1`, [
+      user,
+    ]);
+    const locked = await a.inject({
+      method: "PATCH",
+      url: "/api/me",
+      headers: asUser(user),
+      payload: { surname: "Byron" },
+    });
+    expect(locked.statusCode).toBe(409);
+    expect(locked.json().error.details.code).toBe("name_locked");
+
+    // …but non-name fields still work, and staff can still change the name.
+    expect(
+      (
+        await a.inject({
+          method: "PATCH",
+          url: "/api/me",
+          headers: asUser(user),
+          payload: { phone: "555" },
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await a.inject({
+          method: "PATCH",
+          url: `/api/users/${user}`,
+          headers: asUser(editor),
+          payload: { surname: "Byron" },
+        })
+      ).statusCode,
+    ).toBe(200);
+  });
+
   it("POST /api/users/:id/anonymize — scrubs PII, revokes access, blocks self, ADMIN_ALL (M5.3/H54)", async () => {
     const a = await getApp();
     const admin = await createUserWithCapabilities(["*"]);
@@ -374,9 +439,10 @@ describe("staff user routes (H7)", () => {
     const target = await createUser({ name: "Real Person", email: "person@example.test" });
 
     const { pool } = await import("../../src/db/pool.js");
-    await pool.query(`UPDATE users SET surname = 'Doe', phone = '555', dni = '00000000T' WHERE id = $1`, [
-      target,
-    ]);
+    await pool.query(
+      `UPDATE users SET surname = 'Doe', phone = '555', dni = '00000000T' WHERE id = $1`,
+      [target],
+    );
 
     // USERS_WRITE isn't enough — needs ADMIN_ALL.
     expect(

@@ -128,6 +128,7 @@ export function TemplateFieldControl({
           />
           <Label htmlFor={`cb-${field.key}`} className="text-sm font-normal">
             {label}
+            {field.required && <span className="text-destructive ml-0.5">*</span>}
           </Label>
         </div>
       );
