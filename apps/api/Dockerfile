@@ -17,10 +17,11 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY packages ./packages
 COPY apps/api/package.json ./apps/api/
 RUN pnpm install --frozen-lockfile --filter @hackos/api...
-# Copy source (only what's needed for build — skip test/ and config files)
+COPY apps/api/tsup.config.ts ./apps/api/
+# Copy source + SQL migrations (migrate.ts reads db/migrations/ at runtime)
 COPY apps/api/src ./apps/api/src
 COPY apps/api/scripts ./apps/api/scripts
-COPY apps/api/tsup.config.ts ./apps/api/
+COPY apps/api/db ./apps/api/db
 # Build with just tsup (skip tsc typecheck to save memory on constrained hosts)
 RUN pnpm --filter @hackos/api exec tsup
 # Copies the built package + only its production deps into /app, resolving
