@@ -40,8 +40,8 @@ services:
       - "9000:9000"
       - "9001:9001"
     environment:
-      MINIO_ROOT_USER: hackos
-      MINIO_ROOT_PASSWORD: hackos-secret
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-hackos}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-hackos-secret}
     volumes:
       - miniodata:/data
     healthcheck:
@@ -49,6 +49,29 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # One-shot provisioner: create the bucket and make it publicly readable so the
+  # app's plain object URLs (publicUrl(), no presigned GET) resolve. Idempotent —
+  # `mb --ignore-existing` + `anonymous set download` are safe to re-run on every
+  # `up`, so a fresh Dokploy deploy is self-provisioning with no manual `mc`.
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-hackos}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-hackos-secret}
+      S3_BUCKET: ${S3_BUCKET:-hackos}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >
+        mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}" &&
+        mc mb --ignore-existing "local/$${S3_BUCKET}" &&
+        mc anonymous set download "local/$${S3_BUCKET}" &&
+        echo "MinIO bucket '$${S3_BUCKET}' ready (public download)."
+    restart: "no"
 
   mailpit:
     image: axllent/mailpit:latest
@@ -69,9 +92,15 @@ services:
     environment:
       DATABASE_URL: postgres://hackos:hackos@postgres:5432/hackos
       VALKEY_URL: redis://valkey:6379
-      S3_ENDPOINT: http://minio:9000
-      S3_ACCESS_KEY: hackos
-      S3_SECRET_KEY: hackos-secret
+      # S3_ENDPOINT: host the API signs/PUTs against. Internal by default; set to
+      # the public S3 domain if you use presigned browser uploads (sponsor logos).
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-hackos}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-hackos-secret}
+      S3_BUCKET: ${S3_BUCKET:-hackos}
+      # Browser-reachable base the objects are served from. MUST be set to a
+      # public https host in prod, else stored file/logo URLs won't load.
+      S3_PUBLIC_URL: ${S3_PUBLIC_URL:-}
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
       BETTER_AUTH_URL: http://localhost:3000
@@ -81,6 +110,8 @@ services:
         condition: service_healthy
       valkey:
         condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
 
 volumes:
   pgdata17:
