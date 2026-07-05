@@ -4,6 +4,7 @@ import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import { config } from "../../config.js";
 import { type ApplicationType, SHIRT_TYPES, type TemplateField } from "./schemas.js";
 
 /**
@@ -335,7 +336,7 @@ export async function submitResponse(
 
     const updated = await client.query(
       `UPDATE application_responses
-       SET responses = $3::jsonb, status = 'submitted', submitted_at = now()
+       SET responses = $3::jsonb, status = 'review', submitted_at = now()
        WHERE id = $1 AND user_id = $2 RETURNING *`,
       [existing.id, userId, JSON.stringify(merged)],
     );
@@ -359,7 +360,7 @@ export async function startReview(actorId: number, responseId: number): Promise<
     const resp = await lockResponse(client, responseId);
     if (resp.status === "review") return resp; // idempotent
     if (resp.status !== "submitted") {
-      throw new ConflictError("Only submitted responses move to review", { status: resp.status });
+      throw new ConflictError("Responses move to review automatically on submit; cannot start review from this status", { status: resp.status });
     }
     const updated = await client.query(
       `UPDATE application_responses SET status = 'review' WHERE id = $1 RETURNING *`,
@@ -454,7 +455,7 @@ export async function decide(
     if (decision === "accepted" && app.capacity != null) {
       const { rows: countRows } = await client.query(
         `SELECT count(*)::int AS n FROM application_responses
-         WHERE application_id = $1 AND status IN ('accepted', 'confirmed')`,
+         WHERE application_id = $1 AND status IN ('accepted_internal', 'accepted', 'confirmed')`,
         [resp.application_id],
       );
       if (countRows[0].n >= app.capacity) {
@@ -465,9 +466,10 @@ export async function decide(
       }
     }
 
+    const internalStatus = decision === "accepted" ? "accepted_internal" : "rejected_internal";
     const updated = await client.query(
       `UPDATE application_responses SET status = $2 WHERE id = $1 RETURNING *`,
-      [responseId, decision],
+      [responseId, internalStatus],
     );
     await audit(client, {
       actorId,
@@ -475,34 +477,104 @@ export async function decide(
       entityId: responseId,
       action: `decided_${decision}`,
       before: { status: "review" },
-      after: { status: decision, decision_sent_at: null },
+      after: { status: internalStatus, decision_sent_at: null },
       reason: "internal decision (unsent)",
     });
     return updated.rows[0];
   });
 }
 
-/** Send one already-decided (accepted|rejected), still-unsent response (H14). */
+/**
+ * Revert an internal decision — flip between accepted_internal and
+ * rejected_internal. Only allowed when the decision hasn't been sent yet.
+ * Reverting to accepted re-checks capacity. (H14)
+ */
+export async function revertDecision(
+  actorId: number,
+  responseId: number,
+  newDecision: "accepted" | "rejected",
+): Promise<ResponseRow> {
+  return withTransaction(async (client) => {
+    const resp = await lockResponse(client, responseId);
+    if (resp.decision_sent_at) {
+      throw new ConflictError("Cannot revert a decision that has already been sent", {
+        status: resp.status,
+      });
+    }
+    if (resp.status !== "accepted_internal" && resp.status !== "rejected_internal") {
+      throw new ConflictError("Only internal decisions can be reverted", {
+        status: resp.status,
+      });
+    }
+
+    const newInternalStatus =
+      newDecision === "accepted" ? "accepted_internal" : "rejected_internal";
+    if (resp.status === newInternalStatus) {
+      return resp; // idempotent — same decision
+    }
+
+    // If reverting to accepted, re-check capacity
+    if (newDecision === "accepted") {
+      const { rows: appRows } = await client.query(
+        `SELECT * FROM applications WHERE id = $1 FOR UPDATE`,
+        [resp.application_id],
+      );
+      const app = appRows[0] as ApplicationRow;
+      if (app.capacity != null) {
+        const { rows: countRows } = await client.query(
+          `SELECT count(*)::int AS n FROM application_responses
+           WHERE application_id = $1 AND status IN ('accepted_internal', 'accepted', 'confirmed')`,
+          [resp.application_id],
+        );
+        if (countRows[0].n >= app.capacity) {
+          throw new ConflictError("Capacity reached for this application", {
+            code: "capacity_full",
+            capacity: app.capacity,
+          });
+        }
+      }
+    }
+
+    const updated = await client.query(
+      `UPDATE application_responses SET status = $2 WHERE id = $1 RETURNING *`,
+      [responseId, newInternalStatus],
+    );
+    await audit(client, {
+      actorId,
+      entityType: "application_response",
+      entityId: responseId,
+      action: `reverted_to_${newDecision}`,
+      before: { status: resp.status },
+      after: { status: newInternalStatus },
+    });
+    return updated.rows[0];
+  });
+}
+
+/** Send one already-decided, still-unsent response (H14). Returns the confirmation token if accepted. */
 async function sendOne(
   client: pg.PoolClient,
   actorId: number,
   resp: ResponseRow,
   app: ApplicationRow,
-): Promise<void> {
+): Promise<string | null> {
   const user = await loadUserComms(client, resp.user_id);
   let token: string | null = null;
-  if (resp.status === "accepted") {
+  const isAccepted = resp.status === "accepted_internal";
+  const sentStatus = isAccepted ? "accepted" : "rejected";
+  if (isAccepted) {
     token = await issueConfirmationToken(client, resp, app, user.email);
   }
-  await client.query(`UPDATE application_responses SET decision_sent_at = now() WHERE id = $1`, [
-    resp.id,
-  ]);
+  await client.query(
+    `UPDATE application_responses SET status = $2, decision_sent_at = now() WHERE id = $1`,
+    [resp.id, sentStatus],
+  );
   await enqueueDecisionEmailRow(
     client,
     resp.user_id,
     user,
     app,
-    resp.status as "accepted" | "rejected",
+    sentStatus as "accepted" | "rejected",
     token,
   );
   await audit(client, {
@@ -510,15 +582,19 @@ async function sendOne(
     entityType: "application_response",
     entityId: resp.id,
     action: "decision_sent",
-    after: { decision: resp.status },
+    after: { decision: sentStatus },
   });
+  return token;
 }
 
-export async function sendDecision(actorId: number, responseId: number): Promise<ResponseRow> {
+export async function sendDecision(
+  actorId: number,
+  responseId: number,
+): Promise<{ response: ResponseRow; confirmationToken: string | null }> {
   return withTransaction(async (client) => {
     const resp = await lockResponse(client, responseId);
-    if (resp.status !== "accepted" && resp.status !== "rejected") {
-      throw new ConflictError("Only accepted/rejected responses can be sent", {
+    if (resp.status !== "accepted_internal" && resp.status !== "rejected_internal") {
+      throw new ConflictError("Only internal decisions can be sent", {
         status: resp.status,
       });
     }
@@ -526,11 +602,11 @@ export async function sendDecision(actorId: number, responseId: number): Promise
       throw new ConflictError("Decision already sent", { code: "already_sent" });
     }
     const app = await requireApplication(client, resp.application_id);
-    await sendOne(client, actorId, resp, app);
+    const token = await sendOne(client, actorId, resp, app);
     const { rows } = await client.query(`SELECT * FROM application_responses WHERE id = $1`, [
       responseId,
     ]);
-    return rows[0];
+    return { response: rows[0], confirmationToken: token };
   });
 }
 
@@ -538,25 +614,32 @@ export async function sendDecisionsBatch(
   actorId: number,
   applicationId: number,
   includeRejected: boolean,
-): Promise<{ sent: number }> {
+): Promise<{ sent: number; tokens: Array<{ responseId: number; token: string | null }> }> {
   return withTransaction(async (client) => {
     const app = await requireApplication(client, applicationId);
-    const statuses = includeRejected ? ["accepted", "rejected"] : ["accepted"];
+    const statuses = includeRejected
+      ? ["accepted_internal", "rejected_internal"]
+      : ["accepted_internal"];
     const { rows } = await client.query(
       `SELECT * FROM application_responses
        WHERE application_id = $1 AND status = ANY($2) AND decision_sent_at IS NULL
        ORDER BY id FOR UPDATE`,
       [applicationId, statuses],
     );
+    const tokens: Array<{ responseId: number; token: string | null }> = [];
     for (const resp of rows as ResponseRow[]) {
-      await sendOne(client, actorId, resp, app);
+      const token = await sendOne(client, actorId, resp, app);
+      tokens.push({ responseId: resp.id, token });
     }
-    return { sent: rows.length };
+    return { sent: rows.length, tokens };
   });
 }
 
 /** Resend an accepted decision — regenerates the token + email, second chance for the expired (H15). */
-export async function resendDecision(actorId: number, responseId: number): Promise<ResponseRow> {
+export async function resendDecision(
+  actorId: number,
+  responseId: number,
+): Promise<{ response: ResponseRow; confirmationToken: string | null }> {
   return withTransaction(async (client) => {
     const resp = await lockResponse(client, responseId);
     if (resp.status !== "accepted" && resp.status !== "expired") {
@@ -584,8 +667,143 @@ export async function resendDecision(actorId: number, responseId: number): Promi
     const { rows } = await client.query(`SELECT * FROM application_responses WHERE id = $1`, [
       responseId,
     ]);
-    return rows[0];
+    return { response: rows[0], confirmationToken: token };
   });
+}
+
+/**
+ * Re-accept a declined, rejected, or expired response — moves it back to
+ * `accepted` with a fresh confirmation token and email. Admin operation
+ * (APPLICATIONS_DECIDE) that re-checks capacity.
+ */
+export async function reAccept(
+  actorId: number,
+  responseId: number,
+): Promise<{ response: ResponseRow; confirmationToken: string | null }> {
+  return withTransaction(async (client) => {
+    const resp = await lockResponse(client, responseId);
+    if (resp.status !== "declined" && resp.status !== "rejected" && resp.status !== "expired") {
+      throw new ConflictError("Only declined, rejected, or expired responses can be re-accepted", {
+        status: resp.status,
+      });
+    }
+
+    const app = await requireApplication(client, resp.application_id);
+
+    if (app.capacity != null) {
+      const { rows: countRows } = await client.query(
+        `SELECT count(*)::int AS n FROM application_responses
+         WHERE application_id = $1 AND status IN ('accepted_internal', 'accepted', 'confirmed')`,
+        [resp.application_id],
+      );
+      if (countRows[0].n >= app.capacity) {
+        throw new ConflictError("Capacity reached for this application", {
+          code: "capacity_full",
+          capacity: app.capacity,
+        });
+      }
+    }
+
+    const user = await loadUserComms(client, resp.user_id);
+    const token = await issueConfirmationToken(client, resp, app, user.email);
+
+    await client.query(
+      `UPDATE application_responses
+       SET status = 'accepted', decision_sent_at = now(), confirmed_at = NULL, declined_at = NULL
+       WHERE id = $1`,
+      [resp.id],
+    );
+
+    await enqueueDecisionEmailRow(client, resp.user_id, user, app, "accepted", token);
+
+    await audit(client, {
+      actorId,
+      entityType: "application_response",
+      entityId: resp.id,
+      action: "re_accepted",
+      before: { status: resp.status },
+      after: { status: "accepted" },
+    });
+
+    const { rows } = await client.query(`SELECT * FROM application_responses WHERE id = $1`, [
+      responseId,
+    ]);
+    return { response: rows[0], confirmationToken: token };
+  });
+}
+
+// ── batch operations ─────────────────────────────────────────────────────────
+
+export async function batchDecide(
+  actorId: number,
+  responseIds: number[],
+  decision: "accepted" | "rejected",
+): Promise<{ processed: number }> {
+  let processed = 0;
+  const sorted = [...responseIds].sort((a, b) => a - b);
+  for (const id of sorted) {
+    try {
+      await decide(actorId, id, decision);
+      processed++;
+    } catch {
+      // skip individual failures so the rest proceed
+    }
+  }
+  return { processed };
+}
+
+export async function batchSendDecisions(
+  actorId: number,
+  responseIds: number[],
+): Promise<{ sent: number; tokens: Array<{ responseId: number; token: string | null }> }> {
+  return withTransaction(async (client) => {
+    const tokens: Array<{ responseId: number; token: string | null }> = [];
+    const sorted = [...responseIds].sort((a, b) => a - b);
+    for (const id of sorted) {
+      const resp = await lockResponse(client, id);
+      if (resp.status !== "accepted_internal" && resp.status !== "rejected_internal") continue;
+      if (resp.decision_sent_at) continue;
+      const app = await requireApplication(client, resp.application_id);
+      const token = await sendOne(client, actorId, resp, app);
+      tokens.push({ responseId: id, token });
+    }
+    return { sent: tokens.length, tokens };
+  });
+}
+
+export async function batchRevertDecisions(
+  actorId: number,
+  responseIds: number[],
+  newDecision: "accepted" | "rejected",
+): Promise<{ processed: number }> {
+  let processed = 0;
+  const sorted = [...responseIds].sort((a, b) => a - b);
+  for (const id of sorted) {
+    try {
+      await revertDecision(actorId, id, newDecision);
+      processed++;
+    } catch {
+      // skip individual failures
+    }
+  }
+  return { processed };
+}
+
+// ── confirm link retrieval (H15) ────────────────────────────────────────────
+
+export async function getConfirmLink(
+  responseId: number,
+): Promise<{ token: string; expiresAt: Date } | null> {
+  const { rows } = await pool.query(
+    `SELECT t.token, t.expires_at
+     FROM application_responses r
+     JOIN email_verification_tokens t ON t.id = r.confirmation_token_id
+     WHERE r.id = $1 AND r.status = 'accepted' AND t.type = 'spot_confirmation'
+     ORDER BY t.id DESC LIMIT 1`,
+    [responseId],
+  );
+  if (!rows[0]) return null;
+  return { token: rows[0].token, expiresAt: rows[0].expires_at };
 }
 
 async function enqueueDecisionEmailRow(
@@ -598,7 +816,7 @@ async function enqueueDecisionEmailRow(
 ): Promise<void> {
   const decisionDetails =
     decision === "accepted" && confirmToken
-      ? `Confirm your spot within ${app.confirmation_window_hours}h: /applications/confirm?token=${confirmToken}`
+      ? `[${app.confirmation_window_hours}h confirm link](${config.WEB_URL}/applications/confirm?token=${confirmToken})`
       : "";
   await client.query(
     `INSERT INTO notification_outbox (user_id, category, channel, payload)
@@ -705,7 +923,7 @@ async function doDecline(
   if (resp.status === "declined") {
     return { status: "declined", alreadyDeclined: true, wiped: false };
   }
-  if (resp.status !== "accepted") {
+  if (resp.status !== "accepted" && resp.status !== "confirmed") {
     throw new ConflictError("This spot is not in a declinable state", { status: resp.status });
   }
   await client.query(
@@ -726,7 +944,7 @@ async function doDecline(
     entityId: resp.id,
     action: "declined",
     source: via,
-    before: { status: "accepted" },
+    before: { status: resp.status },
     after: { status: "declined", sensitive_wiped: wiped },
   });
   return { status: "declined", alreadyDeclined: false, wiped };
@@ -824,9 +1042,9 @@ export async function expireDueConfirmations(): Promise<{ expired: number }> {
 
 // ── read helpers ──────────────────────────────────────────────────────────────
 
-/** Applicant-facing status masks internal accepted/rejected as "review" until sent (H14). */
-export function maskStatus(status: string, decisionSentAt: Date | null): string {
-  if ((status === "accepted" || status === "rejected") && decisionSentAt == null) return "review";
+/** Applicant-facing status masks internal decisions as "review" until sent (H14). */
+export function maskStatus(status: string, _decisionSentAt: Date | null): string {
+  if (status === "accepted_internal" || status === "rejected_internal") return "review";
   return status;
 }
 
