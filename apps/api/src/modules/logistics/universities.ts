@@ -5,7 +5,7 @@ import { z } from "zod";
 import { pool } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { requireCapability } from "../../lib/capabilities.js";
-import { NotFoundError } from "../../lib/errors.js";
+import { ConflictError, NotFoundError } from "../../lib/errors.js";
 
 const idParam = z.object({ id: z.coerce.number().int().positive() });
 
@@ -14,6 +14,9 @@ const createBody = z.object({
 });
 
 const COLUMNS = "id, name, proposed_by, created_at";
+
+/** Postgres unique_violation — thrown by the unique `universities.name` index. */
+const PG_UNIQUE_VIOLATION = "23505";
 
 export function registerUniversityRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
@@ -76,6 +79,36 @@ export function registerUniversityRoutes(app: FastifyInstance): void {
       });
       reply.code(201);
       return rows[0];
+    },
+  );
+
+  // Admin: rename a university.
+  r.patch(
+    "/api/universities/:id",
+    { preHandler: manage, schema: { params: idParam, body: createBody } },
+    async (req) => {
+      try {
+        const { rows } = await pool.query(
+          `UPDATE universities SET name = $2 WHERE id = $1 RETURNING ${COLUMNS}`,
+          [req.params.id, req.body.name],
+        );
+        if (!rows[0]) throw new NotFoundError("University not found", { id: req.params.id });
+        await audit(pool, {
+          actorId: req.userId,
+          entityType: "university",
+          entityId: req.params.id,
+          action: "updated",
+          after: { name: req.body.name },
+        });
+        return rows[0];
+      } catch (err) {
+        if ((err as { code?: string }).code === PG_UNIQUE_VIOLATION) {
+          throw new ConflictError("A university with that name already exists", {
+            name: req.body.name,
+          });
+        }
+        throw err;
+      }
     },
   );
 

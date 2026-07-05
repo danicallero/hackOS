@@ -47,7 +47,8 @@ export function UniversitiesManager() {
   const [entries, setEntries] = useState<University[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [createOpen, setCreateOpen] = useState(false);
+  // `undefined` => closed; `null` => create; a row => edit.
+  const [editing, setEditing] = useState<University | null | undefined>(undefined);
   const [deleteTarget, setDeleteTarget] = useState<University | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -75,18 +76,26 @@ export function UniversitiesManager() {
     return () => clearTimeout(handle);
   }, [load]);
 
+  const formOpen = editing !== undefined;
   useEffect(() => {
-    if (createOpen) reset({ name: "" });
-  }, [createOpen, reset]);
+    if (editing === undefined) return;
+    reset({ name: editing?.name ?? "" });
+  }, [editing, reset]);
 
   async function onSubmit(values: Values) {
+    const name = values.name.trim();
     try {
-      await api.post<University>("/api/universities", { name: values.name.trim() });
-      toast.success("University added.");
-      setCreateOpen(false);
+      if (editing) {
+        await api.patch<University>(`/api/universities/${editing.id}`, { name });
+        toast.success("University renamed.");
+      } else {
+        await api.post<University>("/api/universities", { name });
+        toast.success("University added.");
+      }
+      setEditing(undefined);
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not add the university.");
+      toast.error(err instanceof ApiError ? err.message : "Could not save the university.");
     }
   }
 
@@ -121,7 +130,7 @@ export function UniversitiesManager() {
           The shared directory backing the university picker on application forms. Applicants can
           propose new ones; you curate them here.
         </p>
-        <Button onClick={() => setCreateOpen(true)}>
+        <Button onClick={() => setEditing(null)}>
           <PlusIcon />
           New
         </Button>
@@ -155,6 +164,7 @@ export function UniversitiesManager() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => setEditing(row)}>Rename</DropdownMenuItem>
               <DropdownMenuItem variant="destructive" onSelect={() => setDeleteTarget(row)}>
                 Delete
               </DropdownMenuItem>
@@ -163,20 +173,24 @@ export function UniversitiesManager() {
         )}
       />
 
-      {/* Create */}
+      {/* Create / rename */}
       <Modal
-        open={createOpen}
-        onOpenChange={setCreateOpen}
+        open={formOpen}
+        onOpenChange={(o) => !o && setEditing(undefined)}
         icon={GraduationCapIcon}
-        title="New university"
-        description="Add an institution to the shared directory."
+        title={editing ? "Rename university" : "New university"}
+        description={
+          editing
+            ? "Update the institution's name. Applicant selections keep their id."
+            : "Add an institution to the shared directory."
+        }
         footer={
           <>
-            <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
+            <Button type="button" variant="outline" onClick={() => setEditing(undefined)}>
               Cancel
             </Button>
             <SubmitButton form={FORM_ID} pending={form.formState.isSubmitting}>
-              Add university
+              {editing ? "Save changes" : "Add university"}
             </SubmitButton>
           </>
         }
