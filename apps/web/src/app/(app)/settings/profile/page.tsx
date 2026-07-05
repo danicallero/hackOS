@@ -31,6 +31,7 @@ import { ApiError, api } from "@/lib/api";
 import { pickText } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 import type { Intolerance, Language, Me } from "@/lib/types";
+import { EmailCard } from "./email-card";
 
 const SHIRT_SIZES = ["XS", "S", "M", "L", "XL", "XXL"] as const;
 const LANGS: Language[] = ["es", "gl", "en"];
@@ -117,146 +118,146 @@ export default function ProfileSettingsPage() {
   }));
 
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <SectionCard
-          icon={UserIcon}
-          title="Personal details"
-          description="Keep your details current so accreditation and catering use the right data."
-          footer={<SubmitButton pending={form.formState.isSubmitting}>Save changes</SubmitButton>}
-        >
-          <FormField
-            control={form.control}
-            name="name"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>First name</FormLabel>
-                <FormControl>
-                  <Input autoComplete="given-name" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="surname"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Last name</FormLabel>
-                <FormControl>
-                  <Input autoComplete="family-name" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormItem>
-            <FormLabel>Email</FormLabel>
-            <FormControl>
-              <Input value={me.email} disabled readOnly />
-            </FormControl>
-            <FormDescription>
-              Contact the organization to change your primary email.
-            </FormDescription>
-          </FormItem>
-          <FormField
-            control={form.control}
-            name="phone"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Phone</FormLabel>
-                <FormControl>
-                  <Input type="tel" autoComplete="tel" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="language"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Language</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
+    <div className="space-y-6">
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)}>
+          <SectionCard
+            icon={UserIcon}
+            title="Personal details"
+            description="Keep your details current so accreditation and catering use the right data."
+            footer={<SubmitButton pending={form.formState.isSubmitting}>Save changes</SubmitButton>}
+          >
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>First name</FormLabel>
                   <FormControl>
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
+                    <Input autoComplete="given-name" {...field} />
                   </FormControl>
-                  <SelectContent>
-                    <SelectItem value="es">Castellano</SelectItem>
-                    <SelectItem value="gl">Galego</SelectItem>
-                    <SelectItem value="en">English</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormDescription>Applies to emails and screens.</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="shirtSize"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Shirt size</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="surname"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Last name</FormLabel>
                   <FormControl>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Not set" />
-                    </SelectTrigger>
+                    <Input autoComplete="family-name" {...field} />
                   </FormControl>
-                  <SelectContent>
-                    <SelectItem value={NONE}>Not set</SelectItem>
-                    {SHIRT_SIZES.map((s) => (
-                      <SelectItem key={s} value={s}>
-                        {s}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="foodIntolerances"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Food intolerances</FormLabel>
-                <FormControl>
-                  <MultiSelect
-                    options={intoleranceOptions}
-                    value={field.value}
-                    onChange={field.onChange}
-                    placeholder="Select any that apply…"
-                    searchPlaceholder="Search intolerances…"
-                    emptyText="No intolerances in the dictionary yet."
-                  />
-                </FormControl>
-                <FormDescription>From the shared catalogue maintained by the org.</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="foodIntoleranceNotes"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Other dietary notes</FormLabel>
-                <FormControl>
-                  <Textarea rows={3} placeholder="Anything else catering should know…" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </SectionCard>
-      </form>
-    </Form>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="phone"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Phone</FormLabel>
+                  <FormControl>
+                    <Input type="tel" autoComplete="tel" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="language"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Language</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="es">Castellano</SelectItem>
+                      <SelectItem value="gl">Galego</SelectItem>
+                      <SelectItem value="en">English</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>Applies to emails and screens.</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="shirtSize"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Shirt size</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Not set" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value={NONE}>Not set</SelectItem>
+                      {SHIRT_SIZES.map((s) => (
+                        <SelectItem key={s} value={s}>
+                          {s}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="foodIntolerances"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Food intolerances</FormLabel>
+                  <FormControl>
+                    <MultiSelect
+                      options={intoleranceOptions}
+                      value={field.value}
+                      onChange={field.onChange}
+                      placeholder="Select any that apply…"
+                      searchPlaceholder="Search intolerances…"
+                      emptyText="No intolerances in the dictionary yet."
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    From the shared catalogue maintained by the org.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="foodIntoleranceNotes"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Other dietary notes</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      rows={3}
+                      placeholder="Anything else catering should know…"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </SectionCard>
+        </form>
+      </Form>
+      <EmailCard />
+    </div>
   );
 }

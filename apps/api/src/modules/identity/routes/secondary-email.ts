@@ -92,7 +92,9 @@ export function registerSecondaryEmailRoutes(app: FastifyInstance): void {
         );
         await enqueueAuthEmail(client, userId, "auth.verify", {
           name: "",
-          verifyUrl: `${config.BETTER_AUTH_URL}/verify-secondary-email?token=${token}`,
+          // Link to the WEB app (a real page), not the API host. The page
+          // POSTs the token to /api/me/secondary-email/verify while signed in.
+          verifyUrl: `${config.WEB_URL}/verify-secondary-email?token=${token}`,
         });
       });
       return { status: true as const };

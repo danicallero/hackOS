@@ -3,7 +3,8 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { MailCheckIcon } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { SubmitButton } from "@/components/common/submit-button";
@@ -22,9 +23,14 @@ import { authClient } from "@/lib/auth-client";
 const schema = z.object({ email: z.string().email("Enter a valid email") });
 type Values = z.infer<typeof schema>;
 
-export default function ForgotPasswordPage() {
+function ForgotPasswordForm() {
+  const params = useSearchParams();
   const [sent, setSent] = useState(false);
-  const form = useForm<Values>({ resolver: zodResolver(schema), defaultValues: { email: "" } });
+  const form = useForm<Values>({
+    resolver: zodResolver(schema),
+    // QoL: prefill with the email carried over from the sign-in screen.
+    defaultValues: { email: params.get("email") ?? "" },
+  });
 
   async function onSubmit(values: Values) {
     // H5: the response is identical whether or not the email exists — never
@@ -92,5 +98,13 @@ export default function ForgotPasswordPage() {
         </Link>
       </div>
     </Card>
+  );
+}
+
+export default function ForgotPasswordPage() {
+  return (
+    <Suspense>
+      <ForgotPasswordForm />
+    </Suspense>
   );
 }

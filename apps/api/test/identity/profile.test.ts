@@ -125,6 +125,21 @@ describe("PATCH /api/me (H7)", () => {
     expect(res.json().shirtSize).toBe("M");
   });
 
+  it("persists language + shirt size + food intolerances and loads them back via GET /api/me", async () => {
+    const a = await getApp();
+    const userId = await createUser();
+    await a.inject({
+      method: "PATCH",
+      url: "/api/me",
+      headers: asUser(userId),
+      payload: { language: "en", shirtSize: "L", foodIntolerances: [1, 2] },
+    });
+    const me = await a.inject({ method: "GET", url: "/api/me", headers: asUser(userId) });
+    expect(me.json().language).toBe("en");
+    expect(me.json().shirtSize).toBe("L");
+    expect(me.json().foodIntolerances).toEqual([1, 2]);
+  });
+
   it("rejects restricted/system fields on self-edit (email, badge, dni, notes)", async () => {
     const a = await getApp();
     const userId = await createUser();

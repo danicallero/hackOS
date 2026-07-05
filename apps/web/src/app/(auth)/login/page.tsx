@@ -7,6 +7,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { PasswordInput } from "@/components/common/password-input";
 import { SubmitButton } from "@/components/common/submit-button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Form,
@@ -41,12 +42,21 @@ export default function LoginPage() {
       password: values.password,
     });
     if (error) {
-      form.setError("root", { message: error.message ?? "Invalid email or password" });
+      const message =
+        error.code === "INVALID_EMAIL_OR_PASSWORD" || error.status === 401
+          ? "Incorrect email or password."
+          : (error.message ?? "Could not sign in. Please try again.");
+      form.setError("root", { message });
       return;
     }
     await refresh();
     router.push("/dashboard");
   }
+
+  const emailValue = form.watch("email");
+  const forgotHref = emailValue
+    ? `/forgot-password?email=${encodeURIComponent(emailValue)}`
+    : "/forgot-password";
 
   return (
     <Card>
@@ -57,6 +67,11 @@ export default function LoginPage() {
       <CardContent>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            {form.formState.errors.root && (
+              <Alert variant="destructive">
+                <AlertDescription>{form.formState.errors.root.message}</AlertDescription>
+              </Alert>
+            )}
             <FormField
               control={form.control}
               name="email"
@@ -78,7 +93,7 @@ export default function LoginPage() {
                   <div className="flex items-center justify-between">
                     <FormLabel>Password</FormLabel>
                     <Link
-                      href="/forgot-password"
+                      href={forgotHref}
                       className="text-muted-foreground text-xs underline underline-offset-4"
                     >
                       Forgot password?
@@ -91,9 +106,6 @@ export default function LoginPage() {
                 </FormItem>
               )}
             />
-            {form.formState.errors.root && (
-              <p className="text-destructive text-sm">{form.formState.errors.root.message}</p>
-            )}
             <SubmitButton className="w-full" pending={form.formState.isSubmitting}>
               Sign in
             </SubmitButton>
