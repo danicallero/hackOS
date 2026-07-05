@@ -87,6 +87,46 @@ describe("applications CRUD (H11)", () => {
     expect(list.json().applications).toHaveLength(1);
   });
 
+  it("APPLICATIONS_REVIEW can read forms but not write", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);
+    const reviewer = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_REVIEW]);
+
+    const created = await a.inject({
+      method: "POST",
+      url: "/api/applications",
+      headers: asUser(manager),
+      payload: { name: "Test", type: "participant", template: sampleTemplate() },
+    });
+    const id = created.json().id;
+
+    // reviewer can read
+    const list = await a.inject({
+      method: "GET",
+      url: "/api/applications",
+      headers: asUser(reviewer),
+    });
+    expect(list.statusCode).toBe(200);
+    expect(list.json().applications).toHaveLength(1);
+
+    const single = await a.inject({
+      method: "GET",
+      url: `/api/applications/${id}`,
+      headers: asUser(reviewer),
+    });
+    expect(single.statusCode).toBe(200);
+    expect(single.json().name).toBe("Test");
+
+    // reviewer cannot write
+    const patch = await a.inject({
+      method: "PATCH",
+      url: `/api/applications/${id}`,
+      headers: asUser(reviewer),
+      payload: { name: "Hacked" },
+    });
+    expect(patch.statusCode).toBe(403);
+  });
+
   it("rejects an invalid template (select without options)", async () => {
     const a = await getApp();
     const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);

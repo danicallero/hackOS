@@ -124,7 +124,7 @@ describe("application responses (H12)", () => {
       payload: { food_intolerances: [1, 2], food_intolerance_notes: "no nuts", shirt_size: "L" },
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json().response.status).toBe("submitted");
+    expect(res.json().response.status).toBe("review");
     expect(typeof res.json().privacy_notice).toBe("string");
     expect(res.json().privacy_notice.length).toBeGreaterThan(10);
 

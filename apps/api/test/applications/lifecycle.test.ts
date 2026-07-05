@@ -23,6 +23,7 @@ import {
 let app: App;
 let reviewer: number;
 let decider: number;
+let confirmOverride: number;
 
 beforeEach(async () => {
   await truncateAll();
@@ -30,6 +31,7 @@ beforeEach(async () => {
   await valkey.flushdb();
   reviewer = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_REVIEW]);
   decider = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_DECIDE]);
+  confirmOverride = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_CONFIRM_OVERRIDE]);
 });
 
 afterAll(async () => {
@@ -92,11 +94,16 @@ async function toAcceptedSent(appId: number): Promise<{ userId: number; response
 }
 
 describe("review + decide (H13, H14)", () => {
-  it("moves submitted -> review and rejects reviewing a draft (invalid transition 409)", async () => {
+  it("submit auto-transitions to review; start-review is a no-op; decide works directly", async () => {
     const a = await getApp();
     const appId = await createApplication();
     const { responseId } = await submittedApplicant(appId);
 
+    // after submit the response is already in review
+    const r = await getResponse(responseId);
+    expect(r.status).toBe("review");
+
+    // start-review is idempotent on an already-reviewed response
     const ok = await a.inject({
       method: "POST",
       url: `/api/responses/${responseId}/start-review`,
@@ -105,15 +112,15 @@ describe("review + decide (H13, H14)", () => {
     expect(ok.statusCode).toBe(200);
     expect(ok.json().status).toBe("review");
 
-    // deciding requires review; a fresh submitted (not reviewed) one cannot skip
-    const { responseId: other } = await submittedApplicant(appId);
-    const badDecide = await a.inject({
+    // decide works directly after submit — no manual start-review needed
+    const decided = await a.inject({
       method: "POST",
-      url: `/api/responses/${other}/decide`,
+      url: `/api/responses/${responseId}/decide`,
       headers: asUser(decider),
       payload: { decision: "accepted" },
     });
-    expect(badDecide.statusCode).toBe(409);
+    expect(decided.statusCode).toBe(200);
+    expect((await getResponse(responseId)).status).toBe("accepted_internal");
   });
 
   it("per-reviewer rows are independent; staff notes are shared", async () => {
@@ -173,7 +180,7 @@ describe("review + decide (H13, H14)", () => {
     });
 
     // internally accepted…
-    expect((await getResponse(responseId)).status).toBe("accepted");
+    expect((await getResponse(responseId)).status).toBe("accepted_internal");
     // …but the applicant status endpoint masks it as review
     const mine = await a.inject({
       method: "GET",
@@ -194,6 +201,58 @@ describe("review + decide (H13, H14)", () => {
       headers: asUser(userId),
     });
     expect(after.json().status).toBe("accepted");
+  });
+
+  it("revert flips accepted_internal <-> rejected_internal; cannot revert after send", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { responseId } = await submittedApplicant(appId);
+
+    // accept internally
+    await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/decide`,
+      headers: asUser(decider),
+      payload: { decision: "accepted" },
+    });
+    expect((await getResponse(responseId)).status).toBe("accepted_internal");
+
+    // reject internally (revert)
+    const revertToReject = await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/revert-decision`,
+      headers: asUser(decider),
+      payload: { decision: "rejected" },
+    });
+    expect(revertToReject.statusCode).toBe(200);
+    expect((await getResponse(responseId)).status).toBe("rejected_internal");
+
+    // accept again (revert back)
+    const revertToAccept = await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/revert-decision`,
+      headers: asUser(decider),
+      payload: { decision: "accepted" },
+    });
+    expect(revertToAccept.statusCode).toBe(200);
+    expect((await getResponse(responseId)).status).toBe("accepted_internal");
+
+    // send the decision
+    await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/send-decision`,
+      headers: asUser(decider),
+    });
+    expect((await getResponse(responseId)).status).toBe("accepted");
+
+    // revert after send is a 409
+    const afterSend = await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/revert-decision`,
+      headers: asUser(decider),
+      payload: { decision: "rejected" },
+    });
+    expect(afterSend.statusCode).toBe(409);
   });
 
   it("capacity guard: accepting past capacity is a 409", async () => {
@@ -318,14 +377,23 @@ describe("confirm / decline (H15)", () => {
     expect(ok.json().status).toBe("confirmed");
   });
 
-  it("admin override can confirm on behalf (audited via=admin_override)", async () => {
+  it("admin override can confirm on behalf (audited via=admin_override, requires APPLICATIONS_CONFIRM_OVERRIDE)", async () => {
     const a = await getApp();
     const appId = await createApplication();
     const { responseId } = await toAcceptedSent(appId);
-    const res = await a.inject({
+
+    // decider (without confirm-override) is rejected
+    const forbidden = await a.inject({
       method: "POST",
       url: `/api/responses/${responseId}/confirm`,
       headers: asUser(decider),
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    const res = await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/confirm`,
+      headers: asUser(confirmOverride),
     });
     expect(res.statusCode).toBe(200);
     const { rows } = await pool.query(
@@ -449,6 +517,64 @@ describe("confirm / decline (H15)", () => {
     expect(ok.json().status).toBe("confirmed");
   });
 
+  it("confirm-link returns the token URL for sent decisions", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { responseId } = await toAcceptedSent(appId);
+
+    const res = await a.inject({
+      method: "GET",
+      url: `/api/responses/${responseId}/confirm-link`,
+      headers: asUser(decider),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().confirm_url).toMatch(/^\/applications\/confirm\?token=/);
+    expect(typeof res.json().expires_at).toBe("string");
+  });
+
+  it("decision email contains an absolute confirmation URL", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { userId, responseId } = await toAcceptedSent(appId);
+
+    const { rows: outbox } = await pool.query(
+      `SELECT payload FROM notification_outbox WHERE user_id = $1`,
+      [userId],
+    );
+    expect(outbox).toHaveLength(1);
+    const details = outbox[0].payload.vars.decisionDetails;
+    expect(details).toMatch(/http:\/\/localhost:3001\/applications\/confirm\?token=/);
+  });
+
+  it("batch decide + batch send processes multiple responses", async () => {
+    const a = await getApp();
+    const appId = await createApplication({ capacity: 10 });
+    const r1 = (await submittedApplicant(appId)).responseId;
+    const r2 = (await submittedApplicant(appId)).responseId;
+
+    // batch decide both as accepted
+    const batchDecide = await a.inject({
+      method: "POST",
+      url: "/api/responses/batch/decide",
+      headers: asUser(decider),
+      payload: { response_ids: [r1, r2], decision: "accepted" },
+    });
+    expect(batchDecide.statusCode).toBe(200);
+    expect(batchDecide.json().processed).toBe(2);
+
+    // batch send both
+    const batchSend = await a.inject({
+      method: "POST",
+      url: "/api/responses/batch/send-decision",
+      headers: asUser(decider),
+      payload: { response_ids: [r1, r2] },
+    });
+    expect(batchSend.statusCode).toBe(200);
+    expect(batchSend.json().sent).toBe(2);
+    expect(batchSend.json().tokens).toHaveLength(2);
+    expect(batchSend.json().tokens[0].token).toBeTruthy();
+  });
+
   it("parallel confirms of the same response settle to one confirmed ticket", async () => {
     const a = await getApp();
     const appId = await createApplication();
@@ -465,5 +591,249 @@ describe("confirm / decline (H15)", () => {
       userId,
     ]);
     expect(rows[0].n).toBe(1);
+  });
+});
+
+describe("cancel after confirming", () => {
+  it("decline from confirmed status transitions to declined and wipes sensitive data", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { userId, responseId } = await toAcceptedSent(appId);
+
+    // confirm first
+    await a.inject({
+      method: "POST",
+      url: `/api/me/responses/${responseId}/confirm`,
+      headers: asUser(userId),
+    });
+    expect((await getResponse(responseId)).status).toBe("confirmed");
+    expect((await getUserSensitive(userId)).food_intolerances).toEqual([7]);
+
+    // now cancel (decline) after confirming
+    const res = await a.inject({
+      method: "POST",
+      url: `/api/me/responses/${responseId}/decline`,
+      headers: asUser(userId),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().status).toBe("declined");
+    expect(res.json().sensitive_wiped).toBe(true);
+    expect((await getResponse(responseId)).status).toBe("declined");
+    expect((await getUserSensitive(userId)).food_intolerances).toEqual([]);
+  });
+
+  it("admin override can decline a confirmed response and it's idempotent", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { userId, responseId } = await toAcceptedSent(appId);
+
+    await a.inject({
+      method: "POST",
+      url: `/api/me/responses/${responseId}/confirm`,
+      headers: asUser(userId),
+    });
+    expect((await getResponse(responseId)).status).toBe("confirmed");
+
+    const adminCancel = await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/decline`,
+      headers: asUser(confirmOverride),
+    });
+    expect(adminCancel.statusCode).toBe(200);
+    expect(adminCancel.json().status).toBe("declined");
+
+    const again = await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/decline`,
+      headers: asUser(confirmOverride),
+    });
+    expect(again.json().already_declined).toBe(true);
+  });
+
+  it("decline from confirmed preserves the ticket (invariant 10)", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { userId, responseId } = await toAcceptedSent(appId);
+
+    await a.inject({
+      method: "POST",
+      url: `/api/me/responses/${responseId}/confirm`,
+      headers: asUser(userId),
+    });
+    const { rows: before } = await pool.query(
+      `SELECT count(*)::int AS n FROM tickets WHERE user_id = $1`,
+      [userId],
+    );
+    expect(before[0].n).toBe(1);
+
+    await a.inject({
+      method: "POST",
+      url: `/api/me/responses/${responseId}/decline`,
+      headers: asUser(userId),
+    });
+
+    const { rows: after } = await pool.query(
+      `SELECT count(*)::int AS n FROM tickets WHERE user_id = $1`,
+      [userId],
+    );
+    expect(after[0].n).toBe(1); // ticket is permanent, never voided
+  });
+
+  it("401 for anonymous decline", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { responseId } = await toAcceptedSent(appId);
+
+    const res = await a.inject({
+      method: "POST",
+      url: `/api/me/responses/${responseId}/decline`,
+    });
+    expect(res.statusCode).toBe(401);
+  });
+});
+
+describe("re-accept (admin)", () => {
+  it("re-accepts a declined response, issues a fresh token and email", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { userId, responseId } = await toAcceptedSent(appId);
+
+    // decline
+    await a.inject({
+      method: "POST",
+      url: `/api/me/responses/${responseId}/decline`,
+      headers: asUser(userId),
+    });
+    expect((await getResponse(responseId)).status).toBe("declined");
+
+    // admin re-accepts
+    const res = await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/re-accept`,
+      headers: asUser(decider),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().confirmationToken).toBeTruthy();
+
+    const r = await getResponse(responseId);
+    expect(r.status).toBe("accepted");
+    expect(r.declined_at).toBeNull();
+
+    // a fresh decision email was enqueued
+    const { rows: outbox } = await pool.query(
+      `SELECT payload FROM notification_outbox WHERE user_id = $1`,
+      [userId],
+    );
+    expect(outbox.length).toBeGreaterThanOrEqual(2);
+    const last = outbox[outbox.length - 1];
+    expect(last.payload.template).toBe("application.decision");
+
+    // the new token can confirm
+    const token = await latestConfirmationToken(userId);
+    const confirm = await a.inject({
+      method: "POST",
+      url: "/api/applications/confirm",
+      payload: { token },
+    });
+    expect(confirm.statusCode).toBe(200);
+    expect(confirm.json().status).toBe("confirmed");
+  });
+
+  it("re-accepts a rejected response (sent)", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { userId, responseId } = await submittedApplicant(appId);
+
+    await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/start-review`,
+      headers: asUser(reviewer),
+    });
+    await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/decide`,
+      headers: asUser(decider),
+      payload: { decision: "rejected" },
+    });
+    await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/send-decision`,
+      headers: asUser(decider),
+    });
+    expect((await getResponse(responseId)).status).toBe("rejected");
+
+    const res = await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/re-accept`,
+      headers: asUser(decider),
+    });
+    expect(res.statusCode).toBe(200);
+    expect((await getResponse(responseId)).status).toBe("accepted");
+  });
+
+  it("403 without APPLICATIONS_DECIDE capability", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { responseId } = await toAcceptedSent(appId);
+
+    const res = await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/re-accept`,
+      headers: asUser(reviewer), // reviewer lacks APPLICATIONS_DECIDE
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("409 on re-accept when capacity is full", async () => {
+    const a = await getApp();
+    const appId = await createApplication({ capacity: 1 });
+    const a1 = await toAcceptedSent(appId);
+    // fill the single slot
+    const a2 = await submittedApplicant(appId);
+    await a.inject({
+      method: "POST",
+      url: `/api/responses/${a2.responseId}/start-review`,
+      headers: asUser(reviewer),
+    });
+    await a.inject({
+      method: "POST",
+      url: `/api/responses/${a2.responseId}/decide`,
+      headers: asUser(decider),
+      payload: { decision: "accepted" },
+    });
+    await a.inject({
+      method: "POST",
+      url: `/api/responses/${a2.responseId}/send-decision`,
+      headers: asUser(decider),
+    });
+
+    // decline a1 first
+    await a.inject({
+      method: "POST",
+      url: `/api/me/responses/${a1.responseId}/decline`,
+      headers: asUser(a1.userId),
+    });
+
+    // now re-accept should fail because a2 holds the only slot
+    const res = await a.inject({
+      method: "POST",
+      url: `/api/responses/${a1.responseId}/re-accept`,
+      headers: asUser(decider),
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.details.code).toBe("capacity_full");
+  });
+
+  it("409 on re-accept from an invalid state (review)", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { responseId } = await submittedApplicant(appId);
+
+    const res = await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/re-accept`,
+      headers: asUser(decider),
+    });
+    expect(res.statusCode).toBe(409);
   });
 });
