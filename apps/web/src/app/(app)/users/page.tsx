@@ -28,6 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ApiError, api } from "@/lib/api";
+import type { Tone } from "@/lib/tones";
 import type { DerivedRole, UserList, UserListItem } from "@/lib/types";
 import { ActiveInvitationsModal } from "./active-invitations-modal";
 import { InviteUserDialog } from "./invite-dialog";
@@ -56,6 +57,16 @@ const ROLE_LABEL: Record<DerivedRole, string> = {
   sponsor: "Sponsor",
   staff: "Staff",
   participant: "Participant",
+};
+
+/** Distinct tone per role so Admin/Judge/Sponsor/Staff never share a color.
+ * Kept in sync with the profile header (users/[id]/page.tsx). */
+const ROLE_TONE: Record<DerivedRole, Tone> = {
+  admin: "brand",
+  judge: "info",
+  sponsor: "warning",
+  staff: "success",
+  participant: "neutral",
 };
 
 const COLUMN_OPTIONS = [
@@ -92,6 +103,25 @@ const DEFAULT_COLUMNS = new Set<UserColumnId>([
   "created",
 ]);
 
+/** Persist the visible-column choice so it survives reloads (H-usability). */
+const COLUMNS_STORAGE_KEY = "hackos.users.visibleColumns";
+
+function loadStoredColumns(): Set<UserColumnId> {
+  if (typeof window === "undefined") return DEFAULT_COLUMNS;
+  try {
+    const raw = window.localStorage.getItem(COLUMNS_STORAGE_KEY);
+    if (!raw) return DEFAULT_COLUMNS;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return DEFAULT_COLUMNS;
+    const valid = parsed.filter((id): id is UserColumnId =>
+      (COLUMN_OPTIONS as readonly string[]).includes(id),
+    );
+    return valid.length > 0 ? new Set(valid) : DEFAULT_COLUMNS;
+  } catch {
+    return DEFAULT_COLUMNS;
+  }
+}
+
 function applicationLabel(status: string | null): string {
   if (!status) return "No application";
   if (status === "accepted_internal") return "Accepted (unsent)";
@@ -126,7 +156,7 @@ const allColumns: Column<UserListItem>[] = [
     header: "Role",
     sortValue: (u) => u.role,
     cell: (u) => (
-      <StatusBadge tone={u.role === "participant" ? "neutral" : "info"} dot={false}>
+      <StatusBadge tone={ROLE_TONE[u.role]} dot={false}>
         {ROLE_LABEL[u.role]}
       </StatusBadge>
     ),
@@ -137,10 +167,14 @@ const allColumns: Column<UserListItem>[] = [
     sortValue: (u) => u.email.toLowerCase(),
     cell: (u) => (
       <div className="flex items-center gap-2">
-        <span className="text-muted-foreground">{u.email}</span>
-        <StatusBadge tone={u.emailVerified ? "success" : "warning"} dot={false}>
+        <StatusBadge
+          tone={u.emailVerified ? "success" : "warning"}
+          dot={false}
+          className="w-24 shrink-0 justify-center"
+        >
           {u.emailVerified ? "Verified" : "Unverified"}
         </StatusBadge>
+        <span className="text-muted-foreground">{u.email}</span>
       </div>
     ),
   },
@@ -210,6 +244,23 @@ export default function UsersPage() {
   const [roleFilter, setRoleFilter] = useState("all");
   const [spotFilter, setSpotFilter] = useState("all");
   const [visibleColumns, setVisibleColumns] = useState<Set<UserColumnId>>(DEFAULT_COLUMNS);
+  const [columnsHydrated, setColumnsHydrated] = useState(false);
+
+  // Restore the saved column choice on mount (after hydration to avoid a
+  // server/client mismatch), then persist any change back to localStorage.
+  useEffect(() => {
+    setVisibleColumns(loadStoredColumns());
+    setColumnsHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!columnsHydrated) return;
+    try {
+      window.localStorage.setItem(COLUMNS_STORAGE_KEY, JSON.stringify([...visibleColumns]));
+    } catch {
+      // Storage unavailable (private mode, quota) — non-fatal.
+    }
+  }, [visibleColumns, columnsHydrated]);
 
   useEffect(() => {
     let cancelled = false;

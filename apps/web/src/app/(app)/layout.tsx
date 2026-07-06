@@ -18,7 +18,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <AuthGuard>
       <SidebarProvider>
         <AppSidebar />
-        <SidebarInset>
+        <SidebarInset className="min-w-0">
           <header className="bg-background/80 sticky top-0 z-10 flex h-14 shrink-0 items-center gap-2 border-b px-4 backdrop-blur sm:px-6">
             <SidebarTrigger className="-ml-1" />
             <Separator orientation="vertical" className="mr-1 !h-4" />
@@ -29,8 +29,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
           </header>
           <VerificationBanner />
-          <main className="flex-1 px-4 py-6 sm:px-6 lg:py-8">
-            <div className="mx-auto w-full max-w-4xl">{children}</div>
+          <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:py-8">
+            <div className="mx-auto w-full max-w-6xl">{children}</div>
           </main>
         </SidebarInset>
       </SidebarProvider>
