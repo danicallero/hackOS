@@ -20,7 +20,6 @@ import {
   TypeIcon,
 } from "lucide-react";
 import { useState } from "react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -56,17 +55,6 @@ const QUESTION_TYPES: { kind: BuilderKind; label: string; description: string }[
 ];
 
 const EMPTY_I18N: I18nText = { en: "", es: "", gl: "" };
-const objectKeys = new WeakMap<object, string>();
-let objectKeySeq = 0;
-
-function objectKey(value: object): string {
-  const existing = objectKeys.get(value);
-  if (existing) return existing;
-  objectKeySeq += 1;
-  const next = `builder-item-${objectKeySeq}`;
-  objectKeys.set(value, next);
-  return next;
-}
 
 function questionTypeLabel(kind: string): string {
   return QUESTION_TYPES.find((type) => type.kind === kind)?.label ?? kind;
@@ -156,59 +144,32 @@ export function PrizeBuilder({
   const remove = (index: number) => onChange(value.filter((_, i) => i !== index));
 
   return (
-    <div className="space-y-3">
-      {value.length === 0 ? (
-        <Card className="border-dashed p-4 shadow-none">
-          <div className="space-y-2">
-            <p className="text-sm font-medium">No prizes yet</p>
-            <p className="text-muted-foreground text-sm text-pretty">
-              Add one or more prize labels with an optional public link.
-            </p>
-            <Button type="button" variant="outline" size="sm" onClick={add}>
-              <PlusIcon className="size-4" />
-              Add prize
-            </Button>
-          </div>
-        </Card>
-      ) : (
-        value.map((prize, index) => (
-          <Card key={objectKey(prize)} className="gap-4 p-4 shadow-none">
-            <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
-              <Field label={`Prize ${index + 1} label`}>
-                <Input
-                  value={prize.name}
-                  placeholder="Best overall project"
-                  onChange={(event) => update(index, { name: event.target.value })}
-                />
-              </Field>
-              <Field label="Optional link">
-                <Input
-                  value={prize.link ?? ""}
-                  placeholder="https://example.com/prize"
-                  type="url"
-                  onChange={(event) => update(index, { link: event.target.value })}
-                />
-              </Field>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="self-end"
-                aria-label={`Remove prize ${index + 1}`}
-                onClick={() => remove(index)}
-              >
-                <Trash2Icon className="size-4" />
-              </Button>
-            </div>
-          </Card>
-        ))
-      )}
-      {value.length > 0 && (
-        <Button type="button" variant="outline" size="sm" onClick={add}>
-          <PlusIcon className="size-4" />
-          Add another prize
-        </Button>
-      )}
+    <div className="space-y-2">
+      {value.map((prize, index) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: rows are positional; a stable id would remount inputs and drop focus.
+        <div key={index} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-center">
+          <Input
+            value={prize.name}
+            placeholder="Prize name"
+            aria-label={`Prize ${index + 1} name`}
+            onChange={(event) => update(index, { name: event.target.value })}
+          />
+          <Input
+            value={prize.link ?? ""}
+            type="url"
+            placeholder="Link (optional)"
+            aria-label={`Prize ${index + 1} link`}
+            onChange={(event) => update(index, { link: event.target.value })}
+          />
+          <IconButton label={`Remove prize ${index + 1}`} onClick={() => remove(index)}>
+            <Trash2Icon className="size-4" />
+          </IconButton>
+        </div>
+      ))}
+      <Button type="button" variant="outline" size="sm" onClick={add}>
+        <PlusIcon className="size-4" />
+        {value.length === 0 ? "Add prize" : "Add another prize"}
+      </Button>
     </div>
   );
 }
@@ -220,7 +181,7 @@ export function JudgingPanelBuilder({
   value: Question[];
   onChange: (value: Question[]) => void;
 }) {
-  const [openTranslations, setOpenTranslations] = useState<Record<string, boolean>>({});
+  const [openTranslations, setOpenTranslations] = useState<Record<number, boolean>>({});
   const update = (index: number, question: Question) =>
     onChange(value.map((existing, i) => (i === index ? question : existing)));
   const move = (index: number, dir: -1 | 1) => {
@@ -231,154 +192,136 @@ export function JudgingPanelBuilder({
     onChange(next);
   };
 
+  const addField = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button type="button" variant="outline" size="sm">
+          <PlusIcon className="size-4" />
+          Add field
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-64">
+        {QUESTION_TYPES.map((type) => (
+          <DropdownMenuItem
+            key={type.kind}
+            onSelect={() => onChange([...value, defaultQuestion(type.kind, value.length)])}
+          >
+            <QuestionIcon kind={type.kind} />
+            <div>
+              <div>{type.label}</div>
+              <div className="text-muted-foreground text-xs">{type.description}</div>
+            </div>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
+  if (value.length === 0) return addField;
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <p className="text-sm font-medium">Judging fields</p>
-          <p className="text-muted-foreground text-sm text-pretty">
-            English is required; Spanish and Galician default to English when left blank.
-          </p>
-        </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button type="button" variant="outline">
-              <PlusIcon className="size-4" />
-              Add field
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-64">
-            {QUESTION_TYPES.map((type) => (
-              <DropdownMenuItem
-                key={type.kind}
-                onSelect={() => onChange([...value, defaultQuestion(type.kind, value.length)])}
-              >
-                <QuestionIcon kind={type.kind} />
+      {value.map((question, index) => {
+        const translationsOpen = openTranslations[index] ?? false;
+        const setOpen = (open: boolean) =>
+          setOpenTranslations((state) => ({ ...state, [index]: open }));
+        return (
+          // biome-ignore lint/suspicious/noArrayIndexKey: fields are positional; a key tied to question.key would remount inputs and drop focus while typing.
+          <Card key={index} className="gap-4 p-4 shadow-none">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <QuestionIcon kind={question.kind} />
                 <div>
-                  <div>{type.label}</div>
-                  <div className="text-muted-foreground text-xs">{type.description}</div>
-                </div>
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
-      {value.length === 0 ? (
-        <Card className="border-dashed p-4 shadow-none">
-          <p className="text-sm font-medium">No judging fields yet</p>
-          <p className="text-muted-foreground text-sm text-pretty">
-            Add scoring, text, boolean or choice fields to define what judges fill in.
-          </p>
-        </Card>
-      ) : (
-        value.map((question, index) => {
-          const translationKey = `${question.key}-${index}`;
-          const translationsOpen = openTranslations[translationKey] ?? false;
-          return (
-            <Card key={translationKey} className="gap-4 p-4 shadow-none">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <QuestionIcon kind={question.kind} />
-                  <div>
-                    <div className="font-medium">{question.label.en || `Field ${index + 1}`}</div>
-                    <div className="text-muted-foreground text-xs">{question.key}</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Badge variant="secondary">{questionTypeLabel(question.kind)}</Badge>
-                  <IconButton
-                    label="Move field up"
-                    disabled={index === 0}
-                    onClick={() => move(index, -1)}
-                  >
-                    <ArrowUpIcon className="size-4" />
-                  </IconButton>
-                  <IconButton
-                    label="Move field down"
-                    disabled={index === value.length - 1}
-                    onClick={() => move(index, 1)}
-                  >
-                    <ArrowDownIcon className="size-4" />
-                  </IconButton>
-                  <IconButton
-                    label="Remove field"
-                    onClick={() => onChange(value.filter((_, i) => i !== index))}
-                  >
-                    <Trash2Icon className="size-4" />
-                  </IconButton>
+                  <div className="font-medium">{question.label.en || `Field ${index + 1}`}</div>
+                  <div className="text-muted-foreground text-xs">{question.key}</div>
                 </div>
               </div>
-
-              <div className="grid gap-4 md:grid-cols-[1fr_220px]">
-                <Field label="Question type">
-                  <Select
-                    value={question.kind}
-                    onValueChange={(kind) =>
-                      update(index, retargetQuestion(question, kind as BuilderKind))
-                    }
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {QUESTION_TYPES.map((type) => (
-                        <SelectItem key={type.kind} value={type.kind}>
-                          {type.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-                <Field label="Answer required">
-                  <div className="flex h-10 items-center gap-2 rounded-md border px-3">
-                    <Switch
-                      checked={question.required}
-                      onCheckedChange={(required) => update(index, { ...question, required })}
-                    />
-                    <span className="text-sm">Required</span>
-                  </div>
-                </Field>
+              <div className="flex items-center gap-1">
+                <IconButton
+                  label="Move field up"
+                  disabled={index === 0}
+                  onClick={() => move(index, -1)}
+                >
+                  <ArrowUpIcon className="size-4" />
+                </IconButton>
+                <IconButton
+                  label="Move field down"
+                  disabled={index === value.length - 1}
+                  onClick={() => move(index, 1)}
+                >
+                  <ArrowDownIcon className="size-4" />
+                </IconButton>
+                <IconButton
+                  label="Remove field"
+                  onClick={() => onChange(value.filter((_, i) => i !== index))}
+                >
+                  <Trash2Icon className="size-4" />
+                </IconButton>
               </div>
+            </div>
 
-              <div className="grid gap-4 md:grid-cols-[220px_1fr]">
-                <Field label="Field key">
-                  <Input
-                    value={question.key}
-                    placeholder="innovation"
-                    onChange={(event) =>
-                      update(index, { ...question, key: slug(event.target.value) })
-                    }
-                  />
-                </Field>
-                <MultilingualInput
-                  label="Label"
-                  value={question.label}
-                  open={translationsOpen}
-                  onOpenChange={(open) =>
-                    setOpenTranslations((state) => ({ ...state, [translationKey]: open }))
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Type">
+                <Select
+                  value={question.kind}
+                  onValueChange={(kind) =>
+                    update(index, retargetQuestion(question, kind as BuilderKind))
                   }
-                  onChange={(label) => update(index, { ...question, label })}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {QUESTION_TYPES.map((type) => (
+                      <SelectItem key={type.kind} value={type.kind}>
+                        {type.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="Field key">
+                <Input
+                  value={question.key}
+                  placeholder="innovation"
+                  onChange={(event) =>
+                    update(index, { ...question, key: slug(event.target.value) })
+                  }
                 />
-              </div>
+              </Field>
+            </div>
 
-              <MultilingualInput
-                label="Description"
-                value={question.description ?? EMPTY_I18N}
-                open={translationsOpen}
-                onOpenChange={(open) =>
-                  setOpenTranslations((state) => ({ ...state, [translationKey]: open }))
-                }
-                onChange={(description) => update(index, { ...question, description })}
-                textarea
-                optional
+            <MultilingualInput
+              label="Label"
+              value={question.label}
+              open={translationsOpen}
+              onOpenChange={setOpen}
+              onChange={(label) => update(index, { ...question, label })}
+            />
+            <MultilingualInput
+              label="Description"
+              value={question.description ?? EMPTY_I18N}
+              open={translationsOpen}
+              onOpenChange={setOpen}
+              onChange={(description) => update(index, { ...question, description })}
+              textarea
+              optional
+            />
+
+            <QuestionSettings question={question} onChange={(next) => update(index, next)} />
+
+            <div className="flex items-center gap-2">
+              <Switch
+                id={`required-${index}`}
+                checked={question.required}
+                onCheckedChange={(required) => update(index, { ...question, required })}
               />
-
-              <QuestionSettings question={question} onChange={(next) => update(index, next)} />
-            </Card>
-          );
-        })
-      )}
+              <Label htmlFor={`required-${index}`}>Required</Label>
+            </div>
+          </Card>
+        );
+      })}
+      {addField}
     </div>
   );
 }
@@ -392,29 +335,26 @@ function QuestionSettings({
 }) {
   if (question.kind === "scale") {
     return (
-      <div className="grid gap-4 md:grid-cols-2">
-        <Field label="Minimum">
-          <Input value={question.min} disabled inputMode="numeric" />
-        </Field>
-        <Field label="Maximum">
-          <Input value={question.max} disabled inputMode="numeric" />
-        </Field>
-      </div>
+      <p className="text-muted-foreground text-sm">
+        Judges score this on a {question.min}–{question.max} scale.
+      </p>
     );
   }
   if (question.kind === "integer" || question.kind === "float") {
     return (
-      <div className="grid gap-4 md:grid-cols-2">
-        <Field label="Minimum (optional)">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Minimum">
           <Input
             value={question.min ?? ""}
+            placeholder="No limit"
             inputMode={question.kind === "integer" ? "numeric" : "decimal"}
             onChange={(event) => onChange(numberPatch(question, "min", event.target.value))}
           />
         </Field>
-        <Field label="Maximum (optional)">
+        <Field label="Maximum">
           <Input
             value={question.max ?? ""}
+            placeholder="No limit"
             inputMode={question.kind === "integer" ? "numeric" : "decimal"}
             onChange={(event) => onChange(numberPatch(question, "max", event.target.value))}
           />
@@ -456,7 +396,7 @@ function OptionsBuilder({
       ),
     });
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <Label>Options</Label>
         <Button
@@ -481,35 +421,30 @@ function OptionsBuilder({
         </Button>
       </div>
       {question.options.map((option, index) => (
-        <div
-          key={objectKey(option)}
-          className="grid gap-3 rounded-md border p-3 md:grid-cols-[180px_1fr_auto]"
-        >
-          <Field label="Value">
-            <Input
-              value={option.value}
-              onChange={(event) => updateOption(index, { value: slug(event.target.value) })}
-            />
-          </Field>
-          <MultilingualInput
-            label="Option label"
-            value={option.label}
-            open={false}
-            onOpenChange={() => undefined}
-            onChange={(label) => updateOption(index, { label })}
+        // biome-ignore lint/suspicious/noArrayIndexKey: options are positional; a stable id would remount inputs and drop focus.
+        <div key={index} className="grid gap-2 sm:grid-cols-[180px_1fr_auto] sm:items-center">
+          <Input
+            value={option.value}
+            placeholder="value"
+            aria-label={`Option ${index + 1} value`}
+            onChange={(event) => updateOption(index, { value: slug(event.target.value) })}
           />
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="self-end"
-            aria-label={`Remove option ${index + 1}`}
+          <Input
+            value={option.label.en}
+            placeholder="Option label"
+            aria-label={`Option ${index + 1} label`}
+            onChange={(event) =>
+              updateOption(index, { label: { ...option.label, en: event.target.value } })
+            }
+          />
+          <IconButton
+            label={`Remove option ${index + 1}`}
             onClick={() =>
               onChange({ ...question, options: question.options.filter((_, i) => i !== index) })
             }
           >
             <Trash2Icon className="size-4" />
-          </Button>
+          </IconButton>
         </div>
       ))}
     </div>
@@ -551,7 +486,7 @@ function MultilingualInput({
         onChange={(event) => onChange({ ...value, en: event.target.value })}
       />
       {open && (
-        <div className="grid gap-2 md:grid-cols-2">
+        <div className="grid gap-2 sm:grid-cols-2">
           <Control
             value={value.es}
             placeholder="Spanish, defaults to English"

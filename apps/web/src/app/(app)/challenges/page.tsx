@@ -315,24 +315,14 @@ function CreateChallengeModal({
               </FormItem>
             )}
           />
-          <div className="space-y-3 rounded-lg border p-4">
-            <div>
-              <h3 className="font-medium">Prizes</h3>
-              <p className="text-muted-foreground text-sm text-pretty">
-                Stored as JSON with a label and optional link for each prize.
-              </p>
-            </div>
+          <section className="space-y-3 rounded-lg border p-4">
+            <h3 className="text-sm font-medium">Prizes</h3>
             <PrizeBuilder value={prizes} onChange={setPrizes} />
-          </div>
-          <div className="space-y-3 rounded-lg border p-4">
-            <div>
-              <h3 className="font-medium">Judging panel</h3>
-              <p className="text-muted-foreground text-sm text-pretty">
-                Define the fields judges will fill in for this challenge.
-              </p>
-            </div>
+          </section>
+          <section className="space-y-3 rounded-lg border p-4">
+            <h3 className="text-sm font-medium">Judging panel</h3>
             <JudgingPanelBuilder value={questions} onChange={setQuestions} />
-          </div>
+          </section>
           <FormField
             control={form.control}
             name="maxPresentationSeconds"

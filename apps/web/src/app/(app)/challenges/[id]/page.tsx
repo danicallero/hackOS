@@ -330,25 +330,14 @@ function EditCard({ challenge, onSaved }: { challenge: Challenge; onSaved: () =>
               </FormItem>
             )}
           />
-          <div className="space-y-3 rounded-lg border p-4">
-            <div>
-              <h3 className="font-medium">Prizes</h3>
-              <p className="text-muted-foreground text-sm text-pretty">
-                Add one or more prize labels with optional public links.
-              </p>
-            </div>
+          <section className="space-y-3 rounded-lg border p-4">
+            <h3 className="text-sm font-medium">Prizes</h3>
             <PrizeBuilder value={prizes} onChange={setPrizes} />
-          </div>
-          <div className="space-y-3 rounded-lg border p-4">
-            <div>
-              <h3 className="font-medium">Judging panel builder</h3>
-              <p className="text-muted-foreground text-sm text-pretty">
-                Build the typed form judges will use. Spanish and Galician labels default to
-                English.
-              </p>
-            </div>
+          </section>
+          <section className="space-y-3 rounded-lg border p-4">
+            <h3 className="text-sm font-medium">Judging panel</h3>
             <JudgingPanelBuilder value={questions} onChange={setQuestions} />
-          </div>
+          </section>
           <FormField
             control={form.control}
             name="maxPresentationSeconds"
