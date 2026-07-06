@@ -2,10 +2,12 @@ import type { Queryable } from "../../db/pool.js";
 import { BadRequestError } from "../../lib/errors.js";
 import {
   type DevpostParticipantRow,
+  normalizeDevpostSlug,
   normalizeTitle,
   normalizeUrl,
   parseParticipantsCsv,
   parseProjectsCsv,
+  projectRefCandidates,
 } from "./csv.js";
 
 /**
@@ -66,17 +68,24 @@ function resolveProjectIndex(
   ref: string | null,
   byUrl: Map<string, number>,
   byNormUrl: Map<string, number>,
+  bySlug: Map<string, number>,
   byTitle: Map<string, number>,
 ): number | null {
   if (!ref) return null;
-  const trimmedLower = ref.trim().toLowerCase();
-  if (byUrl.has(trimmedLower)) return byUrl.get(trimmedLower) ?? null;
-  const normUrl = normalizeUrl(ref);
-  if (byNormUrl.has(normUrl)) return byNormUrl.get(normUrl) ?? null;
-  const normTitle = normalizeTitle(ref);
-  if (byTitle.has(normTitle)) return byTitle.get(normTitle) ?? null;
+  for (const candidate of projectRefCandidates(ref)) {
+    const trimmedLower = candidate.trim().toLowerCase();
+    if (byUrl.has(trimmedLower)) return byUrl.get(trimmedLower) ?? null;
+    const normUrl = normalizeUrl(candidate);
+    if (byNormUrl.has(normUrl)) return byNormUrl.get(normUrl) ?? null;
+    const slug = normalizeDevpostSlug(candidate);
+    if (bySlug.has(slug)) return bySlug.get(slug) ?? null;
+    const normTitle = normalizeTitle(candidate);
+    if (byTitle.has(normTitle)) return byTitle.get(normTitle) ?? null;
+  }
   return null;
 }
+
+const GENERAL_PRIZE = "general";
 
 export async function buildImportPlan(
   db: Queryable,
@@ -92,6 +101,7 @@ export async function buildImportPlan(
   // Fuzzy (case-insensitive) join keys — participants CSV -> project row.
   const joinByUrl = new Map<string, number>();
   const joinByNormUrl = new Map<string, number>();
+  const joinBySlug = new Map<string, number>();
   const joinByTitle = new Map<string, number>();
   projects.forEach((p, i) => {
     if (p.url) {
@@ -99,6 +109,8 @@ export async function buildImportPlan(
       if (!joinByUrl.has(lower)) joinByUrl.set(lower, i);
       const norm = normalizeUrl(p.url);
       if (!joinByNormUrl.has(norm)) joinByNormUrl.set(norm, i);
+      const slug = normalizeDevpostSlug(p.url);
+      if (slug && !joinBySlug.has(slug)) joinBySlug.set(slug, i);
     }
     const normTitle = normalizeTitle(p.title);
     if (!joinByTitle.has(normTitle)) joinByTitle.set(normTitle, i);
@@ -110,7 +122,13 @@ export async function buildImportPlan(
   const matchesByProjectIndex = new Map<number, DevpostParticipantRow[]>();
   const unassignedParticipants: DevpostParticipantRow[] = [];
   for (const p of participants) {
-    const idx = resolveProjectIndex(p.projectRef, joinByUrl, joinByNormUrl, joinByTitle);
+    const idx = resolveProjectIndex(
+      p.projectRef,
+      joinByUrl,
+      joinByNormUrl,
+      joinBySlug,
+      joinByTitle,
+    );
     if (idx === null) {
       unassignedParticipants.push(p);
       continue;
@@ -233,7 +251,7 @@ export async function buildImportPlan(
       url: project.url,
       description: project.description,
       demoUrl: project.demoUrl,
-      prizes: project.prizes,
+      prizes: [GENERAL_PRIZE, ...project.prizes],
       members,
       existingRepoId,
       action: existingRepoId ? ("update" as const) : ("create" as const),

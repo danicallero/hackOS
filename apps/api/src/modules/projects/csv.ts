@@ -61,7 +61,17 @@ const PARTICIPANT_FIELD_ALIASES: Record<string, string[]> = {
   firstName: ["firstname"],
   lastName: ["lastname"],
   username: ["devpostusername", "username", "onlineprofiles"],
-  projectRef: ["projecttitle", "projecttitles", "projecturl", "submissionurl", "project"],
+  projectRef: [
+    "projecttitle",
+    "projecttitles",
+    "projectname",
+    "projectnames",
+    "projecturl",
+    "projecturls",
+    "submissionurl",
+    "submissionurls",
+    "project",
+  ],
 };
 
 const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
@@ -142,6 +152,25 @@ export function normalizeUrl(url: string): string {
     .toLowerCase()
     .replace(/^https?:\/\//, "")
     .replace(/\/+$/, "");
+}
+
+export function normalizeDevpostSlug(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/^www\./, "")
+    .replace(/^.*\/(submissions|software)\//, "")
+    .replace(/^\d+-/, "")
+    .replace(/\/+$/, "");
+}
+
+export function projectRefCandidates(value: string | undefined): string[] {
+  if (!value) return [];
+  return value
+    .split(/[,;|]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 export function parseProjectsCsv(csvText: string): DevpostProjectRow[] {
