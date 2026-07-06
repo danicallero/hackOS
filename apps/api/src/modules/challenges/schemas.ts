@@ -26,6 +26,7 @@ export const updateChallengeBody = z
     prizes: z.array(prizeSchema).nullable().optional(),
     judgingPanelCriteria: questionnaireSchema.optional(),
     maxPresentationSeconds: z.number().int().positive().nullable().optional(),
+    visibility: z.enum(["visible", "hidden"]).optional(),
     availableFrom: z.coerce.date().nullish(),
   })
   .strict()
@@ -47,7 +48,7 @@ export const CHALLENGE_GENERAL_FIELDS = [
   "criteria",
   "criteriaI18n",
   "prizes",
-  "maxPresentationSeconds",
+  "visibility",
   "availableFrom",
 ] as const;
 

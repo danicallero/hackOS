@@ -521,15 +521,9 @@ export async function myProjects(userId: number): Promise<Array<Omit<RepoWithExt
 
 export interface PublicChallenge {
   id: number;
-  title: string;
-  /** Per-language title (en/es/gl); null when no translations were entered. */
-  titleI18n: unknown;
-  description: string;
-  /** Per-language description (en/es/gl); null when no translations were entered. */
-  descriptionI18n: unknown;
-  criteria: string | null;
-  /** Per-language criteria (en/es/gl); null when no translations were entered. */
-  criteriaI18n: unknown;
+  title: Record<string, string>;
+  description: Record<string, string>;
+  criteria: Record<string, string>;
   prizes: unknown;
   availableFrom: string | null;
   enterprise: {
@@ -538,6 +532,17 @@ export interface PublicChallenge {
     logoUrl: string | null;
     website: string | null;
   };
+}
+
+function translationsOf(i18n: unknown, fallback: string | null): Record<string, string> {
+  const translations: Record<string, string> = {};
+  if (i18n && typeof i18n === "object" && !Array.isArray(i18n)) {
+    for (const [locale, value] of Object.entries(i18n as Record<string, unknown>)) {
+      if (typeof value === "string" && value.trim()) translations[locale] = value;
+    }
+  }
+  if (Object.keys(translations).length === 0 && fallback?.trim()) translations.en = fallback;
+  return translations;
 }
 
 export async function listPublicChallenges(): Promise<PublicChallenge[]> {
@@ -559,18 +564,14 @@ export async function listPublicChallenges(): Promise<PublicChallenge[]> {
        JOIN sponsors s ON s.id = c.author
        JOIN enterprises e ON e.id = s.enterprise_id
       WHERE c.visibility = 'visible'
-        AND (c.available_from IS NULL OR c.available_from <= now())
       ORDER BY c.available_from NULLS FIRST, c.id ASC`,
   );
 
   return (rows as Array<Record<string, unknown>>).map((r) => ({
     id: Number(r.id),
-    title: String(r.title),
-    titleI18n: r.title_i18n ?? null,
-    description: String(r.description),
-    descriptionI18n: r.description_i18n ?? null,
-    criteria: (r.criteria as string | null) ?? null,
-    criteriaI18n: r.criteria_i18n ?? null,
+    title: translationsOf(r.title_i18n, String(r.title ?? "")),
+    description: translationsOf(r.description_i18n, String(r.description ?? "")),
+    criteria: translationsOf(r.criteria_i18n, (r.criteria as string | null) ?? null),
     prizes: r.prizes ?? [],
     availableFrom:
       r.available_from instanceof Date

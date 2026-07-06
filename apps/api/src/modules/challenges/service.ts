@@ -11,6 +11,8 @@ import {
   type UpdateChallengeBody,
 } from "./schemas.js";
 
+type TranslationMap = Record<string, string>;
+
 /** Publicly visible challenges are frozen for sponsor owners (admins keep editing). */
 function isFrozenForOwner(visibility: string): boolean {
   return visibility === "visible";
@@ -44,6 +46,26 @@ const CREATE_RETURNING_COLUMNS = `id, author, title, title_i18n, description, de
   criteria, criteria_i18n, prizes, judging_panel_criteria, max_presentation_seconds, visibility,
   available_from, created_at, updated_at`;
 
+function translationsOf(i18n: unknown, fallback: string | null): TranslationMap {
+  const translations: TranslationMap = {};
+  if (i18n && typeof i18n === "object" && !Array.isArray(i18n)) {
+    for (const [locale, value] of Object.entries(i18n as Record<string, unknown>)) {
+      if (typeof value === "string" && value.trim()) translations[locale] = value;
+    }
+  }
+  if (Object.keys(translations).length === 0 && fallback?.trim()) translations.en = fallback;
+  return translations;
+}
+
+function challengeReadModel(row: Record<string, unknown>) {
+  return {
+    ...row,
+    title: translationsOf(row.title_i18n, String(row.title ?? "")),
+    description: translationsOf(row.description_i18n, String(row.description ?? "")),
+    criteria: translationsOf(row.criteria_i18n, (row.criteria as string | null) ?? null),
+  };
+}
+
 /**
  * The judging window is owned by the queue workstream (queue_settings). Its
  * start doubles as the panel-edit deadline: once judging has started, the
@@ -65,7 +87,7 @@ export async function getChallenge(challengeId: number) {
     challengeId,
   ]);
   if (!rows[0]) throw new NotFoundError("Challenge not found", { challengeId });
-  return rows[0];
+  return challengeReadModel(rows[0]);
 }
 
 /** Challenges owned by the enterprise `userId` is a sponsor of (H44/H46). */
@@ -80,7 +102,7 @@ export async function listOwnedChallenges(userId: number) {
       ORDER BY c.id`,
     [userId],
   );
-  return rows;
+  return rows.map(challengeReadModel);
 }
 
 export async function listAllChallenges() {
@@ -91,7 +113,7 @@ export async function listAllChallenges() {
        JOIN enterprises ent ON ent.id = author.enterprise_id
       ORDER BY c.id`,
   );
-  return rows;
+  return rows.map(challengeReadModel);
 }
 
 async function ensureEnterpriseSponsorAnchor(db: Queryable, enterpriseId: number): Promise<number> {
@@ -175,8 +197,9 @@ export async function createChallenge(input: CreateChallengeBody, actorId: numbe
 }
 
 /**
- * Admin-only reveal to the public catalog (H45). Makes the challenge visible,
- * optionally on a schedule: the public route stays quiet until `availableFrom`.
+ * Admin-only reveal to the public catalog (H45). Makes the challenge visible.
+ * `availableFrom` is retained only as the scheduler trigger timestamp; it does
+ * not hide an already-visible challenge.
  */
 export async function publishChallenge(
   challengeId: number,
@@ -268,8 +291,8 @@ export async function unpublishChallenge(challengeId: number, actorId: number) {
 
 /**
  * Admin-only bulk visibility flip (H45). Making challenges visible reveals them
- * immediately (clears any pending schedule); hiding pulls them from the public
- * route. Each challenge is audited; unknown ids are ignored.
+ * immediately; hiding pulls them from the public route. `available_from` is a
+ * trigger, not a visibility filter, so bulk changes leave it untouched.
  */
 export async function setChallengesVisibility(
   challengeIds: number[],
@@ -282,7 +305,6 @@ export async function setChallengesVisibility(
     const { rows } = await client.query(
       `UPDATE challenges
           SET visibility = $2,
-              available_from = CASE WHEN $2 = 'visible' THEN NULL ELSE available_from END,
               updated_at = now()
         WHERE id = ANY($1::int[])
         RETURNING id`,
@@ -341,6 +363,11 @@ export async function updateChallenge(
         challengeId,
       });
     }
+    if (access === "owner" && patch.visibility !== undefined) {
+      throw new ForbiddenError("Challenge visibility can only be edited by admins", {
+        challengeId,
+      });
+    }
 
     const sets: string[] = [];
     const values: unknown[] = [];
@@ -388,6 +415,7 @@ export async function updateChallenge(
       put("judging_panel_criteria", JSON.stringify(patch.judgingPanelCriteria), "::jsonb");
     if (patch.maxPresentationSeconds !== undefined)
       put("max_presentation_seconds", patch.maxPresentationSeconds);
+    if (patch.visibility !== undefined) put("visibility", patch.visibility);
     if (patch.availableFrom !== undefined) put("available_from", patch.availableFrom ?? null);
 
     values.push(challengeId);
@@ -419,6 +447,25 @@ export async function updateChallenge(
   });
 }
 
+/**
+ * Scheduled visibility sweep (H45). `available_from` is only a trigger: due
+ * hidden rows flip visible, while already-visible rows remain visible even if
+ * their timestamp is in the future.
+ */
+export async function revealDueChallenges(client: Queryable = pool): Promise<number[]> {
+  const { rows } = await client.query(
+    `UPDATE challenges
+        SET visibility = 'visible',
+            available_from = NULL,
+            updated_at = now()
+      WHERE visibility = 'hidden'
+        AND available_from IS NOT NULL
+        AND available_from <= now()
+      RETURNING id`,
+  );
+  return rows.map((r: { id: number }) => Number(r.id));
+}
+
 export async function listVersions(challengeId: number) {
   const { rows } = await pool.query(
     `SELECT v.id, v.editor_id, v.snapshot, v.created_at, u.name, u.surname
@@ -436,7 +483,12 @@ export async function listVersions(challengeId: number) {
  * whether the panel is still editable and when it freezes.
  */
 export async function previewPanel(challengeId: number) {
-  const challenge = await getChallenge(challengeId);
+  const { rows } = await pool.query(
+    `SELECT title, judging_panel_criteria FROM challenges WHERE id = $1`,
+    [challengeId],
+  );
+  const challenge = rows[0];
+  if (!challenge) throw new NotFoundError("Challenge not found", { challengeId });
   const raw = challenge.judging_panel_criteria;
   const questions: Question[] = Array.isArray(raw) ? raw : [];
   const startsAt = await judgingStartsAt();

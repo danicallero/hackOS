@@ -98,7 +98,7 @@ describe("challenge lifecycle (H43-H45)", () => {
     expect(versions.rows[0].n).toBe(1);
   });
 
-  it("publishes immediately or on schedule to the public challenges route", async () => {
+  it("publishes immediately and treats reveal time as a trigger only", async () => {
     const server = await getApp();
     const admin = await createUserWithCapabilities([CAPABILITIES.SPONSORS_MANAGE]);
     const enterpriseId = await createEnterprise("PublicCo");
@@ -119,11 +119,11 @@ describe("challenge lifecycle (H43-H45)", () => {
     expect(future.statusCode).toBe(200);
     expect(future.json().visibility).toBe("visible");
 
-    const hiddenUntilReveal = await server.inject({
+    const visibleDespiteFutureTrigger = await server.inject({
       method: "GET",
       url: "/api/public/challenges",
     });
-    expect(hiddenUntilReveal.json().items).toHaveLength(0);
+    expect(visibleDespiteFutureTrigger.json().items).toHaveLength(1);
 
     const now = await server.inject({
       method: "POST",
@@ -135,8 +135,40 @@ describe("challenge lifecycle (H43-H45)", () => {
 
     const visible = await server.inject({ method: "GET", url: "/api/public/challenges" });
     expect(visible.json().items).toHaveLength(1);
-    expect(visible.json().items[0].title).toBe("Public Prize");
+    expect(visible.json().items[0].title.en).toBe("Public Prize");
     expect(visible.json().items[0].enterprise.name).toBe("PublicCo");
+  });
+
+  it("scheduled visibility worker flips due hidden challenges and leaves future triggers hidden", async () => {
+    const due = await createOwnedChallenge(await createUser(), "hidden");
+    const future = await createOwnedChallenge(await createUser(), "hidden");
+    const alreadyVisible = await createOwnedChallenge(await createUser(), "visible");
+    await pool.query(
+      `UPDATE challenges
+          SET available_from = CASE
+            WHEN id = $1 THEN now() - interval '1 minute'
+            WHEN id = $2 THEN now() + interval '1 hour'
+            WHEN id = $3 THEN now() + interval '1 hour'
+          END
+        WHERE id = ANY($4::int[])`,
+      [due, future, alreadyVisible, [due, future, alreadyVisible]],
+    );
+
+    const { runScheduledVisibilityPublisherOnce } = await import(
+      "../../src/modules/challenges/visibility-publisher.js"
+    );
+    const result = await runScheduledVisibilityPublisherOnce();
+    expect(result.challenges).toEqual([due]);
+
+    const { rows } = await pool.query(
+      `SELECT id, visibility FROM challenges WHERE id = ANY($1::int[]) ORDER BY id`,
+      [[due, future, alreadyVisible]],
+    );
+    expect(Object.fromEntries(rows.map((r) => [Number(r.id), r.visibility]))).toEqual({
+      [due]: "visible",
+      [future]: "hidden",
+      [alreadyVisible]: "visible",
+    });
   });
 
   it("lets linked sponsor reps access/edit without sponsor portal capability before publish", async () => {
@@ -304,6 +336,27 @@ describe("challenge lifecycle (H43-H45)", () => {
     expect(patched.statusCode).toBe(200);
     expect(patched.json().title).toBe("New Title");
     expect(patched.json().title_i18n.gl).toBe("Novo título");
+
+    const fetched = await server.inject({
+      method: "GET",
+      url: `/api/challenges/${id}`,
+      headers: asUser(admin),
+    });
+    expect(fetched.json().title).toEqual({
+      en: "New Title",
+      es: "Título nuevo",
+      gl: "Novo título",
+    });
+    expect(fetched.json().description).toEqual({
+      en: "Build it",
+      es: "Constrúyelo",
+      gl: "Constrúeo",
+    });
+    expect(fetched.json().criteria).toEqual({
+      en: "Impact",
+      es: "Impacto",
+      gl: "Impacto gl",
+    });
   });
 
   it("hiding clears any pending scheduled reveal (H45)", async () => {

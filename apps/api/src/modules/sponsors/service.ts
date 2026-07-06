@@ -113,8 +113,9 @@ export async function updateEnterprise(
 
 /**
  * Admin bulk visibility flip from the enterprises list (H45). Making enterprises
- * visible reveals them immediately (clears any pending schedule); hiding pulls
- * them from the public sponsor reveal. Each enterprise is audited.
+ * visible reveals them immediately; hiding pulls them from the public sponsor
+ * reveal. `available_from` is a trigger, not a visibility filter, so bulk
+ * changes leave it untouched. Each enterprise is audited.
  */
 export async function setEnterprisesVisibility(
   ids: number[],
@@ -126,8 +127,7 @@ export async function setEnterprisesVisibility(
     const visibility = visible ? "visible" : "hidden";
     const { rows } = await client.query(
       `UPDATE enterprises
-          SET visibility = $2,
-              available_from = CASE WHEN $2 = 'visible' THEN NULL ELSE available_from END
+          SET visibility = $2
         WHERE id = ANY($1::int[])
         RETURNING id`,
       [ids, visibility],
@@ -278,18 +278,17 @@ export interface PublicSponsor {
 
 /**
  * Publicly-revealed sponsors for the website / TV logo grid (H45). Driven by
- * the enterprise's own visibility + scheduled reveal — independent of whether
- * it owns a published challenge. Ordered by display priority (1 = primary /
- * biggest), falling back to the sponsor tier's logo_priority.
+ * the enterprise's own visibility; scheduled reveal is handled by the background
+ * trigger. Ordered by display priority (1 = primary / biggest), falling back to
+ * the sponsor tier's logo_priority.
  */
 export async function listPublicSponsors(client: Queryable = pool): Promise<PublicSponsor[]> {
   const { rows } = await client.query(
     `SELECT e.id AS enterprise_id, e.name, e.website, e.logo_url,
             COALESCE(e.display_priority, st.logo_priority, 9999) AS priority
-       FROM enterprises e
+      FROM enterprises e
        LEFT JOIN sponsor_tiers st ON st.id = e.tier_id
       WHERE e.visibility = 'visible'
-        AND (e.available_from IS NULL OR e.available_from <= now())
       ORDER BY priority ASC, e.name ASC`,
   );
   return rows.map((r: Record<string, unknown>) => ({
@@ -299,4 +298,22 @@ export async function listPublicSponsors(client: Queryable = pool): Promise<Publ
     logoUrl: (r.logo_url as string | null) ?? null,
     priority: Number(r.priority),
   }));
+}
+
+/**
+ * Scheduled visibility sweep (H45). `available_from` is only a trigger: due
+ * hidden rows flip visible, while already-visible rows remain visible even if
+ * their timestamp is in the future.
+ */
+export async function revealDueEnterprises(client: Queryable = pool): Promise<number[]> {
+  const { rows } = await client.query(
+    `UPDATE enterprises
+        SET visibility = 'visible',
+            available_from = NULL
+      WHERE visibility = 'hidden'
+        AND available_from IS NOT NULL
+        AND available_from <= now()
+      RETURNING id`,
+  );
+  return rows.map((r: { id: number }) => Number(r.id));
 }

@@ -62,7 +62,8 @@ describe("public content catalog (H48, H49)", () => {
       `INSERT INTO enterprises (name, logo_url) VALUES ($1, $2) RETURNING id`,
       ["Hidden Corp", "https://cdn.test/hidden.png"],
     );
-    // Visible but scheduled for the future — must NOT appear yet.
+    // Visible with a future reveal trigger stays visible; the trigger only
+    // flips hidden rows when it matures.
     await pool.query(
       `INSERT INTO enterprises (name, logo_url, visibility, available_from)
        VALUES ('Future Corp', 'https://cdn.test/future.png', 'visible', now() + interval '2 hours')`,
@@ -87,7 +88,7 @@ describe("public content catalog (H48, H49)", () => {
        ($1, 'AI Prize', 'Public challenge A', 'Demo + impact', '[{"name":"€1k"}]'::jsonb, 'visible', now() - interval '1 hour'),
        ($2, 'Cloud Prize', 'Public challenge B', 'Architecture', '[{"name":"Credits"}]'::jsonb, 'visible', now() - interval '2 hours'),
        ($3, 'Hidden Prize', 'Not public', 'N/A', '[]'::jsonb, 'hidden', now() - interval '1 hour'),
-       ($1, 'Future Prize', 'Not yet public', 'N/A', '[]'::jsonb, 'visible', now() + interval '2 hours')`,
+       ($1, 'Future Prize', 'Still public', 'N/A', '[]'::jsonb, 'visible', now() + interval '2 hours')`,
       [sponsorA.rows[0].id, sponsorB.rows[0].id, sponsorHidden.rows[0].id],
     );
 
@@ -103,20 +104,26 @@ describe("public content catalog (H48, H49)", () => {
 
     const challenges = await server.inject({ method: "GET", url: "/api/public/challenges" });
     expect(challenges.statusCode).toBe(200);
-    expect(challenges.json().items).toHaveLength(2);
+    expect(challenges.json().items).toHaveLength(3);
     expect(
       challenges
         .json()
-        .items.map((c: { title: string }) => c.title)
+        .items.map((c: { title: Record<string, string> }) => c.title.en)
         .sort(),
-    ).toEqual(["AI Prize", "Cloud Prize"]);
+    ).toEqual(["AI Prize", "Cloud Prize", "Future Prize"]);
     expect(challenges.json().items[0].enterprise.name).toBeTruthy();
 
     const sponsors = await server.inject({ method: "GET", url: "/api/public/sponsors" });
     expect(sponsors.statusCode).toBe(200);
-    expect(sponsors.json().items).toHaveLength(2);
-    expect(sponsors.json().items.map((s: { name: string }) => s.name)).toEqual(["Acme", "Beta"]);
-    expect(sponsors.json().items.map((s: { priority: number }) => s.priority)).toEqual([1, 2]);
+    expect(sponsors.json().items).toHaveLength(3);
+    expect(sponsors.json().items.map((s: { name: string }) => s.name)).toEqual([
+      "Acme",
+      "Beta",
+      "Future Corp",
+    ]);
+    expect(sponsors.json().items.map((s: { priority: number }) => s.priority)).toEqual([
+      1, 2, 9999,
+    ]);
 
     const activities = await server.inject({ method: "GET", url: "/api/public/activities" });
     expect(activities.statusCode).toBe(200);

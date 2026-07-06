@@ -87,7 +87,7 @@ describe("enterprise management (H43-H45)", () => {
     expect(mine.json().id).toBe(entId);
   });
 
-  it("admin controls visibility, and the public reveal honours priority + schedule", async () => {
+  it("admin controls visibility, and the public reveal honours priority", async () => {
     const a = await getApp();
     const admin = await createUserWithCapabilities([CAPABILITIES.SPONSORS_MANAGE]);
 
@@ -113,11 +113,52 @@ describe("enterprise management (H43-H45)", () => {
 
     const pub = await a.inject({ method: "GET", url: "/api/public/sponsors" });
     expect(pub.statusCode).toBe(200);
-    // Only the two revealed ones, ordered by priority (1 before 2).
+    // Visible rows are public immediately; reveal time is only a trigger.
     expect(pub.json().items.map((s: { name: string }) => s.name)).toEqual([
+      "Future",
       "Zeta Primary",
       "Alpha Second",
     ]);
+  });
+
+  it("scheduled visibility worker flips due hidden enterprises and leaves future triggers hidden", async () => {
+    const make = async (name: string) =>
+      (
+        await pool.query(
+          `INSERT INTO enterprises (name, visibility) VALUES ($1, 'hidden') RETURNING id`,
+          [name],
+        )
+      ).rows[0].id as number;
+    const due = await make("Due Enterprise");
+    const future = await make("Future Enterprise");
+    const alreadyVisible = await make("Visible Enterprise");
+    await pool.query(
+      `UPDATE enterprises
+          SET visibility = CASE WHEN id = $3 THEN 'visible' ELSE 'hidden' END,
+              available_from = CASE
+                WHEN id = $1 THEN now() - interval '1 minute'
+                WHEN id = $2 THEN now() + interval '1 hour'
+                WHEN id = $3 THEN now() + interval '1 hour'
+              END
+        WHERE id = ANY($4::int[])`,
+      [due, future, alreadyVisible, [due, future, alreadyVisible]],
+    );
+
+    const { runScheduledVisibilityPublisherOnce } = await import(
+      "../../src/modules/challenges/visibility-publisher.js"
+    );
+    const result = await runScheduledVisibilityPublisherOnce();
+    expect(result.enterprises).toEqual([due]);
+
+    const { rows } = await pool.query(
+      `SELECT id, visibility FROM enterprises WHERE id = ANY($1::int[]) ORDER BY id`,
+      [[due, future, alreadyVisible]],
+    );
+    expect(Object.fromEntries(rows.map((r) => [Number(r.id), r.visibility]))).toEqual({
+      [due]: "visible",
+      [future]: "hidden",
+      [alreadyVisible]: "visible",
+    });
   });
 
   it("logo upload (multipart) requires enterprise edit access", async () => {

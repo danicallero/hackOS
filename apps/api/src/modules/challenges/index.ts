@@ -1,5 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import { registerChallengeRoutes } from "./routes.js";
+import { scheduleScheduledVisibilityPublisher } from "./visibility-publisher.js";
+// Side-effecting import: registers the scheduled visibility processor at import
+// time (src/lib/queues.ts convention — "never instantiate BullMQ directly").
+import "./visibility-publisher.js";
 
 /**
  * WS-G — sponsor-facing challenge editing and the judging panel builder
@@ -9,4 +13,5 @@ import { registerChallengeRoutes } from "./routes.js";
  */
 export async function registerChallengesModule(app: FastifyInstance): Promise<void> {
   registerChallengeRoutes(app);
+  await scheduleScheduledVisibilityPublisher();
 }

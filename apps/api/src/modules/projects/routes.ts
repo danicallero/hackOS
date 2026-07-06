@@ -34,9 +34,9 @@ export function registerProjectRoutes(app: FastifyInstance): void {
 
   const publicChallengeSchema = z.object({
     id: z.number().int(),
-    title: z.string(),
-    description: z.string(),
-    criteria: z.string().nullable(),
+    title: z.record(z.string(), z.string()),
+    description: z.record(z.string(), z.string()),
+    criteria: z.record(z.string(), z.string()),
     prizes: z.unknown(),
     availableFrom: z.string().nullable(),
     enterprise: z.object({
