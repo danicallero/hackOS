@@ -267,37 +267,39 @@ function ClaimInner() {
                 </FormItem>
               )}
             />
-            <FormField
-              control={form.control}
-              name="shirtSize"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Shirt size{invitedAsParticipant ? "" : " (optional)"}</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Not set" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value={NONE}>Not set</SelectItem>
-                      {SHIRT_SIZES.map((s) => (
-                        <SelectItem key={s} value={s}>
-                          {s}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {lookup.kind !== "sponsor" && (
+              <FormField
+                control={form.control}
+                name="shirtSize"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Shirt size{invitedAsParticipant ? "" : " (optional)"}</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Not set" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value={NONE}>Not set</SelectItem>
+                        {SHIRT_SIZES.map((s) => (
+                          <SelectItem key={s} value={s}>
+                            {s}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
             <FormField
               control={form.control}
               name="foodIntolerances"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Food intolerances</FormLabel>
+                  <FormLabel>Food intolerances (optional)</FormLabel>
                   <FormControl>
                     <MultiSelect
                       options={intoleranceOptions}
