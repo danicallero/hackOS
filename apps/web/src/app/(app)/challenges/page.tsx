@@ -44,6 +44,8 @@ import {
   i18nWithEnglishFallback,
   isScheduled,
   type Prize,
+  textForDisplay,
+  textForSearch,
   visibilityTone,
 } from "./shared";
 
@@ -62,8 +64,8 @@ const columns: Column<Challenge>[] = [
   {
     id: "title",
     header: "Challenge",
-    sortValue: (c) => c.title.toLowerCase(),
-    cell: (c) => <span className="font-medium">{c.title}</span>,
+    sortValue: (c) => textForDisplay(c.title).toLowerCase(),
+    cell: (c) => <span className="font-medium">{textForDisplay(c.title)}</span>,
   },
   {
     id: "enterprise",
@@ -91,12 +93,19 @@ const columns: Column<Challenge>[] = [
     header: "Reveal",
     sortValue: (c) => c.available_from ?? "",
     cell: (c) => {
-      if (isScheduled(c.available_from)) {
+      if (c.visibility === "hidden" && isScheduled(c.available_from)) {
         return (
           <div className="flex items-center gap-2">
             <StatusBadge tone="warning">Scheduled</StatusBadge>
             <span className="text-muted-foreground text-sm">
-              {new Date(c.available_from as string).toLocaleString()}
+              {new Date(c.available_from as string).toLocaleString("es-ES", {
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: false,
+              })}
             </span>
           </div>
         );
@@ -104,7 +113,16 @@ const columns: Column<Challenge>[] = [
       if (c.visibility === "visible") {
         return (
           <span className="text-muted-foreground text-sm">
-            {c.available_from ? new Date(c.available_from).toLocaleString() : "Immediate"}
+            {c.available_from
+              ? new Date(c.available_from).toLocaleString("es-ES", {
+                  day: "2-digit",
+                  month: "2-digit",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  hour12: false,
+                })
+              : "Immediate"}
           </span>
         );
       }
@@ -202,7 +220,9 @@ export default function ChallengesPage() {
         data={challenges}
         getRowId={(c) => String(c.id)}
         onRowClick={(c) => router.push(`/challenges/${c.id}`)}
-        searchable={(c) => `${c.title} ${c.description} ${c.criteria ?? ""}`}
+        searchable={(c) =>
+          `${textForSearch(c.title)} ${textForSearch(c.description)} ${textForSearch(c.criteria)}`
+        }
         searchPlaceholder="Search challenges..."
         pageSize={15}
         loading={loading}

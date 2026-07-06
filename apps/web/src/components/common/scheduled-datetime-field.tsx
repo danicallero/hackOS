@@ -27,6 +27,7 @@ export function ScheduledDateTimeField({
   clearLabel = "Clear",
   inputLabel = "Date and time",
   description,
+  disabled,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -37,87 +38,108 @@ export function ScheduledDateTimeField({
   clearLabel?: string;
   inputLabel?: string;
   description?: string;
+  disabled?: boolean;
 }) {
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
 
   useEffect(() => {
     if (!editing) return;
+    setDraft(value);
     openNativePicker(inputRef.current);
-  }, [editing]);
+  }, [editing, value]);
 
   const hasValue = Boolean(value);
+  const display = hasValue ? formatScheduledDateTime(value) : emptyLabel;
 
   return (
-    <div className={cn("space-y-3", className)}>
-      <div
-        className={cn(
-          "rounded-lg border p-4",
-          hasValue ? "bg-muted/30" : "border-dashed bg-transparent",
-        )}
-      >
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-1 text-sm">
-            <p className={cn("font-medium", !hasValue && "text-muted-foreground")}>
-              {hasValue ? formatScheduledDateTime(value) : emptyLabel}
-            </p>
-            {description ? (
-              <p className="text-muted-foreground text-pretty">{description}</p>
-            ) : null}
-          </div>
+    <div className={cn("space-y-2", className)}>
+      {editing ? (
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <label htmlFor={inputId} className="sr-only">
+            {inputLabel}
+          </label>
+          <Input
+            id={inputId}
+            ref={inputRef}
+            type="datetime-local"
+            value={draft}
+            disabled={disabled}
+            onChange={(e) => setDraft(e.target.value)}
+          />
           <div className="flex items-center gap-2">
             <Button
               type="button"
-              variant={hasValue ? "outline" : "default"}
-              onClick={() => setEditing(true)}
+              variant="outline"
+              disabled={disabled}
+              onClick={() => {
+                onChange(draft);
+                setEditing(false);
+              }}
             >
-              {hasValue ? <PencilIcon className="size-4" /> : <CalendarIcon className="size-4" />}
-              {hasValue ? editLabel : addLabel}
-            </Button>
-            {hasValue ? (
-              <Button type="button" variant="ghost" onClick={() => onChange("")}>
-                <XIcon className="size-4" />
-                {clearLabel}
-              </Button>
-            ) : null}
-          </div>
-        </div>
-      </div>
-
-      {editing ? (
-        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
-          <div className="space-y-2">
-            <label htmlFor={inputId} className="text-sm font-medium">
-              {inputLabel}
-            </label>
-            <Input
-              id={inputId}
-              ref={inputRef}
-              type="datetime-local"
-              value={value}
-              onChange={(e) => onChange(e.target.value)}
-            />
-          </div>
-          <div className="flex items-center gap-2 sm:pt-7">
-            <Button type="button" variant="outline" onClick={() => setEditing(false)}>
               Done
             </Button>
-            {hasValue ? (
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={disabled}
+              onClick={() => {
+                onChange("");
+                setDraft("");
+                setEditing(false);
+              }}
+            >
+              <XIcon className="size-4" />
+              {clearLabel}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <button
+            type="button"
+            className={cn(
+              "min-h-10 text-left text-sm font-medium underline-offset-4 transition-colors hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              !hasValue && "text-muted-foreground",
+              disabled && "pointer-events-none opacity-50",
+            )}
+            disabled={disabled}
+            onClick={() => setEditing(true)}
+          >
+            {hasValue ? display : addLabel || emptyLabel}
+          </button>
+          {hasValue ? (
+            <div className="flex items-center gap-1">
               <Button
                 type="button"
                 variant="ghost"
-                onClick={() => {
-                  onChange("");
-                  setEditing(false);
-                }}
+                size="icon"
+                aria-label={editLabel}
+                disabled={disabled}
+                onClick={() => setEditing(true)}
+              >
+                <PencilIcon className="size-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label={clearLabel}
+                disabled={disabled}
+                onClick={() => onChange("")}
               >
                 <XIcon className="size-4" />
-                {clearLabel}
               </Button>
-            ) : null}
-          </div>
+            </div>
+          ) : (
+            <CalendarIcon className="text-muted-foreground hidden size-4 sm:block" />
+          )}
         </div>
+      )}
+      {description ? (
+        <p className="text-muted-foreground text-sm text-pretty">{description}</p>
       ) : null}
     </div>
   );

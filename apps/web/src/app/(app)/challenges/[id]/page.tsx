@@ -3,7 +3,7 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { I18nText, Question } from "@hackos/shared/questions";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowLeftIcon, CalendarOffIcon, EyeIcon, EyeOffIcon, TrophyIcon } from "lucide-react";
+import { ArrowLeftIcon, TrophyIcon } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -16,7 +16,6 @@ import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
-import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
@@ -27,6 +26,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { ApiError, api } from "@/lib/api";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { useSessionContext } from "@/lib/session";
@@ -43,6 +43,7 @@ import {
   i18nWithEnglishFallback,
   isScheduled,
   type Prize,
+  textForDisplay,
   visibilityTone,
 } from "../shared";
 
@@ -52,19 +53,16 @@ const optionalPositiveInt = z
 
 const editSchema = z.object({
   maxPresentationSeconds: optionalPositiveInt,
+  visibility: z.enum(["visible", "hidden"]),
   availableFrom: z.string(),
 });
 type EditValues = z.infer<typeof editSchema>;
-
-const publishSchema = z.object({
-  availableFrom: z.string(),
-});
-type PublishValues = z.infer<typeof publishSchema>;
 
 function toFormValues(challenge: Challenge): EditValues {
   return {
     maxPresentationSeconds:
       challenge.max_presentation_seconds != null ? String(challenge.max_presentation_seconds) : "",
+    visibility: challenge.visibility,
     availableFrom: toDatetimeLocal(challenge.available_from),
   };
 }
@@ -128,16 +126,15 @@ export default function ChallengeDetailPage() {
     <div className="space-y-6">
       <BackLink />
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-semibold">{challenge.title}</h1>
+        <h1 className="text-2xl font-semibold">{textForDisplay(challenge.title)}</h1>
         <StatusBadge tone={visibilityTone(challenge.visibility)} className="capitalize">
           {challenge.visibility}
         </StatusBadge>
-        {isScheduled(challenge.available_from) && (
+        {challenge.visibility === "hidden" && isScheduled(challenge.available_from) && (
           <StatusBadge tone="warning">Scheduled</StatusBadge>
         )}
       </div>
 
-      {canAdmin && <PublishCard challenge={challenge} onChanged={load} />}
       <EditCard challenge={challenge} canAdmin={canAdmin} onSaved={load} />
     </div>
   );
@@ -155,123 +152,6 @@ function BackLink() {
   );
 }
 
-function PublishCard({
-  challenge,
-  onChanged,
-}: {
-  challenge: Challenge;
-  onChanged: () => Promise<void>;
-}) {
-  const [busy, setBusy] = useState(false);
-  const form = useForm<PublishValues>({
-    resolver: zodResolver(publishSchema),
-    defaultValues: { availableFrom: toDatetimeLocal(challenge.available_from) },
-  });
-  const { reset } = form;
-
-  useEffect(() => {
-    reset({ availableFrom: toDatetimeLocal(challenge.available_from) });
-  }, [challenge, reset]);
-
-  async function publish(values: PublishValues) {
-    setBusy(true);
-    try {
-      await api.post<Challenge>(`/api/challenges/${challenge.id}/publish`, {
-        availableFrom: fromDatetimeLocal(values.availableFrom),
-      });
-      await onChanged();
-      toast.success("Challenge published.");
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not publish challenge.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  // Hides the challenge and clears any pending reveal. For an already-hidden
-  // challenge this is purely "remove the scheduled reveal".
-  async function hideOrClearSchedule() {
-    const wasVisible = challenge.visibility === "visible";
-    setBusy(true);
-    try {
-      await api.post<Challenge>(`/api/challenges/${challenge.id}/unpublish`);
-      await onChanged();
-      toast.success(wasVisible ? "Challenge hidden." : "Scheduled reveal removed.");
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not update challenge.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(publish)}>
-        <SectionCard
-          icon={challenge.visibility === "visible" ? EyeIcon : EyeOffIcon}
-          title="Public reveal"
-          description="Show this challenge on the public challenges route, now or at a scheduled time."
-          footer={
-            <>
-              {challenge.visibility === "visible" && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={busy}
-                  onClick={hideOrClearSchedule}
-                >
-                  <EyeOffIcon className="size-4" />
-                  Hide
-                </Button>
-              )}
-              {challenge.visibility === "hidden" && challenge.available_from && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={busy}
-                  onClick={hideOrClearSchedule}
-                >
-                  <CalendarOffIcon className="size-4" />
-                  Remove schedule
-                </Button>
-              )}
-              <SubmitButton pending={busy}>
-                <EyeIcon className="size-4" />
-                Make visible
-              </SubmitButton>
-            </>
-          }
-        >
-          <FormField
-            control={form.control}
-            name="availableFrom"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Reveal from</FormLabel>
-                <FormControl>
-                  <ScheduledDateTimeField
-                    value={field.value}
-                    onChange={(value) =>
-                      form.setValue("availableFrom", value, { shouldDirty: true })
-                    }
-                    addLabel="Add reveal time"
-                    inputLabel="Reveal date and time"
-                  />
-                </FormControl>
-                <FormDescription>
-                  Pick a future date and time to schedule the reveal. Leave it empty to go public as
-                  soon as you make it visible.
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </SectionCard>
-      </form>
-    </Form>
-  );
-}
-
 function EditCard({
   challenge,
   canAdmin,
@@ -286,13 +166,16 @@ function EditCard({
     asQuestions(challenge.judging_panel_criteria),
   );
   const [titleI18n, setTitleI18n] = useState<I18nText>(
-    asI18n(challenge.title_i18n, challenge.title),
+    asI18n(challenge.title_i18n ?? challenge.title, textForDisplay(challenge.title)),
   );
   const [descriptionI18n, setDescriptionI18n] = useState<I18nText>(
-    asI18n(challenge.description_i18n, challenge.description ?? ""),
+    asI18n(
+      challenge.description_i18n ?? challenge.description,
+      textForDisplay(challenge.description),
+    ),
   );
   const [criteriaI18n, setCriteriaI18n] = useState<I18nText>(
-    asI18n(challenge.criteria_i18n, challenge.criteria ?? ""),
+    asI18n(challenge.criteria_i18n ?? challenge.criteria, textForDisplay(challenge.criteria)),
   );
   const form = useForm<EditValues>({
     resolver: zodResolver(editSchema),
@@ -304,12 +187,20 @@ function EditCard({
     reset(toFormValues(challenge));
     setPrizes(asPrizes(challenge.prizes));
     setQuestions(asQuestions(challenge.judging_panel_criteria));
-    setTitleI18n(asI18n(challenge.title_i18n, challenge.title));
-    setDescriptionI18n(asI18n(challenge.description_i18n, challenge.description ?? ""));
-    setCriteriaI18n(asI18n(challenge.criteria_i18n, challenge.criteria ?? ""));
+    setTitleI18n(asI18n(challenge.title_i18n ?? challenge.title, textForDisplay(challenge.title)));
+    setDescriptionI18n(
+      asI18n(
+        challenge.description_i18n ?? challenge.description,
+        textForDisplay(challenge.description),
+      ),
+    );
+    setCriteriaI18n(
+      asI18n(challenge.criteria_i18n ?? challenge.criteria, textForDisplay(challenge.criteria)),
+    );
   }, [challenge, reset]);
 
   async function onSubmit(values: EditValues) {
+    const canEditGeneral = canAdmin || challenge.visibility !== "visible";
     const title = titleI18n.en.trim();
     if (!title) {
       toast.error("An English title is required.");
@@ -320,18 +211,27 @@ function EditCard({
     try {
       const normalizedQuestions = normalizeQuestions(questions);
       await api.patch<Challenge>(`/api/challenges/${challenge.id}`, {
-        title,
-        titleI18n: i18nWithEnglishFallback(titleI18n),
-        description: descriptionEn,
-        descriptionI18n: descriptionEn ? i18nWithEnglishFallback(descriptionI18n) : null,
-        criteria: criteriaEn || null,
-        criteriaI18n: criteriaEn ? i18nWithEnglishFallback(criteriaI18n) : null,
-        prizes: normalizePrizes(prizes),
+        ...(canEditGeneral
+          ? {
+              title,
+              titleI18n: i18nWithEnglishFallback(titleI18n),
+              description: descriptionEn,
+              descriptionI18n: descriptionEn ? i18nWithEnglishFallback(descriptionI18n) : null,
+              criteria: criteriaEn || null,
+              criteriaI18n: criteriaEn ? i18nWithEnglishFallback(criteriaI18n) : null,
+              prizes: normalizePrizes(prizes),
+            }
+          : {}),
         judgingPanelCriteria: normalizedQuestions,
         maxPresentationSeconds: values.maxPresentationSeconds
           ? Number(values.maxPresentationSeconds)
           : null,
-        availableFrom: canAdmin ? fromDatetimeLocal(values.availableFrom) : undefined,
+        ...(canAdmin
+          ? {
+              visibility: values.visibility,
+              availableFrom: fromDatetimeLocal(values.availableFrom),
+            }
+          : {}),
       });
       await onSaved();
       toast.success("Challenge updated.");
@@ -339,6 +239,8 @@ function EditCard({
       toast.error(err instanceof Error ? err.message : "Check the builder fields and try again.");
     }
   }
+
+  const generalDisabled = !canAdmin && challenge.visibility === "visible";
 
   return (
     <Form {...form}>
@@ -349,25 +251,27 @@ function EditCard({
           description="Edit public content, prizes and the judging panel configuration."
           footer={<SubmitButton pending={form.formState.isSubmitting}>Save changes</SubmitButton>}
         >
-          <MultilingualInput label="Title" value={titleI18n} onChange={setTitleI18n} />
-          <MultilingualInput
-            label="Description"
-            optional
-            textarea
-            value={descriptionI18n}
-            onChange={setDescriptionI18n}
-          />
-          <MultilingualInput
-            label="Public criteria"
-            optional
-            textarea
-            value={criteriaI18n}
-            onChange={setCriteriaI18n}
-          />
-          <section className="space-y-3 rounded-lg border p-4">
-            <h3 className="text-sm font-medium">Prizes</h3>
-            <PrizeBuilder value={prizes} onChange={setPrizes} />
-          </section>
+          <fieldset disabled={generalDisabled} className="space-y-5 disabled:opacity-60">
+            <MultilingualInput label="Title" value={titleI18n} onChange={setTitleI18n} />
+            <MultilingualInput
+              label="Description"
+              optional
+              textarea
+              value={descriptionI18n}
+              onChange={setDescriptionI18n}
+            />
+            <MultilingualInput
+              label="Public criteria"
+              optional
+              textarea
+              value={criteriaI18n}
+              onChange={setCriteriaI18n}
+            />
+            <section className="space-y-3 rounded-lg border p-4">
+              <h3 className="text-sm font-medium">Prizes</h3>
+              <PrizeBuilder value={prizes} onChange={setPrizes} />
+            </section>
+          </fieldset>
           <section className="space-y-3 rounded-lg border p-4">
             <h3 className="text-sm font-medium">Judging panel</h3>
             <JudgingPanelBuilder value={questions} onChange={setQuestions} />
@@ -385,29 +289,52 @@ function EditCard({
               </FormItem>
             )}
           />
-          {canAdmin ? (
-            <FormField
-              control={form.control}
-              name="availableFrom"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Reveal from</FormLabel>
+          <FormField
+            control={form.control}
+            name="visibility"
+            render={({ field }) => (
+              <FormItem>
+                <div className="flex items-center justify-between gap-4 rounded-md border p-3">
+                  <div className="space-y-1">
+                    <FormLabel>Visible</FormLabel>
+                    <FormDescription>
+                      Visible challenges are public. Reveal from only flips hidden challenges later.
+                    </FormDescription>
+                  </div>
                   <FormControl>
-                    <ScheduledDateTimeField
-                      value={field.value}
-                      onChange={(value) =>
-                        form.setValue("availableFrom", value, { shouldDirty: true })
-                      }
-                      addLabel="Add reveal time"
-                      inputLabel="Reveal date and time"
-                      description="No date/time set means the challenge becomes visible immediately once published."
+                    <Switch
+                      checked={field.value === "visible"}
+                      disabled={!canAdmin}
+                      onCheckedChange={(checked) => field.onChange(checked ? "visible" : "hidden")}
                     />
                   </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          ) : null}
+                </div>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="availableFrom"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Reveal from</FormLabel>
+                <FormControl>
+                  <ScheduledDateTimeField
+                    value={field.value}
+                    disabled={!canAdmin}
+                    onChange={(value) =>
+                      form.setValue("availableFrom", value, { shouldDirty: true })
+                    }
+                    addLabel="Add reveal time"
+                    inputLabel="Reveal date and time"
+                    description="This is only a trigger: when due, hidden challenges become visible."
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
         </SectionCard>
       </form>
     </Form>

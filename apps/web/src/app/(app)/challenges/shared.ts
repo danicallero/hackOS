@@ -8,14 +8,16 @@ export interface Prize {
   link?: string | null;
 }
 
+export type TranslatedText = string | I18nText | Record<string, string>;
+
 export interface Challenge {
   id: number;
   author?: number;
-  title: string;
+  title: TranslatedText;
   title_i18n: I18nText | null;
-  description: string;
+  description: TranslatedText;
   description_i18n: I18nText | null;
-  criteria: string | null;
+  criteria: TranslatedText | null;
   criteria_i18n: I18nText | null;
   prizes: Prize[] | null;
   judging_panel_criteria: Question[] | null;
@@ -30,6 +32,18 @@ export interface Challenge {
 
 export function visibilityTone(v: Visibility): Tone {
   return v === "visible" ? "success" : "neutral";
+}
+
+export function textForDisplay(value: TranslatedText | null | undefined): string {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  return value.en || value.es || value.gl || Object.values(value)[0] || "";
+}
+
+export function textForSearch(value: TranslatedText | null | undefined): string {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  return Object.values(value).join(" ");
 }
 
 /** A challenge whose scheduled reveal is still in the future. */
