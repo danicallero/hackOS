@@ -86,8 +86,6 @@ function resolveProjectIndex(
   return null;
 }
 
-const GENERAL_PRIZE = "general";
-
 export async function buildImportPlan(
   db: Queryable,
   projectsCsv: string,
@@ -253,7 +251,7 @@ export async function buildImportPlan(
       url: project.url,
       description: project.description,
       demoUrl: project.demoUrl,
-      prizes: [GENERAL_PRIZE, ...project.prizes],
+      prizes: project.prizes,
       members,
       existingRepoId,
       action: existingRepoId ? ("update" as const) : ("create" as const),
