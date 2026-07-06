@@ -28,6 +28,7 @@ function snapshotOf(row: Record<string, unknown>) {
     criteria: row.criteria,
     criteria_i18n: row.criteria_i18n,
     prizes: row.prizes,
+    devpost_tags: row.devpost_tags,
     judging_panel_criteria: row.judging_panel_criteria,
     max_presentation_seconds: row.max_presentation_seconds,
     max_in_waiting_area: row.max_in_waiting_area,
@@ -36,16 +37,16 @@ function snapshotOf(row: Record<string, unknown>) {
 }
 
 const EDITABLE_COLUMNS = `id, title, title_i18n, description, description_i18n, criteria,
-  criteria_i18n, prizes, judging_panel_criteria, max_presentation_seconds,
+  criteria_i18n, prizes, devpost_tags, judging_panel_criteria, max_presentation_seconds,
   max_in_waiting_area, visibility, available_from, created_at, updated_at`;
 
 const EDITABLE_COLUMNS_FROM_CHALLENGE = `c.id, c.title, c.title_i18n, c.description,
-  c.description_i18n, c.criteria, c.criteria_i18n, c.prizes, c.judging_panel_criteria,
+  c.description_i18n, c.criteria, c.criteria_i18n, c.prizes, c.devpost_tags, c.judging_panel_criteria,
   c.max_presentation_seconds, c.max_in_waiting_area, c.visibility, c.available_from,
   c.created_at, c.updated_at`;
 
 const CREATE_RETURNING_COLUMNS = `id, author, title, title_i18n, description, description_i18n,
-  criteria, criteria_i18n, prizes, judging_panel_criteria, max_presentation_seconds,
+  criteria, criteria_i18n, prizes, devpost_tags, judging_panel_criteria, max_presentation_seconds,
   max_in_waiting_area, visibility, available_from, created_at, updated_at`;
 
 function translationsOf(i18n: unknown, fallback: string | null): TranslationMap {
@@ -183,10 +184,10 @@ export async function createChallenge(input: CreateChallengeBody, actorId: numbe
     const { rows } = await client.query(
       `INSERT INTO challenges
          (author, title, title_i18n, description, description_i18n, criteria, criteria_i18n,
-          prizes, judging_panel_criteria, max_presentation_seconds, max_in_waiting_area,
+          prizes, devpost_tags, judging_panel_criteria, max_presentation_seconds, max_in_waiting_area,
           visibility, available_from)
-       VALUES ($1, $2, $3::jsonb, $4, $5::jsonb, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10, $11,
-               'hidden', $12)
+       VALUES ($1, $2, $3::jsonb, $4, $5::jsonb, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, $11, $12,
+               'hidden', $13)
        RETURNING ${CREATE_RETURNING_COLUMNS}`,
       [
         authorId,
@@ -197,6 +198,7 @@ export async function createChallenge(input: CreateChallengeBody, actorId: numbe
         criteria,
         input.criteriaI18n ? JSON.stringify(input.criteriaI18n) : null,
         input.prizes === undefined ? null : JSON.stringify(input.prizes),
+        input.devpostTags === undefined ? JSON.stringify([]) : JSON.stringify(input.devpostTags),
         input.judgingPanelCriteria === undefined
           ? null
           : JSON.stringify(input.judgingPanelCriteria),
@@ -444,6 +446,12 @@ export async function updateChallenge(
     }
     if (patch.prizes !== undefined)
       put("prizes", patch.prizes === null ? null : JSON.stringify(patch.prizes), "::jsonb");
+    if (patch.devpostTags !== undefined)
+      put(
+        "devpost_tags",
+        patch.devpostTags === null ? "[]" : JSON.stringify(patch.devpostTags),
+        "::jsonb",
+      );
     if (patch.judgingPanelCriteria !== undefined)
       put("judging_panel_criteria", JSON.stringify(patch.judgingPanelCriteria), "::jsonb");
     if (patch.maxPresentationSeconds !== undefined)

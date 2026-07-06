@@ -5,6 +5,7 @@ import {
   ClipboardListIcon,
   FileTextIcon,
   FolderGitIcon,
+  GavelIcon,
   HandshakeIcon,
   LayoutDashboardIcon,
   LibraryBigIcon,
@@ -59,9 +60,19 @@ export const NAV: NavSection[] = [
     label: "Operations",
     items: [
       {
-        title: "Queue & judging",
+        title: "Queue operations",
         href: "/queue",
         icon: ListOrderedIcon,
+        anyCapability: [
+          CAPABILITIES.QUEUE_OPERATE,
+          CAPABILITIES.QUEUE_ADMIN,
+          CAPABILITIES.JUDGE_PANEL,
+        ],
+      },
+      {
+        title: "Judging",
+        href: "/judging",
+        icon: GavelIcon,
         anyCapability: [
           CAPABILITIES.QUEUE_OPERATE,
           CAPABILITIES.QUEUE_ADMIN,

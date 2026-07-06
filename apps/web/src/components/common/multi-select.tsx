@@ -120,6 +120,7 @@ export function MultiSelect({
                   <button
                     type="button"
                     tabIndex={-1}
+                    aria-label={`Remove ${labelOf(v)}`}
                     onClick={(e) => {
                       e.stopPropagation();
                       toggle(v);

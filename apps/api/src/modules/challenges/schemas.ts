@@ -24,6 +24,7 @@ export const updateChallengeBody = z
     criteria: z.string().nullable().optional(), // public-facing criteria text
     criteriaI18n: i18nTextSchema.nullish(), // per-language criteria
     prizes: z.array(prizeSchema).nullable().optional(),
+    devpostTags: z.array(z.string().min(1)).nullable().optional(),
     judgingPanelCriteria: questionnaireSchema.optional(),
     maxPresentationSeconds: z.number().int().positive().nullable().optional(),
     maxInWaitingArea: z.number().int().min(0).nullable().optional(),
@@ -49,6 +50,7 @@ export const CHALLENGE_GENERAL_FIELDS = [
   "criteria",
   "criteriaI18n",
   "prizes",
+  "devpostTags",
   "visibility",
   "availableFrom",
   "maxInWaitingArea",
@@ -69,6 +71,7 @@ export const createChallengeBody = z
     criteria: z.string().nullable().optional(),
     criteriaI18n: i18nTextSchema.nullish(),
     prizes: z.array(prizeSchema).nullable().optional(),
+    devpostTags: z.array(z.string().min(1)).nullable().optional(),
     judgingPanelCriteria: questionnaireSchema.optional(),
     maxPresentationSeconds: z.number().int().positive().nullable().optional(),
     maxInWaitingArea: z.number().int().min(0).nullable().optional(),

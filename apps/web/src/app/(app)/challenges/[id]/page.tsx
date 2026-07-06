@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { DevpostTagsField } from "@/components/common/devpost-tags-field";
 import { DurationInput } from "@/components/common/duration-input";
 import { EmptyState } from "@/components/common/empty-state";
 import { ScheduledDateTimeField } from "@/components/common/scheduled-datetime-field";
@@ -17,7 +18,6 @@ import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
-import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
@@ -27,18 +27,10 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { ApiError, api } from "@/lib/api";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
-import { listDevpostPrizes, mapPrize } from "@/lib/projects";
+import { listDevpostPrizes } from "@/lib/projects";
 import { useSessionContext } from "@/lib/session";
 import {
   JudgingPanelBuilder,
@@ -216,8 +208,9 @@ function EditCard({
   const [criteriaI18n, setCriteriaI18n] = useState<I18nText>(
     asI18n(challenge.criteria_i18n ?? challenge.criteria, textForDisplay(challenge.criteria)),
   );
-  const [selectedPrize, setSelectedPrize] = useState("");
-  const [mappingPrize, setMappingPrize] = useState(false);
+  const [devpostTags, setDevpostTags] = useState<string[]>(
+    Array.isArray(challenge.devpost_tags) ? challenge.devpost_tags : [],
+  );
   const form = useForm<EditValues>({
     resolver: zodResolver(editSchema),
     defaultValues: toFormValues(challenge),
@@ -238,6 +231,7 @@ function EditCard({
     setCriteriaI18n(
       asI18n(challenge.criteria_i18n ?? challenge.criteria, textForDisplay(challenge.criteria)),
     );
+    setDevpostTags(Array.isArray(challenge.devpost_tags) ? challenge.devpost_tags : []);
   }, [challenge, reset]);
 
   async function onSubmit(values: EditValues) {
@@ -261,6 +255,7 @@ function EditCard({
               criteria: criteriaEn || null,
               criteriaI18n: criteriaEn ? i18nWithEnglishFallback(criteriaI18n) : null,
               prizes: normalizePrizes(prizes),
+              ...(canMapPrizes ? { devpostTags } : {}),
             }
           : {}),
         judgingPanelCriteria: normalizedQuestions,
@@ -313,6 +308,18 @@ function EditCard({
               <h3 className="text-sm font-medium">Prizes</h3>
               <PrizeBuilder value={prizes} onChange={setPrizes} />
             </section>
+            {canMapPrizes && (
+              <DevpostTagsField
+                value={devpostTags}
+                onChange={setDevpostTags}
+                options={devpostPrizes.map((prize) => ({
+                  value: prize.name,
+                  label: prize.name,
+                  description: `${prize.repoCount} project${prize.repoCount === 1 ? "" : "s"}`,
+                }))}
+                emptyText="No imported prizes yet."
+              />
+            )}
           </fieldset>
           <section className="space-y-3 rounded-lg border p-4">
             <h3 className="text-sm font-medium">Judging panel</h3>
@@ -393,45 +400,10 @@ function EditCard({
         </SectionCard>
         {canMapPrizes && (
           <SectionCard
-            title="Devpost prize mapping"
-            description="Bind imported prize keys to this challenge so prize-based imports can fan into it."
+            title="Imported DevPost prizes"
+            description="Reference data from the latest import batch. Selected tags on this challenge decide who enters the queue."
             className="mt-6"
           >
-            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-              <div className="space-y-2">
-                <Label htmlFor="devpost-prize">Imported prize</Label>
-                <Select value={selectedPrize} onValueChange={setSelectedPrize}>
-                  <SelectTrigger id="devpost-prize">
-                    <SelectValue placeholder="Select imported prize" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {devpostPrizes.map((prize) => (
-                      <SelectItem key={prize.name} value={prize.name}>
-                        {prize.name} ({prize.repoCount})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <Button
-                type="button"
-                disabled={!selectedPrize || mappingPrize}
-                onClick={async () => {
-                  setMappingPrize(true);
-                  try {
-                    await mapPrize(selectedPrize, challenge.id);
-                    toast.success("Prize linked to challenge.");
-                    await onSaved();
-                  } catch (err) {
-                    toast.error(err instanceof Error ? err.message : "Could not map prize.");
-                  } finally {
-                    setMappingPrize(false);
-                  }
-                }}
-              >
-                Link prize
-              </Button>
-            </div>
             <div className="mt-4 space-y-2">
               {devpostPrizes.length === 0 ? (
                 <p className="text-muted-foreground text-sm">No imported prizes yet.</p>

@@ -195,6 +195,12 @@ export const assignRoomJudge = (roomId: number, challengeId: number, userId: num
   api.post(`/api/queue/rooms/${roomId}/judges`, { challengeId, userId });
 export const removeRoomJudge = (roomId: number, challengeId: number, userId: number) =>
   api.delete(`/api/queue/rooms/${roomId}/judges/${challengeId}/${userId}`);
+export const enqueueAllChallengeQueues = (idempotencyKey?: string) =>
+  api.post<{
+    challenges: Array<{ challengeId: number; inserted: number; alreadyQueued: number }>;
+    inserted: number;
+    alreadyQueued: number;
+  }>("/api/queue/challenges/enqueue-all", {}, idem(idempotencyKey));
 
 // ── entry transitions (H30-H34) ────────────────────────────────────────────
 // Critical mutations accept an Idempotency-Key; pass a fresh uuid to dedupe

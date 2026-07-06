@@ -107,6 +107,28 @@ describe("judging panel builder (H44)", () => {
     expect(versions.json().versions).toHaveLength(2);
   });
 
+  it("persists devpost tags on challenge edits", async () => {
+    const a = await getApp();
+    const admin = await createUserWithCapabilities([CAPABILITIES.QUEUE_ADMIN]);
+    const owner = await createUser();
+    const challengeId = await seedChallenge(owner);
+
+    const res = await a.inject({
+      method: "PATCH",
+      url: `/api/challenges/${challengeId}`,
+      headers: asUser(admin),
+      payload: { devpostTags: ["Best AI Hack", "General"] },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().devpost_tags).toEqual(["Best AI Hack", "General"]);
+
+    const { pool } = await import("../../src/db/pool.js");
+    const stored = await pool.query(`SELECT devpost_tags FROM challenges WHERE id = $1`, [
+      challengeId,
+    ]);
+    expect(stored.rows[0].devpost_tags).toEqual(["Best AI Hack", "General"]);
+  });
+
   it("lets an org admin edit any challenge", async () => {
     const a = await getApp();
     const owner = await createUser();

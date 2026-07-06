@@ -20,6 +20,7 @@ export interface Challenge {
   criteria: TranslatedText | null;
   criteria_i18n: I18nText | null;
   prizes: Prize[] | null;
+  devpost_tags: string[] | null;
   judging_panel_criteria: Question[] | null;
   max_presentation_seconds: number | null;
   max_in_waiting_area: number | null;
