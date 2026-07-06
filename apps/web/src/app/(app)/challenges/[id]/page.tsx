@@ -284,7 +284,6 @@ function EditCard({
                 <FormControl>
                   <DurationInput value={field.value} onChange={field.onChange} />
                 </FormControl>
-                <FormDescription>Optional. Enter the limit as minutes and seconds.</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -313,7 +312,7 @@ function EditCard({
             name="availableFrom"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Reveal from</FormLabel>
+                <FormLabel>Publish date</FormLabel>
                 <FormControl>
                   <ScheduledDateTimeField
                     value={field.value}
@@ -321,8 +320,8 @@ function EditCard({
                     onChange={(value) =>
                       form.setValue("availableFrom", value, { shouldDirty: true })
                     }
-                    addLabel="Add reveal time"
-                    inputLabel="Reveal date and time"
+                    addLabel="Add publish date"
+                    inputLabel="Publish date and time"
                   />
                 </FormControl>
                 <FormMessage />
