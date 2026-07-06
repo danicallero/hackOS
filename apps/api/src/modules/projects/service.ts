@@ -522,8 +522,12 @@ export async function myProjects(userId: number): Promise<Array<Omit<RepoWithExt
 export interface PublicChallenge {
   id: number;
   title: string;
+  /** Per-language title (en/es/gl); null when no translations were entered. */
+  titleI18n: unknown;
   description: string;
   criteria: string | null;
+  /** Per-language criteria (en/es/gl); null when no translations were entered. */
+  criteriaI18n: unknown;
   prizes: unknown;
   availableFrom: string | null;
   enterprise: {
@@ -538,8 +542,10 @@ export async function listPublicChallenges(): Promise<PublicChallenge[]> {
   const { rows } = await pool.query(
     `SELECT c.id,
             c.title,
+            c.title_i18n,
             c.description,
             c.criteria,
+            c.criteria_i18n,
             c.prizes,
             c.available_from,
             e.id AS enterprise_id,
@@ -557,8 +563,10 @@ export async function listPublicChallenges(): Promise<PublicChallenge[]> {
   return (rows as Array<Record<string, unknown>>).map((r) => ({
     id: Number(r.id),
     title: String(r.title),
+    titleI18n: r.title_i18n ?? null,
     description: String(r.description),
     criteria: (r.criteria as string | null) ?? null,
+    criteriaI18n: r.criteria_i18n ?? null,
     prizes: r.prizes ?? [],
     availableFrom:
       r.available_from instanceof Date

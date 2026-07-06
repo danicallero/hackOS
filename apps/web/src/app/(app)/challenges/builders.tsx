@@ -426,51 +426,78 @@ function OptionsBuilder({
           Add option
         </Button>
       </div>
-      {question.options.map((option, index) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: options are positional; a stable id would remount inputs and drop focus.
-        <div key={index} className="space-y-3 rounded-md border p-3">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-muted-foreground text-xs">Option {index + 1}</span>
-            <IconButton
-              label={`Remove option ${index + 1}`}
-              onClick={() =>
-                onChange({ ...question, options: question.options.filter((_, i) => i !== index) })
-              }
-            >
-              <Trash2Icon className="size-4" />
-            </IconButton>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-[180px_1fr]">
-            <Field
-              label="Value"
-              hint="The identifier exported when a judge picks this option. Keep it stable so exports stay consistent."
-            >
-              <Input
+      {question.options.map((option, index) => {
+        const open = openTranslations[index] ?? false;
+        return (
+          // biome-ignore lint/suspicious/noArrayIndexKey: options are positional; a stable id would remount inputs and drop focus.
+          <div key={index} className="space-y-3 rounded-md border p-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-muted-foreground text-xs">Option {index + 1}</span>
+              <div className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setOpenTranslations((state) => ({ ...state, [index]: !open }))}
+                >
+                  {open ? "Hide translations" : "Add translations"}
+                </Button>
+                <IconButton
+                  label={`Remove option ${index + 1}`}
+                  onClick={() =>
+                    onChange({
+                      ...question,
+                      options: question.options.filter((_, i) => i !== index),
+                    })
+                  }
+                >
+                  <Trash2Icon className="size-4" />
+                </IconButton>
+              </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-[180px_1fr]">
+              <TaggedControl
+                tag="Value"
+                hint="The identifier exported when a judge picks this option. Keep it stable so exports stay consistent."
                 value={option.value}
-                placeholder="value"
-                aria-label={`Option ${index + 1} value`}
-                onChange={(event) => updateOption(index, { value: slug(event.target.value) })}
+                ariaLabel={`Option ${index + 1} value`}
+                onChange={(next) => updateOption(index, { value: slug(next) })}
               />
-            </Field>
-            <MultilingualInput
-              label="Label"
-              value={option.label}
-              open={openTranslations[index] ?? false}
-              onOpenChange={(open) => setOpenTranslations((state) => ({ ...state, [index]: open }))}
-              onChange={(label) => updateOption(index, { label })}
-            />
+              <TaggedControl
+                tag="English"
+                value={option.label.en}
+                ariaLabel={`Option ${index + 1} label`}
+                onChange={(next) => updateOption(index, { label: { ...option.label, en: next } })}
+              />
+            </div>
+            {open && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <TaggedControl
+                  tag="Spanish"
+                  placeholder="Defaults to English"
+                  value={option.label.es}
+                  onChange={(next) => updateOption(index, { label: { ...option.label, es: next } })}
+                />
+                <TaggedControl
+                  tag="Galician"
+                  placeholder="Defaults to English"
+                  value={option.label.gl}
+                  onChange={(next) => updateOption(index, { label: { ...option.label, gl: next } })}
+                />
+              </div>
+            )}
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
 
-function MultilingualInput({
+export function MultilingualInput({
   label,
   value,
   onChange,
-  open,
+  open: openProp,
   onOpenChange,
   textarea,
   optional,
@@ -478,42 +505,89 @@ function MultilingualInput({
   label: string;
   value: I18nText;
   onChange: (value: I18nText) => void;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  /** Controlled expansion. Omit both to let the control manage its own state. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   textarea?: boolean;
   optional?: boolean;
 }) {
-  const Control = textarea ? Textarea : Input;
+  const [openState, setOpenState] = useState(false);
+  const open = openProp ?? openState;
+  const setOpen = onOpenChange ?? setOpenState;
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex min-h-8 items-center justify-between gap-2">
         <Label>
           {label}
           {optional ? " (optional)" : ""}
         </Label>
-        <Button type="button" variant="ghost" size="sm" onClick={() => onOpenChange(!open)}>
+        <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(!open)}>
           {open ? "Hide translations" : "Add translations"}
         </Button>
       </div>
-      <Control
+      <TaggedControl
+        tag="English"
+        textarea={textarea}
         value={value.en}
-        placeholder="English"
-        onChange={(event) => onChange({ ...value, en: event.target.value })}
+        onChange={(next) => onChange({ ...value, en: next })}
       />
       {open && (
         <div className="grid gap-2 sm:grid-cols-2">
-          <Control
+          <TaggedControl
+            tag="Spanish"
+            placeholder="Defaults to English"
+            textarea={textarea}
             value={value.es}
-            placeholder="Spanish, defaults to English"
-            onChange={(event) => onChange({ ...value, es: event.target.value })}
+            onChange={(next) => onChange({ ...value, es: next })}
           />
-          <Control
+          <TaggedControl
+            tag="Galician"
+            placeholder="Defaults to English"
+            textarea={textarea}
             value={value.gl}
-            placeholder="Galician, defaults to English"
-            onChange={(event) => onChange({ ...value, gl: event.target.value })}
+            onChange={(next) => onChange({ ...value, gl: next })}
           />
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * A single input/textarea with a small caption above it — the language (English,
+ * Spanish, Galician) for a translation, or a field name like "Value". The caption
+ * stays visible once the input is filled, so you always know which value is which.
+ */
+function TaggedControl({
+  tag,
+  hint,
+  value,
+  placeholder,
+  onChange,
+  textarea,
+  ariaLabel,
+}: {
+  tag: string;
+  hint?: string;
+  value: string;
+  placeholder?: string;
+  onChange: (value: string) => void;
+  textarea?: boolean;
+  ariaLabel?: string;
+}) {
+  const Control = textarea ? Textarea : Input;
+  return (
+    <div className="space-y-1">
+      <div className="flex min-h-5 items-center gap-1.5">
+        <span className="text-muted-foreground text-xs font-medium">{tag}</span>
+        {hint && <FieldHint text={hint} />}
+      </div>
+      <Control
+        value={value}
+        placeholder={placeholder}
+        aria-label={ariaLabel ?? tag}
+        onChange={(event) => onChange(event.target.value)}
+      />
     </div>
   );
 }

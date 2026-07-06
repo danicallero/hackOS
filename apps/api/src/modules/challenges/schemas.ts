@@ -1,4 +1,4 @@
-import { questionnaireSchema } from "@hackos/shared/questions";
+import { i18nTextSchema, questionnaireSchema } from "@hackos/shared/questions";
 import { z } from "zod";
 
 /** Schemas for the challenge-editing surface (H44). */
@@ -18,8 +18,10 @@ const prizeSchema = z.object({
 export const updateChallengeBody = z
   .object({
     title: z.string().min(1).optional(),
+    titleI18n: i18nTextSchema.optional(), // per-language title (en/es/gl); title mirrors .en
     description: z.string().optional(),
     criteria: z.string().nullable().optional(), // public-facing criteria text
+    criteriaI18n: i18nTextSchema.nullish(), // per-language criteria
     prizes: z.array(prizeSchema).nullable().optional(),
     judgingPanelCriteria: questionnaireSchema.optional(),
     maxPresentationSeconds: z.number().int().positive().nullable().optional(),
@@ -37,8 +39,10 @@ export type UpdateChallengeBody = z.infer<typeof updateChallengeBody>;
  */
 export const CHALLENGE_GENERAL_FIELDS = [
   "title",
+  "titleI18n",
   "description",
   "criteria",
+  "criteriaI18n",
   "prizes",
   "maxPresentationSeconds",
 ] as const;
@@ -52,8 +56,10 @@ export const createChallengeBody = z
   .object({
     enterpriseId: z.number().int().positive(),
     title: z.string().min(1),
+    titleI18n: i18nTextSchema.optional(),
     description: z.string().optional(),
     criteria: z.string().nullable().optional(),
+    criteriaI18n: i18nTextSchema.nullish(),
     prizes: z.array(prizeSchema).nullable().optional(),
     judgingPanelCriteria: questionnaireSchema.optional(),
     maxPresentationSeconds: z.number().int().positive().nullable().optional(),

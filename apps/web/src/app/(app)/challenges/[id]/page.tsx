@@ -1,7 +1,7 @@
 "use client";
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import type { Question } from "@hackos/shared/questions";
+import type { I18nText, Question } from "@hackos/shared/questions";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowLeftIcon, EyeIcon, EyeOffIcon, TrophyIcon } from "lucide-react";
 import Link from "next/link";
@@ -31,13 +31,16 @@ import { ApiError, api } from "@/lib/api";
 import { useSessionContext } from "@/lib/session";
 import {
   JudgingPanelBuilder,
+  MultilingualInput,
   normalizePrizes,
   normalizeQuestions,
   PrizeBuilder,
 } from "../builders";
 import {
+  asI18n,
   type Challenge,
   fromDatetimeLocal,
+  i18nWithEnglishFallback,
   isScheduled,
   type Prize,
   toDatetimeLocal,
@@ -49,9 +52,7 @@ const optionalPositiveInt = z
   .refine((v) => v === "" || (/^\d+$/.test(v) && Number(v) > 0), "Must be a positive number");
 
 const editSchema = z.object({
-  title: z.string().min(1, "Required"),
   description: z.string().max(6000),
-  criteria: z.string().max(6000),
   maxPresentationSeconds: optionalPositiveInt,
 });
 type EditValues = z.infer<typeof editSchema>;
@@ -63,9 +64,7 @@ type PublishValues = z.infer<typeof publishSchema>;
 
 function toFormValues(challenge: Challenge): EditValues {
   return {
-    title: challenge.title,
     description: challenge.description ?? "",
-    criteria: challenge.criteria ?? "",
     maxPresentationSeconds:
       challenge.max_presentation_seconds != null ? String(challenge.max_presentation_seconds) : "",
   };
@@ -232,7 +231,19 @@ function PublishCard({
               <FormItem>
                 <FormLabel>Reveal from</FormLabel>
                 <FormControl>
-                  <Input type="datetime-local" {...field} />
+                  <div className="flex items-center gap-2">
+                    <Input type="datetime-local" className="flex-1" {...field} />
+                    {field.value && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => form.setValue("availableFrom", "", { shouldDirty: true })}
+                      >
+                        Clear
+                      </Button>
+                    )}
+                  </div>
                 </FormControl>
                 <FormDescription>
                   Pick a future date and time to schedule the reveal. Leave it empty to go public as
@@ -253,6 +264,12 @@ function EditCard({ challenge, onSaved }: { challenge: Challenge; onSaved: () =>
   const [questions, setQuestions] = useState<Question[]>(
     asQuestions(challenge.judging_panel_criteria),
   );
+  const [titleI18n, setTitleI18n] = useState<I18nText>(
+    asI18n(challenge.title_i18n, challenge.title),
+  );
+  const [criteriaI18n, setCriteriaI18n] = useState<I18nText>(
+    asI18n(challenge.criteria_i18n, challenge.criteria ?? ""),
+  );
   const form = useForm<EditValues>({
     resolver: zodResolver(editSchema),
     defaultValues: toFormValues(challenge),
@@ -263,15 +280,25 @@ function EditCard({ challenge, onSaved }: { challenge: Challenge; onSaved: () =>
     reset(toFormValues(challenge));
     setPrizes(asPrizes(challenge.prizes));
     setQuestions(asQuestions(challenge.judging_panel_criteria));
+    setTitleI18n(asI18n(challenge.title_i18n, challenge.title));
+    setCriteriaI18n(asI18n(challenge.criteria_i18n, challenge.criteria ?? ""));
   }, [challenge, reset]);
 
   async function onSubmit(values: EditValues) {
+    const title = titleI18n.en.trim();
+    if (!title) {
+      toast.error("An English title is required.");
+      return;
+    }
+    const criteriaEn = criteriaI18n.en.trim();
     try {
       const normalizedQuestions = normalizeQuestions(questions);
       await api.patch<Challenge>(`/api/challenges/${challenge.id}`, {
-        title: values.title,
+        title,
+        titleI18n: i18nWithEnglishFallback(titleI18n),
         description: values.description,
-        criteria: values.criteria || null,
+        criteria: criteriaEn || null,
+        criteriaI18n: criteriaEn ? i18nWithEnglishFallback(criteriaI18n) : null,
         prizes: normalizePrizes(prizes),
         judgingPanelCriteria: normalizedQuestions,
         maxPresentationSeconds: values.maxPresentationSeconds
@@ -294,19 +321,7 @@ function EditCard({ challenge, onSaved }: { challenge: Challenge; onSaved: () =>
           description="Edit public content, prizes and the judging panel configuration."
           footer={<SubmitButton pending={form.formState.isSubmitting}>Save changes</SubmitButton>}
         >
-          <FormField
-            control={form.control}
-            name="title"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Title</FormLabel>
-                <FormControl>
-                  <Input {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          <MultilingualInput label="Title" value={titleI18n} onChange={setTitleI18n} />
           <FormField
             control={form.control}
             name="description"
@@ -320,18 +335,12 @@ function EditCard({ challenge, onSaved }: { challenge: Challenge; onSaved: () =>
               </FormItem>
             )}
           />
-          <FormField
-            control={form.control}
-            name="criteria"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Public criteria</FormLabel>
-                <FormControl>
-                  <Textarea rows={4} {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
+          <MultilingualInput
+            label="Public criteria"
+            optional
+            textarea
+            value={criteriaI18n}
+            onChange={setCriteriaI18n}
           />
           <section className="space-y-3 rounded-lg border p-4">
             <h3 className="text-sm font-medium">Prizes</h3>

@@ -104,7 +104,6 @@ const columns: Column<Enterprise>[] = [
     header: "Reveal",
     sortValue: (e) => e.available_from ?? "",
     cell: (e) => {
-      if (e.visibility !== "visible") return <span className="text-muted-foreground">—</span>;
       if (isScheduled(e.available_from)) {
         return (
           <div className="flex items-center gap-2">
@@ -115,11 +114,14 @@ const columns: Column<Enterprise>[] = [
           </div>
         );
       }
-      return (
-        <span className="text-muted-foreground text-sm">
-          {e.available_from ? new Date(e.available_from).toLocaleString() : "Immediate"}
-        </span>
-      );
+      if (e.visibility === "visible") {
+        return (
+          <span className="text-muted-foreground text-sm">
+            {e.available_from ? new Date(e.available_from).toLocaleString() : "Immediate"}
+          </span>
+        );
+      }
+      return <span className="text-muted-foreground">—</span>;
     },
   },
   {
@@ -489,7 +491,19 @@ function CreateEnterpriseModal({
               <FormItem>
                 <FormLabel>Reveal from</FormLabel>
                 <FormControl>
-                  <Input type="datetime-local" {...field} />
+                  <div className="flex items-center gap-2">
+                    <Input type="datetime-local" className="flex-1" {...field} />
+                    {field.value && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => form.setValue("availableFrom", "", { shouldDirty: true })}
+                      >
+                        Clear
+                      </Button>
+                    )}
+                  </div>
                 </FormControl>
                 <FormDescription>
                   Pick a future date and time to schedule the reveal. Leave it empty to go public as

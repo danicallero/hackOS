@@ -20,24 +20,26 @@ function isFrozenForOwner(visibility: string): boolean {
 function snapshotOf(row: Record<string, unknown>) {
   return {
     title: row.title,
+    title_i18n: row.title_i18n,
     description: row.description,
     criteria: row.criteria,
+    criteria_i18n: row.criteria_i18n,
     prizes: row.prizes,
     judging_panel_criteria: row.judging_panel_criteria,
     max_presentation_seconds: row.max_presentation_seconds,
   };
 }
 
-const EDITABLE_COLUMNS = `id, title, description, criteria, prizes,
+const EDITABLE_COLUMNS = `id, title, title_i18n, description, criteria, criteria_i18n, prizes,
   judging_panel_criteria, max_presentation_seconds, visibility,
   available_from, created_at, updated_at`;
 
-const EDITABLE_COLUMNS_FROM_CHALLENGE = `c.id, c.title, c.description, c.criteria, c.prizes,
-  c.judging_panel_criteria, c.max_presentation_seconds, c.visibility,
+const EDITABLE_COLUMNS_FROM_CHALLENGE = `c.id, c.title, c.title_i18n, c.description, c.criteria,
+  c.criteria_i18n, c.prizes, c.judging_panel_criteria, c.max_presentation_seconds, c.visibility,
   c.available_from, c.created_at, c.updated_at`;
 
-const CREATE_RETURNING_COLUMNS = `id, author, title, description, criteria, prizes,
-  judging_panel_criteria, max_presentation_seconds, visibility,
+const CREATE_RETURNING_COLUMNS = `id, author, title, title_i18n, description, criteria,
+  criteria_i18n, prizes, judging_panel_criteria, max_presentation_seconds, visibility,
   available_from, created_at, updated_at`;
 
 /**
@@ -67,9 +69,10 @@ export async function getChallenge(challengeId: number) {
 /** Challenges owned by the enterprise `userId` is a sponsor of (H44/H46). */
 export async function listOwnedChallenges(userId: number) {
   const { rows } = await pool.query(
-    `SELECT ${EDITABLE_COLUMNS_FROM_CHALLENGE}
+    `SELECT ${EDITABLE_COLUMNS_FROM_CHALLENGE}, ent.name AS enterprise_name
        FROM challenges c
        JOIN sponsors author ON author.id = c.author
+       JOIN enterprises ent ON ent.id = author.enterprise_id
        JOIN sponsors mine ON mine.enterprise_id = author.enterprise_id
       WHERE mine.user_id = $1
       ORDER BY c.id`,
@@ -79,7 +82,13 @@ export async function listOwnedChallenges(userId: number) {
 }
 
 export async function listAllChallenges() {
-  const { rows } = await pool.query(`SELECT ${EDITABLE_COLUMNS} FROM challenges ORDER BY id`);
+  const { rows } = await pool.query(
+    `SELECT ${EDITABLE_COLUMNS_FROM_CHALLENGE}, ent.name AS enterprise_name
+       FROM challenges c
+       JOIN sponsors author ON author.id = c.author
+       JOIN enterprises ent ON ent.id = author.enterprise_id
+      ORDER BY c.id`,
+  );
   return rows;
 }
 
@@ -108,17 +117,25 @@ async function ensureEnterpriseSponsorAnchor(db: Queryable, enterpriseId: number
 export async function createChallenge(input: CreateChallengeBody, actorId: number) {
   return withTransaction(async (client) => {
     const authorId = await ensureEnterpriseSponsorAnchor(client, input.enterpriseId);
+    // title/criteria stay in sync with their i18n .en so plain-string consumers
+    // (queue, projects, exports) keep working.
+    const title = input.titleI18n?.en.trim() || input.title;
+    const criteria = input.criteriaI18n
+      ? input.criteriaI18n.en.trim() || null
+      : (input.criteria ?? null);
     const { rows } = await client.query(
       `INSERT INTO challenges
-         (author, title, description, criteria, prizes, judging_panel_criteria,
-          max_presentation_seconds, visibility)
-       VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, 'hidden')
+         (author, title, title_i18n, description, criteria, criteria_i18n, prizes,
+          judging_panel_criteria, max_presentation_seconds, visibility)
+       VALUES ($1, $2, $3::jsonb, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9, 'hidden')
        RETURNING ${CREATE_RETURNING_COLUMNS}`,
       [
         authorId,
-        input.title,
+        title,
+        input.titleI18n ? JSON.stringify(input.titleI18n) : null,
         input.description ?? "",
-        input.criteria ?? null,
+        criteria,
+        input.criteriaI18n ? JSON.stringify(input.criteriaI18n) : null,
         input.prizes === undefined ? null : JSON.stringify(input.prizes),
         input.judgingPanelCriteria === undefined
           ? null
@@ -317,9 +334,28 @@ export async function updateChallenge(
       i += 1;
     };
 
-    if (patch.title !== undefined) put("title", patch.title);
+    // title/criteria mirror their i18n .en so plain-string consumers keep working.
+    if (patch.titleI18n !== undefined) {
+      put(
+        "title_i18n",
+        patch.titleI18n === null ? null : JSON.stringify(patch.titleI18n),
+        "::jsonb",
+      );
+      put("title", patch.titleI18n?.en.trim() || before.title);
+    } else if (patch.title !== undefined) {
+      put("title", patch.title);
+    }
     if (patch.description !== undefined) put("description", patch.description);
-    if (patch.criteria !== undefined) put("criteria", patch.criteria);
+    if (patch.criteriaI18n !== undefined) {
+      put(
+        "criteria_i18n",
+        patch.criteriaI18n === null ? null : JSON.stringify(patch.criteriaI18n),
+        "::jsonb",
+      );
+      put("criteria", patch.criteriaI18n ? patch.criteriaI18n.en.trim() || null : null);
+    } else if (patch.criteria !== undefined) {
+      put("criteria", patch.criteria);
+    }
     if (patch.prizes !== undefined)
       put("prizes", patch.prizes === null ? null : JSON.stringify(patch.prizes), "::jsonb");
     if (patch.judgingPanelCriteria !== undefined)

@@ -220,4 +220,42 @@ describe("challenge lifecycle (H43-H45)", () => {
     const publicAfter = await server.inject({ method: "GET", url: "/api/public/challenges" });
     expect(publicAfter.json().items).toHaveLength(1);
   });
+
+  it("stores per-language title/criteria and keeps title synced to English (H44)", async () => {
+    const server = await getApp();
+    const admin = await createUserWithCapabilities([CAPABILITIES.SPONSORS_MANAGE]);
+    const enterpriseId = await createEnterprise("I18nCo");
+
+    const created = await server.inject({
+      method: "POST",
+      url: "/api/challenges",
+      headers: asUser(admin),
+      payload: {
+        enterpriseId,
+        title: "AI Prize",
+        titleI18n: { en: "AI Prize", es: "Premio IA", gl: "Premio de IA" },
+        criteria: "Impact",
+        criteriaI18n: { en: "Impact", es: "Impacto", gl: "Impacto gl" },
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.json().title).toBe("AI Prize");
+    expect(created.json().title_i18n).toEqual({
+      en: "AI Prize",
+      es: "Premio IA",
+      gl: "Premio de IA",
+    });
+    expect(created.json().criteria_i18n.es).toBe("Impacto");
+    const id = created.json().id;
+
+    const patched = await server.inject({
+      method: "PATCH",
+      url: `/api/challenges/${id}`,
+      headers: asUser(admin),
+      payload: { titleI18n: { en: "New Title", es: "Título nuevo", gl: "Novo título" } },
+    });
+    expect(patched.statusCode).toBe(200);
+    expect(patched.json().title).toBe("New Title");
+    expect(patched.json().title_i18n.gl).toBe("Novo título");
+  });
 });

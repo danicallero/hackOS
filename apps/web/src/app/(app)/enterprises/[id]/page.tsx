@@ -577,7 +577,21 @@ function EditCard({
                   <FormItem>
                     <FormLabel>Reveal from</FormLabel>
                     <FormControl>
-                      <Input type="datetime-local" {...field} />
+                      <div className="flex items-center gap-2">
+                        <Input type="datetime-local" className="flex-1" {...field} />
+                        {field.value && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              form.setValue("availableFrom", "", { shouldDirty: true })
+                            }
+                          >
+                            Clear
+                          </Button>
+                        )}
+                      </div>
                     </FormControl>
                     <FormDescription>
                       Pick a future date and time to schedule the reveal. Leave it empty to go

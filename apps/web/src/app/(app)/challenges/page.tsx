@@ -1,7 +1,7 @@
 "use client";
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import type { Question } from "@hackos/shared/questions";
+import type { I18nText, Question } from "@hackos/shared/questions";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { EyeIcon, EyeOffIcon, LockIcon, PlusIcon, TrophyIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -30,8 +30,21 @@ import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
 import { useSessionContext } from "@/lib/session";
 import type { EnterpriseSummary } from "@/lib/types";
-import { JudgingPanelBuilder, normalizePrizes, normalizeQuestions, PrizeBuilder } from "./builders";
-import { type Challenge, isScheduled, type Prize, visibilityTone } from "./shared";
+import {
+  JudgingPanelBuilder,
+  MultilingualInput,
+  normalizePrizes,
+  normalizeQuestions,
+  PrizeBuilder,
+} from "./builders";
+import {
+  type Challenge,
+  EMPTY_I18N,
+  i18nWithEnglishFallback,
+  isScheduled,
+  type Prize,
+  visibilityTone,
+} from "./shared";
 
 const optionalPositiveInt = z
   .string()
@@ -39,9 +52,7 @@ const optionalPositiveInt = z
 
 const createSchema = z.object({
   enterpriseId: z.string().min(1, "Required"),
-  title: z.string().min(1, "Required"),
   description: z.string().max(6000),
-  criteria: z.string().max(6000),
   maxPresentationSeconds: optionalPositiveInt,
 });
 type CreateValues = z.infer<typeof createSchema>;
@@ -52,6 +63,17 @@ const columns: Column<Challenge>[] = [
     header: "Challenge",
     sortValue: (c) => c.title.toLowerCase(),
     cell: (c) => <span className="font-medium">{c.title}</span>,
+  },
+  {
+    id: "enterprise",
+    header: "Enterprise",
+    sortValue: (c) => (c.enterprise_name ?? "").toLowerCase(),
+    cell: (c) =>
+      c.enterprise_name ? (
+        <span className="text-muted-foreground text-sm">{c.enterprise_name}</span>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
   },
   {
     id: "visibility",
@@ -68,7 +90,6 @@ const columns: Column<Challenge>[] = [
     header: "Reveal",
     sortValue: (c) => c.available_from ?? "",
     cell: (c) => {
-      if (c.visibility !== "visible") return <span className="text-muted-foreground">—</span>;
       if (isScheduled(c.available_from)) {
         return (
           <div className="flex items-center gap-2">
@@ -79,11 +100,14 @@ const columns: Column<Challenge>[] = [
           </div>
         );
       }
-      return (
-        <span className="text-muted-foreground text-sm">
-          {c.available_from ? new Date(c.available_from).toLocaleString() : "Immediate"}
-        </span>
-      );
+      if (c.visibility === "visible") {
+        return (
+          <span className="text-muted-foreground text-sm">
+            {c.available_from ? new Date(c.available_from).toLocaleString() : "Immediate"}
+          </span>
+        );
+      }
+      return <span className="text-muted-foreground">—</span>;
     },
   },
 ];
@@ -245,13 +269,13 @@ function CreateChallengeModal({
   const [enterprises, setEnterprises] = useState<EnterpriseSummary[]>([]);
   const [prizes, setPrizes] = useState<Prize[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [titleI18n, setTitleI18n] = useState<I18nText>(EMPTY_I18N);
+  const [criteriaI18n, setCriteriaI18n] = useState<I18nText>(EMPTY_I18N);
   const form = useForm<CreateValues>({
     resolver: zodResolver(createSchema),
     defaultValues: {
       enterpriseId: "",
-      title: "",
       description: "",
-      criteria: "",
       maxPresentationSeconds: "",
     },
   });
@@ -262,6 +286,8 @@ function CreateChallengeModal({
     reset();
     setPrizes([]);
     setQuestions([]);
+    setTitleI18n(EMPTY_I18N);
+    setCriteriaI18n(EMPTY_I18N);
     api
       .get<{ enterprises: EnterpriseSummary[] }>("/api/enterprises")
       .then((res) => setEnterprises(res.enterprises))
@@ -271,13 +297,21 @@ function CreateChallengeModal({
   }, [open, reset]);
 
   async function onSubmit(values: CreateValues) {
+    const title = titleI18n.en.trim();
+    if (!title) {
+      toast.error("An English title is required.");
+      return;
+    }
+    const criteriaEn = criteriaI18n.en.trim();
     try {
       const normalizedQuestions = normalizeQuestions(questions);
       const created = await api.post<Challenge>("/api/challenges", {
         enterpriseId: Number(values.enterpriseId),
-        title: values.title,
+        title,
+        titleI18n: i18nWithEnglishFallback(titleI18n),
         description: values.description || undefined,
-        criteria: values.criteria || null,
+        criteria: criteriaEn || null,
+        criteriaI18n: criteriaEn ? i18nWithEnglishFallback(criteriaI18n) : null,
         prizes: normalizePrizes(prizes),
         judgingPanelCriteria: normalizedQuestions,
         maxPresentationSeconds: values.maxPresentationSeconds
@@ -332,19 +366,7 @@ function CreateChallengeModal({
               </FormItem>
             )}
           />
-          <FormField
-            control={form.control}
-            name="title"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Title</FormLabel>
-                <FormControl>
-                  <Input placeholder="Best AI Hack" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          <MultilingualInput label="Title" value={titleI18n} onChange={setTitleI18n} />
           <FormField
             control={form.control}
             name="description"
@@ -358,18 +380,12 @@ function CreateChallengeModal({
               </FormItem>
             )}
           />
-          <FormField
-            control={form.control}
-            name="criteria"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Public criteria</FormLabel>
-                <FormControl>
-                  <Textarea rows={3} {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
+          <MultilingualInput
+            label="Public criteria"
+            optional
+            textarea
+            value={criteriaI18n}
+            onChange={setCriteriaI18n}
           />
           <section className="space-y-3 rounded-lg border p-4">
             <h3 className="text-sm font-medium">Prizes</h3>
