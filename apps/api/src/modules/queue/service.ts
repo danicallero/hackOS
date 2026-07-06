@@ -7,7 +7,12 @@ import { broadcast } from "../../lib/sse.js";
 import { isRepoBlockedByBusyMember } from "./guard.js";
 import { writeQueueHistory } from "./history.js";
 import { notifyTeamCalled, repoMemberIds } from "./notify.js";
-import { nextBottomPosition, type RequeuePosition, resolveRequeuePosition } from "./ordering.js";
+import {
+  compactChallengePositions,
+  nextBottomPosition,
+  type RequeuePosition,
+  resolveRequeuePosition,
+} from "./ordering.js";
 import type { QueueEntryRow } from "./types.js";
 
 /** Postgres unique_violation. Thrown by the `one_active_per_room` partial index (plan/07 invariant 2). */
@@ -478,6 +483,52 @@ export async function cancelEntry(
       after: { status: "cancelled" },
       reason,
     });
+    return res.rows[0];
+  }).then(broadcastEntry);
+}
+
+/**
+ * H21: remove a repo from a challenge queue. Waiting/called teams are
+ * cancelled; teams already in the room are disqualified so the live judging
+ * surface stops showing them. Remaining active entries are compacted.
+ */
+export async function removeRepoFromChallenge(
+  entryId: number,
+  actorId: number,
+  reason?: string,
+): Promise<QueueEntryRow> {
+  return withTransaction(async (client) => {
+    const entry = await lockEntry(client, entryId);
+    const removable = ["waiting", "called", "in_room", "presenting"];
+    assertFrom(entry, removable, "remove from challenge");
+    const nextStatus =
+      entry.status === "waiting" || entry.status === "called" ? "cancelled" : "disqualified";
+    const res = await client.query(
+      `UPDATE queue_entries
+          SET status = $1, assigned_room_id = NULL, position = NULL, called_at = NULL,
+              precalled_at = NULL, presentation_started_at = NULL, completed_at = NULL
+        WHERE id = $2
+        RETURNING *`,
+      [nextStatus, entryId],
+    );
+    await writeQueueHistory(client, {
+      entryId,
+      actorId,
+      previousStatus: entry.status,
+      newStatus: nextStatus,
+      action: "remove_from_challenge",
+      reason,
+    });
+    await audit(client, {
+      actorId,
+      entityType: "queue_entry",
+      entityId: entryId,
+      action: "remove_from_challenge",
+      before: { status: entry.status, challengeId: entry.challenge_id, repoId: entry.repo_id },
+      after: { status: nextStatus },
+      reason,
+    });
+    await compactChallengePositions(client, entry.challenge_id);
     return res.rows[0];
   }).then(broadcastEntry);
 }

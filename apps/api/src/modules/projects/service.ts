@@ -1,8 +1,12 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
+import { broadcast } from "../../lib/sse.js";
+import { writeQueueHistory } from "../queue/history.js";
+import { compactChallengePositions, nextBottomPosition } from "../queue/ordering.js";
 import { buildImportPlan, type ImportPlan, type PlannedRepo } from "./plan.js";
 
 const CLAIM_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -398,17 +402,30 @@ interface RepoRow {
   demo_url: string | null;
 }
 
+interface RepoMember {
+  userId: number;
+  email: string;
+  name: string | null;
+  surname: string | null;
+  importedFrom: string;
+  externalId: string | null;
+  mergeStatus: string;
+  devpostUsername: string | null;
+}
+
+interface RepoChallenge {
+  id: number;
+  title: string;
+  status: string;
+  position: number | null;
+  assignedRoomId: number | null;
+  assignedRoomName: string | null;
+}
+
 interface RepoWithExtras extends RepoRow {
-  members: Array<{
-    email: string;
-    name: string | null;
-    surname: string | null;
-    devpostUsername: string | null;
-    userId: number | null;
-    mergeStatus: string;
-  }>;
+  members: RepoMember[];
   prizes: string[];
-  challenges: Array<{ id: number; title: string }>;
+  challenges: RepoChallenge[];
 }
 
 async function attachMembersAndPrizes(repoRows: RepoRow[]): Promise<RepoWithExtras[]> {
@@ -416,57 +433,59 @@ async function attachMembersAndPrizes(repoRows: RepoRow[]): Promise<RepoWithExtr
   if (ids.length === 0) return [];
 
   const membersRes = await pool.query(
-    `SELECT repo_id, email, name, surname, devpost_username, user_id, merge_status
-     FROM devpost_participants WHERE repo_id = ANY($1::int[])`,
+    `SELECT s.repo_id, s.user_id, u.email, u.name, u.surname, s.imported_from, s.external_id,
+            COALESCE(dp.merge_status, 'manual') AS merge_status,
+            dp.devpost_username
+       FROM submissions s
+       JOIN users u ON u.id = s.user_id
+       LEFT JOIN devpost_participants dp
+         ON dp.repo_id = s.repo_id AND dp.user_id = s.user_id
+      WHERE s.repo_id = ANY($1::int[])
+      ORDER BY s.repo_id, u.name ASC NULLS LAST, u.surname ASC NULLS LAST, u.email ASC`,
     [ids],
   );
   const prizesRes = await pool.query(
     `SELECT repo_id, prize FROM repo_devpost_prizes WHERE repo_id = ANY($1::int[])`,
     [ids],
   );
-  const prizeNames = [...new Set(prizesRes.rows.map((r: { prize: string }) => r.prize))];
-  const challengesRes = prizeNames.length
-    ? await pool.query(
-        `SELECT id, title, devpost_tags FROM challenges WHERE devpost_tags ?| $1::text[]`,
-        [prizeNames],
-      )
-    : { rows: [] as Array<{ id: number; title: string; devpost_tags: string[] }> };
+  const challengesRes = await pool.query(
+    `SELECT qe.repo_id, qe.challenge_id AS id, c.title, qe.status, qe.position,
+            qe.assigned_room_id, r.name AS assigned_room_name
+       FROM queue_entries qe
+       JOIN challenges c ON c.id = qe.challenge_id
+       LEFT JOIN rooms r ON r.id = qe.assigned_room_id
+      WHERE qe.repo_id = ANY($1::int[])
+        AND qe.status IN ('waiting', 'called', 'in_room', 'presenting')
+      ORDER BY qe.repo_id, qe.position ASC NULLS LAST, qe.id ASC`,
+    [ids],
+  );
 
-  const challengesByPrize = new Map<string, Array<{ id: number; title: string }>>();
-  for (const c of challengesRes.rows as Array<{
-    id: number;
-    title: string;
-    devpost_tags: string[];
-  }>) {
-    for (const tag of c.devpost_tags) {
-      if (!prizeNames.includes(tag)) continue;
-      const arr = challengesByPrize.get(tag) ?? [];
-      arr.push({ id: c.id, title: c.title });
-      challengesByPrize.set(tag, arr);
-    }
-  }
-
-  const membersByRepo = new Map<number, RepoWithExtras["members"]>();
-  for (const m of membersRes.rows as Array<{
+  const membersByRepo = new Map<number, RepoMember[]>();
+  for (const row of membersRes.rows as Array<{
     repo_id: number;
+    user_id: number;
     email: string;
     name: string | null;
     surname: string | null;
-    devpost_username: string | null;
-    user_id: number | null;
+    imported_from: string;
+    external_id: string | null;
     merge_status: string;
+    devpost_username: string | null;
   }>) {
-    const arr = membersByRepo.get(m.repo_id) ?? [];
+    const arr = membersByRepo.get(row.repo_id) ?? [];
     arr.push({
-      email: m.email,
-      name: m.name,
-      surname: m.surname,
-      devpostUsername: m.devpost_username,
-      userId: m.user_id,
-      mergeStatus: m.merge_status,
+      userId: row.user_id,
+      email: row.email,
+      name: row.name,
+      surname: row.surname,
+      importedFrom: row.imported_from,
+      externalId: row.external_id,
+      mergeStatus: row.merge_status,
+      devpostUsername: row.devpost_username,
     });
-    membersByRepo.set(m.repo_id, arr);
+    membersByRepo.set(row.repo_id, arr);
   }
+
   const prizesByRepo = new Map<number, string[]>();
   for (const p of prizesRes.rows as Array<{ repo_id: number; prize: string }>) {
     const arr = prizesByRepo.get(p.repo_id) ?? [];
@@ -474,19 +493,34 @@ async function attachMembersAndPrizes(repoRows: RepoRow[]): Promise<RepoWithExtr
     prizesByRepo.set(p.repo_id, arr);
   }
 
-  return repoRows.map((repo) => {
-    const prizes = prizesByRepo.get(repo.id) ?? [];
-    const challengesSeen = new Map<number, { id: number; title: string }>();
-    for (const prize of prizes) {
-      for (const c of challengesByPrize.get(prize) ?? []) challengesSeen.set(c.id, c);
-    }
-    return {
-      ...repo,
-      members: membersByRepo.get(repo.id) ?? [],
-      prizes,
-      challenges: [...challengesSeen.values()],
-    };
-  });
+  const challengesByRepo = new Map<number, RepoChallenge[]>();
+  for (const row of challengesRes.rows as Array<{
+    repo_id: number;
+    id: number;
+    title: string;
+    status: string;
+    position: number | null;
+    assigned_room_id: number | null;
+    assigned_room_name: string | null;
+  }>) {
+    const arr = challengesByRepo.get(row.repo_id) ?? [];
+    arr.push({
+      id: row.id,
+      title: row.title,
+      status: row.status,
+      position: row.position,
+      assignedRoomId: row.assigned_room_id,
+      assignedRoomName: row.assigned_room_name,
+    });
+    challengesByRepo.set(row.repo_id, arr);
+  }
+
+  return repoRows.map((repo) => ({
+    ...repo,
+    members: membersByRepo.get(repo.id) ?? [],
+    prizes: prizesByRepo.get(repo.id) ?? [],
+    challenges: challengesByRepo.get(repo.id) ?? [],
+  }));
 }
 
 const REPO_SELECT = `SELECT id, name, description, github_url, devpost_url, demo_url FROM repos`;
@@ -517,6 +551,179 @@ export async function myProjects(userId: number): Promise<Array<Omit<RepoWithExt
   );
   const withExtras = await attachMembersAndPrizes(rows);
   return withExtras.map(({ members: _members, ...rest }) => rest);
+}
+
+export async function addRepoMember(actorId: number, repoId: number, userId: number) {
+  return withTransaction(async (client) => {
+    const repo = await client.query(`SELECT id FROM repos WHERE id = $1 FOR UPDATE`, [repoId]);
+    if (!repo.rows[0]) throw new NotFoundError(`Repo ${repoId} not found`);
+    const user = await client.query(`SELECT id FROM users WHERE id = $1`, [userId]);
+    if (!user.rows[0]) throw new NotFoundError(`User ${userId} not found`);
+
+    const inserted = await client.query(
+      `INSERT INTO submissions (repo_id, user_id, imported_from, external_id)
+       VALUES ($1, $2, 'manual', NULL)
+       ON CONFLICT (repo_id, user_id) DO NOTHING
+       RETURNING repo_id, user_id`,
+      [repoId, userId],
+    );
+
+    await audit(client, {
+      actorId,
+      entityType: "submission",
+      entityId: `${repoId}:${userId}`,
+      action: "add_member",
+      after: { repoId, userId, inserted: (inserted.rowCount ?? 0) > 0 },
+      source: "admin",
+    });
+
+    return { repoId, userId, inserted: (inserted.rowCount ?? 0) > 0 };
+  });
+}
+
+export async function removeRepoMember(actorId: number, repoId: number, userId: number) {
+  return withTransaction(async (client) => {
+    const existing = await client.query(
+      `SELECT * FROM submissions WHERE repo_id = $1 AND user_id = $2 FOR UPDATE`,
+      [repoId, userId],
+    );
+    if (!existing.rows[0]) throw new NotFoundError(`Repo member ${repoId}:${userId} not found`);
+
+    await client.query(`DELETE FROM submissions WHERE repo_id = $1 AND user_id = $2`, [
+      repoId,
+      userId,
+    ]);
+    await audit(client, {
+      actorId,
+      entityType: "submission",
+      entityId: `${repoId}:${userId}`,
+      action: "remove_member",
+      before: { repoId, userId },
+      source: "admin",
+    });
+    return { repoId, userId, removed: true };
+  });
+}
+
+export async function addRepoChallenge(actorId: number, repoId: number, challengeId: number) {
+  const result = await withTransaction(async (client) => {
+    const repo = await client.query(`SELECT id FROM repos WHERE id = $1 FOR UPDATE`, [repoId]);
+    if (!repo.rows[0]) throw new NotFoundError(`Repo ${repoId} not found`);
+    const challenge = await client.query(`SELECT id FROM challenges WHERE id = $1`, [challengeId]);
+    if (!challenge.rows[0]) throw new NotFoundError(`Challenge ${challengeId} not found`);
+
+    const existing = await client.query(
+      `SELECT * FROM queue_entries WHERE repo_id = $1 AND challenge_id = $2 FOR UPDATE`,
+      [repoId, challengeId],
+    );
+    if (existing.rows[0]) {
+      const entry = existing.rows[0] as { id: number; status: string };
+      if (["cancelled", "disqualified", "completed"].includes(entry.status)) {
+        const position = await nextBottomPosition(client, challengeId);
+        const revived = await client.query(
+          `UPDATE queue_entries
+              SET status = 'waiting', position = $1, assigned_room_id = NULL,
+                  called_at = NULL, presentation_started_at = NULL, completed_at = NULL
+            WHERE id = $2
+            RETURNING *`,
+          [position, entry.id],
+        );
+        await writeQueueHistory(client, {
+          entryId: entry.id,
+          actorId,
+          previousStatus: entry.status,
+          newStatus: "waiting",
+          action: "re_enter",
+          reason: "Added back to challenge",
+          metadata: { position: "bottom" },
+        });
+        await audit(client, {
+          actorId,
+          entityType: "queue_entry",
+          entityId: entry.id,
+          action: "re_enter",
+          before: { status: entry.status },
+          after: { status: "waiting", position: "bottom" },
+          reason: "Added back to challenge",
+          source: "admin",
+        });
+        return { repoId, challengeId, entry: revived.rows[0], inserted: false, revived: true };
+      }
+      return { repoId, challengeId, entry: null, inserted: false, revived: false };
+    }
+
+    const position = await nextBottomPosition(client, challengeId);
+    const inserted = await client.query(
+      `INSERT INTO queue_entries (challenge_id, repo_id, status, position)
+       VALUES ($1, $2, 'waiting', $3)
+       RETURNING *`,
+      [challengeId, repoId, position],
+    );
+    const entry = inserted.rows[0];
+    await client.query(
+      `INSERT INTO queue_history
+         (queue_entry_id, actor_id, previous_status, new_status, action, metadata)
+       VALUES ($1, $2, 'none', 'waiting', 'enqueue', $3)`,
+      [entry.id, actorId, JSON.stringify({ source: "project_edit" })],
+    );
+    await audit(client, {
+      actorId,
+      entityType: "queue_entry",
+      entityId: entry.id,
+      action: "add_challenge",
+      after: { repoId, challengeId, status: "waiting", position },
+      source: "admin",
+    });
+    return { repoId, challengeId, entry, inserted: true, revived: false };
+  });
+  if (result.entry) {
+    await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ENTRY_CHANGED, result.entry);
+  }
+  return result;
+}
+
+export async function removeRepoChallenge(actorId: number, repoId: number, challengeId: number) {
+  const result = await withTransaction(async (client) => {
+    const entryRes = await client.query(
+      `SELECT * FROM queue_entries WHERE repo_id = $1 AND challenge_id = $2 FOR UPDATE`,
+      [repoId, challengeId],
+    );
+    const entry = entryRes.rows[0];
+    if (!entry)
+      throw new NotFoundError(`Repo ${repoId} is not assigned to challenge ${challengeId}`);
+
+    const nextStatus = ["waiting", "called"].includes(entry.status) ? "cancelled" : "disqualified";
+    const updated = await client.query(
+      `UPDATE queue_entries
+          SET status = $1, assigned_room_id = NULL, position = NULL, called_at = NULL,
+              precalled_at = NULL, presentation_started_at = NULL, completed_at = NULL
+        WHERE id = $2
+        RETURNING *`,
+      [nextStatus, entry.id],
+    );
+    await writeQueueHistory(client, {
+      entryId: entry.id,
+      actorId,
+      previousStatus: entry.status,
+      newStatus: nextStatus,
+      action: "remove_from_challenge",
+      reason: "Removed from challenge",
+    });
+    await audit(client, {
+      actorId,
+      entityType: "queue_entry",
+      entityId: entry.id,
+      action: "remove_from_challenge",
+      before: { status: entry.status, challengeId, repoId },
+      after: { status: nextStatus },
+      reason: "Removed from challenge",
+      source: "admin",
+    });
+    await compactChallengePositions(client, challengeId);
+    return { repoId, challengeId, entry: updated.rows[0], removed: true };
+  });
+  await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ENTRY_CHANGED, result.entry);
+  return result;
 }
 
 export interface PublicChallenge {

@@ -74,6 +74,43 @@ export async function roomView(roomId: number) {
   return { room, state, active, called, next };
 }
 
+/** H46 read surface: current room -> challenge and room -> judge assignments. */
+export async function roomAssignments(roomId: number) {
+  const room = (await pool.query(`SELECT * FROM rooms WHERE id = $1`, [roomId])).rows[0];
+  if (!room) throw new NotFoundError("Room not found", { roomId });
+
+  const challengeAssignments = await pool.query(
+    `SELECT rc.challenge_id, c.title, c.visibility, rc.assigned_at, rc.assigned_by,
+            u.name AS assigned_by_name, u.surname AS assigned_by_surname, u.email AS assigned_by_email
+       FROM room_challenges rc
+       JOIN challenges c ON c.id = rc.challenge_id
+       LEFT JOIN users u ON u.id = rc.assigned_by
+      WHERE rc.room_id = $1
+      ORDER BY c.title ASC, rc.assigned_at ASC`,
+    [roomId],
+  );
+
+  const judgeAssignments = await pool.query(
+    `SELECT rj.challenge_id, c.title, rj.user_id, u.name, u.surname, u.email,
+            rj.assigned_at, rj.assigned_by,
+            a.name AS assigned_by_name, a.surname AS assigned_by_surname, a.email AS assigned_by_email
+       FROM room_judges rj
+       JOIN challenges c ON c.id = rj.challenge_id
+       JOIN users u ON u.id = rj.user_id
+       LEFT JOIN users a ON a.id = rj.assigned_by
+      WHERE rj.room_id = $1
+      ORDER BY c.title ASC, u.name ASC NULLS LAST, u.surname ASC NULLS LAST, u.email ASC`,
+    [roomId],
+  );
+
+  return {
+    roomId,
+    room,
+    challenges: challengeAssignments.rows,
+    judges: judgeAssignments.rows,
+  };
+}
+
 export async function allRoomViews() {
   const rooms = (await pool.query(`SELECT id FROM rooms ORDER BY id ASC`)).rows;
   return Promise.all(rooms.map((r: { id: number }) => roomView(r.id)));
@@ -104,7 +141,8 @@ export async function myQueueStatus(userId: number) {
        FROM queue_entries qe
        JOIN challenges c ON c.id = qe.challenge_id
        JOIN repos r ON r.id = qe.repo_id
-      WHERE qe.repo_id = ANY($1)`,
+      WHERE qe.repo_id = ANY($1)
+        AND qe.status NOT IN ('cancelled', 'disqualified')`,
     [repoIds],
   );
 
