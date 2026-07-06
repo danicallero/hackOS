@@ -13,6 +13,7 @@ import {
   CheckCircle2Icon,
   DoorOpenIcon,
   DownloadIcon,
+  ExternalLinkIcon,
   LockIcon,
   PauseIcon,
   PlayIcon,
@@ -20,7 +21,7 @@ import {
   SearchIcon,
   SendIcon,
   SkipForwardIcon,
-  TimerIcon,
+  UsersIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -30,10 +31,17 @@ import { PageHeader } from "@/components/common/page-header";
 import { QueueStatusBadge } from "@/components/common/queue-status-badge";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
-import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
@@ -45,7 +53,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError, api } from "@/lib/api";
@@ -80,6 +87,8 @@ import { type Challenge, textForDisplay } from "../challenges/shared";
 
 type Scores = Record<string, AnswerValue>;
 
+const SCORE_SCALE = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
+
 function challengeName(challenge?: Challenge | null, fallback?: number): string {
   return challenge ? textForDisplay(challenge.title) : fallback ? `Challenge #${fallback}` : "—";
 }
@@ -91,6 +100,14 @@ function entryLabel(entry: QueueEntry): string {
 function minutesLabel(value: number | null | undefined): string {
   if (value == null) return "—";
   return `${Math.round(value)} min`;
+}
+
+function secondsLabel(value: number | null | undefined): string {
+  if (value == null) return "—";
+  const safe = Math.max(0, Math.floor(value));
+  const minutes = Math.floor(safe / 60);
+  const seconds = safe % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
 function exportHref(path: string): string {
@@ -115,6 +132,12 @@ function defaultValue(question: Question): AnswerValue {
     default:
       return "";
   }
+}
+
+function answerHasValue(value: AnswerValue | undefined): boolean {
+  if (value === undefined || value === null || value === "") return false;
+  if (Array.isArray(value)) return value.length > 0;
+  return true;
 }
 
 function normalizeScores(panel: Question[], raw: Record<string, unknown> | undefined): Scores {
@@ -287,26 +310,39 @@ export default function QueuePage() {
       : 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <PageHeader
         title="Judging"
-        description="Run a room queue, present teams, save judging reviews and monitor challenge progress."
+        description="Room controller, current project and scoring panel."
         actions={
-          canAdmin ? (
-            <Button variant="outline" asChild>
-              <Link href="/queue/rooms">Room admin</Link>
-            </Button>
-          ) : undefined
+          <div className="flex flex-wrap gap-2">
+            {canExport && effectiveChallengeId && (
+              <>
+                <Button variant="outline" size="sm" asChild>
+                  <a href={exportHref(exportUrls(effectiveChallengeId).queue)}>
+                    <DownloadIcon className="size-4" />
+                    Queue CSV
+                  </a>
+                </Button>
+                <Button variant="outline" size="sm" asChild>
+                  <a href={exportHref(exportUrls(effectiveChallengeId).evaluations)}>
+                    <DownloadIcon className="size-4" />
+                    Evaluations CSV
+                  </a>
+                </Button>
+              </>
+            )}
+            {canAdmin && (
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/queue/rooms">Room admin</Link>
+              </Button>
+            )}
+          </div>
         }
       />
 
-      <SectionCard
-        title="Room controls"
-        description="Select the room and challenge context for the live panel."
-        icon={DoorOpenIcon}
-        bodyClassName="space-y-4"
-      >
-        <div className="grid gap-4 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
+      <Card className="gap-0 p-5">
+        <div className="grid gap-3 md:grid-cols-[minmax(180px,1fr)_minmax(220px,1.2fr)_auto] md:items-end">
           <div className="space-y-2">
             <Label htmlFor="queue-room">Room</Label>
             <Select
@@ -363,170 +399,128 @@ export default function QueuePage() {
             }
           >
             {isPaused ? <PlayIcon className="size-4" /> : <PauseIcon className="size-4" />}
-            {isPaused ? "Resume room" : "Pause room"}
+            {isPaused ? "Resume" : "Pause"}
           </Button>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard label="Waiting" value={view?.next.length ?? 0} hint="Next teams in queue" />
-          <StatCard label="Called" value={view?.called.length ?? 0} hint="In waiting area" />
-          <StatCard
-            label="Pace"
-            value={minutesLabel(pace.data?.effectiveMinutesPerTeam)}
-            hint={pace.data?.autoAdjusted ? "Auto-adjusted to finish on time" : "Target per team"}
-          />
-          <StatCard
+        <div className="mt-4 flex flex-wrap gap-2">
+          <StatChip label="Waiting room" value={view?.called.length ?? 0} />
+          <StatChip label="Challenge queue" value={view?.next.length ?? 0} />
+          <StatChip label="Max/team" value={minutesLabel(pace.data?.effectiveMinutesPerTeam)} />
+          <StatChip label="Progress" value={`${evaluatedPercent}%`} />
+          <StatChip
             label="Status"
             value={isPaused ? "Paused" : "Live"}
-            hint={view?.room.location ?? view?.room.slug ?? undefined}
+            tone={isPaused ? "warning" : "success"}
           />
         </div>
-      </SectionCard>
+      </Card>
 
-      <Tabs defaultValue="panel" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="panel">Panel</TabsTrigger>
-          <TabsTrigger value="progress">Progress</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="panel" className="space-y-0">
-          {roomsLoading || roomView.loading ? (
-            <div className="flex min-h-[320px] items-center justify-center">
-              <Spinner />
-            </div>
-          ) : !view ? (
-            <EmptyState
-              icon={DoorOpenIcon}
-              title="No room selected"
-              description="Create or select a judging room before operating the queue."
-            />
-          ) : (
-            <div className="grid gap-5 xl:grid-cols-12">
-              <div className="space-y-5 xl:col-span-4">
-                <QueuePanel
-                  view={view}
-                  canOperate={canOperate}
-                  busy={busy}
-                  onCallNext={() =>
-                    activeRoomId &&
-                    mutate(
-                      "call-next",
-                      () => callNext(activeRoomId, crypto.randomUUID()),
-                      "Next team called.",
-                    )
-                  }
-                  onEntryAction={(entry, action, body, label) =>
-                    mutate(
-                      `${action}-${entry.id}`,
-                      () => entryAction(entry.id, action, body, crypto.randomUUID()),
-                      label,
-                    )
-                  }
-                />
-                <SearchPanel
-                  query={search}
-                  results={searchResults}
-                  searching={searching}
-                  disabled={!effectiveChallengeId}
-                  canOperate={canOperate || canJudge}
-                  roomId={activeRoomId}
-                  onQuery={setSearch}
-                  onSearch={onSearch}
-                  onManualCall={(entry, targetStatus) =>
-                    activeRoomId &&
-                    mutate(
-                      `manual-${entry.id}`,
-                      () =>
-                        entryAction(
-                          entry.id,
-                          "manual-call",
-                          { targetStatus, roomId: activeRoomId, reason: "Manual search recovery" },
-                          crypto.randomUUID(),
-                        ),
-                      targetStatus === "in_room" ? "Team brought into room." : "Team called.",
-                    )
-                  }
-                />
-              </div>
-
-              <div className="space-y-5 xl:col-span-8">
-                <PresentationPanel
-                  entry={active}
-                  challenge={activeChallenge}
-                  pace={pace.data}
-                  canJudge={canJudge}
-                  busy={busy}
-                  roomId={activeRoomId}
-                  onEntryAction={(entry, action, body, label) =>
-                    mutate(
-                      `${action}-${entry.id}`,
-                      () => entryAction(entry.id, action, body, crypto.randomUUID()),
-                      label,
-                    )
-                  }
-                />
-              </div>
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="progress" className="space-y-4">
-          <SectionCard
-            title="Challenge progress"
-            description="Operational counts and exports for the selected challenge."
-            icon={CheckCircle2Icon}
-            action={
-              canExport && effectiveChallengeId ? (
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" size="sm" asChild>
-                    <a href={exportHref(exportUrls(effectiveChallengeId).queue)}>
-                      <DownloadIcon className="size-4" />
-                      Queue CSV
-                    </a>
-                  </Button>
-                  <Button variant="outline" size="sm" asChild>
-                    <a href={exportHref(exportUrls(effectiveChallengeId).evaluations)}>
-                      <DownloadIcon className="size-4" />
-                      Evaluations CSV
-                    </a>
-                  </Button>
-                </div>
-              ) : undefined
+      {roomsLoading || roomView.loading ? (
+        <div className="flex min-h-[360px] items-center justify-center">
+          <Spinner />
+        </div>
+      ) : !view ? (
+        <EmptyState
+          icon={DoorOpenIcon}
+          title="No room selected"
+          description="Create or select a judging room before operating the queue."
+        />
+      ) : (
+        <div className="grid min-h-[calc(100dvh-270px)] gap-5 xl:grid-cols-[360px_minmax(0,1fr)_420px]">
+          <QueuePanel
+            view={view}
+            canOperate={canOperate}
+            canJudge={canJudge}
+            busy={busy}
+            query={search}
+            results={searchResults}
+            searching={searching}
+            searchDisabled={!effectiveChallengeId}
+            onQuery={setSearch}
+            onSearch={onSearch}
+            onCallNext={() =>
+              activeRoomId &&
+              mutate(
+                "call-next",
+                () => callNext(activeRoomId, crypto.randomUUID()),
+                "Next team called.",
+              )
             }
-          >
-            {progress.loading ? (
-              <Spinner />
-            ) : !progress.data ? (
-              <EmptyState
-                icon={CheckCircle2Icon}
-                title="No challenge selected"
-                description="Select a challenge to see queue progress."
-              />
-            ) : (
-              <div className="space-y-5">
-                <div>
-                  <div className="mb-2 flex items-center justify-between gap-3">
-                    <p className="font-medium">
-                      {challengeName(activeChallenge, effectiveChallengeId ?? undefined)}
-                    </p>
-                    <span className="text-muted-foreground text-sm tabular-nums">
-                      {evaluatedPercent}% evaluated
-                    </span>
-                  </div>
-                  <Progress value={evaluatedPercent} />
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-                  <StatCard label="Waiting" value={progress.data.waiting} />
-                  <StatCard label="Called" value={progress.data.called} />
-                  <StatCard label="In progress" value={progress.data.inProgress} />
-                  <StatCard label="Evaluated" value={progress.data.evaluated} />
-                  <StatCard label="Disqualified" value={progress.data.disqualified} />
-                </div>
-              </div>
-            )}
-          </SectionCard>
-        </TabsContent>
-      </Tabs>
+            onManualCall={(entry, targetStatus) =>
+              activeRoomId &&
+              mutate(
+                `manual-${entry.id}`,
+                () =>
+                  entryAction(
+                    entry.id,
+                    "manual-call",
+                    { targetStatus, roomId: activeRoomId, reason: "Manual queue selection" },
+                    crypto.randomUUID(),
+                  ),
+                targetStatus === "in_room" ? "Team brought into room." : "Team called.",
+              )
+            }
+            onEntryAction={(entry, action, body, label) =>
+              mutate(
+                `${action}-${entry.id}`,
+                () => entryAction(entry.id, action, body, crypto.randomUUID()),
+                label,
+              )
+            }
+          />
+
+          <PresentationPanel
+            entry={active}
+            challenge={activeChallenge}
+            pace={pace.data}
+            waitingRoomCount={view.called.length}
+            canJudge={canJudge}
+            busy={busy}
+            onEmptyAction={() => {
+              const firstCalled = view.called[0];
+              if (firstCalled) {
+                mutate(
+                  `bring-in-${firstCalled.id}`,
+                  () => entryAction(firstCalled.id, "bring-in", undefined, crypto.randomUUID()),
+                  "Team brought in.",
+                );
+                return;
+              }
+              if (activeRoomId) {
+                mutate(
+                  "call-next",
+                  () => callNext(activeRoomId, crypto.randomUUID()),
+                  "Next team called.",
+                );
+              }
+            }}
+            onEntryAction={(entry, action, body, label) =>
+              mutate(
+                `${action}-${entry.id}`,
+                () => entryAction(entry.id, action, body, crypto.randomUUID()),
+                label,
+              )
+            }
+          />
+
+          <div className="space-y-5">
+            <ReviewForm
+              entry={active}
+              challenge={activeChallenge}
+              roomId={activeRoomId}
+              canJudge={canJudge && active?.status === "presenting"}
+            />
+            <ProgressPanel
+              challenge={activeChallenge}
+              challengeId={effectiveChallengeId}
+              progress={progress.data}
+              loading={progress.loading}
+              evaluatedPercent={evaluatedPercent}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -534,14 +528,30 @@ export default function QueuePage() {
 function QueuePanel({
   view,
   canOperate,
+  canJudge,
   busy,
+  query,
+  results,
+  searching,
+  searchDisabled,
+  onQuery,
+  onSearch,
   onCallNext,
+  onManualCall,
   onEntryAction,
 }: {
   view: RoomView;
   canOperate: boolean;
+  canJudge: boolean;
   busy: string | null;
+  query: string;
+  results: QueueSearchResult[];
+  searching: boolean;
+  searchDisabled: boolean;
+  onQuery: (value: string) => void;
+  onSearch: () => void;
   onCallNext: () => void;
+  onManualCall: (entry: QueueEntry, targetStatus: "called" | "in_room") => void;
   onEntryAction: (
     entry: QueueEntry,
     action: "notify-enter" | "bring-in" | "requeue" | "no-show" | "skip",
@@ -549,131 +559,232 @@ function QueuePanel({
     label: string,
   ) => void;
 }) {
+  const [searchOpen, setSearchOpen] = useState(false);
+  const waitingEntries = view.next;
+  const calledEntries = view.called;
+
   return (
-    <SectionCard
-      title="Queue"
-      description="Call the next team and manage the waiting area."
-      icon={BellRingIcon}
-      action={
+    <Card className="gap-0 overflow-hidden p-0">
+      <div className="flex items-center justify-between gap-3 px-5 pt-5 pb-4">
+        <div>
+          <h2 className="text-base font-semibold">Queue</h2>
+          <p className="text-muted-foreground text-sm">Waiting room and challenge queue.</p>
+        </div>
         <Button disabled={!canOperate || busy === "call-next"} onClick={onCallNext}>
           <BellRingIcon className="size-4" />
           Call next
         </Button>
-      }
-      bodyClassName="space-y-5"
-    >
-      <QueueList
-        title="Called"
-        description="Teams already assigned to this room."
-        entries={view.called}
-        empty="No teams in the waiting area."
-        renderActions={(entry) => (
-          <>
-            <Button
-              size="xs"
-              variant="outline"
-              disabled={busy != null}
-              onClick={() =>
-                onEntryAction(entry, "notify-enter", undefined, "Entrance notice sent.")
-              }
-            >
-              <SendIcon className="size-3" />
-              Notify
-            </Button>
-            <Button
-              size="xs"
-              disabled={busy != null}
-              onClick={() => onEntryAction(entry, "bring-in", undefined, "Team brought in.")}
-            >
-              <DoorOpenIcon className="size-3" />
-              Bring in
-            </Button>
-            <Button
-              size="xs"
-              variant="outline"
-              disabled={busy != null}
-              onClick={() =>
-                onEntryAction(
-                  entry,
-                  "requeue",
-                  { position: "bottom", reason: "Returned from waiting area" },
-                  "Team returned to the queue.",
-                )
-              }
-            >
-              <RotateCcwIcon className="size-3" />
-              Requeue
-            </Button>
-            <Button
-              size="xs"
-              variant="outline"
-              disabled={busy != null}
-              onClick={() =>
-                onEntryAction(entry, "no-show", { reason: "No show" }, "No-show recorded.")
-              }
-            >
-              <AlertTriangleIcon className="size-3" />
-              No-show
-            </Button>
-          </>
-        )}
-      />
+      </div>
       <Separator />
-      <QueueList
-        title="Next"
-        description="Upcoming teams for this room's assigned challenges."
-        entries={view.next}
-        empty="No waiting teams."
-        renderActions={(entry) => (
-          <Button
-            size="xs"
-            variant="outline"
-            disabled={busy != null || !canOperate}
-            onClick={() =>
-              onEntryAction(entry, "skip", { reason: "Skipped by operator" }, "Team skipped.")
-            }
-          >
-            <SkipForwardIcon className="size-3" />
-            Skip
-          </Button>
-        )}
-      />
-    </SectionCard>
+      <div className="space-y-5 p-5">
+        <QueueList
+          title={`Waiting room (${calledEntries.length})`}
+          entries={calledEntries}
+          empty="No teams waiting at the door."
+          compact
+          renderActions={(entry) => (
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                size="sm"
+                disabled={busy != null || !canJudge}
+                onClick={() => onEntryAction(entry, "bring-in", undefined, "Team brought in.")}
+              >
+                <DoorOpenIcon className="size-4" />
+                Bring in
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy != null || (!canJudge && !canOperate)}
+                onClick={() =>
+                  onEntryAction(
+                    entry,
+                    "requeue",
+                    { position: "bottom", reason: "Returned from waiting room" },
+                    "Team returned to the queue.",
+                  )
+                }
+              >
+                <RotateCcwIcon className="size-4" />
+                Requeue
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy != null || (!canJudge && !canOperate)}
+                onClick={() =>
+                  onEntryAction(entry, "notify-enter", undefined, "Entrance notice sent.")
+                }
+              >
+                <SendIcon className="size-4" />
+                Notify
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy != null || (!canJudge && !canOperate)}
+                onClick={() =>
+                  onEntryAction(entry, "no-show", { reason: "No show" }, "No-show recorded.")
+                }
+              >
+                <AlertTriangleIcon className="size-4" />
+                No-show
+              </Button>
+            </div>
+          )}
+        />
+
+        <Separator />
+
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold">Challenge queue ({waitingEntries.length})</h3>
+              <p className="text-muted-foreground text-xs">Upcoming teams for this room.</p>
+            </div>
+            <Button
+              size="icon"
+              variant="ghost"
+              aria-label="Search queue"
+              disabled={searchDisabled}
+              onClick={() => setSearchOpen(true)}
+            >
+              <SearchIcon className="size-4" />
+            </Button>
+          </div>
+          <QueueList
+            title=""
+            entries={waitingEntries}
+            empty="No teams in the challenge queue."
+            scroll
+            renderActions={(entry) => (
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy != null || !canOperate}
+                  onClick={() => onManualCall(entry, "called")}
+                  className="flex-1"
+                >
+                  Call
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy != null || !canOperate}
+                  onClick={() =>
+                    onEntryAction(entry, "skip", { reason: "Skipped by operator" }, "Team skipped.")
+                  }
+                >
+                  <SkipForwardIcon className="size-4" />
+                  Skip
+                </Button>
+              </div>
+            )}
+          />
+        </div>
+      </div>
+
+      <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Call a team</DialogTitle>
+            <DialogDescription>Search by project, repo id or queue entry id.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="flex gap-2">
+              <div className="relative min-w-0 flex-1">
+                <SearchIcon className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+                <Input
+                  value={query}
+                  onChange={(event) => onQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void onSearch();
+                  }}
+                  placeholder="Search queue"
+                  className="pl-9"
+                  autoFocus
+                />
+              </div>
+              <Button variant="outline" disabled={searching || searchDisabled} onClick={onSearch}>
+                Search
+              </Button>
+            </div>
+            <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+              {results.length === 0 ? (
+                <p className="text-muted-foreground py-6 text-center text-sm">No teams found.</p>
+              ) : (
+                results.map((entry) => (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    className="hover:bg-muted w-full rounded-md border p-3 text-left transition-colors"
+                    onClick={() => {
+                      onManualCall(entry, "called");
+                      setSearchOpen(false);
+                    }}
+                  >
+                    <p className="truncate text-sm font-medium">{entryLabel(entry)}</p>
+                    <div className="mt-1 flex flex-wrap gap-2">
+                      <QueueStatusBadge status={entry.status} />
+                      {entry.has_review && (
+                        <StatusBadge
+                          tone={entry.review_status === "submitted" ? "success" : "warning"}
+                        >
+                          {entry.review_status ?? "review"}
+                        </StatusBadge>
+                      )}
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </Card>
   );
 }
 
 function QueueList({
   title,
-  description,
   entries,
   empty,
+  compact,
+  scroll,
   renderActions,
 }: {
   title: string;
-  description: string;
   entries: QueueEntry[];
   empty: string;
+  compact?: boolean;
+  scroll?: boolean;
   renderActions: (entry: QueueEntry) => React.ReactNode;
 }) {
   return (
     <div className="space-y-3">
-      <div>
-        <h3 className="font-medium">{title}</h3>
-        <p className="text-muted-foreground text-sm text-pretty">{description}</p>
-      </div>
+      {title && <h3 className="text-sm font-semibold">{title}</h3>}
       {entries.length === 0 ? (
         <p className="text-muted-foreground rounded-md border border-dashed px-3 py-6 text-center text-sm">
           {empty}
         </p>
       ) : (
-        <ul className="space-y-2">
-          {entries.map((entry) => (
+        <ul className={cn("space-y-2", scroll && "max-h-96 overflow-y-auto pr-1")}>
+          {entries.map((entry, index) => (
             <li key={entry.id} className="rounded-md border p-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="truncate font-medium">{entryLabel(entry)}</p>
+                  <p className={cn("truncate font-medium", compact ? "text-sm" : "text-xs")}>
+                    {!compact && `#${entry.position ?? index + 1} `}
+                    {entryLabel(entry)}
+                  </p>
                   <div className="mt-1 flex flex-wrap items-center gap-2">
                     <QueueStatusBadge status={entry.status} />
+                    {entry.call_count > 0 && (
+                      <span className="text-muted-foreground text-xs tabular-nums">
+                        Past calls: {entry.call_count}
+                      </span>
+                    )}
                     {entry.position != null && (
                       <span className="text-muted-foreground text-xs tabular-nums">
                         Position #{entry.position}
@@ -700,116 +811,23 @@ function QueueList({
   );
 }
 
-function SearchPanel({
-  query,
-  results,
-  searching,
-  disabled,
-  canOperate,
-  roomId,
-  onQuery,
-  onSearch,
-  onManualCall,
-}: {
-  query: string;
-  results: QueueSearchResult[];
-  searching: boolean;
-  disabled: boolean;
-  canOperate: boolean;
-  roomId: number | null;
-  onQuery: (value: string) => void;
-  onSearch: () => void;
-  onManualCall: (entry: QueueSearchResult, targetStatus: "called" | "in_room") => void;
-}) {
-  return (
-    <SectionCard
-      title="Find team"
-      description="Recover a specific team by project, repo id or queue entry id."
-      icon={SearchIcon}
-    >
-      <div className="flex gap-2">
-        <div className="min-w-0 flex-1 space-y-2">
-          <Label htmlFor="queue-search">Search</Label>
-          <Input
-            id="queue-search"
-            value={query}
-            onChange={(event) => onQuery(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") void onSearch();
-            }}
-            placeholder="Project name, repo id or entry id"
-            disabled={disabled}
-          />
-        </div>
-        <Button
-          className="mt-8"
-          variant="outline"
-          disabled={disabled || searching}
-          onClick={onSearch}
-        >
-          <SearchIcon className="size-4" />
-          Search
-        </Button>
-      </div>
-      {results.length > 0 && (
-        <ul className="space-y-2">
-          {results.map((entry) => (
-            <li key={entry.id} className="rounded-md border p-3">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{entryLabel(entry)}</p>
-                  <div className="mt-1 flex flex-wrap gap-2">
-                    <QueueStatusBadge status={entry.status} />
-                    {entry.has_review && (
-                      <StatusBadge
-                        tone={entry.review_status === "submitted" ? "success" : "warning"}
-                      >
-                        {entry.review_status ?? "review"}
-                      </StatusBadge>
-                    )}
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    size="xs"
-                    variant="outline"
-                    disabled={!canOperate || roomId == null}
-                    onClick={() => onManualCall(entry, "called")}
-                  >
-                    Call
-                  </Button>
-                  <Button
-                    size="xs"
-                    disabled={!canOperate || roomId == null}
-                    onClick={() => onManualCall(entry, "in_room")}
-                  >
-                    Bring in
-                  </Button>
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </SectionCard>
-  );
-}
-
 function PresentationPanel({
   entry,
   challenge,
   pace,
+  waitingRoomCount,
   canJudge,
   busy,
-  roomId,
+  onEmptyAction,
   onEntryAction,
 }: {
   entry: QueueEntry | null;
   challenge: Challenge | null;
   pace: RoomPace | null;
+  waitingRoomCount: number;
   canJudge: boolean;
   busy: string | null;
-  roomId: number | null;
+  onEmptyAction: () => void;
   onEntryAction: (
     entry: QueueEntry,
     action: "start" | "complete" | "send-back",
@@ -817,41 +835,67 @@ function PresentationPanel({
     label: string,
   ) => void;
 }) {
+  const isPresenting = entry?.status === "presenting";
+  const isReady = entry?.status === "in_room";
+
   return (
-    <>
-      <SectionCard
-        title="Presentation"
-        description="Current team in the room and timer target."
-        icon={TimerIcon}
-        action={entry ? <QueueStatusBadge status={entry.status} /> : undefined}
-      >
-        {!entry ? (
-          <EmptyState
-            icon={DoorOpenIcon}
-            title="No team in the room"
-            description="Bring in a called team to start presentation and judging."
-          />
+    <Card className={cn("gap-0 overflow-hidden p-0", entry && "border-primary/30 bg-primary/5")}>
+      <div className="flex items-start justify-between gap-4 px-6 pt-6 pb-5">
+        <div className="min-w-0">
+          <h2 className="truncate text-2xl font-semibold text-balance">
+            {entry ? entryLabel(entry) : "Waiting for next team"}
+          </h2>
+          <p className="text-muted-foreground text-sm">
+            {entry
+              ? isPresenting
+                ? "Presentation in progress"
+                : isReady
+                  ? "Ready to start"
+                  : "Team in room"
+              : "Bring in a team to start presentation and scoring."}
+          </p>
+        </div>
+        {entry ? (
+          <QueueStatusBadge status={entry.status} />
         ) : (
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="min-w-0">
-                <h2 className="truncate text-2xl font-semibold text-balance">
-                  {entryLabel(entry)}
-                </h2>
-                <p className="text-muted-foreground text-sm">
-                  {challengeName(challenge, entry.challenge_id)}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-muted-foreground text-xs font-medium uppercase">Target time</p>
-                <p className="text-xl font-semibold tabular-nums">
-                  {minutesLabel(pace?.effectiveMinutesPerTeam)}
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2">
+          <StatusBadge tone="neutral">Idle</StatusBadge>
+        )}
+      </div>
+      <Separator />
+      <div className="space-y-5 p-6">
+        {!entry ? (
+          <div className="flex min-h-64 flex-col items-center justify-center rounded-md border border-dashed p-6 text-center">
+            <DoorOpenIcon className="text-muted-foreground mb-3 size-8" />
+            <p className="text-sm font-medium">No presentation in progress</p>
+            <p className="text-muted-foreground mt-1 text-sm">
+              {waitingRoomCount > 0
+                ? "There are teams waiting at the door."
+                : "Call the next team into the waiting room."}
+            </p>
+            <Button className="mt-4" disabled={busy != null} onClick={onEmptyAction}>
+              {waitingRoomCount > 0 ? (
+                <DoorOpenIcon className="size-4" />
+              ) : (
+                <BellRingIcon className="size-4" />
+              )}
+              {waitingRoomCount > 0 ? "Bring in" : "Call next"}
+            </Button>
+          </div>
+        ) : (
+          <>
+            <ProjectInfo entry={entry} challenge={challenge} />
+
+            {isPresenting && (
+              <PresentationTimer
+                startedAt={entry.presentation_started_at}
+                maxSeconds={challenge?.max_presentation_seconds ?? null}
+                fallbackMinutes={pace?.effectiveMinutesPerTeam ?? null}
+              />
+            )}
+
+            <div className="grid gap-2 sm:grid-cols-3">
               <Button
-                disabled={!canJudge || entry.status !== "in_room" || busy != null}
+                disabled={!canJudge || !isReady || busy != null}
                 onClick={() => onEntryAction(entry, "start", undefined, "Presentation started.")}
               >
                 <PlayIcon className="size-4" />
@@ -859,7 +903,7 @@ function PresentationPanel({
               </Button>
               <Button
                 variant="outline"
-                disabled={!canJudge || entry.status !== "presenting" || busy != null}
+                disabled={!canJudge || !isPresenting || busy != null}
                 onClick={() =>
                   onEntryAction(entry, "complete", undefined, "Presentation completed.")
                 }
@@ -880,15 +924,203 @@ function PresentationPanel({
                 }
               >
                 <RotateCcwIcon className="size-4" />
-                Send back
+                Requeue
               </Button>
             </div>
-          </div>
+          </>
         )}
-      </SectionCard>
+      </div>
+    </Card>
+  );
+}
 
-      <ReviewForm entry={entry} challenge={challenge} roomId={roomId} canJudge={canJudge} />
-    </>
+function ProjectInfo({ entry, challenge }: { entry: QueueEntry; challenge: Challenge | null }) {
+  const members = entry.repo_members ?? [];
+  const links = [
+    { label: "Demo", href: entry.repo_demo_url },
+    { label: "Devpost", href: entry.repo_devpost_url },
+    { label: "GitHub", href: entry.repo_github_url },
+  ].filter((link): link is { label: string; href: string } => Boolean(link.href));
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-md border bg-background p-4">
+        <div className="mb-2 flex items-center gap-2">
+          <UsersIcon className="text-muted-foreground size-4" />
+          <p className="text-xs font-semibold uppercase">Members</p>
+        </div>
+        <p className="text-sm font-medium text-pretty">
+          {members.length > 0
+            ? members
+                .map(
+                  (member) => `${member.name ?? ""} ${member.surname ?? ""}`.trim() || member.email,
+                )
+                .join(" · ")
+            : "—"}
+        </p>
+      </div>
+
+      {entry.repo_description && (
+        <div className="rounded-md border bg-background p-4">
+          <p className="mb-2 text-xs font-semibold uppercase">Project</p>
+          <p className="text-muted-foreground line-clamp-5 text-sm text-pretty">
+            {entry.repo_description}
+          </p>
+        </div>
+      )}
+
+      {links.length > 0 && (
+        <div className="grid gap-2 sm:grid-cols-3">
+          {links.map((link) => (
+            <Button key={link.label} variant="outline" size="sm" asChild>
+              <a href={link.href} target="_blank" rel="noreferrer">
+                <ExternalLinkIcon className="size-4" />
+                {link.label}
+              </a>
+            </Button>
+          ))}
+        </div>
+      )}
+
+      {challenge && (
+        <div className="rounded-md border bg-background p-4">
+          <p className="mb-1 text-xs font-semibold uppercase">Current challenge</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium">
+              {challengeName(challenge, entry.challenge_id)}
+            </span>
+            <StatusBadge tone="success">Now</StatusBadge>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PresentationTimer({
+  startedAt,
+  maxSeconds,
+  fallbackMinutes,
+}: {
+  startedAt: string | null;
+  maxSeconds: number | null;
+  fallbackMinutes: number | null;
+}) {
+  const [now, setNow] = useState(Date.now());
+  const totalSeconds =
+    maxSeconds ?? (fallbackMinutes != null ? Math.round(fallbackMinutes * 60) : null);
+  const startedMs = startedAt ? new Date(startedAt).getTime() : null;
+  const elapsedSeconds =
+    startedMs && Number.isFinite(startedMs) ? Math.max(0, Math.floor((now - startedMs) / 1000)) : 0;
+  const remainingSeconds = totalSeconds != null ? Math.max(0, totalSeconds - elapsedSeconds) : null;
+  const progressValue =
+    totalSeconds && totalSeconds > 0 ? Math.min(100, (elapsedSeconds / totalSeconds) * 100) : 0;
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  return (
+    <div className="rounded-md border bg-background p-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase">Time remaining</p>
+          <p className="mt-1 font-mono text-3xl font-semibold tabular-nums">
+            {secondsLabel(remainingSeconds)}
+          </p>
+        </div>
+        <p className="text-muted-foreground text-sm tabular-nums">
+          of {secondsLabel(totalSeconds)}
+        </p>
+      </div>
+      <Progress value={progressValue} className="mt-3" />
+    </div>
+  );
+}
+
+function ProgressPanel({
+  challenge,
+  challengeId,
+  progress,
+  loading,
+  evaluatedPercent,
+}: {
+  challenge: Challenge | null;
+  challengeId: number | null;
+  progress: ChallengeProgress | null;
+  loading: boolean;
+  evaluatedPercent: number;
+}) {
+  return (
+    <Card className="gap-0 overflow-hidden p-0">
+      <div className="px-5 pt-5 pb-4">
+        <h2 className="text-base font-semibold">Progress</h2>
+        <p className="text-muted-foreground text-sm">
+          {challengeName(challenge, challengeId ?? undefined)}
+        </p>
+      </div>
+      <Separator />
+      <div className="space-y-4 p-5">
+        {loading ? (
+          <Spinner />
+        ) : !progress ? (
+          <p className="text-muted-foreground text-sm">No progress data.</p>
+        ) : (
+          <>
+            <div>
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <span className="text-sm font-medium">Evaluated</span>
+                <span className="text-muted-foreground text-sm tabular-nums">
+                  {evaluatedPercent}%
+                </span>
+              </div>
+              <Progress value={evaluatedPercent} />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <MiniCount label="Waiting" value={progress.waiting} />
+              <MiniCount label="Called" value={progress.called} />
+              <MiniCount label="In progress" value={progress.inProgress} />
+              <MiniCount label="Evaluated" value={progress.evaluated} />
+            </div>
+          </>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function MiniCount({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-md border px-3 py-2">
+      <p className="text-muted-foreground text-xs">{label}</p>
+      <p className="text-lg font-semibold tabular-nums">{value}</p>
+    </div>
+  );
+}
+
+function StatChip({
+  label,
+  value,
+  tone = "neutral",
+}: {
+  label: string;
+  value: React.ReactNode;
+  tone?: "neutral" | "success" | "warning";
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-semibold",
+        tone === "success" &&
+          "border-green-300 bg-green-50 text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-100",
+        tone === "warning" &&
+          "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100",
+        tone === "neutral" && "bg-muted text-foreground",
+      )}
+    >
+      {label}: <span className="font-bold tabular-nums">{value}</span>
+    </span>
   );
 }
 
@@ -910,15 +1142,20 @@ function ReviewForm({
   const [sessions, setSessions] = useState<JudgingSession[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const requiredUnanswered = panel.filter(
+    (question) => question.required && !answerHasValue(scores[question.key]),
+  ).length;
 
   useEffect(() => {
-    if (!entry || !canJudge) return;
+    if (!entry) return;
     let cancelled = false;
     setLoading(true);
     void Promise.all([
       getReview(entry.id),
       getSessions(entry.id),
-      openSession(entry.id, roomId ?? undefined).catch(() => null),
+      canJudge
+        ? openSession(entry.id, roomId ?? undefined).catch(() => null)
+        : Promise.resolve(null),
     ])
       .then(([review, activeSessions]) => {
         if (cancelled) return;
@@ -933,7 +1170,7 @@ function ReviewForm({
       });
     return () => {
       cancelled = true;
-      void closeSession(entry.id).catch(() => undefined);
+      if (canJudge) void closeSession(entry.id).catch(() => undefined);
     };
   }, [entry, canJudge, panel, roomId]);
 
@@ -979,7 +1216,10 @@ function ReviewForm({
           >
             Save draft
           </Button>
-          <Button disabled={!canJudge || saving || loading} onClick={() => save(true)}>
+          <Button
+            disabled={!canJudge || saving || loading || requiredUnanswered > 0}
+            onClick={() => save(true)}
+          >
             <CheckCircle2Icon className="size-4" />
             Submit review
           </Button>
@@ -994,6 +1234,12 @@ function ReviewForm({
         </p>
       ) : (
         <div className="space-y-5">
+          {requiredUnanswered > 0 && (
+            <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+              <AlertTriangleIcon className="size-4 shrink-0" />
+              {requiredUnanswered} required field{requiredUnanswered === 1 ? "" : "s"} unanswered
+            </div>
+          )}
           {sessions.length > 0 && (
             <div className="rounded-md border px-3 py-2">
               <p className="text-sm font-medium">Active judges</p>
@@ -1051,7 +1297,34 @@ function QuestionField({
         {question.required ? <span className="text-destructive"> *</span> : null}
       </Label>
       {description && <p className="text-muted-foreground text-sm text-pretty">{description}</p>}
-      {question.kind === "scale" || question.kind === "integer" || question.kind === "float" ? (
+      {question.kind === "scale" && question.min === 0 && question.max === 10 ? (
+        <div className="flex flex-wrap gap-1">
+          {SCORE_SCALE.map((score) => (
+            <Button
+              key={score}
+              type="button"
+              size="sm"
+              variant={value === score ? "default" : "outline"}
+              className="size-8 p-0 text-xs font-semibold"
+              disabled={disabled}
+              onClick={() => onChange(score)}
+            >
+              {score}
+            </Button>
+          ))}
+          {value !== undefined && value !== null && (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={disabled}
+              onClick={() => onChange("")}
+            >
+              Clear
+            </Button>
+          )}
+        </div>
+      ) : question.kind === "scale" || question.kind === "integer" || question.kind === "float" ? (
         <Input
           id={id}
           type="number"

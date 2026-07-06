@@ -359,6 +359,14 @@ Decide + record in §9.
   `pnpm --filter @hackos/web lint` currently fails because the package script is
   `next lint`, which Next 16 treats as an invalid project directory; use root
   `pnpm lint`/Biome until that script is updated.
+- `2026-07-06` codex: reviewed the old judging implementation in
+  `/Users/dani/hackathon-os/hackOS copy/frontend/features/judging/components`
+  (`QueuePanel`, `PresentationCard`, `ScoringForm`, `TeamInfoSection`,
+  `DynamicFormField`, `StatChip`) and reworked `/judging` to mirror that
+  structure with current hackOS components: room controls + compact stats at
+  the top, waiting-room/challenge queue on the left, current presentation in the
+  center, and scoring/progress on the right. Backend room views now include repo
+  links, description, and team-member metadata for that presentation card.
 
 <!--
 Agents: append dated bullets here. Record decisions (e.g. where WS-D lives),

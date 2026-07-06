@@ -13,6 +13,11 @@ Owner: Codex · Status: ✅ implementation complete
   - The room-specific judging/controller surface copied from the former combined
     panel. It keeps room selector, queue actions, presentation/review controls,
     progress and CSV export links.
+  - Reworked to mirror the old `hackOS copy` judging structure after reviewing
+    `QueuePanel`, `PresentationCard`, `ScoringForm`, `TeamInfoSection`,
+    `DynamicFormField`, and `StatChip`: top room controls + compact stats,
+    waiting-room queue on the left, current project/presentation in the center,
+    scoring/progress on the right.
 - `apps/web/src/app/(app)/queue/rooms/page.tsx`
   - Room CRUD, queue settings, room queue state edits, and assignment forms
     for room challenges and judges, plus authoritative assignment lists from

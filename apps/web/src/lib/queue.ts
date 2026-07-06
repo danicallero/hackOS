@@ -31,6 +31,16 @@ export interface QueueEntry {
   updated_at: string;
   /** Joined into read models. */
   repo_name?: string;
+  repo_description?: string | null;
+  repo_github_url?: string | null;
+  repo_devpost_url?: string | null;
+  repo_demo_url?: string | null;
+  repo_members?: Array<{
+    userId: number;
+    email: string;
+    name: string | null;
+    surname: string | null;
+  }>;
 }
 
 export interface Room {
