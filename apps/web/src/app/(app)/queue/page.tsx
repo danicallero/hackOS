@@ -3,37 +3,46 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
 import {
+  AlertTriangleIcon,
   ArrowRightIcon,
+  BellRingIcon,
   Building2Icon,
-  PauseIcon,
+  DoorOpenIcon,
   RefreshCwIcon,
-  ShieldCheckIcon,
+  RotateCcwIcon,
+  SearchIcon,
   TicketIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/common/empty-state";
+import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
+import { QueueStatusBadge } from "@/components/common/queue-status-badge";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
-import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { useLiveQuery } from "@/hooks/use-event-source";
-import { ApiError, api } from "@/lib/api";
+import { ApiError } from "@/lib/api";
 import {
   enqueueAllChallengeQueues,
+  entryAction,
   getAllRoomViews,
   getRoomAssignments,
+  type QueueEntry,
+  type QueueSearchResult,
   type RoomAssignments,
   type RoomView,
+  searchTeams,
 } from "@/lib/queue";
 import { useSessionContext } from "@/lib/session";
 import { cn } from "@/lib/utils";
-import { type Challenge, textForDisplay } from "../challenges/shared";
+import { textForDisplay } from "../challenges/shared";
 
 export default function QueueOperationsPage() {
   const { can, canAny } = useSessionContext();
@@ -47,7 +56,6 @@ export default function QueueOperationsPage() {
   const [roomAssignments, setRoomAssignments] = useState<Record<number, RoomAssignments | null>>(
     {},
   );
-  const [challenges, setChallenges] = useState<Challenge[]>([]);
   const roomViews = useLiveQuery<RoomView[]>(
     () => getAllRoomViews(),
     "/api/tv/stream",
@@ -60,21 +68,15 @@ export default function QueueOperationsPage() {
   const loadAdminData = useCallback(async () => {
     if (!canAdmin) {
       setRoomAssignments({});
-      setChallenges([]);
       return;
     }
     try {
-      const challengePromise = api.get<{ challenges: Challenge[] }>("/api/challenges");
       const assignmentPromise =
         rooms.length > 0 ? Promise.all(rooms.map((room) => getRoomAssignments(room.room.id))) : [];
-      const [assignmentRows, challengeRows] = await Promise.all([
-        assignmentPromise,
-        challengePromise,
-      ]);
+      const assignmentRows = await assignmentPromise;
       const nextAssignments: Record<number, RoomAssignments> = {};
       for (const item of assignmentRows as RoomAssignments[]) nextAssignments[item.roomId] = item;
       setRoomAssignments(nextAssignments);
-      setChallenges(challengeRows.challenges);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Could not load operations details.");
     }
@@ -83,19 +85,6 @@ export default function QueueOperationsPage() {
   useEffect(() => {
     void loadAdminData();
   }, [loadAdminData]);
-
-  const summary = useMemo(() => {
-    const active = rooms.filter((room) => room.active).length;
-    const called = rooms.reduce((acc, room) => acc + room.called.length, 0);
-    const next = rooms.reduce((acc, room) => acc + room.next.length, 0);
-    const paused = rooms.filter((room) => room.state?.is_paused).length;
-    return { active, called, next, paused };
-  }, [rooms]);
-
-  const eligibleChallenges = useMemo(
-    () => challenges.filter((challenge) => (challenge.devpost_tags?.length ?? 0) > 0),
-    [challenges],
-  );
 
   const onGenerate = useCallback(async () => {
     setBusy(true);
@@ -148,10 +137,10 @@ export default function QueueOperationsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-wide>
       <PageHeader
         title="Queue operations"
-        description="Global room queue state, progress, and manual queue generation."
+        description="Unified room queues and manual recovery actions."
         actions={
           <>
             {canAdmin && (
@@ -170,54 +159,9 @@ export default function QueueOperationsPage() {
         }
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <StatCard label="Rooms" value={rooms.length} icon={Building2Icon} />
-        <StatCard label="Active rooms" value={summary.active} icon={ShieldCheckIcon} />
-        <StatCard label="Called teams" value={summary.called} icon={TicketIcon} />
-        <StatCard label="Next teams" value={summary.next} icon={ArrowRightIcon} />
-        <StatCard label="Paused rooms" value={summary.paused} icon={PauseIcon} />
-      </div>
-
-      {canAdmin && (
-        <SectionCard
-          title="Queue sources"
-          description="Challenges with DevPost tags are eligible for queue generation."
-          icon={TicketIcon}
-          bodyClassName="space-y-3"
-        >
-          {eligibleChallenges.length === 0 ? (
-            <p className="text-muted-foreground text-sm">No tagged challenges yet.</p>
-          ) : (
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {eligibleChallenges.map((challenge) => (
-                <Card key={challenge.id} className="gap-3 p-4 shadow-none">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-medium">{textForDisplay(challenge.title)}</p>
-                      <p className="text-muted-foreground truncate text-xs">
-                        {challenge.devpost_tags?.join(" · ")}
-                      </p>
-                    </div>
-                    <StatusBadge tone="success">Tagged</StatusBadge>
-                  </div>
-                  <Separator />
-                  <div className="flex flex-wrap gap-1.5">
-                    {challenge.devpost_tags?.map((tag) => (
-                      <StatusBadge key={tag} tone="neutral">
-                        {tag}
-                      </StatusBadge>
-                    ))}
-                  </div>
-                </Card>
-              ))}
-            </div>
-          )}
-        </SectionCard>
-      )}
-
       <SectionCard
         title="Room queues"
-        description="Every room, its current queue snapshot, and its assignment state."
+        description="Presenting teams, called teams, next queue head, and fast operator actions."
         icon={Building2Icon}
         bodyClassName="space-y-4"
       >
@@ -234,7 +178,11 @@ export default function QueueOperationsPage() {
                 key={room.room.id}
                 room={room}
                 assignments={roomAssignments[room.room.id] ?? null}
-                showAssignments={canAdmin}
+                canOperate={can(CAPABILITIES.QUEUE_OPERATE) || canAdmin}
+                onChanged={() => {
+                  roomViews.refetch();
+                  void loadAdminData();
+                }}
               />
             ))}
           </div>
@@ -247,21 +195,81 @@ export default function QueueOperationsPage() {
 function RoomQueueCard({
   room,
   assignments,
-  showAssignments,
+  canOperate,
+  onChanged,
 }: {
   room: RoomView;
   assignments: RoomAssignments | null;
-  showAssignments: boolean;
+  canOperate: boolean;
+  onChanged: () => void;
 }) {
   const roomState = room.state;
-  const hasActive = room.active != null;
+  const [selectedEntry, setSelectedEntry] = useState<QueueEntry | null>(null);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<QueueSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const challenge = room.challenge ?? assignments?.challenges[0] ?? null;
+  const challengeId = challenge
+    ? "id" in challenge
+      ? challenge.id
+      : challenge.challenge_id
+    : null;
+  const nextEntry = room.next[0] ?? null;
+
+  useEffect(() => {
+    const term = query.trim();
+    if (!challengeId || !term) {
+      setResults([]);
+      setSearching(false);
+      return;
+    }
+    let cancelled = false;
+    setSearching(true);
+    const handle = window.setTimeout(async () => {
+      try {
+        const hits = await searchTeams(challengeId, term);
+        if (!cancelled) setResults(hits);
+      } catch (err) {
+        if (!cancelled) {
+          toast.error(err instanceof ApiError ? err.message : "Team search failed.");
+        }
+      } finally {
+        if (!cancelled) setSearching(false);
+      }
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(handle);
+    };
+  }, [challengeId, query]);
+
+  const mutate = async (key: string, action: () => Promise<unknown>, success: string) => {
+    setBusy(key);
+    try {
+      await action();
+      toast.success(success);
+      setQuery("");
+      setResults([]);
+      onChanged();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Queue action failed.");
+    } finally {
+      setBusy(null);
+    }
+  };
 
   return (
     <Card className="gap-0 overflow-hidden p-0 shadow-none">
       <div className="flex items-start justify-between gap-3 px-5 py-4">
         <div className="min-w-0 space-y-1">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h3 className="truncate text-base font-semibold">{room.room.name}</h3>
+            {challenge && (
+              <StatusBadge tone="neutral">
+                {textForDisplay("title" in challenge ? challenge.title : "") || "Challenge"}
+              </StatusBadge>
+            )}
             <StatusBadge tone={roomState?.is_paused ? "warning" : "success"}>
               {roomState?.is_paused ? "Paused" : "Live"}
             </StatusBadge>
@@ -270,124 +278,343 @@ function RoomQueueCard({
             {room.room.location ?? "No location"} · {room.room.slug}
           </p>
         </div>
-        <StatusBadge tone={room.room.status === "active" ? "success" : "neutral"}>
-          {room.room.status}
-        </StatusBadge>
       </div>
 
       <Separator />
 
-      <div className="grid gap-3 px-5 py-4 sm:grid-cols-3">
-        <MiniMetric label="Active" value={hasActive ? "1" : "0"} />
-        <MiniMetric label="Called" value={String(room.called.length)} />
-        <MiniMetric label="Next" value={String(room.next.length)} />
+      <div className="space-y-3 px-5 pb-5">
+        <QueueEntryBlock
+          label="Presenting"
+          entry={room.active}
+          empty="No team presenting."
+          onSelect={setSelectedEntry}
+          actions={(entry) => (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!canOperate || busy === `requeue-${entry.id}`}
+              onClick={() =>
+                void mutate(
+                  `requeue-${entry.id}`,
+                  () =>
+                    entryAction(
+                      entry.id,
+                      "send-back",
+                      { reason: "Queue operations: sent back" },
+                      crypto.randomUUID(),
+                    ),
+                  "Team sent back to the waiting area.",
+                )
+              }
+            >
+              <RotateCcwIcon className="size-4" />
+              Requeue
+            </Button>
+          )}
+        />
+
+        <QueueGroup
+          label={`Called teams (${room.called.length})`}
+          entries={room.called}
+          empty="No teams called."
+          onSelect={setSelectedEntry}
+          actions={(entry) => (
+            <>
+              <Button
+                size="sm"
+                disabled={!canOperate || busy === `notify-${entry.id}`}
+                onClick={() =>
+                  void mutate(
+                    `notify-${entry.id}`,
+                    () => entryAction(entry.id, "notify-enter", undefined, crypto.randomUUID()),
+                    "Team renotified.",
+                  )
+                }
+              >
+                <BellRingIcon className="size-4" />
+                Renotify
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!canOperate || busy === `bring-${entry.id}`}
+                onClick={() =>
+                  void mutate(
+                    `bring-${entry.id}`,
+                    () => entryAction(entry.id, "bring-in", undefined, crypto.randomUUID()),
+                    "Team brought into room.",
+                  )
+                }
+              >
+                <DoorOpenIcon className="size-4" />
+                Bring in
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!canOperate || busy === `requeue-${entry.id}`}
+                onClick={() =>
+                  void mutate(
+                    `requeue-${entry.id}`,
+                    () =>
+                      entryAction(
+                        entry.id,
+                        "requeue",
+                        { position: "bottom", reason: "Queue operations: requeued" },
+                        crypto.randomUUID(),
+                      ),
+                    "Team requeued.",
+                  )
+                }
+              >
+                <RotateCcwIcon className="size-4" />
+                Requeue
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!canOperate || busy === `noshow-${entry.id}`}
+                onClick={() =>
+                  void mutate(
+                    `noshow-${entry.id}`,
+                    () =>
+                      entryAction(
+                        entry.id,
+                        "no-show",
+                        { reason: "Queue operations: absent" },
+                        crypto.randomUUID(),
+                      ),
+                    "Team marked absent.",
+                  )
+                }
+              >
+                <AlertTriangleIcon className="size-4" />
+                Absent
+              </Button>
+            </>
+          )}
+        />
+
+        <QueueEntryBlock
+          label="Next at top"
+          entry={nextEntry}
+          empty="No waiting team."
+          onSelect={setSelectedEntry}
+          actions={(entry) => (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!canOperate || busy === `call-${entry.id}`}
+              onClick={() =>
+                void mutate(
+                  `call-${entry.id}`,
+                  () =>
+                    entryAction(
+                      entry.id,
+                      "manual-call",
+                      {
+                        targetStatus: "called",
+                        roomId: room.room.id,
+                        reason: "Queue operations: manually called next",
+                      },
+                      crypto.randomUUID(),
+                    ),
+                  "Team added to the waiting room.",
+                )
+              }
+            >
+              <DoorOpenIcon className="size-4" />
+              Add waiting
+            </Button>
+          )}
+        />
+
+        <div className="space-y-2 rounded-md border p-3">
+          <div className="flex items-center gap-2">
+            <SearchIcon className="text-muted-foreground size-4" />
+            <p className="text-sm font-medium">Add manually to top</p>
+          </div>
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            disabled={!canOperate || !challengeId}
+            placeholder="Search team by project, repo id or entry id"
+          />
+          {query.trim() && (
+            <div className="space-y-2">
+              {searching && results.length === 0 ? (
+                <Spinner className="size-4" />
+              ) : results.length === 0 ? (
+                <p className="text-muted-foreground text-sm">No teams found.</p>
+              ) : (
+                results.slice(0, 5).map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="flex items-center justify-between gap-3 rounded-md border px-3 py-2"
+                  >
+                    <TeamButton entry={entry} onSelect={setSelectedEntry} />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={busy === `top-${entry.id}`}
+                      onClick={() =>
+                        void mutate(
+                          `top-${entry.id}`,
+                          () =>
+                            entryAction(
+                              entry.id,
+                              "move-top",
+                              { reason: "Queue operations: moved to top" },
+                              crypto.randomUUID(),
+                            ),
+                          "Team moved to the top of the queue.",
+                        )
+                      }
+                    >
+                      Top
+                    </Button>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="space-y-3 px-5 pb-5">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <InfoRow
-            label="Capacity"
-            value={roomState ? String(roomState.max_in_waiting_area) : "—"}
-          />
-          <InfoRow
-            label="Pace"
-            value={roomState ? `${roomState.desired_minutes_per_team} min/team` : "—"}
-          />
-        </div>
-        {room.active && (
-          <QueueEntryLine
-            label="Active"
-            value={room.active.repo_name ?? `Repo #${room.active.repo_id}`}
-          />
-        )}
-        {room.called.length > 0 && (
-          <QueueEntryLine
-            label="Called"
-            value={room.called
-              .map((entry) => entry.repo_name ?? `Repo #${entry.repo_id}`)
-              .join(", ")}
-          />
-        )}
-        {room.next.length > 0 && (
-          <QueueEntryLine
-            label="Next"
-            value={room.next.map((entry) => entry.repo_name ?? `Repo #${entry.repo_id}`).join(", ")}
-          />
-        )}
-        {showAssignments && assignments && (
-          <div className="space-y-2">
-            <Separator />
-            <div className="grid gap-3 sm:grid-cols-2">
-              <AssignmentBlock
-                title="Challenges"
-                items={assignments.challenges.map((item) => item.title)}
-                emptyText="No challenges assigned"
-              />
-              <AssignmentBlock
-                title="Judges"
-                items={assignments.judges.map((item) => item.email)}
-                emptyText="No judges assigned"
-              />
-            </div>
-          </div>
-        )}
-      </div>
+      <TeamMembersModal
+        entry={selectedEntry}
+        onOpenChange={(open) => !open && setSelectedEntry(null)}
+      />
     </Card>
   );
 }
 
-function MiniMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md border px-3 py-2">
-      <div className="text-muted-foreground text-xs font-medium">{label}</div>
-      <div className="mt-1 text-lg font-semibold tabular-nums">{value}</div>
-    </div>
-  );
+function entryLabel(entry: QueueEntry): string {
+  return entry.repo_name ?? `Repo #${entry.repo_id}`;
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium">{value}</span>
-    </div>
-  );
-}
-
-function QueueEntryLine({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="space-y-1">
-      <div className="text-muted-foreground text-xs font-medium">{label}</div>
-      <p className="text-sm">{value}</p>
-    </div>
-  );
-}
-
-function AssignmentBlock({
-  title,
-  items,
-  emptyText,
+function TeamButton({
+  entry,
+  onSelect,
 }: {
-  title: string;
-  items: string[];
-  emptyText: string;
+  entry: QueueEntry;
+  onSelect: (entry: QueueEntry) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="min-w-0 text-left hover:underline"
+      onClick={() => onSelect(entry)}
+    >
+      <span className="block truncate text-sm font-medium">{entryLabel(entry)}</span>
+      <span className="text-muted-foreground block text-xs tabular-nums">Entry #{entry.id}</span>
+    </button>
+  );
+}
+
+function QueueEntryBlock({
+  label,
+  entry,
+  empty,
+  onSelect,
+  actions,
+}: {
+  label: string;
+  entry: QueueEntry | null;
+  empty: string;
+  onSelect: (entry: QueueEntry) => void;
+  actions: (entry: QueueEntry) => React.ReactNode;
 }) {
   return (
     <div className="space-y-2 rounded-md border p-3">
-      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        {title}
-      </div>
-      {items.length === 0 ? (
-        <p className="text-muted-foreground text-sm">{emptyText}</p>
-      ) : (
-        <div className="flex flex-wrap gap-1.5">
-          {items.map((item) => (
-            <StatusBadge key={item} tone="neutral">
-              {item}
-            </StatusBadge>
-          ))}
+      <div className="text-muted-foreground text-xs font-medium uppercase">{label}</div>
+      {entry ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <TeamButton entry={entry} onSelect={onSelect} />
+            <div className="mt-1">
+              <QueueStatusBadge status={entry.status} />
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">{actions(entry)}</div>
         </div>
+      ) : (
+        <p className="text-muted-foreground text-sm">{empty}</p>
       )}
     </div>
+  );
+}
+
+function QueueGroup({
+  label,
+  entries,
+  empty,
+  onSelect,
+  actions,
+}: {
+  label: string;
+  entries: QueueEntry[];
+  empty: string;
+  onSelect: (entry: QueueEntry) => void;
+  actions: (entry: QueueEntry) => React.ReactNode;
+}) {
+  return (
+    <div className="space-y-2 rounded-md border p-3">
+      <div className="text-muted-foreground text-xs font-medium uppercase">{label}</div>
+      {entries.length === 0 ? (
+        <p className="text-muted-foreground text-sm">{empty}</p>
+      ) : (
+        <ul className="space-y-2">
+          {entries.map((entry) => (
+            <li key={entry.id} className="space-y-2 rounded-md border px-3 py-2">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <TeamButton entry={entry} onSelect={onSelect} />
+                  <div className="mt-1">
+                    <QueueStatusBadge status={entry.status} />
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">{actions(entry)}</div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function TeamMembersModal({
+  entry,
+  onOpenChange,
+}: {
+  entry: QueueEntry | null;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const members = entry?.repo_members ?? [];
+  return (
+    <Modal
+      open={entry != null}
+      onOpenChange={onOpenChange}
+      title={entry ? entryLabel(entry) : "Team members"}
+      description="Team members"
+      size="md"
+    >
+      {members.length === 0 ? (
+        <p className="text-muted-foreground text-sm">No members linked to this team.</p>
+      ) : (
+        <ul className="divide-y rounded-md border">
+          {members.map((member) => {
+            const name = [member.name, member.surname].filter(Boolean).join(" ").trim();
+            return (
+              <li key={`${member.userId}:${member.email}`} className="px-3 py-2">
+                <p className="text-sm font-medium">{name || member.email}</p>
+                {name && <p className="text-muted-foreground text-sm">{member.email}</p>}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Modal>
   );
 }

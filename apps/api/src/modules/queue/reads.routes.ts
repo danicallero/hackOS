@@ -1,8 +1,9 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import { requireAuth, requireCapability } from "../../lib/capabilities.js";
-import { UnauthorizedError } from "../../lib/errors.js";
+import { pool } from "../../db/pool.js";
+import { requireAuth, requireCapability, userHasCapability } from "../../lib/capabilities.js";
+import { ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
 import { subscribe } from "../../lib/sse.js";
 import { requireAnyCapability } from "./access.js";
 import {
@@ -26,6 +27,22 @@ export function registerReadsRoutes(app: FastifyInstance): void {
     CAPABILITIES.QUEUE_ADMIN,
   );
 
+  async function assertCanReadRoomAssignments(userId: number | null, roomId: number) {
+    if (userId == null) throw new UnauthorizedError();
+    if (await userHasCapability(userId, CAPABILITIES.QUEUE_ADMIN)) return;
+    const { rows } = await pool.query(
+      `SELECT 1
+         FROM room_challenges rc
+         JOIN challenges c ON c.id = rc.challenge_id
+         JOIN sponsors author ON author.id = c.author
+         JOIN sponsors mine ON mine.enterprise_id = author.enterprise_id
+        WHERE rc.room_id = $1 AND mine.user_id = $2
+        LIMIT 1`,
+      [roomId, userId],
+    );
+    if (rows.length === 0) throw new ForbiddenError("Not allowed to read room assignments");
+  }
+
   // H40: progress panel per challenge.
   typed.get(
     "/api/queue/challenges/:challengeId/progress",
@@ -43,8 +60,11 @@ export function registerReadsRoutes(app: FastifyInstance): void {
   // H46: authoritative room assignment surface for the admin panel.
   typed.get(
     "/api/queue/rooms/:roomId/assignments",
-    { preHandler: requireCapability(CAPABILITIES.QUEUE_ADMIN), schema: { params: roomIdParam } },
-    async (req) => roomAssignments(req.params.roomId),
+    { preHandler: requireAuth, schema: { params: roomIdParam } },
+    async (req) => {
+      await assertCanReadRoomAssignments(req.userId, req.params.roomId);
+      return roomAssignments(req.params.roomId);
+    },
   );
 
   // H39: pace check.

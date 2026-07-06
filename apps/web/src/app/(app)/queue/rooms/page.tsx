@@ -51,8 +51,9 @@ function emptyRoomEditor(): RoomEditor {
 }
 
 export default function QueueRoomsPage() {
-  const { can } = useSessionContext();
+  const { can, me } = useSessionContext();
   const canAdmin = can(CAPABILITIES.QUEUE_ADMIN);
+  const canManageRooms = canAdmin || me?.role === "sponsor";
   const [rooms, setRooms] = useState<Room[]>([]);
   const [assignments, setAssignments] = useState<Record<number, RoomAssignments | null>>({});
   const [challenges, setChallenges] = useState<Challenge[]>([]);
@@ -73,7 +74,7 @@ export default function QueueRoomsPage() {
   const selectedChallengeFallback = challenges[0]?.id ?? 0;
 
   const load = useCallback(async () => {
-    if (!canAdmin) {
+    if (!canManageRooms) {
       setLoading(false);
       return;
     }
@@ -81,8 +82,10 @@ export default function QueueRoomsPage() {
     try {
       const [roomRows, challengeRows, userRows] = await Promise.all([
         listRooms(),
-        api.get<{ challenges: Challenge[] }>("/api/challenges"),
-        api.get<UserList>("/api/users", { query: { limit: 200 } }),
+        api.get<{ challenges: Challenge[] }>(canAdmin ? "/api/challenges" : "/api/challenges/mine"),
+        canAdmin
+          ? api.get<UserList>("/api/users", { query: { limit: 200 } })
+          : Promise.resolve({ users: [] }),
       ]);
       setRooms(roomRows);
       setChallenges(challengeRows.challenges);
@@ -93,12 +96,18 @@ export default function QueueRoomsPage() {
     } finally {
       setLoading(false);
     }
-  }, [canAdmin]);
+  }, [canAdmin, canManageRooms]);
 
   const loadRoomDetails = useCallback(async (roomId: number) => {
     try {
-      const roomAssignments = await getRoomAssignments(roomId);
+      const [roomAssignments, judgeCandidates] = await Promise.all([
+        getRoomAssignments(roomId),
+        api.get<UserList>(`/api/queue/rooms/${roomId}/judge-candidates`).catch(() => ({
+          users: [],
+        })),
+      ]);
       setAssignments((current) => ({ ...current, [roomId]: roomAssignments }));
+      setUsers(judgeCandidates.users);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Could not load room details.");
     }
@@ -138,7 +147,7 @@ export default function QueueRoomsPage() {
     });
   }, [selectedRoom]);
 
-  if (!canAdmin) {
+  if (!canManageRooms) {
     return (
       <div className="space-y-6">
         <PageHeader title="Queue rooms" />
@@ -202,10 +211,12 @@ export default function QueueRoomsPage() {
         description="Rooms and assignment controls for the judging flow."
         actions={
           <div className="flex flex-wrap gap-2">
-            <Button onClick={openCreateModal}>
-              <PlusIcon className="size-4" />
-              Create room
-            </Button>
+            {canAdmin && (
+              <Button onClick={openCreateModal}>
+                <PlusIcon className="size-4" />
+                Create room
+              </Button>
+            )}
             <Button variant="outline" asChild>
               <Link href="/queue">
                 <ArrowLeftIcon className="size-4" />
@@ -275,7 +286,7 @@ export default function QueueRoomsPage() {
               <Button disabled={saving === "create"} onClick={() => void saveCreate()}>
                 Create room
               </Button>
-            ) : (
+            ) : canAdmin ? (
               <>
                 <Button
                   variant="outline"
@@ -291,6 +302,10 @@ export default function QueueRoomsPage() {
                   Save room
                 </Button>
               </>
+            ) : (
+              <Button variant="outline" onClick={closeModal}>
+                Close
+              </Button>
             )}
           </div>
         }
@@ -327,6 +342,7 @@ export default function QueueRoomsPage() {
                 <Label>Name</Label>
                 <Input
                   value={roomDraft.name}
+                  disabled={!canAdmin}
                   onChange={(e) =>
                     setRoomDraft((current) => ({ ...current, name: e.target.value }))
                   }
@@ -336,6 +352,7 @@ export default function QueueRoomsPage() {
                 <Label>Slug</Label>
                 <Input
                   value={roomDraft.slug}
+                  disabled={!canAdmin}
                   onChange={(e) =>
                     setRoomDraft((current) => ({ ...current, slug: e.target.value }))
                   }
@@ -345,6 +362,7 @@ export default function QueueRoomsPage() {
                 <Label>Location</Label>
                 <Input
                   value={roomDraft.location}
+                  disabled={!canAdmin}
                   onChange={(e) =>
                     setRoomDraft((current) => ({ ...current, location: e.target.value }))
                   }
@@ -360,6 +378,7 @@ export default function QueueRoomsPage() {
                   challenges={challenges}
                   users={users}
                   onAddChallenge={async (challengeId) => {
+                    if (!canAdmin) return;
                     await assignRoomChallenge(selectedRoom.id, challengeId);
                     await loadRoomDetails(selectedRoom.id);
                   }}
@@ -371,27 +390,30 @@ export default function QueueRoomsPage() {
                     await removeRoomJudge(selectedRoom.id, challengeId, userId);
                     await loadRoomDetails(selectedRoom.id);
                   }}
+                  canSetChallenge={canAdmin}
                 />
               </SectionCard>
             </div>
-            <div className="flex flex-wrap justify-end gap-2">
-              <Button
-                variant="destructive"
-                disabled={saving === `room-${selectedRoom.id}`}
-                onClick={async () => {
-                  try {
-                    await deleteRoom(selectedRoom.id);
-                    toast.success("Room deleted.");
-                    closeModal();
-                    await load();
-                  } catch (err) {
-                    toast.error(err instanceof ApiError ? err.message : "Could not delete room.");
-                  }
-                }}
-              >
-                Delete room
-              </Button>
-            </div>
+            {canAdmin && (
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button
+                  variant="destructive"
+                  disabled={saving === `room-${selectedRoom.id}`}
+                  onClick={async () => {
+                    try {
+                      await deleteRoom(selectedRoom.id);
+                      toast.success("Room deleted.");
+                      closeModal();
+                      await load();
+                    } catch (err) {
+                      toast.error(err instanceof ApiError ? err.message : "Could not delete room.");
+                    }
+                  }}
+                >
+                  Delete room
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </Modal>
@@ -408,6 +430,7 @@ function AssignmentsEditor({
   onAddChallenge,
   onAddJudge,
   onRemoveJudge,
+  canSetChallenge,
 }: {
   roomId: number;
   assignments: RoomAssignments | null;
@@ -417,6 +440,7 @@ function AssignmentsEditor({
   onAddChallenge: (challengeId: number) => Promise<void>;
   onAddJudge: (challengeId: number, userId: number) => Promise<void>;
   onRemoveJudge: (challengeId: number, userId: number) => Promise<void>;
+  canSetChallenge: boolean;
 }) {
   const assignedChallenge = assignments?.challenges[0] ?? null;
   const [challengeId, setChallengeId] = useState("");
@@ -474,39 +498,43 @@ function AssignmentsEditor({
         </div>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor={`challenge-${roomId}`}>Room challenge</Label>
-        <div className="flex gap-2">
-          <Select value={challengeId || undefined} onValueChange={setChallengeId}>
-            <SelectTrigger id={`challenge-${roomId}`} className="flex-1">
-              <SelectValue placeholder="Challenge" />
-            </SelectTrigger>
-            <SelectContent>
-              {challenges.map((challenge) => (
-                <SelectItem key={challenge.id} value={String(challenge.id)}>
-                  {textForDisplay(challenge.title)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button
-            disabled={busy === "challenge" || !challengeId}
-            onClick={async () => {
-              setBusy("challenge");
-              try {
-                await onAddChallenge(Number(challengeId));
-                toast.success("Challenge assigned.");
-              } catch (err) {
-                toast.error(err instanceof ApiError ? err.message : "Could not assign challenge.");
-              } finally {
-                setBusy(null);
-              }
-            }}
-          >
-            Set
-          </Button>
+      {canSetChallenge && (
+        <div className="space-y-2">
+          <Label htmlFor={`challenge-${roomId}`}>Room challenge</Label>
+          <div className="flex gap-2">
+            <Select value={challengeId || undefined} onValueChange={setChallengeId}>
+              <SelectTrigger id={`challenge-${roomId}`} className="flex-1">
+                <SelectValue placeholder="Challenge" />
+              </SelectTrigger>
+              <SelectContent>
+                {challenges.map((challenge) => (
+                  <SelectItem key={challenge.id} value={String(challenge.id)}>
+                    {textForDisplay(challenge.title)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              disabled={busy === "challenge" || !challengeId}
+              onClick={async () => {
+                setBusy("challenge");
+                try {
+                  await onAddChallenge(Number(challengeId));
+                  toast.success("Challenge assigned.");
+                } catch (err) {
+                  toast.error(
+                    err instanceof ApiError ? err.message : "Could not assign challenge.",
+                  );
+                } finally {
+                  setBusy(null);
+                }
+              }}
+            >
+              Set
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="space-y-2">
         <Label htmlFor={`judge-user-${roomId}`}>Assign judge</Label>
