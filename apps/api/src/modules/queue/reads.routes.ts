@@ -5,7 +5,14 @@ import { requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { UnauthorizedError } from "../../lib/errors.js";
 import { subscribe } from "../../lib/sse.js";
 import { requireAnyCapability } from "./access.js";
-import { allRoomViews, challengeProgress, myQueueStatus, roomPace, roomView } from "./reads.js";
+import {
+  allRoomViews,
+  challengeProgress,
+  myQueueStatus,
+  roomAssignments,
+  roomPace,
+  roomView,
+} from "./reads.js";
 import { challengeIdParam, roomIdParam, tvModeBody } from "./schemas.js";
 import { getTvMode, setTvMode } from "./tv.js";
 
@@ -31,6 +38,13 @@ export function registerReadsRoutes(app: FastifyInstance): void {
     "/api/queue/rooms/:roomId/view",
     { preHandler: judgeOrOperate, schema: { params: roomIdParam } },
     async (req) => roomView(req.params.roomId),
+  );
+
+  // H46: authoritative room assignment surface for the admin panel.
+  typed.get(
+    "/api/queue/rooms/:roomId/assignments",
+    { preHandler: requireCapability(CAPABILITIES.QUEUE_ADMIN), schema: { params: roomIdParam } },
+    async (req) => roomAssignments(req.params.roomId),
   );
 
   // H39: pace check.

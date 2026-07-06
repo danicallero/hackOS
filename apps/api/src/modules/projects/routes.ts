@@ -10,9 +10,15 @@ import {
   linkParticipantBodySchema,
   mapPrizeBodySchema,
   prizeParamsSchema,
+  repoChallengeBodySchema,
+  repoChallengeParamsSchema,
   repoIdParamsSchema,
+  repoMemberBodySchema,
+  repoMemberParamsSchema,
 } from "./schemas.js";
 import {
+  addRepoChallenge,
+  addRepoMember,
   confirmImport,
   getRepo,
   linkParticipant,
@@ -22,12 +28,15 @@ import {
   mapPrizeToChallenge,
   myProjects,
   previewImport,
+  removeRepoChallenge,
+  removeRepoMember,
   sendClaimEmail,
 } from "./service.js";
 
 /**
  * Projects / Devpost intake routes (H16-H17 + the PROJECTS_READ views the
- * queue workstream consumes). H18-H21 are post-MVP and intentionally absent.
+ * queue workstream consumes). H21 edit surfaces live here too; H18-H19 remain
+ * post-MVP and intentionally absent.
  */
 export function registerProjectRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
@@ -139,6 +148,47 @@ export function registerProjectRoutes(app: FastifyInstance): void {
       schema: { params: repoIdParamsSchema },
     },
     async (req) => getRepo(req.params.id),
+  );
+
+  // H21: hot-edit team membership and queue membership for a repo.
+  r.post(
+    "/api/repos/:repoId/members",
+    {
+      preHandler: [requireCapability(CAPABILITIES.PROJECTS_EDIT), idempotencyGuard],
+      schema: { params: repoMemberParamsSchema.pick({ repoId: true }), body: repoMemberBodySchema },
+    },
+    async (req) => addRepoMember(req.userId as number, req.params.repoId, req.body.userId),
+  );
+
+  r.delete(
+    "/api/repos/:repoId/members/:userId",
+    {
+      preHandler: requireCapability(CAPABILITIES.PROJECTS_EDIT),
+      schema: { params: repoMemberParamsSchema },
+    },
+    async (req) => removeRepoMember(req.userId as number, req.params.repoId, req.params.userId),
+  );
+
+  r.post(
+    "/api/repos/:repoId/challenges",
+    {
+      preHandler: [requireCapability(CAPABILITIES.PROJECTS_EDIT), idempotencyGuard],
+      schema: {
+        params: repoChallengeParamsSchema.pick({ repoId: true }),
+        body: repoChallengeBodySchema,
+      },
+    },
+    async (req) => addRepoChallenge(req.userId as number, req.params.repoId, req.body.challengeId),
+  );
+
+  r.delete(
+    "/api/repos/:repoId/challenges/:challengeId",
+    {
+      preHandler: requireCapability(CAPABILITIES.PROJECTS_EDIT),
+      schema: { params: repoChallengeParamsSchema },
+    },
+    async (req) =>
+      removeRepoChallenge(req.userId as number, req.params.repoId, req.params.challengeId),
   );
 
   // Participant self-view (minimal H20 read for queue's participant panel).

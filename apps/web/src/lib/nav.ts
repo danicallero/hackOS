@@ -3,6 +3,7 @@ import {
   CalendarDaysIcon,
   ClipboardListIcon,
   FileTextIcon,
+  FolderGitIcon,
   HandshakeIcon,
   LayoutDashboardIcon,
   LibraryBigIcon,
@@ -12,6 +13,7 @@ import {
   ScrollTextIcon,
   SettingsIcon,
   ShieldCheckIcon,
+  TicketIcon,
   TrophyIcon,
   UserIcon,
   UsersIcon,
@@ -48,6 +50,8 @@ export const NAV: NavSection[] = [
       { title: "Dashboard", href: "/dashboard", icon: LayoutDashboardIcon },
       // Participant-facing: everyone can apply (H12-H15). No capability gate.
       { title: "My applications", href: "/my-applications", icon: FileTextIcon },
+      // Participant-facing queue status (H38). No capability gate — auth only.
+      { title: "My queue", href: "/my-queue", icon: TicketIcon },
     ],
   },
   {
@@ -57,8 +61,17 @@ export const NAV: NavSection[] = [
         title: "Queue & judging",
         href: "/queue",
         icon: ListOrderedIcon,
-        anyCapability: [CAPABILITIES.QUEUE_OPERATE, CAPABILITIES.JUDGE_PANEL],
-        soon: true,
+        anyCapability: [
+          CAPABILITIES.QUEUE_OPERATE,
+          CAPABILITIES.QUEUE_ADMIN,
+          CAPABILITIES.JUDGE_PANEL,
+        ],
+      },
+      {
+        title: "Projects",
+        href: "/projects",
+        icon: FolderGitIcon,
+        anyCapability: [CAPABILITIES.PROJECTS_READ, CAPABILITIES.PROJECTS_IMPORT],
       },
       {
         title: "Applications",

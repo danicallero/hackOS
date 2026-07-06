@@ -56,6 +56,23 @@ export async function assignTopPositionsBatch(
   }
 }
 
+/** Rebuilds active positions for a challenge so gaps close after removals. */
+export async function compactChallengePositions(
+  client: Queryable,
+  challengeId: number,
+): Promise<void> {
+  const { rows } = await client.query(
+    `SELECT id
+       FROM queue_entries
+      WHERE challenge_id = $1 AND status IN ('waiting', 'called')
+      ORDER BY position ASC NULLS LAST, id ASC`,
+    [challengeId],
+  );
+  for (let i = 0; i < rows.length; i++) {
+    await client.query(`UPDATE queue_entries SET position = $1 WHERE id = $2`, [i + 1, rows[i].id]);
+  }
+}
+
 export function resolveRequeuePosition(
   client: Queryable,
   challengeId: number,
