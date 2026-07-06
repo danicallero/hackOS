@@ -147,6 +147,7 @@ export const NAV: NavSection[] = [
         href: "/queue/rooms",
         icon: Building2Icon,
         anyCapability: [CAPABILITIES.QUEUE_ADMIN],
+        sponsorVisible: true,
       },
       {
         title: "Libraries",

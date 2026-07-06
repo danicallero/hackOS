@@ -47,6 +47,19 @@ async function assertCanManageRoomJudges(
   });
 }
 
+async function roomIdsForSponsorOwner(userId: number): Promise<number[]> {
+  const { rows } = await pool.query(
+    `SELECT DISTINCT rc.room_id
+       FROM room_challenges rc
+       JOIN challenges c ON c.id = rc.challenge_id
+       JOIN sponsors author ON author.id = c.author
+       JOIN sponsors mine ON mine.enterprise_id = author.enterprise_id
+      WHERE mine.user_id = $1`,
+    [userId],
+  );
+  return rows.map((row: { room_id: number }) => row.room_id);
+}
+
 function auditRequest(req: FastifyRequest) {
   return {
     ip: req.ip,
@@ -76,22 +89,42 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
     },
   );
 
-  typed.get(
-    "/api/queue/rooms",
-    { preHandler: requireAnyCapability(CAPABILITIES.QUEUE_OPERATE, CAPABILITIES.QUEUE_ADMIN) },
-    async () => {
+  typed.get("/api/queue/rooms", { preHandler: requireAuth }, async (req) => {
+    if (
+      req.userId != null &&
+      ((await userHasCapability(req.userId, CAPABILITIES.QUEUE_OPERATE)) ||
+        (await userHasCapability(req.userId, CAPABILITIES.QUEUE_ADMIN)))
+    ) {
       const { rows } = await pool.query(`SELECT * FROM rooms ORDER BY id ASC`);
       return rows;
-    },
-  );
+    }
+
+    if (req.userId == null) throw new ForbiddenError("Missing user");
+    const roomIds = await roomIdsForSponsorOwner(req.userId);
+    if (roomIds.length === 0) {
+      throw new ForbiddenError("Not allowed to list queue rooms");
+    }
+    const { rows } = await pool.query(`SELECT * FROM rooms WHERE id = ANY($1) ORDER BY id ASC`, [
+      roomIds,
+    ]);
+    return rows;
+  });
 
   typed.get(
     "/api/queue/rooms/:roomId",
     {
-      preHandler: requireAnyCapability(CAPABILITIES.QUEUE_OPERATE, CAPABILITIES.QUEUE_ADMIN),
+      preHandler: requireAuth,
       schema: { params: roomIdParam },
     },
     async (req) => {
+      if (
+        req.userId == null ||
+        (!(await userHasCapability(req.userId, CAPABILITIES.QUEUE_OPERATE)) &&
+          !(await userHasCapability(req.userId, CAPABILITIES.QUEUE_ADMIN)) &&
+          !(await roomIdsForSponsorOwner(req.userId)).includes(req.params.roomId))
+      ) {
+        throw new ForbiddenError("Not allowed to read this room");
+      }
       const room = (await pool.query(`SELECT * FROM rooms WHERE id = $1`, [req.params.roomId]))
         .rows[0];
       if (!room) throw new NotFoundError("Room not found");
@@ -212,6 +245,30 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
         });
       });
       return { ok: true };
+    },
+  );
+
+  typed.get(
+    "/api/queue/rooms/:roomId/judge-candidates",
+    {
+      preHandler: requireAuth,
+      schema: { params: roomIdParam },
+    },
+    async (req) => {
+      const challenge = (
+        await pool.query(`SELECT challenge_id FROM room_challenges WHERE room_id = $1`, [
+          req.params.roomId,
+        ])
+      ).rows[0] as { challenge_id: number } | undefined;
+      if (!challenge) throw new NotFoundError("Room challenge assignment not found");
+      await assertCanManageRoomJudges(req.userId, req.params.roomId, challenge.challenge_id);
+      const { rows } = await pool.query(
+        `SELECT id, email, name, surname
+           FROM users
+          ORDER BY name ASC NULLS LAST, surname ASC NULLS LAST, email ASC
+          LIMIT 500`,
+      );
+      return { users: rows };
     },
   );
 
