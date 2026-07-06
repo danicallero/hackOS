@@ -200,13 +200,15 @@ export function DataTable<T>({
           </TableHeader>
           <TableBody>
             {loading ? (
-              Array.from({ length: pageSize ?? 5 }).map((_, i) => (
-                <TableRow key={`skeleton-${i}`} className="hover:bg-transparent">
-                  {Array.from({ length: colCount }).map((__, j) => (
-                    <TableCell key={`sk-${i}-${j}`}>
-                      <Skeleton className="h-4 w-full max-w-32" />
-                    </TableCell>
-                  ))}
+              Array.from({ length: pageSize ?? 5 }, (_, i) => `skeleton-row-${i}`).map((rowKey) => (
+                <TableRow key={rowKey} className="hover:bg-transparent">
+                  {Array.from({ length: colCount }, (_, j) => `${rowKey}-cell-${j}`).map(
+                    (cellKey) => (
+                      <TableCell key={cellKey}>
+                        <Skeleton className="h-4 w-full max-w-32" />
+                      </TableCell>
+                    ),
+                  )}
                 </TableRow>
               ))
             ) : rows.length === 0 ? (

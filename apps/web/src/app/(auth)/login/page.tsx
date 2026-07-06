@@ -32,7 +32,7 @@ type Values = z.infer<typeof schema>;
 /** Only allow same-origin relative paths as a post-login destination — never
  * an absolute URL or protocol-relative `//host` (open-redirect guard). */
 function safeNext(next: string | null): string {
-  if (next && next.startsWith("/") && !next.startsWith("//")) return next;
+  if (next?.startsWith("/") && !next.startsWith("//")) return next;
   return "/dashboard";
 }
 

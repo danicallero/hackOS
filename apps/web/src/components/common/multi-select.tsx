@@ -4,7 +4,7 @@ import { CheckIcon, ChevronsUpDownIcon, XIcon } from "lucide-react";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import {
   Command,
   CommandEmpty,
@@ -98,11 +98,17 @@ export function MultiSelect({
   return (
     <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
       <PopoverPrimitive.Trigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={disabled}
-          className={cn("h-auto min-h-10 w-full justify-between px-3 py-2 font-normal", className)}
+        <div
+          role="combobox"
+          tabIndex={disabled ? -1 : 0}
+          aria-disabled={disabled}
+          aria-expanded={open}
+          className={cn(
+            buttonVariants({ variant: "outline" }),
+            "h-auto min-h-10 w-full justify-between px-3 py-2 font-normal",
+            disabled && "pointer-events-none opacity-50",
+            className,
+          )}
         >
           <span className="flex flex-1 flex-wrap gap-1">
             {value.length === 0 ? (
@@ -111,8 +117,8 @@ export function MultiSelect({
               value.map((v) => (
                 <Badge key={v} variant="secondary" className="gap-1">
                   {labelOf(v)}
-                  <span
-                    role="button"
+                  <button
+                    type="button"
                     tabIndex={-1}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -121,13 +127,13 @@ export function MultiSelect({
                     className="hover:text-foreground text-muted-foreground"
                   >
                     <XIcon className="size-3" />
-                  </span>
+                  </button>
                 </Badge>
               ))
             )}
           </span>
           <ChevronsUpDownIcon className="text-muted-foreground size-4 shrink-0" />
-        </Button>
+        </div>
       </PopoverPrimitive.Trigger>
       {inDialog ? content : <PopoverPrimitive.Portal>{content}</PopoverPrimitive.Portal>}
     </PopoverPrimitive.Root>

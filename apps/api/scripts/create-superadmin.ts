@@ -73,9 +73,10 @@ async function main(): Promise<void> {
     );
   }
 
-  const { rows: existingUserRows } = await pool.query(`SELECT id FROM users WHERE email = $1`, [email]);
-  const existingUserId =
-    existingUserRows.length > 0 ? (existingUserRows[0].id as number) : null;
+  const { rows: existingUserRows } = await pool.query(`SELECT id FROM users WHERE email = $1`, [
+    email,
+  ]);
+  const existingUserId = existingUserRows.length > 0 ? (existingUserRows[0].id as number) : null;
 
   let userId: number;
   let action: "create_superadmin" | "grant_superadmin";
