@@ -374,10 +374,12 @@ function EnterpriseMemberships({
       icon={Building2Icon}
       title="Enterprises"
       action={
-        canManage && addable.length > 0 ? (
-          <Select value="" onValueChange={addEnterprise} disabled={busy}>
+        canManage ? (
+          <Select value="" onValueChange={addEnterprise} disabled={busy || addable.length === 0}>
             <SelectTrigger className="w-56">
-              <SelectValue placeholder="Add enterprise…" />
+              <SelectValue
+                placeholder={addable.length > 0 ? "Add enterprise…" : "No enterprises to add"}
+              />
             </SelectTrigger>
             <SelectContent>
               {addable.map((enterprise) => (
