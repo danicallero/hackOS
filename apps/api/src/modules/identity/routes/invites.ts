@@ -467,7 +467,9 @@ export function registerInviteRoutes(app: FastifyInstance): void {
           language: z.enum(["en", "es", "gl"]).optional(),
           foodIntolerances: z.array(z.number().int()).default([]),
           foodIntoleranceNotes: z.string().max(2000).nullable().optional(),
-          shirtSize: z.string().min(1).max(10),
+          // Optional: only participants must supply a shirt size (enforced in the
+          // handler once we know the invite kind). Staff/sponsors can skip it.
+          shirtSize: z.string().min(1).max(10).nullish(),
         }),
         response: {
           201: z.object({
@@ -512,15 +514,11 @@ export function registerInviteRoutes(app: FastifyInstance): void {
           | "sponsor"
           | "participant";
 
-        // B: all invite kinds must provide logistics data — food & shirt
-        // are needed for catering and logistics planning.
-        if (!req.body.shirtSize) {
+        // Only participants must provide a shirt size (catering/logistics for
+        // attendees). Staff and sponsors don't need one. Dietary restrictions
+        // are NEVER required — an invitee may simply have none.
+        if (kind === "participant" && !req.body.shirtSize) {
           throw new BadRequestError("Shirt size is required", { field: "shirtSize" });
-        }
-        if (!req.body.foodIntolerances || req.body.foodIntolerances.length === 0) {
-          throw new BadRequestError("Food intolerances are required", {
-            field: "foodIntolerances",
-          });
         }
 
         const { rows: clash } = await client.query(`SELECT id FROM users WHERE email = $1`, [

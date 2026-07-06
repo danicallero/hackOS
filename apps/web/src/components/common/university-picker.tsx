@@ -90,7 +90,9 @@ export function UniversityPicker({
     } else if (resolvedFor.current !== value) {
       resolvedFor.current = value;
       api
-        .get<{ universities: University[] }>("/api/public/universities")
+        .get<{ universities: University[] }>("/api/public/universities", {
+          query: { ids: value },
+        })
         .then(({ universities }) => {
           const match = universities.find((o) => String(o.id) === value);
           if (match) setSelectedLabel(match.name);

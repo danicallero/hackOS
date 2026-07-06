@@ -18,6 +18,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/common/empty-state";
+import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
@@ -65,6 +66,7 @@ export default function MyApplicationDetailPage() {
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [acting, setActing] = useState(false);
+  const [releaseOpen, setReleaseOpen] = useState(false);
   const [privacyNotice, setPrivacyNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -228,10 +230,11 @@ export default function MyApplicationDetailPage() {
     setActing(true);
     try {
       await api.post(`/api/me/responses/${response.id}/decline`);
-      toast.success("You've declined your place.");
+      toast.success("You've released your place.");
+      setReleaseOpen(false);
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not decline your place.");
+      toast.error(err instanceof ApiError ? err.message : "Could not release your place.");
     } finally {
       setActing(false);
     }
@@ -312,11 +315,44 @@ export default function MyApplicationDetailPage() {
       )}
 
       {status === "confirmed" && (
-        <Alert>
-          <CheckCircle2Icon />
-          <AlertTitle>Your place is confirmed</AlertTitle>
-          <AlertDescription>You're all set. See you at the event!</AlertDescription>
-        </Alert>
+        <SectionCard
+          icon={CheckCircle2Icon}
+          title="Your place is confirmed"
+          description="You're all set. See you at the event!"
+        >
+          <p className="text-muted-foreground text-sm">
+            Can't make it after all? You can release your place at any time so the organizers can
+            offer it to someone else.
+          </p>
+          <div>
+            <Button variant="outline" onClick={() => setReleaseOpen(true)} disabled={acting}>
+              <XCircleIcon />I can't attend — release my place
+            </Button>
+          </div>
+          <Modal
+            open={releaseOpen}
+            onOpenChange={setReleaseOpen}
+            icon={ShieldAlertIcon}
+            title="Release your place?"
+            description="This gives up your confirmed spot at the event."
+            footer={
+              <>
+                <Button variant="outline" onClick={() => setReleaseOpen(false)} disabled={acting}>
+                  Keep my place
+                </Button>
+                <Button variant="destructive" onClick={handleDecline} disabled={acting}>
+                  {acting && <Spinner />}
+                  Yes, release my place
+                </Button>
+              </>
+            }
+          >
+            <p className="text-muted-foreground text-sm">
+              This can't be undone from here — you'd need the organizers to re-invite you. Any
+              dietary data you shared is deleted when you release your place.
+            </p>
+          </Modal>
+        </SectionCard>
       )}
       {status === "declined" && (
         <Alert>

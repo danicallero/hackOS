@@ -387,6 +387,44 @@ describe("H9/H10 invite acceptance", () => {
     expect(rows[0].food_intolerance_notes).toBe("no nuts");
   });
 
+  it("staff can accept without a shirt size or any dietary data", async () => {
+    const a = await getApp();
+    const actor = await inviter();
+    const invite = await createInvite(a, actor, {
+      email: "nologistics@example.com",
+      kind: "staff",
+    });
+
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/invites/accept",
+      // No shirtSize, no foodIntolerances — the invitee has neither.
+      payload: { ...ACCEPT_BASE, token: invite.token },
+    });
+    expect(res.statusCode).toBe(201);
+
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows } = await pool.query(`SELECT * FROM users WHERE id = $1`, [res.json().userId]);
+    expect(rows[0].shirt_size).toBeNull();
+    expect(rows[0].food_intolerances).toEqual([]);
+  });
+
+  it("participant can accept with a shirt size but no dietary restrictions", async () => {
+    const a = await getApp();
+    const actor = await inviter();
+    const invite = await createInvite(a, actor, {
+      email: "nofood@example.com",
+      kind: "participant",
+    });
+
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/invites/accept",
+      payload: { ...ACCEPT_BASE, token: invite.token, shirtSize: "M" },
+    });
+    expect(res.statusCode).toBe(201);
+  });
+
   it("concurrent double-accept of the same token has exactly one winner", async () => {
     const a = await getApp();
     const actor = await inviter();

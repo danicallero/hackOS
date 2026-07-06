@@ -22,13 +22,31 @@ export function registerUniversityRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
   const manage = requireCapability(CAPABILITIES.INTOLERANCES_MANAGE);
 
-  // Public: autocomplete list for the university picker.
+  // Public: autocomplete list for the university picker. `q` filters by name;
+  // `ids` (comma-separated) resolves specific ids by NAME — needed so callers
+  // (the staff response view, a reloaded draft) can render the name of a stored
+  // university id even when it falls outside the alphabetical top-50 page.
   r.get("/api/public/universities", async (req) => {
-    const query = (req.query as { q?: string }).q;
+    const q = (req.query as { q?: string; ids?: string }).q;
+    const idsParam = (req.query as { q?: string; ids?: string }).ids;
+
+    if (idsParam) {
+      const ids = idsParam
+        .split(",")
+        .map((s) => Number(s.trim()))
+        .filter((n) => Number.isInteger(n) && n > 0);
+      if (ids.length === 0) return { universities: [] };
+      const { rows } = await pool.query(
+        `SELECT id, name FROM universities WHERE id = ANY($1) ORDER BY name`,
+        [ids],
+      );
+      return { universities: rows };
+    }
+
     const params: unknown[] = [];
     let sql = `SELECT id, name FROM universities`;
-    if (query) {
-      params.push(`%${query}%`);
+    if (q) {
+      params.push(`%${q}%`);
       sql += ` WHERE name ILIKE $1`;
     }
     sql += ` ORDER BY name LIMIT 50`;
