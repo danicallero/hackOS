@@ -137,7 +137,9 @@ export function TemplateFieldControl({
       control = (
         <Input
           type="date"
-          value={typeof value === "string" ? value : ""}
+          // A native date input only shows a yyyy-MM-dd value; slice off any time
+          // part so a stored ISO datetime still renders instead of going blank.
+          value={typeof value === "string" ? value.slice(0, 10) : ""}
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
         />

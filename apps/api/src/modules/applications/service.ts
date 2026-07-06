@@ -135,7 +135,12 @@ export function validateResponses(
         if (typeof value !== "string") errors[field.key] = "must be a string";
         break;
       case "university":
-        if (typeof value !== "number") errors[field.key] = "must be a number";
+        // The value is a shared-library university id. The picker sends a
+        // number, but accept a numeric string too (legacy rows / staff edits)
+        // so a valid id is never rejected on a type technicality.
+        if (typeof value !== "number" && !(typeof value === "string" && /^\d+$/.test(value))) {
+          errors[field.key] = "must be a university id";
+        }
         break;
       default:
         if (typeof value !== "string") errors[field.key] = "must be a string";
@@ -1348,31 +1353,20 @@ export async function editResponse(
   responses: Record<string, unknown>,
 ): Promise<ResponseRow> {
   const { rows } = await pool.query(
-    `SELECT r.*, a.type, a.template,
-            u.shirt_size, u.food_intolerances, u.food_intolerance_notes
+    `SELECT a.template
      FROM application_responses r
      JOIN applications a ON a.id = r.application_id
-     JOIN users u ON u.id = r.user_id
      WHERE r.id = $1`,
     [responseId],
   );
   if (!rows[0]) throw new NotFoundError("Response not found");
-  const { type, template, shirt_size, food_intolerances, food_intolerance_notes } = rows[0];
-  const enriched = await enrichTemplate(type, template);
-  // Shirt size and dietary data live on the user row, not the answers. Backfill
-  // any the caller didn't send so an edit that only touched form questions still
-  // passes enriched validation (which marks shirt_size required for these types).
-  const forValidation: Record<string, unknown> = { ...responses };
-  if (forValidation.shirt_size == null && shirt_size != null) {
-    forValidation.shirt_size = shirt_size;
-  }
-  if (forValidation.food_intolerances == null && Array.isArray(food_intolerances)) {
-    forValidation.food_intolerances = food_intolerances.map(String);
-  }
-  if (forValidation.food_intolerance_notes == null && food_intolerance_notes != null) {
-    forValidation.food_intolerance_notes = food_intolerance_notes;
-  }
-  validateResponses(enriched, forValidation);
+  const { template } = rows[0];
+  // Validate ONLY against the form template the staff answer-edit form actually
+  // renders. Shirt size and dietary data live on the user row (managed from the
+  // profile / logistics), not this form — validating the *enriched* template
+  // here made every edit fail with "shirt_size required" whenever that logistics
+  // field was blank, a field staff can't even set in this form.
+  validateResponses(template, responses);
 
   return withTransaction(async (client) => {
     const { rows: locked } = await client.query(

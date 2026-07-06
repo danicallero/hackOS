@@ -1341,9 +1341,23 @@ function renderAnswer(
       const uni = universities.find((u) => u.id === Number(value));
       return uni ? uni.name : String(value);
     }
+    case "date":
+      return fmtDate(value);
     default:
       return String(value);
   }
+}
+
+/** Format a stored date answer (yyyy-MM-dd, or an ISO datetime) as a plain date. */
+function fmtDate(value: unknown): string {
+  if (typeof value !== "string" || !value) return "—";
+  // Anchor a date-only string to UTC noon so the local-timezone render can't
+  // roll it to the previous/next day.
+  const iso = /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T12:00:00Z` : value;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? value
+    : d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
 /** Render a response value; file answers become a clickable link so staff (and
@@ -1359,7 +1373,22 @@ function AnswerValue({
   universities: { id: number; name: string }[];
   lang: Language;
 }) {
-  if ((field.kind === "file" || field.kind === "file-url") && typeof value === "string" && value) {
+  // A file-url is a link the applicant typed: show the URL itself so staff can
+  // read and click through to it. A file is a private upload key with no
+  // meaningful text, so it stays a generic "View file" link.
+  if (field.kind === "file-url" && typeof value === "string" && value) {
+    return (
+      <a
+        href={value}
+        target="_blank"
+        rel="noreferrer"
+        className="text-primary break-all underline underline-offset-4"
+      >
+        {value}
+      </a>
+    );
+  }
+  if (field.kind === "file" && typeof value === "string" && value) {
     return <FileLink value={value} />;
   }
   const rendered = renderAnswer(field, value, universities, lang);
@@ -1396,11 +1425,22 @@ export function ReviewModal({
       .get<{ intolerances: Intolerance[] }>("/api/public/food-intolerances")
       .then((res) => setIntolerances(res.intolerances))
       .catch(() => {});
+    // Resolve exactly the university ids this response references (by id, not the
+    // alphabetical top-50) so the name always renders instead of the raw id.
+    const uniIds = new Set<string>();
+    for (const f of template ?? []) {
+      if (f.kind !== "university") continue;
+      const v = response.responses[f.key];
+      if (v != null && v !== "") uniIds.add(String(v));
+    }
+    if (uniIds.size === 0) return;
     api
-      .get<{ universities: { id: number; name: string }[] }>("/api/public/universities")
+      .get<{ universities: { id: number; name: string }[] }>("/api/public/universities", {
+        query: { ids: [...uniIds].join(",") },
+      })
       .then((res) => setUniversities(res.universities))
       .catch(() => {});
-  }, []);
+  }, [template, response.responses]);
   // No GET for a reviewer's own row exists — the score/notes inputs are
   // write-only (blank each open); the list column shows the average + count.
   const [myScore, setMyScore] = useState("");
