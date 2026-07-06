@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { DurationInput } from "@/components/common/duration-input";
 import { EmptyState } from "@/components/common/empty-state";
 import { ScheduledDateTimeField } from "@/components/common/scheduled-datetime-field";
 import { SectionCard } from "@/components/common/section-card";
@@ -25,7 +26,6 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { ApiError, api } from "@/lib/api";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
@@ -281,10 +281,11 @@ function EditCard({
             name="maxPresentationSeconds"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Max presentation seconds</FormLabel>
+                <FormLabel>Max presentation time</FormLabel>
                 <FormControl>
-                  <Input inputMode="numeric" placeholder="Optional" {...field} />
+                  <DurationInput value={field.value} onChange={field.onChange} />
                 </FormControl>
+                <FormDescription>Optional. Enter the limit as minutes and seconds.</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
