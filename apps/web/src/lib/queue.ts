@@ -75,6 +75,8 @@ export interface QueueSettings {
 export interface RoomView {
   room: Room;
   state: RoomQueueState | null;
+  /** The single challenge this room judges (read-only in the panel). */
+  challenge: { id: number; title: string } | null;
   active: QueueEntry | null;
   called: QueueEntry[];
   next: QueueEntry[];
@@ -225,6 +227,7 @@ type EntryAction =
   | "requeue"
   | "no-show"
   | "skip"
+  | "move-top"
   | "cancel"
   | "disqualify"
   | "manual-call";

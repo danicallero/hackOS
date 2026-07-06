@@ -9,6 +9,7 @@ import { EVENTS } from "@hackos/shared/events";
 import type { AnswerValue, Question } from "@hackos/shared/questions";
 import {
   AlertTriangleIcon,
+  ArrowUpToLineIcon,
   BellRingIcon,
   CheckCircle2Icon,
   DoorOpenIcon,
@@ -35,13 +36,6 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
@@ -58,12 +52,10 @@ import { useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError, api } from "@/lib/api";
 import { API_URL } from "@/lib/env";
 import {
-  type ChallengeProgress,
   callNext,
   closeSession,
   entryAction,
   exportUrls,
-  getChallengeProgress,
   getReview,
   getRoomPace,
   getRoomView,
@@ -95,11 +87,6 @@ function challengeName(challenge?: Challenge | null, fallback?: number): string 
 
 function entryLabel(entry: QueueEntry): string {
   return entry.repo_name ?? `Repo #${entry.repo_id}`;
-}
-
-function minutesLabel(value: number | null | undefined): string {
-  if (value == null) return "—";
-  return `${Math.round(value)} min`;
 }
 
 function secondsLabel(value: number | null | undefined): string {
@@ -173,7 +160,6 @@ export default function QueuePage() {
   const [roomsLoading, setRoomsLoading] = useState(true);
   const [roomId, setRoomId] = useState<number | null>(null);
   const [challenges, setChallenges] = useState<Challenge[]>([]);
-  const [selectedChallengeId, setSelectedChallengeId] = useState<number | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [searchResults, setSearchResults] = useState<QueueSearchResult[]>([]);
@@ -195,23 +181,15 @@ export default function QueuePage() {
     { enabled: canUse && activeRoomId != null },
   );
 
+  // The room judges a single challenge (read-only label in the panel); fall
+  // back to whatever a live entry reports so a freshly seeded room still works.
   const effectiveChallengeId =
-    selectedChallengeId ??
+    roomView.data?.challenge?.id ??
     roomView.data?.active?.challenge_id ??
     roomView.data?.called[0]?.challenge_id ??
     roomView.data?.next[0]?.challenge_id ??
     challenges[0]?.id ??
     null;
-
-  const progress = useLiveQuery<ChallengeProgress>(
-    () =>
-      effectiveChallengeId
-        ? getChallengeProgress(effectiveChallengeId)
-        : Promise.resolve(null as never),
-    "/api/queue/stream",
-    [EVENTS.QUEUE_ENTRY_CHANGED, EVENTS.QUEUE_ROOM_CHANGED],
-    { enabled: canUse && effectiveChallengeId != null },
-  );
 
   const activeChallenge = useMemo(
     () => challenges.find((c) => c.id === effectiveChallengeId) ?? null,
@@ -232,7 +210,6 @@ export default function QueuePage() {
       setRooms(roomRows);
       setChallenges(challengeRows.challenges);
       setRoomId((current) => current ?? roomRows[0]?.id ?? null);
-      setSelectedChallengeId((current) => current ?? challengeRows.challenges[0]?.id ?? null);
     } catch (err) {
       toast.error(errorMessage(err, "Could not load queue setup."));
     } finally {
@@ -245,8 +222,8 @@ export default function QueuePage() {
   }, [loadRooms]);
 
   const refreshLive = useCallback(async () => {
-    await Promise.all([roomView.refetch(), pace.refetch(), progress.refetch()]);
-  }, [roomView, pace, progress]);
+    await Promise.all([roomView.refetch(), pace.refetch()]);
+  }, [roomView, pace]);
 
   const mutate = useCallback(
     async (key: string, action: () => Promise<unknown>, success: string) => {
@@ -264,19 +241,31 @@ export default function QueuePage() {
     [refreshLive],
   );
 
-  const onSearch = useCallback(async () => {
-    if (!effectiveChallengeId || !search.trim()) {
+  // H37 search-as-you-type: debounce the query and refresh results as the
+  // operator types. An empty query clears the list.
+  useEffect(() => {
+    const term = search.trim();
+    if (!effectiveChallengeId || !term) {
       setSearchResults([]);
+      setSearching(false);
       return;
     }
+    let cancelled = false;
     setSearching(true);
-    try {
-      setSearchResults(await searchTeams(effectiveChallengeId, search.trim()));
-    } catch (err) {
-      toast.error(errorMessage(err, "Search failed."));
-    } finally {
-      setSearching(false);
-    }
+    const handle = window.setTimeout(async () => {
+      try {
+        const hits = await searchTeams(effectiveChallengeId, term);
+        if (!cancelled) setSearchResults(hits);
+      } catch (err) {
+        if (!cancelled) toast.error(errorMessage(err, "Search failed."));
+      } finally {
+        if (!cancelled) setSearching(false);
+      }
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(handle);
+    };
   }, [effectiveChallengeId, search]);
 
   if (!canUse) {
@@ -296,21 +285,11 @@ export default function QueuePage() {
   const active = view?.active ?? null;
   const state = view?.state ?? null;
   const isPaused = state?.is_paused ?? view?.room.status === "paused";
-  const progressTotal = progress.data
-    ? progress.data.waiting +
-      progress.data.called +
-      progress.data.inProgress +
-      progress.data.evaluated +
-      progress.data.disqualified +
-      progress.data.other
-    : 0;
-  const evaluatedPercent =
-    progress.data && progressTotal > 0
-      ? Math.round((progress.data.evaluated / progressTotal) * 100)
-      : 0;
+  const challengeLabel =
+    view?.challenge?.title ?? (activeChallenge ? challengeName(activeChallenge) : "—");
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" data-wide>
       <PageHeader
         title="Judging"
         description="Room controller, current project and scoring panel."
@@ -363,24 +342,14 @@ export default function QueuePage() {
             </Select>
           </div>
 
+          {/* A room judges exactly one challenge — informational, read-only.
+              Change it from the room admin surface, not here. */}
           <div className="space-y-2">
-            <Label htmlFor="queue-challenge">Challenge</Label>
-            <Select
-              value={effectiveChallengeId ? String(effectiveChallengeId) : ""}
-              onValueChange={(value) => setSelectedChallengeId(Number(value))}
-              disabled={challenges.length === 0}
-            >
-              <SelectTrigger id="queue-challenge" className="w-full">
-                <SelectValue placeholder="Select challenge" />
-              </SelectTrigger>
-              <SelectContent>
-                {challenges.map((challenge) => (
-                  <SelectItem key={challenge.id} value={String(challenge.id)}>
-                    {challengeName(challenge)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label>Challenge</Label>
+            <div className="border-input bg-muted/40 text-muted-foreground flex h-9 w-full items-center gap-2 rounded-md border px-3 text-sm">
+              <LockIcon className="size-3.5 shrink-0" />
+              <span className="text-foreground truncate font-medium">{challengeLabel}</span>
+            </div>
           </div>
 
           <Button
@@ -402,18 +371,6 @@ export default function QueuePage() {
             {isPaused ? "Resume" : "Pause"}
           </Button>
         </div>
-
-        <div className="mt-4 flex flex-wrap gap-2">
-          <StatChip label="Waiting room" value={view?.called.length ?? 0} />
-          <StatChip label="Challenge queue" value={view?.next.length ?? 0} />
-          <StatChip label="Max/team" value={minutesLabel(pace.data?.effectiveMinutesPerTeam)} />
-          <StatChip label="Progress" value={`${evaluatedPercent}%`} />
-          <StatChip
-            label="Status"
-            value={isPaused ? "Paused" : "Live"}
-            tone={isPaused ? "warning" : "success"}
-          />
-        </div>
       </Card>
 
       {roomsLoading || roomView.loading ? (
@@ -427,7 +384,7 @@ export default function QueuePage() {
           description="Create or select a judging room before operating the queue."
         />
       ) : (
-        <div className="grid min-h-[calc(100dvh-270px)] gap-5 xl:grid-cols-[360px_minmax(0,1fr)_420px]">
+        <div className="grid min-h-[calc(100dvh-220px)] gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
           <QueuePanel
             view={view}
             canOperate={canOperate}
@@ -438,7 +395,6 @@ export default function QueuePage() {
             searching={searching}
             searchDisabled={!effectiveChallengeId}
             onQuery={setSearch}
-            onSearch={onSearch}
             onCallNext={() =>
               activeRoomId &&
               mutate(
@@ -468,55 +424,81 @@ export default function QueuePage() {
                 label,
               )
             }
-          />
-
-          <PresentationPanel
-            entry={active}
-            challenge={activeChallenge}
-            pace={pace.data}
-            waitingRoomCount={view.called.length}
-            canJudge={canJudge}
-            busy={busy}
-            onEmptyAction={() => {
-              const firstCalled = view.called[0];
-              if (firstCalled) {
-                mutate(
-                  `bring-in-${firstCalled.id}`,
-                  () => entryAction(firstCalled.id, "bring-in", undefined, crypto.randomUUID()),
-                  "Team brought in.",
-                );
-                return;
-              }
-              if (activeRoomId) {
-                mutate(
-                  "call-next",
-                  () => callNext(activeRoomId, crypto.randomUUID()),
-                  "Next team called.",
-                );
-              }
-            }}
-            onEntryAction={(entry, action, body, label) =>
+            onAddTop={(entry) =>
               mutate(
-                `${action}-${entry.id}`,
-                () => entryAction(entry.id, action, body, crypto.randomUUID()),
-                label,
+                `move-top-${entry.id}`,
+                () =>
+                  entryAction(
+                    entry.id,
+                    "move-top",
+                    { reason: "Search: moved to top of queue" },
+                    crypto.randomUUID(),
+                  ),
+                "Team moved to the top of the queue.",
+              )
+            }
+            onAddWaiting={(entry) =>
+              activeRoomId &&
+              mutate(
+                `add-waiting-${entry.id}`,
+                () =>
+                  entryAction(
+                    entry.id,
+                    "manual-call",
+                    {
+                      targetStatus: "called",
+                      roomId: activeRoomId,
+                      reason: "Search: to waiting room",
+                    },
+                    crypto.randomUUID(),
+                  ),
+                "Team added to the waiting room.",
               )
             }
           />
 
+          {/* Main column: evaluated project card, then scoring / questions
+              flowing directly below it. */}
           <div className="space-y-5">
+            <PresentationPanel
+              entry={active}
+              challenge={activeChallenge}
+              pace={pace.data}
+              waitingRoomCount={view.called.length}
+              canJudge={canJudge}
+              busy={busy}
+              onEmptyAction={() => {
+                const firstCalled = view.called[0];
+                if (firstCalled) {
+                  mutate(
+                    `bring-in-${firstCalled.id}`,
+                    () => entryAction(firstCalled.id, "bring-in", undefined, crypto.randomUUID()),
+                    "Team brought in.",
+                  );
+                  return;
+                }
+                if (activeRoomId) {
+                  mutate(
+                    "call-next",
+                    () => callNext(activeRoomId, crypto.randomUUID()),
+                    "Next team called.",
+                  );
+                }
+              }}
+              onEntryAction={(entry, action, body, label) =>
+                mutate(
+                  `${action}-${entry.id}`,
+                  () => entryAction(entry.id, action, body, crypto.randomUUID()),
+                  label,
+                )
+              }
+            />
+
             <ReviewForm
               entry={active}
               challenge={activeChallenge}
               roomId={activeRoomId}
               canJudge={canJudge && active?.status === "presenting"}
-            />
-            <ProgressPanel
-              challenge={activeChallenge}
-              challengeId={effectiveChallengeId}
-              progress={progress.data}
-              loading={progress.loading}
-              evaluatedPercent={evaluatedPercent}
             />
           </div>
         </div>
@@ -535,10 +517,11 @@ function QueuePanel({
   searching,
   searchDisabled,
   onQuery,
-  onSearch,
   onCallNext,
   onManualCall,
   onEntryAction,
+  onAddTop,
+  onAddWaiting,
 }: {
   view: RoomView;
   canOperate: boolean;
@@ -549,7 +532,6 @@ function QueuePanel({
   searching: boolean;
   searchDisabled: boolean;
   onQuery: (value: string) => void;
-  onSearch: () => void;
   onCallNext: () => void;
   onManualCall: (entry: QueueEntry, targetStatus: "called" | "in_room") => void;
   onEntryAction: (
@@ -558,10 +540,13 @@ function QueuePanel({
     body: Record<string, unknown> | undefined,
     label: string,
   ) => void;
+  onAddTop: (entry: QueueSearchResult) => void;
+  onAddWaiting: (entry: QueueSearchResult) => void;
 }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const waitingEntries = view.next;
   const calledEntries = view.called;
+  const trimmed = query.trim();
 
   return (
     <Card className="gap-0 overflow-hidden p-0">
@@ -644,14 +629,30 @@ function QueuePanel({
             </div>
             <Button
               size="icon"
-              variant="ghost"
-              aria-label="Search queue"
+              variant={searchOpen ? "secondary" : "ghost"}
+              aria-label="Search teams"
+              aria-pressed={searchOpen}
               disabled={searchDisabled}
-              onClick={() => setSearchOpen(true)}
+              onClick={() => setSearchOpen((open) => !open)}
             >
               <SearchIcon className="size-4" />
             </Button>
           </div>
+
+          {searchOpen && (
+            <TeamSearch
+              query={query}
+              results={results}
+              searching={searching}
+              trimmed={trimmed}
+              busy={busy}
+              canOperate={canOperate}
+              onQuery={onQuery}
+              onAddTop={onAddTop}
+              onAddWaiting={onAddWaiting}
+            />
+          )}
+
           <QueueList
             title=""
             entries={waitingEntries}
@@ -684,65 +685,94 @@ function QueuePanel({
           />
         </div>
       </div>
-
-      <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Call a team</DialogTitle>
-            <DialogDescription>Search by project, repo id or queue entry id.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="flex gap-2">
-              <div className="relative min-w-0 flex-1">
-                <SearchIcon className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
-                <Input
-                  value={query}
-                  onChange={(event) => onQuery(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") void onSearch();
-                  }}
-                  placeholder="Search queue"
-                  className="pl-9"
-                  autoFocus
-                />
-              </div>
-              <Button variant="outline" disabled={searching || searchDisabled} onClick={onSearch}>
-                Search
-              </Button>
-            </div>
-            <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
-              {results.length === 0 ? (
-                <p className="text-muted-foreground py-6 text-center text-sm">No teams found.</p>
-              ) : (
-                results.map((entry) => (
-                  <button
-                    key={entry.id}
-                    type="button"
-                    className="hover:bg-muted w-full rounded-md border p-3 text-left transition-colors"
-                    onClick={() => {
-                      onManualCall(entry, "called");
-                      setSearchOpen(false);
-                    }}
-                  >
-                    <p className="truncate text-sm font-medium">{entryLabel(entry)}</p>
-                    <div className="mt-1 flex flex-wrap gap-2">
-                      <QueueStatusBadge status={entry.status} />
-                      {entry.has_review && (
-                        <StatusBadge
-                          tone={entry.review_status === "submitted" ? "success" : "warning"}
-                        >
-                          {entry.review_status ?? "review"}
-                        </StatusBadge>
-                      )}
-                    </div>
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </Card>
+  );
+}
+
+/**
+ * H37 search-as-you-type. Each hit offers the two "add" actions from the story:
+ * move to the top of the queue, or drop straight into the waiting room. Both
+ * only ever MOVE the existing queue entry (never create a second evaluation).
+ */
+function TeamSearch({
+  query,
+  results,
+  searching,
+  trimmed,
+  busy,
+  canOperate,
+  onQuery,
+  onAddTop,
+  onAddWaiting,
+}: {
+  query: string;
+  results: QueueSearchResult[];
+  searching: boolean;
+  trimmed: string;
+  busy: string | null;
+  canOperate: boolean;
+  onQuery: (value: string) => void;
+  onAddTop: (entry: QueueSearchResult) => void;
+  onAddWaiting: (entry: QueueSearchResult) => void;
+}) {
+  return (
+    <div className="bg-muted/30 space-y-3 rounded-md border p-3">
+      <div className="relative">
+        <SearchIcon className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+        <Input
+          value={query}
+          onChange={(event) => onQuery(event.target.value)}
+          placeholder="Search by project, repo id or entry id"
+          className="pl-9"
+        />
+      </div>
+      {!trimmed ? (
+        <p className="text-muted-foreground py-2 text-center text-xs">
+          Start typing to find a team.
+        </p>
+      ) : searching && results.length === 0 ? (
+        <div className="flex justify-center py-4">
+          <Spinner />
+        </div>
+      ) : results.length === 0 ? (
+        <p className="text-muted-foreground py-2 text-center text-xs">No teams found.</p>
+      ) : (
+        <ul className="max-h-72 space-y-2 overflow-y-auto pr-1">
+          {results.map((entry) => (
+            <li key={entry.id} className="bg-background rounded-md border p-3">
+              <p className="truncate text-sm font-medium">{entryLabel(entry)}</p>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <QueueStatusBadge status={entry.status} />
+                {entry.has_review && (
+                  <StatusBadge tone={entry.review_status === "submitted" ? "success" : "warning"}>
+                    {entry.review_status ?? "review"}
+                  </StatusBadge>
+                )}
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy != null || !canOperate}
+                  onClick={() => onAddTop(entry)}
+                >
+                  <ArrowUpToLineIcon className="size-4" />
+                  Top of queue
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={busy != null || !canOperate}
+                  onClick={() => onAddWaiting(entry)}
+                >
+                  <DoorOpenIcon className="size-4" />
+                  Waiting room
+                </Button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -1036,91 +1066,6 @@ function PresentationTimer({
       </div>
       <Progress value={progressValue} className="mt-3" />
     </div>
-  );
-}
-
-function ProgressPanel({
-  challenge,
-  challengeId,
-  progress,
-  loading,
-  evaluatedPercent,
-}: {
-  challenge: Challenge | null;
-  challengeId: number | null;
-  progress: ChallengeProgress | null;
-  loading: boolean;
-  evaluatedPercent: number;
-}) {
-  return (
-    <Card className="gap-0 overflow-hidden p-0">
-      <div className="px-5 pt-5 pb-4">
-        <h2 className="text-base font-semibold">Progress</h2>
-        <p className="text-muted-foreground text-sm">
-          {challengeName(challenge, challengeId ?? undefined)}
-        </p>
-      </div>
-      <Separator />
-      <div className="space-y-4 p-5">
-        {loading ? (
-          <Spinner />
-        ) : !progress ? (
-          <p className="text-muted-foreground text-sm">No progress data.</p>
-        ) : (
-          <>
-            <div>
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <span className="text-sm font-medium">Evaluated</span>
-                <span className="text-muted-foreground text-sm tabular-nums">
-                  {evaluatedPercent}%
-                </span>
-              </div>
-              <Progress value={evaluatedPercent} />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <MiniCount label="Waiting" value={progress.waiting} />
-              <MiniCount label="Called" value={progress.called} />
-              <MiniCount label="In progress" value={progress.inProgress} />
-              <MiniCount label="Evaluated" value={progress.evaluated} />
-            </div>
-          </>
-        )}
-      </div>
-    </Card>
-  );
-}
-
-function MiniCount({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-md border px-3 py-2">
-      <p className="text-muted-foreground text-xs">{label}</p>
-      <p className="text-lg font-semibold tabular-nums">{value}</p>
-    </div>
-  );
-}
-
-function StatChip({
-  label,
-  value,
-  tone = "neutral",
-}: {
-  label: string;
-  value: React.ReactNode;
-  tone?: "neutral" | "success" | "warning";
-}) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-semibold",
-        tone === "success" &&
-          "border-green-300 bg-green-50 text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-100",
-        tone === "warning" &&
-          "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100",
-        tone === "neutral" && "bg-muted text-foreground",
-      )}
-    >
-      {label}: <span className="font-bold tabular-nums">{value}</span>
-    </span>
   );
 }
 
