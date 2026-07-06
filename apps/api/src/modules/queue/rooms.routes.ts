@@ -1,9 +1,10 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import { pool } from "../../db/pool.js";
-import { requireCapability } from "../../lib/capabilities.js";
-import { ConflictError, NotFoundError } from "../../lib/errors.js";
+import { pool, withTransaction } from "../../db/pool.js";
+import { audit } from "../../lib/audit.js";
+import { requireAuth, requireCapability, userHasCapability } from "../../lib/capabilities.js";
+import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { requireAnyCapability } from "./access.js";
 import {
@@ -20,6 +21,39 @@ import {
   updateRoomBody,
 } from "./schemas.js";
 import { enqueueChallenge, pauseRoom, resumeRoom } from "./service.js";
+
+async function assertCanManageRoomJudges(
+  userId: number | null,
+  roomId: number,
+  challengeId: number,
+): Promise<"admin" | "owner"> {
+  if (userId == null) throw new ConflictError("Missing actor");
+  if (await userHasCapability(userId, CAPABILITIES.QUEUE_ADMIN)) return "admin";
+
+  const { rows } = await pool.query(
+    `SELECT rc.challenge_id
+       FROM room_challenges rc
+       JOIN challenges c ON c.id = rc.challenge_id
+       JOIN sponsors author ON author.id = c.author
+       JOIN sponsors mine ON mine.enterprise_id = author.enterprise_id
+      WHERE rc.room_id = $1 AND rc.challenge_id = $2 AND mine.user_id = $3`,
+    [roomId, challengeId, userId],
+  );
+  if (rows[0]) return "owner";
+
+  throw new ForbiddenError("Not allowed to manage judges for this room", {
+    roomId,
+    challengeId,
+  });
+}
+
+function auditRequest(req: FastifyRequest) {
+  return {
+    ip: req.ip,
+    userAgent:
+      typeof req.headers["user-agent"] === "string" ? req.headers["user-agent"] : undefined,
+  };
+}
 
 /** Rooms, assignment admin, room/queue settings, enqueue (H29 admin surface). */
 export function registerRoomsRoutes(app: FastifyInstance): void {
@@ -101,12 +135,50 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
       schema: { params: roomIdParam, body: assignChallengeBody },
     },
     async (req, reply) => {
-      await pool.query(
-        `INSERT INTO room_challenges (room_id, challenge_id, assigned_by)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (room_id, challenge_id) DO NOTHING`,
-        [req.params.roomId, req.body.challengeId, req.userId],
-      );
+      await withTransaction(async (client) => {
+        const before = (
+          await client.query(`SELECT * FROM room_challenges WHERE room_id = $1 FOR UPDATE`, [
+            req.params.roomId,
+          ])
+        ).rows[0];
+        const room = (
+          await client.query(`SELECT id FROM rooms WHERE id = $1 FOR UPDATE`, [req.params.roomId])
+        ).rows[0];
+        if (!room) throw new NotFoundError("Room not found", { roomId: req.params.roomId });
+
+        const challenge = (
+          await client.query(`SELECT id FROM challenges WHERE id = $1 FOR UPDATE`, [
+            req.body.challengeId,
+          ])
+        ).rows[0];
+        if (!challenge) {
+          throw new NotFoundError("Challenge not found", { challengeId: req.body.challengeId });
+        }
+        await client.query(
+          `INSERT INTO room_challenges (room_id, challenge_id, assigned_by)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (room_id) DO UPDATE
+             SET challenge_id = EXCLUDED.challenge_id,
+                 assigned_by = EXCLUDED.assigned_by,
+                 assigned_at = now()`,
+          [req.params.roomId, req.body.challengeId, req.userId],
+        );
+        if (before && before.challenge_id !== req.body.challengeId) {
+          await client.query(`DELETE FROM room_judges WHERE room_id = $1 AND challenge_id <> $2`, [
+            req.params.roomId,
+            req.body.challengeId,
+          ]);
+        }
+        await audit(client, {
+          actorId: req.userId,
+          entityType: "room",
+          entityId: req.params.roomId,
+          action: "assign_challenge",
+          before,
+          after: { roomId: req.params.roomId, challengeId: req.body.challengeId },
+          ...auditRequest(req),
+        });
+      });
       reply.code(201);
       return { roomId: req.params.roomId, challengeId: req.body.challengeId };
     },
@@ -119,10 +191,26 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
       schema: { params: roomChallengeParam },
     },
     async (req) => {
-      await pool.query(`DELETE FROM room_challenges WHERE room_id = $1 AND challenge_id = $2`, [
-        req.params.roomId,
-        req.params.challengeId,
-      ]);
+      await withTransaction(async (client) => {
+        const before = (
+          await client.query(
+            `DELETE FROM room_challenges WHERE room_id = $1 AND challenge_id = $2 RETURNING *`,
+            [req.params.roomId, req.params.challengeId],
+          )
+        ).rows[0];
+        await client.query(`DELETE FROM room_judges WHERE room_id = $1 AND challenge_id = $2`, [
+          req.params.roomId,
+          req.params.challengeId,
+        ]);
+        await audit(client, {
+          actorId: req.userId,
+          entityType: "room",
+          entityId: req.params.roomId,
+          action: "remove_challenge",
+          before,
+          ...auditRequest(req),
+        });
+      });
       return { ok: true };
     },
   );
@@ -130,16 +218,42 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
   typed.post(
     "/api/queue/rooms/:roomId/judges",
     {
-      preHandler: requireCapability(CAPABILITIES.QUEUE_ADMIN),
+      preHandler: requireAuth,
       schema: { params: roomIdParam, body: assignJudgeBody },
     },
     async (req, reply) => {
-      await pool.query(
-        `INSERT INTO room_judges (room_id, challenge_id, user_id, assigned_by)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT (room_id, challenge_id, user_id) DO NOTHING`,
-        [req.params.roomId, req.body.challengeId, req.body.userId, req.userId],
-      );
+      await assertCanManageRoomJudges(req.userId, req.params.roomId, req.body.challengeId);
+      await withTransaction(async (client) => {
+        const roomChallenge = (
+          await client.query(
+            `SELECT * FROM room_challenges WHERE room_id = $1 AND challenge_id = $2 FOR UPDATE`,
+            [req.params.roomId, req.body.challengeId],
+          )
+        ).rows[0];
+        if (!roomChallenge) {
+          throw new NotFoundError("Room challenge assignment not found", {
+            roomId: req.params.roomId,
+            challengeId: req.body.challengeId,
+          });
+        }
+        const { rows } = await client.query(
+          `INSERT INTO room_judges (room_id, challenge_id, user_id, assigned_by)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (room_id, challenge_id, user_id) DO UPDATE
+             SET assigned_by = EXCLUDED.assigned_by,
+                 assigned_at = now()
+           RETURNING *`,
+          [req.params.roomId, req.body.challengeId, req.body.userId, req.userId],
+        );
+        await audit(client, {
+          actorId: req.userId,
+          entityType: "room_judge",
+          entityId: `${req.params.roomId}:${req.body.challengeId}:${req.body.userId}`,
+          action: "assign",
+          after: rows[0],
+          ...auditRequest(req),
+        });
+      });
       reply.code(201);
       return {
         roomId: req.params.roomId,
@@ -152,14 +266,27 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
   typed.delete(
     "/api/queue/rooms/:roomId/judges/:challengeId/:userId",
     {
-      preHandler: requireCapability(CAPABILITIES.QUEUE_ADMIN),
+      preHandler: requireAuth,
       schema: { params: roomJudgeParam },
     },
     async (req) => {
-      await pool.query(
-        `DELETE FROM room_judges WHERE room_id = $1 AND challenge_id = $2 AND user_id = $3`,
-        [req.params.roomId, req.params.challengeId, req.params.userId],
-      );
+      await assertCanManageRoomJudges(req.userId, req.params.roomId, req.params.challengeId);
+      await withTransaction(async (client) => {
+        const before = (
+          await client.query(
+            `DELETE FROM room_judges WHERE room_id = $1 AND challenge_id = $2 AND user_id = $3 RETURNING *`,
+            [req.params.roomId, req.params.challengeId, req.params.userId],
+          )
+        ).rows[0];
+        await audit(client, {
+          actorId: req.userId,
+          entityType: "room_judge",
+          entityId: `${req.params.roomId}:${req.params.challengeId}:${req.params.userId}`,
+          action: "remove",
+          before,
+          ...auditRequest(req),
+        });
+      });
       return { ok: true };
     },
   );

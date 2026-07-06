@@ -33,7 +33,6 @@ import {
   listRooms,
   type Room,
   type RoomAssignments,
-  removeRoomChallenge,
   removeRoomJudge,
   updateRoom,
 } from "@/lib/queue";
@@ -60,6 +59,7 @@ export default function QueueRoomsPage() {
   const [users, setUsers] = useState<UserList["users"]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedRoomId, setSelectedRoomId] = useState<number | null>(null);
+  const [modalMode, setModalMode] = useState<"create" | "edit" | null>(null);
   const [createDraft, setCreateDraft] = useState<RoomEditor>(emptyRoomEditor());
   const [roomDraft, setRoomDraft] = useState<RoomEditor>(emptyRoomEditor());
   const [saving, setSaving] = useState<string | null>(null);
@@ -88,13 +88,12 @@ export default function QueueRoomsPage() {
       setChallenges(challengeRows.challenges);
       setUsers(userRows.users);
       setCreateDraft((draft) => (draft.name ? draft : { ...emptyRoomEditor() }));
-      if (!selectedRoomId && roomRows[0]) setSelectedRoomId(roomRows[0].id);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Could not load room admin data.");
     } finally {
       setLoading(false);
     }
-  }, [canAdmin, selectedRoomId]);
+  }, [canAdmin]);
 
   const loadRoomDetails = useCallback(async (roomId: number) => {
     try {
@@ -104,6 +103,22 @@ export default function QueueRoomsPage() {
       toast.error(err instanceof ApiError ? err.message : "Could not load room details.");
     }
   }, []);
+
+  const openCreateModal = () => {
+    setSelectedRoomId(null);
+    setCreateDraft(emptyRoomEditor());
+    setModalMode("create");
+  };
+
+  const openManageModal = (roomId: number) => {
+    setSelectedRoomId(roomId);
+    setModalMode("edit");
+  };
+
+  const closeModal = () => {
+    setModalMode(null);
+    setSelectedRoomId(null);
+  };
 
   useEffect(() => {
     void load();
@@ -153,6 +168,7 @@ export default function QueueRoomsPage() {
       );
       toast.success("Room created.");
       setCreateDraft(emptyRoomEditor());
+      closeModal();
       await load();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Could not create room.");
@@ -185,12 +201,18 @@ export default function QueueRoomsPage() {
         title="Queue rooms"
         description="Rooms and assignment controls for the judging flow."
         actions={
-          <Button variant="outline" asChild>
-            <Link href="/queue">
-              <ArrowLeftIcon className="size-4" />
-              Back to panel
-            </Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={openCreateModal}>
+              <PlusIcon className="size-4" />
+              Create room
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/queue">
+                <ArrowLeftIcon className="size-4" />
+                Back to panel
+              </Link>
+            </Button>
+          </div>
         }
       />
 
@@ -201,28 +223,6 @@ export default function QueueRoomsPage() {
           icon={Building2Icon}
           bodyClassName="space-y-4"
         >
-          <div className="grid gap-3 md:grid-cols-4 xl:grid-cols-5">
-            <Input
-              value={createDraft.name}
-              onChange={(e) => setCreateDraft((d) => ({ ...d, name: e.target.value }))}
-              placeholder="Room name"
-            />
-            <Input
-              value={createDraft.slug}
-              onChange={(e) => setCreateDraft((d) => ({ ...d, slug: e.target.value }))}
-              placeholder="Slug"
-            />
-            <Input
-              value={createDraft.location}
-              onChange={(e) => setCreateDraft((d) => ({ ...d, location: e.target.value }))}
-              placeholder="Location"
-            />
-            <Button disabled={saving === "create"} onClick={() => void saveCreate()}>
-              <PlusIcon className="size-4" />
-              Create room
-            </Button>
-          </div>
-
           {loading ? (
             <Spinner />
           ) : rooms.length === 0 ? (
@@ -234,12 +234,7 @@ export default function QueueRoomsPage() {
           ) : (
             <div className="grid gap-3 md:grid-cols-2">
               {rooms.map((room) => (
-                <button
-                  key={room.id}
-                  type="button"
-                  className="rounded-md border p-4 text-left hover:bg-muted/40"
-                  onClick={() => setSelectedRoomId(room.id)}
-                >
+                <div key={room.id} className="rounded-md border p-4">
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <p className="font-medium">{room.name}</p>
@@ -252,7 +247,12 @@ export default function QueueRoomsPage() {
                       {room.status}
                     </StatusBadge>
                   </div>
-                </button>
+                  <div className="mt-4 flex justify-end">
+                    <Button variant="outline" size="sm" onClick={() => openManageModal(room.id)}>
+                      Manage
+                    </Button>
+                  </div>
+                </div>
               ))}
             </div>
           )}
@@ -260,32 +260,67 @@ export default function QueueRoomsPage() {
       </div>
 
       <Modal
-        open={selectedRoom !== null}
+        open={modalMode !== null}
         onOpenChange={(open) => {
-          if (!open) setSelectedRoomId(null);
+          if (!open) closeModal();
         }}
-        title={selectedRoom?.name ?? "Room"}
-        description={selectedRoom?.slug ?? undefined}
+        title={modalMode === "create" ? "Create room" : (selectedRoom?.name ?? "Room")}
+        description={
+          modalMode === "create" ? "Base room details" : (selectedRoom?.slug ?? undefined)
+        }
         size="xl"
         footer={
           <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              disabled={saving === `room-${selectedRoom?.id}`}
-              onClick={() => void load()}
-            >
-              Reset
-            </Button>
-            <Button
-              disabled={saving === `room-${selectedRoom?.id}`}
-              onClick={() => void saveSelectedRoom()}
-            >
-              Save room
-            </Button>
+            {modalMode === "create" ? (
+              <Button disabled={saving === "create"} onClick={() => void saveCreate()}>
+                Create room
+              </Button>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  disabled={saving === `room-${selectedRoom?.id}`}
+                  onClick={() => void load()}
+                >
+                  Reset
+                </Button>
+                <Button
+                  disabled={saving === `room-${selectedRoom?.id}`}
+                  onClick={() => void saveSelectedRoom()}
+                >
+                  Save room
+                </Button>
+              </>
+            )}
           </div>
         }
       >
-        {selectedRoom && (
+        {modalMode === "create" && (
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Name</Label>
+              <Input
+                value={createDraft.name}
+                onChange={(e) => setCreateDraft((d) => ({ ...d, name: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Slug</Label>
+              <Input
+                value={createDraft.slug}
+                onChange={(e) => setCreateDraft((d) => ({ ...d, slug: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2 lg:col-span-2">
+              <Label>Location</Label>
+              <Input
+                value={createDraft.location}
+                onChange={(e) => setCreateDraft((d) => ({ ...d, location: e.target.value }))}
+              />
+            </div>
+          </div>
+        )}
+        {modalMode === "edit" && selectedRoom && (
           <div className="space-y-5">
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="space-y-2">
@@ -332,10 +367,6 @@ export default function QueueRoomsPage() {
                     await assignRoomJudge(selectedRoom.id, challengeId, userId);
                     await loadRoomDetails(selectedRoom.id);
                   }}
-                  onRemoveChallenge={async (challengeId) => {
-                    await removeRoomChallenge(selectedRoom.id, challengeId);
-                    await loadRoomDetails(selectedRoom.id);
-                  }}
                   onRemoveJudge={async (challengeId, userId) => {
                     await removeRoomJudge(selectedRoom.id, challengeId, userId);
                     await loadRoomDetails(selectedRoom.id);
@@ -351,7 +382,7 @@ export default function QueueRoomsPage() {
                   try {
                     await deleteRoom(selectedRoom.id);
                     toast.success("Room deleted.");
-                    setSelectedRoomId(null);
+                    closeModal();
                     await load();
                   } catch (err) {
                     toast.error(err instanceof ApiError ? err.message : "Could not delete room.");
@@ -376,7 +407,6 @@ function AssignmentsEditor({
   users,
   onAddChallenge,
   onAddJudge,
-  onRemoveChallenge,
   onRemoveJudge,
 }: {
   roomId: number;
@@ -386,46 +416,36 @@ function AssignmentsEditor({
   users: UserList["users"];
   onAddChallenge: (challengeId: number) => Promise<void>;
   onAddJudge: (challengeId: number, userId: number) => Promise<void>;
-  onRemoveChallenge: (challengeId: number) => Promise<void>;
   onRemoveJudge: (challengeId: number, userId: number) => Promise<void>;
 }) {
-  const [challengeId, setChallengeId] = useState(String(challengeFallback));
-  const [judgeChallengeId, setJudgeChallengeId] = useState(String(challengeFallback));
+  const assignedChallenge = assignments?.challenges[0] ?? null;
+  const [challengeId, setChallengeId] = useState("");
+  const effectiveChallengeId = assignedChallenge?.challenge_id ?? Number(challengeId || 0);
   const [userId, setUserId] = useState("");
-  const [removeChallengeId, setRemoveChallengeId] = useState("");
-  const [removeJudgeChallengeId, setRemoveJudgeChallengeId] = useState("");
-  const [removeJudgeUserId, setRemoveJudgeUserId] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
 
   useEffect(() => {
-    setChallengeId(String(challengeFallback));
-    setJudgeChallengeId(String(challengeFallback));
-  }, [challengeFallback]);
+    const nextChallengeId = assignments?.challenges[0]?.challenge_id ?? challengeFallback;
+    setChallengeId(nextChallengeId ? String(nextChallengeId) : "");
+  }, [assignments?.challenges, challengeFallback]);
 
   return (
     <div className="space-y-4">
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="space-y-2 rounded-md border p-3">
-          <p className="text-sm font-medium">Current challenges</p>
-          {assignments?.challenges?.length ? (
-            <ul className="space-y-2">
-              {assignments.challenges.map((assignment) => (
-                <li
-                  key={`${assignment.challenge_id}`}
-                  className="flex items-center justify-between gap-3"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{assignment.title}</p>
-                    <p className="text-muted-foreground text-xs">
-                      {assignment.assigned_by_email ?? "system"}
-                    </p>
-                  </div>
-                  <StatusBadge tone="brand">id {assignment.challenge_id}</StatusBadge>
-                </li>
-              ))}
-            </ul>
+          <p className="text-sm font-medium">Room challenge</p>
+          {assignedChallenge ? (
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium">{assignedChallenge.title}</p>
+                <p className="text-muted-foreground text-xs">
+                  {assignedChallenge.assigned_by_email ?? "system"}
+                </p>
+              </div>
+              <StatusBadge tone="brand">id {assignedChallenge.challenge_id}</StatusBadge>
+            </div>
           ) : (
-            <p className="text-muted-foreground text-sm">No challenges assigned.</p>
+            <p className="text-muted-foreground text-sm">No challenge assigned.</p>
           )}
         </div>
 
@@ -455,11 +475,11 @@ function AssignmentsEditor({
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor={`challenge-${roomId}`}>Attach challenge</Label>
+        <Label htmlFor={`challenge-${roomId}`}>Room challenge</Label>
         <div className="flex gap-2">
-          <Select value={challengeId} onValueChange={setChallengeId}>
+          <Select value={challengeId || undefined} onValueChange={setChallengeId}>
             <SelectTrigger id={`challenge-${roomId}`} className="flex-1">
-              <SelectValue />
+              <SelectValue placeholder="Challenge" />
             </SelectTrigger>
             <SelectContent>
               {challenges.map((challenge) => (
@@ -470,41 +490,29 @@ function AssignmentsEditor({
             </SelectContent>
           </Select>
           <Button
-            disabled={busy === "challenge"}
+            disabled={busy === "challenge" || !challengeId}
             onClick={async () => {
               setBusy("challenge");
               try {
                 await onAddChallenge(Number(challengeId));
-                toast.success("Challenge attached.");
+                toast.success("Challenge assigned.");
               } catch (err) {
-                toast.error(err instanceof ApiError ? err.message : "Could not attach challenge.");
+                toast.error(err instanceof ApiError ? err.message : "Could not assign challenge.");
               } finally {
                 setBusy(null);
               }
             }}
           >
-            Add
+            Set
           </Button>
         </div>
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor={`judge-challenge-${roomId}`}>Assign judge</Label>
-        <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
-          <Select value={judgeChallengeId} onValueChange={setJudgeChallengeId}>
-            <SelectTrigger id={`judge-challenge-${roomId}`}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {challenges.map((challenge) => (
-                <SelectItem key={challenge.id} value={String(challenge.id)}>
-                  {textForDisplay(challenge.title)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <Label htmlFor={`judge-user-${roomId}`}>Assign judge</Label>
+        <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
           <Select value={userId} onValueChange={setUserId}>
-            <SelectTrigger>
+            <SelectTrigger id={`judge-user-${roomId}`}>
               <SelectValue placeholder="User" />
             </SelectTrigger>
             <SelectContent>
@@ -516,11 +524,11 @@ function AssignmentsEditor({
             </SelectContent>
           </Select>
           <Button
-            disabled={busy === "judge" || !userId}
+            disabled={busy === "judge" || !userId || !effectiveChallengeId}
             onClick={async () => {
               setBusy("judge");
               try {
-                await onAddJudge(Number(judgeChallengeId), Number(userId));
+                await onAddJudge(effectiveChallengeId, Number(userId));
                 toast.success("Judge assigned.");
               } catch (err) {
                 toast.error(err instanceof ApiError ? err.message : "Could not assign judge.");
@@ -534,66 +542,41 @@ function AssignmentsEditor({
         </div>
       </div>
 
-      <div className="space-y-2 rounded-md border p-3">
-        <p className="text-sm font-medium">Remove by id</p>
-        <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
-          <Input
-            value={removeChallengeId}
-            onChange={(e) => setRemoveChallengeId(e.target.value)}
-            placeholder="Challenge id"
-          />
-          <div className="grid gap-2 sm:grid-cols-2">
-            <Input
-              value={removeJudgeChallengeId}
-              onChange={(e) => setRemoveJudgeChallengeId(e.target.value)}
-              placeholder="Judge challenge id"
-            />
-            <Input
-              value={removeJudgeUserId}
-              onChange={(e) => setRemoveJudgeUserId(e.target.value)}
-              placeholder="User id"
-            />
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Button
-              variant="outline"
-              disabled={busy === "remove-challenge" || !removeChallengeId}
-              onClick={async () => {
-                setBusy("remove-challenge");
-                try {
-                  await onRemoveChallenge(Number(removeChallengeId));
-                  toast.success("Challenge removed.");
-                } catch (err) {
-                  toast.error(
-                    err instanceof ApiError ? err.message : "Could not remove challenge.",
-                  );
-                } finally {
-                  setBusy(null);
-                }
-              }}
-            >
-              Remove challenge
-            </Button>
-            <Button
-              variant="outline"
-              disabled={busy === "remove-judge" || !removeJudgeChallengeId || !removeJudgeUserId}
-              onClick={async () => {
-                setBusy("remove-judge");
-                try {
-                  await onRemoveJudge(Number(removeJudgeChallengeId), Number(removeJudgeUserId));
-                  toast.success("Judge removed.");
-                } catch (err) {
-                  toast.error(err instanceof ApiError ? err.message : "Could not remove judge.");
-                } finally {
-                  setBusy(null);
-                }
-              }}
-            >
-              Remove judge
-            </Button>
+      {assignments?.judges?.length ? (
+        <div className="space-y-2 rounded-md border p-3">
+          <p className="text-sm font-medium">Remove judges</p>
+          <div className="space-y-2">
+            {assignments.judges.map((assignment) => (
+              <div
+                key={`${assignment.challenge_id}:${assignment.user_id}`}
+                className="flex items-center justify-between gap-3"
+              >
+                <p className="min-w-0 truncate text-sm">{assignment.email}</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={busy === `remove-judge-${assignment.user_id}`}
+                  onClick={async () => {
+                    setBusy(`remove-judge-${assignment.user_id}`);
+                    try {
+                      await onRemoveJudge(assignment.challenge_id, assignment.user_id);
+                      toast.success("Judge removed.");
+                    } catch (err) {
+                      toast.error(
+                        err instanceof ApiError ? err.message : "Could not remove judge.",
+                      );
+                    } finally {
+                      setBusy(null);
+                    }
+                  }}
+                >
+                  Remove
+                </Button>
+              </div>
+            ))}
           </div>
         </div>
-      </div>
+      ) : null}
     </div>
   );
 }
