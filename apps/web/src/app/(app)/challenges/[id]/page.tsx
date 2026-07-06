@@ -19,7 +19,6 @@ import { SubmitButton } from "@/components/common/submit-button";
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -295,12 +294,7 @@ function EditCard({
             render={({ field }) => (
               <FormItem>
                 <div className="flex items-center justify-between gap-4 rounded-md border p-3">
-                  <div className="space-y-1">
-                    <FormLabel>Visible</FormLabel>
-                    <FormDescription>
-                      Visible challenges are public. Reveal from only flips hidden challenges later.
-                    </FormDescription>
-                  </div>
+                  <FormLabel>Visible</FormLabel>
                   <FormControl>
                     <Switch
                       checked={field.value === "visible"}
@@ -328,7 +322,6 @@ function EditCard({
                     }
                     addLabel="Add reveal time"
                     inputLabel="Reveal date and time"
-                    description="This is only a trigger: when due, hidden challenges become visible."
                   />
                 </FormControl>
                 <FormMessage />

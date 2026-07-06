@@ -1,21 +1,11 @@
 "use client";
 
-import { CalendarIcon, PencilIcon, XIcon } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { CalendarIcon, CheckIcon, PencilIcon, XIcon } from "lucide-react";
+import { useEffect, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { formatScheduledDateTime } from "@/lib/datetime";
+import { formatScheduledDateTime, parseScheduledDateTime } from "@/lib/datetime";
 import { cn } from "@/lib/utils";
-
-function openNativePicker(input: HTMLInputElement | null) {
-  if (!input) return;
-  input.focus();
-  if (typeof input.showPicker === "function") {
-    input.showPicker();
-    return;
-  }
-  input.click();
-}
 
 export function ScheduledDateTimeField({
   value,
@@ -41,18 +31,32 @@ export function ScheduledDateTimeField({
   disabled?: boolean;
 }) {
   const inputId = useId();
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const errorId = useId();
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value);
+  const [draft, setDraft] = useState("");
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (!editing) return;
-    setDraft(value);
-    openNativePicker(inputRef.current);
+    setDraft(value ? formatScheduledDateTime(value) : "");
+    setError("");
   }, [editing, value]);
 
   const hasValue = Boolean(value);
   const display = hasValue ? formatScheduledDateTime(value) : emptyLabel;
+  const fieldChrome =
+    "h-10 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm dark:bg-input/50";
+
+  function commitDraft() {
+    const parsed = parseScheduledDateTime(draft);
+    if (parsed === null) {
+      setError("Use dd/MM/yyyy HH:mm, for example 24/02/2027 18:30.");
+      return;
+    }
+
+    onChange(parsed);
+    setEditing(false);
+  }
 
   return (
     <div className={cn("space-y-2", className)}>
@@ -63,23 +67,29 @@ export function ScheduledDateTimeField({
           </label>
           <Input
             id={inputId}
-            ref={inputRef}
-            type="datetime-local"
+            type="text"
+            inputMode="numeric"
+            placeholder="dd/MM/yyyy HH:mm"
             value={draft}
             disabled={disabled}
-            onChange={(e) => setDraft(e.target.value)}
+            aria-invalid={Boolean(error)}
+            aria-describedby={error ? errorId : undefined}
+            className="tabular-nums"
+            onChange={(e) => {
+              setDraft(e.target.value);
+              setError("");
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                commitDraft();
+              }
+            }}
           />
           <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={disabled}
-              onClick={() => {
-                onChange(draft);
-                setEditing(false);
-              }}
-            >
-              Done
+            <Button type="button" variant="outline" disabled={disabled} onClick={commitDraft}>
+              <CheckIcon className="size-4" />
+              OK
             </Button>
             <Button
               type="button"
@@ -101,7 +111,8 @@ export function ScheduledDateTimeField({
           <button
             type="button"
             className={cn(
-              "min-h-10 text-left text-sm font-medium underline-offset-4 transition-colors hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              fieldChrome,
+              "text-left font-medium tabular-nums focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
               !hasValue && "text-muted-foreground",
               disabled && "pointer-events-none opacity-50",
             )}
@@ -138,6 +149,11 @@ export function ScheduledDateTimeField({
           )}
         </div>
       )}
+      {error ? (
+        <p id={errorId} className="text-destructive text-sm text-pretty">
+          {error}
+        </p>
+      ) : null}
       {description ? (
         <p className="text-muted-foreground text-sm text-pretty">{description}</p>
       ) : null}
