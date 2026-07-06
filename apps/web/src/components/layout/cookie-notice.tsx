@@ -55,11 +55,12 @@ export function CookieNotice() {
           Legally-required cookie notice
         </h2>
         <p className="mt-1.5 text-pretty text-xs leading-5 text-zinc-600 sm:text-sm">
-          hackOS keeps a first-party cookie and a few local settings so your theme, layout, and
-          session preferences do not reset every time you blink.
+          hackOS keeps a first-party session cookie and a few local settings so your theme, layout, and
+          session preferences do not reset every time you blink. Groundbreaking, we know.
         </p>
         <p className="mt-1.5 text-pretty text-xs leading-5 text-zinc-600 sm:text-sm">
           No ad trackers. No selling your traffic. No trading your information like office supplies.
+          <br />
           Ursula von der Leyen may breathe easier now.
         </p>
       </div>
