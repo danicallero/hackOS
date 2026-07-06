@@ -442,7 +442,6 @@ function CreateChallengeModal({
                     }
                     addLabel="Add reveal time"
                     inputLabel="Reveal date and time"
-                    description="Optional. The challenge still starts hidden; this saves the reveal time for later publishing."
                   />
                 </FormControl>
                 <FormMessage />

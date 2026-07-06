@@ -558,9 +558,6 @@ function EditCard({
                         <SelectItem value="visible">Visible</SelectItem>
                       </SelectContent>
                     </Select>
-                    <FormDescription>
-                      Only visible enterprises appear in the public sponsor reveal (H45).
-                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -581,10 +578,6 @@ function EditCard({
                         inputLabel="Reveal date and time"
                       />
                     </FormControl>
-                    <FormDescription>
-                      Pick a future date and time to schedule the reveal. Leave it empty to go
-                      public as soon as the enterprise is visible.
-                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
