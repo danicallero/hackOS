@@ -10,6 +10,7 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 import { type Column, DataTable } from "@/components/common/data-table";
+import { DurationInput } from "@/components/common/duration-input";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
@@ -420,10 +421,11 @@ function CreateChallengeModal({
             name="maxPresentationSeconds"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Max presentation seconds</FormLabel>
+                <FormLabel>Max presentation time</FormLabel>
                 <FormControl>
-                  <Input inputMode="numeric" placeholder="Optional" {...field} />
+                  <DurationInput value={field.value} onChange={field.onChange} />
                 </FormControl>
+                <FormDescription>Optional. Enter the limit as minutes and seconds.</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
