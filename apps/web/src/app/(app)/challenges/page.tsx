@@ -13,6 +13,7 @@ import { type Column, DataTable } from "@/components/common/data-table";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
+import { ScheduledDateTimeField } from "@/components/common/scheduled-datetime-field";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { ApiError, api } from "@/lib/api";
+import { fromDatetimeLocal } from "@/lib/datetime";
 import { useSessionContext } from "@/lib/session";
 import type { EnterpriseSummary } from "@/lib/types";
 import {
@@ -52,6 +54,7 @@ const optionalPositiveInt = z
 const createSchema = z.object({
   enterpriseId: z.string().min(1, "Required"),
   maxPresentationSeconds: optionalPositiveInt,
+  availableFrom: z.string(),
 });
 type CreateValues = z.infer<typeof createSchema>;
 
@@ -275,6 +278,7 @@ function CreateChallengeModal({
     defaultValues: {
       enterpriseId: "",
       maxPresentationSeconds: "",
+      availableFrom: "",
     },
   });
   const { reset } = form;
@@ -318,6 +322,7 @@ function CreateChallengeModal({
         maxPresentationSeconds: values.maxPresentationSeconds
           ? Number(values.maxPresentationSeconds)
           : null,
+        availableFrom: fromDatetimeLocal(values.availableFrom),
       });
       toast.success("Challenge created.");
       await onCreated(created);
@@ -398,6 +403,27 @@ function CreateChallengeModal({
                 <FormLabel>Max presentation seconds</FormLabel>
                 <FormControl>
                   <Input inputMode="numeric" placeholder="Optional" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="availableFrom"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Reveal from</FormLabel>
+                <FormControl>
+                  <ScheduledDateTimeField
+                    value={field.value}
+                    onChange={(value) =>
+                      form.setValue("availableFrom", value, { shouldDirty: true })
+                    }
+                    addLabel="Add reveal time"
+                    inputLabel="Reveal date and time"
+                    description="Optional. The challenge still starts hidden; this saves the reveal time for later publishing."
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>

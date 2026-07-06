@@ -15,6 +15,7 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 import { EmptyState } from "@/components/common/empty-state";
+import { ScheduledDateTimeField } from "@/components/common/scheduled-datetime-field";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { SubmitButton } from "@/components/common/submit-button";
@@ -39,16 +40,10 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
+import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { API_URL } from "@/lib/env";
 import { useCan } from "@/lib/session";
-import {
-  type Enterprise,
-  fromDatetimeLocal,
-  initials,
-  LOGO_ACCEPT,
-  LOGO_CONTENT_TYPES,
-  toDatetimeLocal,
-} from "../shared";
+import { type Enterprise, initials, LOGO_ACCEPT, LOGO_CONTENT_TYPES } from "../shared";
 
 const optionalUrl = z.string().url("Enter a valid URL").or(z.literal(""));
 const optionalPositiveInt = z
@@ -577,21 +572,14 @@ function EditCard({
                   <FormItem>
                     <FormLabel>Reveal from</FormLabel>
                     <FormControl>
-                      <div className="flex items-center gap-2">
-                        <Input type="datetime-local" className="flex-1" {...field} />
-                        {field.value && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() =>
-                              form.setValue("availableFrom", "", { shouldDirty: true })
-                            }
-                          >
-                            Clear
-                          </Button>
-                        )}
-                      </div>
+                      <ScheduledDateTimeField
+                        value={field.value}
+                        onChange={(value) =>
+                          form.setValue("availableFrom", value, { shouldDirty: true })
+                        }
+                        addLabel="Add reveal time"
+                        inputLabel="Reveal date and time"
+                      />
                     </FormControl>
                     <FormDescription>
                       Pick a future date and time to schedule the reveal. Leave it empty to go

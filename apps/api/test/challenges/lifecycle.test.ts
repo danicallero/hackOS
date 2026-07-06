@@ -64,6 +64,7 @@ describe("challenge lifecycle (H43-H45)", () => {
     const server = await getApp();
     const admin = await createUserWithCapabilities([CAPABILITIES.SPONSORS_MANAGE]);
     const enterpriseId = await createEnterprise("Acme");
+    const revealAt = new Date(Date.now() + 3600_000).toISOString();
 
     const created = await server.inject({
       method: "POST",
@@ -74,10 +75,12 @@ describe("challenge lifecycle (H43-H45)", () => {
         title: "Acme AI Challenge",
         description: "Build something useful",
         prizes: [{ name: "1000 EUR", link: "https://acme.test/prize" }],
+        availableFrom: revealAt,
       },
     });
     expect(created.statusCode).toBe(201);
     expect(created.json().visibility).toBe("hidden");
+    expect(created.json().available_from).toBe(revealAt);
 
     const publicBefore = await server.inject({ method: "GET", url: "/api/public/challenges" });
     expect(publicBefore.json().items).toHaveLength(0);
@@ -157,6 +160,47 @@ describe("challenge lifecycle (H43-H45)", () => {
     });
     expect(edit.statusCode).toBe(200);
     expect(edit.json().description).toBe("Sponsor-owned edit");
+
+    const scheduleEdit = await server.inject({
+      method: "PATCH",
+      url: `/api/challenges/${challengeId}`,
+      headers: asUser(owner),
+      payload: { availableFrom: new Date(Date.now() + 3600_000).toISOString() },
+    });
+    expect(scheduleEdit.statusCode).toBe(403);
+  });
+
+  it("persists and clears challenge reveal time through the main update route", async () => {
+    const server = await getApp();
+    const admin = await createUserWithCapabilities([CAPABILITIES.SPONSORS_MANAGE]);
+    const challengeId = await createOwnedChallenge(await createUser());
+    const revealAt = new Date(Date.now() + 3600_000).toISOString();
+
+    const scheduled = await server.inject({
+      method: "PATCH",
+      url: `/api/challenges/${challengeId}`,
+      headers: asUser(admin),
+      payload: { availableFrom: revealAt },
+    });
+    expect(scheduled.statusCode).toBe(200);
+    expect(scheduled.json().available_from).toBe(revealAt);
+
+    const fetched = await server.inject({
+      method: "GET",
+      url: `/api/challenges/${challengeId}`,
+      headers: asUser(admin),
+    });
+    expect(fetched.statusCode).toBe(200);
+    expect(fetched.json().available_from).toBe(revealAt);
+
+    const cleared = await server.inject({
+      method: "PATCH",
+      url: `/api/challenges/${challengeId}`,
+      headers: asUser(admin),
+      payload: { availableFrom: null },
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json().available_from).toBeNull();
   });
 
   it("freezes visible general fields for sponsors, while admins can still edit", async () => {

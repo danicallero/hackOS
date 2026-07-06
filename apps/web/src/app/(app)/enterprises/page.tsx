@@ -17,6 +17,7 @@ import { type Column, DataTable } from "@/components/common/data-table";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
+import { ScheduledDateTimeField } from "@/components/common/scheduled-datetime-field";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -40,6 +41,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
+import { fromDatetimeLocal } from "@/lib/datetime";
 import { useCan, useMe } from "@/lib/session";
 import { type Enterprise, initials, isScheduled, visibilityTone } from "./shared";
 
@@ -349,7 +351,7 @@ function CreateEnterpriseModal({
         tierId: values.tierId ? Number(values.tierId) : null,
         displayPriority: values.displayPriority ? Number(values.displayPriority) : null,
         visibility: values.visibility,
-        availableFrom: values.availableFrom ? new Date(values.availableFrom).toISOString() : null,
+        availableFrom: fromDatetimeLocal(values.availableFrom),
       });
       toast.success("Enterprise created.");
       await onCreated(created);
@@ -491,19 +493,14 @@ function CreateEnterpriseModal({
               <FormItem>
                 <FormLabel>Reveal from</FormLabel>
                 <FormControl>
-                  <div className="flex items-center gap-2">
-                    <Input type="datetime-local" className="flex-1" {...field} />
-                    {field.value && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => form.setValue("availableFrom", "", { shouldDirty: true })}
-                      >
-                        Clear
-                      </Button>
-                    )}
-                  </div>
+                  <ScheduledDateTimeField
+                    value={field.value}
+                    onChange={(value) =>
+                      form.setValue("availableFrom", value, { shouldDirty: true })
+                    }
+                    addLabel="Add reveal time"
+                    inputLabel="Reveal date and time"
+                  />
                 </FormControl>
                 <FormDescription>
                   Pick a future date and time to schedule the reveal. Leave it empty to go public as

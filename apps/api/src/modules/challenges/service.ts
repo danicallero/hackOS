@@ -28,6 +28,7 @@ function snapshotOf(row: Record<string, unknown>) {
     prizes: row.prizes,
     judging_panel_criteria: row.judging_panel_criteria,
     max_presentation_seconds: row.max_presentation_seconds,
+    available_from: row.available_from,
   };
 }
 
@@ -130,8 +131,8 @@ export async function createChallenge(input: CreateChallengeBody, actorId: numbe
     const { rows } = await client.query(
       `INSERT INTO challenges
          (author, title, title_i18n, description, description_i18n, criteria, criteria_i18n,
-          prizes, judging_panel_criteria, max_presentation_seconds, visibility)
-       VALUES ($1, $2, $3::jsonb, $4, $5::jsonb, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10, 'hidden')
+          prizes, judging_panel_criteria, max_presentation_seconds, visibility, available_from)
+       VALUES ($1, $2, $3::jsonb, $4, $5::jsonb, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10, 'hidden', $11)
        RETURNING ${CREATE_RETURNING_COLUMNS}`,
       [
         authorId,
@@ -146,6 +147,7 @@ export async function createChallenge(input: CreateChallengeBody, actorId: numbe
           ? null
           : JSON.stringify(input.judgingPanelCriteria),
         input.maxPresentationSeconds ?? null,
+        input.availableFrom ?? null,
       ],
     );
     const created = rows[0];
@@ -334,6 +336,11 @@ export async function updateChallenge(
         visibility: before.visibility,
       });
     }
+    if (access === "owner" && patch.availableFrom !== undefined) {
+      throw new ForbiddenError("Challenge reveal scheduling can only be edited by admins", {
+        challengeId,
+      });
+    }
 
     const sets: string[] = [];
     const values: unknown[] = [];
@@ -381,6 +388,7 @@ export async function updateChallenge(
       put("judging_panel_criteria", JSON.stringify(patch.judgingPanelCriteria), "::jsonb");
     if (patch.maxPresentationSeconds !== undefined)
       put("max_presentation_seconds", patch.maxPresentationSeconds);
+    if (patch.availableFrom !== undefined) put("available_from", patch.availableFrom ?? null);
 
     values.push(challengeId);
     const { rows: updatedRows } = await client.query(

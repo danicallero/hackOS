@@ -26,6 +26,7 @@ export const updateChallengeBody = z
     prizes: z.array(prizeSchema).nullable().optional(),
     judgingPanelCriteria: questionnaireSchema.optional(),
     maxPresentationSeconds: z.number().int().positive().nullable().optional(),
+    availableFrom: z.coerce.date().nullish(),
   })
   .strict()
   .refine((b) => Object.keys(b).length > 0, { message: "no fields to update" });
@@ -47,6 +48,7 @@ export const CHALLENGE_GENERAL_FIELDS = [
   "criteriaI18n",
   "prizes",
   "maxPresentationSeconds",
+  "availableFrom",
 ] as const;
 
 /**
@@ -66,6 +68,7 @@ export const createChallengeBody = z
     prizes: z.array(prizeSchema).nullable().optional(),
     judgingPanelCriteria: questionnaireSchema.optional(),
     maxPresentationSeconds: z.number().int().positive().nullable().optional(),
+    availableFrom: z.coerce.date().nullish(),
   })
   .strict();
 

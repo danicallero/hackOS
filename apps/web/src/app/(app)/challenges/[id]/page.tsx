@@ -11,6 +11,7 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 import { EmptyState } from "@/components/common/empty-state";
+import { ScheduledDateTimeField } from "@/components/common/scheduled-datetime-field";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -27,6 +28,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { ApiError, api } from "@/lib/api";
+import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { useSessionContext } from "@/lib/session";
 import {
   JudgingPanelBuilder,
@@ -38,11 +40,9 @@ import {
 import {
   asI18n,
   type Challenge,
-  fromDatetimeLocal,
   i18nWithEnglishFallback,
   isScheduled,
   type Prize,
-  toDatetimeLocal,
   visibilityTone,
 } from "../shared";
 
@@ -52,6 +52,7 @@ const optionalPositiveInt = z
 
 const editSchema = z.object({
   maxPresentationSeconds: optionalPositiveInt,
+  availableFrom: z.string(),
 });
 type EditValues = z.infer<typeof editSchema>;
 
@@ -64,6 +65,7 @@ function toFormValues(challenge: Challenge): EditValues {
   return {
     maxPresentationSeconds:
       challenge.max_presentation_seconds != null ? String(challenge.max_presentation_seconds) : "",
+    availableFrom: toDatetimeLocal(challenge.available_from),
   };
 }
 
@@ -136,7 +138,7 @@ export default function ChallengeDetailPage() {
       </div>
 
       {canAdmin && <PublishCard challenge={challenge} onChanged={load} />}
-      <EditCard challenge={challenge} onSaved={load} />
+      <EditCard challenge={challenge} canAdmin={canAdmin} onSaved={load} />
     </div>
   );
 }
@@ -247,19 +249,14 @@ function PublishCard({
               <FormItem>
                 <FormLabel>Reveal from</FormLabel>
                 <FormControl>
-                  <div className="flex items-center gap-2">
-                    <Input type="datetime-local" className="flex-1" {...field} />
-                    {field.value && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => form.setValue("availableFrom", "", { shouldDirty: true })}
-                      >
-                        Clear
-                      </Button>
-                    )}
-                  </div>
+                  <ScheduledDateTimeField
+                    value={field.value}
+                    onChange={(value) =>
+                      form.setValue("availableFrom", value, { shouldDirty: true })
+                    }
+                    addLabel="Add reveal time"
+                    inputLabel="Reveal date and time"
+                  />
                 </FormControl>
                 <FormDescription>
                   Pick a future date and time to schedule the reveal. Leave it empty to go public as
@@ -275,7 +272,15 @@ function PublishCard({
   );
 }
 
-function EditCard({ challenge, onSaved }: { challenge: Challenge; onSaved: () => Promise<void> }) {
+function EditCard({
+  challenge,
+  canAdmin,
+  onSaved,
+}: {
+  challenge: Challenge;
+  canAdmin: boolean;
+  onSaved: () => Promise<void>;
+}) {
   const [prizes, setPrizes] = useState<Prize[]>(asPrizes(challenge.prizes));
   const [questions, setQuestions] = useState<Question[]>(
     asQuestions(challenge.judging_panel_criteria),
@@ -326,6 +331,7 @@ function EditCard({ challenge, onSaved }: { challenge: Challenge; onSaved: () =>
         maxPresentationSeconds: values.maxPresentationSeconds
           ? Number(values.maxPresentationSeconds)
           : null,
+        availableFrom: canAdmin ? fromDatetimeLocal(values.availableFrom) : undefined,
       });
       await onSaved();
       toast.success("Challenge updated.");
@@ -379,6 +385,29 @@ function EditCard({ challenge, onSaved }: { challenge: Challenge; onSaved: () =>
               </FormItem>
             )}
           />
+          {canAdmin ? (
+            <FormField
+              control={form.control}
+              name="availableFrom"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Reveal from</FormLabel>
+                  <FormControl>
+                    <ScheduledDateTimeField
+                      value={field.value}
+                      onChange={(value) =>
+                        form.setValue("availableFrom", value, { shouldDirty: true })
+                      }
+                      addLabel="Add reveal time"
+                      inputLabel="Reveal date and time"
+                      description="No date/time set means the challenge becomes visible immediately once published."
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          ) : null}
         </SectionCard>
       </form>
     </Form>
