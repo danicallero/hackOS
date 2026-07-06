@@ -4,11 +4,11 @@ import { pool } from "../../src/db/pool.js";
 import type { MailConfig } from "../../src/modules/notifications/channels/email.js";
 import { sendEmail } from "../../src/modules/notifications/channels/email.js";
 import { drainOutboxOnce } from "../../src/modules/notifications/dispatcher.js";
+import { notify } from "../../src/modules/notifications/service.js";
 import {
   emailLayoutSettingsFromConfig,
   renderEmailTemplate,
 } from "../../src/modules/notifications/templates.js";
-import { notify } from "../../src/modules/notifications/service.js";
 import { createUser } from "../helpers.js";
 import { clearMailpit, getMailpitMessage, listMailpitMessages } from "./mailpit-helpers.js";
 import {

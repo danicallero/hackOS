@@ -20,7 +20,10 @@ const downloadQuerySchema = z.object({ key: z.string().min(1) });
  *  stored key's last segment is a clean, human name (not timestamped gibberish). */
 function safeFilename(name: string): string {
   const base = name.split(/[\\/]/).pop() ?? name;
-  return base.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^[-.]+/, "").slice(0, 120);
+  return base
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/^[-.]+/, "")
+    .slice(0, 120);
 }
 
 /**

@@ -51,10 +51,7 @@ describe("foundation", () => {
     expect(spec.components.securitySchemes.sessionToken.type).toBe("apiKey");
     expect(spec.components.securitySchemes.bearerToken.type).toBe("http");
     expect(spec.paths["/api/me"].get.tags).toEqual(["identity"]);
-    expect(spec.paths["/api/me"].get.security).toEqual([
-      { sessionToken: [] },
-      { bearerToken: [] },
-    ]);
+    expect(spec.paths["/api/me"].get.security).toEqual([{ sessionToken: [] }, { bearerToken: [] }]);
     expect(spec.paths["/api/auth/sign-up/email"].post.tags).toEqual(["auth"]);
     expect(spec.paths["/api/auth/sign-in/email"].post.tags).toEqual(["auth"]);
     expect(spec.paths["/api/auth/get-session"].get.tags).toEqual(["auth"]);
