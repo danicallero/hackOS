@@ -219,7 +219,7 @@ export default function ProfileSettingsPage() {
               name="foodIntolerances"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Food intolerances</FormLabel>
+                  <FormLabel>Food intolerances (optional)</FormLabel>
                   <FormControl>
                     <MultiSelect
                       options={intoleranceOptions}
