@@ -21,13 +21,18 @@ import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ApiError, api } from "@/lib/api";
 import { fromDatetimeLocal } from "@/lib/datetime";
 import { useSessionContext } from "@/lib/session";
@@ -358,100 +363,108 @@ function CreateChallengeModal({
       onOpenChange={onOpenChange}
       icon={TrophyIcon}
       title="New challenge"
-      description="Create a hidden draft template associated with an enterprise."
       size="lg"
+      className="max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto]"
       footer={
         <SubmitButton form="create-challenge-form" pending={form.formState.isSubmitting}>
           Create challenge
         </SubmitButton>
       }
     >
-      <Form {...form}>
-        <form
-          id="create-challenge-form"
-          onSubmit={form.handleSubmit(onSubmit)}
-          className="space-y-5"
-        >
-          <FormField
-            control={form.control}
-            name="enterpriseId"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Enterprise ID</FormLabel>
-                <FormControl>
-                  <Input list="challenge-enterprises" inputMode="numeric" {...field} />
-                </FormControl>
-                <datalist id="challenge-enterprises">
-                  {enterprises.map((e) => (
-                    <option key={e.id} value={e.id}>
-                      {e.name}
-                    </option>
-                  ))}
-                </datalist>
-                <FormDescription>Choose the enterprise that owns this challenge.</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <MultilingualInput label="Title" value={titleI18n} onChange={setTitleI18n} />
-          <MultilingualInput
-            label="Description"
-            optional
-            textarea
-            value={descriptionI18n}
-            onChange={setDescriptionI18n}
-          />
-          <MultilingualInput
-            label="Public criteria"
-            optional
-            textarea
-            value={criteriaI18n}
-            onChange={setCriteriaI18n}
-          />
-          <section className="space-y-3 rounded-lg border p-4">
-            <h3 className="text-sm font-medium">Prizes</h3>
-            <PrizeBuilder value={prizes} onChange={setPrizes} />
-          </section>
-          <section className="space-y-3 rounded-lg border p-4">
-            <h3 className="text-sm font-medium">Judging panel</h3>
-            <JudgingPanelBuilder value={questions} onChange={setQuestions} />
-          </section>
-          <FormField
-            control={form.control}
-            name="maxPresentationSeconds"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Max presentation time</FormLabel>
-                <FormControl>
-                  <DurationInput value={field.value} onChange={field.onChange} />
-                </FormControl>
-                <FormDescription>Optional. Enter the limit as minutes and seconds.</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="availableFrom"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Reveal from</FormLabel>
-                <FormControl>
-                  <ScheduledDateTimeField
+      <div className="min-h-0 overflow-y-auto pr-1">
+        <Form {...form}>
+          <form
+            id="create-challenge-form"
+            onSubmit={form.handleSubmit(onSubmit)}
+            className="space-y-5"
+          >
+            <FormField
+              control={form.control}
+              name="enterpriseId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Enterprise</FormLabel>
+                  <Select
                     value={field.value}
-                    onChange={(value) =>
-                      form.setValue("availableFrom", value, { shouldDirty: true })
-                    }
-                    addLabel="Add reveal time"
-                    inputLabel="Reveal date and time"
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </form>
-      </Form>
+                    onValueChange={field.onChange}
+                    disabled={enterprises.length === 0}
+                  >
+                    <FormControl>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select an enterprise" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {enterprises.map((enterprise) => (
+                        <SelectItem key={enterprise.id} value={String(enterprise.id)}>
+                          {enterprise.name} (#{enterprise.id})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <MultilingualInput label="Title" value={titleI18n} onChange={setTitleI18n} />
+            <MultilingualInput
+              label="Description"
+              optional
+              textarea
+              value={descriptionI18n}
+              onChange={setDescriptionI18n}
+            />
+            <MultilingualInput
+              label="Public criteria"
+              optional
+              textarea
+              value={criteriaI18n}
+              onChange={setCriteriaI18n}
+            />
+            <section className="space-y-3 rounded-lg border p-4">
+              <h3 className="text-sm font-medium">Prizes</h3>
+              <PrizeBuilder value={prizes} onChange={setPrizes} />
+            </section>
+            <section className="space-y-3 rounded-lg border p-4">
+              <h3 className="text-sm font-medium">Judging panel</h3>
+              <JudgingPanelBuilder value={questions} onChange={setQuestions} />
+            </section>
+            <FormField
+              control={form.control}
+              name="maxPresentationSeconds"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Max presentation time</FormLabel>
+                  <FormControl>
+                    <DurationInput value={field.value} onChange={field.onChange} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="availableFrom"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Publish date</FormLabel>
+                  <FormControl>
+                    <ScheduledDateTimeField
+                      value={field.value}
+                      onChange={(value) =>
+                        form.setValue("availableFrom", value, { shouldDirty: true })
+                      }
+                      addLabel="Add publish date"
+                      inputLabel="Publish date and time"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </form>
+        </Form>
+      </div>
     </Modal>
   );
 }
