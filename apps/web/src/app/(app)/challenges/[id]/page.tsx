@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { DevpostTagsField } from "@/components/common/devpost-tags-field";
 import { DurationInput } from "@/components/common/duration-input";
 import { EmptyState } from "@/components/common/empty-state";
 import { ScheduledDateTimeField } from "@/components/common/scheduled-datetime-field";
@@ -25,9 +26,11 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { ApiError, api } from "@/lib/api";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
+import { listDevpostPrizes } from "@/lib/projects";
 import { useSessionContext } from "@/lib/session";
 import {
   JudgingPanelBuilder,
@@ -52,6 +55,7 @@ const optionalPositiveInt = z
 
 const editSchema = z.object({
   maxPresentationSeconds: optionalPositiveInt,
+  maxInWaitingArea: optionalPositiveInt,
   visibility: z.enum(["visible", "hidden"]),
   availableFrom: z.string(),
 });
@@ -61,6 +65,8 @@ function toFormValues(challenge: Challenge): EditValues {
   return {
     maxPresentationSeconds:
       challenge.max_presentation_seconds != null ? String(challenge.max_presentation_seconds) : "",
+    maxInWaitingArea:
+      challenge.max_in_waiting_area != null ? String(challenge.max_in_waiting_area) : "",
     visibility: challenge.visibility,
     availableFrom: toDatetimeLocal(challenge.available_from),
   };
@@ -74,12 +80,22 @@ function asQuestions(value: Question[] | null): Question[] {
   return Array.isArray(value) ? value : [];
 }
 
+type DevpostPrize = {
+  name: string;
+  lastBatch: string | null;
+  repoCount: number;
+  mappedChallengeId: number | null;
+  mappedChallengeTitle: string | null;
+};
+
 export default function ChallengeDetailPage() {
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
-  const { canAny } = useSessionContext();
+  const { can, canAny } = useSessionContext();
   const canAdmin = canAny(CAPABILITIES.SPONSORS_MANAGE, CAPABILITIES.QUEUE_ADMIN);
+  const canMapPrizes = can(CAPABILITIES.QUEUE_ADMIN);
   const [challenge, setChallenge] = useState<Challenge | null>(null);
+  const [devpostPrizes, setDevpostPrizes] = useState<DevpostPrize[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -88,12 +104,18 @@ export default function ChallengeDetailPage() {
     try {
       const data = await api.get<Challenge>(`/api/challenges/${id}`);
       setChallenge(data);
+      if (canMapPrizes) {
+        const prizes = await listDevpostPrizes();
+        setDevpostPrizes(prizes.prizes);
+      } else {
+        setDevpostPrizes([]);
+      }
       setStatus("ready");
     } catch (err) {
       setErrorMsg(err instanceof ApiError ? err.message : "Could not load this challenge.");
       setStatus("error");
     }
-  }, [id]);
+  }, [canMapPrizes, id]);
 
   useEffect(() => {
     if (Number.isFinite(id)) void load();
@@ -134,7 +156,13 @@ export default function ChallengeDetailPage() {
         )}
       </div>
 
-      <EditCard challenge={challenge} canAdmin={canAdmin} onSaved={load} />
+      <EditCard
+        challenge={challenge}
+        canAdmin={canAdmin}
+        canMapPrizes={canMapPrizes}
+        devpostPrizes={devpostPrizes}
+        onSaved={load}
+      />
     </div>
   );
 }
@@ -154,10 +182,14 @@ function BackLink() {
 function EditCard({
   challenge,
   canAdmin,
+  canMapPrizes,
+  devpostPrizes,
   onSaved,
 }: {
   challenge: Challenge;
   canAdmin: boolean;
+  canMapPrizes: boolean;
+  devpostPrizes: DevpostPrize[];
   onSaved: () => Promise<void>;
 }) {
   const [prizes, setPrizes] = useState<Prize[]>(asPrizes(challenge.prizes));
@@ -175,6 +207,9 @@ function EditCard({
   );
   const [criteriaI18n, setCriteriaI18n] = useState<I18nText>(
     asI18n(challenge.criteria_i18n ?? challenge.criteria, textForDisplay(challenge.criteria)),
+  );
+  const [devpostTags, setDevpostTags] = useState<string[]>(
+    Array.isArray(challenge.devpost_tags) ? challenge.devpost_tags : [],
   );
   const form = useForm<EditValues>({
     resolver: zodResolver(editSchema),
@@ -196,6 +231,7 @@ function EditCard({
     setCriteriaI18n(
       asI18n(challenge.criteria_i18n ?? challenge.criteria, textForDisplay(challenge.criteria)),
     );
+    setDevpostTags(Array.isArray(challenge.devpost_tags) ? challenge.devpost_tags : []);
   }, [challenge, reset]);
 
   async function onSubmit(values: EditValues) {
@@ -219,12 +255,14 @@ function EditCard({
               criteria: criteriaEn || null,
               criteriaI18n: criteriaEn ? i18nWithEnglishFallback(criteriaI18n) : null,
               prizes: normalizePrizes(prizes),
+              ...(canMapPrizes ? { devpostTags } : {}),
             }
           : {}),
         judgingPanelCriteria: normalizedQuestions,
         maxPresentationSeconds: values.maxPresentationSeconds
           ? Number(values.maxPresentationSeconds)
           : null,
+        maxInWaitingArea: values.maxInWaitingArea ? Number(values.maxInWaitingArea) : null,
         ...(canAdmin
           ? {
               visibility: values.visibility,
@@ -270,6 +308,18 @@ function EditCard({
               <h3 className="text-sm font-medium">Prizes</h3>
               <PrizeBuilder value={prizes} onChange={setPrizes} />
             </section>
+            {canMapPrizes && (
+              <DevpostTagsField
+                value={devpostTags}
+                onChange={setDevpostTags}
+                options={devpostPrizes.map((prize) => ({
+                  value: prize.name,
+                  label: prize.name,
+                  description: `${prize.repoCount} project${prize.repoCount === 1 ? "" : "s"}`,
+                }))}
+                emptyText="No imported prizes yet."
+              />
+            )}
           </fieldset>
           <section className="space-y-3 rounded-lg border p-4">
             <h3 className="text-sm font-medium">Judging panel</h3>
@@ -283,6 +333,25 @@ function EditCard({
                 <FormLabel>Max presentation time</FormLabel>
                 <FormControl>
                   <DurationInput value={field.value} onChange={field.onChange} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="maxInWaitingArea"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Waiting room capacity</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={field.value}
+                    onChange={(e) => field.onChange(e.target.value)}
+                    disabled={!canAdmin}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -329,6 +398,40 @@ function EditCard({
             )}
           />
         </SectionCard>
+        {canMapPrizes && (
+          <SectionCard
+            title="Imported DevPost prizes"
+            description="Reference data from the latest import batch. Selected tags on this challenge decide who enters the queue."
+            className="mt-6"
+          >
+            <div className="mt-4 space-y-2">
+              {devpostPrizes.length === 0 ? (
+                <p className="text-muted-foreground text-sm">No imported prizes yet.</p>
+              ) : (
+                devpostPrizes.map((prize) => (
+                  <div
+                    key={prize.name}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-medium">{prize.name}</p>
+                      <p className="text-muted-foreground text-xs">
+                        {prize.repoCount} project{prize.repoCount === 1 ? "" : "s"}
+                      </p>
+                    </div>
+                    {prize.mappedChallengeId ? (
+                      <StatusBadge tone="success">
+                        Mapped to {prize.mappedChallengeTitle}
+                      </StatusBadge>
+                    ) : (
+                      <StatusBadge tone="neutral">Unmapped</StatusBadge>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </SectionCard>
+        )}
       </form>
     </Form>
   );

@@ -259,4 +259,39 @@ describe("enqueue a challenge (H29 admin)", () => {
     );
     expect(rows).toHaveLength(1);
   });
+
+  it("generates queues for all challenges using their devpost tags", async () => {
+    const ch1 = await createChallenge({ devpostTags: ["Best AI Hack"] });
+    const ch2 = await createChallenge({ devpostTags: ["Most Caffeinated"] });
+    const { repoId: r1 } = await createRepoWithTeam();
+    const { repoId: r2 } = await createRepoWithTeam();
+    const { repoId: r3 } = await createRepoWithTeam();
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`INSERT INTO repo_devpost_prizes (repo_id, prize) VALUES ($1, $2), ($3, $4)`, [
+      r1,
+      "Best AI Hack",
+      r2,
+      "Most Caffeinated",
+    ]);
+    await pool.query(`INSERT INTO repo_devpost_prizes (repo_id, prize) VALUES ($1, $2)`, [
+      r3,
+      "Unmatched Prize",
+    ]);
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/queue/challenges/enqueue-all",
+      headers: asUser(adminId),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().inserted).toBe(2);
+
+    const rows = await pool.query(
+      `SELECT challenge_id, repo_id FROM queue_entries ORDER BY challenge_id, repo_id`,
+    );
+    expect(rows.rows).toEqual([
+      { challenge_id: ch1, repo_id: r1 },
+      { challenge_id: ch2, repo_id: r2 },
+    ]);
+  });
 });

@@ -1,13 +1,12 @@
 "use client";
 
-// Queue admin surface for rooms and settings (H46, queue control follow-up).
+// Queue admin surface for rooms and assignments (H46).
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { ArrowLeftIcon, Building2Icon, CalendarClockIcon, LockIcon, PlusIcon } from "lucide-react";
+import { ArrowLeftIcon, Building2Icon, LockIcon, PlusIcon } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { DateTimeInput } from "@/components/common/datetime-input";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
@@ -25,25 +24,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ApiError, api } from "@/lib/api";
-import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import {
   assignRoomChallenge,
   assignRoomJudge,
   createRoom,
   deleteRoom,
-  getQueueSettings,
-  getRoom,
   getRoomAssignments,
   listRooms,
-  type QueueSettings,
   type Room,
   type RoomAssignments,
-  type RoomQueueState,
   removeRoomChallenge,
   removeRoomJudge,
-  updateQueueSettings,
   updateRoom,
-  updateRoomState,
 } from "@/lib/queue";
 import { useSessionContext } from "@/lib/session";
 import type { UserList } from "@/lib/types";
@@ -53,52 +45,29 @@ type RoomEditor = {
   name: string;
   slug: string;
   location: string;
-  status: "active" | "paused";
 };
 
 function emptyRoomEditor(): RoomEditor {
-  return { name: "", slug: "", location: "", status: "active" };
-}
-
-function emptySettings(): QueueSettings {
-  return {
-    id: 1,
-    handoff_buffer_minutes: 0,
-    schedule_start_at: null,
-    schedule_end_at: null,
-    pre_call_notification_eta_minutes: 3,
-    requeue_prompt_default: "ask",
-  };
+  return { name: "", slug: "", location: "" };
 }
 
 export default function QueueRoomsPage() {
   const { can } = useSessionContext();
   const canAdmin = can(CAPABILITIES.QUEUE_ADMIN);
   const [rooms, setRooms] = useState<Room[]>([]);
-  const [roomState, setRoomState] = useState<Record<number, RoomQueueState | null>>({});
   const [assignments, setAssignments] = useState<Record<number, RoomAssignments | null>>({});
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [users, setUsers] = useState<UserList["users"]>([]);
-  const [settings, setSettings] = useState<QueueSettings>(emptySettings());
   const [loading, setLoading] = useState(true);
   const [selectedRoomId, setSelectedRoomId] = useState<number | null>(null);
   const [createDraft, setCreateDraft] = useState<RoomEditor>(emptyRoomEditor());
   const [roomDraft, setRoomDraft] = useState<RoomEditor>(emptyRoomEditor());
-  const [stateDraft, setStateDraft] = useState<{
-    maxInWaitingArea: number;
-    desiredMinutesPerTeam: number;
-  }>({
-    maxInWaitingArea: 0,
-    desiredMinutesPerTeam: 0,
-  });
   const [saving, setSaving] = useState<string | null>(null);
 
   const selectedRoom = useMemo(
     () => rooms.find((room) => room.id === selectedRoomId) ?? null,
     [rooms, selectedRoomId],
   );
-
-  const selectedRoomQueueState = selectedRoom ? (roomState[selectedRoom.id] ?? null) : null;
   const selectedRoomAssignments = selectedRoom ? (assignments[selectedRoom.id] ?? null) : null;
 
   const selectedChallengeFallback = challenges[0]?.id ?? 0;
@@ -110,23 +79,14 @@ export default function QueueRoomsPage() {
     }
     setLoading(true);
     try {
-      const [roomRows, challengeRows, userRows, queueSettings] = await Promise.all([
+      const [roomRows, challengeRows, userRows] = await Promise.all([
         listRooms(),
         api.get<{ challenges: Challenge[] }>("/api/challenges"),
         api.get<UserList>("/api/users", { query: { limit: 200 } }),
-        getQueueSettings(),
       ]);
       setRooms(roomRows);
       setChallenges(challengeRows.challenges);
       setUsers(userRows.users);
-      setSettings(queueSettings);
-      setRoomState((current) => {
-        const next = { ...current };
-        for (const room of roomRows) {
-          if (!(room.id in next)) next[room.id] = null;
-        }
-        return next;
-      });
       setCreateDraft((draft) => (draft.name ? draft : { ...emptyRoomEditor() }));
       if (!selectedRoomId && roomRows[0]) setSelectedRoomId(roomRows[0].id);
     } catch (err) {
@@ -138,11 +98,7 @@ export default function QueueRoomsPage() {
 
   const loadRoomDetails = useCallback(async (roomId: number) => {
     try {
-      const [room, roomAssignments] = await Promise.all([
-        getRoom(roomId),
-        getRoomAssignments(roomId),
-      ]);
-      setRoomState((current) => ({ ...current, [roomId]: room.queueState }));
+      const roomAssignments = await getRoomAssignments(roomId);
       setAssignments((current) => ({ ...current, [roomId]: roomAssignments }));
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Could not load room details.");
@@ -164,13 +120,8 @@ export default function QueueRoomsPage() {
       name: selectedRoom.name,
       slug: selectedRoom.slug,
       location: selectedRoom.location ?? "",
-      status: selectedRoom.status === "paused" ? "paused" : "active",
     });
-    setStateDraft({
-      maxInWaitingArea: selectedRoomQueueState?.max_in_waiting_area ?? 0,
-      desiredMinutesPerTeam: selectedRoomQueueState?.desired_minutes_per_team ?? 0,
-    });
-  }, [selectedRoom, selectedRoomQueueState]);
+  }, [selectedRoom]);
 
   if (!canAdmin) {
     return (
@@ -218,7 +169,6 @@ export default function QueueRoomsPage() {
         name: roomDraft.name.trim(),
         slug: roomDraft.slug.trim(),
         location: roomDraft.location.trim() || null,
-        status: roomDraft.status,
       });
       toast.success("Room updated.");
       await load();
@@ -229,44 +179,11 @@ export default function QueueRoomsPage() {
     }
   };
 
-  const saveState = async (body: { maxInWaitingArea?: number; desiredMinutesPerTeam?: number }) => {
-    if (!selectedRoom) return;
-    setSaving(`state-${selectedRoom.id}`);
-    try {
-      await updateRoomState(selectedRoom.id, body);
-      toast.success("Room queue state updated.");
-      await loadRoomDetails(selectedRoom.id);
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not update queue state.");
-    } finally {
-      setSaving(null);
-    }
-  };
-
-  const saveSettings = async () => {
-    setSaving("settings");
-    try {
-      await updateQueueSettings({
-        handoff_buffer_minutes: settings.handoff_buffer_minutes,
-        schedule_start_at: settings.schedule_start_at,
-        schedule_end_at: settings.schedule_end_at,
-        pre_call_notification_eta_minutes: settings.pre_call_notification_eta_minutes,
-        requeue_prompt_default: settings.requeue_prompt_default,
-      });
-      toast.success("Queue settings updated.");
-      await load();
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not update settings.");
-    } finally {
-      setSaving(null);
-    }
-  };
-
   return (
     <div className="space-y-6">
       <PageHeader
         title="Queue rooms"
-        description="Rooms, queue settings and assignment controls for the judging flow."
+        description="Rooms and assignment controls for the judging flow."
         actions={
           <Button variant="outline" asChild>
             <Link href="/queue">
@@ -284,7 +201,7 @@ export default function QueueRoomsPage() {
           icon={Building2Icon}
           bodyClassName="space-y-4"
         >
-          <div className="grid gap-3 md:grid-cols-4">
+          <div className="grid gap-3 md:grid-cols-4 xl:grid-cols-5">
             <Input
               value={createDraft.name}
               onChange={(e) => setCreateDraft((d) => ({ ...d, name: e.target.value }))}
@@ -339,101 +256,6 @@ export default function QueueRoomsPage() {
               ))}
             </div>
           )}
-        </SectionCard>
-
-        <SectionCard
-          title="Queue settings"
-          description="Global defaults for pacing and reminder windows."
-          icon={CalendarClockIcon}
-          footer={
-            <Button disabled={saving === "settings"} onClick={() => void saveSettings()}>
-              Save settings
-            </Button>
-          }
-        >
-          <div className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="handoff">Handoff buffer minutes</Label>
-                <Input
-                  id="handoff"
-                  type="number"
-                  min={0}
-                  value={settings.handoff_buffer_minutes}
-                  onChange={(e) =>
-                    setSettings((current) => ({
-                      ...current,
-                      handoff_buffer_minutes: Number(e.target.value || 0),
-                    }))
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="precall">Pre-call ETA minutes</Label>
-                <Input
-                  id="precall"
-                  type="number"
-                  min={0}
-                  value={settings.pre_call_notification_eta_minutes}
-                  onChange={(e) =>
-                    setSettings((current) => ({
-                      ...current,
-                      pre_call_notification_eta_minutes: Number(e.target.value || 0),
-                    }))
-                  }
-                />
-              </div>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="schedule-start">Schedule start</Label>
-                <DateTimeInput
-                  value={toDatetimeLocal(settings.schedule_start_at)}
-                  onChange={(value) =>
-                    setSettings((current) => ({
-                      ...current,
-                      schedule_start_at: fromDatetimeLocal(value),
-                    }))
-                  }
-                  id="schedule-start"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="schedule-end">Schedule end</Label>
-                <DateTimeInput
-                  value={toDatetimeLocal(settings.schedule_end_at)}
-                  onChange={(value) =>
-                    setSettings((current) => ({
-                      ...current,
-                      schedule_end_at: fromDatetimeLocal(value),
-                    }))
-                  }
-                  id="schedule-end"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="requeue-default">Requeue prompt default</Label>
-              <Select
-                value={settings.requeue_prompt_default}
-                onValueChange={(value) =>
-                  setSettings((current) => ({
-                    ...current,
-                    requeue_prompt_default: value as QueueSettings["requeue_prompt_default"],
-                  }))
-                }
-              >
-                <SelectTrigger id="requeue-default">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="top">top</SelectItem>
-                  <SelectItem value="bottom">bottom</SelectItem>
-                  <SelectItem value="ask">ask</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
         </SectionCard>
       </div>
 
@@ -493,38 +315,8 @@ export default function QueueRoomsPage() {
                   }
                 />
               </div>
-              <div className="space-y-2 lg:col-span-2">
-                <Label>Status</Label>
-                <Select
-                  value={roomDraft.status}
-                  onValueChange={(value) =>
-                    setRoomDraft((current) => ({
-                      ...current,
-                      status: value as RoomEditor["status"],
-                    }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="active">active</SelectItem>
-                    <SelectItem value="paused">paused</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
             <div className="grid gap-4 lg:grid-cols-2">
-              <SectionCard title="Room queue state" description="Capacity and pace defaults.">
-                <RoomStateEditor
-                  roomState={selectedRoomQueueState}
-                  draft={stateDraft}
-                  onDraftChange={setStateDraft}
-                  onSave={saveState}
-                  saving={saving === `state-${selectedRoom.id}`}
-                />
-              </SectionCard>
-
               <SectionCard title="Assignments" description="Attach challenges and judges by id.">
                 <AssignmentsEditor
                   roomId={selectedRoom.id}
@@ -572,73 +364,6 @@ export default function QueueRoomsPage() {
           </div>
         )}
       </Modal>
-    </div>
-  );
-}
-
-function RoomStateEditor({
-  roomState,
-  draft,
-  onDraftChange,
-  onSave,
-  saving,
-}: {
-  roomState: RoomQueueState | null;
-  draft: { maxInWaitingArea: number; desiredMinutesPerTeam: number };
-  onDraftChange: React.Dispatch<
-    React.SetStateAction<{ maxInWaitingArea: number; desiredMinutesPerTeam: number }>
-  >;
-  onSave: (body: { maxInWaitingArea?: number; desiredMinutesPerTeam?: number }) => void;
-  saving: boolean;
-}) {
-  return (
-    <div className="space-y-3">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="max-wait">Waiting area cap</Label>
-          <Input
-            id="max-wait"
-            type="number"
-            min={0}
-            value={draft.maxInWaitingArea}
-            onChange={(e) =>
-              onDraftChange((current) => ({
-                ...current,
-                maxInWaitingArea: Number(e.target.value || 0),
-              }))
-            }
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="team-minutes">Minutes per team</Label>
-          <Input
-            id="team-minutes"
-            type="number"
-            min={1}
-            value={draft.desiredMinutesPerTeam}
-            onChange={(e) =>
-              onDraftChange((current) => ({
-                ...current,
-                desiredMinutesPerTeam: Number(e.target.value || 0),
-              }))
-            }
-          />
-        </div>
-      </div>
-      <Button
-        disabled={saving}
-        onClick={() =>
-          onSave({
-            maxInWaitingArea: draft.maxInWaitingArea,
-            desiredMinutesPerTeam: draft.desiredMinutesPerTeam,
-          })
-        }
-      >
-        Save room state
-      </Button>
-      <p className="text-muted-foreground text-xs">
-        Current state: {roomState ? `paused=${String(roomState.is_paused)}` : "not loaded"}
-      </p>
     </div>
   );
 }

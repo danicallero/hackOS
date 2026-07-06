@@ -28,23 +28,26 @@ function snapshotOf(row: Record<string, unknown>) {
     criteria: row.criteria,
     criteria_i18n: row.criteria_i18n,
     prizes: row.prizes,
+    devpost_tags: row.devpost_tags,
     judging_panel_criteria: row.judging_panel_criteria,
     max_presentation_seconds: row.max_presentation_seconds,
+    max_in_waiting_area: row.max_in_waiting_area,
     available_from: row.available_from,
   };
 }
 
 const EDITABLE_COLUMNS = `id, title, title_i18n, description, description_i18n, criteria,
-  criteria_i18n, prizes, judging_panel_criteria, max_presentation_seconds, visibility,
-  available_from, created_at, updated_at`;
+  criteria_i18n, prizes, devpost_tags, judging_panel_criteria, max_presentation_seconds,
+  max_in_waiting_area, visibility, available_from, created_at, updated_at`;
 
 const EDITABLE_COLUMNS_FROM_CHALLENGE = `c.id, c.title, c.title_i18n, c.description,
-  c.description_i18n, c.criteria, c.criteria_i18n, c.prizes, c.judging_panel_criteria,
-  c.max_presentation_seconds, c.visibility, c.available_from, c.created_at, c.updated_at`;
+  c.description_i18n, c.criteria, c.criteria_i18n, c.prizes, c.devpost_tags, c.judging_panel_criteria,
+  c.max_presentation_seconds, c.max_in_waiting_area, c.visibility, c.available_from,
+  c.created_at, c.updated_at`;
 
 const CREATE_RETURNING_COLUMNS = `id, author, title, title_i18n, description, description_i18n,
-  criteria, criteria_i18n, prizes, judging_panel_criteria, max_presentation_seconds, visibility,
-  available_from, created_at, updated_at`;
+  criteria, criteria_i18n, prizes, devpost_tags, judging_panel_criteria, max_presentation_seconds,
+  max_in_waiting_area, visibility, available_from, created_at, updated_at`;
 
 function translationsOf(i18n: unknown, fallback: string | null): TranslationMap {
   const translations: TranslationMap = {};
@@ -88,6 +91,34 @@ export async function getChallenge(challengeId: number) {
   ]);
   if (!rows[0]) throw new NotFoundError("Challenge not found", { challengeId });
   return challengeReadModel(rows[0]);
+}
+
+export async function listDevpostPrizes() {
+  const { rows } = await pool.query(
+    `SELECT dp.name, dp.last_batch, COUNT(rdp.repo_id)::int AS repo_count,
+            MIN(c.id) FILTER (WHERE c.id IS NOT NULL) AS mapped_challenge_id,
+            MIN(c.title) FILTER (WHERE c.id IS NOT NULL) AS mapped_challenge_title
+       FROM devpost_prizes dp
+       LEFT JOIN repo_devpost_prizes rdp ON rdp.prize = dp.name
+       LEFT JOIN challenges c ON c.devpost_tags ? dp.name
+      GROUP BY dp.name, dp.last_batch
+      ORDER BY dp.name ASC`,
+  );
+  return rows.map(
+    (row: {
+      name: string;
+      last_batch: string | null;
+      repo_count: string | number;
+      mapped_challenge_id: number | null;
+      mapped_challenge_title: string | null;
+    }) => ({
+      name: row.name,
+      lastBatch: row.last_batch,
+      repoCount: Number(row.repo_count ?? 0),
+      mappedChallengeId: row.mapped_challenge_id ? Number(row.mapped_challenge_id) : null,
+      mappedChallengeTitle: row.mapped_challenge_title ?? null,
+    }),
+  );
 }
 
 /** Challenges owned by the enterprise `userId` is a sponsor of (H44/H46). */
@@ -153,8 +184,10 @@ export async function createChallenge(input: CreateChallengeBody, actorId: numbe
     const { rows } = await client.query(
       `INSERT INTO challenges
          (author, title, title_i18n, description, description_i18n, criteria, criteria_i18n,
-          prizes, judging_panel_criteria, max_presentation_seconds, visibility, available_from)
-       VALUES ($1, $2, $3::jsonb, $4, $5::jsonb, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10, 'hidden', $11)
+          prizes, devpost_tags, judging_panel_criteria, max_presentation_seconds, max_in_waiting_area,
+          visibility, available_from)
+       VALUES ($1, $2, $3::jsonb, $4, $5::jsonb, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, $11, $12,
+               'hidden', $13)
        RETURNING ${CREATE_RETURNING_COLUMNS}`,
       [
         authorId,
@@ -165,10 +198,12 @@ export async function createChallenge(input: CreateChallengeBody, actorId: numbe
         criteria,
         input.criteriaI18n ? JSON.stringify(input.criteriaI18n) : null,
         input.prizes === undefined ? null : JSON.stringify(input.prizes),
+        input.devpostTags === undefined ? JSON.stringify([]) : JSON.stringify(input.devpostTags),
         input.judgingPanelCriteria === undefined
           ? null
           : JSON.stringify(input.judgingPanelCriteria),
         input.maxPresentationSeconds ?? null,
+        input.maxInWaitingArea ?? 2,
         input.availableFrom ?? null,
       ],
     );
@@ -411,10 +446,17 @@ export async function updateChallenge(
     }
     if (patch.prizes !== undefined)
       put("prizes", patch.prizes === null ? null : JSON.stringify(patch.prizes), "::jsonb");
+    if (patch.devpostTags !== undefined)
+      put(
+        "devpost_tags",
+        patch.devpostTags === null ? "[]" : JSON.stringify(patch.devpostTags),
+        "::jsonb",
+      );
     if (patch.judgingPanelCriteria !== undefined)
       put("judging_panel_criteria", JSON.stringify(patch.judgingPanelCriteria), "::jsonb");
     if (patch.maxPresentationSeconds !== undefined)
       put("max_presentation_seconds", patch.maxPresentationSeconds);
+    if (patch.maxInWaitingArea !== undefined) put("max_in_waiting_area", patch.maxInWaitingArea);
     if (patch.visibility !== undefined) put("visibility", patch.visibility);
     if (patch.availableFrom !== undefined) put("available_from", patch.availableFrom ?? null);
 
@@ -424,6 +466,17 @@ export async function updateChallenge(
       values,
     );
     const after = updatedRows[0];
+
+    if (patch.maxInWaitingArea !== undefined) {
+      await client.query(
+        `UPDATE room_queue_state rqs
+            SET max_in_waiting_area = $2
+           FROM room_challenges rc
+          WHERE rc.room_id = rqs.room_id
+            AND rc.challenge_id = $1`,
+        [challengeId, patch.maxInWaitingArea],
+      );
+    }
 
     await client.query(
       `INSERT INTO challenge_versions (challenge_id, editor_id, snapshot)

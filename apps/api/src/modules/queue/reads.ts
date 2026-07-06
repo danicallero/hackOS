@@ -1,6 +1,26 @@
 import { pool } from "../../db/pool.js";
 import { NotFoundError } from "../../lib/errors.js";
 
+const QUEUE_ENTRY_SELECT = `qe.*, r.name AS repo_name, r.description AS repo_description,
+  r.github_url AS repo_github_url, r.devpost_url AS repo_devpost_url, r.demo_url AS repo_demo_url,
+  COALESCE(
+    (
+      SELECT jsonb_agg(
+               jsonb_build_object(
+                 'userId', u.id,
+                 'email', u.email,
+                 'name', u.name,
+                 'surname', u.surname
+               )
+               ORDER BY u.name ASC NULLS LAST, u.surname ASC NULLS LAST, u.email ASC
+             )
+        FROM submissions s
+        JOIN users u ON u.id = s.user_id
+       WHERE s.repo_id = qe.repo_id
+    ),
+    '[]'::jsonb
+  ) AS repo_members`;
+
 /** H40: counts by status for the challenge progress panel. */
 export async function challengeProgress(challengeId: number) {
   const { rows } = await pool.query(
@@ -36,7 +56,7 @@ export async function roomView(roomId: number) {
   const active =
     (
       await pool.query(
-        `SELECT qe.*, r.name AS repo_name
+        `SELECT ${QUEUE_ENTRY_SELECT}
          FROM queue_entries qe JOIN repos r ON r.id = qe.repo_id
         WHERE qe.assigned_room_id = $1 AND qe.status IN ('in_room', 'presenting')
         LIMIT 1`,
@@ -46,7 +66,7 @@ export async function roomView(roomId: number) {
 
   const called = (
     await pool.query(
-      `SELECT qe.*, r.name AS repo_name
+      `SELECT ${QUEUE_ENTRY_SELECT}
          FROM queue_entries qe JOIN repos r ON r.id = qe.repo_id
         WHERE qe.assigned_room_id = $1 AND qe.status = 'called'
         ORDER BY qe.position ASC NULLS LAST, qe.id ASC`,
@@ -61,7 +81,7 @@ export async function roomView(roomId: number) {
   const next = challengeIds.length
     ? (
         await pool.query(
-          `SELECT qe.*, r.name AS repo_name
+          `SELECT ${QUEUE_ENTRY_SELECT}
              FROM queue_entries qe JOIN repos r ON r.id = qe.repo_id
             WHERE qe.challenge_id = ANY($1) AND qe.status = 'waiting'
             ORDER BY qe.position ASC NULLS LAST, qe.id ASC

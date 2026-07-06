@@ -31,6 +31,16 @@ export interface QueueEntry {
   updated_at: string;
   /** Joined into read models. */
   repo_name?: string;
+  repo_description?: string | null;
+  repo_github_url?: string | null;
+  repo_devpost_url?: string | null;
+  repo_demo_url?: string | null;
+  repo_members?: Array<{
+    userId: number;
+    email: string;
+    name: string | null;
+    surname: string | null;
+  }>;
 }
 
 export interface Room {
@@ -173,10 +183,8 @@ export const updateRoom = (
   body: Partial<Pick<Room, "name" | "slug" | "location" | "status">>,
 ) => api.patch<Room>(`/api/queue/rooms/${roomId}`, body);
 export const deleteRoom = (roomId: number) => api.delete(`/api/queue/rooms/${roomId}`);
-export const updateRoomState = (
-  roomId: number,
-  body: { maxInWaitingArea?: number; desiredMinutesPerTeam?: number },
-) => api.patch<RoomQueueState>(`/api/queue/rooms/${roomId}/state`, body);
+export const updateRoomState = (roomId: number, body: { desiredMinutesPerTeam?: number }) =>
+  api.patch<RoomQueueState>(`/api/queue/rooms/${roomId}/state`, body);
 export const updateQueueSettings = (
   body: Partial<
     Pick<
@@ -197,6 +205,12 @@ export const assignRoomJudge = (roomId: number, challengeId: number, userId: num
   api.post(`/api/queue/rooms/${roomId}/judges`, { challengeId, userId });
 export const removeRoomJudge = (roomId: number, challengeId: number, userId: number) =>
   api.delete(`/api/queue/rooms/${roomId}/judges/${challengeId}/${userId}`);
+export const enqueueAllChallengeQueues = (idempotencyKey?: string) =>
+  api.post<{
+    challenges: Array<{ challengeId: number; inserted: number; alreadyQueued: number }>;
+    inserted: number;
+    alreadyQueued: number;
+  }>("/api/queue/challenges/enqueue-all", {}, idem(idempotencyKey));
 
 // ── entry transitions (H30-H34) ────────────────────────────────────────────
 // Critical mutations accept an Idempotency-Key; pass a fresh uuid to dedupe

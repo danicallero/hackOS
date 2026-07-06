@@ -10,6 +10,7 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 import { type Column, DataTable } from "@/components/common/data-table";
+import { DevpostTagsField } from "@/components/common/devpost-tags-field";
 import { DurationInput } from "@/components/common/duration-input";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
@@ -26,6 +27,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -35,6 +37,7 @@ import {
 } from "@/components/ui/select";
 import { ApiError, api } from "@/lib/api";
 import { fromDatetimeLocal } from "@/lib/datetime";
+import { type DevpostPrize, listDevpostPrizes } from "@/lib/projects";
 import { useSessionContext } from "@/lib/session";
 import type { EnterpriseSummary } from "@/lib/types";
 import {
@@ -62,6 +65,7 @@ const optionalPositiveInt = z
 const createSchema = z.object({
   enterpriseId: z.string().min(1, "Required"),
   maxPresentationSeconds: optionalPositiveInt,
+  maxInWaitingArea: optionalPositiveInt,
   availableFrom: z.string(),
 });
 type CreateValues = z.infer<typeof createSchema>;
@@ -294,16 +298,19 @@ function CreateChallengeModal({
   onCreated: (created: Challenge) => void | Promise<void>;
 }) {
   const [enterprises, setEnterprises] = useState<EnterpriseSummary[]>([]);
+  const [devpostPrizes, setDevpostPrizes] = useState<DevpostPrize[]>([]);
   const [prizes, setPrizes] = useState<Prize[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [titleI18n, setTitleI18n] = useState<I18nText>(EMPTY_I18N);
   const [descriptionI18n, setDescriptionI18n] = useState<I18nText>(EMPTY_I18N);
   const [criteriaI18n, setCriteriaI18n] = useState<I18nText>(EMPTY_I18N);
+  const [devpostTags, setDevpostTags] = useState<string[]>([]);
   const form = useForm<CreateValues>({
     resolver: zodResolver(createSchema),
     defaultValues: {
       enterpriseId: "",
       maxPresentationSeconds: "",
+      maxInWaitingArea: "",
       availableFrom: "",
     },
   });
@@ -312,16 +319,22 @@ function CreateChallengeModal({
   useEffect(() => {
     if (!open) return;
     reset();
+    setDevpostTags([]);
     setPrizes([]);
     setQuestions([]);
     setTitleI18n(EMPTY_I18N);
     setDescriptionI18n(EMPTY_I18N);
     setCriteriaI18n(EMPTY_I18N);
-    api
-      .get<{ enterprises: EnterpriseSummary[] }>("/api/enterprises")
-      .then((res) => setEnterprises(res.enterprises))
+    Promise.all([
+      api.get<{ enterprises: EnterpriseSummary[] }>("/api/enterprises"),
+      listDevpostPrizes(),
+    ])
+      .then(([enterprisesRes, prizesRes]) => {
+        setEnterprises(enterprisesRes.enterprises);
+        setDevpostPrizes(prizesRes.prizes);
+      })
       .catch((err) =>
-        toast.error(err instanceof ApiError ? err.message : "Could not load enterprises."),
+        toast.error(err instanceof ApiError ? err.message : "Could not load challenge data."),
       );
   }, [open, reset]);
 
@@ -344,10 +357,12 @@ function CreateChallengeModal({
         criteria: criteriaEn || null,
         criteriaI18n: criteriaEn ? i18nWithEnglishFallback(criteriaI18n) : null,
         prizes: normalizePrizes(prizes),
+        devpostTags,
         judgingPanelCriteria: normalizedQuestions,
         maxPresentationSeconds: values.maxPresentationSeconds
           ? Number(values.maxPresentationSeconds)
           : null,
+        maxInWaitingArea: values.maxInWaitingArea ? Number(values.maxInWaitingArea) : null,
         availableFrom: fromDatetimeLocal(values.availableFrom),
       });
       toast.success("Challenge created.");
@@ -425,6 +440,16 @@ function CreateChallengeModal({
               <h3 className="text-sm font-medium">Prizes</h3>
               <PrizeBuilder value={prizes} onChange={setPrizes} />
             </section>
+            <DevpostTagsField
+              value={devpostTags}
+              onChange={setDevpostTags}
+              options={devpostPrizes.map((prize) => ({
+                value: prize.name,
+                label: prize.name,
+                description: `${prize.repoCount} project${prize.repoCount === 1 ? "" : "s"}`,
+              }))}
+              emptyText="No imported prizes yet."
+            />
             <section className="space-y-3 rounded-lg border p-4">
               <h3 className="text-sm font-medium">Judging panel</h3>
               <JudgingPanelBuilder value={questions} onChange={setQuestions} />
@@ -437,6 +462,24 @@ function CreateChallengeModal({
                   <FormLabel>Max presentation time</FormLabel>
                   <FormControl>
                     <DurationInput value={field.value} onChange={field.onChange} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="maxInWaitingArea"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Waiting room capacity</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={field.value}
+                      onChange={(e) => field.onChange(e.target.value)}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

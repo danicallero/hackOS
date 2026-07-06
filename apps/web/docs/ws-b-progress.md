@@ -1,20 +1,23 @@
 # WS-B — Queue & Judging panel (H29-H40) progress
 
-Owner: Codex · Status: 🔵 MVP built, review needed
+Owner: Codex · Status: ✅ implementation complete
 
 ## Built
 
 - `apps/web/src/app/(app)/queue/page.tsx`
-  - Live room selector and challenge selector.
-  - Room pause/resume (H35) and pace display (H39).
-  - Queue panel for called + next teams with call-next, notify-enter, bring-in,
-    requeue, no-show and skip actions (H29-H34).
-  - Search/manual recovery by project/repo/entry with manual-call to `called` or
-    `in_room` (H37).
-  - Presentation panel with start/complete/send-back controls (H32-H33).
-  - Scoring form from `judging_panel_criteria`, review draft save, submit, and
-    active judging session presence (H36).
-  - Challenge progress tab and CSV export links (H40).
+  - Now the operations dashboard: all room queue snapshots, live counts, room
+    assignment summaries for admins, and manual queue generation for all tagged
+    challenges.
+  - `/queue` is no longer the judging surface; it points to operations only.
+- `apps/web/src/app/(app)/judging/page.tsx`
+  - The room-specific judging/controller surface copied from the former combined
+    panel. It keeps room selector, queue actions, presentation/review controls,
+    progress and CSV export links.
+  - Reworked to mirror the old `hackOS copy` judging structure after reviewing
+    `QueuePanel`, `PresentationCard`, `ScoringForm`, `TeamInfoSection`,
+    `DynamicFormField`, and `StatChip`: top room controls + compact stats,
+    waiting-room queue on the left, current project/presentation in the center,
+    scoring/progress on the right.
 - `apps/web/src/app/(app)/queue/rooms/page.tsx`
   - Room CRUD, queue settings, room queue state edits, and assignment forms
     for room challenges and judges, plus authoritative assignment lists from
@@ -28,7 +31,8 @@ Owner: Codex · Status: 🔵 MVP built, review needed
 ## Verification
 
 - `pnpm --filter @hackos/web typecheck` — clean.
-- `npx @biomejs/biome check ...` on touched web files — clean.
+- `pnpm exec biome check ...` on touched web files — clean.
+- `pnpm --filter @hackos/api typecheck` — clean.
 
 ## Remaining
 

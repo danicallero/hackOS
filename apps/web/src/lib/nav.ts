@@ -1,9 +1,11 @@
 import { CAPABILITIES, type Capability } from "@hackos/shared/capabilities";
 import {
+  Building2Icon,
   CalendarDaysIcon,
   ClipboardListIcon,
   FileTextIcon,
   FolderGitIcon,
+  GavelIcon,
   HandshakeIcon,
   LayoutDashboardIcon,
   LibraryBigIcon,
@@ -58,9 +60,19 @@ export const NAV: NavSection[] = [
     label: "Operations",
     items: [
       {
-        title: "Queue & judging",
+        title: "Queue operations",
         href: "/queue",
         icon: ListOrderedIcon,
+        anyCapability: [
+          CAPABILITIES.QUEUE_OPERATE,
+          CAPABILITIES.QUEUE_ADMIN,
+          CAPABILITIES.JUDGE_PANEL,
+        ],
+      },
+      {
+        title: "Judging",
+        href: "/judging",
+        icon: GavelIcon,
         anyCapability: [
           CAPABILITIES.QUEUE_OPERATE,
           CAPABILITIES.QUEUE_ADMIN,
@@ -129,6 +141,12 @@ export const NAV: NavSection[] = [
         href: "/settings/event",
         icon: SettingsIcon,
         capability: CAPABILITIES.SCHEDULE_MANAGE,
+      },
+      {
+        title: "Rooms",
+        href: "/queue/rooms",
+        icon: Building2Icon,
+        anyCapability: [CAPABILITIES.QUEUE_ADMIN],
       },
       {
         title: "Libraries",

@@ -19,7 +19,7 @@ Legend: ⬜ not started · 🟨 in progress · ✅ done · 🔵 review needed
 |----|------|-------|--------|-------|
 | 0  | Foundation (SSE hook, queue API client, nav, shared bits) | orchestrator | ✅ | Interfaces stable — see §5 committed files |
 | A  | Devpost import + Projects UI (H16–H17, repos read) | agent + codex | ✅ | progress → `ws-a-progress.md`; detail + unmatched routes added |
-| B  | Queue & Judging panel (H29–H40) | codex | 🔵 | MVP panel + room-admin page; assignment inspection still backend-limited |
+| B  | Queue operations + Judging panel (H29–H40) | codex | ✅ | `/queue` ops dashboard + `/judging` panel; room assignments + generate-queues wired |
 | C  | TV screens (H41–H42) | discarded | ⏹ | removed on request |
 | D  | Participant "my queue" (H38) | agent (bg) | ✅ | progress → `ws-d-progress.md` |
 
@@ -38,8 +38,8 @@ Legend: ⬜ not started · 🟨 in progress · ✅ done · 🔵 review needed
 - `@/lib/projects` → `ImportPlan`, `RepoWithExtras`, wrappers (`previewImport`,
   `confirmImport`, `listUnmatched`, `linkParticipant`, `listRepos`, …).
 - `@/components/common/queue-status-badge` → `<QueueStatusBadge status=… />`.
-- `nav.ts`: "Queue & judging" (`/queue`) + "Projects" (`/projects`) live (WS-D
-  must add its own nav entry if it makes a page).
+- `nav.ts`: "Queue operations" (`/queue`), "Judging" (`/judging`) and
+  "Projects" (`/projects`) live.
 - Idempotency: pass `crypto.randomUUID()` as the idem key on critical POSTs.
 
 **Claim protocol:** set your name in Owner + flip to 🟨 before writing code.
@@ -319,6 +319,16 @@ Decide + record in §9.
   @hackos/web typecheck` + biome clean. A–D unblocked; import the §5 interfaces.
   Verified `listRooms` returns `Room[]` (not `{rooms}`) and `/rooms/:id` returns
   `room + queueState` (only `/rooms/:id/view` is a `RoomView`).
+- `2026-07-06` codex: split the queue/judging surface. `/queue` is now the
+  operations dashboard (all rooms, queue generation, admin assignment summary)
+  and `/judging` hosts the room-specific panel. Added challenge `devpostTags`
+  editing on the challenge forms, backend `POST /api/queue/challenges/enqueue-all`,
+  and a reusable DevPost tags field.
+- `2026-07-06` codex: verification update after the split — `pnpm --filter
+  @hackos/web typecheck` and `pnpm --filter @hackos/api typecheck` are clean;
+  `biome check` is clean on touched files. API vitest could not run because the
+  test PostgreSQL instance at `localhost:5433` was not available in this
+  environment.
 - `2026-07-06` codex: resumed after Claude rate-limit. Removed stray generated
   `</content>`/`</invoke>` markers from WS-C TV files. `pnpm --filter
   @hackos/web typecheck` clean afterward.
@@ -349,6 +359,14 @@ Decide + record in §9.
   `pnpm --filter @hackos/web lint` currently fails because the package script is
   `next lint`, which Next 16 treats as an invalid project directory; use root
   `pnpm lint`/Biome until that script is updated.
+- `2026-07-06` codex: reviewed the old judging implementation in
+  `/Users/dani/hackathon-os/hackOS copy/frontend/features/judging/components`
+  (`QueuePanel`, `PresentationCard`, `ScoringForm`, `TeamInfoSection`,
+  `DynamicFormField`, `StatChip`) and reworked `/judging` to mirror that
+  structure with current hackOS components: room controls + compact stats at
+  the top, waiting-room/challenge queue on the left, current presentation in the
+  center, and scoring/progress on the right. Backend room views now include repo
+  links, description, and team-member metadata for that presentation card.
 
 <!--
 Agents: append dated bullets here. Record decisions (e.g. where WS-D lives),
