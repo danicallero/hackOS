@@ -10,6 +10,7 @@ import { notifyTeamCalled, repoMemberIds } from "./notify.js";
 import {
   compactChallengePositions,
   nextBottomPosition,
+  nextTopPosition,
   type RequeuePosition,
   resolveRequeuePosition,
 } from "./ordering.js";
@@ -412,6 +413,43 @@ export async function skipToEnd(
       action: "skip",
       reason,
       metadata: { position: "bottom" },
+    });
+    return res.rows[0];
+  }).then(broadcastEntry);
+}
+
+const MOVE_TOP_FROM = ["waiting", "called"];
+
+/**
+ * H37: send a team to the TOP of its challenge's shared queue from the judging
+ * search. A `called` team is released back to `waiting` first — "adding" a team
+ * only ever moves the existing entry (never creates a second one).
+ */
+export async function moveToTop(
+  entryId: number,
+  actorId: number,
+  reason?: string,
+): Promise<QueueEntryRow> {
+  return withTransaction(async (client) => {
+    const entry = await lockEntry(client, entryId);
+    assertFrom(entry, MOVE_TOP_FROM, "move_to_top");
+    const position = await nextTopPosition(client, entry.challenge_id);
+    const res = await client.query(
+      `UPDATE queue_entries
+          SET status = 'waiting', position = $1, assigned_room_id = NULL, called_at = NULL,
+              presentation_started_at = NULL
+        WHERE id = $2
+        RETURNING *`,
+      [position, entryId],
+    );
+    await writeQueueHistory(client, {
+      entryId,
+      actorId,
+      previousStatus: entry.status,
+      newStatus: "waiting",
+      action: "move_to_top",
+      reason,
+      metadata: { position: "top" },
     });
     return res.rows[0];
   }).then(broadcastEntry);

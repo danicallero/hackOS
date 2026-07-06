@@ -23,6 +23,7 @@ import {
   disqualify,
   manualCall,
   markNoShow,
+  moveToTop,
   notifyEnter,
   reEnter,
   requeue,
@@ -129,6 +130,17 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
       schema: { params: entryIdParam, body: reasonBody },
     },
     async (req) => markNoShow(req.params.entryId, actor(req.userId), req.body.reason),
+  );
+
+  // H37: send a searched team to the TOP of the challenge queue (release from
+  // `called` if needed). "Adding" only moves the existing entry.
+  typed.post(
+    "/api/queue/entries/:entryId/move-top",
+    {
+      preHandler: [judgeOrOperate, idempotencyGuard],
+      schema: { params: entryIdParam, body: reasonBody },
+    },
+    async (req) => moveToTop(req.params.entryId, actor(req.userId), req.body.reason),
   );
 
   // Voluntary "send me to the end" — no ladder penalty (plan/07 §4).

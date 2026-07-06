@@ -111,6 +111,8 @@ export const listUnmatched = () =>
   api.get<{ participants: UnmatchedParticipant[] }>("/api/devpost/imports/unmatched");
 export const linkParticipant = (repoId: number, email: string, userId: number) =>
   api.post("/api/devpost/imports/link", { repoId, email, userId });
+export const linkSecondaryEmail = (repoId: number, email: string, userId: number) =>
+  api.post("/api/devpost/imports/link-secondary", { repoId, email, userId });
 export const sendClaimEmail = (repoId: number, email: string) =>
   api.post("/api/devpost/imports/claim-email", { repoId, email });
 export const mapPrize = (prizeName: string, challengeId: number) =>

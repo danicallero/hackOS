@@ -78,20 +78,37 @@ export async function roomView(roomId: number) {
     await pool.query(`SELECT challenge_id FROM room_challenges WHERE room_id = $1`, [roomId])
   ).rows.map((r: { challenge_id: number }) => r.challenge_id);
 
+  // H29/H46: a room judges a single challenge (many rooms may share one). The
+  // judging panel renders it as a read-only label, so expose it directly.
+  const challenge =
+    (
+      await pool.query(
+        `SELECT rc.challenge_id AS id, c.title
+           FROM room_challenges rc
+           JOIN challenges c ON c.id = rc.challenge_id
+          WHERE rc.room_id = $1
+          ORDER BY rc.assigned_at ASC, rc.challenge_id ASC
+          LIMIT 1`,
+        [roomId],
+      )
+    ).rows[0] ?? null;
+
+  // The whole challenge queue — the operator/judge panel shows every upcoming
+  // team, not just the head (the waiting-area top-up is bounded separately by
+  // max_in_waiting_area in the pump).
   const next = challengeIds.length
     ? (
         await pool.query(
           `SELECT ${QUEUE_ENTRY_SELECT}
              FROM queue_entries qe JOIN repos r ON r.id = qe.repo_id
             WHERE qe.challenge_id = ANY($1) AND qe.status = 'waiting'
-            ORDER BY qe.position ASC NULLS LAST, qe.id ASC
-            LIMIT 5`,
+            ORDER BY qe.position ASC NULLS LAST, qe.id ASC`,
           [challengeIds],
         )
       ).rows
     : [];
 
-  return { room, state, active, called, next };
+  return { room, state, challenge, active, called, next };
 }
 
 /** H46 read surface: current room -> challenge and room -> judge assignments. */

@@ -23,6 +23,7 @@ import {
   confirmImport,
   getRepo,
   linkParticipant,
+  linkParticipantSecondary,
   listPublicChallenges,
   listRepos,
   listUnmatchedParticipants,
@@ -109,6 +110,20 @@ export function registerProjectRoutes(app: FastifyInstance): void {
     async (req) => {
       const { repoId, email, userId } = req.body;
       return linkParticipant(req.userId as number, repoId, email.toLowerCase(), userId);
+    },
+  );
+
+  // Link an unmatched email to an account by adding it as a verified-secondary
+  // (H6): reuses identity's secondary-email verification flow.
+  r.post(
+    "/api/devpost/imports/link-secondary",
+    {
+      preHandler: [requireCapability(CAPABILITIES.PROJECTS_IMPORT), idempotencyGuard],
+      schema: { body: linkParticipantBodySchema },
+    },
+    async (req) => {
+      const { repoId, email, userId } = req.body;
+      return linkParticipantSecondary(req.userId as number, repoId, email.toLowerCase(), userId);
     },
   );
 

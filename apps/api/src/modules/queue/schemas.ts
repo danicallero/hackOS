@@ -34,6 +34,7 @@ export const assignJudgeBody = z.object({
 });
 
 export const roomQueueStateBody = z.object({
+  maxInWaitingArea: z.coerce.number().int().min(1).optional(),
   desiredMinutesPerTeam: z.coerce.number().int().min(1).optional(),
 });
 

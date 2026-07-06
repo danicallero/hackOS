@@ -177,8 +177,16 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
       ).rows[0];
       if (!existing) throw new NotFoundError("Room not found");
       const { rows } = await pool.query(
-        `UPDATE room_queue_state SET desired_minutes_per_team = $1 WHERE room_id = $2 RETURNING *`,
-        [req.body.desiredMinutesPerTeam ?? existing.desired_minutes_per_team, req.params.roomId],
+        `UPDATE room_queue_state
+            SET max_in_waiting_area = $1,
+                desired_minutes_per_team = $2
+          WHERE room_id = $3
+          RETURNING *`,
+        [
+          req.body.maxInWaitingArea ?? existing.max_in_waiting_area,
+          req.body.desiredMinutesPerTeam ?? existing.desired_minutes_per_team,
+          req.params.roomId,
+        ],
       );
       return rows[0];
     },

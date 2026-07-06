@@ -1,6 +1,10 @@
+import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { type Question, validateAnswers } from "@hackos/shared/questions";
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
+import { broadcast } from "../../lib/sse.js";
+import { writeQueueHistory } from "./history.js";
+import type { QueueEntryRow } from "./types.js";
 
 /**
  * Judging (H36-H37, H40). attempt_review is 1:1 with queue_entries — the
@@ -68,11 +72,15 @@ export async function upsertAttemptReview(
   actorId: number,
   patch: AttemptReviewPatch,
 ) {
-  return withTransaction(async (client) => {
-    const entryRes = await client.query(`SELECT challenge_id FROM queue_entries WHERE id = $1`, [
-      entryId,
-    ]);
+  const { review, completedEntry } = await withTransaction(async (client) => {
+    // Lock the entry row: a submit may complete the presentation (below), so
+    // its status must be stable for the duration of the transaction.
+    const entryRes = await client.query(
+      `SELECT id, challenge_id, status FROM queue_entries WHERE id = $1 FOR UPDATE`,
+      [entryId],
+    );
     if (entryRes.rowCount === 0) throw new NotFoundError("Queue entry not found", { entryId });
+    const entryStatus: string = entryRes.rows[0].status;
     const challengeId = entryRes.rows[0].challenge_id;
 
     const { typed, keys } =
@@ -133,7 +141,8 @@ export async function upsertAttemptReview(
     }
 
     let newStatus = current.status;
-    if (patch.submit && current.status !== "submitted") {
+    const justSubmitted = Boolean(patch.submit) && current.status !== "submitted";
+    if (justSubmitted) {
       changedFields.push("status");
       previous.status = current.status;
       next.status = "submitted";
@@ -152,7 +161,7 @@ export async function upsertAttemptReview(
         );
     }
 
-    if (changedFields.length === 0) return current; // no-op save, no version row
+    if (changedFields.length === 0) return { review: current, completedEntry: null }; // no-op save
 
     const { rows: updatedRows } = await client.query(
       `UPDATE attempt_review SET scores = $1, notes = $2, status = $3 WHERE attempt_id = $4 RETURNING *`,
@@ -165,8 +174,40 @@ export async function upsertAttemptReview(
       [entryId, actorId, changedFields, JSON.stringify(previous), JSON.stringify(next)],
     );
 
-    return updatedRows[0];
+    // H37: submitting the final review closes the presentation. Only a team
+    // actually in the room / presenting is completed — submitting a review for
+    // a team still in the queue (e.g. a late correction) leaves its status be.
+    let completedEntry: QueueEntryRow | null = null;
+    if (justSubmitted && (entryStatus === "presenting" || entryStatus === "in_room")) {
+      const done = await client.query(
+        `UPDATE queue_entries SET status = 'completed', completed_at = now()
+          WHERE id = $1 AND status IN ('presenting', 'in_room')
+          RETURNING *`,
+        [entryId],
+      );
+      if (done.rowCount) {
+        completedEntry = done.rows[0];
+        await writeQueueHistory(client, {
+          entryId,
+          actorId,
+          previousStatus: entryStatus,
+          newStatus: "completed",
+          action: "complete",
+          metadata: { viaReviewSubmit: true },
+        });
+      }
+    }
+
+    return { review: updatedRows[0], completedEntry };
   });
+
+  // One queue transition -> one broadcast (plan/07 invariant 5). The judging
+  // panel's live query drops the completed team from the room on this event.
+  if (completedEntry) {
+    await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ENTRY_CHANGED, completedEntry);
+  }
+
+  return review;
 }
 
 export async function listAttemptReviewVersions(entryId: number) {
