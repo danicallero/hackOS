@@ -287,6 +287,12 @@ export function registerProfileRoutes(app: FastifyInstance): void {
                 name: z.string().nullable(),
                 surname: z.string().nullable(),
                 badgeId: z.string().nullable(),
+                role: z.enum(["admin", "judge", "sponsor", "staff", "participant"]),
+                phone: z.string().nullable(),
+                language: z.string(),
+                shirtSize: z.string().nullable(),
+                applicationStatus: z.string().nullable(),
+                confirmedSpot: z.boolean(),
                 createdAt: z.string(),
               }),
             ),
@@ -296,14 +302,13 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => {
-      // H8/H10: staff directory. `q` matches name/surname/email (ILIKE).
       const { q, limit, offset } = req.query;
       const filter = q?.trim() ? `%${q.trim()}%` : null;
       const where = filter ? `WHERE name ILIKE $1 OR surname ILIKE $1 OR email ILIKE $1` : "";
       const args = filter ? [filter, limit, offset] : [limit, offset];
       const p = filter ? 2 : 1;
       const { rows } = await pool.query(
-        `SELECT id, email, email_verified, name, surname, badge_id, created_at
+        `SELECT id, email, email_verified, name, surname, badge_id, phone, language, shirt_size, created_at
            FROM users ${where}
            ORDER BY created_at DESC LIMIT $${p} OFFSET $${p + 1}`,
         args,
@@ -312,16 +317,54 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         `SELECT count(*)::int AS n FROM users ${where}`,
         filter ? [filter] : [],
       );
-      return {
-        users: rows.map((r: UserRow) => ({
+      const ids = rows.map((r: UserRow) => r.id);
+      const { rows: statusRows } =
+        ids.length > 0
+          ? await pool.query(
+              `SELECT DISTINCT ON (user_id) user_id, status
+                 FROM application_responses
+                WHERE user_id = ANY($1::int[])
+                ORDER BY user_id,
+                  CASE status
+                    WHEN 'confirmed' THEN 1
+                    WHEN 'accepted' THEN 2
+                    WHEN 'accepted_internal' THEN 3
+                    WHEN 'declined' THEN 4
+                    WHEN 'expired' THEN 5
+                    WHEN 'rejected' THEN 6
+                    WHEN 'rejected_internal' THEN 7
+                    WHEN 'review' THEN 8
+                    WHEN 'submitted' THEN 9
+                    ELSE 10
+                  END,
+                  id DESC`,
+              [ids],
+            )
+          : { rows: [] };
+      const statusByUser = new Map(
+        statusRows.map((r: { user_id: number; status: string }) => [r.user_id, r.status]),
+      );
+
+      const users = await Promise.all(
+        rows.map(async (r: UserRow) => ({
           id: r.id,
           email: r.email,
           emailVerified: r.email_verified,
           name: r.name,
           surname: r.surname,
           badgeId: r.badge_id,
+          role: await computeDerivedRole(pool, r.id),
+          phone: r.phone,
+          language: r.language,
+          shirtSize: r.shirt_size,
+          applicationStatus: statusByUser.get(r.id) ?? null,
+          confirmedSpot: statusByUser.get(r.id) === "confirmed",
           createdAt: r.created_at.toISOString(),
         })),
+      );
+
+      return {
+        users,
         total: countRows[0].n as number,
       };
     },

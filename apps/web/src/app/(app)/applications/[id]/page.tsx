@@ -1366,7 +1366,7 @@ function AnswerValue({
   return <span className="whitespace-pre-wrap">{rendered}</span>;
 }
 
-function ReviewModal({
+export function ReviewModal({
   response,
   applicationId,
   template,
