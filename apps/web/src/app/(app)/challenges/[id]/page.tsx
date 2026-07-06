@@ -37,8 +37,8 @@ import {
 } from "../builders";
 import {
   type Challenge,
-  challengeTone,
   fromDatetimeLocal,
+  isScheduled,
   type Prize,
   toDatetimeLocal,
   visibilityTone,
@@ -131,12 +131,12 @@ export default function ChallengeDetailPage() {
       <BackLink />
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-semibold">{challenge.title}</h1>
-        <StatusBadge tone={challengeTone(challenge.status)} className="capitalize">
-          {challenge.status}
-        </StatusBadge>
         <StatusBadge tone={visibilityTone(challenge.visibility)} className="capitalize">
           {challenge.visibility}
         </StatusBadge>
+        {isScheduled(challenge.available_from) && (
+          <StatusBadge tone="warning">Scheduled</StatusBadge>
+        )}
       </div>
 
       {canAdmin && <PublishCard challenge={challenge} onChanged={load} />}
@@ -207,12 +207,12 @@ function PublishCard({
     <Form {...form}>
       <form onSubmit={form.handleSubmit(publish)}>
         <SectionCard
-          icon={challenge.status === "published" ? EyeIcon : EyeOffIcon}
+          icon={challenge.visibility === "visible" ? EyeIcon : EyeOffIcon}
           title="Public reveal"
-          description="Publish this challenge to the public challenges route immediately or at a scheduled time."
+          description="Show this challenge on the public challenges route, now or at a scheduled time."
           footer={
             <>
-              {challenge.status === "published" && (
+              {challenge.visibility === "visible" && (
                 <Button type="button" variant="outline" disabled={busy} onClick={unpublish}>
                   <EyeOffIcon className="size-4" />
                   Hide
@@ -220,7 +220,7 @@ function PublishCard({
               )}
               <SubmitButton pending={busy}>
                 <EyeIcon className="size-4" />
-                Publish
+                Make visible
               </SubmitButton>
             </>
           }
@@ -234,7 +234,10 @@ function PublishCard({
                 <FormControl>
                   <Input type="datetime-local" {...field} />
                 </FormControl>
-                <FormDescription>Leave blank to reveal immediately.</FormDescription>
+                <FormDescription>
+                  Pick a future date and time to schedule the reveal. Leave it empty to go public as
+                  soon as you make it visible.
+                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}

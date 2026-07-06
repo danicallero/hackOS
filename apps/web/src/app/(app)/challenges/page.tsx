@@ -3,7 +3,7 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { Question } from "@hackos/shared/questions";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { LockIcon, PlusIcon, TrophyIcon } from "lucide-react";
+import { EyeIcon, EyeOffIcon, LockIcon, PlusIcon, TrophyIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -31,7 +31,7 @@ import { ApiError, api } from "@/lib/api";
 import { useSessionContext } from "@/lib/session";
 import type { EnterpriseSummary } from "@/lib/types";
 import { JudgingPanelBuilder, normalizePrizes, normalizeQuestions, PrizeBuilder } from "./builders";
-import { type Challenge, challengeTone, type Prize, visibilityTone } from "./shared";
+import { type Challenge, isScheduled, type Prize, visibilityTone } from "./shared";
 
 const optionalPositiveInt = z
   .string()
@@ -54,16 +54,6 @@ const columns: Column<Challenge>[] = [
     cell: (c) => <span className="font-medium">{c.title}</span>,
   },
   {
-    id: "status",
-    header: "Status",
-    sortValue: (c) => c.status,
-    cell: (c) => (
-      <StatusBadge tone={challengeTone(c.status)} className="capitalize">
-        {c.status}
-      </StatusBadge>
-    ),
-  },
-  {
     id: "visibility",
     header: "Visibility",
     sortValue: (c) => c.visibility,
@@ -77,11 +67,24 @@ const columns: Column<Challenge>[] = [
     id: "reveal",
     header: "Reveal",
     sortValue: (c) => c.available_from ?? "",
-    cell: (c) => (
-      <span className="text-muted-foreground text-sm">
-        {c.available_from ? new Date(c.available_from).toLocaleString() : "Immediate"}
-      </span>
-    ),
+    cell: (c) => {
+      if (c.visibility !== "visible") return <span className="text-muted-foreground">—</span>;
+      if (isScheduled(c.available_from)) {
+        return (
+          <div className="flex items-center gap-2">
+            <StatusBadge tone="warning">Scheduled</StatusBadge>
+            <span className="text-muted-foreground text-sm">
+              {new Date(c.available_from as string).toLocaleString()}
+            </span>
+          </div>
+        );
+      }
+      return (
+        <span className="text-muted-foreground text-sm">
+          {c.available_from ? new Date(c.available_from).toLocaleString() : "Immediate"}
+        </span>
+      );
+    },
   },
 ];
 
@@ -93,6 +96,8 @@ export default function ChallengesPage() {
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const load = useCallback(async () => {
     if (!canSee) {
@@ -104,6 +109,7 @@ export default function ChallengesPage() {
       const path = canAdmin ? "/api/challenges" : "/api/challenges/mine";
       const res = await api.get<{ challenges: Challenge[] }>(path);
       setChallenges(res.challenges);
+      setSelectedIds(new Set());
     } catch (err) {
       setChallenges([]);
       toast.error(err instanceof ApiError ? err.message : "Could not load challenges.");
@@ -111,6 +117,28 @@ export default function ChallengesPage() {
       setLoading(false);
     }
   }, [canAdmin, canSee]);
+
+  const bulkVisibility = useCallback(
+    async (visible: boolean) => {
+      const ids = [...selectedIds].map(Number);
+      if (ids.length === 0) return;
+      setBulkBusy(true);
+      try {
+        await api.post("/api/challenges/visibility", { ids, visible });
+        toast.success(
+          visible
+            ? `Made ${ids.length} challenge${ids.length > 1 ? "s" : ""} visible.`
+            : `Hid ${ids.length} challenge${ids.length > 1 ? "s" : ""}.`,
+        );
+        await load();
+      } catch (err) {
+        toast.error(err instanceof ApiError ? err.message : "Could not update visibility.");
+      } finally {
+        setBulkBusy(false);
+      }
+    },
+    [selectedIds, load],
+  );
 
   useEffect(() => {
     void load();
@@ -153,6 +181,34 @@ export default function ChallengesPage() {
         searchPlaceholder="Search challenges..."
         pageSize={15}
         loading={loading}
+        selectable={canAdmin}
+        selectedIds={selectedIds}
+        onSelectionChange={setSelectedIds}
+        toolbar={
+          canAdmin && selectedIds.size > 0 ? (
+            <>
+              <span className="text-muted-foreground text-sm">{selectedIds.size} selected</span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={bulkBusy}
+                onClick={() => bulkVisibility(true)}
+              >
+                <EyeIcon className="size-4" />
+                Make visible
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={bulkBusy}
+                onClick={() => bulkVisibility(false)}
+              >
+                <EyeOffIcon className="size-4" />
+                Hide
+              </Button>
+            </>
+          ) : undefined
+        }
         empty={{
           icon: TrophyIcon,
           title: "No challenges yet",

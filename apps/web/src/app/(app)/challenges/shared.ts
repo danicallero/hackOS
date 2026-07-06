@@ -1,7 +1,6 @@
 import type { I18nText, Question } from "@hackos/shared/questions";
 import type { Tone } from "@/lib/tones";
 
-export type ChallengeStatus = "draft" | "active" | "published" | "archived";
 export type Visibility = "visible" | "hidden";
 
 export interface Prize {
@@ -18,22 +17,21 @@ export interface Challenge {
   prizes: Prize[] | null;
   judging_panel_criteria: Question[] | null;
   max_presentation_seconds: number | null;
-  status: ChallengeStatus;
   visibility: Visibility;
   available_from: string | null;
   created_at: string;
   updated_at: string;
 }
 
-export function challengeTone(status: string): Tone {
-  if (status === "published") return "success";
-  if (status === "active") return "info";
-  if (status === "archived") return "neutral";
-  return "warning";
-}
-
 export function visibilityTone(v: Visibility): Tone {
   return v === "visible" ? "success" : "neutral";
+}
+
+/** A challenge whose scheduled reveal is still in the future. */
+export function isScheduled(availableFrom: string | null): boolean {
+  if (!availableFrom) return false;
+  const at = new Date(availableFrom);
+  return !Number.isNaN(at.getTime()) && at.getTime() > Date.now();
 }
 
 export function toJsonText(value: unknown, fallback: unknown): string {

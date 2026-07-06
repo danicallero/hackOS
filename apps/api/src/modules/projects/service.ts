@@ -549,8 +549,7 @@ export async function listPublicChallenges(): Promise<PublicChallenge[]> {
        FROM challenges c
        JOIN sponsors s ON s.id = c.author
        JOIN enterprises e ON e.id = s.enterprise_id
-      WHERE c.status = 'published'
-        AND c.visibility = 'visible'
+      WHERE c.visibility = 'visible'
         AND (c.available_from IS NULL OR c.available_from <= now())
       ORDER BY c.available_from NULLS FIRST, c.id ASC`,
   );

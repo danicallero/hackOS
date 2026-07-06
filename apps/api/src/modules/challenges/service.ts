@@ -11,9 +11,9 @@ import {
   type UpdateChallengeBody,
 } from "./schemas.js";
 
-/** Published (or archived) challenges are frozen for sponsor owners. */
-function isFrozenForOwner(status: string): boolean {
-  return status === "published" || status === "archived";
+/** Publicly visible challenges are frozen for sponsor owners (admins keep editing). */
+function isFrozenForOwner(visibility: string): boolean {
+  return visibility === "visible";
 }
 
 /** Snapshot of the editable surface, written to challenge_versions on every change. */
@@ -29,15 +29,15 @@ function snapshotOf(row: Record<string, unknown>) {
 }
 
 const EDITABLE_COLUMNS = `id, title, description, criteria, prizes,
-  judging_panel_criteria, max_presentation_seconds, status, visibility,
+  judging_panel_criteria, max_presentation_seconds, visibility,
   available_from, created_at, updated_at`;
 
 const EDITABLE_COLUMNS_FROM_CHALLENGE = `c.id, c.title, c.description, c.criteria, c.prizes,
-  c.judging_panel_criteria, c.max_presentation_seconds, c.status, c.visibility,
+  c.judging_panel_criteria, c.max_presentation_seconds, c.visibility,
   c.available_from, c.created_at, c.updated_at`;
 
 const CREATE_RETURNING_COLUMNS = `id, author, title, description, criteria, prizes,
-  judging_panel_criteria, max_presentation_seconds, status, visibility,
+  judging_panel_criteria, max_presentation_seconds, visibility,
   available_from, created_at, updated_at`;
 
 /**
@@ -111,8 +111,8 @@ export async function createChallenge(input: CreateChallengeBody, actorId: numbe
     const { rows } = await client.query(
       `INSERT INTO challenges
          (author, title, description, criteria, prizes, judging_panel_criteria,
-          max_presentation_seconds, status, visibility)
-       VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, 'draft', 'hidden')
+          max_presentation_seconds, visibility)
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, 'hidden')
        RETURNING ${CREATE_RETURNING_COLUMNS}`,
       [
         authorId,
@@ -142,7 +142,6 @@ export async function createChallenge(input: CreateChallengeBody, actorId: numbe
       after: {
         enterpriseId: input.enterpriseId,
         title: created.title,
-        status: created.status,
         visibility: created.visibility,
       },
     });
@@ -151,7 +150,10 @@ export async function createChallenge(input: CreateChallengeBody, actorId: numbe
   });
 }
 
-/** Admin-only publication to the public catalog (H45). */
+/**
+ * Admin-only reveal to the public catalog (H45). Makes the challenge visible,
+ * optionally on a schedule: the public route stays quiet until `availableFrom`.
+ */
 export async function publishChallenge(
   challengeId: number,
   actorId: number,
@@ -168,8 +170,7 @@ export async function publishChallenge(
     const availableFrom = input.availableFrom ?? null;
     const updated = await client.query(
       `UPDATE challenges
-          SET status = 'published',
-              visibility = 'visible',
+          SET visibility = 'visible',
               available_from = $2,
               updated_at = now()
         WHERE id = $1
@@ -189,23 +190,15 @@ export async function publishChallenge(
       entityType: "challenge",
       entityId: challengeId,
       action: "published",
-      before: {
-        status: before.status,
-        visibility: before.visibility,
-        available_from: before.available_from,
-      },
-      after: {
-        status: after.status,
-        visibility: after.visibility,
-        available_from: after.available_from,
-      },
+      before: { visibility: before.visibility, available_from: before.available_from },
+      after: { visibility: after.visibility, available_from: after.available_from },
     });
 
     return after;
   });
 }
 
-/** Admin-only hide/unpublish for correcting accidental reveals. */
+/** Admin-only hide for correcting accidental reveals (H45). */
 export async function unpublishChallenge(challengeId: number, actorId: number) {
   return withTransaction(async (client) => {
     const beforeRes = await client.query(
@@ -217,8 +210,7 @@ export async function unpublishChallenge(challengeId: number, actorId: number) {
 
     const updated = await client.query(
       `UPDATE challenges
-          SET status = 'draft',
-              visibility = 'hidden',
+          SET visibility = 'hidden',
               updated_at = now()
         WHERE id = $1
         RETURNING ${EDITABLE_COLUMNS}`,
@@ -237,11 +229,46 @@ export async function unpublishChallenge(challengeId: number, actorId: number) {
       entityType: "challenge",
       entityId: challengeId,
       action: "unpublished",
-      before: { status: before.status, visibility: before.visibility },
-      after: { status: after.status, visibility: after.visibility },
+      before: { visibility: before.visibility },
+      after: { visibility: after.visibility },
     });
 
     return after;
+  });
+}
+
+/**
+ * Admin-only bulk visibility flip (H45). Making challenges visible reveals them
+ * immediately (clears any pending schedule); hiding pulls them from the public
+ * route. Each challenge is audited; unknown ids are ignored.
+ */
+export async function setChallengesVisibility(
+  challengeIds: number[],
+  visible: boolean,
+  actorId: number,
+) {
+  if (challengeIds.length === 0) return { updated: [] as number[] };
+  return withTransaction(async (client) => {
+    const visibility = visible ? "visible" : "hidden";
+    const { rows } = await client.query(
+      `UPDATE challenges
+          SET visibility = $2,
+              available_from = CASE WHEN $2 = 'visible' THEN NULL ELSE available_from END,
+              updated_at = now()
+        WHERE id = ANY($1::int[])
+        RETURNING id`,
+      [challengeIds, visibility],
+    );
+    for (const row of rows) {
+      await audit(client, {
+        actorId,
+        entityType: "challenge",
+        entityId: Number(row.id),
+        action: visible ? "published" : "unpublished",
+        after: { visibility },
+      });
+    }
+    return { updated: rows.map((r) => Number(r.id)) };
   });
 }
 
@@ -274,10 +301,10 @@ export async function updateChallenge(
     const touchesGeneralField = CHALLENGE_GENERAL_FIELDS.some(
       (field) => patch[field] !== undefined,
     );
-    if (access === "owner" && isFrozenForOwner(before.status) && touchesGeneralField) {
-      throw new ForbiddenError("Published challenges can only be edited by admins", {
+    if (access === "owner" && isFrozenForOwner(before.visibility) && touchesGeneralField) {
+      throw new ForbiddenError("Visible challenges can only be edited by admins", {
         challengeId,
-        status: before.status,
+        visibility: before.visibility,
       });
     }
 

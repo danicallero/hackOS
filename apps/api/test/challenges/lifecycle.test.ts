@@ -45,16 +45,16 @@ async function createEnterprise(name = `ent-${crypto.randomUUID()}`): Promise<nu
   return rows[0].id;
 }
 
-async function createOwnedChallenge(ownerUserId: number, status = "draft"): Promise<number> {
+async function createOwnedChallenge(ownerUserId: number, visibility = "hidden"): Promise<number> {
   const enterpriseId = await createEnterprise();
   const sponsor = await pool.query(
     `INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2) RETURNING id`,
     [enterpriseId, ownerUserId],
   );
   const challenge = await pool.query(
-    `INSERT INTO challenges (author, title, description, status, visibility)
-     VALUES ($1, 'Owned Challenge', 'Draft details', $2, 'hidden') RETURNING id`,
-    [sponsor.rows[0].id, status],
+    `INSERT INTO challenges (author, title, description, visibility)
+     VALUES ($1, 'Owned Challenge', 'Draft details', $2) RETURNING id`,
+    [sponsor.rows[0].id, visibility],
   );
   return challenge.rows[0].id;
 }
@@ -77,7 +77,6 @@ describe("challenge lifecycle (H43-H45)", () => {
       },
     });
     expect(created.statusCode).toBe(201);
-    expect(created.json().status).toBe("draft");
     expect(created.json().visibility).toBe("hidden");
 
     const publicBefore = await server.inject({ method: "GET", url: "/api/public/challenges" });
@@ -115,7 +114,6 @@ describe("challenge lifecycle (H43-H45)", () => {
       payload: { availableFrom: new Date(Date.now() + 3600_000).toISOString() },
     });
     expect(future.statusCode).toBe(200);
-    expect(future.json().status).toBe("published");
     expect(future.json().visibility).toBe("visible");
 
     const hiddenUntilReveal = await server.inject({
@@ -161,15 +159,11 @@ describe("challenge lifecycle (H43-H45)", () => {
     expect(edit.json().description).toBe("Sponsor-owned edit");
   });
 
-  it("freezes published general fields for sponsors, while admins can still edit", async () => {
+  it("freezes visible general fields for sponsors, while admins can still edit", async () => {
     const server = await getApp();
     const owner = await createUser();
     const admin = await createUserWithCapabilities([CAPABILITIES.SPONSORS_MANAGE]);
-    const challengeId = await createOwnedChallenge(owner, "published");
-    await pool.query(
-      `UPDATE challenges SET visibility = 'visible', available_from = NULL WHERE id = $1`,
-      [challengeId],
-    );
+    const challengeId = await createOwnedChallenge(owner, "visible");
 
     const sponsorEdit = await server.inject({
       method: "PATCH",
@@ -195,5 +189,35 @@ describe("challenge lifecycle (H43-H45)", () => {
     });
     expect(adminEdit.statusCode).toBe(200);
     expect(adminEdit.json().description).toBe("Admin correction");
+  });
+
+  it("bulk-reveals and hides challenges from the list (H45)", async () => {
+    const server = await getApp();
+    const admin = await createUserWithCapabilities([CAPABILITIES.SPONSORS_MANAGE]);
+    const a = await createOwnedChallenge(await createUser());
+    const b = await createOwnedChallenge(await createUser());
+
+    const reveal = await server.inject({
+      method: "POST",
+      url: "/api/challenges/visibility",
+      headers: asUser(admin),
+      payload: { ids: [a, b], visible: true },
+    });
+    expect(reveal.statusCode).toBe(200);
+    expect(reveal.json().updated).toEqual(expect.arrayContaining([a, b]));
+
+    const publicNow = await server.inject({ method: "GET", url: "/api/public/challenges" });
+    expect(publicNow.json().items).toHaveLength(2);
+
+    const hide = await server.inject({
+      method: "POST",
+      url: "/api/challenges/visibility",
+      headers: asUser(admin),
+      payload: { ids: [a], visible: false },
+    });
+    expect(hide.statusCode).toBe(200);
+
+    const publicAfter = await server.inject({ method: "GET", url: "/api/public/challenges" });
+    expect(publicAfter.json().items).toHaveLength(1);
   });
 });

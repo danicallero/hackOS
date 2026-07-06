@@ -45,6 +45,13 @@ export function visibilityTone(v: Visibility): Tone {
   return v === "visible" ? "success" : "neutral";
 }
 
+/** An enterprise whose scheduled reveal is still in the future. */
+export function isScheduled(availableFrom: string | null): boolean {
+  if (!availableFrom) return false;
+  const at = new Date(availableFrom);
+  return !Number.isNaN(at.getTime()) && at.getTime() > Date.now();
+}
+
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "?";

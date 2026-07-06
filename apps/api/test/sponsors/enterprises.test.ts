@@ -276,4 +276,44 @@ describe("enterprise membership (M4)", () => {
       ).statusCode,
     ).toBe(404);
   });
+
+  it("admin bulk-reveals and hides enterprises from the list (H45)", async () => {
+    const a = await getApp();
+    const admin = await createUserWithCapabilities([CAPABILITIES.SPONSORS_MANAGE]);
+    const make = async (name: string) =>
+      (
+        await a.inject({
+          method: "POST",
+          url: "/api/enterprises",
+          headers: asUser(admin),
+          payload: { name, visibility: "hidden" },
+        })
+      ).json().id as number;
+    const one = await make("Bulk One");
+    const two = await make("Bulk Two");
+
+    const reveal = await a.inject({
+      method: "POST",
+      url: "/api/enterprises/visibility",
+      headers: asUser(admin),
+      payload: { ids: [one, two], visible: true },
+    });
+    expect(reveal.statusCode).toBe(200);
+    expect(reveal.json().updated).toEqual(expect.arrayContaining([one, two]));
+
+    const pub = await a.inject({ method: "GET", url: "/api/public/sponsors" });
+    const names = pub.json().items.map((s: { name: string }) => s.name);
+    expect(names).toEqual(expect.arrayContaining(["Bulk One", "Bulk Two"]));
+
+    await a.inject({
+      method: "POST",
+      url: "/api/enterprises/visibility",
+      headers: asUser(admin),
+      payload: { ids: [one], visible: false },
+    });
+    const pubAfter = await a.inject({ method: "GET", url: "/api/public/sponsors" });
+    const namesAfter = pubAfter.json().items.map((s: { name: string }) => s.name);
+    expect(namesAfter).not.toContain("Bulk One");
+    expect(namesAfter).toContain("Bulk Two");
+  });
 });

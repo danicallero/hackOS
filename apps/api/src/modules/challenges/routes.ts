@@ -5,6 +5,7 @@ import { requireAnyCapability, requireAuth } from "../../lib/capabilities.js";
 import { UnauthorizedError } from "../../lib/errors.js";
 import { assertCanEditChallenge, assertCanViewPanel } from "./access.js";
 import {
+  bulkVisibilityBody,
   challengeIdParam,
   createChallengeBody,
   publishChallengeBody,
@@ -18,6 +19,7 @@ import {
   listVersions,
   previewPanel,
   publishChallenge,
+  setChallengesVisibility,
   unpublishChallenge,
   updateChallenge,
 } from "./service.js";
@@ -43,8 +45,8 @@ export function registerChallengeRoutes(app: FastifyInstance): void {
     async () => ({ challenges: await listAllChallenges() }),
   );
 
-  // Admin creates a challenge template bound to an enterprise. It starts draft +
-  // hidden; publish below makes it appear on /api/public/challenges (H45).
+  // Admin creates a challenge template bound to an enterprise. It starts hidden;
+  // making it visible below reveals it on /api/public/challenges (H45).
   r.post(
     "/api/challenges",
     {
@@ -75,6 +77,16 @@ export function registerChallengeRoutes(app: FastifyInstance): void {
       const access = await assertCanEditChallenge(req.userId, req.params.id);
       return updateChallenge(req.params.id, actor(req.userId), req.body, access);
     },
+  );
+
+  // Admin bulk visibility flip from the challenges list (H45).
+  r.post(
+    "/api/challenges/visibility",
+    {
+      preHandler: requireAnyCapability(CAPABILITIES.SPONSORS_MANAGE, CAPABILITIES.QUEUE_ADMIN),
+      schema: { body: bulkVisibilityBody },
+    },
+    async (req) => setChallengesVisibility(req.body.ids, req.body.visible, actor(req.userId)),
   );
 
   r.post(

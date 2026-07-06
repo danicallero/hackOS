@@ -1,4 +1,4 @@
-import { pool, type Queryable } from "../../db/pool.js";
+import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import type { CreateEnterpriseBody, UpdateEnterpriseBody } from "./schemas.js";
@@ -109,6 +109,40 @@ export async function updateEnterprise(
       throw new ConflictError("An enterprise with that name already exists");
     throw err;
   }
+}
+
+/**
+ * Admin bulk visibility flip from the enterprises list (H45). Making enterprises
+ * visible reveals them immediately (clears any pending schedule); hiding pulls
+ * them from the public sponsor reveal. Each enterprise is audited.
+ */
+export async function setEnterprisesVisibility(
+  ids: number[],
+  visible: boolean,
+  actorId: number | null,
+) {
+  if (ids.length === 0) return { updated: [] as number[] };
+  return withTransaction(async (client) => {
+    const visibility = visible ? "visible" : "hidden";
+    const { rows } = await client.query(
+      `UPDATE enterprises
+          SET visibility = $2,
+              available_from = CASE WHEN $2 = 'visible' THEN NULL ELSE available_from END
+        WHERE id = ANY($1::int[])
+        RETURNING id`,
+      [ids, visibility],
+    );
+    for (const row of rows) {
+      await audit(client, {
+        actorId,
+        entityType: "enterprise",
+        entityId: Number(row.id),
+        action: "updated",
+        after: { visibility },
+      });
+    }
+    return { updated: rows.map((r) => Number(r.id)) };
+  });
 }
 
 export async function setEnterpriseLogo(id: number, logoUrl: string, actorId: number | null) {

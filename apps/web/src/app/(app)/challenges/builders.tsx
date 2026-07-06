@@ -11,6 +11,7 @@ import {
   ArrowUpIcon,
   CheckSquareIcon,
   CircleDotIcon,
+  CircleHelpIcon,
   HashIcon,
   ListChecksIcon,
   PlusIcon,
@@ -39,6 +40,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { i18nWithEnglishFallback, type Prize } from "./shared";
 
 type BuilderKind = QuestionKind;
@@ -280,7 +282,10 @@ export function JudgingPanelBuilder({
                   </SelectContent>
                 </Select>
               </Field>
-              <Field label="Field key">
+              <Field
+                label="Field key"
+                hint="The identifier exported with the answers for this field. Keep it stable so exports stay consistent."
+              >
                 <Input
                   value={question.key}
                   placeholder="innovation"
@@ -388,6 +393,7 @@ function OptionsBuilder({
   question: Extract<Question, { kind: "single_choice" | "multi_choice" }>;
   onChange: (question: Question) => void;
 }) {
+  const [openTranslations, setOpenTranslations] = useState<Record<number, boolean>>({});
   const updateOption = (index: number, patch: Partial<(typeof question.options)[number]>) =>
     onChange({
       ...question,
@@ -396,7 +402,7 @@ function OptionsBuilder({
       ),
     });
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
         <Label>Options</Label>
         <Button
@@ -422,29 +428,38 @@ function OptionsBuilder({
       </div>
       {question.options.map((option, index) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: options are positional; a stable id would remount inputs and drop focus.
-        <div key={index} className="grid gap-2 sm:grid-cols-[180px_1fr_auto] sm:items-center">
-          <Input
-            value={option.value}
-            placeholder="value"
-            aria-label={`Option ${index + 1} value`}
-            onChange={(event) => updateOption(index, { value: slug(event.target.value) })}
-          />
-          <Input
-            value={option.label.en}
-            placeholder="Option label"
-            aria-label={`Option ${index + 1} label`}
-            onChange={(event) =>
-              updateOption(index, { label: { ...option.label, en: event.target.value } })
-            }
-          />
-          <IconButton
-            label={`Remove option ${index + 1}`}
-            onClick={() =>
-              onChange({ ...question, options: question.options.filter((_, i) => i !== index) })
-            }
-          >
-            <Trash2Icon className="size-4" />
-          </IconButton>
+        <div key={index} className="space-y-3 rounded-md border p-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-muted-foreground text-xs">Option {index + 1}</span>
+            <IconButton
+              label={`Remove option ${index + 1}`}
+              onClick={() =>
+                onChange({ ...question, options: question.options.filter((_, i) => i !== index) })
+              }
+            >
+              <Trash2Icon className="size-4" />
+            </IconButton>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-[180px_1fr]">
+            <Field
+              label="Value"
+              hint="The identifier exported when a judge picks this option. Keep it stable so exports stay consistent."
+            >
+              <Input
+                value={option.value}
+                placeholder="value"
+                aria-label={`Option ${index + 1} value`}
+                onChange={(event) => updateOption(index, { value: slug(event.target.value) })}
+              />
+            </Field>
+            <MultilingualInput
+              label="Label"
+              value={option.label}
+              open={openTranslations[index] ?? false}
+              onOpenChange={(open) => setOpenTranslations((state) => ({ ...state, [index]: open }))}
+              onChange={(label) => updateOption(index, { label })}
+            />
+          </div>
         </div>
       ))}
     </div>
@@ -503,12 +518,43 @@ function MultilingualInput({
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="space-y-2">
-      <Label>{label}</Label>
+      <div className="flex items-center gap-1.5">
+        <Label>{label}</Label>
+        {hint && <FieldHint text={hint} />}
+      </div>
       {children}
     </div>
+  );
+}
+
+/** A small "?" affordance that reveals an explanation on hover, focus or tap. */
+function FieldHint({ text }: { text: string }) {
+  return (
+    <TooltipProvider delayDuration={150}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            aria-label="More information"
+            className="text-muted-foreground hover:text-foreground focus-visible:text-foreground inline-flex"
+          >
+            <CircleHelpIcon className="size-3.5" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-60 text-pretty">{text}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 

@@ -40,6 +40,16 @@ export const updateEnterpriseBody = z
 
 export const OWNER_EDITABLE_KEYS = ["website", "logoUrl", "description"] as const;
 
+/** Admin bulk visibility flip from the enterprises list (H45). */
+export const bulkVisibilityBody = z
+  .object({
+    ids: z.array(z.number().int().positive()).min(1),
+    visible: z.boolean(),
+  })
+  .strict();
+
+export type BulkVisibilityBody = z.infer<typeof bulkVisibilityBody>;
+
 /** M4: affiliate a user with an enterprise. */
 export const addMemberBody = z.object({ userId: z.number().int().positive() }).strict();
 

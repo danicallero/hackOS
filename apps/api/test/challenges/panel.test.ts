@@ -56,7 +56,7 @@ async function seedChallenge(ownerUserId: number): Promise<number> {
     [ent.rows[0].id, ownerUserId],
   );
   const ch = await pool.query(
-    `INSERT INTO challenges (author, title, status) VALUES ($1, 'My Challenge', 'active') RETURNING id`,
+    `INSERT INTO challenges (author, title) VALUES ($1, 'My Challenge') RETURNING id`,
     [sponsor.rows[0].id],
   );
   return ch.rows[0].id;

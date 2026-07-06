@@ -580,7 +580,8 @@ function EditCard({
                       <Input type="datetime-local" {...field} />
                     </FormControl>
                     <FormDescription>
-                      Optional scheduled reveal — leave blank to reveal immediately once visible.
+                      Pick a future date and time to schedule the reveal. Leave it empty to go
+                      public as soon as the enterprise is visible.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

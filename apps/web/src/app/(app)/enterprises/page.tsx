@@ -7,7 +7,7 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Building2Icon, LockIcon, PlusIcon } from "lucide-react";
+import { Building2Icon, EyeIcon, EyeOffIcon, LockIcon, PlusIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -41,7 +41,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
 import { useCan, useMe } from "@/lib/session";
-import { type Enterprise, initials, visibilityTone } from "./shared";
+import { type Enterprise, initials, isScheduled, visibilityTone } from "./shared";
 
 // Optional URL: allow blank, otherwise must be a valid URL.
 const optionalUrl = z.string().url("Enter a valid URL").or(z.literal(""));
@@ -100,6 +100,29 @@ const columns: Column<Enterprise>[] = [
     ),
   },
   {
+    id: "reveal",
+    header: "Reveal",
+    sortValue: (e) => e.available_from ?? "",
+    cell: (e) => {
+      if (e.visibility !== "visible") return <span className="text-muted-foreground">—</span>;
+      if (isScheduled(e.available_from)) {
+        return (
+          <div className="flex items-center gap-2">
+            <StatusBadge tone="warning">Scheduled</StatusBadge>
+            <span className="text-muted-foreground text-sm">
+              {new Date(e.available_from as string).toLocaleString()}
+            </span>
+          </div>
+        );
+      }
+      return (
+        <span className="text-muted-foreground text-sm">
+          {e.available_from ? new Date(e.available_from).toLocaleString() : "Immediate"}
+        </span>
+      );
+    },
+  },
+  {
     id: "priority",
     header: "Priority",
     align: "right",
@@ -120,12 +143,15 @@ export default function EnterprisesPage() {
   const [enterprises, setEnterprises] = useState<Enterprise[]>([]);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const r = await api.get<{ enterprises: Enterprise[] }>("/api/enterprises");
       setEnterprises(r.enterprises);
+      setSelectedIds(new Set());
     } catch (err) {
       setEnterprises([]);
       toast.error(err instanceof ApiError ? err.message : "Could not load enterprises.");
@@ -133,6 +159,28 @@ export default function EnterprisesPage() {
       setLoading(false);
     }
   }, []);
+
+  const bulkVisibility = useCallback(
+    async (visible: boolean) => {
+      const ids = [...selectedIds].map(Number);
+      if (ids.length === 0) return;
+      setBulkBusy(true);
+      try {
+        await api.post("/api/enterprises/visibility", { ids, visible });
+        toast.success(
+          visible
+            ? `Made ${ids.length} enterprise${ids.length > 1 ? "s" : ""} visible.`
+            : `Hid ${ids.length} enterprise${ids.length > 1 ? "s" : ""}.`,
+        );
+        await load();
+      } catch (err) {
+        toast.error(err instanceof ApiError ? err.message : "Could not update visibility.");
+      } finally {
+        setBulkBusy(false);
+      }
+    },
+    [selectedIds, load],
+  );
 
   useEffect(() => {
     if (canManage) {
@@ -210,6 +258,34 @@ export default function EnterprisesPage() {
         searchPlaceholder="Search enterprises…"
         pageSize={15}
         loading={loading}
+        selectable
+        selectedIds={selectedIds}
+        onSelectionChange={setSelectedIds}
+        toolbar={
+          selectedIds.size > 0 ? (
+            <>
+              <span className="text-muted-foreground text-sm">{selectedIds.size} selected</span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={bulkBusy}
+                onClick={() => bulkVisibility(true)}
+              >
+                <EyeIcon className="size-4" />
+                Make visible
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={bulkBusy}
+                onClick={() => bulkVisibility(false)}
+              >
+                <EyeOffIcon className="size-4" />
+                Hide
+              </Button>
+            </>
+          ) : undefined
+        }
         empty={{
           icon: Building2Icon,
           title: "No enterprises yet",
@@ -416,7 +492,8 @@ function CreateEnterpriseModal({
                   <Input type="datetime-local" {...field} />
                 </FormControl>
                 <FormDescription>
-                  Optional scheduled reveal — leave blank to reveal immediately once visible.
+                  Pick a future date and time to schedule the reveal. Leave it empty to go public as
+                  soon as the enterprise is visible.
                 </FormDescription>
                 <FormMessage />
               </FormItem>

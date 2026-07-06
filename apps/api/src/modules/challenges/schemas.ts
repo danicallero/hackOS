@@ -73,3 +73,16 @@ export const publishChallengeBody = z
   .strict();
 
 export type PublishChallengeBody = z.infer<typeof publishChallengeBody>;
+
+/**
+ * Admin bulk visibility flip (H45): select challenges in the list and reveal or
+ * hide them in one call. `visible: true` makes them public immediately.
+ */
+export const bulkVisibilityBody = z
+  .object({
+    ids: z.array(z.number().int().positive()).min(1),
+    visible: z.boolean(),
+  })
+  .strict();
+
+export type BulkVisibilityBody = z.infer<typeof bulkVisibilityBody>;

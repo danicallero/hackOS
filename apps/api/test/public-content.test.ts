@@ -82,12 +82,12 @@ describe("public content catalog (H48, H49)", () => {
     );
 
     await pool.query(
-      `INSERT INTO challenges (author, title, description, criteria, prizes, status, visibility, available_from)
+      `INSERT INTO challenges (author, title, description, criteria, prizes, visibility, available_from)
        VALUES
-       ($1, 'AI Prize', 'Public challenge A', 'Demo + impact', '[{"name":"€1k"}]'::jsonb, 'published', 'visible', now() - interval '1 hour'),
-       ($2, 'Cloud Prize', 'Public challenge B', 'Architecture', '[{"name":"Credits"}]'::jsonb, 'published', 'visible', now() - interval '2 hours'),
-       ($3, 'Hidden Prize', 'Not public', 'N/A', '[]'::jsonb, 'draft', 'hidden', now() - interval '1 hour'),
-       ($1, 'Future Prize', 'Not yet public', 'N/A', '[]'::jsonb, 'published', 'visible', now() + interval '2 hours')`,
+       ($1, 'AI Prize', 'Public challenge A', 'Demo + impact', '[{"name":"€1k"}]'::jsonb, 'visible', now() - interval '1 hour'),
+       ($2, 'Cloud Prize', 'Public challenge B', 'Architecture', '[{"name":"Credits"}]'::jsonb, 'visible', now() - interval '2 hours'),
+       ($3, 'Hidden Prize', 'Not public', 'N/A', '[]'::jsonb, 'hidden', now() - interval '1 hour'),
+       ($1, 'Future Prize', 'Not yet public', 'N/A', '[]'::jsonb, 'visible', now() + interval '2 hours')`,
       [sponsorA.rows[0].id, sponsorB.rows[0].id, sponsorHidden.rows[0].id],
     );
 

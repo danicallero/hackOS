@@ -7,6 +7,7 @@ import { putObject } from "../../lib/storage.js";
 import { assertCanEditEnterprise } from "./access.js";
 import {
   addMemberBody,
+  bulkVisibilityBody,
   CONTENT_TYPE_EXT,
   createEnterpriseBody,
   enterpriseIdParam,
@@ -25,6 +26,7 @@ import {
   myEnterprise,
   removeEnterpriseMember,
   setEnterpriseLogo,
+  setEnterprisesVisibility,
   updateEnterprise,
 } from "./service.js";
 
@@ -58,6 +60,13 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
       reply.code(201);
       return created;
     },
+  );
+
+  // Admin bulk visibility flip from the enterprises list (H45).
+  r.post(
+    "/api/enterprises/visibility",
+    { preHandler: manage, schema: { body: bulkVisibilityBody } },
+    async (req) => setEnterprisesVisibility(req.body.ids, req.body.visible, req.userId),
   );
 
   // Sponsor rep's own enterprise (H44).
