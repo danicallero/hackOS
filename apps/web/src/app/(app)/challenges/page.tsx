@@ -26,6 +26,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -62,6 +63,7 @@ const optionalPositiveInt = z
 const createSchema = z.object({
   enterpriseId: z.string().min(1, "Required"),
   maxPresentationSeconds: optionalPositiveInt,
+  maxInWaitingArea: optionalPositiveInt,
   availableFrom: z.string(),
 });
 type CreateValues = z.infer<typeof createSchema>;
@@ -304,6 +306,7 @@ function CreateChallengeModal({
     defaultValues: {
       enterpriseId: "",
       maxPresentationSeconds: "",
+      maxInWaitingArea: "",
       availableFrom: "",
     },
   });
@@ -348,6 +351,7 @@ function CreateChallengeModal({
         maxPresentationSeconds: values.maxPresentationSeconds
           ? Number(values.maxPresentationSeconds)
           : null,
+        maxInWaitingArea: values.maxInWaitingArea ? Number(values.maxInWaitingArea) : null,
         availableFrom: fromDatetimeLocal(values.availableFrom),
       });
       toast.success("Challenge created.");
@@ -437,6 +441,24 @@ function CreateChallengeModal({
                   <FormLabel>Max presentation time</FormLabel>
                   <FormControl>
                     <DurationInput value={field.value} onChange={field.onChange} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="maxInWaitingArea"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Waiting room capacity</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={field.value}
+                      onChange={(e) => field.onChange(e.target.value)}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

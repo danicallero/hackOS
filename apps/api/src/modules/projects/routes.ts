@@ -4,6 +4,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
+import { listDevpostPrizes } from "../challenges/service.js";
 import {
   claimEmailBodySchema,
   importCsvBodySchema,
@@ -133,6 +134,12 @@ export function registerProjectRoutes(app: FastifyInstance): void {
     },
     async (req) =>
       mapPrizeToChallenge(req.userId as number, req.params.prizeName, req.body.challengeId),
+  );
+
+  r.get(
+    "/api/devpost/prizes",
+    { preHandler: requireCapability(CAPABILITIES.QUEUE_ADMIN) },
+    async () => ({ prizes: await listDevpostPrizes() }),
   );
 
   // ── PROJECTS_READ views ───────────────────────────────────────────────────

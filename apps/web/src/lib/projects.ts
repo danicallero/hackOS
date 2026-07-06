@@ -25,8 +25,19 @@ export interface PlannedRepo {
 
 export interface PlannedPrize {
   name: string;
-  challengeId?: number | null;
+  lastBatch?: string | null;
+  repoCount?: number;
+  mappedChallengeId?: number | null;
+  mappedChallengeTitle?: string | null;
   [k: string]: unknown;
+}
+
+export interface DevpostPrize {
+  name: string;
+  lastBatch: string | null;
+  repoCount: number;
+  mappedChallengeId: number | null;
+  mappedChallengeTitle: string | null;
 }
 
 /** POST /api/devpost/imports/preview | /confirm response (H16). */
@@ -44,6 +55,8 @@ export interface ImportPlan {
     prizes: number;
   };
 }
+
+export const listDevpostPrizes = () => api.get<{ prizes: DevpostPrize[] }>("/api/devpost/prizes");
 
 export interface UnmatchedParticipant {
   repoId: number;

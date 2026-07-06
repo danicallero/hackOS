@@ -26,6 +26,7 @@ export const updateChallengeBody = z
     prizes: z.array(prizeSchema).nullable().optional(),
     judgingPanelCriteria: questionnaireSchema.optional(),
     maxPresentationSeconds: z.number().int().positive().nullable().optional(),
+    maxInWaitingArea: z.number().int().min(0).nullable().optional(),
     visibility: z.enum(["visible", "hidden"]).optional(),
     availableFrom: z.coerce.date().nullish(),
   })
@@ -50,6 +51,7 @@ export const CHALLENGE_GENERAL_FIELDS = [
   "prizes",
   "visibility",
   "availableFrom",
+  "maxInWaitingArea",
 ] as const;
 
 /**
@@ -69,6 +71,7 @@ export const createChallengeBody = z
     prizes: z.array(prizeSchema).nullable().optional(),
     judgingPanelCriteria: questionnaireSchema.optional(),
     maxPresentationSeconds: z.number().int().positive().nullable().optional(),
+    maxInWaitingArea: z.number().int().min(0).nullable().optional(),
     availableFrom: z.coerce.date().nullish(),
   })
   .strict();

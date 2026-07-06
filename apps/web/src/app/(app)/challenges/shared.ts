@@ -22,6 +22,7 @@ export interface Challenge {
   prizes: Prize[] | null;
   judging_panel_criteria: Question[] | null;
   max_presentation_seconds: number | null;
+  max_in_waiting_area: number | null;
   visibility: Visibility;
   available_from: string | null;
   /** Owning enterprise, joined by the list endpoints. */

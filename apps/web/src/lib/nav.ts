@@ -1,5 +1,6 @@
 import { CAPABILITIES, type Capability } from "@hackos/shared/capabilities";
 import {
+  Building2Icon,
   CalendarDaysIcon,
   ClipboardListIcon,
   FileTextIcon,
@@ -129,6 +130,12 @@ export const NAV: NavSection[] = [
         href: "/settings/event",
         icon: SettingsIcon,
         capability: CAPABILITIES.SCHEDULE_MANAGE,
+      },
+      {
+        title: "Rooms",
+        href: "/queue/rooms",
+        icon: Building2Icon,
+        anyCapability: [CAPABILITIES.QUEUE_ADMIN],
       },
       {
         title: "Libraries",
