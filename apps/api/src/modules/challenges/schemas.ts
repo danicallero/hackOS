@@ -20,6 +20,7 @@ export const updateChallengeBody = z
     title: z.string().min(1).optional(),
     titleI18n: i18nTextSchema.optional(), // per-language title (en/es/gl); title mirrors .en
     description: z.string().optional(),
+    descriptionI18n: i18nTextSchema.nullish(), // per-language description
     criteria: z.string().nullable().optional(), // public-facing criteria text
     criteriaI18n: i18nTextSchema.nullish(), // per-language criteria
     prizes: z.array(prizeSchema).nullable().optional(),
@@ -41,6 +42,7 @@ export const CHALLENGE_GENERAL_FIELDS = [
   "title",
   "titleI18n",
   "description",
+  "descriptionI18n",
   "criteria",
   "criteriaI18n",
   "prizes",
@@ -58,6 +60,7 @@ export const createChallengeBody = z
     title: z.string().min(1),
     titleI18n: i18nTextSchema.optional(),
     description: z.string().optional(),
+    descriptionI18n: i18nTextSchema.nullish(),
     criteria: z.string().nullable().optional(),
     criteriaI18n: i18nTextSchema.nullish(),
     prizes: z.array(prizeSchema).nullable().optional(),

@@ -26,7 +26,6 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
 import { useSessionContext } from "@/lib/session";
 import {
@@ -52,7 +51,6 @@ const optionalPositiveInt = z
   .refine((v) => v === "" || (/^\d+$/.test(v) && Number(v) > 0), "Must be a positive number");
 
 const editSchema = z.object({
-  description: z.string().max(6000),
   maxPresentationSeconds: optionalPositiveInt,
 });
 type EditValues = z.infer<typeof editSchema>;
@@ -64,7 +62,6 @@ type PublishValues = z.infer<typeof publishSchema>;
 
 function toFormValues(challenge: Challenge): EditValues {
   return {
-    description: challenge.description ?? "",
     maxPresentationSeconds:
       challenge.max_presentation_seconds != null ? String(challenge.max_presentation_seconds) : "",
   };
@@ -267,6 +264,9 @@ function EditCard({ challenge, onSaved }: { challenge: Challenge; onSaved: () =>
   const [titleI18n, setTitleI18n] = useState<I18nText>(
     asI18n(challenge.title_i18n, challenge.title),
   );
+  const [descriptionI18n, setDescriptionI18n] = useState<I18nText>(
+    asI18n(challenge.description_i18n, challenge.description ?? ""),
+  );
   const [criteriaI18n, setCriteriaI18n] = useState<I18nText>(
     asI18n(challenge.criteria_i18n, challenge.criteria ?? ""),
   );
@@ -281,6 +281,7 @@ function EditCard({ challenge, onSaved }: { challenge: Challenge; onSaved: () =>
     setPrizes(asPrizes(challenge.prizes));
     setQuestions(asQuestions(challenge.judging_panel_criteria));
     setTitleI18n(asI18n(challenge.title_i18n, challenge.title));
+    setDescriptionI18n(asI18n(challenge.description_i18n, challenge.description ?? ""));
     setCriteriaI18n(asI18n(challenge.criteria_i18n, challenge.criteria ?? ""));
   }, [challenge, reset]);
 
@@ -290,13 +291,15 @@ function EditCard({ challenge, onSaved }: { challenge: Challenge; onSaved: () =>
       toast.error("An English title is required.");
       return;
     }
+    const descriptionEn = descriptionI18n.en.trim();
     const criteriaEn = criteriaI18n.en.trim();
     try {
       const normalizedQuestions = normalizeQuestions(questions);
       await api.patch<Challenge>(`/api/challenges/${challenge.id}`, {
         title,
         titleI18n: i18nWithEnglishFallback(titleI18n),
-        description: values.description,
+        description: descriptionEn,
+        descriptionI18n: descriptionEn ? i18nWithEnglishFallback(descriptionI18n) : null,
         criteria: criteriaEn || null,
         criteriaI18n: criteriaEn ? i18nWithEnglishFallback(criteriaI18n) : null,
         prizes: normalizePrizes(prizes),
@@ -322,18 +325,12 @@ function EditCard({ challenge, onSaved }: { challenge: Challenge; onSaved: () =>
           footer={<SubmitButton pending={form.formState.isSubmitting}>Save changes</SubmitButton>}
         >
           <MultilingualInput label="Title" value={titleI18n} onChange={setTitleI18n} />
-          <FormField
-            control={form.control}
-            name="description"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Description</FormLabel>
-                <FormControl>
-                  <Textarea rows={4} {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
+          <MultilingualInput
+            label="Description"
+            optional
+            textarea
+            value={descriptionI18n}
+            onChange={setDescriptionI18n}
           />
           <MultilingualInput
             label="Public criteria"

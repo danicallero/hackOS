@@ -525,6 +525,8 @@ export interface PublicChallenge {
   /** Per-language title (en/es/gl); null when no translations were entered. */
   titleI18n: unknown;
   description: string;
+  /** Per-language description (en/es/gl); null when no translations were entered. */
+  descriptionI18n: unknown;
   criteria: string | null;
   /** Per-language criteria (en/es/gl); null when no translations were entered. */
   criteriaI18n: unknown;
@@ -544,6 +546,7 @@ export async function listPublicChallenges(): Promise<PublicChallenge[]> {
             c.title,
             c.title_i18n,
             c.description,
+            c.description_i18n,
             c.criteria,
             c.criteria_i18n,
             c.prizes,
@@ -565,6 +568,7 @@ export async function listPublicChallenges(): Promise<PublicChallenge[]> {
     title: String(r.title),
     titleI18n: r.title_i18n ?? null,
     description: String(r.description),
+    descriptionI18n: r.description_i18n ?? null,
     criteria: (r.criteria as string | null) ?? null,
     criteriaI18n: r.criteria_i18n ?? null,
     prizes: r.prizes ?? [],

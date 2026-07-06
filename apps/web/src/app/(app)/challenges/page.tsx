@@ -26,7 +26,6 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
 import { useSessionContext } from "@/lib/session";
 import type { EnterpriseSummary } from "@/lib/types";
@@ -52,7 +51,6 @@ const optionalPositiveInt = z
 
 const createSchema = z.object({
   enterpriseId: z.string().min(1, "Required"),
-  description: z.string().max(6000),
   maxPresentationSeconds: optionalPositiveInt,
 });
 type CreateValues = z.infer<typeof createSchema>;
@@ -270,12 +268,12 @@ function CreateChallengeModal({
   const [prizes, setPrizes] = useState<Prize[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [titleI18n, setTitleI18n] = useState<I18nText>(EMPTY_I18N);
+  const [descriptionI18n, setDescriptionI18n] = useState<I18nText>(EMPTY_I18N);
   const [criteriaI18n, setCriteriaI18n] = useState<I18nText>(EMPTY_I18N);
   const form = useForm<CreateValues>({
     resolver: zodResolver(createSchema),
     defaultValues: {
       enterpriseId: "",
-      description: "",
       maxPresentationSeconds: "",
     },
   });
@@ -287,6 +285,7 @@ function CreateChallengeModal({
     setPrizes([]);
     setQuestions([]);
     setTitleI18n(EMPTY_I18N);
+    setDescriptionI18n(EMPTY_I18N);
     setCriteriaI18n(EMPTY_I18N);
     api
       .get<{ enterprises: EnterpriseSummary[] }>("/api/enterprises")
@@ -302,6 +301,7 @@ function CreateChallengeModal({
       toast.error("An English title is required.");
       return;
     }
+    const descriptionEn = descriptionI18n.en.trim();
     const criteriaEn = criteriaI18n.en.trim();
     try {
       const normalizedQuestions = normalizeQuestions(questions);
@@ -309,7 +309,8 @@ function CreateChallengeModal({
         enterpriseId: Number(values.enterpriseId),
         title,
         titleI18n: i18nWithEnglishFallback(titleI18n),
-        description: values.description || undefined,
+        description: descriptionEn || undefined,
+        descriptionI18n: descriptionEn ? i18nWithEnglishFallback(descriptionI18n) : null,
         criteria: criteriaEn || null,
         criteriaI18n: criteriaEn ? i18nWithEnglishFallback(criteriaI18n) : null,
         prizes: normalizePrizes(prizes),
@@ -367,18 +368,12 @@ function CreateChallengeModal({
             )}
           />
           <MultilingualInput label="Title" value={titleI18n} onChange={setTitleI18n} />
-          <FormField
-            control={form.control}
-            name="description"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Description</FormLabel>
-                <FormControl>
-                  <Textarea rows={3} {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
+          <MultilingualInput
+            label="Description"
+            optional
+            textarea
+            value={descriptionI18n}
+            onChange={setDescriptionI18n}
           />
           <MultilingualInput
             label="Public criteria"

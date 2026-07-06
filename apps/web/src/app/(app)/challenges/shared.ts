@@ -14,6 +14,7 @@ export interface Challenge {
   title: string;
   title_i18n: I18nText | null;
   description: string;
+  description_i18n: I18nText | null;
   criteria: string | null;
   criteria_i18n: I18nText | null;
   prizes: Prize[] | null;

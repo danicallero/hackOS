@@ -22,6 +22,7 @@ function snapshotOf(row: Record<string, unknown>) {
     title: row.title,
     title_i18n: row.title_i18n,
     description: row.description,
+    description_i18n: row.description_i18n,
     criteria: row.criteria,
     criteria_i18n: row.criteria_i18n,
     prizes: row.prizes,
@@ -30,16 +31,16 @@ function snapshotOf(row: Record<string, unknown>) {
   };
 }
 
-const EDITABLE_COLUMNS = `id, title, title_i18n, description, criteria, criteria_i18n, prizes,
-  judging_panel_criteria, max_presentation_seconds, visibility,
+const EDITABLE_COLUMNS = `id, title, title_i18n, description, description_i18n, criteria,
+  criteria_i18n, prizes, judging_panel_criteria, max_presentation_seconds, visibility,
   available_from, created_at, updated_at`;
 
-const EDITABLE_COLUMNS_FROM_CHALLENGE = `c.id, c.title, c.title_i18n, c.description, c.criteria,
-  c.criteria_i18n, c.prizes, c.judging_panel_criteria, c.max_presentation_seconds, c.visibility,
-  c.available_from, c.created_at, c.updated_at`;
+const EDITABLE_COLUMNS_FROM_CHALLENGE = `c.id, c.title, c.title_i18n, c.description,
+  c.description_i18n, c.criteria, c.criteria_i18n, c.prizes, c.judging_panel_criteria,
+  c.max_presentation_seconds, c.visibility, c.available_from, c.created_at, c.updated_at`;
 
-const CREATE_RETURNING_COLUMNS = `id, author, title, title_i18n, description, criteria,
-  criteria_i18n, prizes, judging_panel_criteria, max_presentation_seconds, visibility,
+const CREATE_RETURNING_COLUMNS = `id, author, title, title_i18n, description, description_i18n,
+  criteria, criteria_i18n, prizes, judging_panel_criteria, max_presentation_seconds, visibility,
   available_from, created_at, updated_at`;
 
 /**
@@ -120,20 +121,24 @@ export async function createChallenge(input: CreateChallengeBody, actorId: numbe
     // title/criteria stay in sync with their i18n .en so plain-string consumers
     // (queue, projects, exports) keep working.
     const title = input.titleI18n?.en.trim() || input.title;
+    const description = input.descriptionI18n
+      ? input.descriptionI18n.en
+      : (input.description ?? "");
     const criteria = input.criteriaI18n
       ? input.criteriaI18n.en.trim() || null
       : (input.criteria ?? null);
     const { rows } = await client.query(
       `INSERT INTO challenges
-         (author, title, title_i18n, description, criteria, criteria_i18n, prizes,
-          judging_panel_criteria, max_presentation_seconds, visibility)
-       VALUES ($1, $2, $3::jsonb, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9, 'hidden')
+         (author, title, title_i18n, description, description_i18n, criteria, criteria_i18n,
+          prizes, judging_panel_criteria, max_presentation_seconds, visibility)
+       VALUES ($1, $2, $3::jsonb, $4, $5::jsonb, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10, 'hidden')
        RETURNING ${CREATE_RETURNING_COLUMNS}`,
       [
         authorId,
         title,
         input.titleI18n ? JSON.stringify(input.titleI18n) : null,
-        input.description ?? "",
+        description,
+        input.descriptionI18n ? JSON.stringify(input.descriptionI18n) : null,
         criteria,
         input.criteriaI18n ? JSON.stringify(input.criteriaI18n) : null,
         input.prizes === undefined ? null : JSON.stringify(input.prizes),
@@ -345,7 +350,16 @@ export async function updateChallenge(
     } else if (patch.title !== undefined) {
       put("title", patch.title);
     }
-    if (patch.description !== undefined) put("description", patch.description);
+    if (patch.descriptionI18n !== undefined) {
+      put(
+        "description_i18n",
+        patch.descriptionI18n === null ? null : JSON.stringify(patch.descriptionI18n),
+        "::jsonb",
+      );
+      put("description", patch.descriptionI18n ? patch.descriptionI18n.en : "");
+    } else if (patch.description !== undefined) {
+      put("description", patch.description);
+    }
     if (patch.criteriaI18n !== undefined) {
       put(
         "criteria_i18n",

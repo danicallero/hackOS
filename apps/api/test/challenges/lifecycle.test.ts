@@ -234,6 +234,7 @@ describe("challenge lifecycle (H43-H45)", () => {
         enterpriseId,
         title: "AI Prize",
         titleI18n: { en: "AI Prize", es: "Premio IA", gl: "Premio de IA" },
+        descriptionI18n: { en: "Build it", es: "Constrúyelo", gl: "Constrúeo" },
         criteria: "Impact",
         criteriaI18n: { en: "Impact", es: "Impacto", gl: "Impacto gl" },
       },
@@ -245,6 +246,8 @@ describe("challenge lifecycle (H43-H45)", () => {
       es: "Premio IA",
       gl: "Premio de IA",
     });
+    expect(created.json().description).toBe("Build it");
+    expect(created.json().description_i18n.es).toBe("Constrúyelo");
     expect(created.json().criteria_i18n.es).toBe("Impacto");
     const id = created.json().id;
 
