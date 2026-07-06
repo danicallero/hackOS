@@ -1,26 +1,37 @@
 "use client";
 
-// Users directory (H7/H8/H10): staff browse every user and drill into a
-// profile. Search is server-side (GET /api/users?q=) so it covers the whole
-// table, not just the first page — the endpoint paginates (limit ≤ 200).
-
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { UsersIcon } from "lucide-react";
+import { SlidersHorizontalIcon, UsersIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CapabilityGate } from "@/components/common/capability-gate";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { PageHeader } from "@/components/common/page-header";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ApiError, api } from "@/lib/api";
-import type { UserList, UserListItem } from "@/lib/types";
+import type { DerivedRole, UserList, UserListItem } from "@/lib/types";
 import { ActiveInvitationsModal } from "./active-invitations-modal";
 import { InviteUserDialog } from "./invite-dialog";
 
-/** Initials for the avatar fallback, from name/surname or the email. */
 function initials(u: UserListItem): string {
   const a = u.name?.trim()?.[0];
   const b = u.surname?.trim()?.[0];
@@ -39,7 +50,64 @@ const dateFmt = new Intl.DateTimeFormat("en-GB", {
   year: "numeric",
 });
 
-const columns: Column<UserListItem>[] = [
+const ROLE_LABEL: Record<DerivedRole, string> = {
+  admin: "Admin",
+  judge: "Judge",
+  sponsor: "Sponsor",
+  staff: "Staff",
+  participant: "Participant",
+};
+
+const COLUMN_OPTIONS = [
+  "name",
+  "role",
+  "email",
+  "application",
+  "badge",
+  "phone",
+  "shirt",
+  "language",
+  "created",
+] as const;
+type UserColumnId = (typeof COLUMN_OPTIONS)[number];
+
+const COLUMN_LABEL: Record<UserColumnId, string> = {
+  name: "Name",
+  role: "Role",
+  email: "Email",
+  application: "Application",
+  badge: "Badge",
+  phone: "Phone",
+  shirt: "Shirt",
+  language: "Language",
+  created: "Joined",
+};
+
+const DEFAULT_COLUMNS = new Set<UserColumnId>([
+  "name",
+  "role",
+  "email",
+  "application",
+  "badge",
+  "created",
+]);
+
+function applicationLabel(status: string | null): string {
+  if (!status) return "No application";
+  if (status === "accepted_internal") return "Accepted (unsent)";
+  if (status === "rejected_internal") return "Rejected (unsent)";
+  return status.replace(/_/g, " ");
+}
+
+function applicationTone(status: string | null): "success" | "warning" | "danger" | "neutral" {
+  if (status === "confirmed") return "success";
+  if (status === "accepted" || status === "accepted_internal") return "warning";
+  if (status === "rejected" || status === "rejected_internal" || status === "declined")
+    return "danger";
+  return "neutral";
+}
+
+const allColumns: Column<UserListItem>[] = [
   {
     id: "name",
     header: "Name",
@@ -51,6 +119,16 @@ const columns: Column<UserListItem>[] = [
         </Avatar>
         <span className="font-medium">{fullName(u)}</span>
       </div>
+    ),
+  },
+  {
+    id: "role",
+    header: "Role",
+    sortValue: (u) => u.role,
+    cell: (u) => (
+      <StatusBadge tone={u.role === "participant" ? "neutral" : "info"} dot={false}>
+        {ROLE_LABEL[u.role]}
+      </StatusBadge>
     ),
   },
   {
@@ -67,6 +145,16 @@ const columns: Column<UserListItem>[] = [
     ),
   },
   {
+    id: "application",
+    header: "Application",
+    sortValue: (u) => u.applicationStatus ?? "",
+    cell: (u) => (
+      <StatusBadge tone={applicationTone(u.applicationStatus)} dot={false} className="capitalize">
+        {applicationLabel(u.applicationStatus)}
+      </StatusBadge>
+    ),
+  },
+  {
     id: "badge",
     header: "Badge",
     cell: (u) =>
@@ -75,6 +163,31 @@ const columns: Column<UserListItem>[] = [
       ) : (
         <span className="text-muted-foreground">—</span>
       ),
+  },
+  {
+    id: "phone",
+    header: "Phone",
+    cell: (u) =>
+      u.phone ? (
+        <span className="text-sm">{u.phone}</span>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
+  },
+  {
+    id: "shirt",
+    header: "Shirt",
+    cell: (u) =>
+      u.shirtSize ? (
+        <span className="text-sm">{u.shirtSize}</span>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
+  },
+  {
+    id: "language",
+    header: "Language",
+    cell: (u) => <span className="text-sm uppercase">{u.language}</span>,
   },
   {
     id: "created",
@@ -93,9 +206,11 @@ export default function UsersPage() {
   const [users, setUsers] = useState<UserListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [emailFilter, setEmailFilter] = useState("all");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [spotFilter, setSpotFilter] = useState("all");
+  const [visibleColumns, setVisibleColumns] = useState<Set<UserColumnId>>(DEFAULT_COLUMNS);
 
-  // Debounced server-side search so `q` matches name/surname/email across the
-  // whole table (endpoint uses ILIKE), not just what's already loaded.
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -123,6 +238,40 @@ export default function UsersPage() {
     };
   }, [q]);
 
+  const filteredUsers = useMemo(
+    () =>
+      users.filter((user) => {
+        if (emailFilter === "verified" && !user.emailVerified) return false;
+        if (emailFilter === "unverified" && user.emailVerified) return false;
+        if (roleFilter !== "all" && user.role !== roleFilter) return false;
+        if (spotFilter === "confirmed" && user.applicationStatus !== "confirmed") return false;
+        if (
+          spotFilter === "accepted_pending" &&
+          user.applicationStatus !== "accepted" &&
+          user.applicationStatus !== "accepted_internal"
+        )
+          return false;
+        if (spotFilter === "declined" && user.applicationStatus !== "declined") return false;
+        if (spotFilter === "not_confirmed" && user.applicationStatus === "confirmed") return false;
+        return true;
+      }),
+    [users, emailFilter, roleFilter, spotFilter],
+  );
+
+  const columns = useMemo(
+    () => allColumns.filter((column) => visibleColumns.has(column.id as UserColumnId)),
+    [visibleColumns],
+  );
+
+  function toggleColumn(id: UserColumnId, checked: boolean) {
+    setVisibleColumns((current) => {
+      const next = new Set(current);
+      if (checked) next.add(id);
+      else if (next.size > 1) next.delete(id);
+      return next;
+    });
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -142,16 +291,75 @@ export default function UsersPage() {
         }
       />
 
-      <Input
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder="Search by name, surname or email…"
-        className="h-9 max-w-sm"
-      />
+      <div className="flex flex-wrap items-center gap-2">
+        <Input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search by name, surname or email…"
+          className="h-9 max-w-sm"
+        />
+        <Select value={emailFilter} onValueChange={setEmailFilter}>
+          <SelectTrigger className="h-9 w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Any email</SelectItem>
+            <SelectItem value="verified">Verified</SelectItem>
+            <SelectItem value="unverified">Unverified</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={roleFilter} onValueChange={setRoleFilter}>
+          <SelectTrigger className="h-9 w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Any role</SelectItem>
+            {Object.entries(ROLE_LABEL).map(([value, label]) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={spotFilter} onValueChange={setSpotFilter}>
+          <SelectTrigger className="h-9 w-44">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Any spot</SelectItem>
+            <SelectItem value="confirmed">Confirmed</SelectItem>
+            <SelectItem value="accepted_pending">Accepted pending</SelectItem>
+            <SelectItem value="declined">Declined</SelectItem>
+            <SelectItem value="not_confirmed">Not confirmed</SelectItem>
+          </SelectContent>
+        </Select>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="h-9">
+              <SlidersHorizontalIcon />
+              Columns
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuLabel>Visible fields</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {COLUMN_OPTIONS.map((id) => (
+              <DropdownMenuCheckboxItem
+                key={id}
+                checked={visibleColumns.has(id)}
+                onCheckedChange={(checked) => toggleColumn(id, checked === true)}
+                disabled={visibleColumns.size === 1 && visibleColumns.has(id)}
+              >
+                {COLUMN_LABEL[id]}
+              </DropdownMenuCheckboxItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
 
       <DataTable
         columns={columns}
-        data={users}
+        data={filteredUsers}
         getRowId={(u) => String(u.id)}
         onRowClick={(u) => router.push(`/users/${u.id}`)}
         pageSize={15}

@@ -1,10 +1,5 @@
 "use client";
 
-// User profile (H7/H8): staff open a rich profile with tabs. Data comes from
-// GET /api/users/:id (record + derived role, effective capabilities and group
-// membership). Per-capability tabs (presence, activity) only fetch when the
-// viewer holds the capability the API route requires — never gate on role (H8).
-
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -41,7 +36,6 @@ import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -65,11 +59,14 @@ import { useCan } from "@/lib/session";
 import type { Tone } from "@/lib/tones";
 import type {
   DerivedRole,
+  EnterpriseSummary,
   Intolerance,
   Language,
   PermissionGroupSummary,
   UserDetail,
 } from "@/lib/types";
+import { ReviewModal } from "../../applications/[id]/page";
+import type { ApplicationForm, ResponseRow, TemplateField } from "../../applications/lib";
 
 const SHIRT_SIZES = ["XS", "S", "M", "L", "XL", "XXL"] as const;
 const LANGS: Language[] = ["es", "gl", "en"];
@@ -105,7 +102,7 @@ export default function UserProfilePage() {
   const [errorMsg, setErrorMsg] = useState("");
 
   const load = useCallback(async () => {
-    setStatus("loading");
+    setStatus((current) => (current === "ready" ? "ready" : "loading"));
     try {
       const data = await api.get<UserDetail>(`/api/users/${userId}`);
       setUser(data);
@@ -121,8 +118,6 @@ export default function UserProfilePage() {
     else setStatus("error");
   }, [userId, load]);
 
-  // Food-intolerance dictionary (H12/H25) resolves the user's number[] to names
-  // in read-only mode and powers the picker in the staff edit form.
   useEffect(() => {
     api
       .get<{ intolerances: Intolerance[] }>("/api/public/food-intolerances")
@@ -188,7 +183,7 @@ export default function UserProfilePage() {
           <EmptyState
             icon={FolderGitIcon}
             title="No projects yet"
-            description="Available once the projects module lands — an accepted hacker's submissions will surface here."
+            description="Accepted participants' project submissions will appear here."
           />
         </TabsContent>
       </Tabs>
@@ -237,7 +232,6 @@ function ProfileHeader({ user }: { user: UserDetail }) {
   );
 }
 
-/** Delete an account — superadmin only (ADMIN_ALL); confirm before removing. */
 function DeleteAccountButton({ user }: { user: UserDetail }) {
   const router = useRouter();
   const canDelete = useCan(CAPABILITIES.ADMIN_ALL);
@@ -317,18 +311,23 @@ function OverviewTab({
       ) : (
         <ReadOnlyOverview user={user} intolerances={intolerances} />
       )}
-      <EnterpriseMemberships userId={user.id} />
     </div>
   );
 }
 
-// M4.1: a user's enterprise affiliations, surfaced on their profile. Adding a
-// link is done from the enterprise's own page (Affiliated users); here we show
-// the memberships read-only with a jump to each enterprise.
-function EnterpriseMemberships({ userId }: { userId: number }) {
+function EnterpriseMemberships({
+  userId,
+  onChanged,
+}: {
+  userId: number;
+  onChanged: () => void | Promise<void>;
+}) {
   const [enterprises, setEnterprises] = useState<{ id: number; name: string }[] | null>(null);
+  const [allEnterprises, setAllEnterprises] = useState<EnterpriseSummary[]>([]);
+  const [busy, setBusy] = useState(false);
+  const canManage = useCan(CAPABILITIES.SPONSORS_MANAGE);
 
-  useEffect(() => {
+  const loadMemberships = useCallback(() => {
     let cancelled = false;
     api
       .get<{ enterprises: { id: number; name: string }[] }>(`/api/users/${userId}/enterprises`)
@@ -343,27 +342,73 @@ function EnterpriseMemberships({ userId }: { userId: number }) {
     };
   }, [userId]);
 
-  if (enterprises === null || enterprises.length === 0) return null;
+  useEffect(loadMemberships, [loadMemberships]);
+
+  useEffect(() => {
+    if (!canManage) return;
+    api
+      .get<{ enterprises: EnterpriseSummary[] }>("/api/enterprises")
+      .then((r) => setAllEnterprises(r.enterprises))
+      .catch(() => setAllEnterprises([]));
+  }, [canManage]);
+
+  const memberIds = new Set((enterprises ?? []).map((e) => e.id));
+  const addable = allEnterprises.filter((enterprise) => !memberIds.has(enterprise.id));
+
+  async function addEnterprise(enterpriseId: string) {
+    setBusy(true);
+    try {
+      await api.post(`/api/enterprises/${enterpriseId}/members`, { userId });
+      toast.success("Enterprise added.");
+      loadMemberships();
+      await onChanged();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not add enterprise.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <SectionCard
       icon={Building2Icon}
       title="Enterprises"
-      description="Enterprises this user is affiliated with."
+      action={
+        canManage && addable.length > 0 ? (
+          <Select value="" onValueChange={addEnterprise} disabled={busy}>
+            <SelectTrigger className="w-56">
+              <SelectValue placeholder="Add enterprise…" />
+            </SelectTrigger>
+            <SelectContent>
+              {addable.map((enterprise) => (
+                <SelectItem key={enterprise.id} value={String(enterprise.id)}>
+                  {enterprise.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : undefined
+      }
     >
-      <ul className="flex flex-wrap gap-2">
-        {enterprises.map((e) => (
-          <li key={e.id}>
-            <Button asChild size="sm" variant="outline">
-              <Link href={`/enterprises/${e.id}`}>{e.name}</Link>
-            </Button>
-          </li>
-        ))}
-      </ul>
+      {enterprises === null ? (
+        <Spinner className="size-4" />
+      ) : enterprises.length === 0 ? (
+        <p className="text-muted-foreground text-sm">No enterprise affiliations.</p>
+      ) : (
+        <ul className="flex flex-wrap gap-2">
+          {enterprises.map((e) => (
+            <li key={e.id}>
+              <Button asChild size="sm" variant="outline">
+                <Link href={`/enterprises/${e.id}`}>{e.name}</Link>
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
     </SectionCard>
   );
 }
 
-/** Resolve a user's foodIntolerances number[] to human labels (H12/H25). */
 function intoleranceNames(ids: number[], dict: Intolerance[], lang: Language): string {
   if (!ids.length) return "";
   const byId = new Map(dict.map((i) => [i.id, i]));
@@ -394,12 +439,7 @@ function ReadOnlyOverview({
 }) {
   const lang = (LANGS.includes(user.language as Language) ? user.language : "es") as Language;
   return (
-    <SectionCard
-      icon={UserIcon}
-      title="Profile details"
-      description="Read-only. You need the users:write capability to edit these fields."
-      bodyClassName="space-y-4"
-    >
+    <SectionCard icon={UserIcon} title="Profile details" bodyClassName="space-y-4">
       <dl className="space-y-4">
         <Field
           label="Secondary email"
@@ -465,8 +505,6 @@ function StaffEditForm({
 
   async function onSubmit(values: EditValues) {
     try {
-      // PATCH /api/users/:id (USERS_WRITE) — staff-editable field set. Audited
-      // server-side because actor != target (H7/H53).
       await api.patch<UserDetail>(`/api/users/${user.id}`, {
         name: values.name,
         surname: values.surname,
@@ -605,7 +643,6 @@ function StaffEditForm({
                 <FormControl>
                   <Input {...field} />
                 </FormControl>
-                <FormDescription>Identity-critical — staff only.</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -652,7 +689,6 @@ function StaffEditForm({
                 <FormControl>
                   <Textarea rows={3} placeholder="Internal notes about this user…" {...field} />
                 </FormControl>
-                <FormDescription>Not visible to the user.</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -693,8 +729,6 @@ function StaffEditForm({
     </Form>
   );
 }
-
-// ── Permissions (H8) ─────────────────────────────────────────────────────────
 
 function PermissionsTab({ user, onChanged }: { user: UserDetail; onChanged: () => void }) {
   const canManage = useCan(CAPABILITIES.PERMISSIONS_MANAGE);
@@ -743,7 +777,6 @@ function PermissionsTab({ user, onChanged }: { user: UserDetail; onChanged: () =
       <SectionCard
         icon={UsersIcon}
         title="Permission groups"
-        description="Effective access is the union of the capabilities granted by these groups (H8)."
         action={
           canManage && addable.length > 0 ? (
             <Select value="" onValueChange={addToGroup} disabled={busy}>
@@ -793,11 +826,7 @@ function PermissionsTab({ user, onChanged }: { user: UserDetail; onChanged: () =
         )}
       </SectionCard>
 
-      <SectionCard
-        icon={KeyRoundIcon}
-        title="Effective capabilities"
-        description="Resolved from group membership — this is what the API enforces on every guarded route (H8)."
-      >
+      <SectionCard icon={KeyRoundIcon} title="Effective capabilities">
         {user.capabilities.length === 0 ? (
           <p className="text-muted-foreground text-sm">No capabilities.</p>
         ) : (
@@ -810,11 +839,10 @@ function PermissionsTab({ user, onChanged }: { user: UserDetail; onChanged: () =
           </div>
         )}
       </SectionCard>
+      <EnterpriseMemberships userId={user.id} onChanged={onChanged} />
     </div>
   );
 }
-
-// ── Presence (H24, capability logistics:stats) ───────────────────────────────
 
 interface PresenceHours {
   userId: number;
@@ -894,6 +922,22 @@ function PresenceTab({ userId }: { userId: number }) {
       header: "Left",
       cell: (i) => <span className="text-sm">{timeFmt.format(new Date(i.end))}</span>,
     },
+    {
+      id: "duration",
+      header: "Duration",
+      align: "right",
+      cell: (i) => {
+        const ms = new Date(i.end).getTime() - new Date(i.start).getTime();
+        const minutes = Math.max(0, Math.round(ms / 60000));
+        const hours = Math.floor(minutes / 60);
+        const rest = minutes % 60;
+        return (
+          <span className="text-sm tabular-nums">
+            {hours}h {rest}m
+          </span>
+        );
+      },
+    },
   ];
 
   return (
@@ -902,7 +946,7 @@ function PresenceTab({ userId }: { userId: number }) {
         <StatCard
           label="Estimated hours"
           value={data.hours.toFixed(1)}
-          hint="From door and activity scans (H24)"
+          hint="From entry and exit activity"
           icon={ClockIcon}
         />
         <StatCard
@@ -926,33 +970,16 @@ function PresenceTab({ userId }: { userId: number }) {
   );
 }
 
-// ── Activity ─────────────────────────────────────────────────────────────────
-// Two distinct things live here: the user's *physical* history (activity/meal
-// passes, badge check-ins, door in/out scans — H24-H26) from
-// GET /api/users/:id/activity (USERS_READ, always available on this page), and
-// the *audit log* of record changes (H53) from GET /api/audit (AUDIT_READ).
-
 interface ActivityPass {
   id: number;
   activityName: string;
   category: string;
   loggedAt: string;
-  notes: string | null;
-}
-interface DoorScanRow {
-  id: number;
-  kind: string;
-  location: string | null;
-  scannedAt: string;
 }
 interface UserActivity {
   passes: ActivityPass[];
-  doorScans: DoorScanRow[];
 }
 
-// M3.1/M3.2: the "Logs" tab is the audit trail; physical presence (passes +
-// door scans) now lives under the unified Presence tab, and the standalone
-// "check-ins" concept is gone (a badge assignment is just the first door scan).
 function LogsTab({ userId }: { userId: number }) {
   return <AuditLogSection userId={userId} />;
 }
@@ -967,32 +994,80 @@ interface UserApplicationRow {
   submitted_at: string | null;
 }
 
-// M3.3: the profile Application tab now connects to the applications module.
-// It lists the user's responses (real staff-side status) and links each into
-// the review view, which renders the same TemplateFieldControl component and
-// enforces the applications:review / :edit_response capabilities server-side.
+interface ResponseDetailPayload {
+  response: ResponseRow;
+  user: {
+    name: string | null;
+    email: string;
+    shirt_size: string | null;
+    food_intolerances: number[];
+    food_intolerance_notes: string | null;
+  };
+  application: Pick<ApplicationForm, "id" | "name" | "type"> & { template: TemplateField[] };
+  reviews: { score: number | null }[];
+}
+
 function ApplicationTab({ userId }: { userId: number }) {
   const [rows, setRows] = useState<UserApplicationRow[] | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "forbidden" | "error">("loading");
+  const [selected, setSelected] = useState<{
+    response: ResponseRow;
+    applicationId: number;
+    template: TemplateField[];
+  } | null>(null);
+  const [openingId, setOpeningId] = useState<number | null>(null);
+
+  const loadRows = useCallback(
+    async (showLoading = true) => {
+      if (showLoading) setState("loading");
+      try {
+        const data = await api.get<{ responses: UserApplicationRow[] }>(
+          `/api/users/${userId}/applications`,
+        );
+        setRows(data.responses);
+        setState("ready");
+      } catch (err) {
+        setState(err instanceof ApiError && err.status === 403 ? "forbidden" : "error");
+      }
+    },
+    [userId],
+  );
 
   useEffect(() => {
-    let cancelled = false;
-    setState("loading");
-    api
-      .get<{ responses: UserApplicationRow[] }>(`/api/users/${userId}/applications`)
-      .then((r) => {
-        if (cancelled) return;
-        setRows(r.responses);
-        setState("ready");
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setState(err instanceof ApiError && err.status === 403 ? "forbidden" : "error");
+    void loadRows();
+  }, [loadRows]);
+
+  async function openResponse(responseId: number) {
+    setOpeningId(responseId);
+    try {
+      const detail = await api.get<ResponseDetailPayload>(`/api/responses/${responseId}`);
+      const scores = detail.reviews
+        .map((review) => review.score)
+        .filter((score): score is number => typeof score === "number");
+      const avgScore =
+        scores.length > 0
+          ? scores.reduce((total, score) => total + score, 0) / scores.length
+          : null;
+      setSelected({
+        response: {
+          ...detail.response,
+          name: detail.user.name,
+          email: detail.user.email,
+          shirt_size: detail.user.shirt_size,
+          food_intolerances: detail.user.food_intolerances,
+          food_intolerance_notes: detail.user.food_intolerance_notes,
+          avg_score: avgScore,
+          review_count: detail.reviews.length,
+        },
+        applicationId: detail.application.id,
+        template: detail.application.template,
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [userId]);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not open this application.");
+    } finally {
+      setOpeningId(null);
+    }
+  }
 
   if (state === "loading") {
     return (
@@ -1049,12 +1124,27 @@ function ApplicationTab({ userId }: { userId: number }) {
             <StatusBadge tone={statusTone(r.status)} dot={false}>
               {r.status.replace(/_/g, " ")}
             </StatusBadge>
-            <Button asChild size="sm" variant="outline">
-              <Link href={`/applications/${r.application_id}?response=${r.id}`}>Open</Link>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={openingId === r.id}
+              onClick={() => openResponse(r.id)}
+            >
+              {openingId === r.id ? "Opening…" : "Open"}
             </Button>
           </li>
         ))}
       </ul>
+      {selected && (
+        <ReviewModal
+          response={selected.response}
+          applicationId={selected.applicationId}
+          template={selected.template}
+          onClose={() => setSelected(null)}
+          onChanged={() => loadRows(false)}
+        />
+      )}
     </SectionCard>
   );
 }
@@ -1068,7 +1158,6 @@ function statusTone(status: string): "success" | "warning" | "danger" | "neutral
   return "neutral";
 }
 
-/** Physical passes/check-ins/door scans (H24-H26), gated only by USERS_READ. */
 function PhysicalActivity({ userId }: { userId: number }) {
   const [data, setData] = useState<UserActivity | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
@@ -1104,7 +1193,7 @@ function PhysicalActivity({ userId }: { userId: number }) {
       <EmptyState
         icon={ClipboardListIcon}
         title="Could not load activity"
-        description="This user's passes, check-ins and scans are unavailable right now."
+        description="This user's passes are unavailable right now."
       />
     );
   }
@@ -1130,54 +1219,11 @@ function PhysicalActivity({ userId }: { userId: number }) {
       sortValue: (p) => p.loggedAt,
       cell: (p) => <span className="text-sm">{timeFmt.format(new Date(p.loggedAt))}</span>,
     },
-    {
-      id: "notes",
-      header: "Notes",
-      cell: (p) =>
-        p.notes ? (
-          <span className="text-sm">{p.notes}</span>
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        ),
-    },
-  ];
-
-  const doorScanColumns: Column<DoorScanRow>[] = [
-    {
-      id: "kind",
-      header: "Direction",
-      cell: (d) => (
-        <StatusBadge tone={d.kind === "in" ? "success" : "neutral"} dot={false}>
-          {d.kind === "in" ? "In" : "Out"}
-        </StatusBadge>
-      ),
-    },
-    {
-      id: "location",
-      header: "Location",
-      cell: (d) =>
-        d.location ? (
-          <span className="text-sm">{d.location}</span>
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        ),
-    },
-    {
-      id: "when",
-      header: "When",
-      sortValue: (d) => d.scannedAt,
-      cell: (d) => <span className="text-sm">{timeFmt.format(new Date(d.scannedAt))}</span>,
-    },
   ];
 
   return (
     <div className="space-y-6">
-      <SectionCard
-        icon={ClipboardListIcon}
-        title="Activity passes"
-        description="Food and workshop passes logged from activity scans (H25)."
-        bodyClassName="p-0"
-      >
+      <SectionCard icon={ClipboardListIcon} title="Activity passes" bodyClassName="p-0">
         <DataTable
           columns={passColumns}
           data={data.passes}
@@ -1190,30 +1236,9 @@ function PhysicalActivity({ userId }: { userId: number }) {
           }}
         />
       </SectionCard>
-
-      <SectionCard
-        icon={ClockIcon}
-        title="Door scans"
-        description="In/out scans at the venue doors (H24)."
-        bodyClassName="p-0"
-      >
-        <DataTable
-          columns={doorScanColumns}
-          data={data.doorScans}
-          getRowId={(d) => String(d.id)}
-          pageSize={10}
-          empty={{
-            icon: ClockIcon,
-            title: "No door scans yet",
-            description: "Entry and exit scans will appear here.",
-          }}
-        />
-      </SectionCard>
     </div>
   );
 }
-
-// ── Audit log (H53, capability audit:read) ───────────────────────────────────
 
 interface AuditRow {
   id: number;
@@ -1321,7 +1346,7 @@ function AuditLogSection({ userId }: { userId: number }) {
     <SectionCard
       icon={FileTextIcon}
       title="Audit log"
-      description="Staff edits and other audited changes to this user's record (H53)."
+      description="Staff edits and other audited changes to this user's record."
       bodyClassName="p-0"
     >
       <DataTable
