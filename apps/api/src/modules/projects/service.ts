@@ -1,10 +1,13 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
+import { config } from "../../config.js";
 import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
-import { ConflictError, NotFoundError } from "../../lib/errors.js";
+import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
+import { enqueueAuthEmail } from "../identity/outbox.js";
+import { assertSecondaryEmailAvailable } from "../identity/routes/secondary-email.js";
 import { writeQueueHistory } from "../queue/history.js";
 import { compactChallengePositions, nextBottomPosition } from "../queue/ordering.js";
 import { buildImportPlan, type ImportPlan, type PlannedRepo } from "./plan.js";
@@ -258,6 +261,87 @@ export async function linkParticipant(
   });
 }
 
+export interface LinkSecondaryResult {
+  repoId: number;
+  email: string;
+  userId: number;
+  secondaryEmailSent: true;
+}
+
+const SECONDARY_EMAIL_TTL_HOURS = 24;
+
+/**
+ * H6/H16: link an unmatched Devpost email to a hackOS account by registering
+ * it as that account's SECONDARY email and firing the platform's normal
+ * secondary-email verification (identity, H6) — we do NOT invent a new flow.
+ * Once the owner verifies, a re-import auto-matches them (plan.ts matches
+ * verified secondaries). Reuses identity's uniqueness guard + auth-email
+ * enqueue so the verification link reaches the NEW address, never the primary.
+ */
+export async function linkParticipantSecondary(
+  actorId: number,
+  repoId: number,
+  email: string,
+  userId: number,
+): Promise<LinkSecondaryResult> {
+  const participant = await pool.query(
+    `SELECT 1 FROM devpost_participants WHERE repo_id = $1 AND email = $2`,
+    [repoId, email],
+  );
+  if (participant.rows.length === 0) {
+    throw new NotFoundError(`No devpost participant ${email} for repo ${repoId}`);
+  }
+  const userRes = await pool.query(`SELECT id, email, name FROM users WHERE id = $1`, [userId]);
+  const user = userRes.rows[0] as { id: number; email: string; name: string | null } | undefined;
+  if (!user) throw new NotFoundError(`User ${userId} not found`);
+  if (user.email.toLowerCase() === email) {
+    throw new BadRequestError("That email is already this account's primary email");
+  }
+  // Uniqueness rule (H6), checked before we touch anything — explicit 409.
+  await assertSecondaryEmailAvailable(email, userId);
+
+  const token = randomBytes(32).toString("base64url");
+  await withTransaction(async (client) => {
+    // A new request supersedes any pending unverified token for this user.
+    await client.query(
+      `UPDATE email_verification_tokens SET used_at = now()
+       WHERE user_id = $1 AND type = 'secondary_email' AND used_at IS NULL`,
+      [userId],
+    );
+    await client.query(
+      `INSERT INTO email_verification_tokens (token, type, email, user_id, expires_at)
+       VALUES ($1, 'secondary_email', $2, $3, now() + make_interval(hours => $4))`,
+      [token, email, userId, SECONDARY_EMAIL_TTL_HOURS],
+    );
+    // Pending (not yet verified) address is stored so /me can show it.
+    await client.query(
+      `UPDATE users SET secondary_email = $2, secondary_email_verified_at = NULL WHERE id = $1`,
+      [userId, email],
+    );
+    await enqueueAuthEmail(
+      client,
+      userId,
+      "auth.verify",
+      {
+        name: user.name ?? "",
+        verifyUrl: `${config.WEB_URL}/verify-secondary-email?token=${token}`,
+      },
+      // H6: the verification MUST reach the newly added secondary address.
+      { recipient: email },
+    );
+    await audit(client, {
+      actorId,
+      entityType: "user",
+      entityId: userId,
+      action: "secondary_email_link_requested",
+      after: { secondary_email: email, repoId },
+      source: "admin",
+    });
+  });
+
+  return { repoId, email, userId, secondaryEmailSent: true as const };
+}
+
 export interface ClaimEmailResult {
   repoId: number;
   email: string;
@@ -403,12 +487,10 @@ interface RepoRow {
 }
 
 interface RepoMember {
-  userId: number;
+  userId: number | null;
   email: string;
   name: string | null;
   surname: string | null;
-  importedFrom: string;
-  externalId: string | null;
   mergeStatus: string;
   devpostUsername: string | null;
 }
@@ -416,10 +498,6 @@ interface RepoMember {
 interface RepoChallenge {
   id: number;
   title: string;
-  status: string;
-  position: number | null;
-  assignedRoomId: number | null;
-  assignedRoomName: string | null;
 }
 
 interface RepoWithExtras extends RepoRow {
@@ -428,49 +506,60 @@ interface RepoWithExtras extends RepoRow {
   challenges: RepoChallenge[];
 }
 
+/**
+ * PROJECTS_READ attachments (H16). Members are EVERY imported Devpost
+ * participant — matched and unmatched alike (req: "store ALL member emails")
+ * — so operators can see who still needs linking. Challenges are derived from
+ * each repo's prizes mapped to `challenges.devpost_tags`, not from queue
+ * entries: the read view answers "which challenges does this project qualify
+ * for", which is what read.test expects.
+ */
 async function attachMembersAndPrizes(repoRows: RepoRow[]): Promise<RepoWithExtras[]> {
   const ids = repoRows.map((r) => r.id);
   if (ids.length === 0) return [];
 
   const membersRes = await pool.query(
-    `SELECT s.repo_id, s.user_id, u.email, u.name, u.surname, s.imported_from, s.external_id,
-            COALESCE(dp.merge_status, 'manual') AS merge_status,
-            dp.devpost_username
-       FROM submissions s
-       JOIN users u ON u.id = s.user_id
-       LEFT JOIN devpost_participants dp
-         ON dp.repo_id = s.repo_id AND dp.user_id = s.user_id
-      WHERE s.repo_id = ANY($1::int[])
-      ORDER BY s.repo_id, u.name ASC NULLS LAST, u.surname ASC NULLS LAST, u.email ASC`,
+    `SELECT repo_id, email, name, surname, devpost_username, user_id, merge_status
+       FROM devpost_participants
+      WHERE repo_id = ANY($1::int[])
+      ORDER BY repo_id, name ASC NULLS LAST, surname ASC NULLS LAST, email ASC`,
     [ids],
   );
   const prizesRes = await pool.query(
     `SELECT repo_id, prize FROM repo_devpost_prizes WHERE repo_id = ANY($1::int[])`,
     [ids],
   );
-  const challengesRes = await pool.query(
-    `SELECT qe.repo_id, qe.challenge_id AS id, c.title, qe.status, qe.position,
-            qe.assigned_room_id, r.name AS assigned_room_name
-       FROM queue_entries qe
-       JOIN challenges c ON c.id = qe.challenge_id
-       LEFT JOIN rooms r ON r.id = qe.assigned_room_id
-      WHERE qe.repo_id = ANY($1::int[])
-        AND qe.status IN ('waiting', 'called', 'in_room', 'presenting')
-      ORDER BY qe.repo_id, qe.position ASC NULLS LAST, qe.id ASC`,
-    [ids],
-  );
+  const prizeNames = [...new Set(prizesRes.rows.map((r: { prize: string }) => r.prize))];
+  const challengesRes = prizeNames.length
+    ? await pool.query(
+        `SELECT id, title, devpost_tags FROM challenges WHERE devpost_tags ?| $1::text[]`,
+        [prizeNames],
+      )
+    : { rows: [] as Array<{ id: number; title: string; devpost_tags: string[] }> };
+
+  const challengesByPrize = new Map<string, RepoChallenge[]>();
+  for (const c of challengesRes.rows as Array<{
+    id: number;
+    title: string;
+    devpost_tags: string[];
+  }>) {
+    for (const tag of c.devpost_tags) {
+      if (!prizeNames.includes(tag)) continue;
+      const arr = challengesByPrize.get(tag) ?? [];
+      arr.push({ id: c.id, title: c.title });
+      challengesByPrize.set(tag, arr);
+    }
+  }
 
   const membersByRepo = new Map<number, RepoMember[]>();
   for (const row of membersRes.rows as Array<{
     repo_id: number;
-    user_id: number;
     email: string;
     name: string | null;
     surname: string | null;
-    imported_from: string;
-    external_id: string | null;
-    merge_status: string;
     devpost_username: string | null;
+    user_id: number | null;
+    merge_status: string;
   }>) {
     const arr = membersByRepo.get(row.repo_id) ?? [];
     arr.push({
@@ -478,8 +567,6 @@ async function attachMembersAndPrizes(repoRows: RepoRow[]): Promise<RepoWithExtr
       email: row.email,
       name: row.name,
       surname: row.surname,
-      importedFrom: row.imported_from,
-      externalId: row.external_id,
       mergeStatus: row.merge_status,
       devpostUsername: row.devpost_username,
     });
@@ -493,34 +580,19 @@ async function attachMembersAndPrizes(repoRows: RepoRow[]): Promise<RepoWithExtr
     prizesByRepo.set(p.repo_id, arr);
   }
 
-  const challengesByRepo = new Map<number, RepoChallenge[]>();
-  for (const row of challengesRes.rows as Array<{
-    repo_id: number;
-    id: number;
-    title: string;
-    status: string;
-    position: number | null;
-    assigned_room_id: number | null;
-    assigned_room_name: string | null;
-  }>) {
-    const arr = challengesByRepo.get(row.repo_id) ?? [];
-    arr.push({
-      id: row.id,
-      title: row.title,
-      status: row.status,
-      position: row.position,
-      assignedRoomId: row.assigned_room_id,
-      assignedRoomName: row.assigned_room_name,
-    });
-    challengesByRepo.set(row.repo_id, arr);
-  }
-
-  return repoRows.map((repo) => ({
-    ...repo,
-    members: membersByRepo.get(repo.id) ?? [],
-    prizes: prizesByRepo.get(repo.id) ?? [],
-    challenges: challengesByRepo.get(repo.id) ?? [],
-  }));
+  return repoRows.map((repo) => {
+    const prizes = prizesByRepo.get(repo.id) ?? [];
+    const challengesSeen = new Map<number, RepoChallenge>();
+    for (const prize of prizes) {
+      for (const c of challengesByPrize.get(prize) ?? []) challengesSeen.set(c.id, c);
+    }
+    return {
+      ...repo,
+      members: membersByRepo.get(repo.id) ?? [],
+      prizes,
+      challenges: [...challengesSeen.values()],
+    };
+  });
 }
 
 const REPO_SELECT = `SELECT id, name, description, github_url, devpost_url, demo_url FROM repos`;

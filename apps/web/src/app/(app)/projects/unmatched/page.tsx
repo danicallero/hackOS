@@ -30,7 +30,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ApiError, api } from "@/lib/api";
-import { linkParticipant, listUnmatched, mapPrize, sendClaimEmail } from "@/lib/projects";
+import {
+  linkParticipant,
+  linkSecondaryEmail,
+  listUnmatched,
+  mapPrize,
+  sendClaimEmail,
+} from "@/lib/projects";
 import { useSessionContext } from "@/lib/session";
 import type { UserList } from "@/lib/types";
 import { challengeTitleText, memberName, toUnmatchedRow, type UnmatchedRow } from "../shared";
@@ -242,7 +248,7 @@ export default function UnmatchedProjectsPage() {
                       <StatusBadge tone="warning">Unmatched</StatusBadge>
                     )}
                   </div>
-                  <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto_auto] lg:items-end">
+                  <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto_auto_auto] lg:items-end">
                     <div className="space-y-2">
                       <Label htmlFor={`user-${key}`}>Link to user</Label>
                       <Select
@@ -276,6 +282,22 @@ export default function UnmatchedProjectsPage() {
                     >
                       <LinkIcon className="size-4" />
                       Link
+                    </Button>
+                    {/* H6: link by adding this email as the account's secondary and
+                        triggering the platform's secondary-email verification. */}
+                    <Button
+                      variant="outline"
+                      disabled={!selectedUserId || busy === `${key}:secondary`}
+                      onClick={() =>
+                        mutate(
+                          `${key}:secondary`,
+                          () => linkSecondaryEmail(row.repo_id, row.email, Number(selectedUserId)),
+                          "Verification email sent to the linked address.",
+                        )
+                      }
+                    >
+                      <UserPlusIcon className="size-4" />
+                      Link to hackOS user
                     </Button>
                     <Button
                       variant="outline"
