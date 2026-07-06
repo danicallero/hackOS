@@ -261,4 +261,34 @@ describe("challenge lifecycle (H43-H45)", () => {
     expect(patched.json().title).toBe("New Title");
     expect(patched.json().title_i18n.gl).toBe("Novo título");
   });
+
+  it("hiding clears any pending scheduled reveal (H45)", async () => {
+    const server = await getApp();
+    const admin = await createUserWithCapabilities([CAPABILITIES.SPONSORS_MANAGE]);
+    const enterpriseId = await createEnterprise("SchedCo");
+    const created = await server.inject({
+      method: "POST",
+      url: "/api/challenges",
+      headers: asUser(admin),
+      payload: { enterpriseId, title: "Scheduled" },
+    });
+    const id = created.json().id;
+
+    const scheduled = await server.inject({
+      method: "POST",
+      url: `/api/challenges/${id}/publish`,
+      headers: asUser(admin),
+      payload: { availableFrom: new Date(Date.now() + 3600_000).toISOString() },
+    });
+    expect(scheduled.json().visibility).toBe("visible");
+    expect(scheduled.json().available_from).not.toBeNull();
+
+    const hidden = await server.inject({
+      method: "POST",
+      url: `/api/challenges/${id}/unpublish`,
+      headers: asUser(admin),
+    });
+    expect(hidden.json().visibility).toBe("hidden");
+    expect(hidden.json().available_from).toBeNull();
+  });
 });

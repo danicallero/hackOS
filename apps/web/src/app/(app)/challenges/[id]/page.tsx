@@ -3,7 +3,7 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { I18nText, Question } from "@hackos/shared/questions";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowLeftIcon, EyeIcon, EyeOffIcon, TrophyIcon } from "lucide-react";
+import { ArrowLeftIcon, CalendarOffIcon, EyeIcon, EyeOffIcon, TrophyIcon } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -186,14 +186,17 @@ function PublishCard({
     }
   }
 
-  async function unpublish() {
+  // Hides the challenge and clears any pending reveal. For an already-hidden
+  // challenge this is purely "remove the scheduled reveal".
+  async function hideOrClearSchedule() {
+    const wasVisible = challenge.visibility === "visible";
     setBusy(true);
     try {
       await api.post<Challenge>(`/api/challenges/${challenge.id}/unpublish`);
       await onChanged();
-      toast.success("Challenge hidden.");
+      toast.success(wasVisible ? "Challenge hidden." : "Scheduled reveal removed.");
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not hide challenge.");
+      toast.error(err instanceof ApiError ? err.message : "Could not update challenge.");
     } finally {
       setBusy(false);
     }
@@ -209,9 +212,25 @@ function PublishCard({
           footer={
             <>
               {challenge.visibility === "visible" && (
-                <Button type="button" variant="outline" disabled={busy} onClick={unpublish}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={hideOrClearSchedule}
+                >
                   <EyeOffIcon className="size-4" />
                   Hide
+                </Button>
+              )}
+              {challenge.visibility === "hidden" && challenge.available_from && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={hideOrClearSchedule}
+                >
+                  <CalendarOffIcon className="size-4" />
+                  Remove schedule
                 </Button>
               )}
               <SubmitButton pending={busy}>

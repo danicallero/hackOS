@@ -220,7 +220,11 @@ export async function publishChallenge(
   });
 }
 
-/** Admin-only hide for correcting accidental reveals (H45). */
+/**
+ * Admin-only hide (H45). Also clears any pending reveal (available_from), so a
+ * hidden challenge never carries a stale schedule — this doubles as the
+ * "remove schedule" action for an already-hidden challenge.
+ */
 export async function unpublishChallenge(challengeId: number, actorId: number) {
   return withTransaction(async (client) => {
     const beforeRes = await client.query(
@@ -233,6 +237,7 @@ export async function unpublishChallenge(challengeId: number, actorId: number) {
     const updated = await client.query(
       `UPDATE challenges
           SET visibility = 'hidden',
+              available_from = NULL,
               updated_at = now()
         WHERE id = $1
         RETURNING ${EDITABLE_COLUMNS}`,
