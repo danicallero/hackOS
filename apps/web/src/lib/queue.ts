@@ -185,8 +185,10 @@ export const updateRoom = (
   body: Partial<Pick<Room, "name" | "slug" | "location" | "status">>,
 ) => api.patch<Room>(`/api/queue/rooms/${roomId}`, body);
 export const deleteRoom = (roomId: number) => api.delete(`/api/queue/rooms/${roomId}`);
-export const updateRoomState = (roomId: number, body: { desiredMinutesPerTeam?: number }) =>
-  api.patch<RoomQueueState>(`/api/queue/rooms/${roomId}/state`, body);
+export const updateRoomState = (
+  roomId: number,
+  body: { maxInWaitingArea?: number; desiredMinutesPerTeam?: number },
+) => api.patch<RoomQueueState>(`/api/queue/rooms/${roomId}/state`, body);
 export const updateQueueSettings = (
   body: Partial<
     Pick<
