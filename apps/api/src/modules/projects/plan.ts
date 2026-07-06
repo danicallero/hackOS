@@ -2,7 +2,7 @@ import type { Queryable } from "../../db/pool.js";
 import { BadRequestError } from "../../lib/errors.js";
 import {
   type DevpostParticipantRow,
-  normalizeDevpostSlug,
+  devpostSlugVariants,
   normalizeTitle,
   normalizeUrl,
   parseParticipantsCsv,
@@ -77,8 +77,9 @@ function resolveProjectIndex(
     if (byUrl.has(trimmedLower)) return byUrl.get(trimmedLower) ?? null;
     const normUrl = normalizeUrl(candidate);
     if (byNormUrl.has(normUrl)) return byNormUrl.get(normUrl) ?? null;
-    const slug = normalizeDevpostSlug(candidate);
-    if (bySlug.has(slug)) return bySlug.get(slug) ?? null;
+    for (const slug of devpostSlugVariants(candidate)) {
+      if (bySlug.has(slug)) return bySlug.get(slug) ?? null;
+    }
     const normTitle = normalizeTitle(candidate);
     if (byTitle.has(normTitle)) return byTitle.get(normTitle) ?? null;
   }
@@ -109,8 +110,9 @@ export async function buildImportPlan(
       if (!joinByUrl.has(lower)) joinByUrl.set(lower, i);
       const norm = normalizeUrl(p.url);
       if (!joinByNormUrl.has(norm)) joinByNormUrl.set(norm, i);
-      const slug = normalizeDevpostSlug(p.url);
-      if (slug && !joinBySlug.has(slug)) joinBySlug.set(slug, i);
+      for (const slug of devpostSlugVariants(p.url)) {
+        if (slug && !joinBySlug.has(slug)) joinBySlug.set(slug, i);
+      }
     }
     const normTitle = normalizeTitle(p.title);
     if (!joinByTitle.has(normTitle)) joinByTitle.set(normTitle, i);

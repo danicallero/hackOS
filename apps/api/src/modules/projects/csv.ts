@@ -165,6 +165,18 @@ export function normalizeDevpostSlug(value: string): string {
     .replace(/\/+$/, "");
 }
 
+export function devpostSlugVariants(value: string): string[] {
+  const slug = normalizeDevpostSlug(value);
+  if (!slug) return [];
+  const variants = new Set<string>([slug]);
+  let current = slug;
+  while (current.includes("-")) {
+    current = current.slice(0, current.lastIndexOf("-"));
+    if (current) variants.add(current);
+  }
+  return [...variants];
+}
+
 export function projectRefCandidates(value: string | undefined): string[] {
   if (!value) return [];
   return value
