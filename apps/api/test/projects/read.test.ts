@@ -399,6 +399,61 @@ describe("GET /api/me/projects (participant self-view)", () => {
   });
 });
 
+describe("POST /api/repos/:repoId/members (PROJECTS_EDIT)", () => {
+  it("adds an existing internal user and returns them in project detail", async () => {
+    const server = await getApp();
+    await seedMatchableUsers();
+    const operator = await createUserWithCapabilities([
+      CAPABILITIES.PROJECTS_IMPORT,
+      CAPABILITIES.PROJECTS_EDIT,
+      CAPABILITIES.PROJECTS_READ,
+    ]);
+    await importFixtures(operator);
+
+    const reposRes = await server.inject({
+      method: "GET",
+      url: "/api/repos",
+      headers: asUser(operator),
+    });
+    const repo = reposRes.json().repos.find((r: { name: string }) => r.name === "Neural Beans");
+    const member = await createUser({ email: "late-signup@test.local", name: "Late Signup" });
+
+    const addRes = await server.inject({
+      method: "POST",
+      url: `/api/repos/${repo.id}/members`,
+      headers: asUser(operator),
+      payload: { userId: member },
+    });
+    expect(addRes.statusCode).toBe(200);
+    expect(addRes.json()).toMatchObject({ repoId: repo.id, userId: member, inserted: true });
+
+    const detail = await server.inject({
+      method: "GET",
+      url: `/api/repos/${repo.id}`,
+      headers: asUser(operator),
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json().members).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          userId: member,
+          email: "late-signup@test.local",
+          name: "Late Signup",
+          mergeStatus: "manual",
+        }),
+      ]),
+    );
+
+    const mine = await server.inject({
+      method: "GET",
+      url: "/api/me/projects",
+      headers: asUser(member),
+    });
+    expect(mine.statusCode).toBe(200);
+    expect(mine.json().projects.map((p: { id: number }) => p.id)).toEqual([repo.id]);
+  });
+});
+
 describe("POST /api/devpost/prizes/:prizeName/map", () => {
   it("appends the prize to challenges.devpost_tags and reports affected repos without enqueuing", async () => {
     const server = await getApp();

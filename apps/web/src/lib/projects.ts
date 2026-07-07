@@ -71,7 +71,7 @@ export interface RepoWithExtras {
   name: string;
   url?: string | null;
   members?: Array<{
-    userId: number;
+    userId: number | null;
     email: string;
     name: string | null;
     surname: string | null;
