@@ -10,7 +10,9 @@ import {
   ExternalLinkIcon,
   FileTextIcon,
   FolderGitIcon,
+  IdCardIcon,
   KeyRoundIcon,
+  QrCodeIcon,
   ShieldIcon,
   UserIcon,
   UsersIcon,
@@ -26,6 +28,7 @@ import { type Column, DataTable } from "@/components/common/data-table";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
 import { MultiSelect } from "@/components/common/multi-select";
+import { QrCode } from "@/components/common/qr-code";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { StatCard } from "@/components/common/stat-card";
@@ -56,6 +59,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
 import { pickText } from "@/lib/i18n";
+import { logisticsApi, type TicketQrPayload } from "@/lib/logistics";
 import { type RepoWithExtras, userProjects } from "@/lib/projects";
 import { useCan } from "@/lib/session";
 import type { Tone } from "@/lib/tones";
@@ -156,6 +160,7 @@ export default function UserProfilePage() {
       <Tabs defaultValue="overview">
         <TabsList className="w-full max-w-3xl">
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="qr">QR</TabsTrigger>
           <TabsTrigger value="permissions">Permissions</TabsTrigger>
           <TabsTrigger value="presence">Presence</TabsTrigger>
           <TabsTrigger value="activity">Logs</TabsTrigger>
@@ -165,6 +170,9 @@ export default function UserProfilePage() {
 
         <TabsContent value="overview" className="pt-2">
           <OverviewTab user={user} intolerances={intolerances} onUpdated={load} />
+        </TabsContent>
+        <TabsContent value="qr" className="pt-2">
+          <QrTab user={user} />
         </TabsContent>
         <TabsContent value="permissions" className="pt-2">
           <PermissionsTab user={user} onChanged={load} />
@@ -377,9 +385,66 @@ function ProfileHeader({ user }: { user: UserDetail }) {
         </div>
       </div>
       <div className="ml-auto">
-        <DeleteAccountButton user={user} />
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/logistics?userId=${user.id}`}>
+              <IdCardIcon className="size-4" />
+              Accredit
+            </Link>
+          </Button>
+          <DeleteAccountButton user={user} />
+        </div>
       </div>
     </div>
+  );
+}
+
+function QrTab({ user }: { user: UserDetail }) {
+  const [payload, setPayload] = useState<TicketQrPayload | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    logisticsApi
+      .userTicket(user.id)
+      .then((data) => {
+        if (alive) setPayload(data);
+      })
+      .catch((err) => {
+        if (alive) setError(err instanceof ApiError ? err.message : "Could not load QR payloads.");
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [user.id]);
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-12">
+        <Spinner className="size-5" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return <EmptyState icon={QrCodeIcon} title="Could not load QR codes" description={error} />;
+  }
+
+  return (
+    <SectionCard
+      title="Ticket and badge QR"
+      description="Use these when the participant does not want to download a Wallet pass."
+      icon={QrCodeIcon}
+      bodyClassName="grid gap-4 md:grid-cols-2"
+    >
+      <QrCode value={payload?.ticketToken} label="Entrance ticket" />
+      <QrCode value={payload?.badgeId} label="Current badge" />
+    </SectionCard>
   );
 }
 

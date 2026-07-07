@@ -82,7 +82,11 @@ export interface PublicScheduleItem {
   type: string | null;
   startsAt: string;
   endsAt: string;
+  visibility?: "shown" | "hidden";
   publishAt: string | null;
+  remindedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface MealScanBatchResult {
@@ -92,6 +96,23 @@ export interface MealScanBatchResult {
   queued: boolean;
 }
 
+export interface TicketQrPayload {
+  userId: number;
+  ticketToken: string | null;
+  badgeId: string | null;
+}
+
+export interface ScheduleInput {
+  title: string;
+  description?: string | null;
+  location?: string | null;
+  type?: string | null;
+  startsAt: string;
+  endsAt: string;
+  visibility: "shown" | "hidden";
+  publishAt?: string | null;
+}
+
 export function idempotencyHeaders(prefix: string): Record<string, string> {
   return { "idempotency-key": `${prefix}-${crypto.randomUUID()}` };
 }
@@ -99,9 +120,15 @@ export function idempotencyHeaders(prefix: string): Record<string, string> {
 export const logisticsApi = {
   lookup: (ticketToken: string) =>
     api.post<AccreditationLookup>("/api/accreditation/lookup", { ticketToken }),
+  lookupUser: (userId: number) =>
+    api.post<AccreditationLookup>("/api/accreditation/lookup-user", { userId }),
   checkIn: (body: { ticketToken: string; badgeId: string; method: "qr" | "manual" | "nfc" }) =>
     api.post<CheckInResult>("/api/accreditation/check-in", body, {
       headers: idempotencyHeaders("check-in"),
+    }),
+  checkInUser: (body: { userId: number; badgeId: string; method: "qr" | "manual" | "nfc" }) =>
+    api.post<CheckInResult>("/api/accreditation/check-in-user", body, {
+      headers: idempotencyHeaders("check-in-user"),
     }),
   rotate: (body: {
     userId?: number;
@@ -125,6 +152,17 @@ export const logisticsApi = {
   presenceHours: () => api.get<PresenceHours[]>("/api/presence/hours"),
   stats: () => api.get<LogisticsStats>("/api/logistics/stats"),
   publicSchedule: () => api.get<{ items: PublicScheduleItem[] }>("/api/public/activities"),
+  schedule: () => api.get<{ items: PublicScheduleItem[] }>("/api/schedule"),
+  createSchedule: (body: ScheduleInput) =>
+    api.post<PublicScheduleItem>("/api/schedule", { ...body }),
+  updateSchedule: (id: number, body: Partial<ScheduleInput>) =>
+    api.patch<PublicScheduleItem>(`/api/schedule/${id}`, { ...body }),
+  deleteSchedule: (id: number) => api.delete<{ deleted: true }>(`/api/schedule/${id}`),
+  setScheduleVisibility: (ids: number[], visibility: "shown" | "hidden") =>
+    api.post<{ ids: number[]; visibility: "shown" | "hidden"; updated: number }>(
+      "/api/schedule/visibility",
+      { ids, visibility },
+    ),
   activityScan: (
     activityId: number,
     body: { badgeId: string; allowRepeat?: boolean; scannedAt?: string },
@@ -155,6 +193,8 @@ export const logisticsApi = {
     api.post<{ activityId: number; granted: number }>(
       `/api/activities/${activityId}/entitlements/bulk-grant-confirmed`,
     ),
+  myTicket: () => api.get<TicketQrPayload>("/api/me/ticket"),
+  userTicket: (userId: number) => api.get<TicketQrPayload>(`/api/users/${userId}/ticket`),
 };
 
 export function personName(card: Pick<PersonCard, "name" | "surname" | "userId">): string {

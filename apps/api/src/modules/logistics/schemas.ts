@@ -8,11 +8,18 @@ export const entitlementUserParam = z.object({
 export const userIdParam = z.object({ userId: z.coerce.number().int().positive() });
 
 export const lookupBody = z.object({ ticketToken: z.string().min(1) });
+export const lookupUserBody = z.object({ userId: z.coerce.number().int().positive() });
 
 export const checkInBody = z.object({
   ticketToken: z.string().min(1),
   badgeId: z.string().min(1),
   method: z.enum(["qr", "manual", "nfc"]).default("qr"),
+});
+
+export const checkInUserBody = z.object({
+  userId: z.coerce.number().int().positive(),
+  badgeId: z.string().min(1),
+  method: z.enum(["qr", "manual", "nfc"]).default("manual"),
 });
 
 export const rotateBody = z
@@ -79,4 +86,24 @@ export const appleRegistrationBody = z.object({
 
 export const appleLogBody = z.object({
   logs: z.array(z.string()).default([]),
+});
+
+export const scheduleIdParam = z.object({ id: z.coerce.number().int().positive() });
+
+export const scheduleBody = z.object({
+  title: z.string().min(1).max(300),
+  description: z.string().max(4000).nullable().optional(),
+  location: z.string().max(300).nullable().optional(),
+  type: z.string().max(80).nullable().optional(),
+  startsAt: z.coerce.date(),
+  endsAt: z.coerce.date(),
+  visibility: z.enum(["shown", "hidden"]).default("hidden"),
+  publishAt: z.coerce.date().nullable().optional(),
+});
+
+export const schedulePatchBody = scheduleBody.partial();
+
+export const scheduleVisibilityBody = z.object({
+  ids: z.array(z.coerce.number().int().positive()).min(1).max(200),
+  visibility: z.enum(["shown", "hidden"]),
 });

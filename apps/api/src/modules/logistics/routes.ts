@@ -3,11 +3,17 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { pool } from "../../db/pool.js";
-import { requireAnyCapability, requireCapability } from "../../lib/capabilities.js";
-import { UnauthorizedError } from "../../lib/errors.js";
+import { requireAnyCapability, requireAuth, requireCapability } from "../../lib/capabilities.js";
+import { NotFoundError, UnauthorizedError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { subscribe } from "../../lib/sse.js";
-import { checkIn, lookupByTicket, rotateBadge } from "./accreditation.js";
+import {
+  checkIn,
+  checkInUser,
+  lookupByTicket,
+  lookupByUserId,
+  rotateBadge,
+} from "./accreditation.js";
 import {
   activityScan,
   bulkGrantConfirmed,
@@ -17,6 +23,13 @@ import {
 import { enqueueMealScanBatch } from "./offline-meals.js";
 import { allHours, occupancyEstimate, presenceScan, userHours } from "./presence.js";
 import {
+  createScheduleItem,
+  deleteScheduleItem,
+  listSchedule,
+  setScheduleVisibility,
+  updateScheduleItem,
+} from "./schedule.js";
+import {
   activityIdParam,
   activityScanBody,
   appleDeviceParams,
@@ -25,12 +38,18 @@ import {
   appleRegistrationBody,
   appleRegistrationsQuery,
   checkInBody,
+  checkInUserBody,
   entitlementUserParam,
   grantEntitlementBody,
   lookupBody,
+  lookupUserBody,
   mealScanBatchBody,
   presenceScanBody,
   rotateBody,
+  scheduleBody,
+  scheduleIdParam,
+  schedulePatchBody,
+  scheduleVisibilityBody,
   userIdParam,
   walletPurposeParam,
 } from "./schemas.js";
@@ -72,6 +91,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   const activity = requireCapability(CAPABILITIES.ACTIVITY_SCAN);
   const stats = requireCapability(CAPABILITIES.LOGISTICS_STATS);
   const scheduleManage = requireCapability(CAPABILITIES.SCHEDULE_MANAGE);
+  const ticketRead = requireAnyCapability(CAPABILITIES.USERS_READ, CAPABILITIES.ACCREDIT_SCAN);
   const logisticsRead = requireAnyCapability(
     CAPABILITIES.ACCREDIT_SCAN,
     CAPABILITIES.PRESENCE_SCAN,
@@ -115,11 +135,28 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   );
 
   typed.post(
+    "/api/accreditation/lookup-user",
+    { preHandler: accredit, schema: { body: lookupUserBody } },
+    async (req) => lookupByUserId(req.body.userId),
+  );
+
+  typed.post(
     "/api/accreditation/check-in",
     { preHandler: [accredit, idempotencyGuard], schema: { body: checkInBody } },
     async (req) =>
       checkIn(actor(req.userId), {
         ticketToken: req.body.ticketToken,
+        badgeId: req.body.badgeId,
+        method: req.body.method,
+      }),
+  );
+
+  typed.post(
+    "/api/accreditation/check-in-user",
+    { preHandler: [accredit, idempotencyGuard], schema: { body: checkInUserBody } },
+    async (req) =>
+      checkInUser(actor(req.userId), {
+        userId: req.body.userId,
         badgeId: req.body.badgeId,
         method: req.body.method,
       }),
@@ -221,6 +258,66 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
     await subscribe("logistics", reply);
   });
 
+  // ── Schedule CRUD ───────────────────────────────────────────────────────
+
+  typed.get("/api/schedule", { preHandler: scheduleManage }, async () => listSchedule());
+
+  typed.post(
+    "/api/schedule",
+    { preHandler: scheduleManage, schema: { body: scheduleBody } },
+    async (req, reply) =>
+      reply.code(201).send(
+        await createScheduleItem(actor(req.userId), {
+          title: req.body.title,
+          description: req.body.description ?? null,
+          location: req.body.location ?? null,
+          type: req.body.type ?? null,
+          startsAt: req.body.startsAt,
+          endsAt: req.body.endsAt,
+          visibility: req.body.visibility,
+          publishAt: req.body.publishAt ?? null,
+        }),
+      ),
+  );
+
+  typed.patch(
+    "/api/schedule/:id",
+    { preHandler: scheduleManage, schema: { params: scheduleIdParam, body: schedulePatchBody } },
+    async (req) =>
+      updateScheduleItem(actor(req.userId), req.params.id, {
+        title: req.body.title,
+        description: req.body.description,
+        location: req.body.location,
+        type: req.body.type,
+        startsAt: req.body.startsAt,
+        endsAt: req.body.endsAt,
+        visibility: req.body.visibility,
+        publishAt: req.body.publishAt,
+      }),
+  );
+
+  typed.delete(
+    "/api/schedule/:id",
+    { preHandler: scheduleManage, schema: { params: scheduleIdParam } },
+    async (req) => deleteScheduleItem(actor(req.userId), req.params.id),
+  );
+
+  typed.post(
+    "/api/schedule/visibility",
+    { preHandler: scheduleManage, schema: { body: scheduleVisibilityBody } },
+    async (req) => setScheduleVisibility(actor(req.userId), req.body.ids, req.body.visibility),
+  );
+
+  typed.get("/api/me/ticket", { preHandler: requireAuth }, async (req) =>
+    ticketQrPayload(actor(req.userId)),
+  );
+
+  typed.get(
+    "/api/users/:userId/ticket",
+    { preHandler: ticketRead, schema: { params: userIdParam } },
+    async (req) => ticketQrPayload(req.params.userId),
+  );
+
   // ── H28 Apple Wallet / PassKit ──────────────────────────────────────────
 
   typed.get(
@@ -291,4 +388,21 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   typed.post("/api/wallet/apple/v1/log", { schema: { body: appleLogBody } }, async (req) =>
     appleLog(req.body.logs),
   );
+}
+
+async function ticketQrPayload(userId: number) {
+  const { rows } = await pool.query(
+    `SELECT u.id, u.badge_id, t.token
+       FROM users u
+       LEFT JOIN tickets t ON t.user_id = u.id
+      WHERE u.id = $1`,
+    [userId],
+  );
+  const row = rows[0];
+  if (!row) throw new NotFoundError("User not found");
+  return {
+    userId: row.id as number,
+    ticketToken: (row.token as string | null) ?? null,
+    badgeId: (row.badge_id as string | null) ?? null,
+  };
 }
