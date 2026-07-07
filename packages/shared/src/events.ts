@@ -16,6 +16,8 @@ export const SSE_TOPICS = {
   TV: "tv",
   /** schedule + announcements changes (H47, H50) */
   CONTENT: "content",
+  /** accreditation, presence, meals and wallet updates (H22-H28) */
+  LOGISTICS: "logistics",
   /** per-user channel, suffixed with the user id: `user:42` (H31, H38) */
   USER_PREFIX: "user:",
 } as const;
@@ -38,6 +40,12 @@ export const EVENTS = {
   TV_MODE_CHANGED: "tv.mode.changed", // H42
   CONTENT_SCHEDULE_CHANGED: "content.schedule.changed", // H47
   CONTENT_ANNOUNCEMENT: "content.announcement", // H50
+  LOGISTICS_ACCREDITED: "logistics.accreditation.checked_in", // H22
+  LOGISTICS_BADGE_ROTATED: "logistics.badge.rotated", // H23/H28
+  LOGISTICS_PRESENCE_SCAN: "logistics.presence.scan", // H24
+  LOGISTICS_ACTIVITY_SCAN: "logistics.activity.scan", // H25/H26
+  LOGISTICS_MEAL_SCAN_BATCH: "logistics.meal_scan_batch.processed", // H25
+  LOGISTICS_WALLET_PASS_UPDATED: "logistics.wallet_pass.updated", // H28
   USER_QUEUE_CALLED: "user.queue.called", // H29/H38 "go wait at room X"
   USER_QUEUE_PRECALL: "user.queue.precall", // H38 pre-aviso
   USER_NOTIFICATION: "user.notification", // generic in-app inbox push

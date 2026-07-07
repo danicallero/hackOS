@@ -1,6 +1,8 @@
+import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { BadRequestError } from "../../lib/errors.js";
+import { broadcast } from "../../lib/sse.js";
 import { resolveByBadge } from "./badge.js";
 import {
   buildPresenceIntervals,
@@ -27,7 +29,7 @@ export async function presenceScan(
     throw new BadRequestError("Backdated scan must be in the past");
   }
 
-  return withTransaction(async (client) => {
+  const result = await withTransaction(async (client) => {
     const r = await client.query(
       `INSERT INTO time_logs (user_id, kind, scanned_at, scanned_by, location)
        VALUES ($1, $2, COALESCE($3, now()), $4, $5) RETURNING id, scanned_at`,
@@ -52,6 +54,8 @@ export async function presenceScan(
       manual,
     };
   });
+  await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_PRESENCE_SCAN, result);
+  return result;
 }
 
 // ── presence estimation reads (H24) ───────────────────────────────────────

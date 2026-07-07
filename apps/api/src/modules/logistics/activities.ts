@@ -1,6 +1,8 @@
+import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { AppError, BadRequestError, NotFoundError } from "../../lib/errors.js";
+import { broadcast } from "../../lib/sse.js";
 import { resolveByBadge } from "./badge.js";
 import { loadPersonCard, type PersonCard } from "./cards.js";
 
@@ -36,7 +38,13 @@ interface ScanResult {
 export async function activityScan(
   actorId: number,
   activityId: number,
-  input: { badgeId: string; allowRepeat: boolean },
+  input: {
+    badgeId: string;
+    allowRepeat: boolean;
+    scannedAt?: Date;
+    sourceDeviceId?: string;
+    sourceScanId?: string;
+  },
 ): Promise<ScanResult> {
   const act = await pool.query(`SELECT id, category, requires_scan FROM activities WHERE id = $1`, [
     activityId,
@@ -48,12 +56,40 @@ export async function activityScan(
   }
 
   const userId = await resolveByBadge(pool, input.badgeId);
+  if (input.scannedAt && input.scannedAt.getTime() > Date.now()) {
+    throw new BadRequestError("Offline scan timestamp must be in the past");
+  }
 
-  return withTransaction(async (client) => {
+  const result = await withTransaction(async (client) => {
     // Serialize concurrent scans of the same person+activity (H25 concurrency).
     await client.query(`SELECT pg_advisory_xact_lock($1, $2)`, [userId, activityId]);
 
     const card = await loadPersonCard(client, userId);
+
+    if (input.sourceDeviceId && input.sourceScanId) {
+      const existing = await client.query(
+        `SELECT 1 FROM activity_logs
+          WHERE source_device_id = $1 AND source_scan_id = $2
+          LIMIT 1`,
+        [input.sourceDeviceId, input.sourceScanId],
+      );
+      if (existing.rows[0]) {
+        const count = await client.query(
+          `SELECT count(*)::int AS n FROM activity_logs WHERE user_id = $1 AND activity_id = $2`,
+          [userId, activityId],
+        );
+        return {
+          status: 200,
+          body: {
+            registered: true,
+            firstTime: false,
+            repeat: count.rows[0].n > 1,
+            timesEaten: count.rows[0].n as number,
+            card,
+          },
+        };
+      }
+    }
 
     if (isMeal) {
       const ent = await client.query(
@@ -89,8 +125,20 @@ export async function activityScan(
     }
 
     await client.query(
-      `INSERT INTO activity_logs (user_id, activity_id, logged_by) VALUES ($1, $2, $3)`,
-      [userId, activityId, actorId],
+      `INSERT INTO activity_logs
+         (user_id, activity_id, logged_by, logged_at, source_device_id, source_scan_id)
+       VALUES ($1, $2, $3, COALESCE($4, now()), $5, $6)
+       ON CONFLICT (source_device_id, source_scan_id)
+       WHERE source_device_id IS NOT NULL AND source_scan_id IS NOT NULL
+       DO NOTHING`,
+      [
+        userId,
+        activityId,
+        actorId,
+        input.scannedAt ?? null,
+        input.sourceDeviceId ?? null,
+        input.sourceScanId ?? null,
+      ],
     );
 
     if (!firstTime && isMeal) {
@@ -115,6 +163,18 @@ export async function activityScan(
       },
     };
   });
+
+  if (result.status === 200) {
+    await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_ACTIVITY_SCAN, {
+      activityId,
+      userId,
+      firstTime: result.body.firstTime,
+      repeat: result.body.repeat,
+      scannedAt: (input.scannedAt ?? new Date()).toISOString(),
+    });
+  }
+
+  return result;
 }
 
 // ── H25 entitlement admin (capability SCHEDULE_MANAGE) ────────────────────
