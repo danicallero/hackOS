@@ -498,21 +498,27 @@ interface RepoMember {
 interface RepoChallenge {
   id: number;
   title: string;
+  status: string | null;
+  position: number | null;
+  assignedRoomId: number | null;
+  assignedRoomName: string | null;
+  mappedPrizes: string[];
+  source: "queue" | "prize" | "queue_and_prize";
 }
 
 interface RepoWithExtras extends RepoRow {
   members: RepoMember[];
   prizes: string[];
+  unmappedPrizes: string[];
   challenges: RepoChallenge[];
 }
 
 /**
  * PROJECTS_READ attachments (H16). Members are EVERY imported Devpost
  * participant — matched and unmatched alike (req: "store ALL member emails")
- * — so operators can see who still needs linking. Challenges are derived from
- * each repo's prizes mapped to `challenges.devpost_tags`, not from queue
- * entries: the read view answers "which challenges does this project qualify
- * for", which is what read.test expects.
+ * — so operators can see who still needs linking. Challenges include both
+ * prize-mapped participation and live queue membership so project detail hot
+ * edits are visible immediately after adding a challenge.
  */
 async function attachMembersAndPrizes(repoRows: RepoRow[]): Promise<RepoWithExtras[]> {
   const ids = repoRows.map((r) => r.id);
@@ -537,7 +543,8 @@ async function attachMembersAndPrizes(repoRows: RepoRow[]): Promise<RepoWithExtr
       )
     : { rows: [] as Array<{ id: number; title: string; devpost_tags: string[] }> };
 
-  const challengesByPrize = new Map<string, RepoChallenge[]>();
+  const challengesByPrize = new Map<string, Array<{ id: number; title: string }>>();
+  const mappedPrizes = new Set<string>();
   for (const c of challengesRes.rows as Array<{
     id: number;
     title: string;
@@ -548,8 +555,21 @@ async function attachMembersAndPrizes(repoRows: RepoRow[]): Promise<RepoWithExtr
       const arr = challengesByPrize.get(tag) ?? [];
       arr.push({ id: c.id, title: c.title });
       challengesByPrize.set(tag, arr);
+      mappedPrizes.add(tag);
     }
   }
+
+  const queueRes = await pool.query(
+    `SELECT qe.repo_id, qe.challenge_id AS id, c.title, qe.status, qe.position,
+            qe.assigned_room_id, r.name AS assigned_room_name
+       FROM queue_entries qe
+       JOIN challenges c ON c.id = qe.challenge_id
+       LEFT JOIN rooms r ON r.id = qe.assigned_room_id
+      WHERE qe.repo_id = ANY($1::int[])
+        AND qe.status NOT IN ('cancelled', 'disqualified')
+      ORDER BY qe.repo_id, qe.position ASC NULLS LAST, qe.id ASC`,
+    [ids],
+  );
 
   const membersByRepo = new Map<number, RepoMember[]>();
   for (const row of membersRes.rows as Array<{
@@ -580,16 +600,72 @@ async function attachMembersAndPrizes(repoRows: RepoRow[]): Promise<RepoWithExtr
     prizesByRepo.set(p.repo_id, arr);
   }
 
+  const queueChallengesByRepo = new Map<number, RepoChallenge[]>();
+  for (const row of queueRes.rows as Array<{
+    repo_id: number;
+    id: number;
+    title: string;
+    status: string;
+    position: number | null;
+    assigned_room_id: number | null;
+    assigned_room_name: string | null;
+  }>) {
+    const arr = queueChallengesByRepo.get(row.repo_id) ?? [];
+    arr.push({
+      id: row.id,
+      title: row.title,
+      status: row.status,
+      position: row.position,
+      assignedRoomId: row.assigned_room_id,
+      assignedRoomName: row.assigned_room_name,
+      mappedPrizes: [],
+      source: "queue",
+    });
+    queueChallengesByRepo.set(row.repo_id, arr);
+  }
+
   return repoRows.map((repo) => {
     const prizes = prizesByRepo.get(repo.id) ?? [];
     const challengesSeen = new Map<number, RepoChallenge>();
     for (const prize of prizes) {
-      for (const c of challengesByPrize.get(prize) ?? []) challengesSeen.set(c.id, c);
+      for (const c of challengesByPrize.get(prize) ?? []) {
+        const existing = challengesSeen.get(c.id);
+        if (existing) {
+          existing.mappedPrizes.push(prize);
+          continue;
+        }
+        challengesSeen.set(c.id, {
+          id: c.id,
+          title: c.title,
+          status: null,
+          position: null,
+          assignedRoomId: null,
+          assignedRoomName: null,
+          mappedPrizes: [prize],
+          source: "prize",
+        });
+      }
+    }
+    for (const c of queueChallengesByRepo.get(repo.id) ?? []) {
+      const existing = challengesSeen.get(c.id);
+      if (existing) {
+        challengesSeen.set(c.id, {
+          ...existing,
+          status: c.status,
+          position: c.position,
+          assignedRoomId: c.assignedRoomId,
+          assignedRoomName: c.assignedRoomName,
+          source: "queue_and_prize",
+        });
+        continue;
+      }
+      challengesSeen.set(c.id, c);
     }
     return {
       ...repo,
       members: membersByRepo.get(repo.id) ?? [],
       prizes,
+      unmappedPrizes: prizes.filter((prize) => !mappedPrizes.has(prize)),
       challenges: [...challengesSeen.values()],
     };
   });
@@ -766,6 +842,31 @@ export async function removeRepoMember(actorId: number, repoId: number, userId: 
       source: "admin",
     });
     return { repoId, userId, removed: true };
+  });
+}
+
+export async function removeRepoPrize(actorId: number, repoId: number, prizeName: string) {
+  return withTransaction(async (client) => {
+    const existing = await client.query(
+      `SELECT * FROM repo_devpost_prizes WHERE repo_id = $1 AND prize = $2 FOR UPDATE`,
+      [repoId, prizeName],
+    );
+    if (!existing.rows[0])
+      throw new NotFoundError(`Repo ${repoId} is not linked to prize ${prizeName}`);
+
+    await client.query(`DELETE FROM repo_devpost_prizes WHERE repo_id = $1 AND prize = $2`, [
+      repoId,
+      prizeName,
+    ]);
+    await audit(client, {
+      actorId,
+      entityType: "repo_devpost_prize",
+      entityId: `${repoId}:${prizeName}`,
+      action: "remove_prize",
+      before: { repoId, prize: prizeName },
+      source: "admin",
+    });
+    return { repoId, prize: prizeName, removed: true };
   });
 }
 

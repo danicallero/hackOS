@@ -83,11 +83,14 @@ export interface RepoWithExtras {
   challenges?: Array<{
     id: number;
     title: string;
-    status: string;
+    status: string | null;
     position: number | null;
     assignedRoomId: number | null;
     assignedRoomName: string | null;
+    mappedPrizes: string[];
+    source: "queue" | "prize" | "queue_and_prize";
   }>;
+  unmappedPrizes?: string[];
   [k: string]: unknown;
 }
 
@@ -136,3 +139,5 @@ export const addRepoChallenge = (repoId: number, challengeId: number, idempotenc
   api.post(`/api/repos/${repoId}/challenges`, { challengeId }, idem(idempotencyKey));
 export const removeRepoChallenge = (repoId: number, challengeId: number) =>
   api.delete(`/api/repos/${repoId}/challenges/${challengeId}`);
+export const removeRepoPrize = (repoId: number, prizeName: string) =>
+  api.delete(`/api/repos/${repoId}/prizes/${encodeURIComponent(prizeName)}`);

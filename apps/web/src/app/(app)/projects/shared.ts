@@ -32,10 +32,12 @@ export interface RepoMember {
 export interface RepoChallenge {
   id: number;
   title: string;
-  status: string;
+  status: string | null;
   position: number | null;
   assignedRoomId: number | null;
   assignedRoomName: string | null;
+  mappedPrizes: string[];
+  source: "queue" | "prize" | "queue_and_prize";
 }
 
 export interface ProjectRepo {
@@ -47,6 +49,7 @@ export interface ProjectRepo {
   demo_url: string | null;
   members: RepoMember[];
   prizes: string[];
+  unmappedPrizes: string[];
   challenges: RepoChallenge[];
 }
 

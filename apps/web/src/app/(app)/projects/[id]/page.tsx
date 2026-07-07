@@ -38,6 +38,7 @@ import {
   getRepoById,
   removeRepoChallenge,
   removeRepoMember,
+  removeRepoPrize,
 } from "@/lib/projects";
 import { useSessionContext } from "@/lib/session";
 import type { UserList } from "@/lib/types";
@@ -114,12 +115,30 @@ export default function ProjectDetailPage() {
     void load();
   }, [load]);
 
-  const activeChallenges = useMemo(
+  const challengeCount = repo?.challenges.length ?? 0;
+  const queueChallengeIds = useMemo(
     () =>
-      repo?.challenges.filter((challenge) =>
-        ["waiting", "called", "in_room", "presenting"].includes(challenge.status),
-      ) ?? [],
+      new Set(
+        repo?.challenges
+          .filter((challenge) => challenge.status !== null)
+          .map((challenge) => challenge.id) ?? [],
+      ),
     [repo],
+  );
+  const prizeChallengeTitles = useMemo(() => {
+    const titles = new Map<string, string[]>();
+    for (const challenge of repo?.challenges ?? []) {
+      for (const prize of challenge.mappedPrizes ?? []) {
+        const arr = titles.get(prize) ?? [];
+        arr.push(challengeTitleText(challenge.title));
+        titles.set(prize, arr);
+      }
+    }
+    return titles;
+  }, [repo]);
+  const availableChallenges = useMemo(
+    () => challenges.filter((challenge) => !queueChallengeIds.has(challenge.id)),
+    [challenges, queueChallengeIds],
   );
 
   if (!canRead) {
@@ -180,7 +199,7 @@ export default function ProjectDetailPage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Team members" value={repo.members.length} />
         <StatCard label="Manual adds" value={manualMemberCount(repo)} />
-        <StatCard label="Challenges" value={activeChallenges.length} />
+        <StatCard label="Challenges" value={challengeCount} />
         <StatCard label="Prizes" value={repo.prizes.length} />
       </div>
 
@@ -290,11 +309,11 @@ export default function ProjectDetailPage() {
 
         <SectionCard
           title="Challenges"
-          description="Current queue membership for this project."
+          description="Current challenge participation for this project."
           icon={TrophyIcon}
           bodyClassName="space-y-4"
         >
-          {activeChallenges.length === 0 ? (
+          {repo.challenges.length === 0 ? (
             <EmptyState
               icon={TrophyIcon}
               title="No challenges assigned"
@@ -302,20 +321,28 @@ export default function ProjectDetailPage() {
             />
           ) : (
             <ul className="space-y-3">
-              {activeChallenges.map((challenge) => (
+              {repo.challenges.map((challenge) => (
                 <li key={challenge.id} className="rounded-md border p-3">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate font-medium">{challengeTitleText(challenge.title)}</p>
                       <p className="text-muted-foreground text-xs">
-                        {challenge.assignedRoomName
-                          ? `Room: ${challenge.assignedRoomName}`
-                          : "No room assigned"}
+                        {challenge.status
+                          ? challenge.assignedRoomName
+                            ? `Room: ${challenge.assignedRoomName}`
+                            : "No room assigned"
+                          : `Linked by ${challenge.mappedPrizes.length} prize${
+                              challenge.mappedPrizes.length === 1 ? "" : "s"
+                            }`}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <QueueStatusBadge status={challenge.status} />
-                      {canEdit && (
+                      {challenge.status ? (
+                        <QueueStatusBadge status={challenge.status} />
+                      ) : (
+                        <StatusBadge tone="info">Prize</StatusBadge>
+                      )}
+                      {canEdit && challenge.status && (
                         <Button
                           variant="outline"
                           size="sm"
@@ -346,12 +373,71 @@ export default function ProjectDetailPage() {
           {canEdit && (
             <ProjectChallengeAdder
               repoId={repo.id}
-              challenges={challenges}
+              challenges={availableChallenges}
               onAdd={async (challengeId) => {
                 await addRepoChallenge(repo.id, challengeId, crypto.randomUUID());
                 await load();
               }}
             />
+          )}
+        </SectionCard>
+
+        <SectionCard
+          title="Prizes"
+          description="Imported Devpost prize participation for this project."
+          icon={TrophyIcon}
+          bodyClassName="space-y-4"
+        >
+          {repo.prizes.length === 0 ? (
+            <EmptyState
+              icon={TrophyIcon}
+              title="No prizes imported"
+              description="Prizes appear here after a Devpost import."
+            />
+          ) : (
+            <ul className="space-y-3">
+              {repo.prizes.map((prize) => {
+                const linkedChallenges = prizeChallengeTitles.get(prize) ?? [];
+                return (
+                  <li key={prize} className="rounded-md border p-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{prize}</p>
+                        <p className="text-muted-foreground text-xs">
+                          {linkedChallenges.length > 0
+                            ? `Linked to ${linkedChallenges.join(", ")}`
+                            : "No linked challenge"}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {linkedChallenges.length === 0 && (
+                          <StatusBadge tone="warning">Unlinked</StatusBadge>
+                        )}
+                        {canEdit && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                await removeRepoPrize(repo.id, prize);
+                                toast.success("Prize removed.");
+                                await load();
+                              } catch (err) {
+                                toast.error(
+                                  err instanceof ApiError ? err.message : "Could not remove prize.",
+                                );
+                              }
+                            }}
+                          >
+                            Remove
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </SectionCard>
       </div>
