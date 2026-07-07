@@ -7,6 +7,7 @@ import { requireAuth, requireCapability, userHasCapability } from "../../lib/cap
 import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { requireAnyCapability } from "./access.js";
+import { requireRoomJudgeOrCapability } from "./contextual-access.js";
 import { scheduleTopUp } from "./pump.js";
 import {
   assignChallengeBody,
@@ -61,6 +62,17 @@ async function roomIdsForSponsorOwner(userId: number): Promise<number[]> {
   return rows.map((row: { room_id: number }) => row.room_id);
 }
 
+async function roomIdsForAssignedJudge(userId: number): Promise<number[]> {
+  const { rows } = await pool.query(
+    `SELECT DISTINCT room_id
+       FROM room_judges
+      WHERE user_id = $1
+      ORDER BY room_id ASC`,
+    [userId],
+  );
+  return rows.map((row: { room_id: number }) => row.room_id);
+}
+
 function auditRequest(req: FastifyRequest) {
   return {
     ip: req.ip,
@@ -101,7 +113,12 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
     }
 
     if (req.userId == null) throw new ForbiddenError("Missing user");
-    const roomIds = await roomIdsForSponsorOwner(req.userId);
+    const roomIds = [
+      ...new Set([
+        ...(await roomIdsForSponsorOwner(req.userId)),
+        ...(await roomIdsForAssignedJudge(req.userId)),
+      ]),
+    ];
     if (roomIds.length === 0) {
       throw new ForbiddenError("Not allowed to list queue rooms");
     }
@@ -122,6 +139,7 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
         req.userId == null ||
         (!(await userHasCapability(req.userId, CAPABILITIES.QUEUE_OPERATE)) &&
           !(await userHasCapability(req.userId, CAPABILITIES.QUEUE_ADMIN)) &&
+          !(await roomIdsForAssignedJudge(req.userId)).includes(req.params.roomId) &&
           !(await roomIdsForSponsorOwner(req.userId)).includes(req.params.roomId))
       ) {
         throw new ForbiddenError("Not allowed to read this room");
@@ -382,7 +400,7 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
     "/api/queue/rooms/:roomId/pause",
     {
       preHandler: [
-        requireAnyCapability(CAPABILITIES.QUEUE_OPERATE, CAPABILITIES.JUDGE_PANEL),
+        requireRoomJudgeOrCapability(CAPABILITIES.QUEUE_OPERATE, CAPABILITIES.JUDGE_PANEL),
         idempotencyGuard,
       ],
       schema: { params: roomIdParam },
@@ -398,7 +416,7 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
     "/api/queue/rooms/:roomId/resume",
     {
       preHandler: [
-        requireAnyCapability(CAPABILITIES.QUEUE_OPERATE, CAPABILITIES.JUDGE_PANEL),
+        requireRoomJudgeOrCapability(CAPABILITIES.QUEUE_OPERATE, CAPABILITIES.JUDGE_PANEL),
         idempotencyGuard,
       ],
       schema: { params: roomIdParam },

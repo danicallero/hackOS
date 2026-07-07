@@ -31,6 +31,8 @@ export interface NavItem {
   anyCapability?: Capability[];
   /** Visible to linked sponsor representatives (association-based portal). */
   sponsorVisible?: boolean;
+  /** Visible to users assigned as judges to at least one room. */
+  judgeVisible?: boolean;
   /** Not built yet — shown disabled with a "Soon" badge. */
   soon?: boolean;
 }
@@ -69,6 +71,11 @@ export const NAV: NavSection[] = [
           CAPABILITIES.JUDGE_PANEL,
         ],
       },
+    ],
+  },
+  {
+    label: "Administration",
+    items: [
       {
         title: "Judging",
         href: "/judging",
@@ -78,6 +85,7 @@ export const NAV: NavSection[] = [
           CAPABILITIES.QUEUE_ADMIN,
           CAPABILITIES.JUDGE_PANEL,
         ],
+        judgeVisible: true,
       },
       {
         // H8/H55: judges + sponsor reps get a scoped projects view (backend
@@ -91,6 +99,7 @@ export const NAV: NavSection[] = [
           CAPABILITIES.JUDGE_PANEL,
         ],
         sponsorVisible: true,
+        judgeVisible: true,
       },
       {
         title: "Applications",
@@ -103,6 +112,7 @@ export const NAV: NavSection[] = [
         href: "/schedule",
         icon: CalendarDaysIcon,
         capability: CAPABILITIES.SCHEDULE_MANAGE,
+        judgeVisible: true,
         soon: true,
       },
       {
@@ -126,11 +136,6 @@ export const NAV: NavSection[] = [
         anyCapability: [CAPABILITIES.SPONSORS_MANAGE, CAPABILITIES.QUEUE_ADMIN],
         sponsorVisible: true,
       },
-    ],
-  },
-  {
-    label: "Administration",
-    items: [
       {
         title: "Users",
         href: "/users",

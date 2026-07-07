@@ -21,6 +21,7 @@ function useVisible() {
   const { can, canAny, me } = useSessionContext();
   return (item: NavItem) => {
     if (item.sponsorVisible && me?.role === "sponsor") return true;
+    if (item.judgeVisible && me?.role === "judge") return true;
     if (item.capability) return can(item.capability);
     if (item.anyCapability) return canAny(...item.anyCapability);
     return true;

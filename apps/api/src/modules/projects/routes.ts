@@ -52,10 +52,14 @@ import {
  * association-based, so it can't be a plain capability guard.
  */
 async function resolveRepoScope(userId: number): Promise<RepoScope | null> {
-  const [isFullAccess, isJudge] = await Promise.all([
+  const [isFullAccess, hasJudgePanel] = await Promise.all([
     userHasCapability(userId, CAPABILITIES.PROJECTS_READ),
     userHasCapability(userId, CAPABILITIES.JUDGE_PANEL),
   ]);
+  const isAssignedJudge =
+    (await pool.query(`SELECT 1 FROM room_judges WHERE user_id = $1 LIMIT 1`, [userId])).rows
+      .length > 0;
+  const isJudge = hasJudgePanel || isAssignedJudge;
   const isSponsor =
     (await pool.query(`SELECT 1 FROM sponsors WHERE user_id = $1 LIMIT 1`, [userId])).rows.length >
     0;

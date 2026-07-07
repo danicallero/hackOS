@@ -3,7 +3,11 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { requireCapability } from "../../lib/capabilities.js";
 import { UnauthorizedError } from "../../lib/errors.js";
-import { assertCanExportChallenge, requireAnyCapability } from "./access.js";
+import {
+  requireChallengeJudgeOrCapability,
+  requireEntryJudgeOrCapability,
+} from "./contextual-access.js";
+import { assertCanExportChallenge } from "./access.js";
 import { exportEvaluationsCsv, exportQueueCsv } from "./exports.js";
 import {
   getAttemptReview,
@@ -31,8 +35,15 @@ function actor(userId: number | null): number {
 export function registerJudgingRoutes(app: FastifyInstance): void {
   const typed = app.withTypeProvider<ZodTypeProvider>();
 
-  const judgePanel = requireCapability(CAPABILITIES.JUDGE_PANEL);
-  const judgeOrOperate = requireAnyCapability(CAPABILITIES.JUDGE_PANEL, CAPABILITIES.QUEUE_OPERATE);
+  const judgePanel = requireEntryJudgeOrCapability(CAPABILITIES.JUDGE_PANEL);
+  const judgeOrOperateEntry = requireEntryJudgeOrCapability(
+    CAPABILITIES.JUDGE_PANEL,
+    CAPABILITIES.QUEUE_OPERATE,
+  );
+  const judgeOrOperateChallenge = requireChallengeJudgeOrCapability(
+    CAPABILITIES.JUDGE_PANEL,
+    CAPABILITIES.QUEUE_OPERATE,
+  );
 
   typed.get(
     "/api/queue/entries/:entryId/review",
@@ -68,7 +79,7 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
 
   typed.get(
     "/api/queue/entries/:entryId/sessions",
-    { preHandler: judgeOrOperate, schema: { params: entryIdParam } },
+    { preHandler: judgeOrOperateEntry, schema: { params: entryIdParam } },
     async (req) => listActiveJudgingSessions(req.params.entryId),
   );
 
@@ -77,7 +88,10 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
   // creating a second one (structurally impossible anyway).
   typed.get(
     "/api/queue/challenges/:challengeId/search",
-    { preHandler: judgeOrOperate, schema: { params: challengeIdParam, querystring: searchQuery } },
+    {
+      preHandler: judgeOrOperateChallenge,
+      schema: { params: challengeIdParam, querystring: searchQuery },
+    },
     async (req) => searchChallengeQueue(req.params.challengeId, req.query.q),
   );
 

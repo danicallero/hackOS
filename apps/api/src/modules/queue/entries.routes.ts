@@ -5,7 +5,7 @@ import { pool } from "../../db/pool.js";
 import { requireCapability } from "../../lib/capabilities.js";
 import { UnauthorizedError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
-import { requireAnyCapability } from "./access.js";
+import { requireEntryJudgeOrCapability } from "./contextual-access.js";
 import { scheduleTopUp } from "./pump.js";
 import { entryHistory } from "./reads.js";
 import {
@@ -71,8 +71,11 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
   const typed = app.withTypeProvider<ZodTypeProvider>();
 
   const operate = requireCapability(CAPABILITIES.QUEUE_OPERATE);
-  const judgeOrOperate = requireAnyCapability(CAPABILITIES.JUDGE_PANEL, CAPABILITIES.QUEUE_OPERATE);
-  const judge = requireCapability(CAPABILITIES.JUDGE_PANEL);
+  const judgeOrOperate = requireEntryJudgeOrCapability(
+    CAPABILITIES.JUDGE_PANEL,
+    CAPABILITIES.QUEUE_OPERATE,
+  );
+  const judge = requireEntryJudgeOrCapability(CAPABILITIES.JUDGE_PANEL);
 
   // H29/H30: call the next eligible team of the room's shared queue(s).
   typed.post(

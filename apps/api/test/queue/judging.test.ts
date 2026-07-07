@@ -2,7 +2,13 @@ import "./env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
-import { asUser, buildTestApp, createUserWithCapabilities, truncateAll } from "../helpers.js";
+import {
+  asUser,
+  buildTestApp,
+  createUser,
+  createUserWithCapabilities,
+  truncateAll,
+} from "../helpers.js";
 import {
   assignChallengeToRoom,
   createChallenge,
@@ -209,6 +215,83 @@ describe("collaborative review (H36)", () => {
       payload: { notes: "intruso" },
     });
     expect(res.statusCode).toBe(403);
+  });
+
+  it("lets room-assigned judges use their scoped judging surfaces without capability groups", async () => {
+    const assignedJudge = await createUser();
+    const challengeId = await createChallenge({ judgingPanelCriteria: CRITERIA });
+    const otherChallengeId = await createChallenge({ judgingPanelCriteria: CRITERIA });
+    const roomId = await createRoom();
+    await assignChallengeToRoom(roomId, challengeId);
+
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `INSERT INTO room_judges (room_id, challenge_id, user_id) VALUES ($1, $2, $3)`,
+      [roomId, challengeId, assignedJudge],
+    );
+
+    const { repoId } = await createRepoWithTeam(
+      undefined,
+      `Scoped ${crypto.randomUUID().slice(0, 4)}`,
+    );
+    const entryId = await enqueueRepo(challengeId, repoId, 1);
+    const otherEntryId = await enqueueRepo(otherChallengeId, repoId, 1);
+
+    const me = await app.inject({
+      method: "GET",
+      url: "/api/me",
+      headers: asUser(assignedJudge),
+    });
+    expect(me.json().role).toBe("judge");
+    expect(me.json().capabilities).toEqual([]);
+
+    const rooms = await app.inject({
+      method: "GET",
+      url: "/api/queue/rooms",
+      headers: asUser(assignedJudge),
+    });
+    expect(rooms.statusCode).toBe(200);
+    expect(rooms.json().map((r: { id: number }) => r.id)).toEqual([roomId]);
+
+    const view = await app.inject({
+      method: "GET",
+      url: `/api/queue/rooms/${roomId}/view`,
+      headers: asUser(assignedJudge),
+    });
+    expect(view.statusCode).toBe(200);
+    expect(view.json().challenge.id).toBe(challengeId);
+
+    const challenges = await app.inject({
+      method: "GET",
+      url: "/api/challenges",
+      headers: asUser(assignedJudge),
+    });
+    expect(challenges.statusCode).toBe(200);
+    expect(challenges.json().challenges.map((c: { id: number }) => c.id)).toEqual([challengeId]);
+
+    const projects = await app.inject({
+      method: "GET",
+      url: "/api/repos",
+      headers: asUser(assignedJudge),
+    });
+    expect(projects.statusCode).toBe(200);
+    expect(projects.json().repos.map((r: { id: number }) => r.id)).toEqual([repoId]);
+
+    const review = await app.inject({
+      method: "PATCH",
+      url: `/api/queue/entries/${entryId}/review`,
+      headers: asUser(assignedJudge),
+      payload: { scores: { innovation: 7 } },
+    });
+    expect(review.statusCode).toBe(200);
+
+    const outside = await app.inject({
+      method: "PATCH",
+      url: `/api/queue/entries/${otherEntryId}/review`,
+      headers: asUser(assignedJudge),
+      payload: { scores: { innovation: 7 } },
+    });
+    expect(outside.statusCode).toBe(403);
   });
 });
 

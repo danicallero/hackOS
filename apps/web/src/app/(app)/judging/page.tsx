@@ -153,15 +153,13 @@ function normalizeScores(panel: Question[], raw: Record<string, unknown> | undef
 }
 
 export default function QueuePage() {
-  const { can, canAny } = useSessionContext();
+  const { can, canAny, me } = useSessionContext();
   const canOperate = can(CAPABILITIES.QUEUE_OPERATE);
-  const canJudge = can(CAPABILITIES.JUDGE_PANEL);
+  const canJudge = can(CAPABILITIES.JUDGE_PANEL) || me?.role === "judge";
   const canExport = can(CAPABILITIES.JUDGING_EXPORT);
-  const canUse = canAny(
-    CAPABILITIES.QUEUE_OPERATE,
-    CAPABILITIES.QUEUE_ADMIN,
-    CAPABILITIES.JUDGE_PANEL,
-  );
+  const canUse =
+    me?.role === "judge" ||
+    canAny(CAPABILITIES.QUEUE_OPERATE, CAPABILITIES.QUEUE_ADMIN, CAPABILITIES.JUDGE_PANEL);
 
   const [rooms, setRooms] = useState<Room[]>([]);
   const [roomsLoading, setRoomsLoading] = useState(true);
