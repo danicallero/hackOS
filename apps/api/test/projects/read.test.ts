@@ -76,7 +76,19 @@ describe("GET /api/repos + /api/repos/:id (PROJECTS_READ)", () => {
     const beans = repos.find((r: { name: string }) => r.name === "Neural Beans");
     expect(beans.members).toHaveLength(3);
     expect(beans.prizes.sort()).toEqual(["Best AI Hack", "Most Caffeinated"]);
-    expect(beans.challenges).toEqual([{ id: challengeId, title: "AI Challenge" }]);
+    expect(beans.challenges).toEqual([
+      {
+        id: challengeId,
+        title: "AI Challenge",
+        status: null,
+        position: null,
+        assignedRoomId: null,
+        assignedRoomName: null,
+        mappedPrizes: ["Best AI Hack"],
+        source: "prize",
+      },
+    ]);
+    expect(beans.unmappedPrizes).toEqual(["Most Caffeinated"]);
 
     const single = await server.inject({
       method: "GET",
@@ -93,6 +105,84 @@ describe("GET /api/repos + /api/repos/:id (PROJECTS_READ)", () => {
       headers: asUser(reader),
     });
     expect(missing.statusCode).toBe(404);
+  });
+
+  it("shows directly-added queue challenges after Add to Challenge", async () => {
+    const server = await getApp();
+    await seedMatchableUsers();
+    const challengeId = await createChallenge("Live Queue", []);
+    const operator = await createUserWithCapabilities([
+      CAPABILITIES.PROJECTS_IMPORT,
+      CAPABILITIES.PROJECTS_READ,
+      CAPABILITIES.PROJECTS_EDIT,
+    ]);
+    await importFixtures(operator);
+
+    const repos = await server.inject({
+      method: "GET",
+      url: "/api/repos",
+      headers: asUser(operator),
+    });
+    const beans = repos.json().repos.find((r: { name: string }) => r.name === "Neural Beans");
+
+    const add = await server.inject({
+      method: "POST",
+      url: `/api/repos/${beans.id}/challenges`,
+      headers: asUser(operator),
+      payload: { challengeId },
+    });
+    expect(add.statusCode).toBe(200);
+
+    const single = await server.inject({
+      method: "GET",
+      url: `/api/repos/${beans.id}`,
+      headers: asUser(operator),
+    });
+    expect(single.statusCode).toBe(200);
+    expect(single.json().challenges).toContainEqual(
+      expect.objectContaining({
+        id: challengeId,
+        title: "Live Queue",
+        status: "waiting",
+        mappedPrizes: [],
+        source: "queue",
+      }),
+    );
+  });
+
+  it("removes an imported prize from a project", async () => {
+    const server = await getApp();
+    await seedMatchableUsers();
+    const operator = await createUserWithCapabilities([
+      CAPABILITIES.PROJECTS_IMPORT,
+      CAPABILITIES.PROJECTS_READ,
+      CAPABILITIES.PROJECTS_EDIT,
+    ]);
+    await createChallenge("AI Challenge", ["Best AI Hack"]);
+    await importFixtures(operator);
+
+    const repos = await server.inject({
+      method: "GET",
+      url: "/api/repos",
+      headers: asUser(operator),
+    });
+    const beans = repos.json().repos.find((r: { name: string }) => r.name === "Neural Beans");
+
+    const remove = await server.inject({
+      method: "DELETE",
+      url: `/api/repos/${beans.id}/prizes/${encodeURIComponent("Most Caffeinated")}`,
+      headers: asUser(operator),
+    });
+    expect(remove.statusCode).toBe(200);
+    expect(remove.json()).toEqual({ repoId: beans.id, prize: "Most Caffeinated", removed: true });
+
+    const single = await server.inject({
+      method: "GET",
+      url: `/api/repos/${beans.id}`,
+      headers: asUser(operator),
+    });
+    expect(single.json().prizes).toEqual(["Best AI Hack"]);
+    expect(single.json().unmappedPrizes).toEqual([]);
   });
 });
 
