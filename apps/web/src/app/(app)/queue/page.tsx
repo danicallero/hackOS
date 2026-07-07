@@ -172,7 +172,7 @@ export default function QueueOperationsPage() {
             description="Create rooms in Administration to start building queue views."
           />
         ) : (
-          <div className="grid gap-4 xl:grid-cols-2">
+          <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">
             {rooms.map((room) => (
               <RoomQueueCard
                 key={room.room.id}
@@ -261,10 +261,10 @@ function RoomQueueCard({
 
   return (
     <Card className="gap-0 overflow-hidden p-0 shadow-none">
-      <div className="flex items-start justify-between gap-3 px-5 py-4">
-        <div className="min-w-0 space-y-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="truncate text-base font-semibold">{room.room.name}</h3>
+      <div className="flex items-start justify-between gap-2 px-3.5 py-2.5">
+        <div className="min-w-0 space-y-0.5">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <h3 className="truncate text-sm font-semibold">{room.room.name}</h3>
             {challenge && (
               <StatusBadge tone="neutral">
                 {textForDisplay("title" in challenge ? challenge.title : "") || "Challenge"}
@@ -274,7 +274,7 @@ function RoomQueueCard({
               {roomState?.is_paused ? "Paused" : "Live"}
             </StatusBadge>
           </div>
-          <p className="text-muted-foreground text-sm">
+          <p className="text-muted-foreground text-xs">
             {room.room.location ?? "No location"} · {room.room.slug}
           </p>
         </div>
@@ -282,7 +282,7 @@ function RoomQueueCard({
 
       <Separator />
 
-      <div className="space-y-3 px-5 pb-5">
+      <div className="space-y-2 px-3.5 pb-3.5 pt-2.5">
         <QueueEntryBlock
           label="Presenting"
           entry={room.active}
@@ -429,33 +429,34 @@ function RoomQueueCard({
           )}
         />
 
-        <div className="space-y-2 rounded-md border p-3">
-          <div className="flex items-center gap-2">
-            <SearchIcon className="text-muted-foreground size-4" />
-            <p className="text-sm font-medium">Add manually to top</p>
+        <div className="space-y-1.5 rounded-md border p-2.5">
+          <div className="relative">
+            <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />
+            <Input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              disabled={!canOperate || !challengeId}
+              placeholder="Add to top: search project, repo or entry id"
+              className="h-8 pl-8 text-sm"
+            />
           </div>
-          <Input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            disabled={!canOperate || !challengeId}
-            placeholder="Search team by project, repo id or entry id"
-          />
           {query.trim() && (
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {searching && results.length === 0 ? (
                 <Spinner className="size-4" />
               ) : results.length === 0 ? (
-                <p className="text-muted-foreground text-sm">No teams found.</p>
+                <p className="text-muted-foreground text-xs">No teams found.</p>
               ) : (
                 results.slice(0, 5).map((entry) => (
                   <div
                     key={entry.id}
-                    className="flex items-center justify-between gap-3 rounded-md border px-3 py-2"
+                    className="flex items-center justify-between gap-2 rounded-md border px-2.5 py-1.5"
                   >
                     <TeamButton entry={entry} onSelect={setSelectedEntry} />
                     <Button
                       size="sm"
                       variant="outline"
+                      className="shrink-0"
                       disabled={busy === `top-${entry.id}`}
                       onClick={() =>
                         void mutate(
@@ -526,20 +527,20 @@ function QueueEntryBlock({
   actions: (entry: QueueEntry) => React.ReactNode;
 }) {
   return (
-    <div className="space-y-2 rounded-md border p-3">
-      <div className="text-muted-foreground text-xs font-medium uppercase">{label}</div>
+    <div className="space-y-1.5 rounded-md border p-2.5">
+      <div className="text-muted-foreground text-[0.65rem] font-medium tracking-wide uppercase">
+        {label}
+      </div>
       {entry ? (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             <TeamButton entry={entry} onSelect={onSelect} />
-            <div className="mt-1">
-              <QueueStatusBadge status={entry.status} />
-            </div>
+            <QueueStatusBadge status={entry.status} />
           </div>
-          <div className="flex flex-wrap gap-2">{actions(entry)}</div>
+          <div className="flex flex-wrap gap-1.5">{actions(entry)}</div>
         </div>
       ) : (
-        <p className="text-muted-foreground text-sm">{empty}</p>
+        <p className="text-muted-foreground text-xs">{empty}</p>
       )}
     </div>
   );
@@ -559,23 +560,24 @@ function QueueGroup({
   actions: (entry: QueueEntry) => React.ReactNode;
 }) {
   return (
-    <div className="space-y-2 rounded-md border p-3">
-      <div className="text-muted-foreground text-xs font-medium uppercase">{label}</div>
+    <div className="space-y-1.5 rounded-md border p-2.5">
+      <div className="text-muted-foreground text-[0.65rem] font-medium tracking-wide uppercase">
+        {label}
+      </div>
       {entries.length === 0 ? (
-        <p className="text-muted-foreground text-sm">{empty}</p>
+        <p className="text-muted-foreground text-xs">{empty}</p>
       ) : (
-        <ul className="space-y-2">
+        <ul className="space-y-1.5">
           {entries.map((entry) => (
-            <li key={entry.id} className="space-y-2 rounded-md border px-3 py-2">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <TeamButton entry={entry} onSelect={onSelect} />
-                  <div className="mt-1">
-                    <QueueStatusBadge status={entry.status} />
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2">{actions(entry)}</div>
+            <li
+              key={entry.id}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-2.5 py-1.5"
+            >
+              <div className="flex min-w-0 items-center gap-2">
+                <TeamButton entry={entry} onSelect={onSelect} />
+                <QueueStatusBadge status={entry.status} />
               </div>
+              <div className="flex flex-wrap gap-1.5">{actions(entry)}</div>
             </li>
           ))}
         </ul>

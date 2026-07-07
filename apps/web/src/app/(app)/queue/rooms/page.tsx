@@ -3,8 +3,7 @@
 // Queue admin surface for rooms and assignments (H46).
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { ArrowLeftIcon, Building2Icon, LockIcon, PlusIcon } from "lucide-react";
-import Link from "next/link";
+import { Building2Icon, LockIcon, PlusIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/common/empty-state";
@@ -210,20 +209,12 @@ export default function QueueRoomsPage() {
         title="Queue rooms"
         description="Rooms and assignment controls for the judging flow."
         actions={
-          <div className="flex flex-wrap gap-2">
-            {canAdmin && (
-              <Button onClick={openCreateModal}>
-                <PlusIcon className="size-4" />
-                Create room
-              </Button>
-            )}
-            <Button variant="outline" asChild>
-              <Link href="/queue">
-                <ArrowLeftIcon className="size-4" />
-                Back to panel
-              </Link>
+          canAdmin && (
+            <Button onClick={openCreateModal}>
+              <PlusIcon className="size-4" />
+              Create room
             </Button>
-          </div>
+          )
         }
       />
 
@@ -369,31 +360,32 @@ export default function QueueRoomsPage() {
                 />
               </div>
             </div>
-            <div className="grid gap-4 lg:grid-cols-2">
-              <SectionCard title="Assignments" description="Attach challenges and judges by id.">
-                <AssignmentsEditor
-                  roomId={selectedRoom.id}
-                  assignments={selectedRoomAssignments}
-                  challengeFallback={selectedChallengeFallback}
-                  challenges={challenges}
-                  users={users}
-                  onAddChallenge={async (challengeId) => {
-                    if (!canAdmin) return;
-                    await assignRoomChallenge(selectedRoom.id, challengeId);
-                    await loadRoomDetails(selectedRoom.id);
-                  }}
-                  onAddJudge={async (challengeId, userId) => {
-                    await assignRoomJudge(selectedRoom.id, challengeId, userId);
-                    await loadRoomDetails(selectedRoom.id);
-                  }}
-                  onRemoveJudge={async (challengeId, userId) => {
-                    await removeRoomJudge(selectedRoom.id, challengeId, userId);
-                    await loadRoomDetails(selectedRoom.id);
-                  }}
-                  canSetChallenge={canAdmin}
-                />
-              </SectionCard>
-            </div>
+            <SectionCard
+              title="Assignments"
+              description="Challenge and judges assigned to this room."
+            >
+              <AssignmentsEditor
+                roomId={selectedRoom.id}
+                assignments={selectedRoomAssignments}
+                challengeFallback={selectedChallengeFallback}
+                challenges={challenges}
+                users={users}
+                onAddChallenge={async (challengeId) => {
+                  if (!canAdmin) return;
+                  await assignRoomChallenge(selectedRoom.id, challengeId);
+                  await loadRoomDetails(selectedRoom.id);
+                }}
+                onAddJudge={async (challengeId, userId) => {
+                  await assignRoomJudge(selectedRoom.id, challengeId, userId);
+                  await loadRoomDetails(selectedRoom.id);
+                }}
+                onRemoveJudge={async (challengeId, userId) => {
+                  await removeRoomJudge(selectedRoom.id, challengeId, userId);
+                  await loadRoomDetails(selectedRoom.id);
+                }}
+                canSetChallenge={canAdmin}
+              />
+            </SectionCard>
             {canAdmin && (
               <div className="flex flex-wrap justify-end gap-2">
                 <Button
@@ -453,58 +445,22 @@ function AssignmentsEditor({
     setChallengeId(nextChallengeId ? String(nextChallengeId) : "");
   }, [assignments?.challenges, challengeFallback]);
 
+  const judges = assignments?.judges ?? [];
+
   return (
-    <div className="space-y-4">
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="space-y-2 rounded-md border p-3">
-          <p className="text-sm font-medium">Room challenge</p>
-          {assignedChallenge ? (
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium">{assignedChallenge.title}</p>
-                <p className="text-muted-foreground text-xs">
-                  {assignedChallenge.assigned_by_email ?? "system"}
-                </p>
-              </div>
-              <StatusBadge tone="brand">id {assignedChallenge.challenge_id}</StatusBadge>
-            </div>
-          ) : (
-            <p className="text-muted-foreground text-sm">No challenge assigned.</p>
-          )}
-        </div>
-
-        <div className="space-y-2 rounded-md border p-3">
-          <p className="text-sm font-medium">Current judges</p>
-          {assignments?.judges?.length ? (
-            <ul className="space-y-2">
-              {assignments.judges.map((assignment) => (
-                <li
-                  key={`${assignment.challenge_id}:${assignment.user_id}`}
-                  className="flex items-center justify-between gap-3"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">
-                      {assignment.name ?? assignment.email}
-                    </p>
-                    <p className="text-muted-foreground text-xs">{assignment.title}</p>
-                  </div>
-                  <StatusBadge tone="info">user {assignment.user_id}</StatusBadge>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-muted-foreground text-sm">No judges assigned.</p>
-          )}
-        </div>
-      </div>
-
-      {canSetChallenge && (
-        <div className="space-y-2">
-          <Label htmlFor={`challenge-${roomId}`}>Room challenge</Label>
-          <div className="flex gap-2">
+    <div className="space-y-5">
+      <div className="space-y-2">
+        <Label htmlFor={canSetChallenge ? `challenge-${roomId}` : undefined}>Room challenge</Label>
+        {assignedChallenge ? (
+          <p className="text-sm font-medium">{textForDisplay(assignedChallenge.title)}</p>
+        ) : (
+          <p className="text-muted-foreground text-sm">No challenge assigned.</p>
+        )}
+        {canSetChallenge && (
+          <div className="flex flex-col gap-2 sm:flex-row">
             <Select value={challengeId || undefined} onValueChange={setChallengeId}>
-              <SelectTrigger id={`challenge-${roomId}`} className="flex-1">
-                <SelectValue placeholder="Challenge" />
+              <SelectTrigger id={`challenge-${roomId}`} className="w-full min-w-0 sm:flex-1">
+                <SelectValue placeholder="Select challenge" />
               </SelectTrigger>
               <SelectContent>
                 {challenges.map((challenge) => (
@@ -515,6 +471,7 @@ function AssignmentsEditor({
               </SelectContent>
             </Select>
             <Button
+              className="shrink-0"
               disabled={busy === "challenge" || !challengeId}
               onClick={async () => {
                 setBusy("challenge");
@@ -530,18 +487,18 @@ function AssignmentsEditor({
                 }
               }}
             >
-              Set
+              Set challenge
             </Button>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       <div className="space-y-2">
         <Label htmlFor={`judge-user-${roomId}`}>Assign judge</Label>
-        <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+        <div className="flex flex-col gap-2 sm:flex-row">
           <Select value={userId} onValueChange={setUserId}>
-            <SelectTrigger id={`judge-user-${roomId}`}>
-              <SelectValue placeholder="User" />
+            <SelectTrigger id={`judge-user-${roomId}`} className="w-full min-w-0 sm:flex-1">
+              <SelectValue placeholder="Select judge" />
             </SelectTrigger>
             <SelectContent>
               {users.map((user) => (
@@ -552,6 +509,7 @@ function AssignmentsEditor({
             </SelectContent>
           </Select>
           <Button
+            className="shrink-0"
             disabled={busy === "judge" || !userId || !effectiveChallengeId}
             onClick={async () => {
               setBusy("judge");
@@ -565,46 +523,60 @@ function AssignmentsEditor({
               }
             }}
           >
-            Add
+            Add judge
           </Button>
         </div>
       </div>
 
-      {assignments?.judges?.length ? (
-        <div className="space-y-2 rounded-md border p-3">
-          <p className="text-sm font-medium">Remove judges</p>
-          <div className="space-y-2">
-            {assignments.judges.map((assignment) => (
-              <div
-                key={`${assignment.challenge_id}:${assignment.user_id}`}
-                className="flex items-center justify-between gap-3"
-              >
-                <p className="min-w-0 truncate text-sm">{assignment.email}</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={busy === `remove-judge-${assignment.user_id}`}
-                  onClick={async () => {
-                    setBusy(`remove-judge-${assignment.user_id}`);
-                    try {
-                      await onRemoveJudge(assignment.challenge_id, assignment.user_id);
-                      toast.success("Judge removed.");
-                    } catch (err) {
-                      toast.error(
-                        err instanceof ApiError ? err.message : "Could not remove judge.",
-                      );
-                    } finally {
-                      setBusy(null);
-                    }
-                  }}
+      <div className="space-y-2">
+        <Label>Judges ({judges.length})</Label>
+        {judges.length ? (
+          <ul className="divide-y rounded-md border">
+            {judges.map((assignment) => {
+              const fullName = [assignment.name, assignment.surname]
+                .filter(Boolean)
+                .join(" ")
+                .trim();
+              return (
+                <li
+                  key={`${assignment.challenge_id}:${assignment.user_id}`}
+                  className="flex items-center justify-between gap-3 px-3 py-2"
                 >
-                  Remove
-                </Button>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{fullName || assignment.email}</p>
+                    {fullName && (
+                      <p className="text-muted-foreground truncate text-xs">{assignment.email}</p>
+                    )}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    disabled={busy === `remove-judge-${assignment.user_id}`}
+                    onClick={async () => {
+                      setBusy(`remove-judge-${assignment.user_id}`);
+                      try {
+                        await onRemoveJudge(assignment.challenge_id, assignment.user_id);
+                        toast.success("Judge removed.");
+                      } catch (err) {
+                        toast.error(
+                          err instanceof ApiError ? err.message : "Could not remove judge.",
+                        );
+                      } finally {
+                        setBusy(null);
+                      }
+                    }}
+                  >
+                    Remove
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="text-muted-foreground text-sm">No judges assigned.</p>
+        )}
+      </div>
     </div>
   );
 }
