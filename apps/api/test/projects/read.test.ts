@@ -262,6 +262,51 @@ describe("GET /api/me/projects (participant self-view)", () => {
     });
     expect(empty.json().projects).toHaveLength(0);
   });
+
+  it("lets staff list projects for a selected user in the admin profile", async () => {
+    const server = await getApp();
+    const { aliceId, bobId } = await seedMatchableUsers();
+    const operator = await createUserWithCapabilities([CAPABILITIES.PROJECTS_IMPORT]);
+    await importFixtures(operator);
+
+    const pleb = await createUser();
+    const forbidden = await server.inject({
+      method: "GET",
+      url: `/api/users/${aliceId}/projects`,
+      headers: asUser(pleb),
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    const reader = await createUserWithCapabilities([CAPABILITIES.USERS_READ]);
+    const res = await server.inject({
+      method: "GET",
+      url: `/api/users/${aliceId}/projects`,
+      headers: asUser(reader),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().projects).toHaveLength(1);
+    expect(res.json().projects[0]).toMatchObject({
+      name: "Neural Beans",
+      prizes: ["Best AI Hack", "Most Caffeinated"],
+    });
+
+    const bob = await server.inject({
+      method: "GET",
+      url: `/api/users/${bobId}/projects`,
+      headers: asUser(reader),
+    });
+    expect(bob.statusCode).toBe(200);
+    expect(bob.json().projects.map((project: { name: string }) => project.name)).toEqual([
+      "Neural Beans",
+    ]);
+
+    const missing = await server.inject({
+      method: "GET",
+      url: "/api/users/999999/projects",
+      headers: asUser(reader),
+    });
+    expect(missing.statusCode).toBe(404);
+  });
 });
 
 describe("POST /api/devpost/prizes/:prizeName/map", () => {

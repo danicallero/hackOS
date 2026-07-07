@@ -7,6 +7,7 @@ import {
   Building2Icon,
   ClipboardListIcon,
   ClockIcon,
+  ExternalLinkIcon,
   FileTextIcon,
   FolderGitIcon,
   KeyRoundIcon,
@@ -55,6 +56,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
 import { pickText } from "@/lib/i18n";
+import { type RepoWithExtras, userProjects } from "@/lib/projects";
 import { useCan } from "@/lib/session";
 import type { Tone } from "@/lib/tones";
 import type {
@@ -180,14 +182,163 @@ export default function UserProfilePage() {
           <ApplicationTab userId={user.id} />
         </TabsContent>
         <TabsContent value="projects" className="pt-2">
-          <EmptyState
-            icon={FolderGitIcon}
-            title="No projects yet"
-            description="Accepted participants' project submissions will appear here."
-          />
+          <ProjectsTab userId={user.id} />
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+const projectColumns: Column<RepoWithExtras>[] = [
+  {
+    id: "name",
+    header: "Project",
+    sortValue: (project) => project.name.toLowerCase(),
+    cell: (project) => <span className="font-medium">{project.name}</span>,
+  },
+  {
+    id: "challenges",
+    header: "Challenges",
+    sortValue: (project) => project.challenges?.length ?? 0,
+    cell: (project) =>
+      project.challenges?.length ? (
+        <div className="flex flex-wrap gap-1">
+          {project.challenges.map((challenge) => (
+            <StatusBadge key={challenge.id} tone="brand" dot={false}>
+              {challenge.title}
+            </StatusBadge>
+          ))}
+        </div>
+      ) : (
+        <span className="text-muted-foreground text-sm">None</span>
+      ),
+  },
+  {
+    id: "prizes",
+    header: "Prizes",
+    sortValue: (project) => (Array.isArray(project.prizes) ? project.prizes.length : 0),
+    cell: (project) => {
+      const prizes = Array.isArray(project.prizes) ? (project.prizes as string[]) : [];
+      return prizes.length ? (
+        <span className="text-muted-foreground text-sm">
+          {prizes.length} prize{prizes.length === 1 ? "" : "s"}
+        </span>
+      ) : (
+        <span className="text-muted-foreground text-sm">None</span>
+      );
+    },
+  },
+  {
+    id: "links",
+    header: "Links",
+    cell: (project) => {
+      const devpostUrl = typeof project.devpost_url === "string" ? project.devpost_url : null;
+      const demoUrl = typeof project.demo_url === "string" ? project.demo_url : null;
+      const githubUrl = typeof project.github_url === "string" ? project.github_url : null;
+
+      return (
+        <div className="flex flex-wrap gap-2">
+          {devpostUrl && <ProjectLink href={devpostUrl} label="Devpost" />}
+          {demoUrl && <ProjectLink href={demoUrl} label="Demo" />}
+          {githubUrl && <ProjectLink href={githubUrl} label="Repo" />}
+          {!devpostUrl && !demoUrl && !githubUrl && (
+            <span className="text-muted-foreground text-sm">None</span>
+          )}
+        </div>
+      );
+    },
+  },
+];
+
+function ProjectLink({ href, label }: { href: string; label: string }) {
+  return (
+    <Button variant="ghost" size="sm" asChild className="h-7 px-2">
+      <a href={href} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>
+        <ExternalLinkIcon className="size-3.5" />
+        {label}
+      </a>
+    </Button>
+  );
+}
+
+function ProjectsTab({ userId }: { userId: number }) {
+  const router = useRouter();
+  const [projects, setProjects] = useState<RepoWithExtras[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const data = await userProjects(userId);
+      setProjects(data.projects);
+    } catch (err) {
+      setProjects([]);
+      setError(err instanceof ApiError ? err.message : "Could not load this user's projects.");
+    } finally {
+      setLoading(false);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Spinner className="size-6" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <EmptyState
+        icon={FolderGitIcon}
+        title="Projects could not be loaded"
+        description={error}
+        action={
+          <Button variant="outline" onClick={() => void load()}>
+            Try again
+          </Button>
+        }
+      />
+    );
+  }
+
+  if (projects.length === 0) {
+    return (
+      <EmptyState
+        icon={FolderGitIcon}
+        title="No projects yet"
+        description="Projects appear here once this user is linked as a project member."
+        action={
+          <Button variant="outline" asChild>
+            <Link href="/projects">Open projects</Link>
+          </Button>
+        }
+      />
+    );
+  }
+
+  return (
+    <DataTable
+      columns={projectColumns}
+      data={projects}
+      getRowId={(project) => String(project.id)}
+      onRowClick={(project) => {
+        router.push(`/projects/${project.id}`);
+      }}
+      searchable={(project) =>
+        `${project.name} ${(project.challenges ?? []).map((challenge) => challenge.title).join(" ")} ${
+          Array.isArray(project.prizes) ? project.prizes.join(" ") : ""
+        }`
+      }
+      searchPlaceholder="Search projects..."
+      pageSize={10}
+    />
   );
 }
 

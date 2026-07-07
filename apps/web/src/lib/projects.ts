@@ -122,6 +122,8 @@ export const mapPrize = (prizeName: string, challengeId: number) =>
 export const listRepos = () => api.get<{ repos: RepoWithExtras[] }>("/api/repos");
 export const getRepoById = (id: number) => api.get<RepoWithExtras>(`/api/repos/${id}`);
 export const myProjects = () => api.get<RepoWithExtras[]>("/api/me/projects");
+export const userProjects = (userId: number) =>
+  api.get<{ projects: RepoWithExtras[] }>(`/api/users/${userId}/projects`);
 
 // ── hot edit (H21) ─────────────────────────────────────────────────────────
 const idem = (key?: string) => (key ? { headers: { "Idempotency-Key": key } } : undefined);

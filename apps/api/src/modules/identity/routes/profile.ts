@@ -11,6 +11,7 @@ import {
   requireCapability,
 } from "../../../lib/capabilities.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../../lib/errors.js";
+import { myProjects } from "../../projects/service.js";
 import { computeDerivedRole } from "../role.js";
 
 /**
@@ -82,6 +83,22 @@ const userResponseSchema = z.object({
   universityId: z.number().nullable(),
   notes: z.string().nullable(),
   createdAt: z.string(),
+});
+
+const userProjectSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  description: z.string().nullable(),
+  github_url: z.string().nullable(),
+  devpost_url: z.string().nullable(),
+  demo_url: z.string().nullable(),
+  prizes: z.array(z.string()),
+  challenges: z.array(
+    z.object({
+      id: z.number(),
+      title: z.string(),
+    }),
+  ),
 });
 
 interface UserRow {
@@ -400,6 +417,21 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           .then((r) => r.rows as { id: number; name: string }[]),
       ]);
       return { ...serializeUser(row), role, capabilities: [...capabilities], groups };
+    },
+  );
+
+  api.get(
+    "/api/users/:id/projects",
+    {
+      preHandler: requireCapability(CAPABILITIES.USERS_READ),
+      schema: {
+        params: z.object({ id: z.coerce.number().int() }),
+        response: { 200: z.object({ projects: z.array(userProjectSchema) }) },
+      },
+    },
+    async (req) => {
+      await fetchUser(req.params.id);
+      return { projects: await myProjects(req.params.id) };
     },
   );
 
