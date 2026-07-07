@@ -3,7 +3,7 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { requireCapability } from "../../lib/capabilities.js";
 import { UnauthorizedError } from "../../lib/errors.js";
-import { requireAnyCapability } from "./access.js";
+import { assertCanExportChallenge, requireAnyCapability } from "./access.js";
 import { exportEvaluationsCsv, exportQueueCsv } from "./exports.js";
 import {
   getAttemptReview,
@@ -85,7 +85,9 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
   typed.get(
     "/api/queue/challenges/:challengeId/export/queue.csv",
     {
-      preHandler: requireCapability(CAPABILITIES.JUDGING_EXPORT),
+      preHandler: async (req) => {
+        await assertCanExportChallenge(req.userId, Number(req.params.challengeId));
+      },
       schema: { params: challengeIdParam },
     },
     async (req, reply) => {
@@ -101,7 +103,9 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
   typed.get(
     "/api/queue/challenges/:challengeId/export/evaluations.csv",
     {
-      preHandler: requireCapability(CAPABILITIES.JUDGING_EXPORT),
+      preHandler: async (req) => {
+        await assertCanExportChallenge(req.userId, Number(req.params.challengeId));
+      },
       schema: { params: challengeIdParam },
     },
     async (req, reply) => {
