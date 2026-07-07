@@ -19,6 +19,7 @@ import {
   repoIdParamsSchema,
   repoMemberBodySchema,
   repoMemberParamsSchema,
+  repoPrizeParamsSchema,
 } from "./schemas.js";
 import {
   addRepoChallenge,
@@ -37,6 +38,7 @@ import {
   removeDevpostParticipant,
   removeRepoChallenge,
   removeRepoMember,
+  removeRepoPrize,
   sendClaimEmail,
 } from "./service.js";
 
@@ -256,6 +258,15 @@ export function registerProjectRoutes(app: FastifyInstance): void {
     },
     async (req) =>
       removeRepoChallenge(req.userId as number, req.params.repoId, req.params.challengeId),
+  );
+
+  r.delete(
+    "/api/repos/:repoId/prizes/:prizeName",
+    {
+      preHandler: requireCapability(CAPABILITIES.PROJECTS_EDIT),
+      schema: { params: repoPrizeParamsSchema },
+    },
+    async (req) => removeRepoPrize(req.userId as number, req.params.repoId, req.params.prizeName),
   );
 
   // Participant self-view (minimal H20 read for queue's participant panel).
