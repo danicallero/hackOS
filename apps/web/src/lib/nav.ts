@@ -12,6 +12,7 @@ import {
   ListOrderedIcon,
   type LucideIcon,
   MegaphoneIcon,
+  ScanLineIcon,
   ScrollTextIcon,
   SettingsIcon,
   ShieldCheckIcon,
@@ -19,6 +20,7 @@ import {
   TrophyIcon,
   UserIcon,
   UsersIcon,
+  WalletCardsIcon,
 } from "lucide-react";
 
 export interface NavItem {
@@ -69,6 +71,18 @@ export const NAV: NavSection[] = [
           CAPABILITIES.QUEUE_OPERATE,
           CAPABILITIES.QUEUE_ADMIN,
           CAPABILITIES.JUDGE_PANEL,
+        ],
+      },
+      {
+        title: "Logistics",
+        href: "/logistics",
+        icon: ScanLineIcon,
+        anyCapability: [
+          CAPABILITIES.ACCREDIT_SCAN,
+          CAPABILITIES.PRESENCE_SCAN,
+          CAPABILITIES.ACTIVITY_SCAN,
+          CAPABILITIES.LOGISTICS_STATS,
+          CAPABILITIES.SCHEDULE_MANAGE,
         ],
       },
     ],
@@ -178,6 +192,9 @@ export const NAV: NavSection[] = [
   },
   {
     label: "Account",
-    items: [{ title: "My profile", href: "/settings/profile", icon: UserIcon }],
+    items: [
+      { title: "Wallet", href: "/wallet", icon: WalletCardsIcon },
+      { title: "My profile", href: "/settings/profile", icon: UserIcon },
+    ],
   },
 ];

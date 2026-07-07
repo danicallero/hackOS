@@ -1,6 +1,8 @@
+import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
+import { broadcast } from "../../lib/sse.js";
 import { loadPersonCard } from "./cards.js";
 
 /** Postgres unique_violation — thrown by the unique `users.badge_id` index. */
@@ -51,7 +53,7 @@ export async function checkIn(
   actorId: number,
   input: { ticketToken: string; badgeId: string; method: CheckInMethod },
 ) {
-  return withTransaction(async (client) => {
+  const result = await withTransaction(async (client) => {
     const t = await client.query(`SELECT user_id FROM tickets WHERE token = $1`, [
       input.ticketToken,
     ]);
@@ -110,6 +112,8 @@ export async function checkIn(
       surname: user.surname,
     };
   });
+  await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_ACCREDITED, result);
+  return result;
 }
 
 // ── H23: badge rotation ───────────────────────────────────────────────────
@@ -124,7 +128,7 @@ export async function rotateBadge(
   actorId: number,
   input: { userId?: number; currentBadgeId?: string; newBadgeId: string; reason: string },
 ) {
-  return withTransaction(async (client) => {
+  const result = await withTransaction(async (client) => {
     let userId = input.userId ?? null;
     if (userId == null) {
       const r = await client.query(`SELECT id FROM users WHERE badge_id = $1`, [
@@ -172,7 +176,8 @@ export async function rotateBadge(
 
     // H28 integration point: badge passes are voided on rotation.
     const voided = await client.query(
-      `UPDATE wallet_passes SET status = 'voided', last_updated_at = now()
+      `UPDATE wallet_passes
+          SET status = 'voided', last_updated_at = now(), update_tag = extract(epoch from now())::text
         WHERE user_id = $1 AND purpose = 'badge' AND status <> 'voided' RETURNING id`,
       [userId],
     );
@@ -194,4 +199,14 @@ export async function rotateBadge(
       voidedPasses: voided.rowCount ?? 0,
     };
   });
+  await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_BADGE_ROTATED, result);
+  await broadcast(
+    `${SSE_TOPICS.USER_PREFIX}${result.userId}`,
+    EVENTS.LOGISTICS_WALLET_PASS_UPDATED,
+    {
+      purpose: "badge",
+      status: "voided",
+    },
+  );
+  return result;
 }

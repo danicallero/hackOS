@@ -3,9 +3,10 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { pool } from "../../db/pool.js";
-import { requireCapability } from "../../lib/capabilities.js";
+import { requireAnyCapability, requireCapability } from "../../lib/capabilities.js";
 import { UnauthorizedError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
+import { subscribe } from "../../lib/sse.js";
 import { checkIn, lookupByTicket, rotateBadge } from "./accreditation.js";
 import {
   activityScan,
@@ -13,19 +14,34 @@ import {
   grantEntitlement,
   revokeEntitlement,
 } from "./activities.js";
+import { enqueueMealScanBatch } from "./offline-meals.js";
 import { allHours, occupancyEstimate, presenceScan, userHours } from "./presence.js";
 import {
   activityIdParam,
   activityScanBody,
+  appleDeviceParams,
+  appleLogBody,
+  applePassParams,
+  appleRegistrationBody,
+  appleRegistrationsQuery,
   checkInBody,
   entitlementUserParam,
   grantEntitlementBody,
   lookupBody,
+  mealScanBatchBody,
   presenceScanBody,
   rotateBody,
   userIdParam,
+  walletPurposeParam,
 } from "./schemas.js";
 import { logisticsStats } from "./stats.js";
+import {
+  appleChangedSerials,
+  appleLog,
+  buildApplePass,
+  registerAppleDevice,
+  unregisterAppleDevice,
+} from "./wallet.js";
 
 function actor(userId: number | null): number {
   if (userId == null) throw new UnauthorizedError();
@@ -56,6 +72,13 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   const activity = requireCapability(CAPABILITIES.ACTIVITY_SCAN);
   const stats = requireCapability(CAPABILITIES.LOGISTICS_STATS);
   const scheduleManage = requireCapability(CAPABILITIES.SCHEDULE_MANAGE);
+  const logisticsRead = requireAnyCapability(
+    CAPABILITIES.ACCREDIT_SCAN,
+    CAPABILITIES.PRESENCE_SCAN,
+    CAPABILITIES.ACTIVITY_SCAN,
+    CAPABILITIES.LOGISTICS_STATS,
+    CAPABILITIES.SCHEDULE_MANAGE,
+  );
 
   typed.get(
     "/api/public/activities",
@@ -152,9 +175,23 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       const r = await activityScan(actor(req.userId), req.params.id, {
         badgeId: req.body.badgeId,
         allowRepeat: req.body.allowRepeat,
+        scannedAt: req.body.scannedAt,
       });
       return reply.code(r.status).send(r.body);
     },
+  );
+
+  typed.post(
+    "/api/activities/:id/meal-scans/batch",
+    {
+      preHandler: [activity, idempotencyGuard],
+      schema: { params: activityIdParam, body: mealScanBatchBody },
+    },
+    async (req) =>
+      enqueueMealScanBatch(actor(req.userId), req.params.id, {
+        deviceId: req.body.deviceId,
+        scans: req.body.scans,
+      }),
   );
 
   // Entitlement admin (SCHEDULE_MANAGE — activities admin lives in the schedule WS).
@@ -179,4 +216,79 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   // ── H27 stats ────────────────────────────────────────────────────────────
 
   typed.get("/api/logistics/stats", { preHandler: stats }, async () => logisticsStats());
+
+  typed.get("/api/logistics/stream", { preHandler: logisticsRead }, async (_req, reply) => {
+    await subscribe("logistics", reply);
+  });
+
+  // ── H28 Apple Wallet / PassKit ──────────────────────────────────────────
+
+  typed.get(
+    "/api/me/wallet/apple/:purpose.pkpass",
+    { schema: { params: walletPurposeParam } },
+    async (req, reply) => {
+      const pass = await buildApplePass(actor(req.userId), req.params.purpose);
+      return reply
+        .type("application/vnd.apple.pkpass")
+        .header("content-disposition", `attachment; filename="${req.params.purpose}.pkpass"`)
+        .send(pass);
+    },
+  );
+
+  typed.get(
+    "/api/wallet/apple/v1/passes/:passTypeIdentifier/:serialNumber",
+    { schema: { params: applePassParams } },
+    async (req, reply) => {
+      const pass = await buildApplePass(null, null, {
+        passTypeIdentifier: req.params.passTypeIdentifier,
+        serialNumber: req.params.serialNumber,
+        authorization: req.headers.authorization,
+      });
+      return reply.type("application/vnd.apple.pkpass").send(pass);
+    },
+  );
+
+  typed.post(
+    "/api/wallet/apple/v1/devices/:deviceLibraryIdentifier/registrations/:passTypeIdentifier/:serialNumber",
+    { schema: { params: appleDeviceParams, body: appleRegistrationBody } },
+    async (req, reply) => {
+      const registered = await registerAppleDevice({
+        ...req.params,
+        authorization: req.headers.authorization,
+        pushToken: req.body.pushToken,
+      });
+      return reply.code(registered ? 201 : 200).send({});
+    },
+  );
+
+  typed.delete(
+    "/api/wallet/apple/v1/devices/:deviceLibraryIdentifier/registrations/:passTypeIdentifier/:serialNumber",
+    { schema: { params: appleDeviceParams } },
+    async (req, reply) => {
+      await unregisterAppleDevice({ ...req.params, authorization: req.headers.authorization });
+      return reply.code(200).send({});
+    },
+  );
+
+  typed.get(
+    "/api/wallet/apple/v1/devices/:deviceLibraryIdentifier/registrations/:passTypeIdentifier",
+    {
+      schema: {
+        params: appleDeviceParams.omit({ serialNumber: true }),
+        querystring: appleRegistrationsQuery,
+      },
+    },
+    async (req, reply) => {
+      const r = await appleChangedSerials({
+        ...req.params,
+        passesUpdatedSince: req.query.passesUpdatedSince,
+      });
+      if (r.serialNumbers.length === 0) return reply.code(204).send();
+      return r;
+    },
+  );
+
+  typed.post("/api/wallet/apple/v1/log", { schema: { body: appleLogBody } }, async (req) =>
+    appleLog(req.body.logs),
+  );
 }
