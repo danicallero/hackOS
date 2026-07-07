@@ -1,3 +1,4 @@
+import { config } from "../../config.js";
 import { pool } from "../../db/pool.js";
 import { ConflictError } from "../../lib/errors.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
@@ -15,6 +16,56 @@ import { callNextForRoom } from "./service.js";
  */
 export const QUEUE_PUMP_QUEUE_NAME = "queue-pump";
 
+/**
+ * Top up a SINGLE room's `called` buffer to `max_in_waiting_area` from its
+ * shared challenge queue — the same fill loop as pumpTick, scoped to one room
+ * so a freed slot refills instantly instead of waiting for the 5s tick
+ * (H29/H30/H35, plan/07 §5.1). Only active, non-paused rooms auto-fill (mirrors
+ * the pump's room filter); a paused/inactive room is a no-op.
+ *
+ * MUST run AFTER any surrounding transaction has committed: callNextForRoom
+ * opens its own withTransaction, so never call this inside an open one.
+ */
+export async function topUpRoom(roomId: number): Promise<void> {
+  const { rows } = await pool.query(
+    `SELECT 1 FROM rooms r
+       JOIN room_queue_state rqs ON rqs.room_id = r.id
+      WHERE r.id = $1 AND r.status = 'active' AND rqs.is_paused = false`,
+    [roomId],
+  );
+  if (rows.length === 0) return; // paused or inactive: never auto-fill
+
+  // callNextForRoom is the atomic, race-safe unit — looping here just drains
+  // the room's slack until full or nobody eligible.
+  for (let i = 0; i < 50; i++) {
+    let entry: Awaited<ReturnType<typeof callNextForRoom>>;
+    try {
+      entry = await callNextForRoom(null, roomId, { force: false });
+    } catch (err) {
+      if (err instanceof ConflictError) break; // full or paused mid-loop
+      throw err;
+    }
+    if (!entry) break;
+  }
+}
+
+/**
+ * Top up a room right after a slot-freeing transition commits (H29/H35). Any
+ * error is swallowed and logged so it can never fail the user's original
+ * action; the periodic pump remains the backstop.
+ *
+ * In production this is fire-and-forget — the caller's `await` resolves
+ * immediately and the fill runs in the background, so the HTTP request never
+ * waits on it. Under test we await the fill so integration assertions observe
+ * the settled queue deterministically (no dangling cross-test work).
+ */
+export async function scheduleTopUp(roomId: number): Promise<void> {
+  const done = topUpRoom(roomId).catch((err) => {
+    console.error(`[queue] topUpRoom(${roomId}) failed`, err);
+  });
+  if (config.isTest) await done;
+}
+
 export async function pumpTick(): Promise<void> {
   const { rows: rooms } = await pool.query(
     `SELECT r.id FROM rooms r
@@ -23,18 +74,7 @@ export async function pumpTick(): Promise<void> {
   );
 
   for (const room of rooms as { id: number }[]) {
-    // Top up until full or nobody eligible; callNextForRoom itself is the
-    // atomic, race-safe unit — looping here just drains the room's slack.
-    for (let i = 0; i < 50; i++) {
-      let entry: Awaited<ReturnType<typeof callNextForRoom>>;
-      try {
-        entry = await callNextForRoom(null, room.id, { force: false });
-      } catch (err) {
-        if (err instanceof ConflictError) break; // full or paused mid-loop
-        throw err;
-      }
-      if (!entry) break;
-    }
+    await topUpRoom(room.id);
   }
 
   await emitPreCallWarnings();

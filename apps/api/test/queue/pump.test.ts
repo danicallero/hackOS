@@ -243,3 +243,76 @@ describe("pump interplay with operators", () => {
     }
   });
 });
+
+describe("topUpRoom: immediate single-room refill (H29/H30/H35)", () => {
+  it("refills a freed slot right away, without the periodic tick", async () => {
+    const { topUpRoom } = await import("../../src/modules/queue/pump.js");
+    const { bringIn } = await import("../../src/modules/queue/service.js");
+    const challengeId = await createChallenge();
+    const roomId = await createRoom({ maxInWaitingArea: 2 });
+    await assignChallengeToRoom(roomId, challengeId);
+    const entries: number[] = [];
+    for (let i = 1; i <= 3; i++) {
+      const { repoId } = await createRepoWithTeam();
+      entries.push(await enqueueRepo(challengeId, repoId, i));
+    }
+
+    await topUpRoom(roomId); // fills to cap: teams 1 & 2 called, team 3 waits
+    expect((await getEntry(entries[0]!)).status).toBe("called");
+    expect((await getEntry(entries[1]!)).status).toBe("called");
+    expect((await getEntry(entries[2]!)).status).toBe("waiting");
+
+    // Free a called slot by bringing team 1 in, then top up again — team 3 is
+    // pulled in immediately (no pumpTick involved).
+    const judge = await createUser();
+    await bringIn(entries[0]!, judge);
+    await topUpRoom(roomId);
+    expect((await getEntry(entries[2]!)).status).toBe("called");
+  });
+
+  it("does not auto-fill a paused room", async () => {
+    const { topUpRoom } = await import("../../src/modules/queue/pump.js");
+    const challengeId = await createChallenge();
+    const roomId = await createRoom({ maxInWaitingArea: 2, isPaused: true });
+    await assignChallengeToRoom(roomId, challengeId);
+    const { repoId } = await createRepoWithTeam();
+    const entryId = await enqueueRepo(challengeId, repoId, 1);
+
+    await topUpRoom(roomId); // paused: ConflictError swallowed, nobody called
+    expect((await getEntry(entryId)).status).toBe("waiting");
+  });
+
+  it("bring-in via the route triggers the immediate refill (fire-and-forget)", async () => {
+    const challengeId = await createChallenge();
+    const roomId = await createRoom({ maxInWaitingArea: 2 });
+    await assignChallengeToRoom(roomId, challengeId);
+    const judgeId = await createUserWithCapabilities([CAPABILITIES.JUDGE_PANEL]);
+    const entries: number[] = [];
+    for (let i = 1; i <= 3; i++) {
+      const { repoId } = await createRepoWithTeam();
+      entries.push(await enqueueRepo(challengeId, repoId, i));
+    }
+
+    const { buildTestApp, asUser } = await import("../helpers.js");
+    const app = await buildTestApp();
+    try {
+      await pump(); // teams 1 & 2 called, team 3 waiting (cap 2)
+      const res = await app.inject({
+        method: "POST",
+        url: `/api/queue/entries/${entries[0]!}/bring-in`,
+        headers: asUser(judgeId),
+      });
+      expect(res.statusCode).toBe(200);
+
+      // Refill is fire-and-forget: poll until team 3 is called (no pumpTick).
+      let team3 = await getEntry(entries[2]!);
+      for (let i = 0; i < 50 && team3.status !== "called"; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        team3 = await getEntry(entries[2]!);
+      }
+      expect(team3.status).toBe("called");
+    } finally {
+      await app.close();
+    }
+  });
+});

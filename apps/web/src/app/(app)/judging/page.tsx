@@ -289,37 +289,11 @@ export default function QueuePage() {
     view?.challenge?.title ?? (activeChallenge ? challengeName(activeChallenge) : "—");
 
   return (
-    <div className="space-y-5" data-wide>
-      <PageHeader
-        title="Judging"
-        description="Room controller, current project and scoring panel."
-        actions={
-          <div className="flex flex-wrap gap-2">
-            {canExport && effectiveChallengeId && (
-              <>
-                <Button variant="outline" size="sm" asChild>
-                  <a href={exportHref(exportUrls(effectiveChallengeId).queue)}>
-                    <DownloadIcon className="size-4" />
-                    Queue CSV
-                  </a>
-                </Button>
-                <Button variant="outline" size="sm" asChild>
-                  <a href={exportHref(exportUrls(effectiveChallengeId).evaluations)}>
-                    <DownloadIcon className="size-4" />
-                    Evaluations CSV
-                  </a>
-                </Button>
-              </>
-            )}
-            {canAdmin && (
-              <Button variant="outline" size="sm" asChild>
-                <Link href="/queue/rooms">Room admin</Link>
-              </Button>
-            )}
-          </div>
-        }
-      />
-
+    // App-like layout: the room selector pins to the top, the queue panel stays
+    // put on the left, and only the right column (project + scoring) scrolls.
+    // At xl we clamp the whole page to the viewport (100dvh minus the app chrome:
+    // 3.5rem header + 2rem+2rem main py-8) so the outer page never scrolls.
+    <div className="flex flex-col gap-5 xl:h-[calc(100dvh-7.5rem)]" data-wide>
       <Card className="gap-0 p-5">
         <div className="grid gap-3 md:grid-cols-[minmax(180px,1fr)_minmax(220px,1.2fr)_auto] md:items-end">
           <div className="space-y-2">
@@ -374,92 +348,98 @@ export default function QueuePage() {
       </Card>
 
       {roomsLoading || roomView.loading ? (
-        <div className="flex min-h-[360px] items-center justify-center">
+        <div className="flex min-h-[360px] flex-1 items-center justify-center">
           <Spinner />
         </div>
       ) : !view ? (
-        <EmptyState
-          icon={DoorOpenIcon}
-          title="No room selected"
-          description="Create or select a judging room before operating the queue."
-        />
-      ) : (
-        <div className="grid min-h-[calc(100dvh-220px)] gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
-          <QueuePanel
-            view={view}
-            canOperate={canOperate}
-            canJudge={canJudge}
-            busy={busy}
-            query={search}
-            results={searchResults}
-            searching={searching}
-            searchDisabled={!effectiveChallengeId}
-            onQuery={setSearch}
-            onCallNext={() =>
-              activeRoomId &&
-              mutate(
-                "call-next",
-                () => callNext(activeRoomId, crypto.randomUUID()),
-                "Next team called.",
-              )
-            }
-            onManualCall={(entry, targetStatus) =>
-              activeRoomId &&
-              mutate(
-                `manual-${entry.id}`,
-                () =>
-                  entryAction(
-                    entry.id,
-                    "manual-call",
-                    { targetStatus, roomId: activeRoomId, reason: "Manual queue selection" },
-                    crypto.randomUUID(),
-                  ),
-                targetStatus === "in_room" ? "Team brought into room." : "Team called.",
-              )
-            }
-            onEntryAction={(entry, action, body, label) =>
-              mutate(
-                `${action}-${entry.id}`,
-                () => entryAction(entry.id, action, body, crypto.randomUUID()),
-                label,
-              )
-            }
-            onAddTop={(entry) =>
-              mutate(
-                `move-top-${entry.id}`,
-                () =>
-                  entryAction(
-                    entry.id,
-                    "move-top",
-                    { reason: "Search: moved to top of queue" },
-                    crypto.randomUUID(),
-                  ),
-                "Team moved to the top of the queue.",
-              )
-            }
-            onAddWaiting={(entry) =>
-              activeRoomId &&
-              mutate(
-                `add-waiting-${entry.id}`,
-                () =>
-                  entryAction(
-                    entry.id,
-                    "manual-call",
-                    {
-                      targetStatus: "called",
-                      roomId: activeRoomId,
-                      reason: "Search: to waiting room",
-                    },
-                    crypto.randomUUID(),
-                  ),
-                "Team added to the waiting room.",
-              )
-            }
+        <div className="flex flex-1 items-center justify-center">
+          <EmptyState
+            icon={DoorOpenIcon}
+            title="No room selected"
+            description="Create or select a judging room before operating the queue."
           />
+        </div>
+      ) : (
+        // Two-column region fills the remaining height. Left column is pinned and
+        // scrolls internally if the queue is long; right column is the scroll area.
+        <div className="grid gap-5 xl:min-h-0 xl:flex-1 xl:grid-cols-[360px_minmax(0,1fr)]">
+          <div className="xl:min-h-0 xl:overflow-y-auto">
+            <QueuePanel
+              view={view}
+              canOperate={canOperate}
+              canJudge={canJudge}
+              busy={busy}
+              query={search}
+              results={searchResults}
+              searching={searching}
+              searchDisabled={!effectiveChallengeId}
+              onQuery={setSearch}
+              onCallNext={() =>
+                activeRoomId &&
+                mutate(
+                  "call-next",
+                  () => callNext(activeRoomId, crypto.randomUUID()),
+                  "Next team called.",
+                )
+              }
+              onManualCall={(entry, targetStatus) =>
+                activeRoomId &&
+                mutate(
+                  `manual-${entry.id}`,
+                  () =>
+                    entryAction(
+                      entry.id,
+                      "manual-call",
+                      { targetStatus, roomId: activeRoomId, reason: "Manual queue selection" },
+                      crypto.randomUUID(),
+                    ),
+                  targetStatus === "in_room" ? "Team brought into room." : "Team called.",
+                )
+              }
+              onEntryAction={(entry, action, body, label) =>
+                mutate(
+                  `${action}-${entry.id}`,
+                  () => entryAction(entry.id, action, body, crypto.randomUUID()),
+                  label,
+                )
+              }
+              onAddTop={(entry) =>
+                mutate(
+                  `move-top-${entry.id}`,
+                  () =>
+                    entryAction(
+                      entry.id,
+                      "move-top",
+                      { reason: "Search: moved to top of queue" },
+                      crypto.randomUUID(),
+                    ),
+                  "Team moved to the top of the queue.",
+                )
+              }
+              onAddWaiting={(entry) =>
+                activeRoomId &&
+                mutate(
+                  `add-waiting-${entry.id}`,
+                  () =>
+                    entryAction(
+                      entry.id,
+                      "manual-call",
+                      {
+                        targetStatus: "called",
+                        roomId: activeRoomId,
+                        reason: "Search: to waiting room",
+                      },
+                      crypto.randomUUID(),
+                    ),
+                  "Team added to the waiting room.",
+                )
+              }
+            />
+          </div>
 
           {/* Main column: evaluated project card, then scoring / questions
-              flowing directly below it. */}
-          <div className="space-y-5">
+              flowing directly below it. This column owns the page scroll. */}
+          <div className="space-y-5 xl:min-h-0 xl:overflow-y-auto">
             <PresentationPanel
               entry={active}
               challenge={activeChallenge}
@@ -501,6 +481,34 @@ export default function QueuePage() {
               canJudge={canJudge && active?.status === "presenting"}
             />
           </div>
+        </div>
+      )}
+
+      {/* Unobtrusive footer: CSV exports and the room admin shortcut, moved out
+          of the (removed) page header and gated exactly as before. */}
+      {(canAdmin || (canExport && effectiveChallengeId)) && (
+        <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
+          {canExport && effectiveChallengeId && (
+            <>
+              <Button variant="outline" size="sm" asChild>
+                <a href={exportHref(exportUrls(effectiveChallengeId).queue)}>
+                  <DownloadIcon className="size-4" />
+                  Queue CSV
+                </a>
+              </Button>
+              <Button variant="outline" size="sm" asChild>
+                <a href={exportHref(exportUrls(effectiveChallengeId).evaluations)}>
+                  <DownloadIcon className="size-4" />
+                  Evaluations CSV
+                </a>
+              </Button>
+            </>
+          )}
+          {canAdmin && (
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/queue/rooms">Room admin</Link>
+            </Button>
+          )}
         </div>
       )}
     </div>

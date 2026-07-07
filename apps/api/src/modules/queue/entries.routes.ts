@@ -1,10 +1,12 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
+import { pool } from "../../db/pool.js";
 import { requireCapability } from "../../lib/capabilities.js";
 import { UnauthorizedError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { requireAnyCapability } from "./access.js";
+import { scheduleTopUp } from "./pump.js";
 import { entryHistory } from "./reads.js";
 import {
   callNextBody,
@@ -31,10 +33,33 @@ import {
   skipToEnd,
   startPresentation,
 } from "./service.js";
+import type { QueueEntryRow } from "./types.js";
 
 function actor(userId: number | null): number {
   if (userId == null) throw new UnauthorizedError();
   return userId;
+}
+
+/**
+ * Runs a queue transition, then immediately tops up the affected room's waiting
+ * area so a freed slot refills without waiting for the 5s pump (H29/H30/H35).
+ * The room is captured BEFORE the transition (requeue/no-show null the entry's
+ * assigned_room_id) with the post-transition room as fallback (manual-call from
+ * `waiting` only gains a room after). Top-up is fire-and-forget — it never
+ * fails the user's original action.
+ */
+async function transitionAndTopUp(
+  entryId: number,
+  run: () => Promise<QueueEntryRow>,
+): Promise<QueueEntryRow> {
+  const { rows } = await pool.query(`SELECT assigned_room_id FROM queue_entries WHERE id = $1`, [
+    entryId,
+  ]);
+  const roomBefore = (rows[0]?.assigned_room_id as number | null) ?? null;
+  const entry = await run();
+  const roomId = roomBefore ?? entry.assigned_room_id;
+  if (roomId != null) await scheduleTopUp(roomId);
+  return entry;
 }
 
 /**
@@ -75,7 +100,8 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
   typed.post(
     "/api/queue/entries/:entryId/bring-in",
     { preHandler: [judge, idempotencyGuard], schema: { params: entryIdParam } },
-    async (req) => bringIn(req.params.entryId, actor(req.userId)),
+    async (req) =>
+      transitionAndTopUp(req.params.entryId, () => bringIn(req.params.entryId, actor(req.userId))),
   );
 
   typed.post(
@@ -87,7 +113,10 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
   typed.post(
     "/api/queue/entries/:entryId/complete",
     { preHandler: [judge, idempotencyGuard], schema: { params: entryIdParam } },
-    async (req) => completePresentation(req.params.entryId, actor(req.userId)),
+    async (req) =>
+      transitionAndTopUp(req.params.entryId, () =>
+        completePresentation(req.params.entryId, actor(req.userId)),
+      ),
   );
 
   // H33: in_room|presenting -> called (top), keeps their turn.
@@ -97,7 +126,10 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
       preHandler: [judgeOrOperate, idempotencyGuard],
       schema: { params: entryIdParam, body: reasonBody },
     },
-    async (req) => sendBackToWaiting(req.params.entryId, actor(req.userId), req.body.reason),
+    async (req) =>
+      transitionAndTopUp(req.params.entryId, () =>
+        sendBackToWaiting(req.params.entryId, actor(req.userId), req.body.reason),
+      ),
   );
 
   // H33: called -> waiting, top|bottom.
@@ -108,7 +140,9 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
       schema: { params: entryIdParam, body: requeueBody },
     },
     async (req) =>
-      requeue(req.params.entryId, actor(req.userId), req.body.position, req.body.reason),
+      transitionAndTopUp(req.params.entryId, () =>
+        requeue(req.params.entryId, actor(req.userId), req.body.position, req.body.reason),
+      ),
   );
 
   // H33: recover a forgotten team from a terminal state. Manual + audited.
@@ -129,7 +163,10 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
       preHandler: [judgeOrOperate, idempotencyGuard],
       schema: { params: entryIdParam, body: reasonBody },
     },
-    async (req) => markNoShow(req.params.entryId, actor(req.userId), req.body.reason),
+    async (req) =>
+      transitionAndTopUp(req.params.entryId, () =>
+        markNoShow(req.params.entryId, actor(req.userId), req.body.reason),
+      ),
   );
 
   // H37: send a searched team to the TOP of the challenge queue (release from
@@ -180,12 +217,14 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
       schema: { params: entryIdParam, body: manualCallBody },
     },
     async (req) =>
-      manualCall(
-        req.params.entryId,
-        actor(req.userId),
-        req.body.targetStatus,
-        req.body.roomId,
-        req.body.reason,
+      transitionAndTopUp(req.params.entryId, () =>
+        manualCall(
+          req.params.entryId,
+          actor(req.userId),
+          req.body.targetStatus,
+          req.body.roomId,
+          req.body.reason,
+        ),
       ),
   );
 

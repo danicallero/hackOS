@@ -91,14 +91,18 @@ const columns: Column<ProjectRepo>[] = [
 
 export default function ProjectsPage() {
   const router = useRouter();
-  const { can } = useSessionContext();
-  const canRead = can(CAPABILITIES.PROJECTS_READ);
+  const { can, canAny, me } = useSessionContext();
   const canImport = can(CAPABILITIES.PROJECTS_IMPORT);
+  // H8/H55: judges + sponsor reps get a scoped list from the backend; full
+  // access via projects:read / projects:import.
+  const canView =
+    canAny(CAPABILITIES.PROJECTS_READ, CAPABILITIES.PROJECTS_IMPORT, CAPABILITIES.JUDGE_PANEL) ||
+    me?.role === "sponsor";
   const [repos, setRepos] = useState<ProjectRepo[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
-    if (!canRead) {
+    if (!canView) {
       setLoading(false);
       return;
     }
@@ -112,13 +116,13 @@ export default function ProjectsPage() {
     } finally {
       setLoading(false);
     }
-  }, [canRead]);
+  }, [canView]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  if (!canRead) {
+  if (!canView) {
     return (
       <div className="space-y-6">
         <PageHeader title="Projects" />

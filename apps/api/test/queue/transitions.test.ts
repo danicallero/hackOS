@@ -404,7 +404,9 @@ describe("send_back / requeue / re_enter (H33)", () => {
       payload: { position: "bottom" },
     });
     expect(bottom.statusCode).toBe(200);
-    const entry = await getEntry(e1);
+    // The requeue result is the response body; the freed slot is then
+    // auto-refilled (H29), so re-reading the row could already show it re-called.
+    const entry = bottom.json();
     expect(entry.status).toBe("waiting");
     expect(entry.assigned_room_id).toBeNull();
     expect(entry.called_at).toBeNull();
@@ -504,7 +506,10 @@ describe("no_show / skip / disqualify (H34)", () => {
       payload: { reason: "no aparece" },
     });
     expect(res.statusCode).toBe(200);
-    const entry = await getEntry(e1);
+    // Read the transition result from the response: the freed slot is then
+    // auto-refilled (H29), which — as the only room here — may immediately
+    // re-call this same team; the no_show transition itself sent it to waiting.
+    const entry = res.json();
     expect(entry.status).toBe("waiting"); // never eliminated
     expect(entry.call_count).toBe(1); // ladder
     const { pool } = await import("../../src/db/pool.js");
@@ -577,9 +582,16 @@ describe("no_show / skip / disqualify (H34)", () => {
   });
 
   it("exposes the per-entry history endpoint (H34)", async () => {
-    const { challengeId, roomId } = await setup();
+    app ??= await buildTestApp();
+    const challengeId = await createChallenge();
+    // cap 1 + a second team so the auto-refill after no-show pulls the OTHER
+    // team, leaving this entry's history at exactly [call_next, no_show].
+    const roomId = await createRoom({ maxInWaitingArea: 1 });
+    await assignChallengeToRoom(roomId, challengeId);
     const { repoId } = await createRepoWithTeam();
     const entryId = await enqueueRepo(challengeId, repoId, 1);
+    const { repoId: repo2 } = await createRepoWithTeam();
+    await enqueueRepo(challengeId, repo2, 2);
     await app.inject({
       method: "POST",
       url: `/api/queue/rooms/${roomId}/call-next`,
@@ -723,15 +735,16 @@ describe("pause / resume (H35)", () => {
     const paused = await call();
     expect(paused.statusCode).toBe(409);
 
-    // resume restarts
+    // resume restarts AND immediately refills the waiting area (H35): e2, the
+    // longest-waiting team, is auto-called first, e3 next (cap 2) — no manual
+    // call-next needed.
     await app.inject({
       method: "POST",
       url: `/api/queue/rooms/${roomId}/resume`,
       headers: asUser(operatorId),
       payload: {},
     });
-    const after = await call();
-    expect(after.statusCode).toBe(200);
-    expect(after.json().entry.id).toBe(repos[1]); // e2 is back on top
+    expect((await getEntry(repos[1]!)).status).toBe("called"); // e2 back on top
+    expect((await getEntry(repos[2]!)).status).toBe("called"); // e3 next
   });
 });

@@ -96,6 +96,143 @@ describe("GET /api/repos + /api/repos/:id (PROJECTS_READ)", () => {
   });
 });
 
+describe("GET /api/repos scoping for judges & sponsors (H8, H44/H46)", () => {
+  /** Assign `judge` to judge `challengeId` via a room + room_judges row. */
+  async function assignJudge(judge: number, challengeId: number): Promise<void> {
+    const { pool } = await import("../../src/db/pool.js");
+    const room = await pool.query(`INSERT INTO rooms (name, slug) VALUES ($1, $2) RETURNING id`, [
+      `Room ${crypto.randomUUID().slice(0, 8)}`,
+      `room-${crypto.randomUUID()}`,
+    ]);
+    const roomId = room.rows[0].id;
+    await pool.query(`INSERT INTO room_challenges (room_id, challenge_id) VALUES ($1, $2)`, [
+      roomId,
+      challengeId,
+    ]);
+    await pool.query(
+      `INSERT INTO room_judges (room_id, challenge_id, user_id) VALUES ($1, $2, $3)`,
+      [roomId, challengeId, judge],
+    );
+  }
+
+  /** Enterprise + sponsor(user) + challenge authored by that sponsor. */
+  async function createSponsorChallenge(
+    sponsorUserId: number,
+    title: string,
+    devpostTags: string[],
+  ): Promise<number> {
+    const { pool } = await import("../../src/db/pool.js");
+    const enterprise = await pool.query(`INSERT INTO enterprises (name) VALUES ($1) RETURNING id`, [
+      `Ent ${crypto.randomUUID().slice(0, 8)}`,
+    ]);
+    const sponsor = await pool.query(
+      `INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2) RETURNING id`,
+      [enterprise.rows[0].id, sponsorUserId],
+    );
+    const challenge = await pool.query(
+      `INSERT INTO challenges (author, title, devpost_tags) VALUES ($1, $2, $3::jsonb) RETURNING id`,
+      [sponsor.rows[0].id, title, JSON.stringify(devpostTags)],
+    );
+    return challenge.rows[0].id;
+  }
+
+  it("a judge sees only repos of their assigned challenge; a full reader sees all", async () => {
+    const server = await getApp();
+    await seedMatchableUsers();
+    const operator = await createUserWithCapabilities([CAPABILITIES.PROJECTS_IMPORT]);
+    await importFixtures(operator);
+    // "Most Caffeinated" maps only Neural Beans; "Best AI Hack" maps both repos.
+    const caffeine = await createChallenge("Caffeine", ["Most Caffeinated"]);
+    await createChallenge("AI", ["Best AI Hack"]);
+
+    const judge = await createUserWithCapabilities([CAPABILITIES.JUDGE_PANEL]);
+    await assignJudge(judge, caffeine);
+
+    const judged = await server.inject({
+      method: "GET",
+      url: "/api/repos",
+      headers: asUser(judge),
+    });
+    expect(judged.statusCode).toBe(200);
+    const judgeRepos = judged.json().repos;
+    expect(judgeRepos.map((x: { name: string }) => x.name)).toEqual(["Neural Beans"]);
+
+    // Full projects:read reader still sees everything (2 repos).
+    const reader = await createUserWithCapabilities([CAPABILITIES.PROJECTS_READ]);
+    const all = await server.inject({ method: "GET", url: "/api/repos", headers: asUser(reader) });
+    expect(all.json().repos).toHaveLength(2);
+  });
+
+  it("a judge with no assignments gets an empty list, not a 403", async () => {
+    const server = await getApp();
+    await seedMatchableUsers();
+    const operator = await createUserWithCapabilities([CAPABILITIES.PROJECTS_IMPORT]);
+    await importFixtures(operator);
+
+    const judge = await createUserWithCapabilities([CAPABILITIES.JUDGE_PANEL]);
+    const res = await server.inject({ method: "GET", url: "/api/repos", headers: asUser(judge) });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().repos).toHaveLength(0);
+  });
+
+  it("a sponsor rep sees only their enterprise's challenges' repos", async () => {
+    const server = await getApp();
+    await seedMatchableUsers();
+    const operator = await createUserWithCapabilities([CAPABILITIES.PROJECTS_IMPORT]);
+    await importFixtures(operator);
+
+    const sponsorUser = await createUser();
+    await createSponsorChallenge(sponsorUser, "Sponsor Caffeine", ["Most Caffeinated"]);
+
+    const res = await server.inject({
+      method: "GET",
+      url: "/api/repos",
+      headers: asUser(sponsorUser),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().repos.map((x: { name: string }) => x.name)).toEqual(["Neural Beans"]);
+  });
+
+  it("a user with none of the three access modes is forbidden", async () => {
+    const server = await getApp();
+    const nobody = await createUser();
+    const res = await server.inject({ method: "GET", url: "/api/repos", headers: asUser(nobody) });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("scopes GET /api/repos/:id — out-of-scope repo is 404, not a leak", async () => {
+    const server = await getApp();
+    await seedMatchableUsers();
+    const operator = await createUserWithCapabilities([CAPABILITIES.PROJECTS_IMPORT]);
+    await importFixtures(operator);
+    const caffeine = await createChallenge("Caffeine", ["Most Caffeinated"]);
+    const judge = await createUserWithCapabilities([CAPABILITIES.JUDGE_PANEL]);
+    await assignJudge(judge, caffeine);
+
+    const reader = await createUserWithCapabilities([CAPABILITIES.PROJECTS_READ]);
+    const all = await server.inject({ method: "GET", url: "/api/repos", headers: asUser(reader) });
+    const beans = all.json().repos.find((x: { name: string }) => x.name === "Neural Beans");
+    const rustacean = all
+      .json()
+      .repos.find((x: { name: string }) => x.name === "Rustacean Station");
+
+    const inScope = await server.inject({
+      method: "GET",
+      url: `/api/repos/${beans.id}`,
+      headers: asUser(judge),
+    });
+    expect(inScope.statusCode).toBe(200);
+    expect(inScope.json().name).toBe("Neural Beans");
+
+    const outOfScope = await server.inject({
+      method: "GET",
+      url: `/api/repos/${rustacean.id}`,
+      headers: asUser(judge),
+    });
+    expect(outOfScope.statusCode).toBe(404);
+  });
+});
+
 describe("GET /api/me/projects (participant self-view)", () => {
   it("returns only repos where I have a submission; requires auth", async () => {
     const server = await getApp();

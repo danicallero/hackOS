@@ -80,10 +80,17 @@ export const NAV: NavSection[] = [
         ],
       },
       {
+        // H8/H55: judges + sponsor reps get a scoped projects view (backend
+        // scopes GET /api/repos by their challenges); full access via projects:*.
         title: "Projects",
         href: "/projects",
         icon: FolderGitIcon,
-        anyCapability: [CAPABILITIES.PROJECTS_READ, CAPABILITIES.PROJECTS_IMPORT],
+        anyCapability: [
+          CAPABILITIES.PROJECTS_READ,
+          CAPABILITIES.PROJECTS_IMPORT,
+          CAPABILITIES.JUDGE_PANEL,
+        ],
+        sponsorVisible: true,
       },
       {
         title: "Applications",
