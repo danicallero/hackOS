@@ -288,29 +288,6 @@ function RoomQueueCard({
           entry={room.active}
           empty="No team presenting."
           onSelect={setSelectedEntry}
-          actions={(entry) => (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={!canOperate || busy === `requeue-${entry.id}`}
-              onClick={() =>
-                void mutate(
-                  `requeue-${entry.id}`,
-                  () =>
-                    entryAction(
-                      entry.id,
-                      "send-back",
-                      { reason: "Queue operations: sent back" },
-                      crypto.randomUUID(),
-                    ),
-                  "Team sent back to the waiting area.",
-                )
-              }
-            >
-              <RotateCcwIcon className="size-4" />
-              Requeue
-            </Button>
-          )}
         />
 
         <QueueGroup
@@ -524,7 +501,7 @@ function QueueEntryBlock({
   entry: QueueEntry | null;
   empty: string;
   onSelect: (entry: QueueEntry) => void;
-  actions: (entry: QueueEntry) => React.ReactNode;
+  actions?: (entry: QueueEntry) => React.ReactNode;
 }) {
   return (
     <div className="space-y-1.5 rounded-md border p-2.5">
@@ -537,7 +514,7 @@ function QueueEntryBlock({
             <TeamButton entry={entry} onSelect={onSelect} />
             <QueueStatusBadge status={entry.status} />
           </div>
-          <div className="flex flex-wrap gap-1.5">{actions(entry)}</div>
+          {actions && <div className="flex flex-wrap gap-1.5">{actions(entry)}</div>}
         </div>
       ) : (
         <p className="text-muted-foreground text-xs">{empty}</p>
