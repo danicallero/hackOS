@@ -436,7 +436,7 @@ function RoomQueueCard({
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               disabled={!canOperate || !challengeId}
-              placeholder="Add to top: search project, repo or entry id"
+              placeholder="Search project, repo or entry id"
               className="h-8 pl-8 text-sm"
             />
           </div>
@@ -453,27 +453,52 @@ function RoomQueueCard({
                     className="flex items-center justify-between gap-2 rounded-md border px-2.5 py-1.5"
                   >
                     <TeamButton entry={entry} onSelect={setSelectedEntry} />
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="shrink-0"
-                      disabled={busy === `top-${entry.id}`}
-                      onClick={() =>
-                        void mutate(
-                          `top-${entry.id}`,
-                          () =>
-                            entryAction(
-                              entry.id,
-                              "move-top",
-                              { reason: "Queue operations: moved to top" },
-                              crypto.randomUUID(),
-                            ),
-                          "Team moved to the top of the queue.",
-                        )
-                      }
-                    >
-                      Top
-                    </Button>
+                    <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={!canOperate || busy === `top-${entry.id}`}
+                        onClick={() =>
+                          void mutate(
+                            `top-${entry.id}`,
+                            () =>
+                              entryAction(
+                                entry.id,
+                                "move-top",
+                                { reason: "Queue operations: moved to top" },
+                                crypto.randomUUID(),
+                              ),
+                            "Team moved to the top of the queue.",
+                          )
+                        }
+                      >
+                        Top
+                      </Button>
+                      <Button
+                        size="sm"
+                        disabled={!canOperate || busy === `waiting-${entry.id}`}
+                        onClick={() =>
+                          void mutate(
+                            `waiting-${entry.id}`,
+                            () =>
+                              entryAction(
+                                entry.id,
+                                "manual-call",
+                                {
+                                  targetStatus: "called",
+                                  roomId: room.room.id,
+                                  reason: "Queue operations: sent to waiting room",
+                                },
+                                crypto.randomUUID(),
+                              ),
+                            "Team added to the waiting room.",
+                          )
+                        }
+                      >
+                        <DoorOpenIcon className="size-4" />
+                        Waiting
+                      </Button>
+                    </div>
                   </div>
                 ))
               )}
