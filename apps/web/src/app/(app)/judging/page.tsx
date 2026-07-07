@@ -171,14 +171,14 @@ export default function QueuePage() {
     () => (activeRoomId ? getRoomView(activeRoomId) : Promise.resolve(null as never)),
     "/api/queue/stream",
     [EVENTS.QUEUE_ENTRY_CHANGED, EVENTS.QUEUE_ROOM_CHANGED, EVENTS.QUEUE_NOTIFY_ENTER],
-    { enabled: canUse && activeRoomId != null },
+    { enabled: canUse && activeRoomId != null, queryKey: [activeRoomId] },
   );
 
   const pace = useLiveQuery<RoomPace>(
     () => (activeRoomId ? getRoomPace(activeRoomId) : Promise.resolve(null as never)),
     "/api/queue/stream",
     [EVENTS.QUEUE_ENTRY_CHANGED, EVENTS.QUEUE_ROOM_CHANGED],
-    { enabled: canUse && activeRoomId != null },
+    { enabled: canUse && activeRoomId != null, queryKey: [activeRoomId] },
   );
 
   // The room judges a single challenge (read-only label in the panel); fall
