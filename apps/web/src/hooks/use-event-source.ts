@@ -93,7 +93,11 @@ export function useLiveQuery<T>(
   fetcher: () => Promise<T>,
   streamPath: string,
   eventNames: readonly string[] = Object.values(EVENTS),
-  { enabled = true, debounceMs = 150 }: { enabled?: boolean; debounceMs?: number } = {},
+  {
+    enabled = true,
+    debounceMs = 150,
+    queryKey = [],
+  }: { enabled?: boolean; debounceMs?: number; queryKey?: readonly unknown[] } = {},
 ): { data: T | null; error: unknown; loading: boolean; connected: boolean; refetch: () => void } {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<unknown>(null);
@@ -119,11 +123,15 @@ export function useLiveQuery<T>(
     };
   }, []);
 
+  const queryKeyValue = JSON.stringify(queryKey);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: queryKeyValue intentionally refetches when caller scope changes.
   useEffect(() => {
     if (!enabled) return;
+    setLoading(true);
     const cancel = refetch();
     return cancel;
-  }, [enabled, refetch]);
+  }, [enabled, refetch, queryKeyValue]);
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onEvent = useCallback(() => {
