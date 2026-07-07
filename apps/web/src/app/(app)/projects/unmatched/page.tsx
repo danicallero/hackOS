@@ -297,7 +297,7 @@ export default function UnmatchedProjectsPage() {
                       }
                     >
                       <UserPlusIcon className="size-4" />
-                      Link to hackOS user
+                      Link Participant to User
                     </Button>
                     <Button
                       variant="outline"

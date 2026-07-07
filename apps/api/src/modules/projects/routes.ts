@@ -15,6 +15,7 @@ import {
   prizeParamsSchema,
   repoChallengeBodySchema,
   repoChallengeParamsSchema,
+  repoDevpostParticipantParamsSchema,
   repoIdParamsSchema,
   repoMemberBodySchema,
   repoMemberParamsSchema,
@@ -33,6 +34,7 @@ import {
   myProjects,
   previewImport,
   type RepoScope,
+  removeDevpostParticipant,
   removeRepoChallenge,
   removeRepoMember,
   sendClaimEmail,
@@ -218,6 +220,20 @@ export function registerProjectRoutes(app: FastifyInstance): void {
       schema: { params: repoMemberParamsSchema },
     },
     async (req) => removeRepoMember(req.userId as number, req.params.repoId, req.params.userId),
+  );
+
+  r.delete(
+    "/api/repos/:repoId/devpost-participants/:email",
+    {
+      preHandler: requireCapability(CAPABILITIES.PROJECTS_EDIT),
+      schema: { params: repoDevpostParticipantParamsSchema },
+    },
+    async (req) =>
+      removeDevpostParticipant(
+        req.userId as number,
+        req.params.repoId,
+        req.params.email.toLowerCase(),
+      ),
   );
 
   r.post(

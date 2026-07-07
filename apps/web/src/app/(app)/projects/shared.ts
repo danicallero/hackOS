@@ -19,7 +19,7 @@ import type { Tone } from "@/lib/tones";
 // ── read views (GET /api/repos, /api/repos/:id) — service.ts RepoWithExtras ──
 
 export interface RepoMember {
-  userId: number;
+  userId: number | null;
   email: string;
   name: string | null;
   surname: string | null;

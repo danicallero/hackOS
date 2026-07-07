@@ -217,3 +217,68 @@ describe("POST /api/devpost/imports/claim-email (H17)", () => {
     expect(repoId).toBeGreaterThan(0);
   });
 });
+
+describe("DELETE /api/repos/:repoId/devpost-participants/:email", () => {
+  it("deletes an unmatched imported participant without requiring a user id", async () => {
+    const server = await getApp();
+    await seedMatchableUsers();
+    const operator = await createUserWithCapabilities([
+      CAPABILITIES.PROJECTS_IMPORT,
+      CAPABILITIES.PROJECTS_EDIT,
+    ]);
+    const repoId = await importFixtures(operator);
+
+    const res = await server.inject({
+      method: "DELETE",
+      url: `/api/repos/${repoId}/devpost-participants/${encodeURIComponent(EMAILS.dave)}`,
+      headers: asUser(operator),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ repoId, email: EMAILS.dave, removed: true });
+
+    const { pool } = await import("../../src/db/pool.js");
+    const participant = await pool.query(
+      `SELECT 1 FROM devpost_participants WHERE repo_id = $1 AND email = $2`,
+      [repoId, EMAILS.dave],
+    );
+    expect(participant.rows).toHaveLength(0);
+
+    const auditRows = await pool.query(
+      `SELECT * FROM audit_log WHERE entity_type = 'devpost_participant' AND action = 'delete'`,
+    );
+    expect(auditRows.rows).toHaveLength(1);
+  });
+
+  it("removes the devpost submission when deleting a matched imported participant", async () => {
+    const server = await getApp();
+    const { aliceId } = await seedMatchableUsers();
+    const operator = await createUserWithCapabilities([
+      CAPABILITIES.PROJECTS_IMPORT,
+      CAPABILITIES.PROJECTS_EDIT,
+    ]);
+    await importFixtures(operator);
+
+    const { pool } = await import("../../src/db/pool.js");
+    const repo = await pool.query(`SELECT id FROM repos WHERE name = 'Neural Beans'`);
+    const repoId = repo.rows[0].id;
+
+    const res = await server.inject({
+      method: "DELETE",
+      url: `/api/repos/${repoId}/devpost-participants/${encodeURIComponent(EMAILS.alice)}`,
+      headers: asUser(operator),
+    });
+    expect(res.statusCode).toBe(200);
+
+    const participant = await pool.query(
+      `SELECT 1 FROM devpost_participants WHERE repo_id = $1 AND email = $2`,
+      [repoId, EMAILS.alice],
+    );
+    expect(participant.rows).toHaveLength(0);
+
+    const submission = await pool.query(
+      `SELECT 1 FROM submissions WHERE repo_id = $1 AND user_id = $2`,
+      [repoId, aliceId],
+    );
+    expect(submission.rows).toHaveLength(0);
+  });
+});
