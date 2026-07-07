@@ -127,7 +127,6 @@ export const NAV: NavSection[] = [
         icon: CalendarDaysIcon,
         capability: CAPABILITIES.SCHEDULE_MANAGE,
         judgeVisible: true,
-        soon: true,
       },
       {
         title: "Announcements",

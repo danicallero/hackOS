@@ -19,7 +19,8 @@ import {
   XIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { EmptyState } from "@/components/common/empty-state";
@@ -41,7 +42,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useLiveQuery } from "@/hooks/use-event-source";
-import { ApiError } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
 import { API_URL } from "@/lib/env";
 import {
   type AccreditationLookup,
@@ -54,6 +55,7 @@ import {
   personName,
 } from "@/lib/logistics";
 import { useSessionContext } from "@/lib/session";
+import type { UserList, UserListItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type OfflineScan = {
@@ -245,10 +247,14 @@ export default function LogisticsPage() {
 }
 
 function AccreditationPanel() {
+  const searchParams = useSearchParams();
   const [ticketToken, setTicketToken] = useState("");
   const [badgeId, setBadgeId] = useState("");
   const [method, setMethod] = useState<"qr" | "manual" | "nfc">("qr");
   const [lookup, setLookup] = useState<AccreditationLookup | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [userQuery, setUserQuery] = useState("");
+  const [userResults, setUserResults] = useState<UserListItem[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [rotate, setRotate] = useState({
@@ -264,6 +270,7 @@ function AccreditationPanel() {
     try {
       const result = await logisticsApi.lookup(ticketToken.trim());
       setLookup(result);
+      setSelectedUserId(result.userId);
       if (result.currentBadge && !badgeId) setBadgeId(result.currentBadge);
     } catch (err) {
       setLookup(null);
@@ -273,15 +280,64 @@ function AccreditationPanel() {
     }
   };
 
+  const searchUsers = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const result = await api.get<UserList>("/api/users", {
+        query: { q: userQuery.trim() || undefined, limit: 8 },
+      });
+      setUserResults(result.users);
+    } catch (err) {
+      setUserResults([]);
+      setError(errorMessage(err, "User search failed."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const lookupUser = useCallback(
+    async (userId: number) => {
+      setBusy(true);
+      setError("");
+      try {
+        const result = await logisticsApi.lookupUser(userId);
+        setLookup(result);
+        setSelectedUserId(result.userId);
+        if (result.currentBadge && !badgeId) setBadgeId(result.currentBadge);
+      } catch (err) {
+        setLookup(null);
+        setError(errorMessage(err, "User lookup failed."));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [badgeId],
+  );
+
+  useEffect(() => {
+    const raw = searchParams.get("userId");
+    if (!raw) return;
+    const id = Number(raw);
+    if (Number.isFinite(id)) void lookupUser(id);
+  }, [searchParams, lookupUser]);
+
   const doCheckIn = async () => {
     setBusy(true);
     setError("");
     try {
-      const result = await logisticsApi.checkIn({
-        ticketToken: ticketToken.trim(),
-        badgeId: badgeId.trim(),
-        method,
-      });
+      const result =
+        selectedUserId != null
+          ? await logisticsApi.checkInUser({
+              userId: selectedUserId,
+              badgeId: badgeId.trim(),
+              method,
+            })
+          : await logisticsApi.checkIn({
+              ticketToken: ticketToken.trim(),
+              badgeId: badgeId.trim(),
+              method,
+            });
       toast.success(`Badge ${result.badgeId} assigned to ${personName(result)}.`);
       setLookup({
         ...(lookup as AccreditationLookup),
@@ -340,6 +396,46 @@ function AccreditationPanel() {
             </Button>
           </div>
         </div>
+
+        <div className="grid gap-3 border-t pt-4 md:grid-cols-[minmax(0,1fr)_160px]">
+          <div className="space-y-2">
+            <Label htmlFor="user-search">Find user</Label>
+            <Input
+              id="user-search"
+              value={userQuery}
+              onChange={(e) => setUserQuery(e.target.value)}
+              placeholder="name, surname or email"
+            />
+          </div>
+          <div className="flex items-end">
+            <Button className="w-full" variant="outline" onClick={searchUsers} disabled={busy}>
+              Search
+            </Button>
+          </div>
+        </div>
+
+        {userResults.length > 0 && (
+          <div className="rounded-lg border">
+            {userResults.map((user) => (
+              <button
+                key={user.id}
+                type="button"
+                className="hover:bg-muted flex w-full items-center justify-between gap-3 border-b px-3 py-2 text-left last:border-b-0"
+                onClick={() => void lookupUser(user.id)}
+              >
+                <span>
+                  <span className="block text-sm font-medium">
+                    {[user.name, user.surname].filter(Boolean).join(" ") || user.email}
+                  </span>
+                  <span className="text-muted-foreground block text-xs">{user.email}</span>
+                </span>
+                <StatusBadge tone={user.confirmedSpot ? "success" : "neutral"} dot={false}>
+                  {user.confirmedSpot ? "confirmed" : (user.applicationStatus ?? "no app")}
+                </StatusBadge>
+              </button>
+            ))}
+          </div>
+        )}
 
         {error && <InlineError message={error} />}
         {lookup && <PersonCardView card={lookup} />}

@@ -1,15 +1,26 @@
 "use client";
 
-import { DownloadIcon, IdCardIcon, TicketIcon, type WalletCardsIcon } from "lucide-react";
+import { DownloadIcon, IdCardIcon, TicketIcon, WalletCardsIcon } from "lucide-react";
+import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/common/page-header";
+import { QrCode } from "@/components/common/qr-code";
 import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { API_URL } from "@/lib/env";
+import { logisticsApi, type TicketQrPayload } from "@/lib/logistics";
 import { useMe } from "@/lib/session";
 
 export default function WalletPage() {
   const me = useMe();
+  const [payload, setPayload] = useState<TicketQrPayload | null>(null);
+
+  useEffect(() => {
+    logisticsApi
+      .myTicket()
+      .then(setPayload)
+      .catch(() => setPayload(null));
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -35,6 +46,16 @@ export default function WalletPage() {
           disabled={!me?.badgeId}
         />
       </div>
+
+      <SectionCard
+        title="QR codes"
+        description="Use these directly when you do not want to add a mobile pass."
+        icon={WalletCardsIcon}
+        bodyClassName="grid gap-4 md:grid-cols-2"
+      >
+        <QrCode value={payload?.ticketToken} label="Entrance ticket" />
+        <QrCode value={payload?.badgeId} label="Current badge" />
+      </SectionCard>
     </div>
   );
 }
@@ -47,7 +68,7 @@ function WalletPassCard({
   status,
   disabled,
 }: {
-  icon: typeof WalletCardsIcon;
+  icon: typeof TicketIcon;
   title: string;
   description: string;
   purpose: "ticket" | "badge";

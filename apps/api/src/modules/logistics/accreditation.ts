@@ -20,8 +20,10 @@ export type CheckInMethod = "qr" | "manual" | "nfc";
 export async function lookupByTicket(token: string) {
   const t = await pool.query(`SELECT user_id FROM tickets WHERE token = $1`, [token]);
   if (!t.rows[0]) throw new NotFoundError("Ticket not recognized"); // names no personal data
-  const userId = t.rows[0].user_id as number;
+  return lookupByUserId(t.rows[0].user_id as number);
+}
 
+export async function lookupByUserId(userId: number) {
   const card = await loadPersonCard(pool, userId);
   const u = await pool.query(`SELECT badge_id FROM users WHERE id = $1`, [userId]);
   const badge = (u.rows[0]?.badge_id ?? null) as string | null;
@@ -33,10 +35,15 @@ export async function lookupByTicket(token: string) {
   return {
     ...card,
     confirmed: confirmed.rows.length > 0,
-    hasTicket: true,
+    hasTicket: await hasTicket(userId),
     alreadyAccredited: badge != null,
     currentBadge: badge,
   };
+}
+
+async function hasTicket(userId: number): Promise<boolean> {
+  const ticket = await pool.query(`SELECT 1 FROM tickets WHERE user_id = $1`, [userId]);
+  return ticket.rows.length > 0;
 }
 
 // ── H22: check-in (assign badge) ──────────────────────────────────────────
@@ -53,32 +60,43 @@ export async function checkIn(
   actorId: number,
   input: { ticketToken: string; badgeId: string; method: CheckInMethod },
 ) {
-  const result = await withTransaction(async (client) => {
-    const t = await client.query(`SELECT user_id FROM tickets WHERE token = $1`, [
-      input.ticketToken,
-    ]);
-    if (!t.rows[0]) throw new NotFoundError("Ticket not recognized");
-    const userId = t.rows[0].user_id as number;
+  const t = await pool.query(`SELECT user_id FROM tickets WHERE token = $1`, [input.ticketToken]);
+  if (!t.rows[0]) throw new NotFoundError("Ticket not recognized");
+  return checkInUser(actorId, {
+    userId: t.rows[0].user_id as number,
+    badgeId: input.badgeId,
+    method: input.method,
+  });
+}
 
+export async function checkInUser(
+  actorId: number,
+  input: { userId: number; badgeId: string; method: CheckInMethod },
+) {
+  const result = await withTransaction(async (client) => {
     const u = await client.query(
       `SELECT id, badge_id, name, surname FROM users WHERE id = $1 FOR UPDATE`,
-      [userId],
+      [input.userId],
     );
     const user = u.rows[0];
+    if (!user) throw new NotFoundError("User not found");
     if (user.badge_id) {
       throw new ConflictError("User already accredited", {
-        userId,
+        userId: input.userId,
         currentBadge: user.badge_id,
       });
     }
 
     const owner = await client.query(`SELECT id FROM users WHERE badge_id = $1`, [input.badgeId]);
-    if (owner.rows[0] && owner.rows[0].id !== userId) {
+    if (owner.rows[0] && owner.rows[0].id !== input.userId) {
       throw new ConflictError("Badge already assigned to another user", { badgeId: input.badgeId });
     }
 
     try {
-      await client.query(`UPDATE users SET badge_id = $1 WHERE id = $2`, [input.badgeId, userId]);
+      await client.query(`UPDATE users SET badge_id = $1 WHERE id = $2`, [
+        input.badgeId,
+        input.userId,
+      ]);
     } catch (err) {
       if ((err as { code?: string }).code === PG_UNIQUE_VIOLATION) {
         throw new ConflictError("Badge already assigned to another user", {
@@ -91,19 +109,19 @@ export async function checkIn(
     const cin = await client.query(
       `INSERT INTO check_in_logs (user_id, badge_id, check_in_method, staff_id)
        VALUES ($1, $2, $3, $4) RETURNING id, checked_in_at`,
-      [userId, input.badgeId, input.method, actorId],
+      [input.userId, input.badgeId, input.method, actorId],
     );
 
     await audit(client, {
       actorId,
       entityType: "accreditation",
-      entityId: userId,
+      entityId: input.userId,
       action: "check_in",
       after: { badgeId: input.badgeId, method: input.method },
     });
 
     return {
-      userId,
+      userId: input.userId,
       badgeId: input.badgeId,
       method: input.method,
       checkInLogId: cin.rows[0].id,
