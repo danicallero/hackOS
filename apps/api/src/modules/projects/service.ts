@@ -525,6 +525,20 @@ async function attachMembersAndPrizes(repoRows: RepoRow[]): Promise<RepoWithExtr
       ORDER BY repo_id, name ASC NULLS LAST, surname ASC NULLS LAST, email ASC`,
     [ids],
   );
+  const manualMembersRes = await pool.query(
+    `SELECT s.repo_id, u.id AS user_id, u.email, u.name, u.surname
+       FROM submissions s
+       JOIN users u ON u.id = s.user_id
+      WHERE s.repo_id = ANY($1::int[])
+        AND NOT EXISTS (
+          SELECT 1
+            FROM devpost_participants dp
+           WHERE dp.repo_id = s.repo_id
+             AND dp.user_id = s.user_id
+        )
+      ORDER BY s.repo_id, u.name ASC NULLS LAST, u.surname ASC NULLS LAST, u.email ASC`,
+    [ids],
+  );
   const prizesRes = await pool.query(
     `SELECT repo_id, prize FROM repo_devpost_prizes WHERE repo_id = ANY($1::int[])`,
     [ids],
@@ -569,6 +583,24 @@ async function attachMembersAndPrizes(repoRows: RepoRow[]): Promise<RepoWithExtr
       surname: row.surname,
       mergeStatus: row.merge_status,
       devpostUsername: row.devpost_username,
+    });
+    membersByRepo.set(row.repo_id, arr);
+  }
+  for (const row of manualMembersRes.rows as Array<{
+    repo_id: number;
+    user_id: number;
+    email: string;
+    name: string | null;
+    surname: string | null;
+  }>) {
+    const arr = membersByRepo.get(row.repo_id) ?? [];
+    arr.push({
+      userId: row.user_id,
+      email: row.email,
+      name: row.name,
+      surname: row.surname,
+      mergeStatus: "manual",
+      devpostUsername: null,
     });
     membersByRepo.set(row.repo_id, arr);
   }
