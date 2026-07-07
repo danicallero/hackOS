@@ -12,6 +12,7 @@ import {
   ArrowUpToLineIcon,
   BellRingIcon,
   CheckCircle2Icon,
+  ChevronDownIcon,
   DoorOpenIcon,
   DownloadIcon,
   ExternalLinkIcon,
@@ -24,7 +25,6 @@ import {
   SkipForwardIcon,
   UsersIcon,
 } from "lucide-react";
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/common/empty-state";
@@ -36,6 +36,12 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
@@ -150,7 +156,6 @@ export default function QueuePage() {
   const { can, canAny } = useSessionContext();
   const canOperate = can(CAPABILITIES.QUEUE_OPERATE);
   const canJudge = can(CAPABILITIES.JUDGE_PANEL);
-  const canAdmin = can(CAPABILITIES.QUEUE_ADMIN);
   const canExport = can(CAPABILITIES.JUDGING_EXPORT);
   const canUse = canAny(
     CAPABILITIES.QUEUE_OPERATE,
@@ -328,24 +333,54 @@ export default function QueuePage() {
             </div>
           </div>
 
-          <Button
-            variant={isPaused ? "default" : "outline"}
-            disabled={!activeRoomId || busy === "pause" || (!canOperate && !canJudge)}
-            onClick={() =>
-              activeRoomId &&
-              mutate(
-                "pause",
-                () =>
-                  isPaused
-                    ? resumeRoom(activeRoomId, crypto.randomUUID())
-                    : pauseRoom(activeRoomId, crypto.randomUUID()),
-                isPaused ? "Room resumed." : "Room paused.",
-              )
-            }
-          >
-            {isPaused ? <PlayIcon className="size-4" /> : <PauseIcon className="size-4" />}
-            {isPaused ? "Resume" : "Pause"}
-          </Button>
+          <div className="flex flex-wrap gap-2 md:justify-end">
+            <Button
+              variant={isPaused ? "default" : "outline"}
+              disabled={!activeRoomId || busy === "pause" || (!canOperate && !canJudge)}
+              onClick={() =>
+                activeRoomId &&
+                mutate(
+                  "pause",
+                  () =>
+                    isPaused
+                      ? resumeRoom(activeRoomId, crypto.randomUUID())
+                      : pauseRoom(activeRoomId, crypto.randomUUID()),
+                  isPaused ? "Room resumed." : "Room paused.",
+                )
+              }
+            >
+              {isPaused ? <PlayIcon className="size-4" /> : <PauseIcon className="size-4" />}
+              {isPaused ? "Resume" : "Pause"}
+            </Button>
+
+            {canExport && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" disabled={!effectiveChallengeId}>
+                    <DownloadIcon className="size-4" />
+                    Export Data
+                    <ChevronDownIcon className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                {effectiveChallengeId && (
+                  <DropdownMenuContent align="end" className="w-44">
+                    <DropdownMenuItem asChild>
+                      <a href={exportHref(exportUrls(effectiveChallengeId).queue)}>
+                        <DownloadIcon className="size-4" />
+                        Queue
+                      </a>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <a href={exportHref(exportUrls(effectiveChallengeId).evaluations)}>
+                        <DownloadIcon className="size-4" />
+                        Evaluations
+                      </a>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                )}
+              </DropdownMenu>
+            )}
+          </div>
         </div>
       </Card>
 
@@ -483,34 +518,6 @@ export default function QueuePage() {
               canJudge={canJudge && active?.status === "presenting"}
             />
           </div>
-        </div>
-      )}
-
-      {/* Unobtrusive footer: CSV exports and the room admin shortcut, moved out
-          of the (removed) page header and gated exactly as before. */}
-      {(canAdmin || (canExport && effectiveChallengeId)) && (
-        <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
-          {canExport && effectiveChallengeId && (
-            <>
-              <Button variant="outline" size="sm" asChild>
-                <a href={exportHref(exportUrls(effectiveChallengeId).queue)}>
-                  <DownloadIcon className="size-4" />
-                  Queue CSV
-                </a>
-              </Button>
-              <Button variant="outline" size="sm" asChild>
-                <a href={exportHref(exportUrls(effectiveChallengeId).evaluations)}>
-                  <DownloadIcon className="size-4" />
-                  Evaluations CSV
-                </a>
-              </Button>
-            </>
-          )}
-          {canAdmin && (
-            <Button variant="outline" size="sm" asChild>
-              <Link href="/queue/rooms">Room admin</Link>
-            </Button>
-          )}
         </div>
       )}
     </div>
