@@ -378,15 +378,53 @@ describe("CSV export (H40)", () => {
     });
     expect(forbidden.statusCode).toBe(403);
 
+    const globalExporter = await createUserWithCapabilities([
+      CAPABILITIES.JUDGING_EXPORT,
+      CAPABILITIES.QUEUE_ADMIN,
+    ]);
     const res = await app.inject({
       method: "GET",
       url: `/api/queue/challenges/${challengeId}/export/queue.csv`,
-      headers: asUser(exporterId),
+      headers: asUser(globalExporter),
     });
     expect(res.statusCode).toBe(200);
     expect(res.headers["content-type"]).toContain("text/csv");
     expect(res.body).toContain("repo_name,status");
     expect(res.body).toContain('"Comma, ""Quote"" Team"'); // proper CSV escaping
+  });
+
+  it("blocks an exporter from extracting another challenge's CSV", async () => {
+    const allowedChallengeId = await createChallenge({ judgingPanelCriteria: CRITERIA });
+    const forbiddenChallengeId = await createChallenge({ judgingPanelCriteria: CRITERIA });
+    const allowedRepo = await createRepoWithTeam(undefined, "Allowed Team");
+    const forbiddenRepo = await createRepoWithTeam(undefined, "Forbidden Team");
+    await enqueueRepo(allowedChallengeId, allowedRepo.repoId, 1);
+    await enqueueRepo(forbiddenChallengeId, forbiddenRepo.repoId, 1);
+
+    const scopedExporter = await createUserWithCapabilities([CAPABILITIES.JUDGING_EXPORT]);
+    const roomId = await createRoom();
+    await assignChallengeToRoom(roomId, allowedChallengeId);
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `INSERT INTO room_judges (room_id, challenge_id, user_id) VALUES ($1, $2, $3)`,
+      [roomId, allowedChallengeId, scopedExporter],
+    );
+
+    const allowed = await app.inject({
+      method: "GET",
+      url: `/api/queue/challenges/${allowedChallengeId}/export/queue.csv`,
+      headers: asUser(scopedExporter),
+    });
+    expect(allowed.statusCode).toBe(200);
+    expect(allowed.body).toContain("Allowed Team");
+
+    const blocked = await app.inject({
+      method: "GET",
+      url: `/api/queue/challenges/${forbiddenChallengeId}/export/queue.csv`,
+      headers: asUser(scopedExporter),
+    });
+    expect(blocked.statusCode).toBe(403);
+    expect(blocked.body).not.toContain("Forbidden Team");
   });
 
   it("exports evaluations with one column per criterion", async () => {
@@ -403,10 +441,14 @@ describe("CSV export (H40)", () => {
       payload: { scores: { innovation: 9, execution: 7 }, notes: "solid", submit: true },
     });
 
+    const globalExporter = await createUserWithCapabilities([
+      CAPABILITIES.JUDGING_EXPORT,
+      CAPABILITIES.QUEUE_ADMIN,
+    ]);
     const res = await app.inject({
       method: "GET",
       url: `/api/queue/challenges/${challengeId}/export/evaluations.csv`,
-      headers: asUser(exporterId),
+      headers: asUser(globalExporter),
     });
     expect(res.statusCode).toBe(200);
     const [header, row1, row2] = res.body.trim().split("\r\n");

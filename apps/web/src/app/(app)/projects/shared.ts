@@ -19,7 +19,7 @@ import type { Tone } from "@/lib/tones";
 // ── read views (GET /api/repos, /api/repos/:id) — service.ts RepoWithExtras ──
 
 export interface RepoMember {
-  userId: number;
+  userId: number | null;
   email: string;
   name: string | null;
   surname: string | null;
@@ -32,10 +32,12 @@ export interface RepoMember {
 export interface RepoChallenge {
   id: number;
   title: string;
-  status: string;
+  status: string | null;
   position: number | null;
   assignedRoomId: number | null;
   assignedRoomName: string | null;
+  mappedPrizes: string[];
+  source: "queue" | "prize" | "queue_and_prize";
 }
 
 export interface ProjectRepo {
@@ -47,6 +49,7 @@ export interface ProjectRepo {
   demo_url: string | null;
   members: RepoMember[];
   prizes: string[];
+  unmappedPrizes: string[];
   challenges: RepoChallenge[];
 }
 

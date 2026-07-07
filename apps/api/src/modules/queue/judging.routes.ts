@@ -7,6 +7,7 @@ import {
   requireChallengeJudgeOrCapability,
   requireEntryJudgeOrCapability,
 } from "./contextual-access.js";
+import { assertCanExportChallenge } from "./access.js";
 import { exportEvaluationsCsv, exportQueueCsv } from "./exports.js";
 import {
   getAttemptReview,
@@ -98,7 +99,9 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
   typed.get(
     "/api/queue/challenges/:challengeId/export/queue.csv",
     {
-      preHandler: requireCapability(CAPABILITIES.JUDGING_EXPORT),
+      preHandler: async (req) => {
+        await assertCanExportChallenge(req.userId, Number(req.params.challengeId));
+      },
       schema: { params: challengeIdParam },
     },
     async (req, reply) => {
@@ -114,7 +117,9 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
   typed.get(
     "/api/queue/challenges/:challengeId/export/evaluations.csv",
     {
-      preHandler: requireCapability(CAPABILITIES.JUDGING_EXPORT),
+      preHandler: async (req) => {
+        await assertCanExportChallenge(req.userId, Number(req.params.challengeId));
+      },
       schema: { params: challengeIdParam },
     },
     async (req, reply) => {

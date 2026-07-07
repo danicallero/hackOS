@@ -71,7 +71,7 @@ export interface RepoWithExtras {
   name: string;
   url?: string | null;
   members?: Array<{
-    userId: number;
+    userId: number | null;
     email: string;
     name: string | null;
     surname: string | null;
@@ -83,11 +83,14 @@ export interface RepoWithExtras {
   challenges?: Array<{
     id: number;
     title: string;
-    status: string;
+    status: string | null;
     position: number | null;
     assignedRoomId: number | null;
     assignedRoomName: string | null;
+    mappedPrizes: string[];
+    source: "queue" | "prize" | "queue_and_prize";
   }>;
+  unmappedPrizes?: string[];
   [k: string]: unknown;
 }
 
@@ -122,6 +125,8 @@ export const mapPrize = (prizeName: string, challengeId: number) =>
 export const listRepos = () => api.get<{ repos: RepoWithExtras[] }>("/api/repos");
 export const getRepoById = (id: number) => api.get<RepoWithExtras>(`/api/repos/${id}`);
 export const myProjects = () => api.get<RepoWithExtras[]>("/api/me/projects");
+export const userProjects = (userId: number) =>
+  api.get<{ projects: RepoWithExtras[] }>(`/api/users/${userId}/projects`);
 
 // ── hot edit (H21) ─────────────────────────────────────────────────────────
 const idem = (key?: string) => (key ? { headers: { "Idempotency-Key": key } } : undefined);
@@ -134,3 +139,5 @@ export const addRepoChallenge = (repoId: number, challengeId: number, idempotenc
   api.post(`/api/repos/${repoId}/challenges`, { challengeId }, idem(idempotencyKey));
 export const removeRepoChallenge = (repoId: number, challengeId: number) =>
   api.delete(`/api/repos/${repoId}/challenges/${challengeId}`);
+export const removeRepoPrize = (repoId: number, prizeName: string) =>
+  api.delete(`/api/repos/${repoId}/prizes/${encodeURIComponent(prizeName)}`);
