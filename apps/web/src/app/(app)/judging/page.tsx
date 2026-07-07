@@ -91,10 +91,12 @@ function entryLabel(entry: QueueEntry): string {
 
 function secondsLabel(value: number | null | undefined): string {
   if (value == null) return "—";
-  const safe = Math.max(0, Math.floor(value));
-  const minutes = Math.floor(safe / 60);
-  const seconds = safe % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+  const rounded = Math.floor(value);
+  const sign = rounded < 0 ? "-" : "";
+  const absolute = Math.abs(rounded);
+  const minutes = Math.floor(absolute / 60);
+  const seconds = absolute % 60;
+  return `${sign}${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
 }
 
 function exportHref(path: string): string {
@@ -1035,9 +1037,18 @@ function PresentationTimer({
   const startedMs = startedAt ? new Date(startedAt).getTime() : null;
   const elapsedSeconds =
     startedMs && Number.isFinite(startedMs) ? Math.max(0, Math.floor((now - startedMs) / 1000)) : 0;
-  const remainingSeconds = totalSeconds != null ? Math.max(0, totalSeconds - elapsedSeconds) : null;
+  const remainingSeconds = totalSeconds != null ? totalSeconds - elapsedSeconds : null;
   const progressValue =
     totalSeconds && totalSeconds > 0 ? Math.min(100, (elapsedSeconds / totalSeconds) * 100) : 0;
+  const isOverTime = remainingSeconds != null && remainingSeconds < 0;
+  const isWrappingUp =
+    !isOverTime &&
+    remainingSeconds != null &&
+    totalSeconds != null &&
+    totalSeconds > 0 &&
+    remainingSeconds <= Math.max(60, Math.ceil(totalSeconds * 0.1));
+  const timerTone = isOverTime ? "danger" : isWrappingUp ? "warning" : "default";
+  const cueText = isOverTime ? "Time limit exceeded" : isWrappingUp ? "Wrap up" : "On time";
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -1049,15 +1060,39 @@ function PresentationTimer({
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase">Time remaining</p>
-          <p className="mt-1 font-mono text-3xl font-semibold tabular-nums">
+          <p
+            className={cn(
+              "mt-1 font-mono text-3xl font-semibold tabular-nums",
+              timerTone === "warning" && "text-amber-600 dark:text-amber-400",
+              timerTone === "danger" && "text-destructive",
+            )}
+          >
             {secondsLabel(remainingSeconds)}
           </p>
         </div>
-        <p className="text-muted-foreground text-sm tabular-nums">
-          of {secondsLabel(totalSeconds)}
-        </p>
+        <div className="text-right">
+          <p
+            className={cn(
+              "text-sm font-medium",
+              timerTone === "warning" && "text-amber-600 dark:text-amber-400",
+              timerTone === "danger" && "text-destructive",
+            )}
+          >
+            {cueText}
+          </p>
+          <p className="text-muted-foreground text-sm tabular-nums">
+            of {secondsLabel(totalSeconds)}
+          </p>
+        </div>
       </div>
-      <Progress value={progressValue} className="mt-3" />
+      <Progress
+        value={progressValue}
+        className={cn(
+          "mt-3",
+          timerTone === "warning" && "[&_[data-slot=progress-indicator]]:bg-amber-500",
+          timerTone === "danger" && "[&_[data-slot=progress-indicator]]:bg-destructive",
+        )}
+      />
     </div>
   );
 }
