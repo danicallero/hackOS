@@ -1,7 +1,7 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import { requireAnyCapability, requireAuth } from "../../lib/capabilities.js";
+import { requireAnyCapability, requireAuth, userHasCapability } from "../../lib/capabilities.js";
 import { UnauthorizedError } from "../../lib/errors.js";
 import { assertCanEditChallenge, assertCanViewPanel } from "./access.js";
 import {
@@ -15,6 +15,7 @@ import {
   createChallenge,
   getChallenge,
   listAllChallenges,
+  listAssignedJudgeChallenges,
   listOwnedChallenges,
   listVersions,
   previewPanel,
@@ -39,11 +40,17 @@ export function registerChallengeRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
 
   // Admin-wide list.
-  r.get(
-    "/api/challenges",
-    { preHandler: requireAnyCapability(CAPABILITIES.SPONSORS_MANAGE, CAPABILITIES.QUEUE_ADMIN) },
-    async () => ({ challenges: await listAllChallenges() }),
-  );
+  r.get("/api/challenges", { preHandler: requireAuth }, async (req) => {
+    const userId = actor(req.userId);
+    const canListAll =
+      (await userHasCapability(userId, CAPABILITIES.SPONSORS_MANAGE)) ||
+      (await userHasCapability(userId, CAPABILITIES.QUEUE_ADMIN));
+    return {
+      challenges: canListAll
+        ? await listAllChallenges()
+        : await listAssignedJudgeChallenges(userId),
+    };
+  });
 
   // Admin creates a challenge template bound to an enterprise. It starts hidden;
   // making it visible below reveals it on /api/public/challenges (H45).

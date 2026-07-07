@@ -5,7 +5,10 @@ import { pool } from "../../db/pool.js";
 import { requireAuth, requireCapability, userHasCapability } from "../../lib/capabilities.js";
 import { ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
 import { subscribe } from "../../lib/sse.js";
-import { requireAnyCapability } from "./access.js";
+import {
+  requireChallengeJudgeOrCapability,
+  requireRoomJudgeOrCapability,
+} from "./contextual-access.js";
 import {
   allRoomViews,
   challengeProgress,
@@ -20,12 +23,6 @@ import { getTvMode, setTvMode } from "./tv.js";
 /** Read APIs (H38-H42): progress, room views, participant status, pace, SSE streams, TV mode. */
 export function registerReadsRoutes(app: FastifyInstance): void {
   const typed = app.withTypeProvider<ZodTypeProvider>();
-
-  const judgeOrOperate = requireAnyCapability(
-    CAPABILITIES.JUDGE_PANEL,
-    CAPABILITIES.QUEUE_OPERATE,
-    CAPABILITIES.QUEUE_ADMIN,
-  );
 
   async function assertCanReadRoomAssignments(userId: number | null, roomId: number) {
     if (userId == null) throw new UnauthorizedError();
@@ -46,14 +43,28 @@ export function registerReadsRoutes(app: FastifyInstance): void {
   // H40: progress panel per challenge.
   typed.get(
     "/api/queue/challenges/:challengeId/progress",
-    { preHandler: judgeOrOperate, schema: { params: challengeIdParam } },
+    {
+      preHandler: requireChallengeJudgeOrCapability(
+        CAPABILITIES.JUDGE_PANEL,
+        CAPABILITIES.QUEUE_OPERATE,
+        CAPABILITIES.QUEUE_ADMIN,
+      ),
+      schema: { params: challengeIdParam },
+    },
     async (req) => challengeProgress(req.params.challengeId),
   );
 
   // H41: full room view for operator panels; also the TV data source.
   typed.get(
     "/api/queue/rooms/:roomId/view",
-    { preHandler: judgeOrOperate, schema: { params: roomIdParam } },
+    {
+      preHandler: requireRoomJudgeOrCapability(
+        CAPABILITIES.JUDGE_PANEL,
+        CAPABILITIES.QUEUE_OPERATE,
+        CAPABILITIES.QUEUE_ADMIN,
+      ),
+      schema: { params: roomIdParam },
+    },
     async (req) => roomView(req.params.roomId),
   );
 
@@ -70,7 +81,14 @@ export function registerReadsRoutes(app: FastifyInstance): void {
   // H39: pace check.
   typed.get(
     "/api/queue/rooms/:roomId/pace",
-    { preHandler: judgeOrOperate, schema: { params: roomIdParam } },
+    {
+      preHandler: requireRoomJudgeOrCapability(
+        CAPABILITIES.JUDGE_PANEL,
+        CAPABILITIES.QUEUE_OPERATE,
+        CAPABILITIES.QUEUE_ADMIN,
+      ),
+      schema: { params: roomIdParam },
+    },
     async (req) => roomPace(req.params.roomId),
   );
 
