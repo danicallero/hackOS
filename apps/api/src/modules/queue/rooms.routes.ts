@@ -7,6 +7,7 @@ import { requireAuth, requireCapability, userHasCapability } from "../../lib/cap
 import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { requireAnyCapability } from "./access.js";
+import { scheduleTopUp } from "./pump.js";
 import {
   assignChallengeBody,
   assignJudgeBody,
@@ -405,6 +406,8 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
     async (req) => {
       if (req.userId == null) throw new ConflictError("Missing actor");
       await resumeRoom(req.params.roomId, req.userId);
+      // H35: a resumed room fills back to capacity immediately, not on the tick.
+      await scheduleTopUp(req.params.roomId);
       return { roomId: req.params.roomId, isPaused: false };
     },
   );
