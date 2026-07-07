@@ -868,7 +868,7 @@ function PresentationPanel({
   onEmptyAction: () => void;
   onEntryAction: (
     entry: QueueEntry,
-    action: "start" | "complete" | "send-back",
+    action: "start" | "complete",
     body: Record<string, unknown> | undefined,
     label: string,
   ) => void;
@@ -931,7 +931,7 @@ function PresentationPanel({
               />
             )}
 
-            <div className="grid gap-2 sm:grid-cols-3">
+            <div className="grid gap-2 sm:grid-cols-2">
               <Button
                 disabled={!canJudge || !isReady || busy != null}
                 onClick={() => onEntryAction(entry, "start", undefined, "Presentation started.")}
@@ -948,21 +948,6 @@ function PresentationPanel({
               >
                 <CheckCircle2Icon className="size-4" />
                 Complete
-              </Button>
-              <Button
-                variant="outline"
-                disabled={!canJudge || busy != null}
-                onClick={() =>
-                  onEntryAction(
-                    entry,
-                    "send-back",
-                    { reason: "Sent back from judging room" },
-                    "Team sent back to waiting area.",
-                  )
-                }
-              >
-                <RotateCcwIcon className="size-4" />
-                Requeue
               </Button>
             </div>
           </>
