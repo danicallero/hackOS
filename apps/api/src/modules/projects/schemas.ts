@@ -38,6 +38,11 @@ export const repoMemberParamsSchema = z.object({
   userId: z.coerce.number().int().positive(),
 });
 
+export const repoDevpostParticipantParamsSchema = z.object({
+  repoId: z.coerce.number().int().positive(),
+  email: z.email(),
+});
+
 export const repoChallengeParamsSchema = z.object({
   repoId: z.coerce.number().int().positive(),
   challengeId: z.coerce.number().int().positive(),

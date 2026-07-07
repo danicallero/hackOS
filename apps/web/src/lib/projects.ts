@@ -135,6 +135,8 @@ export const addRepoMember = (repoId: number, userId: number, idempotencyKey?: s
   api.post(`/api/repos/${repoId}/members`, { userId }, idem(idempotencyKey));
 export const removeRepoMember = (repoId: number, userId: number) =>
   api.delete(`/api/repos/${repoId}/members/${userId}`);
+export const removeDevpostParticipant = (repoId: number, email: string) =>
+  api.delete(`/api/repos/${repoId}/devpost-participants/${encodeURIComponent(email)}`);
 export const addRepoChallenge = (repoId: number, challengeId: number, idempotencyKey?: string) =>
   api.post(`/api/repos/${repoId}/challenges`, { challengeId }, idem(idempotencyKey));
 export const removeRepoChallenge = (repoId: number, challengeId: number) =>

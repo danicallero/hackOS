@@ -7,9 +7,12 @@ import {
   ArrowLeftIcon,
   ExternalLinkIcon,
   FolderGitIcon,
+  LinkIcon,
   LockIcon,
   SearchIcon,
+  Trash2Icon,
   TrophyIcon,
+  UserPlusIcon,
   UsersIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -38,6 +41,8 @@ import {
   addRepoChallenge,
   addRepoMember,
   getRepoById,
+  linkSecondaryEmail,
+  removeDevpostParticipant,
   removeRepoChallenge,
   removeRepoMember,
   removeRepoPrize,
@@ -62,13 +67,20 @@ function manualMemberCount(repo: ProjectRepo): number {
   return repo.members.filter((member) => member.mergeStatus === "manual").length;
 }
 
+function userLabel(user: UserList["users"][number]): string {
+  const name = [user.name, user.surname].filter(Boolean).join(" ").trim();
+  return name ? `${name} · ${user.email}` : user.email;
+}
+
 export default function ProjectDetailPage() {
   const params = useParams<{ id: string }>();
   const { can } = useSessionContext();
   const canRead = can(CAPABILITIES.PROJECTS_READ);
   const canEdit = can(CAPABILITIES.PROJECTS_EDIT);
+  const canImport = can(CAPABILITIES.PROJECTS_IMPORT);
   const id = Number(params.id);
   const [repo, setRepo] = useState<ProjectRepo | null>(null);
+  const [users, setUsers] = useState<UserList["users"]>([]);
   const [challenges, setChallenges] = useState<ChallengeOption[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -82,19 +94,26 @@ export default function ProjectDetailPage() {
       const repoRes = await getRepoById(id);
       setRepo(toProjectRepo(repoRes));
 
-      if (canEdit) {
-        try {
-          const challengeResult = await api.get<{ challenges: ChallengeOption[] }>("/api/challenges");
-          setChallenges(challengeResult.challenges);
-        } catch {
-          try {
-            const publicChallenges = await api.get<{ items: ChallengeOption[] }>(
-              "/api/public/challenges",
-            );
-            setChallenges(publicChallenges.items);
-          } catch {
-            setChallenges([]);
-          }
+      if (canEdit || canImport) {
+        const [usersResult, challengeResult] = await Promise.allSettled([
+          canImport
+            ? api.get<UserList>("/api/users", { query: { limit: 200 } })
+            : Promise.resolve(null),
+          canEdit
+            ? api.get<{ challenges: ChallengeOption[] }>("/api/challenges")
+            : api.get<{ items: ChallengeOption[] }>("/api/public/challenges"),
+        ]);
+        if (usersResult.status === "fulfilled" && usersResult.value) {
+          setUsers(usersResult.value.users);
+        } else if (canImport) setUsers([]);
+        if (challengeResult.status === "fulfilled") {
+          setChallenges(
+            "challenges" in challengeResult.value
+              ? challengeResult.value.challenges
+              : challengeResult.value.items,
+          );
+        } else {
+          setChallenges([]);
         }
       }
     } catch (err) {
@@ -103,7 +122,7 @@ export default function ProjectDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [canEdit, canRead, id]);
+  }, [canEdit, canImport, canRead, id]);
 
   useEffect(() => {
     void load();
@@ -266,7 +285,21 @@ export default function ProjectDetailPage() {
                         {mergeStatusLabel(member.mergeStatus)}
                       </StatusBadge>
                       {canEdit && member.userId !== null && (
-                        <MemberRemoveButton repoId={repo.id} userId={member.userId} onRemoved={load} />
+                        <MemberRemoveButton
+                          repoId={repo.id}
+                          userId={member.userId}
+                          onRemoved={load}
+                        />
+                      )}
+                      {member.userId === null && (canEdit || canImport) && (
+                        <DevpostParticipantActions
+                          repoId={repo.id}
+                          email={member.email}
+                          users={users}
+                          canDelete={canEdit}
+                          canLink={canImport}
+                          onChanged={load}
+                        />
                       )}
                     </div>
                   </div>
@@ -453,6 +486,116 @@ function MemberRemoveButton({
   );
 }
 
+function DevpostParticipantActions({
+  repoId,
+  email,
+  users,
+  canDelete,
+  canLink,
+  onChanged,
+}: {
+  repoId: number;
+  email: string;
+  users: UserList["users"];
+  canDelete: boolean;
+  canLink: boolean;
+  onChanged: () => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState("");
+  const [busy, setBusy] = useState<"delete" | "link" | null>(null);
+  const dialogId = `devpost-link-${repoId}-${email}`;
+
+  async function deleteParticipant() {
+    setBusy("delete");
+    try {
+      await removeDevpostParticipant(repoId, email);
+      toast.success("Participant deleted.");
+      await onChanged();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not delete participant.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function linkParticipant() {
+    if (!selectedUserId) return;
+    setBusy("link");
+    try {
+      await linkSecondaryEmail(repoId, email, Number(selectedUserId));
+      toast.success("Verification email sent to the linked address.");
+      setOpen(false);
+      setSelectedUserId("");
+      await onChanged();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not link participant to user.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      {canLink && (
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            aria-expanded={open}
+            aria-controls={dialogId}
+            onClick={() => setOpen((current) => !current)}
+          >
+            <UserPlusIcon className="size-4" />
+            Link Participant to User
+          </Button>
+          {open && (
+            <div id={dialogId} className="grid w-full gap-2 sm:grid-cols-[minmax(220px,1fr)_auto]">
+              <Label htmlFor={`${dialogId}-user`} className="sr-only">
+                User for {email}
+              </Label>
+              <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+                <SelectTrigger id={`${dialogId}-user`}>
+                  <SelectValue placeholder="Select user" />
+                </SelectTrigger>
+                <SelectContent>
+                  {users.map((user) => (
+                    <SelectItem key={user.id} value={String(user.id)}>
+                      {userLabel(user)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                size="sm"
+                disabled={!selectedUserId || busy === "link"}
+                onClick={linkParticipant}
+              >
+                <LinkIcon className="size-4" />
+                Link
+              </Button>
+            </div>
+          )}
+        </>
+      )}
+      {canDelete && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={busy === "delete"}
+          onClick={deleteParticipant}
+        >
+          <Trash2Icon className="size-4" />
+          Delete
+        </Button>
+      )}
+    </div>
+  );
+}
+
 function ProjectMemberAdder({
   repoId,
   currentMembers,
@@ -501,9 +644,7 @@ function ProjectMemberAdder({
 
   const memberUserIds = useMemo(
     () =>
-      new Set(
-        currentMembers.flatMap((member) => (member.userId === null ? [] : [member.userId])),
-      ),
+      new Set(currentMembers.flatMap((member) => (member.userId === null ? [] : [member.userId]))),
     [currentMembers],
   );
   const availableUsers = users.filter((user) => !memberUserIds.has(user.id));

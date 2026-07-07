@@ -877,6 +877,47 @@ export async function removeRepoMember(actorId: number, repoId: number, userId: 
   });
 }
 
+export async function removeDevpostParticipant(actorId: number, repoId: number, email: string) {
+  return withTransaction(async (client) => {
+    const existing = await client.query(
+      `SELECT * FROM devpost_participants WHERE repo_id = $1 AND email = $2 FOR UPDATE`,
+      [repoId, email],
+    );
+    const participant = existing.rows[0] as
+      | { repo_id: number; email: string; user_id: number | null; merge_status: string }
+      | undefined;
+    if (!participant) {
+      throw new NotFoundError(`No devpost participant ${email} for repo ${repoId}`);
+    }
+
+    if (participant.user_id !== null) {
+      await client.query(
+        `DELETE FROM submissions
+          WHERE repo_id = $1 AND user_id = $2 AND imported_from = 'devpost'`,
+        [repoId, participant.user_id],
+      );
+    }
+    await client.query(`DELETE FROM devpost_participants WHERE repo_id = $1 AND email = $2`, [
+      repoId,
+      email,
+    ]);
+    await audit(client, {
+      actorId,
+      entityType: "devpost_participant",
+      entityId: `${repoId}:${email}`,
+      action: "delete",
+      before: {
+        repoId,
+        email,
+        userId: participant.user_id,
+        mergeStatus: participant.merge_status,
+      },
+      source: "admin",
+    });
+    return { repoId, email, removed: true };
+  });
+}
+
 export async function removeRepoPrize(actorId: number, repoId: number, prizeName: string) {
   return withTransaction(async (client) => {
     const existing = await client.query(
