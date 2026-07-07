@@ -2,7 +2,9 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { requireAuth, requireCapability } from "../../lib/capabilities.js";
+import { pool } from "../../db/pool.js";
+import { requireAuth, requireCapability, userHasCapability } from "../../lib/capabilities.js";
+import { ForbiddenError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { listDevpostPrizes } from "../challenges/service.js";
 import {
@@ -21,15 +23,16 @@ import {
   addRepoChallenge,
   addRepoMember,
   confirmImport,
-  getRepo,
+  getRepoForUser,
   linkParticipant,
   linkParticipantSecondary,
   listPublicChallenges,
-  listRepos,
+  listReposForUser,
   listUnmatchedParticipants,
   mapPrizeToChallenge,
   myProjects,
   previewImport,
+  type RepoScope,
   removeRepoChallenge,
   removeRepoMember,
   sendClaimEmail,
@@ -40,6 +43,24 @@ import {
  * queue workstream consumes). H21 edit surfaces live here too; H18-H19 remain
  * post-MVP and intentionally absent.
  */
+/**
+ * Who may open Projects (H8, H20, H44/H46): full-access (`projects:read`/`*`),
+ * judges (`judge:panel`), and sponsor reps (linked in `sponsors`). Returns the
+ * caller's access modes, or null when they hold none (→ 403). Sponsor access is
+ * association-based, so it can't be a plain capability guard.
+ */
+async function resolveRepoScope(userId: number): Promise<RepoScope | null> {
+  const [isFullAccess, isJudge] = await Promise.all([
+    userHasCapability(userId, CAPABILITIES.PROJECTS_READ),
+    userHasCapability(userId, CAPABILITIES.JUDGE_PANEL),
+  ]);
+  const isSponsor =
+    (await pool.query(`SELECT 1 FROM sponsors WHERE user_id = $1 LIMIT 1`, [userId])).rows.length >
+    0;
+  if (!isFullAccess && !isJudge && !isSponsor) return null;
+  return { isFullAccess, isJudge, isSponsor };
+}
+
 export function registerProjectRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
 
@@ -159,17 +180,25 @@ export function registerProjectRoutes(app: FastifyInstance): void {
 
   // ── PROJECTS_READ views ───────────────────────────────────────────────────
 
-  r.get("/api/repos", { preHandler: requireCapability(CAPABILITIES.PROJECTS_READ) }, async () => ({
-    repos: await listRepos(),
-  }));
+  // H8/H44/H46: full-access sees all repos; judges/sponsors see only the
+  // projects of participants in THEIR challenges (empty list if they have none).
+  r.get("/api/repos", { preHandler: requireAuth }, async (req) => {
+    const userId = req.userId as number;
+    const scope = await resolveRepoScope(userId);
+    if (!scope) throw new ForbiddenError(`Missing capability: ${CAPABILITIES.PROJECTS_READ}`);
+    return { repos: await listReposForUser(userId, scope) };
+  });
 
   r.get(
     "/api/repos/:id",
-    {
-      preHandler: requireCapability(CAPABILITIES.PROJECTS_READ),
-      schema: { params: repoIdParamsSchema },
+    { preHandler: requireAuth, schema: { params: repoIdParamsSchema } },
+    async (req) => {
+      const userId = req.userId as number;
+      const scope = await resolveRepoScope(userId);
+      if (!scope) throw new ForbiddenError(`Missing capability: ${CAPABILITIES.PROJECTS_READ}`);
+      // Out-of-scope repo -> 404, so a judge/sponsor can't probe existence.
+      return getRepoForUser(userId, req.params.id, scope);
     },
-    async (req) => getRepo(req.params.id),
   );
 
   // H21: hot-edit team membership and queue membership for a repo.

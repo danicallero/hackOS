@@ -611,6 +611,98 @@ export async function getRepo(id: number): Promise<RepoWithExtras> {
   return withExtras;
 }
 
+/**
+ * How a non-admin caller reaches Projects (H8, H20, H44/H46):
+ *  - `isFullAccess`  → holds `projects:read` (or `*`): sees ALL repos.
+ *  - `isJudge`       → holds `judge:panel`: sees repos of the challenges they
+ *                      are assigned to judge (room_judges).
+ *  - `isSponsor`     → linked in `sponsors`: sees repos of their enterprise's
+ *                      authored challenges.
+ * Judge/sponsor scopes stack (union). A judge/sponsor with zero challenges gets
+ * an empty list, not a 403.
+ */
+export interface RepoScope {
+  isFullAccess: boolean;
+  isJudge: boolean;
+  isSponsor: boolean;
+}
+
+/** Challenge ids a judge is assigned to ∪ a sponsor rep's enterprise challenges. */
+async function scopedChallengeIds(userId: number, scope: RepoScope): Promise<number[]> {
+  const ids = new Set<number>();
+  if (scope.isJudge) {
+    // A judge assigned to a room+challenge judges that challenge (H44).
+    const { rows } = await pool.query(
+      `SELECT DISTINCT challenge_id FROM room_judges WHERE user_id = $1`,
+      [userId],
+    );
+    for (const r of rows as { challenge_id: number }[]) ids.add(r.challenge_id);
+  }
+  if (scope.isSponsor) {
+    // Challenges authored by any sponsor of the same enterprise (H44/H46) —
+    // same ownership join used by rooms.routes/roomIdsForSponsorOwner.
+    const { rows } = await pool.query(
+      `SELECT DISTINCT c.id
+         FROM challenges c
+         JOIN sponsors author ON author.id = c.author
+         JOIN sponsors mine ON mine.enterprise_id = author.enterprise_id
+        WHERE mine.user_id = $1`,
+      [userId],
+    );
+    for (const r of rows as { id: number }[]) ids.add(r.id);
+  }
+  return [...ids];
+}
+
+/**
+ * Repos of the participants of `challengeIds`: repos with a queue_entry for the
+ * challenge, OR repos whose Devpost prizes map to the challenge's devpost_tags
+ * (the same challenge↔repo mapping attachMembersAndPrizes surfaces per repo).
+ */
+async function repoIdsForChallenges(challengeIds: number[]): Promise<number[]> {
+  if (challengeIds.length === 0) return [];
+  const { rows } = await pool.query(
+    `SELECT DISTINCT repo_id FROM (
+        SELECT repo_id FROM queue_entries WHERE challenge_id = ANY($1::int[])
+        UNION
+        SELECT rdp.repo_id
+          FROM repo_devpost_prizes rdp
+          JOIN challenges c ON c.devpost_tags ? rdp.prize
+         WHERE c.id = ANY($1::int[])
+     ) s`,
+    [challengeIds],
+  );
+  return rows.map((r: { repo_id: number }) => r.repo_id);
+}
+
+/** Repos visible to `userId` under `scope` (H8): all for full-access, else scoped. */
+export async function listReposForUser(
+  userId: number,
+  scope: RepoScope,
+): Promise<RepoWithExtras[]> {
+  if (scope.isFullAccess) return listRepos();
+  const challengeIds = await scopedChallengeIds(userId, scope);
+  const repoIds = await repoIdsForChallenges(challengeIds);
+  if (repoIds.length === 0) return [];
+  const { rows } = await pool.query(`${REPO_SELECT} WHERE id = ANY($1::int[]) ORDER BY name`, [
+    repoIds,
+  ]);
+  return attachMembersAndPrizes(rows);
+}
+
+/** Single repo scoped to `userId` — 404 (never leak) if outside their scope. */
+export async function getRepoForUser(
+  userId: number,
+  id: number,
+  scope: RepoScope,
+): Promise<RepoWithExtras> {
+  if (scope.isFullAccess) return getRepo(id);
+  const challengeIds = await scopedChallengeIds(userId, scope);
+  const repoIds = await repoIdsForChallenges(challengeIds);
+  if (!repoIds.includes(id)) throw new NotFoundError(`Repo ${id} not found`);
+  return getRepo(id);
+}
+
 /** Participant self-view (H20 scope, minimal): repos I have a submission on. */
 export async function myProjects(userId: number): Promise<Array<Omit<RepoWithExtras, "members">>> {
   const { rows } = await pool.query(
