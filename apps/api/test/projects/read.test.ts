@@ -397,6 +397,65 @@ describe("GET /api/me/projects (participant self-view)", () => {
     });
     expect(missing.statusCode).toBe(404);
   });
+
+  // #62: the profile must resolve the SAME membership the project/queue rosters
+  // show (submission OR matched Devpost participant). Removing a matched member
+  // drops the submission but leaves the devpost_participants link, so a
+  // submissions-only lookup rendered an empty profile while the roster still
+  // listed the user.
+  it("still lists a project when the member has a Devpost link but no submission", async () => {
+    const server = await getApp();
+    const { aliceId } = await seedMatchableUsers();
+    const operator = await createUserWithCapabilities([
+      CAPABILITIES.PROJECTS_IMPORT,
+      CAPABILITIES.PROJECTS_EDIT,
+      CAPABILITIES.PROJECTS_READ,
+      CAPABILITIES.USERS_READ,
+    ]);
+    await importFixtures(operator);
+
+    const { pool } = await import("../../src/db/pool.js");
+    const beans = (await pool.query(`SELECT id FROM repos WHERE name = 'Neural Beans'`)).rows[0].id;
+
+    // Roster action "Remove member" -> deletes the submission, keeps the
+    // devpost_participants row (still auto_matched to alice).
+    const removed = await server.inject({
+      method: "DELETE",
+      url: `/api/repos/${beans}/members/${aliceId}`,
+      headers: asUser(operator),
+    });
+    expect(removed.statusCode).toBe(200);
+
+    const sub = await pool.query(`SELECT 1 FROM submissions WHERE repo_id = $1 AND user_id = $2`, [
+      beans,
+      aliceId,
+    ]);
+    expect(sub.rows).toHaveLength(0);
+    const dp = await pool.query(
+      `SELECT 1 FROM devpost_participants WHERE repo_id = $1 AND user_id = $2`,
+      [beans, aliceId],
+    );
+    expect(dp.rows).toHaveLength(1);
+
+    // Roster still lists alice as a member...
+    const roster = await server.inject({
+      method: "GET",
+      url: `/api/repos/${beans}`,
+      headers: asUser(operator),
+    });
+    expect(
+      (roster.json().members as { userId: number | null }[]).some((m) => m.userId === aliceId),
+    ).toBe(true);
+
+    // ...so the profile must too.
+    const res = await server.inject({
+      method: "GET",
+      url: `/api/users/${aliceId}/projects`,
+      headers: asUser(operator),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().projects.map((p: { name: string }) => p.name)).toEqual(["Neural Beans"]);
+  });
 });
 
 describe("POST /api/repos/:repoId/members (PROJECTS_EDIT)", () => {
