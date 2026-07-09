@@ -6,13 +6,20 @@ import { notifyTeamPreCall } from "./notify.js";
 import { callNextForRoom } from "./service.js";
 
 /**
- * Queue pump (plan/07 §5.1). For every active, non-paused room, top up
- * `called` entries up to room_queue_state.max_in_waiting_area from the
- * shared challenge queue, honouring position/priority and the H30
- * member-busy guard (all inside callNextForRoom). Challenges whose sponsor
- * opted out of the live queue never block anything here because they were
- * never `enqueue`d in the first place (queue_entries only exist for
- * challenges an admin explicitly enqueued).
+ * Queue pump (plan/07 §5.1). For every non-paused room, top up `called`
+ * entries up to room_queue_state.max_in_waiting_area from the shared
+ * challenge queue, honouring position/priority and the H30 member-busy
+ * guard (all inside callNextForRoom). Challenges whose sponsor opted out of
+ * the live queue never block anything here because they were never `enqueue`d
+ * in the first place (queue_entries only exist for challenges an admin
+ * explicitly enqueued).
+ *
+ * The single auto-fill gate is `room_queue_state.is_paused` — the same flag
+ * the H35 Pause/Resume operator lever writes and callNextForRoom checks. We do
+ * NOT also require `rooms.status = 'active'`: that column has no operational
+ * writer (no UI or endpoint sets it, rooms default to 'paused'), so gating on
+ * it silently froze every real room's auto-fill (issue #60). `rooms.status`
+ * stays a display/lifecycle field only.
  */
 export const QUEUE_PUMP_QUEUE_NAME = "queue-pump";
 
@@ -20,20 +27,18 @@ export const QUEUE_PUMP_QUEUE_NAME = "queue-pump";
  * Top up a SINGLE room's `called` buffer to `max_in_waiting_area` from its
  * shared challenge queue — the same fill loop as pumpTick, scoped to one room
  * so a freed slot refills instantly instead of waiting for the 5s tick
- * (H29/H30/H35, plan/07 §5.1). Only active, non-paused rooms auto-fill (mirrors
- * the pump's room filter); a paused/inactive room is a no-op.
+ * (H29/H30/H35, plan/07 §5.1). Only non-paused rooms auto-fill (mirrors the
+ * pump's room filter); an H35-paused room is a no-op.
  *
  * MUST run AFTER any surrounding transaction has committed: callNextForRoom
  * opens its own withTransaction, so never call this inside an open one.
  */
 export async function topUpRoom(roomId: number): Promise<void> {
   const { rows } = await pool.query(
-    `SELECT 1 FROM rooms r
-       JOIN room_queue_state rqs ON rqs.room_id = r.id
-      WHERE r.id = $1 AND r.status = 'active' AND rqs.is_paused = false`,
+    `SELECT 1 FROM room_queue_state WHERE room_id = $1 AND is_paused = false`,
     [roomId],
   );
-  if (rows.length === 0) return; // paused or inactive: never auto-fill
+  if (rows.length === 0) return; // paused (or unknown room): never auto-fill
 
   // callNextForRoom is the atomic, race-safe unit — looping here just drains
   // the room's slack until full or nobody eligible.
@@ -68,9 +73,7 @@ export async function scheduleTopUp(roomId: number): Promise<void> {
 
 export async function pumpTick(): Promise<void> {
   const { rows: rooms } = await pool.query(
-    `SELECT r.id FROM rooms r
-       JOIN room_queue_state rqs ON rqs.room_id = r.id
-      WHERE r.status = 'active' AND rqs.is_paused = false`,
+    `SELECT room_id AS id FROM room_queue_state WHERE is_paused = false`,
   );
 
   for (const room of rooms as { id: number }[]) {
