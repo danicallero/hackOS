@@ -384,6 +384,47 @@ describe("send_back / requeue / re_enter (H33)", () => {
     expect(entry.position).toBe(rows[0].min); // top
   });
 
+  it("send_back: forbidden for a queue operator, allowed for the room's judge (#59)", async () => {
+    const { challengeId, roomId } = await setup();
+    const { repoId: r1 } = await createRepoWithTeam();
+    const { repoId: r2 } = await createRepoWithTeam();
+    const e1 = await enqueueRepo(challengeId, r1, 1);
+    await enqueueRepo(challengeId, r2, 2);
+    await app.inject({
+      method: "POST",
+      url: `/api/queue/rooms/${roomId}/call-next`,
+      headers: asUser(operatorId),
+      payload: {},
+    });
+    await app.inject({
+      method: "POST",
+      url: `/api/queue/entries/${e1}/bring-in`,
+      headers: asUser(judgeId),
+      payload: {},
+    });
+
+    // Queue Operations view (QUEUE_OPERATE only) must not re-queue a team that
+    // already reached the room — that restriction stays in place.
+    const operatorRes = await app.inject({
+      method: "POST",
+      url: `/api/queue/entries/${e1}/send-back`,
+      headers: asUser(operatorId),
+      payload: { reason: "no procede" },
+    });
+    expect(operatorRes.statusCode).toBe(403);
+    expect(await getEntry(e1).then((e) => e.status)).toBe("in_room");
+
+    // Judging Panel keeps the "Re-queue to Waiting Room" action.
+    const judgeRes = await app.inject({
+      method: "POST",
+      url: `/api/queue/entries/${e1}/send-back`,
+      headers: asUser(judgeId),
+      payload: { reason: "reevaluar despues" },
+    });
+    expect(judgeRes.statusCode).toBe(200);
+    expect(await getEntry(e1).then((e) => e.status)).toBe("called");
+  });
+
   it("requeue: called -> waiting honouring top|bottom; cannot requeue in_room straight to waiting", async () => {
     const { challengeId, roomId } = await setup();
     const { repoId: r1 } = await createRepoWithTeam();

@@ -122,11 +122,14 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
       ),
   );
 
-  // H33: in_room|presenting -> called (top), keeps their turn.
+  // H33: in_room|presenting -> called (top), keeps their turn. Re-queueing a
+  // team that already reached the room/stage is a judging decision — it lives
+  // in the Judging Panel only, never in the global Queue Operations view, so
+  // QUEUE_OPERATE alone is not enough here (#59).
   typed.post(
     "/api/queue/entries/:entryId/send-back",
     {
-      preHandler: [judgeOrOperate, idempotencyGuard],
+      preHandler: [judge, idempotencyGuard],
       schema: { params: entryIdParam, body: reasonBody },
     },
     async (req) =>
