@@ -104,6 +104,11 @@ export async function getEntry(entryId: number) {
   return rows[0];
 }
 
+export async function roomRow(roomId: number) {
+  const { rows } = await pool.query(`SELECT * FROM rooms WHERE id = $1`, [roomId]);
+  return rows[0];
+}
+
 export async function historyRows(entryId: number, action?: string) {
   const { rows } = await pool.query(
     `SELECT * FROM queue_history WHERE queue_entry_id = $1 ${action ? "AND action = $2" : ""} ORDER BY id ASC`,

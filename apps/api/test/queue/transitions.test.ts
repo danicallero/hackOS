@@ -18,6 +18,7 @@ import {
   enqueueRepo,
   getEntry,
   historyRows,
+  roomRow,
 } from "./fixtures.js";
 
 /**
@@ -722,6 +723,98 @@ describe("manual call (H37)", () => {
       payload: { targetStatus: "in_room", roomId },
     });
     expect(occupied.statusCode).toBe(409);
+  });
+});
+
+describe("move_to_top (H37, H58)", () => {
+  it("sends a waiting team to the TOP of its challenge queue", async () => {
+    const { challengeId, roomId } = await setup();
+    const { repoId: r1 } = await createRepoWithTeam();
+    const { repoId: r2 } = await createRepoWithTeam();
+    const e1 = await enqueueRepo(challengeId, r1, 1);
+    const e2 = await enqueueRepo(challengeId, r2, 50);
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/queue/entries/${e2}/move-top`,
+      headers: asUser(operatorId),
+      payload: {},
+    });
+    expect(res.statusCode).toBe(200);
+    void roomId;
+
+    const moved = await getEntry(e2);
+    expect(moved.status).toBe("waiting");
+    const other = await getEntry(e1);
+    expect(moved.position).toBeLessThan(other.position);
+  });
+
+  // H58: the searched team is called in ANOTHER room's waiting area. "Top" must
+  // NOT yank it out — block with `Busy in <room>` and leave the state untouched.
+  it("blocks with `Busy in <room>` when the team is called in another room", async () => {
+    const { challengeId, roomId } = await setup();
+    const { repoId } = await createRepoWithTeam();
+    const entryId = await enqueueRepo(challengeId, repoId, 1);
+
+    // Team is called into its room's waiting area.
+    await app.inject({
+      method: "POST",
+      url: `/api/queue/rooms/${roomId}/call-next`,
+      headers: asUser(operatorId),
+      payload: {},
+    });
+    const { name: roomName } = await roomRow(roomId);
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/queue/entries/${entryId}/move-top`,
+      headers: asUser(judgeId),
+      payload: {},
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.message).toBe(`Busy in ${roomName}`);
+    expect(res.json().error.details.roomName).toBe(roomName);
+
+    // No mutation: still called in the same room, no move_to_top history row.
+    const entry = await getEntry(entryId);
+    expect(entry.status).toBe("called");
+    expect(entry.assigned_room_id).toBe(roomId);
+    expect(await historyRows(entryId, "move_to_top")).toHaveLength(0);
+  });
+
+  // H58: the same repo is active in another room via a DIFFERENT challenge —
+  // move_to_top of its waiting entry here is still blocked.
+  it("blocks when the repo is active in another room for a different challenge", async () => {
+    const { challengeId, roomId } = await setup();
+    const ch2 = await createChallenge();
+    const room2 = await createRoom({ name: "Sala Mars" });
+    await assignChallengeToRoom(room2, ch2);
+
+    const { repoId } = await createRepoWithTeam();
+    const waitingHere = await enqueueRepo(challengeId, repoId, 5);
+    await enqueueRepo(ch2, repoId, 1);
+    void roomId;
+
+    // The repo gets called into room2 through challenge 2.
+    await app.inject({
+      method: "POST",
+      url: `/api/queue/rooms/${room2}/call-next`,
+      headers: asUser(operatorId),
+      payload: {},
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/queue/entries/${waitingHere}/move-top`,
+      headers: asUser(operatorId),
+      payload: {},
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.message).toBe("Busy in Sala Mars");
+
+    const entry = await getEntry(waitingHere);
+    expect(entry.status).toBe("waiting");
+    expect(entry.position).toBe(5); // untouched
   });
 });
 
