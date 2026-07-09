@@ -96,12 +96,29 @@ describe("queue pump (H29, plan/07 §5.1)", () => {
     expect(rows[2].status).toBe("waiting");
   });
 
-  it("skips paused rooms (H35) and inactive rooms", async () => {
+  it("skips H35-paused rooms but fills any non-paused room regardless of lifecycle status (#60)", async () => {
     const challengeId = await createChallenge();
     const pausedRoom = await createRoom({ isPaused: true });
-    const inactiveRoom = await createRoom({ status: "paused" });
+    // `rooms.status` is a display/lifecycle field, NOT an auto-fill gate — only
+    // is_paused pauses the pump. A room left at the default 'paused' status
+    // (as every route-created room is) must still auto-fill (#60 regression).
+    const liveRoom = await createRoom({ status: "paused" });
     await assignChallengeToRoom(pausedRoom, challengeId);
-    await assignChallengeToRoom(inactiveRoom, challengeId);
+    await assignChallengeToRoom(liveRoom, challengeId);
+    const { repoId } = await createRepoWithTeam();
+    const entryId = await enqueueRepo(challengeId, repoId, 1);
+
+    await pump();
+
+    const entry = await getEntry(entryId);
+    expect(entry.status).toBe("called"); // pump ran despite status='paused'
+    expect(entry.assigned_room_id).toBe(liveRoom); // into the non-paused room; the H35-paused room is skipped
+  });
+
+  it("does not fill an H35-paused room even when it is the only option (H35)", async () => {
+    const challengeId = await createChallenge();
+    const pausedRoom = await createRoom({ isPaused: true });
+    await assignChallengeToRoom(pausedRoom, challengeId);
     const { repoId } = await createRepoWithTeam();
     const entryId = await enqueueRepo(challengeId, repoId, 1);
 
