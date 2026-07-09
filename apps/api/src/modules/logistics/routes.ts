@@ -46,6 +46,7 @@ import {
   mealScanBatchBody,
   presenceScanBody,
   rotateBody,
+  scannableActivitiesQuery,
   scheduleBody,
   scheduleIdParam,
   schedulePatchBody,
@@ -53,7 +54,7 @@ import {
   userIdParam,
   walletPurposeParam,
 } from "./schemas.js";
-import { logisticsStats } from "./stats.js";
+import { logisticsStats, scannableActivities } from "./stats.js";
 import {
   appleChangedSerials,
   appleLog,
@@ -91,6 +92,14 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   const activity = requireCapability(CAPABILITIES.ACTIVITY_SCAN);
   const stats = requireCapability(CAPABILITIES.LOGISTICS_STATS);
   const scheduleManage = requireCapability(CAPABILITIES.SCHEDULE_MANAGE);
+  // Read guards let a station load its own data without the stats capability:
+  // a door operator (PRESENCE_SCAN) sees occupancy/hours; a meal/activity
+  // operator (ACTIVITY_SCAN) can list scannable activities with live counts.
+  const presenceRead = requireAnyCapability(
+    CAPABILITIES.PRESENCE_SCAN,
+    CAPABILITIES.LOGISTICS_STATS,
+  );
+  const scanRead = requireAnyCapability(CAPABILITIES.ACTIVITY_SCAN, CAPABILITIES.LOGISTICS_STATS);
   const ticketRead = requireAnyCapability(CAPABILITIES.USERS_READ, CAPABILITIES.ACCREDIT_SCAN);
   const logisticsRead = requireAnyCapability(
     CAPABILITIES.ACCREDIT_SCAN,
@@ -190,17 +199,28 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       }),
   );
 
-  typed.get("/api/presence/estimate", { preHandler: stats }, async () => occupancyEstimate());
+  typed.get("/api/presence/estimate", { preHandler: presenceRead }, async () =>
+    occupancyEstimate(),
+  );
 
-  typed.get("/api/presence/hours", { preHandler: stats }, async () => allHours());
+  typed.get("/api/presence/hours", { preHandler: presenceRead }, async () => allHours());
 
   typed.get(
     "/api/presence/hours/:userId",
-    { preHandler: stats, schema: { params: userIdParam } },
+    { preHandler: presenceRead, schema: { params: userIdParam } },
     async (req) => userHours(req.params.userId),
   );
 
   // ── H25 meals / H26 activities ───────────────────────────────────────────
+
+  // Scannable activities with live counts — powers the meal/activity station
+  // pickers and their inline stats (available to scan operators, not just
+  // LOGISTICS_STATS). Fixes the scanner that used to require the stats panel.
+  typed.get(
+    "/api/activities/scannable",
+    { preHandler: scanRead, schema: { querystring: scannableActivitiesQuery } },
+    async (req) => ({ items: await scannableActivities(req.query.category) }),
+  );
 
   typed.post(
     "/api/activities/:id/scan",

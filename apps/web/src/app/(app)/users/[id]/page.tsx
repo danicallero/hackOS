@@ -387,7 +387,7 @@ function ProfileHeader({ user }: { user: UserDetail }) {
       <div className="ml-auto">
         <div className="flex flex-wrap justify-end gap-2">
           <Button asChild variant="outline" size="sm">
-            <Link href={`/logistics?userId=${user.id}`}>
+            <Link href={`/logistics/accreditation?userId=${user.id}`}>
               <IdCardIcon className="size-4" />
               Accredit
             </Link>

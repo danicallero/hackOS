@@ -140,11 +140,21 @@ describe("H24 presence scan + estimation", () => {
     expect(bulk.json().some((r: { userId: number }) => r.userId === uid)).toBe(true);
   });
 
-  it("requires LOGISTICS_STATS for estimate/hours reads", async () => {
+  it("lets a PRESENCE_SCAN door operator read estimate/hours", async () => {
     const res = await app.inject({
       method: "GET",
       url: "/api/presence/estimate",
       headers: asUser(doorStaff), // only PRESENCE_SCAN
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("rejects estimate/hours reads without presence or stats capability", async () => {
+    const nobody = await createUser();
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/presence/estimate",
+      headers: asUser(nobody),
     });
     expect(res.statusCode).toBe(403);
   });

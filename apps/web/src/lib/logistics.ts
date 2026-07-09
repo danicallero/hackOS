@@ -74,6 +74,18 @@ export interface LogisticsStats {
   }>;
 }
 
+export interface ScannableActivity {
+  activityId: number;
+  name: string;
+  category: string;
+  /** Total scans / servings logged. */
+  count: number;
+  /** Distinct people who passed through. */
+  distinctPeople: number;
+  /** count - distinctPeople (repeat servings / re-scans). */
+  repeats: number;
+}
+
 export interface PublicScheduleItem {
   id: number;
   title: string;
@@ -151,6 +163,10 @@ export const logisticsApi = {
   presenceEstimate: () => api.get<PresenceEstimate>("/api/presence/estimate"),
   presenceHours: () => api.get<PresenceHours[]>("/api/presence/hours"),
   stats: () => api.get<LogisticsStats>("/api/logistics/stats"),
+  scannableActivities: (category?: "meal" | "activity") =>
+    api.get<{ items: ScannableActivity[] }>("/api/activities/scannable", {
+      query: category ? { category } : undefined,
+    }),
   publicSchedule: () => api.get<{ items: PublicScheduleItem[] }>("/api/public/activities"),
   schedule: () => api.get<{ items: PublicScheduleItem[] }>("/api/schedule"),
   createSchedule: (body: ScheduleInput) =>

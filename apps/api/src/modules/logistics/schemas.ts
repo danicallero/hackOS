@@ -40,6 +40,10 @@ export const presenceScanBody = z.object({
   scannedAt: z.coerce.date().optional(),
 });
 
+export const scannableActivitiesQuery = z.object({
+  category: z.enum(["meal", "activity"]).optional(),
+});
+
 export const activityScanBody = z.object({
   badgeId: z.string().min(1),
   allowRepeat: z.boolean().default(false),
