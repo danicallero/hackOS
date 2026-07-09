@@ -1,13 +1,12 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import { requireCapability } from "../../lib/capabilities.js";
 import { UnauthorizedError } from "../../lib/errors.js";
+import { assertCanExportChallenge } from "./access.js";
 import {
   requireChallengeJudgeOrCapability,
   requireEntryJudgeOrCapability,
 } from "./contextual-access.js";
-import { assertCanExportChallenge } from "./access.js";
 import { exportEvaluationsCsv, exportQueueCsv } from "./exports.js";
 import {
   getAttemptReview,

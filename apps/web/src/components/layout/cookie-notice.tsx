@@ -51,12 +51,15 @@ export function CookieNotice() {
       />
 
       <div className="p-4" style={{ minHeight: "11rem" }}>
-        <h2 id="cookie-notice-title" className="text-balance text-base font-semibold text-zinc-700 sm:text-lg">
+        <h2
+          id="cookie-notice-title"
+          className="text-balance text-base font-semibold text-zinc-700 sm:text-lg"
+        >
           Legally-required cookie notice
         </h2>
         <p className="mt-1.5 text-pretty text-xs leading-5 text-zinc-600 sm:text-sm">
-          hackOS keeps a first-party session cookie and a few local settings so your theme, layout, and
-          session preferences do not reset every time you blink. Groundbreaking, we know.
+          hackOS keeps a first-party session cookie and a few local settings so your theme, layout,
+          and session preferences do not reset every time you blink. Groundbreaking, we know.
         </p>
         <p className="mt-1.5 text-pretty text-xs leading-5 text-zinc-600 sm:text-sm">
           No ad trackers. No selling your traffic. No trading your information like office supplies.
