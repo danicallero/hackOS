@@ -420,10 +420,35 @@ export async function skipToEnd(
 
 const MOVE_TOP_FROM = ["waiting", "called"];
 
+/** Statuses in which a team is actively occupying a room's waiting area / floor. */
+const BUSY_IN_ROOM_STATUSES = ["called", "in_room", "presenting"];
+
+/**
+ * H58: is this repo currently active (called/in_room/presenting) in some room?
+ * Returns that room's name so callers can surface `Busy in <room>` instead of
+ * silently yanking the team out of its current room.
+ */
+async function repoBusyRoomName(client: pg.PoolClient, repoId: number): Promise<string | null> {
+  const { rows } = await client.query(
+    `SELECT r.name
+       FROM queue_entries qe
+       JOIN rooms r ON r.id = qe.assigned_room_id
+      WHERE qe.repo_id = $1 AND qe.status = ANY($2)
+      LIMIT 1`,
+    [repoId, BUSY_IN_ROOM_STATUSES],
+  );
+  return rows[0]?.name ?? null;
+}
+
 /**
  * H37: send a team to the TOP of its challenge's shared queue from the judging
- * search. A `called` team is released back to `waiting` first — "adding" a team
- * only ever moves the existing entry (never creates a second one).
+ * search. "Adding" a team only ever moves the existing entry (never creates a
+ * second one).
+ *
+ * H58: a team that is active in a room's waiting area (called/in_room/
+ * presenting) must NOT be extracted from it by the search "Top" action —
+ * doing so bypasses the validation the "add to waiting room" path enforces.
+ * Block with an explicit `Busy in <room>` error and leave the state untouched.
  */
 export async function moveToTop(
   entryId: number,
@@ -432,6 +457,14 @@ export async function moveToTop(
 ): Promise<QueueEntryRow> {
   return withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
+    const busyRoom = await repoBusyRoomName(client, entry.repo_id);
+    if (busyRoom) {
+      throw new ConflictError(`Busy in ${busyRoom}`, {
+        entryId,
+        repoId: entry.repo_id,
+        roomName: busyRoom,
+      });
+    }
     assertFrom(entry, MOVE_TOP_FROM, "move_to_top");
     const position = await nextTopPosition(client, entry.challenge_id);
     const res = await client.query(
