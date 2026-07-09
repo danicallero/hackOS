@@ -875,13 +875,17 @@ function PresentationPanel({
   onEmptyAction: () => void;
   onEntryAction: (
     entry: QueueEntry,
-    action: "start" | "complete",
+    action: "start" | "complete" | "send-back",
     body: Record<string, unknown> | undefined,
     label: string,
   ) => void;
 }) {
   const isPresenting = entry?.status === "presenting";
   const isReady = entry?.status === "in_room";
+  // H33 (#59): a team that already reached the room or the stage can be sent
+  // back to the top of the waiting room. This is a judging decision, so it only
+  // lives here in the Judging Panel — never in the Queue Operations view.
+  const canSendBack = isPresenting || isReady;
 
   return (
     <Card className={cn("gap-0 overflow-hidden p-0", entry && "border-primary/30 bg-primary/5")}>
@@ -956,6 +960,24 @@ function PresentationPanel({
                 <CheckCircle2Icon className="size-4" />
                 Complete
               </Button>
+              {canSendBack && (
+                <Button
+                  variant="outline"
+                  className="sm:col-span-2"
+                  disabled={!canJudge || busy != null}
+                  onClick={() =>
+                    onEntryAction(
+                      entry,
+                      "send-back",
+                      { reason: "Re-queued to waiting room" },
+                      "Team sent back to the waiting room.",
+                    )
+                  }
+                >
+                  <RotateCcwIcon className="size-4" />
+                  Re-queue to waiting room
+                </Button>
+              )}
             </div>
           </>
         )}
