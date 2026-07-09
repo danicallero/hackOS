@@ -300,8 +300,12 @@ export default function QueuePage() {
     // 3.5rem header + 2rem+2rem main py-8) so the outer page never scrolls.
     <div className="flex flex-col gap-5 xl:h-[calc(100dvh-7.5rem)]" data-wide>
       <Card className="gap-0 p-5">
-        <div className="grid gap-3 md:grid-cols-[minmax(180px,1fr)_minmax(220px,1.2fr)_auto] md:items-end">
-          <div className="space-y-2">
+        {/* Fluid header (H29, issue #61): the two field columns grow/shrink and
+            the action cluster drops to its own row under tight widths (tiling
+            WMs, tablet/mobile) instead of overflowing the card. No fixed track
+            widths — flex-basis + min-width + flex-wrap handle the reflow. */}
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="min-w-[11rem] flex-1 space-y-2">
             <Label htmlFor="queue-room">Room</Label>
             <Select
               value={activeRoomId ? String(activeRoomId) : ""}
@@ -323,15 +327,15 @@ export default function QueuePage() {
 
           {/* A room judges exactly one challenge — informational, read-only.
               Change it from the room admin surface, not here. */}
-          <div className="space-y-2">
+          <div className="min-w-[11rem] flex-[1.2] space-y-2">
             <Label>Challenge</Label>
-            <div className="border-input bg-muted/40 text-muted-foreground flex h-9 w-full items-center gap-2 rounded-md border px-3 text-sm">
+            <div className="border-input bg-muted/40 text-muted-foreground flex h-9 w-full min-w-0 items-center gap-2 rounded-md border px-3 text-sm">
               <LockIcon className="size-3.5 shrink-0" />
               <span className="text-foreground truncate font-medium">{challengeLabel}</span>
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2 md:justify-end">
+          <div className="flex flex-1 flex-wrap items-end gap-2 sm:justify-end">
             <Button
               variant={isPaused ? "default" : "outline"}
               disabled={!activeRoomId || busy === "pause" || (!canOperate && !canJudge)}
