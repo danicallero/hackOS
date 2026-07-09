@@ -811,13 +811,25 @@ export async function getRepoForUser(
   return getRepo(id);
 }
 
-/** Participant self-view (H20 scope, minimal): repos I have a submission on. */
+/**
+ * Participant self-view (H20 scope, minimal): repos this user is a member of.
+ *
+ * Membership must match what every other project/queue roster surfaces via
+ * attachMembersAndPrizes — a user counts as a member if they have a submission
+ * OR are a matched Devpost participant (`devpost_participants.user_id`). The two
+ * can diverge: removing a matched member (removeRepoMember) drops the submission
+ * but leaves the devpost_participants link, so a submissions-only lookup rendered
+ * an empty profile while the project/queue roster still listed the user (#62).
+ */
 export async function myProjects(userId: number): Promise<Array<Omit<RepoWithExtras, "members">>> {
   const { rows } = await pool.query(
     `SELECT r.id, r.name, r.description, r.github_url, r.devpost_url, r.demo_url
      FROM repos r
-     JOIN submissions s ON s.repo_id = r.id
-     WHERE s.user_id = $1
+     WHERE r.id IN (
+       SELECT repo_id FROM submissions WHERE user_id = $1
+       UNION
+       SELECT repo_id FROM devpost_participants WHERE user_id = $1
+     )
      ORDER BY r.name`,
     [userId],
   );
