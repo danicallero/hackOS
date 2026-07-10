@@ -12,6 +12,7 @@ import {
 } from "../../../lib/capabilities.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../../lib/errors.js";
 import { myProjects } from "../../projects/service.js";
+import { anonymizeUser } from "../anonymize.js";
 import { computeDerivedRole } from "../role.js";
 
 /**
@@ -588,37 +589,9 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const targetId = req.params.id;
-      if (targetId === req.userId) {
-        throw new BadRequestError("You can't anonymize your own account");
-      }
-      await withTransaction(async (client) => {
-        const { rows } = await client.query(`SELECT email FROM users WHERE id = $1 FOR UPDATE`, [
-          targetId,
-        ]);
-        if (!rows[0]) throw new NotFoundError("User not found", { userId: targetId });
-        const anonEmail = `anonymized+${targetId}@deleted.invalid`;
-        await client.query(
-          `UPDATE users
-             SET email = $2, email_verified = false, name = 'Anonymized', surname = NULL,
-                 phone = NULL, dni = NULL, image = NULL,
-                 secondary_email = NULL, secondary_email_verified_at = NULL,
-                 food_intolerances = '{}', food_intolerance_notes = NULL, notes = NULL
-           WHERE id = $1`,
-          [targetId, anonEmail],
-        );
-        // Revoke all access. Both cascade on user delete anyway, but we remove
-        // them explicitly so the anonymized row can no longer authenticate.
-        await client.query(`DELETE FROM sessions WHERE user_id = $1`, [targetId]);
-        await client.query(`DELETE FROM accounts WHERE user_id = $1`, [targetId]);
-        await audit(client, {
-          actorId: req.userId,
-          entityType: "user",
-          entityId: targetId,
-          action: "anonymized",
-          source: "admin",
-          before: { email: rows[0].email },
-        });
-      });
+      await withTransaction((client) =>
+        anonymizeUser(client, { targetId, actorId: req.userId, source: "admin" }),
+      );
       await invalidateCapabilities(targetId);
       return { anonymized: true as const };
     },

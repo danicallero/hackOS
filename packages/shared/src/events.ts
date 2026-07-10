@@ -18,6 +18,8 @@ export const SSE_TOPICS = {
   CONTENT: "content",
   /** accreditation, presence, meals and wallet updates (H22-H28) */
   LOGISTICS: "logistics",
+  /** staff export/deletion request workflow admin dashboard (H54) */
+  EXPORTS: "exports",
   /** per-user channel, suffixed with the user id: `user:42` (H31, H38) */
   USER_PREFIX: "user:",
 } as const;
@@ -49,6 +51,7 @@ export const EVENTS = {
   USER_QUEUE_CALLED: "user.queue.called", // H29/H38 "go wait at room X"
   USER_QUEUE_PRECALL: "user.queue.precall", // H38 pre-aviso
   USER_NOTIFICATION: "user.notification", // generic in-app inbox push
+  EXPORT_REQUEST_CHANGED: "exports.request.status_changed", // H54
 } as const;
 
 export type EventName = (typeof EVENTS)[keyof typeof EVENTS];
