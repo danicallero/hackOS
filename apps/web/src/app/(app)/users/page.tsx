@@ -1,6 +1,7 @@
 "use client";
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { EVENTS } from "@hackos/shared/events";
 import { SlidersHorizontalIcon, UsersIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -27,6 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import type { Tone } from "@/lib/tones";
 import type { DerivedRole, UserList, UserListItem } from "@/lib/types";
@@ -262,6 +264,11 @@ export default function UsersPage() {
     }
   }, [visibleColumns, columnsHydrated]);
 
+  // Soft, in-place refresh instead of a hard reload when another admin
+  // creates/edits a user elsewhere.
+  const liveRefresh = useAutoRefresh("/api/events/stream", [EVENTS.DATA_CHANGED]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -287,7 +294,7 @@ export default function UsersPage() {
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [q]);
+  }, [q, liveRefresh]);
 
   const filteredUsers = useMemo(
     () =>

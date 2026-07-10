@@ -6,6 +6,7 @@
 // is no admin GET — we list via the public search endpoint — and mutate via the
 // guarded POST/DELETE /api/universities (capability INTOLERANCES_MANAGE).
 
+import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { GraduationCapIcon, MoreHorizontalIcon, PlusIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -32,6 +33,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 
 interface University {
@@ -70,11 +72,16 @@ export function UniversitiesManager() {
     }
   }, [search]);
 
+  // Soft, in-place refresh instead of a hard reload when another admin
+  // edits the universities library elsewhere.
+  const liveRefresh = useAutoRefresh("/api/events/stream", [EVENTS.DATA_CHANGED]);
+
   // Debounce so the server search doesn't fire on every keystroke.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
     const handle = setTimeout(() => void load(), 250);
     return () => clearTimeout(handle);
-  }, [load]);
+  }, [load, liveRefresh]);
 
   const formOpen = editing !== undefined;
   useEffect(() => {

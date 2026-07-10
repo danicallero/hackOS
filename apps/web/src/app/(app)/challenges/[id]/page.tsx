@@ -1,6 +1,7 @@
 "use client";
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { EVENTS } from "@hackos/shared/events";
 import type { I18nText, Question } from "@hackos/shared/questions";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowLeftIcon, TrophyIcon } from "lucide-react";
@@ -28,6 +29,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { listDevpostPrizes } from "@/lib/projects";
@@ -100,7 +102,9 @@ export default function ChallengeDetailPage() {
   const [errorMsg, setErrorMsg] = useState("");
 
   const load = useCallback(async () => {
-    setStatus("loading");
+    // A background live-refresh shouldn't flash the whole editor away —
+    // only the very first load (before there's anything to show) should.
+    setStatus((s) => (s === "ready" ? s : "loading"));
     try {
       const data = await api.get<Challenge>(`/api/challenges/${id}`);
       setChallenge(data);
@@ -117,10 +121,15 @@ export default function ChallengeDetailPage() {
     }
   }, [canMapPrizes, id]);
 
+  // Soft, in-place refresh instead of a hard reload when another admin edits
+  // this challenge elsewhere.
+  const liveRefresh = useAutoRefresh("/api/events/stream", [EVENTS.DATA_CHANGED]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
     if (Number.isFinite(id)) void load();
     else setStatus("error");
-  }, [id, load]);
+  }, [id, load, liveRefresh]);
 
   if (status === "loading") {
     return (

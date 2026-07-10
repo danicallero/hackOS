@@ -1,5 +1,6 @@
 "use client";
 
+import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { KeyRoundIcon, LayersIcon, PlusIcon, ShieldCheckIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -26,6 +27,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import type { PermissionGroupDetail, PermissionGroupSummary } from "@/lib/types";
 import { CAPABILITY_OPTIONS, capabilitiesByDomain, prettifyCapability } from "./helpers";
@@ -64,9 +66,14 @@ export default function PermissionsPage() {
     }
   }, []);
 
+  // Soft, in-place refresh instead of a hard reload when another admin
+  // creates/edits a permission group elsewhere.
+  const liveRefresh = useAutoRefresh("/api/events/stream", [EVENTS.DATA_CHANGED]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
     load();
-  }, [load]);
+  }, [load, liveRefresh]);
 
   async function onCreate(values: CreateValues) {
     try {

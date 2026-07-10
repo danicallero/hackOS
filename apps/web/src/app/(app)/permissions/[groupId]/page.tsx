@@ -1,5 +1,6 @@
 "use client";
 
+import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   ArrowLeftIcon,
@@ -11,7 +12,7 @@ import {
   UsersIcon,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -39,6 +40,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import type {
   PermissionGroupDetail,
@@ -121,6 +123,23 @@ export default function PermissionGroupDetailPage() {
   useEffect(() => {
     if (Number.isFinite(groupId)) load();
   }, [groupId, load]);
+
+  // Soft, in-place refresh instead of a hard reload when another admin edits
+  // this group elsewhere — but never while there's an unsaved capability or
+  // details edit in progress, since `load` -> `applyGroup` would silently
+  // discard it (reset `caps` and the details form to the server's values).
+  const dirtyRef = useRef(false);
+  const liveRefresh = useAutoRefresh("/api/events/stream", [EVENTS.DATA_CHANGED]);
+  const isFirstLiveRefresh = useRef(true);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
+  useEffect(() => {
+    if (isFirstLiveRefresh.current) {
+      isFirstLiveRefresh.current = false;
+      return;
+    }
+    if (dirtyRef.current) return;
+    void load();
+  }, [liveRefresh, load]);
 
   async function onSaveDetails(values: DetailsValues) {
     try {
@@ -218,6 +237,14 @@ export default function PermissionGroupDetailPage() {
     [allGroups, group?.includes, groupId],
   );
   const groupName = (id: number) => allGroups.find((g) => g.id === id)?.name ?? `Group #${id}`;
+
+  // Kept current every render so the live-refresh effect above always reads
+  // the latest dirty state without needing it in its dependency array.
+  dirtyRef.current =
+    (group
+      ? caps.length !== group.capabilities.length ||
+        caps.some((c) => !group.capabilities.includes(c))
+      : false) || form.formState.isDirty;
 
   if (loading && !group) {
     return (

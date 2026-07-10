@@ -3,6 +3,7 @@
 // Project detail with hot-edit membership and challenge assignment (H20-H21).
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { EVENTS } from "@hackos/shared/events";
 import {
   ArrowLeftIcon,
   ExternalLinkIcon,
@@ -17,7 +18,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
@@ -36,6 +37,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import {
   addRepoChallenge,
@@ -84,15 +86,20 @@ export default function ProjectDetailPage() {
   const [challenges, setChallenges] = useState<ChallengeOption[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // A background live-refresh shouldn't flash the whole page away — only
+  // the very first load (before there's anything to show) should.
+  const hasLoadedRef = useRef(false);
+
   const load = useCallback(async () => {
     if (!canRead || !Number.isFinite(id)) {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!hasLoadedRef.current) setLoading(true);
     try {
       const repoRes = await getRepoById(id);
       setRepo(toProjectRepo(repoRes));
+      hasLoadedRef.current = true;
 
       if (canEdit || canImport) {
         const [usersResult, challengeResult] = await Promise.allSettled([
@@ -124,9 +131,14 @@ export default function ProjectDetailPage() {
     }
   }, [canEdit, canImport, canRead, id]);
 
+  // Soft, in-place refresh instead of a hard reload when this project
+  // changes elsewhere.
+  const liveRefresh = useAutoRefresh("/api/events/stream", [EVENTS.DATA_CHANGED]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, liveRefresh]);
 
   const challengeCount = repo?.challenges.length ?? 0;
   const queueChallengeIds = useMemo(

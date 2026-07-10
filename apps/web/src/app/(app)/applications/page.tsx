@@ -7,6 +7,7 @@
 // /api/applications with an empty template — questions are added in detail.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ClipboardListIcon, PlusIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -37,6 +38,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { useCan } from "@/lib/session";
 import {
@@ -91,9 +93,14 @@ export default function ApplicationsPage() {
     }
   }, []);
 
+  // Soft, in-place refresh instead of a hard reload when another admin
+  // creates/edits a form elsewhere.
+  const liveRefresh = useAutoRefresh("/api/events/stream", [EVENTS.DATA_CHANGED]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
     load();
-  }, [load]);
+  }, [load, liveRefresh]);
 
   async function onCreate(values: CreateValues) {
     const capacityNum = values.capacity.trim() ? Number(values.capacity) : null;

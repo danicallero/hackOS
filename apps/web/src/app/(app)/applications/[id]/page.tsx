@@ -13,6 +13,7 @@
 // the judging questionSchema. i18n labels carry {en,es,gl} (plan/07 §2).
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   ArrowDownIcon,
@@ -80,6 +81,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { pickText } from "@/lib/i18n";
 import { useCan, useMe } from "@/lib/session";
@@ -144,18 +146,24 @@ export default function ApplicationDetailPage() {
     }
   }, [id, canManage]);
 
+  // Soft, in-place refresh instead of a hard reload when someone else edits
+  // this form, its questions, or a response changes its stats elsewhere.
+  const liveRefresh = useAutoRefresh("/api/events/stream", [EVENTS.DATA_CHANGED]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
     if (Number.isFinite(id)) void loadForm();
     else setState("error");
-  }, [id, loadForm]);
+  }, [id, loadForm, liveRefresh]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
     if (!canStats || !Number.isFinite(id)) return;
     api
       .get<ApplicationStats>(`/api/applications/${id}/stats`)
       .then(setStats)
       .catch(() => setStats(null));
-  }, [id, canStats]);
+  }, [id, canStats, liveRefresh]);
 
   if (state === "loading") {
     return (
@@ -1006,11 +1014,16 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
     }
   }, [id, statusFilter, search]);
 
+  // Soft, in-place refresh instead of a hard reload when a response changes
+  // (submitted, reviewed, decided) elsewhere.
+  const liveRefresh = useAutoRefresh("/api/events/stream", [EVENTS.DATA_CHANGED]);
+
   // Debounce so server-side search/filter doesn't fire on every keystroke.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
     const handle = setTimeout(() => void load(), 250);
     return () => clearTimeout(handle);
-  }, [load]);
+  }, [load, liveRefresh]);
 
   // Deep-link: `?response=<id>` (used by the profile Application tab) opens that
   // specific response's review modal directly — the same view as clicking a row

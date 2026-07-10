@@ -12,10 +12,11 @@
 //   POST /api/me/responses/:responseId/confirm   → confirm my place (H15)
 //   POST /api/me/responses/:responseId/decline   → decline my place (H15)
 
+import { EVENTS } from "@hackos/shared/events";
 import { CheckCircle2Icon, ClipboardListIcon, ShieldAlertIcon, XCircleIcon } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
@@ -27,6 +28,7 @@ import { SubmitButton } from "@/components/common/submit-button";
 import { TemplateFieldControl } from "@/components/common/template-field-control";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { useMe } from "@/lib/session";
 import type { Language } from "@/lib/types";
@@ -69,8 +71,12 @@ export default function MyApplicationDetailPage() {
   const [releaseOpen, setReleaseOpen] = useState(false);
   const [privacyNotice, setPrivacyNotice] = useState<string | null>(null);
 
+  // A background live-refresh shouldn't flash the whole page away — only
+  // the very first load (before there's anything to show) should.
+  const hasLoadedRef = useRef(false);
+
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!hasLoadedRef.current) setLoading(true);
     // The public form (template) is only served while the window is open; a
     // closed form 404s but the applicant may still have a response to view. The
     // intolerance dictionary feeds the dietary field for participant/mentor forms.
@@ -108,12 +114,31 @@ export default function MyApplicationDetailPage() {
     ) {
       toast.error(respRes.reason.message);
     }
+    hasLoadedRef.current = true;
     setLoading(false);
   }, [id, me]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  // Soft, in-place refresh instead of a hard reload when staff decides on
+  // this application elsewhere — but never while the answers are editable,
+  // since `load` reseeds `values` from the server and would silently
+  // discard an in-progress draft (it's only saved client-side until
+  // "Save draft"/submit).
+  const editableRef = useRef(false);
+  const liveRefresh = useAutoRefresh("/api/events/stream", [EVENTS.DATA_CHANGED]);
+  const isFirstLiveRefresh = useRef(true);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
+  useEffect(() => {
+    if (isFirstLiveRefresh.current) {
+      isFirstLiveRefresh.current = false;
+      return;
+    }
+    if (editableRef.current) return;
+    void load();
+  }, [liveRefresh, load]);
 
   // Mirror the API's enrichment so shirt-size + dietary fields render in the form
   // (participant/mentor) rather than being pulled silently from the profile (H12).
@@ -122,6 +147,7 @@ export default function MyApplicationDetailPage() {
   // A form is only present here when its window is open, so a draft/new response
   // is editable exactly when we have the template and nothing past 'draft'.
   const editable = !!form && (!response || status === "draft");
+  editableRef.current = editable;
   // Accepted + decision sent (the API only unmasks to 'accepted' once sent) means
   // the applicant now holds a confirmation window (H15).
   const canConfirm = status === "accepted";

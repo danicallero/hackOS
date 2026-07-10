@@ -8,9 +8,10 @@
 //   GET /api/me/applications      → { responses } (my responses, masked status)
 //   GET /api/public/applications  → { applications } (open forms w/ template)
 
+import { EVENTS } from "@hackos/shared/events";
 import { ClipboardListIcon, FilePlus2Icon, InboxIcon } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
@@ -18,6 +19,7 @@ import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import {
   fmtDateTime,
@@ -32,8 +34,12 @@ export default function MyApplicationsPage() {
   const [forms, setForms] = useState<PublicForm[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // A background live-refresh shouldn't flash the whole page away — only
+  // the very first load (before there's anything to show) should.
+  const hasLoadedRef = useRef(false);
+
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!hasLoadedRef.current) setLoading(true);
     try {
       const [mine, open] = await Promise.all([
         api.get<{ responses: MyResponseSummary[] }>("/api/me/applications"),
@@ -41,6 +47,7 @@ export default function MyApplicationsPage() {
       ]);
       setResponses(mine.responses);
       setForms(open.applications);
+      hasLoadedRef.current = true;
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Could not load your applications.");
     } finally {
@@ -48,9 +55,14 @@ export default function MyApplicationsPage() {
     }
   }, []);
 
+  // Soft, in-place refresh instead of a hard reload when staff decides on
+  // one of your applications elsewhere.
+  const liveRefresh = useAutoRefresh("/api/events/stream", [EVENTS.DATA_CHANGED]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
     load();
-  }, [load]);
+  }, [load, liveRefresh]);
 
   // Open forms I haven't started a response for yet.
   const applied = new Set(responses.map((r) => r.application_id));

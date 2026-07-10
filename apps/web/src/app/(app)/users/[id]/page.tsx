@@ -1,6 +1,7 @@
 "use client";
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   ArrowLeftIcon,
@@ -57,6 +58,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { pickText } from "@/lib/i18n";
 import { logisticsApi, type TicketQrPayload } from "@/lib/logistics";
@@ -119,10 +121,15 @@ export default function UserProfilePage() {
     }
   }, [userId]);
 
+  // Soft, in-place refresh instead of a hard reload when this user's profile
+  // changes elsewhere.
+  const liveRefresh = useAutoRefresh("/api/events/stream", [EVENTS.DATA_CHANGED]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
     if (Number.isFinite(userId)) void load();
     else setStatus("error");
-  }, [userId, load]);
+  }, [userId, load, liveRefresh]);
 
   useEffect(() => {
     api

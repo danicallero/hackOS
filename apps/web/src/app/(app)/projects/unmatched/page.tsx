@@ -3,6 +3,7 @@
 // Resolve unmatched Devpost participants and map prizes to challenges (H17).
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { EVENTS } from "@hackos/shared/events";
 import {
   ArrowLeftIcon,
   LinkIcon,
@@ -29,6 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import {
   linkParticipant,
@@ -102,9 +104,14 @@ export default function UnmatchedProjectsPage() {
     }
   }, [userQuery]);
 
+  // Soft, in-place refresh instead of a hard reload when a project/repo
+  // changes elsewhere.
+  const liveRefresh = useAutoRefresh("/api/events/stream", [EVENTS.DATA_CHANGED]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, liveRefresh]);
 
   useEffect(() => {
     if (!canImport) return;

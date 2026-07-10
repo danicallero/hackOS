@@ -6,6 +6,7 @@
 // page is the full, unscoped query surface referenced there.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { EVENTS } from "@hackos/shared/events";
 import { LockIcon, ScrollTextIcon } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -18,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError } from "@/lib/api";
 import { fromDatetimeLocal } from "@/lib/datetime";
 import { type AuditRow, notificationsApi } from "@/lib/notifications";
@@ -70,6 +72,12 @@ export default function AuditPage() {
     return () => clearTimeout(handle);
   }, [filters]);
 
+  // Soft, in-place refresh instead of a hard reload — audit entries are
+  // created by every sensitive mutation in the app (H53), so this stays on
+  // the global stream.
+  const liveRefresh = useAutoRefresh("/api/events/stream", [EVENTS.DATA_CHANGED]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
     if (!canRead) {
       setLoading(false);
@@ -105,7 +113,7 @@ export default function AuditPage() {
     return () => {
       cancelled = true;
     };
-  }, [canRead, debounced, offset]);
+  }, [canRead, debounced, offset, liveRefresh]);
 
   if (!canRead) {
     return (
