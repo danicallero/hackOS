@@ -6,6 +6,7 @@
 // admin GET — we list via the public endpoint — and mutate via the guarded
 // POST/PATCH/DELETE /api/food-intolerances (capability INTOLERANCES_MANAGE).
 
+import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { MoreHorizontalIcon, PlusIcon, UtensilsCrossedIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -32,6 +33,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { pickText } from "@/lib/i18n";
 import type { Intolerance } from "@/lib/types";
@@ -101,9 +103,14 @@ export function IntolerancesManager() {
     }
   }, []);
 
+  // Soft, in-place refresh instead of a hard reload when another admin
+  // edits the intolerances library elsewhere.
+  const liveRefresh = useAutoRefresh("/api/events/stream", [EVENTS.DATA_CHANGED]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
     load();
-  }, [load]);
+  }, [load, liveRefresh]);
 
   // Prime the form whenever the create/edit modal opens.
   const formOpen = editing !== undefined;

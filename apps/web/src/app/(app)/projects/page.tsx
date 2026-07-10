@@ -4,6 +4,7 @@
 // size, mapped challenges / prizes and a matched-vs-unmatched indicator.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { EVENTS } from "@hackos/shared/events";
 import { FolderGitIcon, LockIcon, UploadIcon, UsersIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -13,6 +14,7 @@ import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError } from "@/lib/api";
 import { listRepos } from "@/lib/projects";
 import { useSessionContext } from "@/lib/session";
@@ -118,9 +120,14 @@ export default function ProjectsPage() {
     }
   }, [canView]);
 
+  // Soft, in-place refresh instead of a hard reload when a project changes
+  // elsewhere.
+  const liveRefresh = useAutoRefresh("/api/events/stream", [EVENTS.DATA_CHANGED]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, liveRefresh]);
 
   if (!canView) {
     return (

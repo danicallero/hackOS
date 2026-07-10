@@ -1,6 +1,7 @@
 "use client";
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { EVENTS } from "@hackos/shared/events";
 import {
   CalendarDaysIcon,
   EyeIcon,
@@ -31,6 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError } from "@/lib/api";
 import { formatScheduledDateTime } from "@/lib/datetime";
 import { logisticsApi, type PublicScheduleItem, type ScheduleInput } from "@/lib/logistics";
@@ -104,10 +106,15 @@ export default function SchedulePage() {
     }
   }, []);
 
+  // Soft, in-place refresh instead of a hard reload when another admin
+  // edits the schedule elsewhere (H47).
+  const liveRefresh = useAutoRefresh("/api/content/stream", [EVENTS.CONTENT_SCHEDULE_CHANGED]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
     if (canManage) void load();
     else setLoading(false);
-  }, [canManage, load]);
+  }, [canManage, load, liveRefresh]);
 
   async function setVisibility(visibility: "shown" | "hidden") {
     const ids = [...selectedIds].map(Number);

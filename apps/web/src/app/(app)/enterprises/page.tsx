@@ -6,6 +6,7 @@
 // acceptance. Row click drills into the edit page.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Building2Icon, EyeIcon, EyeOffIcon, LockIcon, PlusIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -40,6 +41,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { fromDatetimeLocal } from "@/lib/datetime";
 import { useCan, useMe } from "@/lib/session";
@@ -186,6 +188,11 @@ export default function EnterprisesPage() {
     [selectedIds, load],
   );
 
+  // Soft, in-place refresh instead of a hard reload when another admin
+  // creates/edits an enterprise elsewhere.
+  const liveRefresh = useAutoRefresh("/api/events/stream", [EVENTS.DATA_CHANGED]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
     if (canManage) {
       void load();
@@ -210,7 +217,7 @@ export default function EnterprisesPage() {
     return () => {
       alive = false;
     };
-  }, [canManage, load, me?.role, router]);
+  }, [canManage, load, me?.role, router, liveRefresh]);
 
   if (!canManage && me?.role === "sponsor" && loading) {
     return (

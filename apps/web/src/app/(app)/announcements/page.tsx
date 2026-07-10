@@ -5,6 +5,7 @@
 // consumes the CRUD API in apps/api/src/modules/notifications/routes/announcements.ts.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { EVENTS } from "@hackos/shared/events";
 import { LockIcon, MegaphoneIcon, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -26,6 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError } from "@/lib/api";
 import { formatScheduledDateTime, fromDatetimeLocal } from "@/lib/datetime";
 import { type Announcement, type AnnouncementInput, notificationsApi } from "@/lib/notifications";
@@ -98,10 +100,15 @@ export default function AnnouncementsPage() {
     }
   }, []);
 
+  // Soft, in-place refresh instead of a hard reload when another admin
+  // publishes/edits/deletes an announcement elsewhere (H50).
+  const liveRefresh = useAutoRefresh("/api/content/stream", [EVENTS.CONTENT_ANNOUNCEMENT]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
     if (canManage) void load();
     else setLoading(false);
-  }, [canManage, load]);
+  }, [canManage, load, liveRefresh]);
 
   async function remove(item: Announcement) {
     setBusy(true);

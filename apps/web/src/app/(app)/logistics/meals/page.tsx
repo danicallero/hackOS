@@ -1,6 +1,7 @@
 "use client";
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { EVENTS } from "@hackos/shared/events";
 import { LockIcon, SoupIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -12,6 +13,7 @@ import { ActivityScannerCard } from "@/components/logistics/activity-scanner";
 import { errorMessage } from "@/components/logistics/ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { api } from "@/lib/api";
 import { logisticsApi, type ScannableActivity } from "@/lib/logistics";
 import { useCan } from "@/lib/session";
@@ -61,7 +63,12 @@ function EntitlementPanel() {
       .catch(() => setMeals([]));
   }, []);
 
-  useEffect(() => load(), [load]);
+  // Soft, in-place refresh instead of a hard reload when meal scans/grants
+  // happen elsewhere.
+  const liveRefresh = useAutoRefresh("/api/logistics/stream", [EVENTS.LOGISTICS_MEAL_SCAN_BATCH]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
+  useEffect(() => load(), [load, liveRefresh]);
 
   const selected = [...selectedIds].map(Number);
 

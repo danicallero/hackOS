@@ -3,8 +3,9 @@
 // Queue admin surface for rooms and assignments (H46).
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { EVENTS } from "@hackos/shared/events";
 import { Building2Icon, LockIcon, PlusIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
@@ -22,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import {
   assignRoomChallenge,
@@ -136,6 +138,28 @@ export default function QueueRoomsPage() {
     if (!selectedRoomId) return;
     void loadRoomDetails(selectedRoomId);
   }, [loadRoomDetails, selectedRoomId]);
+
+  // Soft, in-place refresh instead of a hard reload when another admin
+  // edits rooms/assignments elsewhere — but never while the room editor
+  // modal is open, since `load` recomputing `selectedRoom` would reseed
+  // `roomDraft` (name/slug/location) and discard an in-progress edit.
+  const editingRef = useRef(false);
+  editingRef.current = modalMode === "edit";
+  const liveRefresh = useAutoRefresh("/api/queue/stream", [
+    EVENTS.QUEUE_ENTRY_CHANGED,
+    EVENTS.QUEUE_ROOM_CHANGED,
+  ]);
+  const isFirstLiveRefresh = useRef(true);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
+  useEffect(() => {
+    if (isFirstLiveRefresh.current) {
+      isFirstLiveRefresh.current = false;
+      return;
+    }
+    if (editingRef.current) return;
+    void load();
+    if (selectedRoomId) void loadRoomDetails(selectedRoomId);
+  }, [liveRefresh, load, loadRoomDetails, selectedRoomId]);
 
   useEffect(() => {
     if (!selectedRoom) return;
