@@ -4,6 +4,7 @@ import { audit } from "../../lib/audit.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
 import { loadPersonCard } from "./cards.js";
+import { enqueueWalletSync } from "./wallet-sync.js";
 
 /** Postgres unique_violation — thrown by the unique `users.badge_id` index. */
 const PG_UNIQUE_VIOLATION = "23505";
@@ -146,6 +147,7 @@ export async function rotateBadge(
   actorId: number,
   input: { userId?: number; currentBadgeId?: string; newBadgeId: string; reason: string },
 ) {
+  let voidedPassIds: number[] = [];
   const result = await withTransaction(async (client) => {
     let userId = input.userId ?? null;
     if (userId == null) {
@@ -192,13 +194,15 @@ export async function rotateBadge(
       throw err;
     }
 
-    // H28 integration point: badge passes are voided on rotation.
+    // H28: badge passes are voided on rotation, both Apple and Google (not
+    // filtered by platform), and pushed to their devices after commit below.
     const voided = await client.query(
       `UPDATE wallet_passes
           SET status = 'voided', last_updated_at = now(), update_tag = extract(epoch from now())::text
         WHERE user_id = $1 AND purpose = 'badge' AND status <> 'voided' RETURNING id`,
       [userId],
     );
+    voidedPassIds = voided.rows.map((r: { id: number }) => r.id);
 
     await audit(client, {
       actorId,
@@ -226,5 +230,6 @@ export async function rotateBadge(
       status: "voided",
     },
   );
+  await enqueueWalletSync(voidedPassIds);
   return result;
 }

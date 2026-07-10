@@ -20,6 +20,7 @@ import {
   grantEntitlement,
   revokeEntitlement,
 } from "./activities.js";
+import { buildGoogleSaveUrl } from "./google-wallet.js";
 import { enqueueMealScanBatch } from "./offline-meals.js";
 import { allHours, occupancyEstimate, presenceScan, userHours } from "./presence.js";
 import {
@@ -409,6 +410,14 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
 
   typed.post("/api/wallet/apple/v1/log", { schema: { body: appleLogBody } }, async (req) =>
     appleLog(req.body.logs),
+  );
+
+  // ── H28 Google Wallet ────────────────────────────────────────────────────
+
+  typed.get(
+    "/api/me/wallet/google/:purpose",
+    { schema: { params: walletPurposeParam } },
+    async (req) => ({ saveUrl: await buildGoogleSaveUrl(actor(req.userId), req.params.purpose) }),
   );
 }
 

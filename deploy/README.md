@@ -120,6 +120,64 @@ sensible defaults, so you can usually skip them entirely.
 
 ---
 
+## Wallet passes (H28)
+
+Apple Wallet and Google Wallet are both **optional** — omitting either just
+makes that platform's `/api/me/wallet/...` endpoint return a clear `503
+service_unavailable` instead of blocking deploy or (worse) serving an
+invalid pass. Configuring one but not all of its required vars fails loudly
+at boot instead, so a half-finished setup can't ship by accident.
+
+All values below are **base64-encoded PEM/key content**, not file paths —
+like every other secret in this app, they're single-line values that live
+only in Dokploy's Project (shared) env store (or your gitignored
+`.env.<instance>` file), never baked into the image or committed to the
+repo.
+
+| Variable | Notes |
+|---|---|
+| `APPLE_PASS_TYPE_IDENTIFIER` | Your Pass Type ID, e.g. `pass.org.example.hackos`. |
+| `APPLE_TEAM_IDENTIFIER` | Apple Developer Team ID. |
+| `APPLE_PASS_ORGANIZATION` | Display name on the pass. Defaults to `hackOS`. |
+| `APPLE_PASS_CERTIFICATE_PEM` 🔒 | base64 of the Pass Type ID certificate (PEM). |
+| `APPLE_PASS_KEY_PEM` 🔒 | base64 of that certificate's private key (PEM). |
+| `APPLE_PASS_KEY_PASSPHRASE` 🔒 | Only if the key is encrypted. |
+| `APPLE_WWDR_CERTIFICATE_PEM` 🔒 | base64 of Apple's WWDR intermediate certificate (PEM). |
+| `APPLE_APNS_ENVIRONMENT` | `production` (default) or `sandbox` — which APNs gateway pass-update pushes go to. |
+| `GOOGLE_WALLET_ISSUER_ID` | Your Google Wallet issuer account ID. |
+| `GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL` | Service account with the Wallet Object Issuer role, scoped to that issuer only. |
+| `GOOGLE_WALLET_PRIVATE_KEY_PEM` 🔒 | base64 of that service account's private key (PEM), from its JSON key file. |
+
+**Getting the Apple values**: in Apple Developer → Certificates, Identifiers
+& Profiles, create a Pass Type ID and its certificate, download it, and
+export the certificate + private key as PEM (e.g. via Keychain Access →
+Export, or `openssl pkcs12 -in cert.p12 -nocerts -out key.pem -nodes` /
+`-clcerts -nokeys -out cert.pem`). Download the WWDR intermediate certificate
+from Apple's PKI page. Then for each file:
+
+```sh
+base64 -i cert.pem | tr -d '\n'   # → APPLE_PASS_CERTIFICATE_PEM
+```
+
+**Getting the Google values**: in Google Cloud IAM, create a service
+account scoped to Wallet Object Issuer for your issuer only (not a
+project-wide role), download its JSON key, then:
+
+```sh
+jq -r .client_email key.json                                # → GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL
+jq -r .private_key key.json | base64 | tr -d '\n'            # → GOOGLE_WALLET_PRIVATE_KEY_PEM
+```
+
+**Never commit these files or their base64 blobs.** If a key leaks, revoke
+it immediately at the source — in Apple Developer (revoke the certificate)
+or Google Cloud IAM (delete the service account key) — rotating
+`BETTER_AUTH_SECRET` does nothing for these, they're independent
+credentials. As with every other secret, give each instance its own wallet
+credentials where your Apple/Google accounts allow it, so a leak on one
+event doesn't compromise another (see [Multiple instances](#multiple-instances)).
+
+---
+
 ## Mode A — per-service on Dokploy (recommended)
 
 ### 1. Create the private network (once per instance)
