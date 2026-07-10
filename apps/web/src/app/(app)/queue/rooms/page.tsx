@@ -272,19 +272,44 @@ export default function QueueRoomsPage() {
         }
         size="xl"
         footer={
-          <div className="flex flex-wrap gap-2">
-            {modalMode === "create" ? (
+          modalMode === "create" ? (
+            <>
+              <Button variant="outline" onClick={closeModal}>
+                Cancel
+              </Button>
               <Button disabled={saving === "create"} onClick={() => void saveCreate()}>
                 Create room
               </Button>
-            ) : canAdmin ? (
-              <>
+            </>
+          ) : canAdmin ? (
+            <div className="flex w-full flex-wrap items-center justify-between gap-2">
+              <Button
+                variant="destructive"
+                disabled={saving === `room-${selectedRoom?.id}`}
+                onClick={async () => {
+                  if (!selectedRoom) return;
+                  setSaving(`room-${selectedRoom.id}`);
+                  try {
+                    await deleteRoom(selectedRoom.id);
+                    toast.success("Room deleted.");
+                    closeModal();
+                    await load();
+                  } catch (err) {
+                    toast.error(err instanceof ApiError ? err.message : "Could not delete room.");
+                  } finally {
+                    setSaving(null);
+                  }
+                }}
+              >
+                Delete room
+              </Button>
+              <div className="flex flex-wrap gap-2">
                 <Button
                   variant="outline"
                   disabled={saving === `room-${selectedRoom?.id}`}
-                  onClick={() => void load()}
+                  onClick={closeModal}
                 >
-                  Reset
+                  Cancel
                 </Button>
                 <Button
                   disabled={saving === `room-${selectedRoom?.id}`}
@@ -292,13 +317,13 @@ export default function QueueRoomsPage() {
                 >
                   Save room
                 </Button>
-              </>
-            ) : (
-              <Button variant="outline" onClick={closeModal}>
-                Close
-              </Button>
-            )}
-          </div>
+              </div>
+            </div>
+          ) : (
+            <Button variant="outline" onClick={closeModal}>
+              Close
+            </Button>
+          )
         }
       >
         {modalMode === "create" && (
@@ -386,26 +411,6 @@ export default function QueueRoomsPage() {
                 canSetChallenge={canAdmin}
               />
             </SectionCard>
-            {canAdmin && (
-              <div className="flex flex-wrap justify-end gap-2">
-                <Button
-                  variant="destructive"
-                  disabled={saving === `room-${selectedRoom.id}`}
-                  onClick={async () => {
-                    try {
-                      await deleteRoom(selectedRoom.id);
-                      toast.success("Room deleted.");
-                      closeModal();
-                      await load();
-                    } catch (err) {
-                      toast.error(err instanceof ApiError ? err.message : "Could not delete room.");
-                    }
-                  }}
-                >
-                  Delete room
-                </Button>
-              </div>
-            )}
           </div>
         )}
       </Modal>
