@@ -39,12 +39,16 @@ function GlobalDataRefresh() {
  * - Toaster: sonner toasts for success/business-error feedback.
  */
 export function Providers({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  // The kiosk TV (H41) is never touched by anyone, so a banner that only
+  // dismisses on click would sit there forever, permanently covering rooms.
+  const isKiosk = pathname?.startsWith("/tv");
   return (
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
       <SessionProvider>
         <GlobalDataRefresh />
         <TooltipProvider delayDuration={200}>{children}</TooltipProvider>
-        <CookieNotice />
+        {!isKiosk && <CookieNotice />}
         <Toaster position="bottom-right" />
       </SessionProvider>
     </ThemeProvider>

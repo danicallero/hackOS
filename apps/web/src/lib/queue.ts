@@ -76,7 +76,7 @@ export interface RoomView {
   room: Room;
   state: RoomQueueState | null;
   /** The single challenge this room judges (read-only in the panel). */
-  challenge: { id: number; title: string } | null;
+  challenge: { id: number; title: string; enterprise_name: string } | null;
   active: QueueEntry | null;
   called: QueueEntry[];
   next: QueueEntry[];
