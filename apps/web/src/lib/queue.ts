@@ -155,6 +155,14 @@ export interface MyQueueEntry {
 // ── reads ────────────────────────────────────────────────────────────────
 export const getRoomView = (roomId: number) => api.get<RoomView>(`/api/queue/rooms/${roomId}/view`);
 export const getAllRoomViews = () => api.get<RoomView[]>("/api/tv/rooms");
+export type TvModeName = "rooms" | "schedule" | "sponsors" | "announcement" | "wifi" | "timer";
+export interface TvMode {
+  mode: TvModeName;
+  payload: unknown;
+}
+export const getTvMode = () => api.get<TvMode>("/api/tv/mode");
+export const setTvMode = (mode: TvModeName, payload: unknown = null) =>
+  api.patch<TvMode>("/api/tv/mode", { mode, payload });
 export const getChallengeProgress = (challengeId: number) =>
   api.get<ChallengeProgress>(`/api/queue/challenges/${challengeId}/progress`);
 export const getRoomPace = (roomId: number) => api.get<RoomPace>(`/api/queue/rooms/${roomId}/pace`);

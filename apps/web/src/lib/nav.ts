@@ -23,6 +23,7 @@ import {
   SoupIcon,
   TicketIcon,
   TrophyIcon,
+  TvIcon,
   UserIcon,
   UsersIcon,
   WalletCardsIcon,
@@ -190,6 +191,12 @@ export const NAV: NavSection[] = [
         href: "/settings/event",
         icon: SettingsIcon,
         capability: CAPABILITIES.SCHEDULE_MANAGE,
+      },
+      {
+        title: "TV control",
+        href: "/tv/control",
+        icon: TvIcon,
+        capability: CAPABILITIES.TV_CONTROL,
       },
       {
         title: "Rooms",
