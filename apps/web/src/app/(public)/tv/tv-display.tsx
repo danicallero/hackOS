@@ -17,7 +17,7 @@ import type {
   PublicSponsor,
 } from "@/components/public/public-types";
 import { EventTimer } from "@/components/public/timer";
-import { useEventSource } from "@/hooks/use-event-source";
+import { type SseEnvelope, useEventSource } from "@/hooks/use-event-source";
 import { api } from "@/lib/api";
 import { logisticsApi, type PublicScheduleItem } from "@/lib/logistics";
 import { getAllRoomViews, getTvMode, type RoomView, type TvMode } from "@/lib/queue";
@@ -41,7 +41,10 @@ function textPayload(payload: unknown, key: string): string | null {
 
 function RoomCard({ room }: { room: RoomView }) {
   const active = room.active ?? null;
-  const waiting = room.called.slice(active ? 0 : 1).concat(room.next).slice(0, 3);
+  const waiting = room.called
+    .slice(active ? 0 : 1)
+    .concat(room.next)
+    .slice(0, 3);
   const activeLabel = active
     ? "Presenting now"
     : room.called[0]
@@ -61,9 +64,7 @@ function RoomCard({ room }: { room: RoomView }) {
       </div>
       <div className="mt-8 rounded-xl bg-muted/60 p-4">
         <p className="text-muted-foreground text-base">{activeLabel}</p>
-        <p className="mt-1 truncate text-4xl font-semibold">
-          {activeEntry?.repo_name ?? "—"}
-        </p>
+        <p className="mt-1 truncate text-4xl font-semibold">{activeEntry?.repo_name ?? "—"}</p>
       </div>
       <div className="mt-6 border-t pt-4">
         <p className="text-muted-foreground text-base">Up next</p>
@@ -297,6 +298,11 @@ export function TvDisplay() {
   const [data, setData] = useState<TvData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const requestId = useRef(0);
+
+  // The initial snapshot is the only time the display needs every resource.
+  // Subsequent SSE updates are intentionally scoped below so React keeps the
+  // active view and its unchanged props in place instead of repainting it from
+  // a freshly replaced page-wide data object.
   const load = useCallback(async () => {
     const currentRequest = ++requestId.current;
     try {
@@ -329,17 +335,70 @@ export function TvDisplay() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const refreshMode = useCallback(async () => {
+    try {
+      const mode = await getTvMode();
+      setData((current) => (current ? { ...current, mode } : current));
+      setError(null);
+    } catch {
+      setError("The display is reconnecting to the event service.");
+    }
+  }, []);
+
+  const refreshRooms = useCallback(async () => {
+    try {
+      const rooms = await getAllRoomViews();
+      setData((current) => (current ? { ...current, rooms } : current));
+      setError(null);
+    } catch {
+      setError("The display is reconnecting to the event service.");
+    }
+  }, []);
+
+  const refreshSchedule = useCallback(async () => {
+    try {
+      const schedule = await logisticsApi.publicSchedule();
+      setData((current) => (current ? { ...current, schedule: schedule.items } : current));
+      setError(null);
+    } catch {
+      setError("The display is reconnecting to the event service.");
+    }
+  }, []);
+
+  const refreshAnnouncements = useCallback(async () => {
+    try {
+      const announcements = await api.get<{ items: PublicAnnouncement[] }>(
+        "/api/announcements/public",
+      );
+      setData((current) =>
+        current ? { ...current, announcements: announcements.items } : current,
+      );
+      setError(null);
+    } catch {
+      setError("The display is reconnecting to the event service.");
+    }
+  }, []);
+
+  const refreshContent = useCallback(
+    (event: SseEnvelope) => {
+      if (event.type === EVENTS.CONTENT_SCHEDULE_CHANGED) void refreshSchedule();
+      if (event.type === EVENTS.CONTENT_ANNOUNCEMENT) void refreshAnnouncements();
+    },
+    [refreshAnnouncements, refreshSchedule],
+  );
+
   useEventSource("/api/tv/stream", {
     events: [EVENTS.TV_MODE_CHANGED],
-    onEvent: () => void load(),
+    onEvent: () => void refreshMode(),
   });
   useEventSource("/api/queue/stream", {
     events: [EVENTS.QUEUE_ENTRY_CHANGED, EVENTS.QUEUE_ROOM_CHANGED],
-    onEvent: () => void load(),
+    onEvent: () => void refreshRooms(),
   });
   useEventSource("/api/content/stream", {
     events: [EVENTS.CONTENT_ANNOUNCEMENT, EVENTS.CONTENT_SCHEDULE_CHANGED],
-    onEvent: () => void load(),
+    onEvent: refreshContent,
   });
   if (!data && !error)
     return (
