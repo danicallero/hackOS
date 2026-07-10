@@ -4,7 +4,7 @@ import { CalendarIcon, CheckIcon, PencilIcon, XIcon } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { formatScheduledDateTime, parseScheduledDateTime } from "@/lib/datetime";
+import { formatScheduledDateTime, toDatetimeLocal } from "@/lib/datetime";
 import { cn } from "@/lib/utils";
 
 export function ScheduledDateTimeField({
@@ -31,15 +31,12 @@ export function ScheduledDateTimeField({
   disabled?: boolean;
 }) {
   const inputId = useId();
-  const errorId = useId();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
-  const [error, setError] = useState("");
 
   useEffect(() => {
     if (!editing) return;
-    setDraft(value ? formatScheduledDateTime(value) : "");
-    setError("");
+    setDraft(toDatetimeLocal(value));
   }, [editing, value]);
 
   const hasValue = Boolean(value);
@@ -48,13 +45,7 @@ export function ScheduledDateTimeField({
     "h-10 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm dark:bg-input/50";
 
   function commitDraft() {
-    const parsed = parseScheduledDateTime(draft);
-    if (parsed === null) {
-      setError("Use dd/MM/yyyy HH:mm, for example 24/02/2027 18:30.");
-      return;
-    }
-
-    onChange(parsed);
+    onChange(draft);
     setEditing(false);
   }
 
@@ -67,17 +58,12 @@ export function ScheduledDateTimeField({
           </label>
           <Input
             id={inputId}
-            type="text"
-            inputMode="numeric"
-            placeholder="dd/MM/yyyy HH:mm"
+            type="datetime-local"
             value={draft}
             disabled={disabled}
-            aria-invalid={Boolean(error)}
-            aria-describedby={error ? errorId : undefined}
             className="tabular-nums"
             onChange={(e) => {
               setDraft(e.target.value);
-              setError("");
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
@@ -149,11 +135,6 @@ export function ScheduledDateTimeField({
           )}
         </div>
       )}
-      {error ? (
-        <p id={errorId} className="text-destructive text-sm text-pretty">
-          {error}
-        </p>
-      ) : null}
       {description ? (
         <p className="text-muted-foreground text-sm text-pretty">{description}</p>
       ) : null}
