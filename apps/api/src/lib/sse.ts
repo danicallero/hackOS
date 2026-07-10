@@ -1,5 +1,6 @@
-import type { SseEnvelope } from "@hackos/shared/events";
+import { EVENTS, SSE_TOPICS, type SseEnvelope } from "@hackos/shared/events";
 import type { FastifyReply } from "fastify";
+import { invalidateReadCache } from "./read-cache.js";
 import { valkey, valkeySub } from "./valkey.js";
 
 /**
@@ -44,6 +45,13 @@ export async function broadcast<T>(topic: string, type: string, data: T): Promis
     data,
   };
   await valkey.publish(`${CHANNEL_PREFIX}${topic}`, formatSse(envelope));
+  // Worker-originated changes do not have an HTTP response, so mirror every
+  // domain event into the global refresh stream as well. The guard prevents
+  // the mirror from recursively publishing itself.
+  if (topic !== SSE_TOPICS.GLOBAL) {
+    await invalidateReadCache();
+    await broadcast(SSE_TOPICS.GLOBAL, EVENTS.DATA_CHANGED, { at: envelope.at });
+  }
   return envelope;
 }
 

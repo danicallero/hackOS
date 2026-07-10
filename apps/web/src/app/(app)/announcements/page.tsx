@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api";
-import { formatScheduledDateTime } from "@/lib/datetime";
+import { formatScheduledDateTime, fromDatetimeLocal } from "@/lib/datetime";
 import { type Announcement, type AnnouncementInput, notificationsApi } from "@/lib/notifications";
 import { useCan } from "@/lib/session";
 import type { Tone } from "@/lib/tones";
@@ -313,9 +313,17 @@ function AnnouncementFormModal({
       new Date(values.publishAt as string).getTime();
 
   async function submit() {
+    // `datetime-local` deliberately has no timezone.  Convert it here so the
+    // API always receives the offset-bearing ISO timestamp it validates.
+    const publishAt = values.publishAt ? fromDatetimeLocal(values.publishAt) : null;
+    const expiresAt = values.expiresAt ? fromDatetimeLocal(values.expiresAt) : null;
+    if ((values.publishAt && !publishAt) || (values.expiresAt && !expiresAt)) {
+      toast.error("Enter valid dates and times before saving the announcement.");
+      return;
+    }
     setPending(true);
     try {
-      await onSubmit(values);
+      await onSubmit({ ...values, publishAt, expiresAt });
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Could not save announcement.");
     } finally {

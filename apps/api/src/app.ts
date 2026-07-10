@@ -14,9 +14,12 @@ import { config } from "./config.js";
 import { pool } from "./db/pool.js";
 import { AppError } from "./lib/errors.js";
 import { idempotencyOnSend } from "./lib/idempotency.js";
+import { cacheJson, invalidateReadCache, readCachedJson, readCacheKey } from "./lib/read-cache.js";
+import { broadcast } from "./lib/sse.js";
 import { valkey } from "./lib/valkey.js";
 import { registerModules } from "./modules/index.js";
 import { authContextPlugin } from "./plugins/auth-context.js";
+import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 
 export type App = FastifyInstance;
 
@@ -28,8 +31,10 @@ const PUBLIC_OPERATIONS = new Set([
   "GET /api/announcements/public",
   "GET /api/tv/mode",
   "GET /api/tv/rooms",
-  "GET /api/stream/queue",
-  "GET /api/stream/tv",
+  "GET /api/queue/stream",
+  "GET /api/tv/stream",
+  "GET /api/content/stream",
+  "GET /api/events/stream",
 ]);
 
 function docsTagFor(url: string): string {
@@ -234,6 +239,45 @@ export async function buildApp(): Promise<App> {
   await app.register(multipart, { limits: { fileSize: 5 * 1024 * 1024, files: 1 } });
   await app.register(authContextPlugin);
   app.addHook("onSend", idempotencyOnSend);
+  app.addHook("preHandler", async (req, reply) => {
+    try {
+      const key = await readCacheKey(req);
+      if (!key) return;
+      req.readCacheKey = key;
+      const cached = await readCachedJson(key);
+      if (cached !== null) {
+        reply.header("x-read-cache", "HIT");
+        return reply.send(cached);
+      }
+      reply.header("x-read-cache", "MISS");
+    } catch (err) {
+      // Cache availability must never prevent a normal API read.
+      req.log.warn({ err, method: req.method, url: req.url }, "read cache lookup failed");
+    }
+  });
+  app.addHook("preSerialization", async (req, reply, payload) => {
+    if (reply.statusCode >= 300) return payload;
+    try {
+      await cacheJson(req.readCacheKey, payload);
+    } catch (err) {
+      req.log.warn({ err, method: req.method, url: req.url }, "read cache write failed");
+    }
+    return payload;
+  });
+  app.addHook("onResponse", async (req, reply) => {
+    // This is the catch-all synchronization contract: a successful mutation
+    // emits an intentionally payload-free event so it cannot expose data from
+    // an endpoint to an unrelated open window. Domain streams still carry
+    // their specific events for consumers that can update more selectively.
+    if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method) && reply.statusCode < 300) {
+      try {
+        await invalidateReadCache();
+        await broadcast(SSE_TOPICS.GLOBAL, EVENTS.DATA_CHANGED, { at: new Date().toISOString() });
+      } catch (err) {
+        req.log.warn({ err, method: req.method, url: req.url }, "global SSE broadcast failed");
+      }
+    }
+  });
 
   await app.register(swagger, {
     openapi: {

@@ -110,6 +110,18 @@ export function registerReadsRoutes(app: FastifyInstance): void {
     await subscribe("tv", reply);
   });
 
+  // Public displays also need to react when the agenda or announcement feed
+  // changes; these are published on the shared content topic.
+  typed.get("/api/content/stream", async (_req, reply) => {
+    await subscribe("content", reply);
+  });
+
+  // A deliberately payload-free stream for clients which are not tied to a
+  // single domain read model. Every successful API write publishes here.
+  typed.get("/api/events/stream", async (_req, reply) => {
+    await subscribe("global", reply);
+  });
+
   // Personal stream (H31/H38 aviso/pre-aviso): only your own topic.
   typed.get("/api/queue/me/stream", { preHandler: requireAuth }, async (req, reply) => {
     await subscribe(`user:${req.userId}`, reply);

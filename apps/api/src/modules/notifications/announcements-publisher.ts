@@ -1,6 +1,8 @@
 import { config } from "../../config.js";
 import { withTransaction } from "../../db/pool.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
+import { broadcast } from "../../lib/sse.js";
+import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import type { Announcement } from "./announcements-service.js";
 import { fanOutAnnouncement } from "./announcements-service.js";
 
@@ -17,7 +19,7 @@ import { fanOutAnnouncement } from "./announcements-service.js";
 const QUEUE_NAME = "announcements-publisher";
 
 export async function runAnnouncementsPublisherOnce(): Promise<{ published: number }> {
-  return withTransaction(async (client) => {
+  const published = await withTransaction(async (client) => {
     const { rows } = await client.query(
       `SELECT * FROM announcements
        WHERE fanned_out_at IS NULL
@@ -37,6 +39,12 @@ export async function runAnnouncementsPublisherOnce(): Promise<{ published: numb
     }
     return { published };
   });
+  if (published.published > 0) {
+    await broadcast(SSE_TOPICS.CONTENT, EVENTS.CONTENT_ANNOUNCEMENT, {
+      action: "scheduled_publish",
+    });
+  }
+  return published;
 }
 
 registerWorker(QUEUE_NAME, async () => {

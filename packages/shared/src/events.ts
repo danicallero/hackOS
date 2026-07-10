@@ -16,6 +16,8 @@ export const SSE_TOPICS = {
   TV: "tv",
   /** schedule + announcements changes (H47, H50) */
   CONTENT: "content",
+  /** every successful write, for keeping independent browser windows in sync */
+  GLOBAL: "global",
   /** accreditation, presence, meals and wallet updates (H22-H28) */
   LOGISTICS: "logistics",
   /** staff export/deletion request workflow admin dashboard (H54) */
@@ -42,6 +44,7 @@ export const EVENTS = {
   TV_MODE_CHANGED: "tv.mode.changed", // H42
   CONTENT_SCHEDULE_CHANGED: "content.schedule.changed", // H47
   CONTENT_ANNOUNCEMENT: "content.announcement", // H50
+  DATA_CHANGED: "data.changed", // successful mutation anywhere in the API
   LOGISTICS_ACCREDITED: "logistics.accreditation.checked_in", // H22
   LOGISTICS_BADGE_ROTATED: "logistics.badge.rotated", // H23/H28
   LOGISTICS_PRESENCE_SCAN: "logistics.presence.scan", // H24
