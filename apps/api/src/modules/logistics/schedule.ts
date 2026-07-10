@@ -1,4 +1,5 @@
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
+import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
@@ -52,9 +53,31 @@ function assertWindow(startsAt: Date, endsAt: Date) {
   }
 }
 
-async function emitScheduleChanged(data: unknown) {
+export async function emitScheduleChanged(data: unknown) {
   await broadcast(SSE_TOPICS.CONTENT, EVENTS.CONTENT_SCHEDULE_CHANGED, data);
   await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.CONTENT_SCHEDULE_CHANGED, data);
+}
+
+/**
+ * Scheduled reveal trigger (H47/H48, issue #80). Mirrors
+ * challenges/service.ts's revealDueChallenges: a bare UPDATE...WHERE is
+ * concurrency-safe on its own (row locks acquired atomically by Postgres),
+ * no explicit SELECT...FOR UPDATE needed for this style of flip. Unlike
+ * challenges, publish_at is left intact rather than nulled — admins still
+ * see "when this was scheduled to go live" via serialize()/GET /api/schedule,
+ * and leaving it doesn't cause re-triggering since visibility='hidden' no
+ * longer matches once flipped.
+ */
+export async function revealDueScheduleItems(client: Queryable = pool): Promise<number[]> {
+  const { rows } = await client.query(
+    `UPDATE schedule
+        SET visibility = 'shown'
+      WHERE visibility = 'hidden'
+        AND publish_at IS NOT NULL
+        AND publish_at <= now()
+      RETURNING id`,
+  );
+  return rows.map((r: { id: number }) => Number(r.id));
 }
 
 export async function listSchedule() {
