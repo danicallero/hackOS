@@ -398,12 +398,7 @@ describe("GET /api/me/projects (participant self-view)", () => {
     expect(missing.statusCode).toBe(404);
   });
 
-  // #62: the profile must resolve the SAME membership the project/queue rosters
-  // show (submission OR matched Devpost participant). Removing a matched member
-  // drops the submission but leaves the devpost_participants link, so a
-  // submissions-only lookup rendered an empty profile while the roster still
-  // listed the user.
-  it("still lists a project when the member has a Devpost link but no submission", async () => {
+  it("detaches a removed Devpost-matched member from project, queue, and profile views", async () => {
     const server = await getApp();
     const { aliceId } = await seedMatchableUsers();
     const operator = await createUserWithCapabilities([
@@ -411,14 +406,27 @@ describe("GET /api/me/projects (participant self-view)", () => {
       CAPABILITIES.PROJECTS_EDIT,
       CAPABILITIES.PROJECTS_READ,
       CAPABILITIES.USERS_READ,
+      CAPABILITIES.QUEUE_ADMIN,
     ]);
     await importFixtures(operator);
 
     const { pool } = await import("../../src/db/pool.js");
     const beans = (await pool.query(`SELECT id FROM repos WHERE name = 'Neural Beans'`)).rows[0].id;
+    const challengeId = await createChallenge("Beans queue", []);
+    const room = await pool.query(
+      `INSERT INTO rooms (name, slug) VALUES ('Beans room', 'beans-room') RETURNING id`,
+    );
+    const roomId = room.rows[0].id;
+    await pool.query(`INSERT INTO room_challenges (room_id, challenge_id) VALUES ($1, $2)`, [
+      roomId,
+      challengeId,
+    ]);
+    await pool.query(
+      `INSERT INTO queue_entries (challenge_id, repo_id, status, position)
+       VALUES ($1, $2, 'waiting', 1)`,
+      [challengeId, beans],
+    );
 
-    // Roster action "Remove member" -> deletes the submission, keeps the
-    // devpost_participants row (still auto_matched to alice).
     const removed = await server.inject({
       method: "DELETE",
       url: `/api/repos/${beans}/members/${aliceId}`,
@@ -432,12 +440,22 @@ describe("GET /api/me/projects (participant self-view)", () => {
     ]);
     expect(sub.rows).toHaveLength(0);
     const dp = await pool.query(
-      `SELECT 1 FROM devpost_participants WHERE repo_id = $1 AND user_id = $2`,
-      [beans, aliceId],
+      `SELECT email, user_id, merge_status FROM devpost_participants
+        WHERE repo_id = $1 AND email = $2`,
+      [beans, EMAILS.alice],
     );
-    expect(dp.rows).toHaveLength(1);
+    expect(dp.rows).toEqual([
+      expect.objectContaining({ email: EMAILS.alice, user_id: null, merge_status: "unmatched" }),
+    ]);
+    const audit = await pool.query(
+      `SELECT after FROM audit_log
+        WHERE entity_type = 'submission' AND entity_id = $1 AND action = 'remove_member'`,
+      [`${beans}:${aliceId}`],
+    );
+    expect(audit.rows[0].after).toMatchObject({
+      detachedDevpostParticipants: [EMAILS.alice],
+    });
 
-    // Roster still lists alice as a member...
     const roster = await server.inject({
       method: "GET",
       url: `/api/repos/${beans}`,
@@ -445,16 +463,28 @@ describe("GET /api/me/projects (participant self-view)", () => {
     });
     expect(
       (roster.json().members as { userId: number | null }[]).some((m) => m.userId === aliceId),
-    ).toBe(true);
+    ).toBe(false);
+    expect(roster.json().members).toContainEqual(
+      expect.objectContaining({ email: EMAILS.alice, userId: null, mergeStatus: "unmatched" }),
+    );
 
-    // ...so the profile must too.
+    const queue = await server.inject({
+      method: "GET",
+      url: `/api/queue/rooms/${roomId}/view`,
+      headers: asUser(operator),
+    });
+    expect(queue.statusCode).toBe(200);
+    expect(queue.json().next[0].repo_members).not.toContainEqual(
+      expect.objectContaining({ userId: aliceId }),
+    );
+
     const res = await server.inject({
       method: "GET",
       url: `/api/users/${aliceId}/projects`,
       headers: asUser(operator),
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json().projects.map((p: { name: string }) => p.name)).toEqual(["Neural Beans"]);
+    expect(res.json().projects).toEqual([]);
   });
 });
 

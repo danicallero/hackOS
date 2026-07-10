@@ -54,6 +54,12 @@ Key facts that drive every design decision below:
 - **`devpost_participants` is a staging/reconciliation table**, distinct from the
   authoritative `submissions`. A participant is `unmatched`, `auto_matched`, or
   `manually_linked`; only matched participants get a `submissions` row.
+- **Removing a project member detaches every membership link.** When an operator
+  removes a matched Devpost member, hackOS deletes the `submissions` row and
+  clears `devpost_participants.user_id`, changing its `merge_status` to
+  `unmatched`. The imported email, name, username, and batch stay intact for
+  audit and a later reconciliation; the detached account no longer appears in
+  project, queue, or profile membership views.
 
 ### 1.2 Challenges module (`apps/api/src/modules/challenges/`)
 
