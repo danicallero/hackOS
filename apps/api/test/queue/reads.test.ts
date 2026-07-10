@@ -216,9 +216,16 @@ describe("SSE streams (H41/H42)", () => {
   it("GET /api/queue/stream and /api/tv/stream open public event-streams", async () => {
     // inject with payloadAsStream so the never-ending SSE body doesn't hang the test
     for (const url of ["/api/queue/stream", "/api/tv/stream"]) {
-      const res = await app.inject({ method: "GET", url, payloadAsStream: true });
+      const res = await app.inject({
+        method: "GET",
+        url,
+        headers: { origin: "https://hackos.example.test" },
+        payloadAsStream: true,
+      });
       expect(res.statusCode).toBe(200);
       expect(res.headers["content-type"]).toBe("text/event-stream");
+      expect(res.headers["access-control-allow-origin"]).toBe("https://hackos.example.test");
+      expect(res.headers["access-control-allow-credentials"]).toBe("true");
       const firstChunk: Buffer = await new Promise((resolve, reject) => {
         res.stream().once("data", resolve);
         res.stream().once("error", reject);
