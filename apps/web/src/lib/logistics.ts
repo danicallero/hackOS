@@ -92,6 +92,7 @@ export interface PublicScheduleItem {
   description: string | null;
   location: string | null;
   type: string | null;
+  requiresScan?: boolean;
   startsAt: string;
   endsAt: string;
   visibility?: "shown" | "hidden";
@@ -119,6 +120,7 @@ export interface ScheduleInput {
   description?: string | null;
   location?: string | null;
   type?: string | null;
+  requiresScan?: boolean;
   startsAt: string;
   endsAt: string;
   visibility: "shown" | "hidden";

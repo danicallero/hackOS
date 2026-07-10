@@ -99,6 +99,7 @@ export const scheduleBody = z.object({
   description: z.string().max(4000).nullable().optional(),
   location: z.string().max(300).nullable().optional(),
   type: z.string().max(80).nullable().optional(),
+  requiresScan: z.boolean().optional(),
   startsAt: z.coerce.date(),
   endsAt: z.coerce.date(),
   visibility: z.enum(["shown", "hidden"]).default("hidden"),
