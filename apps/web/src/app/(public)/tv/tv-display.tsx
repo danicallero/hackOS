@@ -46,6 +46,21 @@ function columnsForWidth(width: number) {
   return Math.max(1, Math.floor((width + GRID_GAP) / (MIN_CARD_WIDTH + GRID_GAP)));
 }
 
+/** The waiting room can legitimately hold more than the couple of teams a
+ * card was originally sized for. Rather than cap the list (hiding real
+ * teams) or let the card grow without bound (forcing the whole page's
+ * fit-to-viewport scale down just because one room got busy), each row
+ * shrinks a little per additional team so the card's own height stays
+ * roughly bounded regardless of how many are actually waiting. */
+const WAITING_ROW_MAX_REM = 1.35;
+const WAITING_ROW_MIN_REM = 0.8;
+const WAITING_ROW_SHRINK_REM = 0.08;
+
+function waitingRoomRowSize(count: number): string {
+  const size = WAITING_ROW_MAX_REM - Math.max(0, count - 1) * WAITING_ROW_SHRINK_REM;
+  return `${Math.max(WAITING_ROW_MIN_REM, size)}rem`;
+}
+
 type TvData = {
   mode: TvMode;
   event: PublicEvent;
@@ -195,13 +210,16 @@ function PresentingBlock({ active }: { active: QueueEntry | null }) {
   );
 }
 
-/** "Waiting room teams" — entries called specifically into this room
- * (status "called"), bounded by its configured waiting-area capacity. One
+/** "Waiting room teams" — every entry called specifically into this room
+ * (status "called"). The room's `max_in_waiting_area` is an operational cap
+ * the backend pump already enforces when calling teams in; it's not a
+ * display limit, so the TV never hides a team that's actually there. One
  * card (mirroring the "presenting now" block) holds every entry, tinted
- * yellow to read as "waiting" at a glance. */
+ * yellow to read as "waiting" at a glance, with each row sized down a touch
+ * as more teams show up so the card doesn't grow unbounded. */
 function WaitingRoomList({ room }: { room: RoomView }) {
-  const capacity = room.state?.max_in_waiting_area;
-  const entries = capacity ? room.called.slice(0, capacity) : room.called;
+  const entries = room.called;
+  const rowSize = waitingRoomRowSize(entries.length);
   return (
     <div className="bg-warning/20 mt-4 rounded-xl p-4">
       <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
@@ -210,7 +228,11 @@ function WaitingRoomList({ room }: { room: RoomView }) {
       <ol className="mt-1.5 space-y-1">
         {entries.length ? (
           entries.map((entry, index) => (
-            <li key={entry.id} className="flex min-w-0 items-center gap-2 text-lg font-semibold">
+            <li
+              key={entry.id}
+              className="flex min-w-0 items-center gap-2 font-semibold"
+              style={{ fontSize: rowSize }}
+            >
               <span className="tabular-nums">{index + 1}.</span>
               <span className="min-w-0 flex-1">
                 <MarqueeText text={entry.repo_name ?? "Team"} />
