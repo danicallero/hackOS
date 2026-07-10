@@ -8,7 +8,7 @@ import {
   UsersRoundIcon,
   WifiIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Brand } from "@/components/common/brand";
 import { Spinner } from "@/components/common/spinner";
 import type {
@@ -40,36 +40,43 @@ function textPayload(payload: unknown, key: string): string | null {
 }
 
 function RoomCard({ room }: { room: RoomView }) {
-  const active = room.active ?? room.called[0] ?? null;
-  const next = room.next.slice(0, 2);
+  const active = room.active ?? null;
+  const waiting = room.called.slice(active ? 0 : 1).concat(room.next).slice(0, 3);
+  const activeLabel = active
+    ? "Presenting now"
+    : room.called[0]
+      ? "Please go to the room"
+      : "Waiting for the next team";
+  const activeEntry = active ?? room.called[0] ?? null;
   return (
-    <article className="min-w-0 rounded-2xl border bg-card p-5 shadow-sm">
+    <article className="min-w-0 rounded-2xl border bg-card p-6 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-muted-foreground text-sm">{room.room.location ?? "Judging room"}</p>
-          <h3 className="text-balance mt-1 text-2xl font-semibold">{room.room.name}</h3>
+          <p className="text-muted-foreground text-base">{room.room.location ?? "Judging room"}</p>
+          <h3 className="text-balance mt-1 text-3xl font-semibold">{room.room.name}</h3>
         </div>
         {room.state?.is_paused && (
           <span className="rounded-full border px-3 py-1 text-sm">Paused</span>
         )}
       </div>
-      <div className="mt-7">
-        <p className="text-muted-foreground text-sm">Now presenting</p>
-        <p className="mt-1 truncate text-3xl font-semibold">
-          {active?.repo_name ?? "Waiting for the next team"}
+      <div className="mt-8 rounded-xl bg-muted/60 p-4">
+        <p className="text-muted-foreground text-base">{activeLabel}</p>
+        <p className="mt-1 truncate text-4xl font-semibold">
+          {activeEntry?.repo_name ?? "—"}
         </p>
       </div>
       <div className="mt-6 border-t pt-4">
-        <p className="text-muted-foreground text-sm">Up next</p>
-        <ol className="mt-2 space-y-1">
-          {next.length ? (
-            next.map((entry) => (
-              <li key={entry.id} className="truncate text-lg">
-                {entry.repo_name ?? "Team"}
+        <p className="text-muted-foreground text-base">Up next</p>
+        <ol className="mt-3 space-y-2">
+          {waiting.length ? (
+            waiting.map((entry, index) => (
+              <li key={entry.id} className="flex min-w-0 items-center gap-3 text-xl">
+                <span className="text-muted-foreground tabular-nums">{index + 1}</span>
+                <span className="truncate">{entry.repo_name ?? "Team"}</span>
               </li>
             ))
           ) : (
-            <li className="text-muted-foreground text-lg">No teams in queue</li>
+            <li className="text-muted-foreground text-xl">No teams in queue</li>
           )}
         </ol>
       </div>
@@ -289,7 +296,9 @@ function AnnouncementView({
 export function TvDisplay() {
   const [data, setData] = useState<TvData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const requestId = useRef(0);
   const load = useCallback(async () => {
+    const currentRequest = ++requestId.current;
     try {
       const [mode, event, rooms, schedule, sponsorResult, announcementResult] = await Promise.all([
         getTvMode(),
@@ -299,6 +308,9 @@ export function TvDisplay() {
         api.get<{ items: PublicSponsor[] }>("/api/public/sponsors"),
         api.get<{ items: PublicAnnouncement[] }>("/api/announcements/public"),
       ]);
+      // A slower older response must never overwrite the state obtained after
+      // an SSE event (for example, a mode change followed by a queue update).
+      if (currentRequest !== requestId.current) return;
       setData({
         mode,
         event,
@@ -309,7 +321,9 @@ export function TvDisplay() {
       });
       setError(null);
     } catch {
-      setError("The display is reconnecting to the event service.");
+      if (currentRequest === requestId.current) {
+        setError("The display is reconnecting to the event service.");
+      }
     }
   }, []);
   useEffect(() => {
@@ -323,10 +337,10 @@ export function TvDisplay() {
     events: [EVENTS.QUEUE_ENTRY_CHANGED, EVENTS.QUEUE_ROOM_CHANGED],
     onEvent: () => void load(),
   });
-  useEffect(() => {
-    const interval = window.setInterval(() => void load(), 60_000);
-    return () => window.clearInterval(interval);
-  }, [load]);
+  useEventSource("/api/content/stream", {
+    events: [EVENTS.CONTENT_ANNOUNCEMENT, EVENTS.CONTENT_SCHEDULE_CHANGED],
+    onEvent: () => void load(),
+  });
   if (!data && !error)
     return (
       <div className="grid min-h-dvh place-items-center" role="status" aria-busy="true">

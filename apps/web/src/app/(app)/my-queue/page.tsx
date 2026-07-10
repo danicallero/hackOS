@@ -7,8 +7,9 @@
 // ready. No capability gate — this is the participant-facing view, auth only.
 //
 // Data:
-//   GET  /api/queue/me          → MyQueueEntry[] (read model; polled via SSE)
+//   GET  /api/queue/me          → MyQueueEntry[] (read model, refetched by SSE)
 //   GET  /api/queue/me/stream   → per-user SSE (user.queue.called / .precall)
+//   GET  /api/events/stream     → global mutations which can change rank/ETA
 //
 // Realtime (plan §4): the SSE payload is a signal, so we refetch the read model
 // on every event (useLiveQuery). We additionally listen to the same stream to
@@ -56,7 +57,16 @@ export default function MyQueuePage() {
     data: entries,
     error,
     loading,
+    refetch,
   } = useLiveQuery<MyQueueEntry[]>(getMyQueue, "/api/queue/me/stream", CALL_EVENTS);
+
+  // A team can move up when somebody else is called or requeued. That event
+  // is not necessarily addressed to this user, so use the global SSE signal
+  // to refetch this small personal read model without navigating the page.
+  useEventSource("/api/events/stream", {
+    events: [EVENTS.DATA_CHANGED],
+    onEvent: () => refetch(),
+  });
 
   // The read model only carries `roomId`; the call event carries the room name.
   // Cache names as we see them so the "go to room" notice reads nicely.
