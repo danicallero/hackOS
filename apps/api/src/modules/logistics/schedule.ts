@@ -9,6 +9,7 @@ export interface ScheduleInput {
   description?: string | null;
   location?: string | null;
   type?: string | null;
+  requiresScan?: boolean;
   startsAt: Date;
   endsAt: Date;
   visibility: "shown" | "hidden";
@@ -20,6 +21,7 @@ export interface SchedulePatch {
   description?: string | null;
   location?: string | null;
   type?: string | null;
+  requiresScan?: boolean;
   startsAt?: Date;
   endsAt?: Date;
   visibility?: "shown" | "hidden";
@@ -33,6 +35,7 @@ function serialize(row: Record<string, unknown>) {
     description: (row.description as string | null) ?? null,
     location: (row.location as string | null) ?? null,
     type: (row.type as string | null) ?? null,
+    requiresScan: Boolean(row.requires_scan),
     startsAt: (row.starts_at as Date).toISOString(),
     endsAt: (row.ends_at as Date).toISOString(),
     visibility: String(row.visibility),
@@ -56,7 +59,7 @@ async function emitScheduleChanged(data: unknown) {
 
 export async function listSchedule() {
   const { rows } = await pool.query(
-    `SELECT id, title, description, location, type, starts_at, ends_at, visibility,
+    `SELECT id, title, description, location, type, requires_scan, starts_at, ends_at, visibility,
             publish_at, reminded_at, created_at, updated_at
        FROM schedule
       ORDER BY starts_at ASC, id ASC`,
@@ -69,15 +72,16 @@ export async function createScheduleItem(actorId: number | null, input: Schedule
   const item = await withTransaction(async (client) => {
     const { rows } = await client.query(
       `INSERT INTO schedule
-         (title, description, location, type, starts_at, ends_at, visibility, publish_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING id, title, description, location, type, starts_at, ends_at, visibility,
+         (title, description, location, type, requires_scan, starts_at, ends_at, visibility, publish_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING id, title, description, location, type, requires_scan, starts_at, ends_at, visibility,
                  publish_at, reminded_at, created_at, updated_at`,
       [
         input.title,
         input.description ?? null,
         input.location ?? null,
         input.type ?? null,
+        input.type === "meal" || input.requiresScan === true,
         input.startsAt,
         input.endsAt,
         input.visibility,
@@ -85,6 +89,17 @@ export async function createScheduleItem(actorId: number | null, input: Schedule
       ],
     );
     const item = serialize(rows[0]);
+    await client.query(
+      `INSERT INTO activities (name, description, category, requires_scan, schedule_id)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        item.title,
+        item.description,
+        item.type === "meal" ? "meal" : (item.type ?? "activity"),
+        item.requiresScan,
+        item.id,
+      ],
+    );
     await audit(client, {
       actorId,
       entityType: "schedule",
@@ -101,7 +116,7 @@ export async function createScheduleItem(actorId: number | null, input: Schedule
 export async function updateScheduleItem(actorId: number | null, id: number, patch: SchedulePatch) {
   const item = await withTransaction(async (client) => {
     const current = await client.query(
-      `SELECT id, title, description, location, type, starts_at, ends_at, visibility,
+      `SELECT id, title, description, location, type, requires_scan, starts_at, ends_at, visibility,
               publish_at, reminded_at, created_at, updated_at
          FROM schedule WHERE id = $1 FOR UPDATE`,
       [id],
@@ -110,6 +125,12 @@ export async function updateScheduleItem(actorId: number | null, id: number, pat
     const before = serialize(current.rows[0]);
     const nextStartsAt = patch.startsAt ?? (current.rows[0].starts_at as Date);
     const nextEndsAt = patch.endsAt ?? (current.rows[0].ends_at as Date);
+    const nextType =
+      patch.type === undefined ? (current.rows[0].type as string | null) : patch.type;
+    const nextRequiresScan =
+      nextType === "meal" ||
+      patch.requiresScan === true ||
+      (patch.requiresScan === undefined && Boolean(current.rows[0].requires_scan));
     assertWindow(nextStartsAt, nextEndsAt);
 
     const { rows } = await client.query(
@@ -118,19 +139,21 @@ export async function updateScheduleItem(actorId: number | null, id: number, pat
               description = $3,
               location = $4,
               type = $5,
-              starts_at = $6,
-              ends_at = $7,
-              visibility = $8,
-              publish_at = $9
+              requires_scan = $6,
+              starts_at = $7,
+              ends_at = $8,
+              visibility = $9,
+              publish_at = $10
         WHERE id = $1
-        RETURNING id, title, description, location, type, starts_at, ends_at, visibility,
+        RETURNING id, title, description, location, type, requires_scan, starts_at, ends_at, visibility,
                   publish_at, reminded_at, created_at, updated_at`,
       [
         id,
         patch.title ?? current.rows[0].title,
         patch.description === undefined ? current.rows[0].description : patch.description,
         patch.location === undefined ? current.rows[0].location : patch.location,
-        patch.type === undefined ? current.rows[0].type : patch.type,
+        nextType,
+        nextRequiresScan,
         nextStartsAt,
         nextEndsAt,
         patch.visibility ?? current.rows[0].visibility,
@@ -138,6 +161,21 @@ export async function updateScheduleItem(actorId: number | null, id: number, pat
       ],
     );
     const after = serialize(rows[0]);
+    await client.query(
+      `UPDATE activities
+          SET name = $2,
+              description = $3,
+              category = $4,
+              requires_scan = $5
+        WHERE schedule_id = $1`,
+      [
+        id,
+        after.title,
+        after.description,
+        after.type === "meal" ? "meal" : (after.type ?? "activity"),
+        after.requiresScan,
+      ],
+    );
     await audit(client, {
       actorId,
       entityType: "schedule",
@@ -154,10 +192,16 @@ export async function updateScheduleItem(actorId: number | null, id: number, pat
 
 export async function deleteScheduleItem(actorId: number | null, id: number) {
   await withTransaction(async (client) => {
+    // H25/H26: keep historical scan logs, but remove the linked activity from
+    // scanner pickers before the foreign key clears its schedule reference.
+    await client.query(
+      `UPDATE activities SET category = 'archived', requires_scan = false WHERE schedule_id = $1`,
+      [id],
+    );
     const { rows } = await client.query(
       `DELETE FROM schedule
         WHERE id = $1
-        RETURNING id, title, description, location, type, starts_at, ends_at, visibility,
+        RETURNING id, title, description, location, type, requires_scan, starts_at, ends_at, visibility,
                   publish_at, reminded_at, created_at, updated_at`,
       [id],
     );

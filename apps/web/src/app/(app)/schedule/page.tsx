@@ -20,6 +20,7 @@ import { ScheduledDateTimeField } from "@/components/common/scheduled-datetime-f
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -40,6 +41,7 @@ const EMPTY_FORM: ScheduleInput = {
   description: "",
   location: "",
   type: "activity",
+  requiresScan: false,
   startsAt: "",
   endsAt: "",
   visibility: "hidden",
@@ -54,6 +56,7 @@ function toForm(item: PublicScheduleItem): ScheduleInput {
     description: item.description ?? "",
     location: item.location ?? "",
     type: item.type ?? "activity",
+    requiresScan: item.requiresScan ?? false,
     startsAt: item.startsAt,
     endsAt: item.endsAt,
     visibility: item.visibility ?? "hidden",
@@ -67,6 +70,7 @@ function cleanForm(form: ScheduleInput): ScheduleInput {
     description: form.description?.trim() || null,
     location: form.location?.trim() || null,
     type: form.type?.trim() || null,
+    requiresScan: form.type === "meal" || form.requiresScan === true,
     startsAt: new Date(form.startsAt).toISOString(),
     endsAt: new Date(form.endsAt).toISOString(),
     visibility: form.visibility,
@@ -350,7 +354,9 @@ function ScheduleFormModal({
           <Field label="Type">
             <Select
               value={values.type ?? "activity"}
-              onValueChange={(type) => setValues((v) => ({ ...v, type }))}
+              onValueChange={(type) =>
+                setValues((v) => ({ ...v, type, requiresScan: type === "meal" || v.requiresScan }))
+              }
             >
               <SelectTrigger>
                 <SelectValue />
@@ -380,6 +386,19 @@ function ScheduleFormModal({
               </SelectContent>
             </Select>
           </Field>
+        </div>
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="requires-scan"
+            checked={values.type === "meal" || values.requiresScan === true}
+            disabled={values.type === "meal"}
+            onCheckedChange={(checked) =>
+              setValues((v) => ({ ...v, requiresScan: checked === true }))
+            }
+          />
+          <Label htmlFor="requires-scan" className="font-normal">
+            Registrable by scanner{values.type === "meal" ? " (meals are always registrable)" : ""}
+          </Label>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Starts">

@@ -37,6 +37,74 @@ afterAll(async () => {
 });
 
 describe("GET /api/activities/scannable (H25/H26)", () => {
+  it("gets meals and registrable activities from schedule management", async () => {
+    const start = new Date("2030-01-01T12:00:00.000Z");
+    const create = async (title: string, type: string, requiresScan = false) => {
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/schedule",
+        headers: asUser(manager),
+        payload: {
+          title,
+          type,
+          requiresScan,
+          startsAt: start.toISOString(),
+          endsAt: new Date(start.getTime() + 60 * 60_000).toISOString(),
+        },
+      });
+      expect(res.statusCode).toBe(201);
+      return res.json() as { id: number; requiresScan: boolean };
+    };
+
+    const lunch = await create("Lunch", "meal");
+    const workshop = await create("Workshop", "workshop", true);
+    await create("Opening", "ceremony");
+
+    expect(lunch.requiresScan).toBe(true);
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/activities/scannable",
+      headers: asUser(scanner),
+    });
+    expect(res.statusCode).toBe(200);
+    const items = res.json().items as Array<{ activityId: number; name: string }>;
+    expect(items.map((item) => item.name).sort()).toEqual(["Lunch", "Workshop"]);
+
+    const workshopActivity = items.find((item) => item.name === "Workshop");
+    expect(workshopActivity?.activityId).toBeDefined();
+    const attendee = await createUser();
+    await assignBadge(attendee, "SCHEDULE-WORKSHOP");
+    const scan = await app.inject({
+      method: "POST",
+      url: `/api/activities/${workshopActivity?.activityId}/scan`,
+      headers: asUser(scanner),
+      payload: { badgeId: "SCHEDULE-WORKSHOP" },
+    });
+    expect(scan.statusCode).toBe(200);
+
+    const updated = await app.inject({
+      method: "PATCH",
+      url: `/api/schedule/${workshop.id}`,
+      headers: asUser(manager),
+      payload: { requiresScan: false },
+    });
+    expect(updated.statusCode).toBe(200);
+
+    const afterUpdate = await app.inject({
+      method: "GET",
+      url: "/api/activities/scannable?category=activity",
+      headers: asUser(scanner),
+    });
+    expect(afterUpdate.json().items).toEqual([]);
+
+    const deleted = await app.inject({
+      method: "DELETE",
+      url: `/api/schedule/${workshop.id}`,
+      headers: asUser(manager),
+    });
+    expect(deleted.statusCode).toBe(200);
+  });
+
   it("lists meals and registrable activities with counts for a scan operator", async () => {
     const meal = await createMeal("Lunch");
     const talk = await createActivity({ requiresScan: true, name: "Talk" });
