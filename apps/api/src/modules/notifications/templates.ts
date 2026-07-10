@@ -148,6 +148,20 @@ const TEMPLATES: Record<string, TemplateDefinition> = {
       body: "Ola {{name}},\n\nA túa solicitude a {{applicationName}} foi {{decision}}.{{decisionDetails}}",
     },
   },
+  "schedule.reminder": {
+    en: {
+      subject: "Reminder: {{title}}",
+      body: "Hi,\n\n{{title}} starts at {{startsAt}}.{{locationLine}}\n\nSee you there!",
+    },
+    es: {
+      subject: "Recordatorio: {{title}}",
+      body: "Hola,\n\n{{title}} empieza a las {{startsAt}}.{{locationLine}}\n\n¡Nos vemos allí!",
+    },
+    gl: {
+      subject: "Lembranza: {{title}}",
+      body: "Ola,\n\n{{title}} comeza ás {{startsAt}}.{{locationLine}}\n\nVémonos alí!",
+    },
+  },
 };
 
 export function emailLayoutSettingsFromConfig(): EmailLayoutSettings {
