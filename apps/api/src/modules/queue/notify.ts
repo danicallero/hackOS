@@ -68,3 +68,39 @@ export async function notifyTeamPreCall(
     await broadcast(`${SSE_TOPICS.USER_PREFIX}${userId}`, EVENTS.USER_QUEUE_PRECALL, payload);
   }
 }
+
+/**
+ * Signal only the participants whose own H38 read model can have changed.
+ * The event intentionally carries just the challenge id; clients refetch the
+ * authenticated read model instead of receiving another team's queue data.
+ */
+export async function notifyChallengeQueueChanged(
+  client: Queryable,
+  challengeId: number,
+): Promise<void> {
+  const { rows } = await client.query(
+    `SELECT DISTINCT s.user_id
+       FROM queue_entries qe
+       JOIN submissions s ON s.repo_id = qe.repo_id
+      WHERE qe.challenge_id = $1`,
+    [challengeId],
+  );
+  await Promise.all(
+    rows.map((row: { user_id: number }) =>
+      broadcast(`${SSE_TOPICS.USER_PREFIX}${row.user_id}`, EVENTS.USER_QUEUE_CHANGED, {
+        challengeId,
+      }),
+    ),
+  );
+}
+
+/** Notify participants whose queues are affected by a room-level change. */
+export async function notifyRoomQueueChanged(client: Queryable, roomId: number): Promise<void> {
+  const { rows } = await client.query(
+    `SELECT challenge_id FROM room_challenges WHERE room_id = $1`,
+    [roomId],
+  );
+  await Promise.all(
+    rows.map((row: { challenge_id: number }) => notifyChallengeQueueChanged(client, row.challenge_id)),
+  );
+}

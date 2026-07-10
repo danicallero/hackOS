@@ -1,12 +1,17 @@
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import type pg from "pg";
-import { withTransaction } from "../../db/pool.js";
+import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
 import { isRepoBlockedByBusyMember } from "./guard.js";
 import { writeQueueHistory } from "./history.js";
-import { notifyTeamCalled, repoMemberIds } from "./notify.js";
+import {
+  notifyChallengeQueueChanged,
+  notifyRoomQueueChanged,
+  notifyTeamCalled,
+  repoMemberIds,
+} from "./notify.js";
 import {
   compactChallengePositions,
   nextBottomPosition,
@@ -29,6 +34,7 @@ async function lockEntry(client: pg.PoolClient, entryId: number): Promise<QueueE
 
 async function broadcastEntry(entry: QueueEntryRow): Promise<QueueEntryRow> {
   await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ENTRY_CHANGED, entry);
+  await notifyChallengeQueueChanged(pool, entry.challenge_id);
   return entry;
 }
 
@@ -801,6 +807,7 @@ export async function pauseRoom(roomId: number, actorId: number): Promise<void> 
   });
 
   await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ROOM_CHANGED, { roomId, isPaused: true });
+  await notifyRoomQueueChanged(pool, roomId);
 }
 
 export async function resumeRoom(roomId: number, _actorId: number): Promise<void> {
@@ -816,4 +823,5 @@ export async function resumeRoom(roomId: number, _actorId: number): Promise<void
     );
   });
   await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ROOM_CHANGED, { roomId, isPaused: false });
+  await notifyRoomQueueChanged(pool, roomId);
 }

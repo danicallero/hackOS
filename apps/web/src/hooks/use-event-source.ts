@@ -8,9 +8,8 @@ import { API_URL } from "@/lib/env";
  * SSE consumption for the queue/judging vertical (H38, H41-H42). The server
  * frames events per `packages/shared/src/events.ts`: each message is one
  * `SseEnvelope` ({ type, id, at, data }) with the envelope `type` as the SSE
- * event name. `EventSource` auto-reconnects; clients refetch their read model
- * when the stream opens and on every event because the payload is a signal,
- * not full state (see plan §4).
+ * event name. Clients refetch their read model on matching server events; the
+ * payload is a signal, not full state (see plan §4).
  *
  * `EventSource` can't set headers; the queue/tv streams are cookie-auth or
  * public, so `withCredentials` carries the session cookie.
@@ -23,8 +22,6 @@ interface UseEventSourceOptions {
   events?: readonly string[];
   /** Called for each matching envelope. Keep it stable or it re-subscribes. */
   onEvent?: (envelope: SseEnvelope) => void;
-  /** Called whenever the stream opens or reconnects. */
-  onOpen?: () => void;
   /** Set false to not open the connection (e.g. before an id is known). */
   enabled?: boolean;
 }
@@ -35,14 +32,12 @@ interface UseEventSourceOptions {
  */
 export function useEventSource(
   path: string,
-  { events, onEvent, onOpen, enabled = true }: UseEventSourceOptions = {},
+  { events, onEvent, enabled = true }: UseEventSourceOptions = {},
 ): { connected: boolean } {
   const [connected, setConnected] = useState(false);
   // Keep the latest callback without forcing a resubscribe every render.
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
-  const onOpenRef = useRef(onOpen);
-  onOpenRef.current = onOpen;
 
   const eventsKey = events ? events.join(",") : "";
 
@@ -50,10 +45,7 @@ export function useEventSource(
     if (!enabled || !path) return;
 
     const source = new EventSource(`${API_URL}${path}`, { withCredentials: true });
-    source.onopen = () => {
-      setConnected(true);
-      onOpenRef.current?.();
-    };
+    source.onopen = () => setConnected(true);
     source.onerror = () => setConnected(false); // EventSource retries on its own
 
     const handler = (e: MessageEvent) => {
@@ -103,13 +95,10 @@ export function useLiveQuery<T>(
   {
     enabled = true,
     debounceMs = 150,
-    pollIntervalMs,
     queryKey = [],
   }: {
     enabled?: boolean;
     debounceMs?: number;
-    /** Reconcile periodically when a view must not remain stale after a missed SSE event. */
-    pollIntervalMs?: number;
     queryKey?: readonly unknown[];
   } = {},
 ): { data: T | null; error: unknown; loading: boolean; connected: boolean; refetch: () => void } {
@@ -147,24 +136,13 @@ export function useLiveQuery<T>(
     return cancel;
   }, [enabled, refetch, queryKeyValue]);
 
-  useEffect(() => {
-    if (!enabled || !pollIntervalMs) return;
-    const interval = window.setInterval(refetch, pollIntervalMs);
-    return () => window.clearInterval(interval);
-  }, [enabled, pollIntervalMs, refetch]);
-
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onEvent = useCallback(() => {
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(refetch, debounceMs);
   }, [refetch, debounceMs]);
 
-  const { connected } = useEventSource(streamPath, {
-    events: eventNames,
-    onEvent,
-    onOpen: refetch,
-    enabled,
-  });
+  const { connected } = useEventSource(streamPath, { events: eventNames, onEvent, enabled });
 
   useEffect(
     () => () => {

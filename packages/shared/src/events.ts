@@ -53,6 +53,7 @@ export const EVENTS = {
   LOGISTICS_WALLET_PASS_UPDATED: "logistics.wallet_pass.updated", // H28
   USER_QUEUE_CALLED: "user.queue.called", // H29/H38 "go wait at room X"
   USER_QUEUE_PRECALL: "user.queue.precall", // H38 pre-aviso
+  USER_QUEUE_CHANGED: "user.queue.changed", // H38: one of the user's challenge queues changed
   USER_NOTIFICATION: "user.notification", // generic in-app inbox push
   EXPORT_REQUEST_CHANGED: "exports.request.status_changed", // H54
 } as const;

@@ -91,7 +91,8 @@ describe("call_next (H29, H30)", () => {
 
     expect(await broadcastCount("queue")).toBe(before + 1);
     // per-user "go wait at room X" (H29/H38)
-    expect(await broadcastCount(`user:${member}`)).toBe(1);
+    // Direct call notice plus the challenge-scoped H38 read-model signal.
+    expect(await broadcastCount(`user:${member}`)).toBe(2);
     const { pool } = await import("../../src/db/pool.js");
     const outbox = await pool.query(
       `SELECT * FROM notification_outbox WHERE user_id = $1 AND category = 'queue' AND channel = 'push'`,
