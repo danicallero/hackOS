@@ -37,8 +37,11 @@ RUN pnpm --filter @hackos/api deploy --prod --legacy /app
 FROM base AS deploy
 ENV NODE_ENV=production
 # tini gives us a real init (signal forwarding + zombie reaping) so SIGTERM
-# from the orchestrator reaches Node and triggers graceful shutdown.
-RUN apk add --no-cache tini
+# from the orchestrator reaches Node and triggers graceful shutdown. openssl
+# is the CLI Apple Wallet pass signing shells out to (H28) — node:alpine
+# does NOT ship it by default, so without this the /3.pkpass endpoints
+# throw ENOENT the first time a configured deploy tries to sign a pass.
+RUN apk add --no-cache tini openssl
 COPY --from=build /app /app
 WORKDIR /app
 

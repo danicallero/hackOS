@@ -52,11 +52,15 @@ export async function setIntolerances(
 }
 
 /** An active Apple/Google badge pass (H28 hook), voided on rotation. */
-export async function createBadgePass(userId: number): Promise<number> {
+export async function createBadgePass(
+  userId: number,
+  platform: "apple" | "google" = "apple",
+): Promise<number> {
+  const googleObjectId = platform === "google" ? `test-issuer.badge-${crypto.randomUUID()}` : null;
   const { rows } = await pool.query(
-    `INSERT INTO wallet_passes (user_id, purpose, platform, serial_number, authentication_token)
-     VALUES ($1, 'badge', 'apple', $2, $3) RETURNING id`,
-    [userId, `sn-${crypto.randomUUID()}`, `at-${crypto.randomUUID()}`],
+    `INSERT INTO wallet_passes (user_id, purpose, platform, serial_number, authentication_token, google_object_id)
+     VALUES ($1, 'badge', $2, $3, $4, $5) RETURNING id`,
+    [userId, platform, `sn-${crypto.randomUUID()}`, `at-${crypto.randomUUID()}`, googleObjectId],
   );
   return rows[0].id;
 }

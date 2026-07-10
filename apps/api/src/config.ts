@@ -95,9 +95,65 @@ const envSchema = z.object({
   CORS_ORIGINS: z.string().default(""),
 
   LOG_LEVEL: z.string().default("info"),
+
+  /**
+   * Apple Wallet / PassKit (H28). Neither platform is boot-mandatory — a
+   * deploy without these just serves a clear 503 on the wallet endpoints
+   * instead of an invalid/empty-signature pass. `*_PEM` values are
+   * base64-encoded PEM content (not file paths): single-line env values are
+   * how every other secret in this app is configured (S3, mail, auth), and
+   * base64 sidesteps the newline problem with raw PEM in an env var.
+   */
+  APPLE_PASS_TYPE_IDENTIFIER: z.string().optional(),
+  APPLE_TEAM_IDENTIFIER: z.string().optional(),
+  APPLE_PASS_ORGANIZATION: z.string().default("hackOS"),
+  APPLE_PASS_CERTIFICATE_PEM: z.string().optional(),
+  APPLE_PASS_KEY_PEM: z.string().optional(),
+  APPLE_PASS_KEY_PASSPHRASE: z.string().optional(),
+  APPLE_WWDR_CERTIFICATE_PEM: z.string().optional(),
+  /** Which APNs gateway to push pass updates to (H28). */
+  APPLE_APNS_ENVIRONMENT: z.enum(["production", "sandbox"]).default("production"),
+
+  /**
+   * Google Wallet (H28). Same "optional but never silently broken" posture
+   * as Apple above — see APPLE_PASS_CERTIFICATE_PEM comment.
+   */
+  GOOGLE_WALLET_ISSUER_ID: z.string().optional(),
+  GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL: z.string().optional(),
+  GOOGLE_WALLET_PRIVATE_KEY_PEM: z.string().optional(),
 });
 
-const parsed = envSchema.parse(process.env);
+const parsed = envSchema
+  .superRefine((v, ctx) => {
+    // A half-set platform is almost always a deploy mistake (typo'd var
+    // name, one secret missing from the store) — catch it at boot, in every
+    // env, without requiring the platform to be configured at all.
+    const apple = [
+      v.APPLE_PASS_CERTIFICATE_PEM,
+      v.APPLE_PASS_KEY_PEM,
+      v.APPLE_WWDR_CERTIFICATE_PEM,
+    ];
+    if (apple.some(Boolean) && !apple.every(Boolean)) {
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "APPLE_PASS_CERTIFICATE_PEM, APPLE_PASS_KEY_PEM and APPLE_WWDR_CERTIFICATE_PEM must be set together (H28)",
+      });
+    }
+    const google = [
+      v.GOOGLE_WALLET_ISSUER_ID,
+      v.GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL,
+      v.GOOGLE_WALLET_PRIVATE_KEY_PEM,
+    ];
+    if (google.some(Boolean) && !google.every(Boolean)) {
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "GOOGLE_WALLET_ISSUER_ID, GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL and GOOGLE_WALLET_PRIVATE_KEY_PEM must be set together (H28)",
+      });
+    }
+  })
+  .parse(process.env);
 
 export const config = {
   ...parsed,
@@ -105,6 +161,16 @@ export const config = {
   isProd: parsed.NODE_ENV === "production",
   workersInline: parsed.WORKERS_INLINE ?? parsed.NODE_ENV !== "production",
   trustProxy: parsed.TRUST_PROXY ?? parsed.NODE_ENV === "production",
+  appleWalletConfigured: Boolean(
+    parsed.APPLE_PASS_CERTIFICATE_PEM &&
+      parsed.APPLE_PASS_KEY_PEM &&
+      parsed.APPLE_WWDR_CERTIFICATE_PEM,
+  ),
+  googleWalletConfigured: Boolean(
+    parsed.GOOGLE_WALLET_ISSUER_ID &&
+      parsed.GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL &&
+      parsed.GOOGLE_WALLET_PRIVATE_KEY_PEM,
+  ),
 };
 
 export type Config = typeof config;

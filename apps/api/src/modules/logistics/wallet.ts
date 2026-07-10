@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,25 +8,19 @@ import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { config } from "../../config.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
-import { BadRequestError, NotFoundError, UnauthorizedError } from "../../lib/errors.js";
+import {
+  BadRequestError,
+  NotFoundError,
+  ServiceUnavailableError,
+  UnauthorizedError,
+} from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
+import { ensurePassRecord, type PassRow, type Purpose } from "./wallet-passes.js";
 
 const execFileAsync = promisify(execFile);
-const PASS_TYPE_IDENTIFIER = process.env.APPLE_PASS_TYPE_IDENTIFIER ?? "pass.local.hackos";
-const TEAM_IDENTIFIER = process.env.APPLE_TEAM_IDENTIFIER ?? "LOCALTEAM";
-const ORGANIZATION_NAME = process.env.APPLE_PASS_ORGANIZATION ?? "hackOS";
-
-type Purpose = "ticket" | "badge";
-
-interface PassRow {
-  id: number;
-  user_id: number;
-  purpose: Purpose;
-  serial_number: string;
-  authentication_token: string;
-  status: string;
-  update_tag: string;
-}
+export const PASS_TYPE_IDENTIFIER = config.APPLE_PASS_TYPE_IDENTIFIER ?? "pass.local.hackos";
+const TEAM_IDENTIFIER = config.APPLE_TEAM_IDENTIFIER ?? "LOCALTEAM";
+const ORGANIZATION_NAME = config.APPLE_PASS_ORGANIZATION;
 
 function appleAuthToken(header: string | undefined): string {
   const prefix = "ApplePass ";
@@ -44,46 +38,6 @@ async function requirePassBySerial(serialNumber: string, authorization?: string)
   );
   if (!rows[0]) throw new UnauthorizedError();
   return rows[0];
-}
-
-async function ensurePass(userId: number, purpose: Purpose): Promise<PassRow> {
-  if (purpose === "ticket") {
-    const t = await pool.query(`SELECT 1 FROM tickets WHERE user_id = $1`, [userId]);
-    if (!t.rows[0]) throw new NotFoundError("Ticket not issued");
-  } else {
-    const b = await pool.query(`SELECT badge_id FROM users WHERE id = $1`, [userId]);
-    if (!b.rows[0]) throw new NotFoundError("User not found");
-    if (!b.rows[0].badge_id) throw new BadRequestError("Badge not assigned");
-  }
-
-  return withTransaction(async (client) => {
-    const existing = await client.query(
-      `SELECT id, user_id, purpose, serial_number, authentication_token, status, update_tag
-         FROM wallet_passes
-        WHERE user_id = $1 AND purpose = $2 AND platform = 'apple' AND status <> 'voided'
-        FOR UPDATE`,
-      [userId, purpose],
-    );
-    if (existing.rows[0]) return existing.rows[0];
-
-    const serial = `${purpose}-${userId}-${randomBytes(6).toString("hex")}`;
-    const auth = randomBytes(24).toString("base64url");
-    const created = await client.query(
-      `INSERT INTO wallet_passes
-         (user_id, purpose, platform, serial_number, authentication_token, update_tag)
-       VALUES ($1, $2, 'apple', $3, $4, $5)
-       RETURNING id, user_id, purpose, serial_number, authentication_token, status, update_tag`,
-      [userId, purpose, serial, auth, Date.now().toString()],
-    );
-    await audit(client, {
-      actorId: userId,
-      entityType: "wallet_pass",
-      entityId: created.rows[0].id,
-      action: "issued",
-      after: { purpose, platform: "apple", serialNumber: serial },
-    });
-    return created.rows[0];
-  });
 }
 
 async function passPayload(pass: PassRow) {
@@ -144,7 +98,7 @@ export async function buildApplePass(
   }
   const pass = lookup
     ? await requirePassBySerial(lookup.serialNumber, lookup.authorization)
-    : await ensurePass(userId ?? 0, purpose ?? "ticket");
+    : await ensurePassRecord(userId ?? 0, purpose ?? "ticket", "apple");
   if (pass.status === "voided" && !lookup) throw new BadRequestError("Pass has been voided");
 
   const passJson = JSON.stringify(await passPayload(pass));
@@ -160,35 +114,66 @@ export async function buildApplePass(
   ]);
 }
 
+function decodePem(base64: string): string {
+  return Buffer.from(base64, "base64").toString("utf8");
+}
+
+/**
+ * Signs the manifest with the configured Pass Type ID certificate. Never
+ * returns an empty/invalid signature — an unconfigured or broken signing
+ * setup throws explicitly (H28: "production cannot serve unsigned Apple
+ * passes"), in every environment, not just production.
+ */
 async function signManifest(manifestJson: string): Promise<Buffer> {
-  const cert = process.env.APPLE_PASS_CERTIFICATE_PATH;
-  const key = process.env.APPLE_PASS_KEY_PATH;
-  const wwdr = process.env.APPLE_WWDR_CERTIFICATE_PATH;
-  if (!cert || !key || !wwdr) return Buffer.alloc(0);
+  if (!config.appleWalletConfigured) {
+    throw new ServiceUnavailableError(
+      "Apple Wallet signing is not configured (APPLE_PASS_CERTIFICATE_PEM / APPLE_PASS_KEY_PEM / APPLE_WWDR_CERTIFICATE_PEM)",
+    );
+  }
 
   const dir = await mkdtemp(join(tmpdir(), "hackos-pass-"));
   try {
     const manifestPath = join(dir, "manifest.json");
     const signaturePath = join(dir, "signature");
+    const certPath = join(dir, "cert.pem");
+    const keyPath = join(dir, "key.pem");
+    const wwdrPath = join(dir, "wwdr.pem");
     await writeFile(manifestPath, manifestJson);
-    await execFileAsync("openssl", [
-      "smime",
-      "-binary",
-      "-sign",
-      "-certfile",
-      wwdr,
-      "-signer",
-      cert,
-      "-inkey",
-      key,
-      "-in",
-      manifestPath,
-      "-out",
-      signaturePath,
-      "-outform",
-      "DER",
-    ]);
-    return readFile(signaturePath);
+    await writeFile(certPath, decodePem(config.APPLE_PASS_CERTIFICATE_PEM!), { mode: 0o600 });
+    await writeFile(keyPath, decodePem(config.APPLE_PASS_KEY_PEM!), { mode: 0o600 });
+    await writeFile(wwdrPath, decodePem(config.APPLE_WWDR_CERTIFICATE_PEM!), { mode: 0o600 });
+    const passphraseArgs = config.APPLE_PASS_KEY_PASSPHRASE
+      ? ["-passin", `pass:${config.APPLE_PASS_KEY_PASSPHRASE}`]
+      : [];
+
+    try {
+      await execFileAsync("openssl", [
+        "smime",
+        "-binary",
+        "-sign",
+        "-certfile",
+        wwdrPath,
+        "-signer",
+        certPath,
+        "-inkey",
+        keyPath,
+        ...passphraseArgs,
+        "-in",
+        manifestPath,
+        "-out",
+        signaturePath,
+        "-outform",
+        "DER",
+      ]);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+        throw new ServiceUnavailableError(
+          "openssl binary not found — install openssl in the runtime image to sign Apple passes",
+        );
+      }
+      throw err;
+    }
+    return await readFile(signaturePath);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

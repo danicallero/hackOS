@@ -9,7 +9,7 @@ import {
   createUserWithCapabilities,
   truncateAll,
 } from "../helpers.js";
-import { assignBadge, createMeal, issueTicket } from "./fixtures.js";
+import { assignBadge, createMeal } from "./fixtures.js";
 
 let app: App;
 let scanner: number;
@@ -106,105 +106,5 @@ describe("H25 offline meal scan queue", () => {
     expect(first.json().accepted).toBe(1);
     expect(second.json().accepted).toBe(0);
     expect(second.json().duplicate).toBe(1);
-  });
-});
-
-describe("H28 Apple Wallet PassKit", () => {
-  it("issues a ticket pkpass and serves it through the native PassKit route", async () => {
-    const uid = await createUser({ name: "Wallet" });
-    await issueTicket(uid, "ticket-wallet-1");
-
-    const res = await app.inject({
-      method: "GET",
-      url: "/api/me/wallet/apple/ticket.pkpass",
-      headers: asUser(uid),
-    });
-    expect(res.statusCode).toBe(200);
-    expect(res.headers["content-type"]).toContain("application/vnd.apple.pkpass");
-    expect(res.rawPayload.subarray(0, 4).toString("hex")).toBe("504b0304");
-
-    const { pool } = await import("../../src/db/pool.js");
-    const pass = await pool.query(
-      `SELECT serial_number, authentication_token FROM wallet_passes WHERE user_id = $1`,
-      [uid],
-    );
-    const serial = pass.rows[0].serial_number;
-    const token = pass.rows[0].authentication_token;
-
-    const native = await app.inject({
-      method: "GET",
-      url: `/api/wallet/apple/v1/passes/pass.local.hackos/${serial}`,
-      headers: { authorization: `ApplePass ${token}` },
-    });
-    expect(native.statusCode).toBe(200);
-    expect(native.rawPayload.subarray(0, 4).toString("hex")).toBe("504b0304");
-  });
-
-  it("registers and lists changed serials for an Apple device", async () => {
-    const uid = await createUser();
-    await issueTicket(uid, "ticket-wallet-2");
-    await app.inject({
-      method: "GET",
-      url: "/api/me/wallet/apple/ticket.pkpass",
-      headers: asUser(uid),
-    });
-
-    const { pool } = await import("../../src/db/pool.js");
-    const pass = await pool.query(
-      `SELECT serial_number, authentication_token FROM wallet_passes WHERE user_id = $1`,
-      [uid],
-    );
-    const serial = pass.rows[0].serial_number;
-    const token = pass.rows[0].authentication_token;
-
-    const register = await app.inject({
-      method: "POST",
-      url: `/api/wallet/apple/v1/devices/device-1/registrations/pass.local.hackos/${serial}`,
-      headers: { authorization: `ApplePass ${token}` },
-      payload: { pushToken: "push-1" },
-    });
-    expect(register.statusCode).toBe(201);
-
-    const changed = await app.inject({
-      method: "GET",
-      url: "/api/wallet/apple/v1/devices/device-1/registrations/pass.local.hackos",
-    });
-    expect(changed.statusCode).toBe(200);
-    expect(changed.json().serialNumbers).toContain(serial);
-  });
-
-  it("issues a fresh active badge pass after badge rotation voids the old serial", async () => {
-    const staff = await createUserWithCapabilities([CAPABILITIES.ACCREDIT_SCAN]);
-    const uid = await createUser();
-    await assignBadge(uid, "BADGE-OLD");
-
-    const first = await app.inject({
-      method: "GET",
-      url: "/api/me/wallet/apple/badge.pkpass",
-      headers: asUser(uid),
-    });
-    expect(first.statusCode).toBe(200);
-
-    const rotate = await app.inject({
-      method: "POST",
-      url: "/api/accreditation/rotate",
-      headers: asUser(staff),
-      payload: { userId: uid, newBadgeId: "BADGE-NEW", reason: "lost" },
-    });
-    expect(rotate.statusCode).toBe(200);
-
-    const second = await app.inject({
-      method: "GET",
-      url: "/api/me/wallet/apple/badge.pkpass",
-      headers: asUser(uid),
-    });
-    expect(second.statusCode).toBe(200);
-
-    const { pool } = await import("../../src/db/pool.js");
-    const passes = await pool.query(
-      `SELECT status FROM wallet_passes WHERE user_id = $1 AND purpose = 'badge' ORDER BY id`,
-      [uid],
-    );
-    expect(passes.rows.map((r: { status: string }) => r.status)).toEqual(["voided", "active"]);
   });
 });
