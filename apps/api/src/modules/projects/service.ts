@@ -816,10 +816,10 @@ export async function getRepoForUser(
  *
  * Membership must match what every other project/queue roster surfaces via
  * attachMembersAndPrizes — a user counts as a member if they have a submission
- * OR are a matched Devpost participant (`devpost_participants.user_id`). The two
- * can diverge: removing a matched member (removeRepoMember) drops the submission
- * but leaves the devpost_participants link, so a submissions-only lookup rendered
- * an empty profile while the project/queue roster still listed the user (#62).
+ * OR are a matched Devpost participant (`devpost_participants.user_id`).
+ * `removeRepoMember` clears that link when it removes the corresponding
+ * submission, so all membership surfaces stop agreeing that the user belongs to
+ * the project at the same time.
  */
 export async function myProjects(userId: number): Promise<Array<Omit<RepoWithExtras, "members">>> {
   const { rows } = await pool.query(
@@ -877,12 +877,28 @@ export async function removeRepoMember(actorId: number, repoId: number, userId: 
       repoId,
       userId,
     ]);
+
+    // Keep the imported Devpost row (email/name/import batch) for audit and a
+    // future reconciliation, but detach its account link. A matched Devpost row
+    // is otherwise also treated as roster membership by project/profile reads.
+    const detached = await client.query(
+      `UPDATE devpost_participants
+          SET user_id = NULL, merge_status = 'unmatched'
+        WHERE repo_id = $1 AND user_id = $2
+        RETURNING email, merge_status`,
+      [repoId, userId],
+    );
     await audit(client, {
       actorId,
       entityType: "submission",
       entityId: `${repoId}:${userId}`,
       action: "remove_member",
       before: { repoId, userId },
+      after: {
+        repoId,
+        userId,
+        detachedDevpostParticipants: detached.rows.map((row: { email: string }) => row.email),
+      },
       source: "admin",
     });
     return { repoId, userId, removed: true };
