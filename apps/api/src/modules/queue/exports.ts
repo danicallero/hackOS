@@ -1,19 +1,7 @@
 import { pool } from "../../db/pool.js";
+import { toCsv } from "../../lib/csv.js";
 
 /** H40: CSV export helpers. Plain text/csv responses, no external dep. */
-
-function csvCell(v: unknown): string {
-  if (v === null || v === undefined) return "";
-  const s = v instanceof Date ? v.toISOString() : String(v);
-  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
-}
-
-function toCsv(header: string[], rows: unknown[][]): string {
-  const lines = [header.join(",")];
-  for (const row of rows) lines.push(row.map(csvCell).join(","));
-  return `${lines.join("\r\n")}\r\n`;
-}
 
 export async function exportQueueCsv(challengeId: number): Promise<string> {
   const { rows } = await pool.query(
