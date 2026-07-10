@@ -66,10 +66,10 @@ export async function roomView(roomId: number) {
 
   const called = (
     await pool.query(
-      `SELECT ${QUEUE_ENTRY_SELECT}
+        `SELECT ${QUEUE_ENTRY_SELECT}
          FROM queue_entries qe JOIN repos r ON r.id = qe.repo_id
         WHERE qe.assigned_room_id = $1 AND qe.status = 'called'
-        ORDER BY qe.position ASC NULLS LAST, qe.id ASC`,
+        ORDER BY qe.called_at ASC NULLS LAST, qe.id ASC`,
       [roomId],
     )
   ).rows;

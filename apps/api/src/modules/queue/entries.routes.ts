@@ -62,6 +62,17 @@ async function transitionAndTopUp(
   return entry;
 }
 
+/** A top-of-challenge move should immediately fill any open waiting-room slot. */
+async function moveToTopAndTopUp(entryId: number, run: () => Promise<QueueEntryRow>): Promise<QueueEntryRow> {
+  const entry = await run();
+  const { rows } = await pool.query(
+    `SELECT room_id FROM room_challenges WHERE challenge_id = $1 ORDER BY room_id ASC`,
+    [entry.challenge_id],
+  );
+  await Promise.all(rows.map((row: { room_id: number }) => scheduleTopUp(row.room_id)));
+  return entry;
+}
+
 /**
  * Queue state machine transitions (H29-H35, H37). Every POST here is a
  * critical mutation: idempotencyGuard + withTransaction/FOR UPDATE inside
@@ -183,7 +194,10 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
       preHandler: [judgeOrOperate, idempotencyGuard],
       schema: { params: entryIdParam, body: reasonBody },
     },
-    async (req) => moveToTop(req.params.entryId, actor(req.userId), req.body.reason),
+    async (req) =>
+      moveToTopAndTopUp(req.params.entryId, () =>
+        moveToTop(req.params.entryId, actor(req.userId), req.body.reason),
+      ),
   );
 
   // Voluntary "send me to the end" — no ladder penalty (plan/07 §4).

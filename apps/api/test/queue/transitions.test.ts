@@ -278,6 +278,47 @@ describe("notify_enter (H31)", () => {
 });
 
 describe("bring_in / start / complete (H32)", () => {
+  it("lists waiting-room teams FIFO while allowing judges to bring in a newer team manually", async () => {
+    const { challengeId, roomId } = await setup();
+    const { repoId: firstRepo } = await createRepoWithTeam();
+    const { repoId: secondRepo } = await createRepoWithTeam();
+    const first = await enqueueRepo(challengeId, firstRepo, 10);
+    const second = await enqueueRepo(challengeId, secondRepo, 1);
+
+    for (const entryId of [first, second]) {
+      const res = await app.inject({
+        method: "POST",
+        url: `/api/queue/entries/${entryId}/manual-call`,
+        headers: asUser(operatorId),
+        payload: { targetStatus: "called", roomId },
+      });
+      expect(res.statusCode).toBe(200);
+    }
+
+    // Position differs from waiting-room arrival order: first was called first.
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`UPDATE queue_entries SET called_at = now() - interval '1 minute' WHERE id = $1`, [
+      first,
+    ]);
+    await pool.query(`UPDATE queue_entries SET called_at = now() WHERE id = $1`, [second]);
+    const view = await app.inject({
+      method: "GET",
+      url: `/api/queue/rooms/${roomId}/view`,
+      headers: asUser(judgeId),
+    });
+    expect(view.statusCode).toBe(200);
+    expect(view.json().called.map((entry: { id: number }) => entry.id)).toEqual([first, second]);
+
+    // FIFO is the normal order, but a judge can override it for an operational need.
+    const override = await app.inject({
+      method: "POST",
+      url: `/api/queue/entries/${second}/bring-in`,
+      headers: asUser(judgeId),
+      payload: {},
+    });
+    expect(override.statusCode).toBe(200);
+  });
+
   it("walks the full happy path with one history row per action", async () => {
     const { challengeId, roomId } = await setup();
     const { repoId } = await createRepoWithTeam();
@@ -779,6 +820,26 @@ describe("move_to_top (H37, H58)", () => {
     expect(moved.status).toBe("waiting");
     const other = await getEntry(e1);
     expect(moved.position).toBeLessThan(other.position);
+  });
+
+  it("calls a team moved to the top when its room has an open waiting-room slot", async () => {
+    const { challengeId, roomId } = await setup();
+    const { repoId: r1 } = await createRepoWithTeam();
+    const { repoId: r2 } = await createRepoWithTeam();
+    await enqueueRepo(challengeId, r1, 1);
+    const movedEntry = await enqueueRepo(challengeId, r2, 50);
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/queue/entries/${movedEntry}/move-top`,
+      headers: asUser(operatorId),
+      payload: {},
+    });
+    expect(res.statusCode).toBe(200);
+
+    const moved = await getEntry(movedEntry);
+    expect(moved.status).toBe("called");
+    expect(moved.assigned_room_id).toBe(roomId);
   });
 
   // H58: the searched team is called in ANOTHER room's waiting area. "Top" must
