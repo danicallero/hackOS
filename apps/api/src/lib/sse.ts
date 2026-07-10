@@ -1,5 +1,6 @@
 import { EVENTS, SSE_TOPICS, type SseEnvelope } from "@hackos/shared/events";
 import type { FastifyReply } from "fastify";
+import type { OutgoingHttpHeaders } from "node:http";
 import { invalidateReadCache } from "./read-cache.js";
 import { valkey, valkeySub } from "./valkey.js";
 
@@ -61,7 +62,13 @@ export async function broadcast<T>(topic: string, type: string, data: T): Promis
  */
 export async function subscribe(topic: string, reply: FastifyReply): Promise<void> {
   await ensureRelay();
+  // `@fastify/cors` stores its headers on Fastify's reply object.  Writing
+  // straight to `reply.raw` bypasses Fastify's normal response serialization,
+  // so preserve those already-computed headers before taking over the socket.
+  // Without this, credentialed cross-origin EventSource requests are rejected
+  // by the browser even though the SSE connection itself is healthy.
   reply.raw.writeHead(200, {
+    ...(reply.getHeaders() as OutgoingHttpHeaders),
     "content-type": "text/event-stream",
     "cache-control": "no-cache",
     connection: "keep-alive",
