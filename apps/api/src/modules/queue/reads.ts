@@ -66,7 +66,7 @@ export async function roomView(roomId: number) {
 
   const called = (
     await pool.query(
-        `SELECT ${QUEUE_ENTRY_SELECT}
+      `SELECT ${QUEUE_ENTRY_SELECT}
          FROM queue_entries qe JOIN repos r ON r.id = qe.repo_id
         WHERE qe.assigned_room_id = $1 AND qe.status = 'called'
         ORDER BY qe.called_at ASC NULLS LAST, qe.id ASC`,
@@ -80,12 +80,15 @@ export async function roomView(roomId: number) {
 
   // H29/H46: a room judges a single challenge (many rooms may share one). The
   // judging panel renders it as a read-only label, so expose it directly.
+  // H41: the TV shows the sponsoring enterprise above the challenge title.
   const challenge =
     (
       await pool.query(
-        `SELECT rc.challenge_id AS id, c.title
+        `SELECT rc.challenge_id AS id, c.title, e.name AS enterprise_name
            FROM room_challenges rc
            JOIN challenges c ON c.id = rc.challenge_id
+           JOIN sponsors s ON s.id = c.author
+           JOIN enterprises e ON e.id = s.enterprise_id
           WHERE rc.room_id = $1
           ORDER BY rc.assigned_at ASC, rc.challenge_id ASC
           LIMIT 1`,
