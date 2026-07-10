@@ -81,15 +81,64 @@ function textPayload(payload: unknown, key: string): string | null {
 const MARQUEE_PAUSE_MS = 1600;
 const MARQUEE_PIXELS_PER_SECOND = 45;
 
+/** Shared clock so every marquee on the page moves in lockstep instead of
+ * each finishing its own trip whenever: all wait together, all set off
+ * together (each at its own natural speed), the shorter ones hold at the end
+ * until the longest one catches up, all wait together again, then all
+ * return together the same way. One coordinator per page is exactly what we
+ * want here — there is only ever one TV screen mounted per tab. */
+class MarqueeCoordinator {
+  private overflows = new Map<symbol, number>();
+  private listeners = new Set<() => void>();
+  private maxOverflow = 0;
+
+  report(key: symbol, overflow: number) {
+    if (overflow > 0) this.overflows.set(key, overflow);
+    else this.overflows.delete(key);
+    this.recompute();
+  }
+
+  remove(key: symbol) {
+    this.overflows.delete(key);
+    this.recompute();
+  }
+
+  private recompute() {
+    let max = 0;
+    for (const value of this.overflows.values()) max = Math.max(max, value);
+    if (max !== this.maxOverflow) {
+      this.maxOverflow = max;
+      for (const listener of this.listeners) listener();
+    }
+  }
+
+  subscribe(listener: () => void) {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  get maxTravelMs() {
+    return (this.maxOverflow / MARQUEE_PIXELS_PER_SECOND) * 1000;
+  }
+}
+
+const marqueeCoordinator = new MarqueeCoordinator();
+
 /** Kiosk-only alternative to a static `truncate` ellipsis (H41: nobody can
  * hover, click, or scroll to read the rest). Only when the text actually
  * overflows its box, scroll it into view on a loop: pause at the start,
  * scroll to reveal the clipped tail, pause there, scroll back, repeat. Text
- * that already fits never animates. */
+ * that already fits never animates. Every overflowing text on the page moves
+ * on the same shared clock (see MarqueeCoordinator) rather than each running
+ * its own independent, out-of-phase loop. */
 function MarqueeText({ text, className }: { text: string; className?: string }) {
   const containerRef = useRef<HTMLSpanElement>(null);
   const textRef = useRef<HTMLSpanElement>(null);
   const animationRef = useRef<Animation | null>(null);
+  const registrationKey = useRef<symbol | null>(null);
+  if (!registrationKey.current) registrationKey.current = Symbol("marquee");
 
   // `text` isn't read in the effect body, but a same-size container swapping
   // to different-length content (e.g. a new presenting team) must still
@@ -98,37 +147,59 @@ function MarqueeText({ text, className }: { text: string; className?: string }) 
   useLayoutEffect(() => {
     const container = containerRef.current;
     const el = textRef.current;
-    if (!container || !el) return;
+    const key = registrationKey.current;
+    if (!container || !el || !key) return;
 
-    const setup = () => {
+    let ownOverflow = 0;
+
+    const applyAnimation = () => {
       animationRef.current?.cancel();
       el.style.transform = "translateX(0)";
-      const overflow = el.scrollWidth - container.clientWidth;
-      if (overflow <= 1) return;
-      const travel = (overflow / MARQUEE_PIXELS_PER_SECOND) * 1000;
-      const total = MARQUEE_PAUSE_MS * 2 + travel * 2;
+      if (ownOverflow <= 1) return;
+      const ownTravel = (ownOverflow / MARQUEE_PIXELS_PER_SECOND) * 1000;
+      const maxTravel = marqueeCoordinator.maxTravelMs;
+      const total = MARQUEE_PAUSE_MS * 2 + maxTravel * 2;
+      // Own forward travel ends at o2; shorter texts then hold at full
+      // offset until o3 (when the longest text arrives). Both pauses (o1-o0,
+      // o4-o3) are shared by every instance. The return trip mirrors this.
+      const o1 = MARQUEE_PAUSE_MS / total;
+      const o2 = (MARQUEE_PAUSE_MS + ownTravel) / total;
+      const o3 = (MARQUEE_PAUSE_MS + maxTravel) / total;
+      const o4 = (MARQUEE_PAUSE_MS + maxTravel + MARQUEE_PAUSE_MS) / total;
+      const o5 = (MARQUEE_PAUSE_MS + maxTravel + MARQUEE_PAUSE_MS + ownTravel) / total;
+      const offset = `translateX(-${ownOverflow}px)`;
       animationRef.current = el.animate(
         [
           { transform: "translateX(0)", offset: 0 },
-          { transform: "translateX(0)", offset: MARQUEE_PAUSE_MS / total },
-          { transform: `translateX(-${overflow}px)`, offset: (MARQUEE_PAUSE_MS + travel) / total },
-          {
-            transform: `translateX(-${overflow}px)`,
-            offset: (MARQUEE_PAUSE_MS + travel + MARQUEE_PAUSE_MS) / total,
-          },
+          { transform: "translateX(0)", offset: o1 },
+          { transform: offset, offset: o2 },
+          { transform: offset, offset: o3 },
+          { transform: offset, offset: o4 },
+          { transform: offset, offset: o5 },
           { transform: "translateX(0)", offset: 1 },
         ],
         { duration: total, iterations: Number.POSITIVE_INFINITY, easing: "ease-in-out" },
       );
     };
 
-    setup();
-    const observer = new ResizeObserver(setup);
+    const measure = () => {
+      ownOverflow = el.scrollWidth - container.clientWidth;
+      marqueeCoordinator.report(key, ownOverflow);
+      applyAnimation();
+    };
+
+    measure();
+    // Re-applies with the new shared pace whenever the page-wide longest
+    // overflow changes (a longer/shorter name appears elsewhere).
+    const unsubscribe = marqueeCoordinator.subscribe(applyAnimation);
+    const observer = new ResizeObserver(measure);
     observer.observe(container);
     observer.observe(el);
     return () => {
       animationRef.current?.cancel();
       observer.disconnect();
+      unsubscribe();
+      marqueeCoordinator.remove(key);
     };
   }, [text]);
 
@@ -176,21 +247,21 @@ function ChallengeHeading({ challenge }: { challenge: RoomView["challenge"] }) {
 }
 
 /** Room name + location — identical treatment everywhere a room appears,
- * standalone or clustered in a joint group, name always bold. */
+ * standalone or clustered in a joint group, name always bold. The
+ * ready/paused pill is NOT part of this block: it always belongs in the
+ * top-right corner of whichever card this room heads, so callers place it
+ * alongside this component rather than nesting it underneath. */
 function RoomHeader({ room }: { room: RoomView }) {
   return (
-    <div className="flex items-start justify-between gap-3">
-      <div className="min-w-0">
-        {room.room.location && (
-          <p className="text-muted-foreground text-sm font-medium">
-            <MarqueeText text={room.room.location} />
-          </p>
-        )}
-        <h3 className="text-xl font-bold">
-          <MarqueeText text={room.room.name} />
-        </h3>
-      </div>
-      <RoomStatusPill paused={Boolean(room.state?.is_paused)} />
+    <div className="min-w-0">
+      {room.room.location && (
+        <p className="text-muted-foreground text-sm font-medium">
+          <MarqueeText text={room.room.location} />
+        </p>
+      )}
+      <h3 className="text-xl font-bold">
+        <MarqueeText text={room.room.name} />
+      </h3>
     </div>
   );
 }
@@ -274,14 +345,27 @@ function NextInQueueFooter({
   );
 }
 
-/** A room whose challenge (if any) isn't shared with another room. */
+/** A room whose challenge (if any) isn't shared with another room. The
+ * ready/paused pill always sits in the card's top-right corner — next to the
+ * challenge heading when there is one, next to the room header otherwise —
+ * matching where it sits on a joint card's per-room mini-cards. */
 function StandaloneRoomCard({ room }: { room: RoomView }) {
+  const pill = <RoomStatusPill paused={Boolean(room.state?.is_paused)} />;
   return (
     <article className="flex min-w-0 flex-col rounded-2xl border bg-card p-5 shadow-sm">
-      <ChallengeHeading challenge={room.challenge} />
-      <div className={room.challenge ? "mt-3" : undefined}>
-        <RoomHeader room={room} />
+      <div className="flex items-start justify-between gap-3">
+        {room.challenge ? (
+          <ChallengeHeading challenge={room.challenge} />
+        ) : (
+          <RoomHeader room={room} />
+        )}
+        {pill}
       </div>
+      {room.challenge && (
+        <div className="mt-3">
+          <RoomHeader room={room} />
+        </div>
+      )}
       <PresentingBlock active={room.active} />
       <WaitingRoomList room={room} />
       <NextInQueueFooter entry={room.next[0] ?? null} waitingCount={room.next.length} />
@@ -314,7 +398,10 @@ function JointGroupCard({ group, maxSpan }: { group: RoomGroup; maxSpan: number 
       >
         {group.rooms.map((room) => (
           <div key={room.room.id} className="min-w-0 rounded-xl border bg-card p-4">
-            <RoomHeader room={room} />
+            <div className="flex items-start justify-between gap-3">
+              <RoomHeader room={room} />
+              <RoomStatusPill paused={Boolean(room.state?.is_paused)} />
+            </div>
             <PresentingBlock active={room.active} />
             <WaitingRoomList room={room} />
           </div>
