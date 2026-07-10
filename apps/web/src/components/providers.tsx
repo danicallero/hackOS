@@ -17,9 +17,14 @@ function GlobalDataRefresh() {
   useEventSource("/api/events/stream", {
     events: [EVENTS.DATA_CHANGED],
     onEvent: () => {
-      // This route owns a focused live query; it refetches its queue model
-      // below without losing focus, local state or a visible call notice.
-      if (pathname === "/my-queue") return;
+      // These routes own a focused live query — /my-queue refetches its queue
+      // model below without losing focus, local state or a visible call
+      // notice; /tv (H41) already owns scoped per-topic SSE refreshes (mode,
+      // rooms, schedule, announcements) that update in place. A full
+      // navigation here would undo that and flash the kiosk on every
+      // mutation anywhere in the API, since every broadcast mirrors into this
+      // same global DATA_CHANGED stream (apps/api/src/lib/sse.ts).
+      if (pathname === "/my-queue" || pathname?.startsWith("/tv")) return;
       // Coalesce writes which generate several domain changes into one reload.
       // A full navigation is intentional: most app routes own client-side
       // read-model state, so a router refresh alone would leave it stale.
