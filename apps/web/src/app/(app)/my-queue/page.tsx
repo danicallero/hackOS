@@ -8,8 +8,8 @@
 //
 // Data:
 //   GET  /api/queue/me          → MyQueueEntry[] (read model, refetched by SSE)
-//   GET  /api/queue/me/stream   → per-user SSE (user.queue.called / .precall)
-//   GET  /api/events/stream     → global mutations which can change rank/ETA
+//   GET  /api/queue/me/stream   → per-user SSE (only changes to one of the
+//                                  participant's own challenge queues)
 //
 // Realtime (plan §4): the SSE payload is a signal, so we refetch the read model
 // on every event (useLiveQuery). We additionally listen to the same stream to
@@ -36,7 +36,11 @@ type CalledPayload = { entryId: number; challengeId: number; roomId: number; roo
 /** Payload of `user.queue.precall`. */
 type PrecallPayload = { entryId: number; challengeId: number; etaMinutes: number };
 
-const CALL_EVENTS = [EVENTS.USER_QUEUE_CALLED, EVENTS.USER_QUEUE_PRECALL] as const;
+const CALL_EVENTS = [
+  EVENTS.USER_QUEUE_CALLED,
+  EVENTS.USER_QUEUE_PRECALL,
+  EVENTS.USER_QUEUE_CHANGED,
+] as const;
 
 function formatEta(minutes: number | null): string | null {
   if (minutes == null) return null;
@@ -57,20 +61,7 @@ export default function MyQueuePage() {
     data: entries,
     error,
     loading,
-    refetch,
-  } = useLiveQuery<MyQueueEntry[]>(getMyQueue, "/api/queue/me/stream", CALL_EVENTS, {
-    // SSE keeps normal changes immediate; reconciliation covers a missed event
-    // or reconnect because the server deliberately does not retain an event log.
-    pollIntervalMs: 10_000,
-  });
-
-  // A team can move up when somebody else is called or requeued. That event
-  // is not necessarily addressed to this user, so use the global SSE signal
-  // to refetch this small personal read model without navigating the page.
-  useEventSource("/api/events/stream", {
-    events: [EVENTS.DATA_CHANGED],
-    onEvent: () => refetch(),
-  });
+  } = useLiveQuery<MyQueueEntry[]>(getMyQueue, "/api/queue/me/stream", CALL_EVENTS);
 
   // The read model only carries `roomId`; the call event carries the room name.
   // Cache names as we see them so the "go to room" notice reads nicely.

@@ -4,6 +4,7 @@ import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
 import { writeQueueHistory } from "./history.js";
+import { notifyChallengeQueueChanged } from "./notify.js";
 import type { QueueEntryRow } from "./types.js";
 
 /**
@@ -205,6 +206,7 @@ export async function upsertAttemptReview(
   // panel's live query drops the completed team from the room on this event.
   if (completedEntry) {
     await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ENTRY_CHANGED, completedEntry);
+    await notifyChallengeQueueChanged(pool, completedEntry.challenge_id);
   }
 
   return review;

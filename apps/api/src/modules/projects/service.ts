@@ -9,6 +9,7 @@ import { broadcast } from "../../lib/sse.js";
 import { enqueueAuthEmail } from "../identity/outbox.js";
 import { assertSecondaryEmailAvailable } from "../identity/routes/secondary-email.js";
 import { writeQueueHistory } from "../queue/history.js";
+import { notifyChallengeQueueChanged } from "../queue/notify.js";
 import { compactChallengePositions, nextBottomPosition } from "../queue/ordering.js";
 import { buildImportPlan, type ImportPlan, type PlannedRepo } from "./plan.js";
 
@@ -1044,6 +1045,7 @@ export async function addRepoChallenge(actorId: number, repoId: number, challeng
   });
   if (result.entry) {
     await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ENTRY_CHANGED, result.entry);
+    await notifyChallengeQueueChanged(pool, result.entry.challenge_id);
   }
   return result;
 }
@@ -1089,6 +1091,7 @@ export async function removeRepoChallenge(actorId: number, repoId: number, chall
     return { repoId, challengeId, entry: updated.rows[0], removed: true };
   });
   await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ENTRY_CHANGED, result.entry);
+  await notifyChallengeQueueChanged(pool, result.entry.challenge_id);
   return result;
 }
 
