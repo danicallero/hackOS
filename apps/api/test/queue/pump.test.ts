@@ -299,7 +299,17 @@ describe("topUpRoom: immediate single-room refill (H29/H30/H35)", () => {
     expect((await getEntry(entryId)).status).toBe("waiting");
   });
 
-  it("bring-in via the route triggers the immediate refill (fire-and-forget)", async () => {
+  it("treats a room removed during lifecycle cleanup as a no-op", async () => {
+    const { topUpRoom } = await import("../../src/modules/queue/pump.js");
+    const roomId = await createRoom();
+    const { pool } = await import("../../src/db/pool.js");
+
+    await pool.query(`DELETE FROM rooms WHERE id = $1`, [roomId]);
+
+    await expect(topUpRoom(roomId)).resolves.toBeUndefined();
+  });
+
+  it("bring-in via the route settles the immediate refill before a test response returns", async () => {
     const challengeId = await createChallenge();
     const roomId = await createRoom({ maxInWaitingArea: 2 });
     await assignChallengeToRoom(roomId, challengeId);
@@ -321,13 +331,9 @@ describe("topUpRoom: immediate single-room refill (H29/H30/H35)", () => {
       });
       expect(res.statusCode).toBe(200);
 
-      // Refill is fire-and-forget: poll until team 3 is called (no pumpTick).
-      let team3 = await getEntry(entries[2]!);
-      for (let i = 0; i < 50 && team3.status !== "called"; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 20));
-        team3 = await getEntry(entries[2]!);
-      }
-      expect(team3.status).toBe("called");
+      // Test mode awaits scheduleTopUp, so the request cannot leave a refill
+      // task running into the next fixture.
+      expect((await getEntry(entries[2]!)).status).toBe("called");
     } finally {
       await app.close();
     }

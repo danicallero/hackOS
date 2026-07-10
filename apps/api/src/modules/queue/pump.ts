@@ -1,6 +1,6 @@
 import { config } from "../../config.js";
 import { pool } from "../../db/pool.js";
-import { ConflictError } from "../../lib/errors.js";
+import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { notifyTeamPreCall } from "./notify.js";
 import { callNextForRoom } from "./service.js";
@@ -48,6 +48,11 @@ export async function topUpRoom(roomId: number): Promise<void> {
       entry = await callNextForRoom(null, roomId, { force: false });
     } catch (err) {
       if (err instanceof ConflictError) break; // full or paused mid-loop
+      // A fire-and-forget refill can start just before its room is removed.
+      // That is normal lifecycle cleanup, not an operator-visible failure; in
+      // particular, it must not leave a rejected task behind during test
+      // fixture teardown.
+      if (err instanceof NotFoundError) return;
       throw err;
     }
     if (!entry) break;
