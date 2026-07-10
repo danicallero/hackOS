@@ -128,6 +128,38 @@ describe("call_next (H29, H30)", () => {
     expect(forced.json().called).toBe(true);
   });
 
+  it("H30: skips the same project in another challenge while it is called elsewhere", async () => {
+    const { challengeId, roomId } = await setup();
+    const challenge2 = await createChallenge();
+    const room2 = await createRoom({ maxInWaitingArea: 1 });
+    await assignChallengeToRoom(room2, challenge2);
+
+    const { repoId } = await createRepoWithTeam();
+    const firstEntry = await enqueueRepo(challengeId, repoId, 1);
+    const secondEntry = await enqueueRepo(challenge2, repoId, 1);
+
+    const first = await app.inject({
+      method: "POST",
+      url: `/api/queue/rooms/${roomId}/call-next`,
+      headers: asUser(operatorId),
+      payload: {},
+    });
+    expect(first.statusCode).toBe(200);
+    expect(first.json().entry.id).toBe(firstEntry);
+
+    const second = await app.inject({
+      method: "POST",
+      url: `/api/queue/rooms/${room2}/call-next`,
+      headers: asUser(operatorId),
+      payload: {},
+    });
+    expect(second.statusCode).toBe(200);
+    expect(second.json().called).toBe(false);
+
+    expect((await getEntry(firstEntry)).status).toBe("called");
+    expect((await getEntry(secondEntry)).status).toBe("waiting");
+  });
+
   it("H30: skips a team with a member busy in another room WITHOUT losing its position", async () => {
     const { challengeId: ch1, roomId: room1 } = await setup();
     const ch2 = await createChallenge();

@@ -3,9 +3,9 @@ import type { Queryable } from "../../db/pool.js";
 /**
  * H30 hard invariant: never call a team if any of its members (via
  * `submissions` of the repo being considered) is already `called`, `in_room`
- * or `presenting` for ANOTHER repo (i.e. another challenge — the unique
- * (challenge_id, repo_id) index makes duplicate entries within a challenge
- * impossible).
+ * or `presenting` in ANOTHER room. This includes another entry for the same
+ * repo when that project competes in more than one challenge: a team cannot
+ * physically wait at two room doors at once.
  *
  * Race note (plan/07 §2): row locks on the candidate entry are NOT enough —
  * two rooms calling two different repos that share a member would each lock
@@ -29,7 +29,7 @@ export async function isRepoBlockedByBusyMember(
   const { rows } = await client.query(
     `SELECT 1
        FROM submissions s1
-       JOIN submissions s2 ON s2.user_id = s1.user_id AND s2.repo_id <> s1.repo_id
+       JOIN submissions s2 ON s2.user_id = s1.user_id
        JOIN queue_entries qe ON qe.repo_id = s2.repo_id
                               AND qe.status IN ('called', 'in_room', 'presenting')
       WHERE s1.repo_id = $1

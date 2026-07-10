@@ -58,7 +58,11 @@ export default function MyQueuePage() {
     error,
     loading,
     refetch,
-  } = useLiveQuery<MyQueueEntry[]>(getMyQueue, "/api/queue/me/stream", CALL_EVENTS);
+  } = useLiveQuery<MyQueueEntry[]>(getMyQueue, "/api/queue/me/stream", CALL_EVENTS, {
+    // SSE keeps normal changes immediate; reconciliation covers a missed event
+    // or reconnect because the server deliberately does not retain an event log.
+    pollIntervalMs: 10_000,
+  });
 
   // A team can move up when somebody else is called or requeued. That event
   // is not necessarily addressed to this user, so use the global SSE signal
