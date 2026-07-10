@@ -11,6 +11,7 @@ import {
   FolderGitIcon,
   GavelIcon,
   HandshakeIcon,
+  InboxIcon,
   LayoutDashboardIcon,
   LibraryBigIcon,
   ListOrderedIcon,
@@ -157,7 +158,6 @@ export const NAV: NavSection[] = [
         href: "/announcements",
         icon: MegaphoneIcon,
         capability: CAPABILITIES.ANNOUNCEMENTS_MANAGE,
-        soon: true,
       },
       {
         title: "Enterprises",
@@ -209,13 +209,14 @@ export const NAV: NavSection[] = [
         href: "/audit",
         icon: ScrollTextIcon,
         capability: CAPABILITIES.AUDIT_READ,
-        soon: true,
       },
     ],
   },
   {
     label: "Account",
     items: [
+      // Everyone has an inbox — auth only, no capability (H50/H51).
+      { title: "Inbox", href: "/inbox", icon: InboxIcon },
       { title: "Wallet", href: "/wallet", icon: WalletCardsIcon },
       { title: "My profile", href: "/settings/profile", icon: UserIcon },
     ],
