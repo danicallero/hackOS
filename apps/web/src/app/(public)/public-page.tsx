@@ -259,7 +259,7 @@ export function PublicPage() {
                 >
                   <p className="text-muted-foreground text-sm">{challenge.enterprise.name}</p>
                   <h3 className="mt-1 text-lg font-medium">{displayText(challenge.title)}</h3>
-                  <p className="text-muted-foreground text-pretty mt-2 text-sm">
+                  <p className="text-muted-foreground text-pretty mt-2 line-clamp-3 text-sm">
                     {displayText(challenge.description)}
                   </p>
                   {Array.isArray(challenge.prizes) && challenge.prizes.length > 0 && (
