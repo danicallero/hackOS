@@ -43,6 +43,9 @@ export interface PresenceLookup extends PersonCard {
   badgeId: string;
   /** Whether the presence estimate currently has this person inside. */
   present: boolean;
+  /** Ground truth: when their currently-open door session started, or null
+   * if it's closed. An 'in' scan is rejected while this is set. */
+  openSince: string | null;
 }
 
 export interface PresenceScanResult {
@@ -74,7 +77,6 @@ export interface TimeLogEntry {
   id: number;
   kind: "in" | "out";
   scannedAt: string;
-  location: string | null;
   scannedBy: { userId: number; name: string | null; surname: string | null };
 }
 
@@ -83,7 +85,18 @@ export interface TimeLogUpdateResult {
   userId: number;
   kind: "in" | "out";
   scannedAt: string;
-  location: string | null;
+}
+
+export interface OpenPresenceSession {
+  userId: number;
+  name: string | null;
+  surname: string | null;
+  since: string;
+  lastSignal: string;
+  /** No supporting signal (door or activity) for longer than the
+   * suspicious-gap window — flagged for staff to double-check, not
+   * auto-closed. */
+  stale: boolean;
 }
 
 export interface ActivityScanResult {
@@ -196,23 +209,17 @@ export const logisticsApi = {
     }),
   presenceLookup: (badgeId: string) =>
     api.post<PresenceLookup>("/api/presence/lookup", { badgeId }),
-  presenceScan: (body: {
-    badgeId: string;
-    kind: "in" | "out";
-    location?: string;
-    scannedAt?: string;
-  }) =>
+  presenceScan: (body: { badgeId: string; kind: "in" | "out"; scannedAt?: string }) =>
     api.post<PresenceScanResult>("/api/presence/scan", body, {
       headers: idempotencyHeaders("presence"),
     }),
   presenceEstimate: () => api.get<PresenceEstimate>("/api/presence/estimate"),
   presenceHours: () => api.get<PresenceHours[]>("/api/presence/hours"),
+  presenceOpenSessions: () => api.get<{ items: OpenPresenceSession[] }>("/api/presence/open"),
   presenceLogs: (userId: number) =>
     api.get<{ items: TimeLogEntry[] }>(`/api/presence/logs/${userId}`),
-  updateTimeLog: (
-    id: number,
-    body: { kind?: "in" | "out"; scannedAt?: string; location?: string | null },
-  ) => api.patch<TimeLogUpdateResult>(`/api/presence/logs/${id}`, body),
+  updateTimeLog: (id: number, body: { kind?: "in" | "out"; scannedAt?: string }) =>
+    api.patch<TimeLogUpdateResult>(`/api/presence/logs/${id}`, body),
   deleteTimeLog: (id: number) => api.delete<{ deleted: true }>(`/api/presence/logs/${id}`),
   stats: () => api.get<LogisticsStats>("/api/logistics/stats"),
   scannableActivities: (category?: "meal" | "activity") =>
