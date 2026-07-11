@@ -21,6 +21,7 @@ const eventConfigBody = z
     timezone: z.string().min(1).optional(),
     hackingStartsAt: z.coerce.date().nullable().optional(),
     hackingEndsAt: z.coerce.date().nullable().optional(),
+    showStartCountdown: z.boolean().optional(),
   })
   .strict();
 
@@ -30,6 +31,7 @@ const DEFAULTS = {
   timezone: "Europe/Madrid",
   hacking_starts_at: null,
   hacking_ends_at: null,
+  show_start_countdown: false,
 } as const;
 
 interface EventConfigRow {
@@ -38,23 +40,49 @@ interface EventConfigRow {
   timezone: string;
   hacking_starts_at: string | null;
   hacking_ends_at: string | null;
+  show_start_countdown: boolean;
 }
 
 async function readConfig(): Promise<EventConfigRow> {
   const { rows } = await pool.query(
-    `SELECT name, tagline, timezone, hacking_starts_at, hacking_ends_at
+    `SELECT name, tagline, timezone, hacking_starts_at, hacking_ends_at, show_start_countdown
        FROM event_config WHERE id = 1`,
   );
   return rows[0] ?? DEFAULTS;
 }
 
-function toPublic(row: EventConfigRow) {
+/**
+ * The judging window (queue_settings.schedule_start_at/schedule_end_at) is
+ * owned by the queue module (H39's room-pacing input) — this is a read-only
+ * passthrough so the public countdown can show "judging starts/ends in" once
+ * hacking_ends_at passes.
+ */
+async function readJudgingWindow(): Promise<{
+  judging_starts_at: string | null;
+  judging_ends_at: string | null;
+}> {
+  const { rows } = await pool.query(
+    `SELECT schedule_start_at, schedule_end_at FROM queue_settings WHERE id = 1`,
+  );
+  return {
+    judging_starts_at: rows[0]?.schedule_start_at ?? null,
+    judging_ends_at: rows[0]?.schedule_end_at ?? null,
+  };
+}
+
+function toPublic(
+  row: EventConfigRow,
+  judging: { judging_starts_at: string | null; judging_ends_at: string | null },
+) {
   return {
     name: row.name,
     tagline: row.tagline,
     timezone: row.timezone,
     hackingStartsAt: row.hacking_starts_at,
     hackingEndsAt: row.hacking_ends_at,
+    showStartCountdown: row.show_start_countdown,
+    judgingStartsAt: judging.judging_starts_at,
+    judgingEndsAt: judging.judging_ends_at,
   };
 }
 
@@ -62,10 +90,10 @@ export function registerEventRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
 
   // Anonymous: the public countdown feed for web / TV.
-  r.get("/api/public/event", async () => toPublic(await readConfig()));
+  r.get("/api/public/event", async () => toPublic(await readConfig(), await readJudgingWindow()));
 
   r.get("/api/event", { preHandler: requireCapability(CAPABILITIES.SCHEDULE_MANAGE) }, async () =>
-    toPublic(await readConfig()),
+    toPublic(await readConfig(), await readJudgingWindow()),
   );
 
   r.put(
@@ -84,6 +112,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
         hacking_starts_at:
           b.hackingStartsAt === undefined ? current.hacking_starts_at : b.hackingStartsAt,
         hacking_ends_at: b.hackingEndsAt === undefined ? current.hacking_ends_at : b.hackingEndsAt,
+        show_start_countdown:
+          b.showStartCountdown === undefined ? current.show_start_countdown : b.showStartCountdown,
       };
 
       if (
@@ -95,23 +125,33 @@ export function registerEventRoutes(app: FastifyInstance): void {
       }
 
       const { rows } = await pool.query(
-        `INSERT INTO event_config (id, name, tagline, timezone, hacking_starts_at, hacking_ends_at)
-         VALUES (1, $1, $2, $3, $4, $5)
+        `INSERT INTO event_config
+            (id, name, tagline, timezone, hacking_starts_at, hacking_ends_at, show_start_countdown)
+         VALUES (1, $1, $2, $3, $4, $5, $6)
          ON CONFLICT (id) DO UPDATE
             SET name = EXCLUDED.name, tagline = EXCLUDED.tagline, timezone = EXCLUDED.timezone,
                 hacking_starts_at = EXCLUDED.hacking_starts_at,
-                hacking_ends_at = EXCLUDED.hacking_ends_at
-         RETURNING name, tagline, timezone, hacking_starts_at, hacking_ends_at`,
-        [next.name, next.tagline, next.timezone, next.hacking_starts_at, next.hacking_ends_at],
+                hacking_ends_at = EXCLUDED.hacking_ends_at,
+                show_start_countdown = EXCLUDED.show_start_countdown
+         RETURNING name, tagline, timezone, hacking_starts_at, hacking_ends_at, show_start_countdown`,
+        [
+          next.name,
+          next.tagline,
+          next.timezone,
+          next.hacking_starts_at,
+          next.hacking_ends_at,
+          next.show_start_countdown,
+        ],
       );
+      const judging = await readJudgingWindow();
       await audit(pool, {
         actorId: req.userId,
         entityType: "event_config",
         entityId: 1,
         action: "updated",
-        after: toPublic(rows[0]),
+        after: toPublic(rows[0], judging),
       });
-      return toPublic(rows[0]);
+      return toPublic(rows[0], judging);
     },
   );
 }

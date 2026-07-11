@@ -5,7 +5,7 @@
 // panels. Backed by GET/PUT /api/event (capability SCHEDULE_MANAGE).
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CalendarClockIcon } from "lucide-react";
+import { CalendarClockIcon, GavelIcon } from "lucide-react";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -23,7 +23,10 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { ApiError, api } from "@/lib/api";
+import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
+import { getQueueSettings, updateQueueSettings } from "@/lib/queue";
 import type { EventConfig } from "@/lib/types";
 
 const schema = z.object({
@@ -33,6 +36,7 @@ const schema = z.object({
   // Held as datetime-local strings ("YYYY-MM-DDTHH:mm"); empty means "unset".
   hackingStartsAt: z.string(),
   hackingEndsAt: z.string(),
+  showStartCountdown: z.boolean(),
 });
 
 type Values = z.infer<typeof schema>;
@@ -63,6 +67,15 @@ function fromLocalInputValue(value: string): string | null {
 }
 
 export default function EventSettingsPage() {
+  return (
+    <div className="space-y-6">
+      <HackingWindowSection />
+      <JudgingWindowSection />
+    </div>
+  );
+}
+
+function HackingWindowSection() {
   const form = useForm<Values>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -71,6 +84,7 @@ export default function EventSettingsPage() {
       timezone: "Europe/Madrid",
       hackingStartsAt: "",
       hackingEndsAt: "",
+      showStartCountdown: false,
     },
   });
   const { reset } = form;
@@ -86,6 +100,7 @@ export default function EventSettingsPage() {
           timezone: cfg.timezone || "Europe/Madrid",
           hackingStartsAt: toLocalInputValue(cfg.hackingStartsAt),
           hackingEndsAt: toLocalInputValue(cfg.hackingEndsAt),
+          showStartCountdown: cfg.showStartCountdown,
         }),
       )
       .catch((err) =>
@@ -102,6 +117,7 @@ export default function EventSettingsPage() {
         timezone: values.timezone.trim(),
         hackingStartsAt: fromLocalInputValue(values.hackingStartsAt),
         hackingEndsAt: fromLocalInputValue(values.hackingEndsAt),
+        showStartCountdown: values.showStartCountdown,
       });
       reset({
         name: next.name ?? "",
@@ -109,6 +125,7 @@ export default function EventSettingsPage() {
         timezone: next.timezone || "Europe/Madrid",
         hackingStartsAt: toLocalInputValue(next.hackingStartsAt),
         hackingEndsAt: toLocalInputValue(next.hackingEndsAt),
+        showStartCountdown: next.showStartCountdown,
       });
       toast.success("Event settings saved.");
     } catch (err) {
@@ -192,6 +209,119 @@ export default function EventSettingsPage() {
                   <DateTimeInput value={field.value} onChange={field.onChange} />
                 </FormControl>
                 <FormDescription>Must be after the start time.</FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="showStartCountdown"
+            render={({ field }) => (
+              <FormItem>
+                <div className="flex items-center justify-between gap-4 rounded-md border p-3">
+                  <div>
+                    <FormLabel>Countdown to start</FormLabel>
+                    <FormDescription>
+                      Before hacking starts, show a live countdown to the start time instead of a
+                      locked duration.
+                    </FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch checked={field.value} onCheckedChange={field.onChange} />
+                  </FormControl>
+                </div>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </SectionCard>
+      </form>
+    </Form>
+  );
+}
+
+const judgingSchema = z.object({
+  // Held as datetime-local strings ("YYYY-MM-DDTHH:mm"); empty means "unset".
+  judgingStartsAt: z.string(),
+  judgingEndsAt: z.string(),
+});
+
+type JudgingValues = z.infer<typeof judgingSchema>;
+
+/**
+ * The judging window (queue_settings.schedule_start_at/schedule_end_at) sizes
+ * how much time judging rooms have per project: roomPace() (H39) tightens the
+ * per-team budget automatically as this window's end approaches, based on how
+ * many projects are still pending. Edited here via a separate resource
+ * (/api/queue/settings, capability QUEUE_ADMIN) from the hacking window above.
+ */
+function JudgingWindowSection() {
+  const form = useForm<JudgingValues>({
+    resolver: zodResolver(judgingSchema),
+    defaultValues: { judgingStartsAt: "", judgingEndsAt: "" },
+  });
+  const { reset } = form;
+
+  useEffect(() => {
+    getQueueSettings()
+      .then((settings) =>
+        reset({
+          judgingStartsAt: toDatetimeLocal(settings.schedule_start_at),
+          judgingEndsAt: toDatetimeLocal(settings.schedule_end_at),
+        }),
+      )
+      .catch((err) =>
+        toast.error(err instanceof ApiError ? err.message : "Could not load the judging window."),
+      );
+  }, [reset]);
+
+  async function onSubmit(values: JudgingValues) {
+    try {
+      const next = await updateQueueSettings({
+        scheduleStartAt: fromDatetimeLocal(values.judgingStartsAt),
+        scheduleEndAt: fromDatetimeLocal(values.judgingEndsAt),
+      });
+      reset({
+        judgingStartsAt: toDatetimeLocal(next.schedule_start_at),
+        judgingEndsAt: toDatetimeLocal(next.schedule_end_at),
+      });
+      toast.success("Judging window saved.");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not save the judging window.");
+    }
+  }
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <SectionCard
+          icon={GavelIcon}
+          title="Judging window"
+          description="Sizes how much time judging rooms have per project — room pacing (H39) tightens automatically as this window's end approaches."
+          footer={<SubmitButton pending={form.formState.isSubmitting}>Save changes</SubmitButton>}
+        >
+          <FormField
+            control={form.control}
+            name="judgingStartsAt"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Judging starts</FormLabel>
+                <FormControl>
+                  <DateTimeInput value={field.value} onChange={field.onChange} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="judgingEndsAt"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Judging ends</FormLabel>
+                <FormControl>
+                  <DateTimeInput value={field.value} onChange={field.onChange} />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}

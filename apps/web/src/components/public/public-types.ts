@@ -6,6 +6,9 @@ export interface PublicEvent {
   timezone: string;
   hackingStartsAt: string | null;
   hackingEndsAt: string | null;
+  showStartCountdown: boolean;
+  judgingStartsAt: string | null;
+  judgingEndsAt: string | null;
 }
 
 export interface PublicSponsor {

@@ -44,6 +44,9 @@ describe("event config (H45/H47)", () => {
       hackingStartsAt: null,
       hackingEndsAt: null,
       timezone: "Europe/Madrid",
+      showStartCountdown: false,
+      judgingStartsAt: null,
+      judgingEndsAt: null,
     });
   });
 
@@ -91,5 +94,39 @@ describe("event config (H45/H47)", () => {
       },
     });
     expect(res.statusCode).toBe(400);
+  });
+
+  it("round-trips showStartCountdown, defaulting to false", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const put = await a.inject({
+      method: "PUT",
+      url: "/api/event",
+      headers: asUser(manager),
+      payload: { showStartCountdown: true },
+    });
+    expect(put.statusCode).toBe(200);
+    expect(put.json().showStartCountdown).toBe(true);
+
+    const pub = await a.inject({ method: "GET", url: "/api/public/event" });
+    expect(pub.json().showStartCountdown).toBe(true);
+  });
+
+  it("exposes the judging window (queue_settings) publicly, read-only", async () => {
+    const a = await getApp();
+    const admin = await createUserWithCapabilities([CAPABILITIES.QUEUE_ADMIN]);
+    const start = "2026-07-05T18:00:00.000Z";
+    const end = "2026-07-05T22:00:00.000Z";
+    const patch = await a.inject({
+      method: "PATCH",
+      url: "/api/queue/settings",
+      headers: asUser(admin),
+      payload: { scheduleStartAt: start, scheduleEndAt: end },
+    });
+    expect(patch.statusCode).toBe(200);
+
+    const pub = await a.inject({ method: "GET", url: "/api/public/event" });
+    expect(new Date(pub.json().judgingStartsAt).toISOString()).toBe(start);
+    expect(new Date(pub.json().judgingEndsAt).toISOString()).toBe(end);
   });
 });
