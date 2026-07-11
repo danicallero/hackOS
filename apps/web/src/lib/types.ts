@@ -80,6 +80,9 @@ export interface EventConfig {
   timezone: string;
   hackingStartsAt: string | null;
   hackingEndsAt: string | null;
+  showStartCountdown: boolean;
+  judgingStartsAt: string | null;
+  judgingEndsAt: string | null;
 }
 
 export type InviteKind = "staff" | "sponsor" | "participant";

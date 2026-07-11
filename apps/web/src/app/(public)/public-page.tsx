@@ -20,7 +20,7 @@ import type {
   PublicSponsor,
 } from "@/components/public/public-types";
 import { displayText } from "@/components/public/public-types";
-import { EventTimer } from "@/components/public/timer";
+import { EventPhaseDisplay, useEventPhase } from "@/components/public/timer";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { logisticsApi, type PublicScheduleItem } from "@/lib/logistics";
@@ -82,6 +82,7 @@ export function PublicPage() {
   useEffect(() => {
     if (content?.event.name) document.title = content.event.name;
   }, [content]);
+  const eventPhase = useEventPhase(content?.event ?? null);
 
   if (!content && !error)
     return (
@@ -153,11 +154,10 @@ export function PublicPage() {
               <Link href="/login">Log in</Link>
             </Button>
           </div>
-          {event.hackingEndsAt && (
+          {eventPhase.kind !== "none" && (
             <div className="border-primary/20 bg-card/60 mt-10 inline-flex flex-col rounded-xl border p-5 shadow-sm backdrop-blur">
-              <p className="text-muted-foreground text-sm">Time remaining</p>
-              <EventTimer
-                endsAt={event.hackingEndsAt}
+              <EventPhaseDisplay
+                phase={eventPhase}
                 className="mt-1 block font-mono text-4xl font-semibold tabular-nums sm:text-5xl"
               />
             </div>

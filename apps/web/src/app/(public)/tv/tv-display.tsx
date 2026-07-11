@@ -16,7 +16,7 @@ import type {
   PublicEvent,
   PublicSponsor,
 } from "@/components/public/public-types";
-import { EventTimer } from "@/components/public/timer";
+import { EventPhaseDisplay, EventTimer, useEventPhase } from "@/components/public/timer";
 import { type SseEnvelope, useEventSource } from "@/hooks/use-event-source";
 import { useFitToViewport } from "@/hooks/use-fit-to-viewport";
 import { api } from "@/lib/api";
@@ -633,17 +633,32 @@ function WifiView({ payload }: { payload: unknown }) {
   );
 }
 function TimerView({ event, payload }: { event: PublicEvent; payload: unknown }) {
-  const endsAt = textPayload(payload, "endsAt") ?? event.hackingEndsAt;
-  const label = textPayload(payload, "label") ?? "Time remaining";
+  // An operator's manual override (H42) always wins; otherwise fall back to
+  // the same hacking/judging phase logic as the public landing page.
+  const override = textPayload(payload, "endsAt") ?? textPayload(payload, "label");
+  const phase = useEventPhase(event);
+  const timerClassName = "mt-5 block font-mono text-7xl font-semibold tabular-nums sm:text-9xl";
   return (
     <TvFrame title="Event timer" icon={Clock3Icon}>
       <div className="grid min-h-[60dvh] place-items-center text-center">
         <div>
-          <p className="text-3xl text-muted-foreground">{label}</p>
-          <EventTimer
-            endsAt={endsAt}
-            className="mt-5 block font-mono text-7xl font-semibold tabular-nums sm:text-9xl"
-          />
+          {override ? (
+            <>
+              <p className="text-3xl text-muted-foreground">
+                {textPayload(payload, "label") ?? "Time remaining"}
+              </p>
+              <EventTimer
+                endsAt={textPayload(payload, "endsAt") ?? event.hackingEndsAt}
+                className={timerClassName}
+              />
+            </>
+          ) : (
+            <EventPhaseDisplay
+              phase={phase}
+              className={timerClassName}
+              labelClassName="text-3xl text-muted-foreground"
+            />
+          )}
         </div>
       </div>
     </TvFrame>

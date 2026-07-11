@@ -197,18 +197,13 @@ export const updateRoomState = (
   roomId: number,
   body: { maxInWaitingArea?: number; desiredMinutesPerTeam?: number },
 ) => api.patch<RoomQueueState>(`/api/queue/rooms/${roomId}/state`, body);
-export const updateQueueSettings = (
-  body: Partial<
-    Pick<
-      QueueSettings,
-      | "handoff_buffer_minutes"
-      | "schedule_start_at"
-      | "schedule_end_at"
-      | "pre_call_notification_eta_minutes"
-      | "requeue_prompt_default"
-    >
-  >,
-) => api.patch<QueueSettings>("/api/queue/settings", body);
+export const updateQueueSettings = (body: {
+  handoffBufferMinutes?: number;
+  scheduleStartAt?: string | null;
+  scheduleEndAt?: string | null;
+  preCallNotificationEtaMinutes?: number;
+  requeuePromptDefault?: QueueSettings["requeue_prompt_default"];
+}) => api.patch<QueueSettings>("/api/queue/settings", body);
 export const assignRoomChallenge = (roomId: number, challengeId: number) =>
   api.post(`/api/queue/rooms/${roomId}/challenges`, { challengeId });
 export const removeRoomChallenge = (roomId: number, challengeId: number) =>
