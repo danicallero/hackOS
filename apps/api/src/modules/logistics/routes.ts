@@ -22,7 +22,15 @@ import {
 } from "./activities.js";
 import { buildGoogleSaveUrl } from "./google-wallet.js";
 import { enqueueMealScanBatch } from "./offline-meals.js";
-import { allHours, occupancyEstimate, presenceScan, userHours } from "./presence.js";
+import {
+  allHours,
+  deleteTimeLog,
+  listTimeLogs,
+  occupancyEstimate,
+  presenceScan,
+  updateTimeLog,
+  userHours,
+} from "./presence.js";
 import {
   createScheduleItem,
   deleteScheduleItem,
@@ -52,6 +60,8 @@ import {
   scheduleIdParam,
   schedulePatchBody,
   scheduleVisibilityBody,
+  timeLogIdParam,
+  timeLogPatchBody,
   userIdParam,
   walletPurposeParam,
 } from "./schemas.js";
@@ -210,6 +220,30 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
     "/api/presence/hours/:userId",
     { preHandler: presenceRead, schema: { params: userIdParam } },
     async (req) => userHours(req.params.userId),
+  );
+
+  // Raw scan admin — view/correct individual door scans (H24 usability).
+  typed.get(
+    "/api/presence/logs/:userId",
+    { preHandler: presenceRead, schema: { params: userIdParam } },
+    async (req) => ({ items: await listTimeLogs(req.params.userId) }),
+  );
+
+  typed.patch(
+    "/api/presence/logs/:id",
+    { preHandler: presence, schema: { params: timeLogIdParam, body: timeLogPatchBody } },
+    async (req) =>
+      updateTimeLog(actor(req.userId), req.params.id, {
+        kind: req.body.kind,
+        scannedAt: req.body.scannedAt,
+        location: req.body.location,
+      }),
+  );
+
+  typed.delete(
+    "/api/presence/logs/:id",
+    { preHandler: presence, schema: { params: timeLogIdParam } },
+    async (req) => deleteTimeLog(actor(req.userId), req.params.id),
   );
 
   // ── H25 meals / H26 activities ───────────────────────────────────────────

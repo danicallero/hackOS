@@ -39,10 +39,36 @@ export interface PresenceEstimate {
   present: number[];
 }
 
+export interface PresenceInterval {
+  start: string;
+  end: string;
+  /** True when `end` is a real door 'out' scan; false when it's an estimate
+   * (inferred from a gap, or the session is still open). */
+  confirmed: boolean;
+}
+
 export interface PresenceHours {
   userId: number;
+  name?: string | null;
+  surname?: string | null;
   hours: number;
-  intervals?: { start: string; end: string }[];
+  intervals?: PresenceInterval[];
+}
+
+export interface TimeLogEntry {
+  id: number;
+  kind: "in" | "out";
+  scannedAt: string;
+  location: string | null;
+  scannedBy: { userId: number; name: string | null; surname: string | null };
+}
+
+export interface TimeLogUpdateResult {
+  id: number;
+  userId: number;
+  kind: "in" | "out";
+  scannedAt: string;
+  location: string | null;
 }
 
 export interface ActivityScanResult {
@@ -164,6 +190,13 @@ export const logisticsApi = {
     }),
   presenceEstimate: () => api.get<PresenceEstimate>("/api/presence/estimate"),
   presenceHours: () => api.get<PresenceHours[]>("/api/presence/hours"),
+  presenceLogs: (userId: number) =>
+    api.get<{ items: TimeLogEntry[] }>(`/api/presence/logs/${userId}`),
+  updateTimeLog: (
+    id: number,
+    body: { kind?: "in" | "out"; scannedAt?: string; location?: string | null },
+  ) => api.patch<TimeLogUpdateResult>(`/api/presence/logs/${id}`, body),
+  deleteTimeLog: (id: number) => api.delete<{ deleted: true }>(`/api/presence/logs/${id}`),
   stats: () => api.get<LogisticsStats>("/api/logistics/stats"),
   scannableActivities: (category?: "meal" | "activity") =>
     api.get<{ items: ScannableActivity[] }>("/api/activities/scannable", {

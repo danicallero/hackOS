@@ -9,7 +9,9 @@ import {
 /**
  * H24 presence estimation — deterministic unit tests over the pure algorithm,
  * including the story's canonical cases. Times are millis from a fixed base so
- * assertions are exact. PRESUMED_STAY default = 3h.
+ * assertions are exact. PRESUMED_STAY default = 8h (wide enough that a quiet
+ * afternoon of hacking with no scan isn't mistaken for having left, narrow
+ * enough that an overnight gap still is).
  */
 
 const H = 3_600_000;
@@ -26,6 +28,20 @@ describe("presence estimation (H24)", () => {
     expect(hours(events, at(24))).toBe(9);
     expect(isPresentAt(events, at(12))).toBe(true);
     expect(isPresentAt(events, at(19))).toBe(false);
+    const [interval] = buildPresenceIntervals(events, at(24));
+    expect(interval?.confirmed).toBe(true); // closed by a real door 'out'
+  });
+
+  it("a quiet afternoon with no scans is not mistaken for having left", () => {
+    // in at 09:00, next signal 6h later (well within the 8h window) — must
+    // stay a single continuous interval, not split into an "exit + re-entry".
+    const events: PresenceEvent[] = [
+      { t: at(9), kind: "in" },
+      { t: at(15), kind: "activity" },
+    ];
+    const intervals = buildPresenceIntervals(events, at(24));
+    expect(intervals).toHaveLength(1);
+    expect(isPresentAt(events, at(13))).toBe(true); // 4h gap, no scan in between
   });
 
   it("dinner but no breakfast = slept elsewhere (no overnight credit)", () => {
@@ -35,37 +51,37 @@ describe("presence estimation (H24)", () => {
       { t: at(33), kind: "activity" }, // Sunday 09:00
     ];
     const intervals = buildPresenceIntervals(events, at(48));
-    // two separate ~3h intervals, the overnight gap is never credited
+    // two separate intervals — the overnight gap itself is never credited
     expect(intervals).toHaveLength(2);
-    expect(intervals[0]).toEqual({ start: at(21), end: at(24) });
-    expect(intervals[1]).toEqual({ start: at(33), end: at(36) });
-    expect(hours(events, at(48))).toBe(6);
-    // not present overnight
-    expect(isPresentAt(events, at(28))).toBe(false);
+    expect(intervals[0]).toEqual({ start: at(21), end: at(29), confirmed: false });
+    expect(intervals[1]).toEqual({ start: at(33), end: at(41), confirmed: false });
+    // not present in the middle of the overnight gap
+    expect(isPresentAt(events, at(31))).toBe(false);
   });
 
   it("workshop before lunch extends the morning presence continuously", () => {
     const events: PresenceEvent[] = [
       { t: at(11), kind: "activity" }, // workshop
-      { t: at(14), kind: "activity" }, // lunch, within the 3h window
+      { t: at(14), kind: "activity" }, // lunch, well within the window
     ];
     const intervals = buildPresenceIntervals(events, at(24));
     // one continuous interval starting at the workshop (morning extended back)
     expect(intervals).toHaveLength(1);
     const [morning] = intervals;
     expect(morning?.start).toBe(at(11));
-    expect(morning?.end).toBe(at(17)); // lunch + 3h
+    expect(morning?.confirmed).toBe(false);
     expect(isPresentAt(events, at(13))).toBe(true); // between workshop and lunch
   });
 
-  it("meal-only participant still accrues reasonable hours", () => {
+  it("meal-only participant across a full day accrues the whole (capped) day", () => {
     const events: PresenceEvent[] = [
       { t: at(9), kind: "activity" }, // breakfast
       { t: at(14), kind: "activity" }, // lunch
       { t: at(21), kind: "activity" }, // dinner
     ];
-    // three ~3h blocks (gaps exceed the 3h window between meals)
-    expect(hours(events, at(30))).toBe(9);
+    // each meal extends the presumed window past the next one, merging into a
+    // single day-long presence, capped by MAX_SESSION (16h) from the first scan.
+    expect(hours(events, at(30))).toBe(16);
   });
 
   it("out authoritatively closes a presumed interval at the out time", () => {
@@ -75,6 +91,8 @@ describe("presence estimation (H24)", () => {
     ];
     expect(hours(events, at(24))).toBe(1);
     expect(isPresentAt(events, at(11))).toBe(false);
+    const [interval] = buildPresenceIntervals(events, at(24));
+    expect(interval?.confirmed).toBe(true);
   });
 
   it("caps a single interval so a stray far-apart out cannot over-credit", () => {
@@ -87,7 +105,9 @@ describe("presence estimation (H24)", () => {
 
   it("currently open door-in counts as present up to now, capped by window", () => {
     const events: PresenceEvent[] = [{ t: at(9), kind: "in" }];
-    expect(isPresentAt(events, at(10))).toBe(true); // within 3h window
-    expect(isPresentAt(events, at(13))).toBe(false); // window lapsed, no further signal
+    expect(isPresentAt(events, at(10))).toBe(true); // within the 8h window
+    expect(isPresentAt(events, at(18))).toBe(false); // window lapsed, no further signal
+    const intervals = buildPresenceIntervals(events, at(10));
+    expect(intervals[0]?.confirmed).toBe(false); // still open, no real 'out' yet
   });
 });

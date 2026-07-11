@@ -40,6 +40,14 @@ export const presenceScanBody = z.object({
   scannedAt: z.coerce.date().optional(),
 });
 
+export const timeLogIdParam = z.object({ id: z.coerce.number().int().positive() });
+
+export const timeLogPatchBody = z.object({
+  kind: z.enum(["in", "out"]).optional(),
+  scannedAt: z.coerce.date().optional(),
+  location: z.string().nullable().optional(),
+});
+
 export const scannableActivitiesQuery = z.object({
   category: z.enum(["meal", "activity"]).optional(),
 });

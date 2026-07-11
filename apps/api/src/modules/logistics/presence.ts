@@ -1,7 +1,7 @@
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
-import { BadRequestError } from "../../lib/errors.js";
+import { BadRequestError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
 import { resolveByBadge } from "./badge.js";
 import {
@@ -106,21 +106,164 @@ export async function userHours(userId: number, now: number = Date.now()) {
     intervals: intervals.map((i) => ({
       start: new Date(i.start).toISOString(),
       end: new Date(i.end).toISOString(),
+      confirmed: i.confirmed,
     })),
   };
 }
 
-/** H24: estimated hours for every user with presence signals (bulk). */
+/** H24: estimated hours for every user with presence signals (bulk, admin display). */
 export async function allHours(now: number = Date.now()) {
   const map = await loadEvents();
-  return [...map.entries()]
-    .map(([userId, events]) => ({
-      userId,
-      hours: round2(totalPresenceMs(events, now) / MS_PER_HOUR),
-    }))
+  const userIds = [...map.keys()];
+  if (userIds.length === 0) return [];
+
+  const { rows: people } = await pool.query(
+    `SELECT id, name, surname FROM users WHERE id = ANY($1)`,
+    [userIds],
+  );
+  const nameById = new Map(
+    (people as { id: number; name: string | null; surname: string | null }[]).map((p) => [
+      p.id,
+      { name: p.name, surname: p.surname },
+    ]),
+  );
+
+  return userIds
+    .map((userId) => {
+      const events = map.get(userId) ?? [];
+      return {
+        userId,
+        name: nameById.get(userId)?.name ?? null,
+        surname: nameById.get(userId)?.surname ?? null,
+        hours: round2(totalPresenceMs(events, now) / MS_PER_HOUR),
+      };
+    })
     .sort((a, b) => a.userId - b.userId);
 }
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+// ── raw scan admin — view/correct individual time_logs (H24 usability) ─────
+
+/** List every raw door scan for a user, oldest first, for admin review/edit. */
+export async function listTimeLogs(userId: number) {
+  const { rows } = await pool.query(
+    `SELECT tl.id, tl.kind, tl.scanned_at, tl.location, tl.scanned_by,
+            u.name AS scanned_by_name, u.surname AS scanned_by_surname
+       FROM time_logs tl
+       JOIN users u ON u.id = tl.scanned_by
+      WHERE tl.user_id = $1
+      ORDER BY tl.scanned_at ASC, tl.id ASC`,
+    [userId],
+  );
+  return rows.map((r) => ({
+    id: r.id as number,
+    kind: r.kind as "in" | "out",
+    scannedAt: (r.scanned_at as Date).toISOString(),
+    location: (r.location as string | null) ?? null,
+    scannedBy: {
+      userId: r.scanned_by as number,
+      name: (r.scanned_by_name as string | null) ?? null,
+      surname: (r.scanned_by_surname as string | null) ?? null,
+    },
+  }));
+}
+
+/** Correct a wrong door scan (H24): admin fixes kind/time/location on an existing time_log. */
+export async function updateTimeLog(
+  actorId: number,
+  id: number,
+  input: { kind?: "in" | "out"; scannedAt?: Date; location?: string | null },
+) {
+  if (input.scannedAt != null && input.scannedAt.getTime() > Date.now()) {
+    throw new BadRequestError("Scan time must be in the past");
+  }
+
+  const result = await withTransaction(async (client) => {
+    const { rows } = await client.query(
+      `SELECT id, user_id, kind, scanned_at, location FROM time_logs WHERE id = $1 FOR UPDATE`,
+      [id],
+    );
+    const before = rows[0];
+    if (!before) throw new NotFoundError("Time log not found");
+
+    const kind = input.kind ?? before.kind;
+    const scannedAt = input.scannedAt ?? before.scanned_at;
+    const location = input.location !== undefined ? input.location : before.location;
+
+    const { rows: updated } = await client.query(
+      `UPDATE time_logs SET kind = $1, scanned_at = $2, location = $3
+        WHERE id = $4 RETURNING id, user_id, kind, scanned_at, location`,
+      [kind, scannedAt, location, id],
+    );
+
+    await audit(client, {
+      actorId,
+      entityType: "presence",
+      entityId: before.user_id,
+      action: "edit_time_log",
+      before: {
+        id,
+        kind: before.kind,
+        scannedAt: before.scanned_at,
+        location: before.location,
+      },
+      after: { id, kind, scannedAt, location },
+      source: "admin",
+    });
+
+    return updated[0];
+  });
+
+  await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_PRESENCE_SCAN, {
+    edited: true,
+    timeLogId: result.id,
+    userId: result.user_id,
+  });
+  return {
+    id: result.id as number,
+    userId: result.user_id as number,
+    kind: result.kind as "in" | "out",
+    scannedAt: (result.scanned_at as Date).toISOString(),
+    location: (result.location as string | null) ?? null,
+  };
+}
+
+/** Remove a bad door scan (H24): e.g. a mis-scanned badge or duplicate entry. */
+export async function deleteTimeLog(actorId: number, id: number) {
+  const userId = await withTransaction(async (client) => {
+    const { rows } = await client.query(
+      `SELECT id, user_id, kind, scanned_at, location FROM time_logs WHERE id = $1 FOR UPDATE`,
+      [id],
+    );
+    const before = rows[0];
+    if (!before) throw new NotFoundError("Time log not found");
+
+    await client.query(`DELETE FROM time_logs WHERE id = $1`, [id]);
+
+    await audit(client, {
+      actorId,
+      entityType: "presence",
+      entityId: before.user_id,
+      action: "delete_time_log",
+      before: {
+        id,
+        kind: before.kind,
+        scannedAt: before.scanned_at,
+        location: before.location,
+      },
+      source: "admin",
+    });
+
+    return before.user_id as number;
+  });
+
+  await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_PRESENCE_SCAN, {
+    deleted: true,
+    timeLogId: id,
+    userId,
+  });
+  return { deleted: true as const };
 }

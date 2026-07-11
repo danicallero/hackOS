@@ -16,7 +16,11 @@
  *     `PRESUMED_STAY` after the LAST supporting signal. Each new signal within
  *     the still-open window pushes the auto-close forward (so a workshop before
  *     lunch extends the morning: the interval starts at the workshop scan and
- *     stays open through lunch).
+ *     stays open through lunch). `PRESUMED_STAY` defaults to a window wider
+ *     than the normal same-day gap between meals/activities (so a quiet
+ *     afternoon of hacking with no scan isn't mistaken for having left), but
+ *     narrower than an overnight gap (so "dinner but no breakfast" still
+ *     reads as having slept elsewhere, per the story's canonical example).
  *   - `out` HARD-CLOSES the open interval exactly at the out time, regardless
  *     of the presumed window — an in→out pair is a full continuous session even
  *     with no scans in between (a full working day with a single in and out).
@@ -25,6 +29,13 @@
  *     interval opens. This is what makes "dinner but no breakfast = slept
  *     elsewhere": the dinner interval closes ~PRESUMED_STAY after dinner and the
  *     overnight gap until the next day's first scan is never credited.
+ *
+ * Every interval carries `confirmed`: true when it was hard-closed by a real
+ * door `out` scan, false when the end is inferred — either the presumed-stay
+ * window lapsed, or the interval is still open and was simply cut off at
+ * `cutoff` (now). Callers (admin UI) use this to show "estimated" vs
+ * "confirmed" instead of presenting an inferred gap as if it were a real
+ * recorded exit.
  *
  * Every interval is capped at `MAX_SESSION` so a stray next-day `out` (or an
  * `in` with no follow-up) cannot credit an implausible multi-day block.
@@ -45,17 +56,26 @@ export interface Interval {
   /** epoch milliseconds */
   start: number;
   end: number;
+  /** True when `end` is a real door `out` scan; false when it's inferred
+   * (presumed-stay window lapsed, or still open and cut off at `cutoff`). */
+  confirmed: boolean;
 }
 
 export interface PresenceOptions {
   /** How long a lone activity/door-in keeps a person "present" absent other
-   * signals. Bridges typical event spacing (workshop → lunch). Configurable. */
+   * signals. Bridges typical same-day event spacing (workshop → lunch →
+   * dinner) while still letting an overnight gap close the session.
+   * Configurable. */
   presumedStayMs?: number;
   /** Hard cap on any single interval, guards against stray far-apart signals. */
   maxSessionMs?: number;
 }
 
-export const DEFAULT_PRESUMED_STAY_MS = 180 * 60_000; // 3h
+// Wider than a typical same-day gap between meals/activities (lunch→dinner is
+// commonly ~7h) but narrower than an overnight gap (dinner→breakfast is
+// commonly ~10-12h), so a quiet stretch of hacking doesn't read as an exit
+// while sleeping elsewhere still does.
+export const DEFAULT_PRESUMED_STAY_MS = 8 * 60 * 60_000; // 8h
 export const DEFAULT_MAX_SESSION_MS = 16 * 60 * 60_000; // 16h
 
 const KIND_ORDER: Record<PresenceEventKind, number> = { in: 0, activity: 1, out: 2 };
@@ -82,19 +102,19 @@ export function buildPresenceIntervals(
   let start = 0;
   let presumedClose = 0;
 
-  const close = (end: number): void => {
+  const close = (end: number, confirmed: boolean): void => {
     const bounded = Math.min(end, start + maxSession);
-    if (bounded > start) intervals.push({ start, end: bounded });
+    if (bounded > start) intervals.push({ start, end: bounded, confirmed });
     open = false;
   };
 
   for (const ev of sorted) {
     // A pending presumed window lapses before the next arrival/activity
     // (but never before an authoritative `out`, which reaches back to `start`).
-    if (open && ev.kind !== "out" && ev.t > presumedClose) close(presumedClose);
+    if (open && ev.kind !== "out" && ev.t > presumedClose) close(presumedClose, false);
 
     if (ev.kind === "out") {
-      if (open) close(ev.t);
+      if (open) close(ev.t, true);
       continue;
     }
 
@@ -108,7 +128,7 @@ export function buildPresenceIntervals(
     }
   }
 
-  if (open) close(Math.min(presumedClose, cutoff));
+  if (open) close(Math.min(presumedClose, cutoff), false);
   return intervals;
 }
 

@@ -30,6 +30,8 @@ import {
 } from "@/components/ui/select";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
+import { logisticsApi } from "@/lib/logistics";
+import { useCan } from "@/lib/session";
 import type { Tone } from "@/lib/tones";
 import type { DerivedRole, UserList, UserListItem } from "@/lib/types";
 import { ActiveInvitationsModal } from "./active-invitations-modal";
@@ -77,6 +79,7 @@ const COLUMN_OPTIONS = [
   "email",
   "application",
   "badge",
+  "presence",
   "phone",
   "shirt",
   "language",
@@ -90,6 +93,7 @@ const COLUMN_LABEL: Record<UserColumnId, string> = {
   email: "Email",
   application: "Application",
   badge: "Badge",
+  presence: "Presence",
   phone: "Phone",
   shirt: "Shirt",
   language: "Language",
@@ -139,102 +143,123 @@ function applicationTone(status: string | null): "success" | "warning" | "danger
   return "neutral";
 }
 
-const allColumns: Column<UserListItem>[] = [
-  {
-    id: "name",
-    header: "Name",
-    sortValue: (u) => `${u.surname ?? ""} ${u.name ?? ""}`.trim().toLowerCase(),
-    cell: (u) => (
-      <div className="flex items-center gap-3">
-        <Avatar size="sm">
-          <AvatarFallback>{initials(u)}</AvatarFallback>
-        </Avatar>
-        <span className="font-medium">{fullName(u)}</span>
-      </div>
-    ),
-  },
-  {
-    id: "role",
-    header: "Role",
-    sortValue: (u) => u.role,
-    cell: (u) => (
-      <StatusBadge tone={ROLE_TONE[u.role]} dot={false}>
-        {ROLE_LABEL[u.role]}
-      </StatusBadge>
-    ),
-  },
-  {
-    id: "email",
-    header: "Email",
-    sortValue: (u) => u.email.toLowerCase(),
-    cell: (u) => (
-      <div className="flex items-center gap-2">
-        <StatusBadge
-          tone={u.emailVerified ? "success" : "warning"}
-          dot={false}
-          className="w-24 shrink-0 justify-center"
-        >
-          {u.emailVerified ? "Verified" : "Unverified"}
+/** Presence needs the live occupancy set, so the column list is built per-render
+ * (see `useCan(PRESENCE_SCAN | LOGISTICS_STATS)` in the page component). */
+function buildColumns(presentIds: Set<number> | null): Column<UserListItem>[] {
+  return [
+    {
+      id: "name",
+      header: "Name",
+      sortValue: (u) => `${u.surname ?? ""} ${u.name ?? ""}`.trim().toLowerCase(),
+      cell: (u) => (
+        <div className="flex items-center gap-3">
+          <Avatar size="sm">
+            <AvatarFallback>{initials(u)}</AvatarFallback>
+          </Avatar>
+          <span className="font-medium">{fullName(u)}</span>
+        </div>
+      ),
+    },
+    {
+      id: "role",
+      header: "Role",
+      sortValue: (u) => u.role,
+      cell: (u) => (
+        <StatusBadge tone={ROLE_TONE[u.role]} dot={false}>
+          {ROLE_LABEL[u.role]}
         </StatusBadge>
-        <span className="text-muted-foreground">{u.email}</span>
-      </div>
-    ),
-  },
-  {
-    id: "application",
-    header: "Application",
-    sortValue: (u) => u.applicationStatus ?? "",
-    cell: (u) => (
-      <StatusBadge tone={applicationTone(u.applicationStatus)} dot={false} className="capitalize">
-        {applicationLabel(u.applicationStatus)}
-      </StatusBadge>
-    ),
-  },
-  {
-    id: "badge",
-    header: "Badge",
-    cell: (u) =>
-      u.badgeId ? (
-        <span className="font-mono text-xs">{u.badgeId}</span>
-      ) : (
-        <span className="text-muted-foreground">—</span>
       ),
-  },
-  {
-    id: "phone",
-    header: "Phone",
-    cell: (u) =>
-      u.phone ? (
-        <span className="text-sm">{u.phone}</span>
-      ) : (
-        <span className="text-muted-foreground">—</span>
+    },
+    {
+      id: "email",
+      header: "Email",
+      sortValue: (u) => u.email.toLowerCase(),
+      cell: (u) => (
+        <div className="flex items-center gap-2">
+          <StatusBadge
+            tone={u.emailVerified ? "success" : "warning"}
+            dot={false}
+            className="w-24 shrink-0 justify-center"
+          >
+            {u.emailVerified ? "Verified" : "Unverified"}
+          </StatusBadge>
+          <span className="text-muted-foreground">{u.email}</span>
+        </div>
       ),
-  },
-  {
-    id: "shirt",
-    header: "Shirt",
-    cell: (u) =>
-      u.shirtSize ? (
-        <span className="text-sm">{u.shirtSize}</span>
-      ) : (
-        <span className="text-muted-foreground">—</span>
+    },
+    {
+      id: "application",
+      header: "Application",
+      sortValue: (u) => u.applicationStatus ?? "",
+      cell: (u) => (
+        <StatusBadge tone={applicationTone(u.applicationStatus)} dot={false} className="capitalize">
+          {applicationLabel(u.applicationStatus)}
+        </StatusBadge>
       ),
-  },
-  {
-    id: "language",
-    header: "Language",
-    cell: (u) => <span className="text-sm uppercase">{u.language}</span>,
-  },
-  {
-    id: "created",
-    header: "Joined",
-    align: "right",
-    sortValue: (u) => u.createdAt,
-    cell: (u) => (
-      <span className="text-muted-foreground text-sm">{dateFmt.format(new Date(u.createdAt))}</span>
-    ),
-  },
-];
+    },
+    {
+      id: "badge",
+      header: "Badge",
+      cell: (u) =>
+        u.badgeId ? (
+          <span className="font-mono text-xs">{u.badgeId}</span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
+    },
+    {
+      id: "presence",
+      header: "Presence",
+      sortValue: (u) => (presentIds?.has(u.id) ? 1 : 0),
+      cell: (u) =>
+        presentIds == null ? (
+          <span className="text-muted-foreground">—</span>
+        ) : presentIds.has(u.id) ? (
+          <StatusBadge tone="success">Present</StatusBadge>
+        ) : (
+          <StatusBadge tone="neutral" dot={false}>
+            Away
+          </StatusBadge>
+        ),
+    },
+    {
+      id: "phone",
+      header: "Phone",
+      cell: (u) =>
+        u.phone ? (
+          <span className="text-sm">{u.phone}</span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
+    },
+    {
+      id: "shirt",
+      header: "Shirt",
+      cell: (u) =>
+        u.shirtSize ? (
+          <span className="text-sm">{u.shirtSize}</span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
+    },
+    {
+      id: "language",
+      header: "Language",
+      cell: (u) => <span className="text-sm uppercase">{u.language}</span>,
+    },
+    {
+      id: "created",
+      header: "Joined",
+      align: "right",
+      sortValue: (u) => u.createdAt,
+      cell: (u) => (
+        <span className="text-muted-foreground text-sm">
+          {dateFmt.format(new Date(u.createdAt))}
+        </span>
+      ),
+    },
+  ];
+}
 
 export default function UsersPage() {
   const router = useRouter();
@@ -247,6 +272,10 @@ export default function UsersPage() {
   const [spotFilter, setSpotFilter] = useState("all");
   const [visibleColumns, setVisibleColumns] = useState<Set<UserColumnId>>(DEFAULT_COLUMNS);
   const [columnsHydrated, setColumnsHydrated] = useState(false);
+  const canScanPresence = useCan(CAPABILITIES.PRESENCE_SCAN);
+  const canStats = useCan(CAPABILITIES.LOGISTICS_STATS);
+  const showPresence = canScanPresence || canStats;
+  const [presentIds, setPresentIds] = useState<Set<number> | null>(null);
 
   // Restore the saved column choice on mount (after hydration to avoid a
   // server/client mismatch), then persist any change back to localStorage.
@@ -267,6 +296,28 @@ export default function UsersPage() {
   // Soft, in-place refresh instead of a hard reload when another admin
   // creates/edits a user elsewhere.
   const liveRefresh = useAutoRefresh("/api/events/stream", [EVENTS.DATA_CHANGED]);
+
+  // Live occupancy for the optional Presence column — only fetched for staff
+  // who could otherwise see it via the presence/stats panels anyway.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
+  useEffect(() => {
+    if (!showPresence) {
+      setPresentIds(null);
+      return;
+    }
+    let cancelled = false;
+    logisticsApi
+      .presenceEstimate()
+      .then((r) => {
+        if (!cancelled) setPresentIds(new Set(r.present));
+      })
+      .catch(() => {
+        if (!cancelled) setPresentIds(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showPresence, liveRefresh]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
@@ -316,9 +367,19 @@ export default function UsersPage() {
     [users, emailFilter, roleFilter, spotFilter],
   );
 
+  const availableColumnOptions = useMemo(
+    () => COLUMN_OPTIONS.filter((id) => id !== "presence" || showPresence),
+    [showPresence],
+  );
+
   const columns = useMemo(
-    () => allColumns.filter((column) => visibleColumns.has(column.id as UserColumnId)),
-    [visibleColumns],
+    () =>
+      buildColumns(presentIds).filter(
+        (column) =>
+          visibleColumns.has(column.id as UserColumnId) &&
+          (column.id !== "presence" || showPresence),
+      ),
+    [visibleColumns, presentIds, showPresence],
   );
 
   function toggleColumn(id: UserColumnId, checked: boolean) {
@@ -401,7 +462,7 @@ export default function UsersPage() {
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>Visible fields</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            {COLUMN_OPTIONS.map((id) => (
+            {availableColumnOptions.map((id) => (
               <DropdownMenuCheckboxItem
                 key={id}
                 checked={visibleColumns.has(id)}

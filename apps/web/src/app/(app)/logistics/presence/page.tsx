@@ -3,6 +3,7 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
 import { DoorOpenIcon, LockIcon, UsersIcon } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import { type Column, DataTable } from "@/components/common/data-table";
@@ -90,6 +91,7 @@ function PresencePanel({
   loading: boolean;
   onScanned: () => void;
 }) {
+  const router = useRouter();
   const [badgeId, setBadgeId] = useState("");
   const [kind, setKind] = useState<"in" | "out">("in");
   const [location, setLocation] = useState("");
@@ -122,8 +124,15 @@ function PresencePanel({
     {
       id: "user",
       header: "User",
-      sortValue: (row) => row.userId,
-      cell: (row) => <span className="font-mono text-sm">#{row.userId}</span>,
+      sortValue: (row) => `${row.surname ?? ""} ${row.name ?? ""}`.trim().toLowerCase(),
+      cell: (row) => {
+        const name = [row.name, row.surname].filter(Boolean).join(" ").trim();
+        return name ? (
+          <span>{name}</span>
+        ) : (
+          <span className="text-muted-foreground font-mono text-sm">#{row.userId}</span>
+        );
+      },
     },
     {
       id: "hours",
@@ -191,8 +200,9 @@ function PresencePanel({
           columns={columns}
           data={hours}
           getRowId={(row) => String(row.userId)}
+          onRowClick={(row) => router.push(`/users/${row.userId}?tab=presence`)}
           loading={loading}
-          searchable={(row) => `${row.userId} ${row.hours}`}
+          searchable={(row) => `${row.userId} ${row.name ?? ""} ${row.surname ?? ""} ${row.hours}`}
           searchPlaceholder="Filter users..."
           pageSize={10}
           empty={{
