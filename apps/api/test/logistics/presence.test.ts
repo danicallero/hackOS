@@ -42,7 +42,7 @@ describe("H24 presence scan + estimation", () => {
       method: "POST",
       url: "/api/presence/scan",
       headers: asUser(doorStaff),
-      payload: { badgeId: "P-1", kind: "in", location: "gate" },
+      payload: { badgeId: "P-1", kind: "in" },
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().kind).toBe("in");
@@ -140,6 +140,124 @@ describe("H24 presence scan + estimation", () => {
     expect(bulk.json().some((r: { userId: number }) => r.userId === uid)).toBe(true);
   });
 
+  it("never lets an entrance exist without a way to close it: rejects a duplicate in, requires reconciliation, then allows out then in", async () => {
+    const uid = await createUser();
+    await assignBadge(uid, "P-4");
+
+    const firstIn = await app.inject({
+      method: "POST",
+      url: "/api/presence/scan",
+      headers: asUser(doorStaff),
+      payload: { badgeId: "P-4", kind: "in" },
+    });
+    expect(firstIn.statusCode).toBe(200);
+
+    // A second `in` while the session is still open is rejected — the
+    // system never auto-closes it to make room.
+    const dupeIn = await app.inject({
+      method: "POST",
+      url: "/api/presence/scan",
+      headers: asUser(doorStaff),
+      payload: { badgeId: "P-4", kind: "in" },
+    });
+    expect(dupeIn.statusCode).toBe(409);
+    expect(dupeIn.json().error.code).toBe("conflict");
+
+    // Lookup surfaces the open session so staff know to reconcile first.
+    const lookup1 = await app.inject({
+      method: "POST",
+      url: "/api/presence/lookup",
+      headers: asUser(doorStaff),
+      payload: { badgeId: "P-4" },
+    });
+    expect(lookup1.json().openSince).not.toBeNull();
+
+    // An `out` with no open session is likewise rejected.
+    const uid2 = await createUser();
+    await assignBadge(uid2, "P-5");
+    const orphanOut = await app.inject({
+      method: "POST",
+      url: "/api/presence/scan",
+      headers: asUser(doorStaff),
+      payload: { badgeId: "P-5", kind: "out" },
+    });
+    expect(orphanOut.statusCode).toBe(409);
+
+    // Staff reconciles by closing the open session with a manual out...
+    const close = await app.inject({
+      method: "POST",
+      url: "/api/presence/scan",
+      headers: asUser(doorStaff),
+      payload: { badgeId: "P-4", kind: "out" },
+    });
+    expect(close.statusCode).toBe(200);
+
+    // ...after which a new entrance is accepted again.
+    const secondIn = await app.inject({
+      method: "POST",
+      url: "/api/presence/scan",
+      headers: asUser(doorStaff),
+      payload: { badgeId: "P-4", kind: "in" },
+    });
+    expect(secondIn.statusCode).toBe(200);
+
+    const lookup2 = await app.inject({
+      method: "POST",
+      url: "/api/presence/lookup",
+      headers: asUser(doorStaff),
+      payload: { badgeId: "P-4" },
+    });
+    expect(lookup2.json().openSince).not.toBeNull();
+  });
+
+  it("lists open sessions for staff reconciliation, flagging stale ones", async () => {
+    const fresh = await createUser();
+    await assignBadge(fresh, "P-6");
+    await app.inject({
+      method: "POST",
+      url: "/api/presence/scan",
+      headers: asUser(doorStaff),
+      payload: { badgeId: "P-6", kind: "in" },
+    });
+
+    const stale = await createUser();
+    await assignBadge(stale, "P-7");
+    const longAgo = new Date(Date.now() - 20 * 3_600_000).toISOString();
+    await app.inject({
+      method: "POST",
+      url: "/api/presence/scan",
+      headers: asUser(doorStaff),
+      payload: { badgeId: "P-7", kind: "in", scannedAt: longAgo },
+    });
+
+    const closed = await createUser();
+    await assignBadge(closed, "P-8");
+    await app.inject({
+      method: "POST",
+      url: "/api/presence/scan",
+      headers: asUser(doorStaff),
+      payload: { badgeId: "P-8", kind: "in" },
+    });
+    await app.inject({
+      method: "POST",
+      url: "/api/presence/scan",
+      headers: asUser(doorStaff),
+      payload: { badgeId: "P-8", kind: "out" },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/presence/open",
+      headers: asUser(statsStaff),
+    });
+    expect(res.statusCode).toBe(200);
+    const items = res.json().items as { userId: number; stale: boolean }[];
+    const byUser = new Map(items.map((i) => [i.userId, i]));
+    expect(byUser.get(fresh)?.stale).toBe(false);
+    expect(byUser.get(stale)?.stale).toBe(true);
+    expect(byUser.has(closed)).toBe(false);
+  });
+
   it("lets a PRESENCE_SCAN door operator read estimate/hours", async () => {
     const res = await app.inject({
       method: "GET",
@@ -168,7 +286,7 @@ describe("H24 raw scan admin (view/edit/delete)", () => {
       method: "POST",
       url: "/api/presence/scan",
       headers: asUser(doorStaff),
-      payload: { badgeId: "P-10", kind: "in", location: "gate" },
+      payload: { badgeId: "P-10", kind: "in" },
     });
 
     const list = await app.inject({
@@ -186,11 +304,10 @@ describe("H24 raw scan admin (view/edit/delete)", () => {
       method: "PATCH",
       url: `/api/presence/logs/${logId}`,
       headers: asUser(doorStaff),
-      payload: { kind: "out", scannedAt: newTime, location: "side door" },
+      payload: { kind: "out", scannedAt: newTime },
     });
     expect(patch.statusCode).toBe(200);
     expect(patch.json().kind).toBe("out");
-    expect(patch.json().location).toBe("side door");
 
     const { pool } = await import("../../src/db/pool.js");
     const audits = await pool.query(

@@ -107,7 +107,7 @@ export async function buildExportBundle(subjectUserId: number): Promise<Record<s
       .then((r) => r.rows),
     pool
       .query(
-        `SELECT id, kind, location, scanned_at
+        `SELECT id, kind, scanned_at
            FROM time_logs WHERE user_id = $1 ORDER BY scanned_at`,
         [subjectUserId],
       )

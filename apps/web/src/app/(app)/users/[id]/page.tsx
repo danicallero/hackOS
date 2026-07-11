@@ -1235,11 +1235,6 @@ function PresenceSection({ userId }: { userId: number }) {
       ),
     },
     {
-      id: "location",
-      header: "Location",
-      cell: (l) => <span className="text-sm">{l.location ?? "—"}</span>,
-    },
-    {
       id: "scannedBy",
       header: "Scanned by",
       cell: (l) => (
@@ -1370,7 +1365,6 @@ function EditTimeLogModal({
 }) {
   const [kind, setKind] = useState<"in" | "out">(log.kind);
   const [scannedAt, setScannedAt] = useState(toDatetimeLocal(log.scannedAt));
-  const [location, setLocation] = useState(log.location ?? "");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
 
@@ -1381,7 +1375,6 @@ function EditTimeLogModal({
       await logisticsApi.updateTimeLog(log.id, {
         kind,
         scannedAt: new Date(scannedAt).toISOString(),
-        location: location.trim() || null,
       });
       toast.success("Scan updated.");
       onSaved();
@@ -1428,14 +1421,6 @@ function EditTimeLogModal({
             type="datetime-local"
             value={scannedAt}
             onChange={(e) => setScannedAt(e.target.value)}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label>Location</Label>
-          <Input
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
-            placeholder="gate"
           />
         </div>
         {error && <InlineError message={error} />}

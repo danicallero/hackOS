@@ -3,6 +3,7 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
 import {
+  AlertTriangleIcon,
   ClockIcon,
   DoorOpenIcon,
   LockIcon,
@@ -19,6 +20,7 @@ import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
 import { StatCard } from "@/components/common/stat-card";
+import { StatusBadge } from "@/components/common/status-badge";
 import { PersonCardView } from "@/components/logistics/person-card";
 import { errorMessage, Field, InlineError } from "@/components/logistics/ui";
 import { Button } from "@/components/ui/button";
@@ -33,11 +35,24 @@ import {
 import { useLiveQuery } from "@/hooks/use-event-source";
 import {
   logisticsApi,
+  type OpenPresenceSession,
   type PresenceEstimate,
   type PresenceHours,
   type PresenceLookup,
 } from "@/lib/logistics";
 import { useCan } from "@/lib/session";
+
+const timeFmt = new Intl.DateTimeFormat("en-GB", {
+  day: "2-digit",
+  month: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+function hoursSince(iso: string): string {
+  const h = (Date.now() - new Date(iso).getTime()) / 3_600_000;
+  return h < 1 ? "<1h ago" : `${Math.round(h)}h ago`;
+}
 
 const PRESENCE_EVENTS = [EVENTS.LOGISTICS_PRESENCE_SCAN, EVENTS.LOGISTICS_ACTIVITY_SCAN];
 
@@ -52,6 +67,12 @@ export default function PresencePage() {
   );
   const hours = useLiveQuery<PresenceHours[]>(
     logisticsApi.presenceHours,
+    "/api/logistics/stream",
+    PRESENCE_EVENTS,
+    { enabled: canPresence, debounceMs: 400 },
+  );
+  const openSessions = useLiveQuery<OpenPresenceSession[]>(
+    async () => (await logisticsApi.presenceOpenSessions()).items,
     "/api/logistics/stream",
     PRESENCE_EVENTS,
     { enabled: canPresence, debounceMs: 400 },
@@ -83,13 +104,28 @@ export default function PresencePage() {
           icon={UsersIcon}
           hint={estimate.connected ? "Live estimate" : "Reconnects automatically"}
         />
+        <StatCard
+          label="Open sessions"
+          value={openSessions.data?.length ?? "—"}
+          icon={DoorOpenIcon}
+          hint="Entered, not yet exited"
+        />
+        <StatCard
+          label="Stale sessions"
+          value={openSessions.data?.filter((s) => s.stale).length ?? "—"}
+          icon={AlertTriangleIcon}
+          hint="No signal in a while — needs reconciling"
+        />
       </div>
       <PresencePanel
         hours={hours.data ?? []}
         loading={hours.loading}
+        openSessions={openSessions.data ?? []}
+        openSessionsLoading={openSessions.loading}
         onScanned={() => {
           estimate.refetch();
           hours.refetch();
+          openSessions.refetch();
         }}
       />
     </div>
@@ -99,16 +135,19 @@ export default function PresencePage() {
 function PresencePanel({
   hours,
   loading,
+  openSessions,
+  openSessionsLoading,
   onScanned,
 }: {
   hours: PresenceHours[];
   loading: boolean;
+  openSessions: OpenPresenceSession[];
+  openSessionsLoading: boolean;
   onScanned: () => void;
 }) {
   const router = useRouter();
   const [badgeId, setBadgeId] = useState("");
   const [lookup, setLookup] = useState<PresenceLookup | null>(null);
-  const [location, setLocation] = useState("");
   const [manualOpen, setManualOpen] = useState(false);
   const [manualKind, setManualKind] = useState<"in" | "out">("in");
   const [manualScannedAt, setManualScannedAt] = useState("");
@@ -118,7 +157,6 @@ function PresencePanel({
   const reset = () => {
     setBadgeId("");
     setLookup(null);
-    setLocation("");
     setManualOpen(false);
     setManualScannedAt("");
   };
@@ -130,7 +168,7 @@ function PresencePanel({
     try {
       const result = await logisticsApi.presenceLookup(badgeId.trim());
       setLookup(result);
-      setManualKind(result.present ? "out" : "in");
+      setManualKind(result.openSince ? "out" : "in");
     } catch (err) {
       setLookup(null);
       setError(errorMessage(err, "Badge lookup failed."));
@@ -144,11 +182,7 @@ function PresencePanel({
     setBusy(true);
     setError("");
     try {
-      await logisticsApi.presenceScan({
-        badgeId: lookup.badgeId,
-        kind,
-        location: location.trim() || undefined,
-      });
+      await logisticsApi.presenceScan({ badgeId: lookup.badgeId, kind });
       toast.success(kind === "in" ? "Entry recorded." : "Exit recorded.");
       reset();
       onScanned();
@@ -167,7 +201,6 @@ function PresencePanel({
       await logisticsApi.presenceScan({
         badgeId: lookup.badgeId,
         kind: manualKind,
-        location: location.trim() || undefined,
         scannedAt: new Date(manualScannedAt).toISOString(),
       });
       toast.success("Manual record added.");
@@ -236,26 +269,26 @@ function PresencePanel({
         {lookup && (
           <>
             <PersonCardView card={lookup} />
-            <Field label="Location">
-              <Input
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                placeholder="main door"
-              />
-            </Field>
+            {lookup.openSince && (
+              <div className="border-warning/40 bg-warning/10 text-warning-foreground flex items-center gap-2 rounded-lg border px-3 py-2 text-sm">
+                <AlertTriangleIcon className="size-4 shrink-0" />
+                Already has an open session since {timeFmt.format(new Date(lookup.openSince))} (
+                {hoursSince(lookup.openSince)}). Register an exit before a new entry.
+              </div>
+            )}
             <div className="grid gap-3 sm:grid-cols-2">
               <Button
-                variant={lookup.present ? "outline" : "default"}
+                variant={lookup.openSince ? "outline" : "default"}
                 onClick={() => doScan("in")}
-                disabled={busy}
+                disabled={busy || !!lookup.openSince}
               >
                 <LogInIcon className="size-4" />
                 Register entry
               </Button>
               <Button
-                variant={lookup.present ? "default" : "outline"}
+                variant={lookup.openSince ? "default" : "outline"}
                 onClick={() => doScan("out")}
-                disabled={busy}
+                disabled={busy || !lookup.openSince}
               >
                 <LogOutIcon className="size-4" />
                 Register exit
@@ -332,6 +365,70 @@ function PresencePanel({
           }}
         />
       </SectionCard>
+
+      <SectionCard
+        title="Open sessions"
+        description="Entered but not yet exited. The system never closes these — reconcile stale ones with a manual exit."
+        icon={AlertTriangleIcon}
+        className="xl:col-span-2"
+      >
+        <DataTable
+          columns={openSessionColumns}
+          data={openSessions}
+          getRowId={(row) => String(row.userId)}
+          onRowClick={(row) => router.push(`/users/${row.userId}?tab=presence`)}
+          loading={openSessionsLoading}
+          searchable={(row) => `${row.userId} ${row.name ?? ""} ${row.surname ?? ""}`}
+          searchPlaceholder="Filter users..."
+          pageSize={10}
+          empty={{
+            icon: DoorOpenIcon,
+            title: "No open sessions",
+            description: "Everyone who entered has also exited.",
+          }}
+        />
+      </SectionCard>
     </div>
   );
 }
+
+const openSessionColumns: Column<OpenPresenceSession>[] = [
+  {
+    id: "user",
+    header: "User",
+    sortValue: (row) => `${row.surname ?? ""} ${row.name ?? ""}`.trim().toLowerCase(),
+    cell: (row) => {
+      const name = [row.name, row.surname].filter(Boolean).join(" ").trim();
+      return name ? (
+        <span>{name}</span>
+      ) : (
+        <span className="text-muted-foreground font-mono text-sm">#{row.userId}</span>
+      );
+    },
+  },
+  {
+    id: "since",
+    header: "Entered",
+    sortValue: (row) => row.since,
+    cell: (row) => <span className="text-sm">{timeFmt.format(new Date(row.since))}</span>,
+  },
+  {
+    id: "lastSignal",
+    header: "Last signal",
+    sortValue: (row) => row.lastSignal,
+    cell: (row) => (
+      <span className="text-sm">
+        {timeFmt.format(new Date(row.lastSignal))} ({hoursSince(row.lastSignal)})
+      </span>
+    ),
+  },
+  {
+    id: "stale",
+    header: "Status",
+    cell: (row) => (
+      <StatusBadge tone={row.stale ? "warning" : "neutral"} dot={false}>
+        {row.stale ? "Stale — check" : "Fresh"}
+      </StatusBadge>
+    ),
+  },
+];

@@ -7,11 +7,11 @@ export async function exportAttendanceCsv(): Promise<string> {
   const { rows } = await pool.query(
     `SELECT u.id AS user_id, u.name, u.surname, u.email,
             'check_in' AS event, cil.checked_in_at AS occurred_at,
-            cil.check_in_method AS method, NULL::text AS location, cil.staff_id AS logged_by
+            cil.check_in_method AS method, cil.staff_id AS logged_by
        FROM check_in_logs cil JOIN users u ON u.id = cil.user_id
       UNION ALL
      SELECT u.id, u.name, u.surname, u.email,
-            tl.kind, tl.scanned_at, NULL::text, tl.location, tl.scanned_by
+            tl.kind, tl.scanned_at, NULL::text, tl.scanned_by
        FROM time_logs tl JOIN users u ON u.id = tl.user_id
       ORDER BY occurred_at`,
   );
@@ -23,7 +23,6 @@ export async function exportAttendanceCsv(): Promise<string> {
     "event",
     "occurred_at",
     "method",
-    "location",
     "logged_by",
   ];
   return toCsv(

@@ -27,6 +27,7 @@ import {
   deleteTimeLog,
   listTimeLogs,
   occupancyEstimate,
+  openSessions,
   presenceLookup,
   presenceScan,
   updateTimeLog,
@@ -213,7 +214,6 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       presenceScan(actor(req.userId), {
         badgeId: req.body.badgeId,
         kind: req.body.kind,
-        location: req.body.location,
         scannedAt: req.body.scannedAt,
       }),
   );
@@ -223,6 +223,11 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   );
 
   typed.get("/api/presence/hours", { preHandler: presenceRead }, async () => allHours());
+
+  // Staff reconciliation queue: open sessions, stale ones flagged (H24).
+  typed.get("/api/presence/open", { preHandler: presenceRead }, async () => ({
+    items: await openSessions(),
+  }));
 
   typed.get(
     "/api/presence/hours/:userId",
@@ -244,7 +249,6 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       updateTimeLog(actor(req.userId), req.params.id, {
         kind: req.body.kind,
         scannedAt: req.body.scannedAt,
-        location: req.body.location,
       }),
   );
 
