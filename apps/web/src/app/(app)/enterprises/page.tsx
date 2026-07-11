@@ -19,9 +19,10 @@ import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
 import { ScheduledDateTimeField } from "@/components/common/scheduled-datetime-field";
+import { SponsorLogo } from "@/components/common/sponsor-logo";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -58,6 +59,7 @@ const createSchema = z.object({
   name: z.string().min(1, "Required").max(200),
   website: optionalUrl,
   logoUrl: optionalUrl,
+  logoNegativeUrl: optionalUrl,
   description: z.string().max(2000),
   tierId: optionalPositiveInt,
   displayPriority: optionalPositiveInt,
@@ -74,8 +76,16 @@ const columns: Column<Enterprise>[] = [
     cell: (e) => (
       <div className="flex items-center gap-3">
         <Avatar size="sm">
-          {e.logo_url && <AvatarImage src={e.logo_url} alt={e.name} />}
-          <AvatarFallback>{initials(e.name)}</AvatarFallback>
+          {e.logo_url ? (
+            <SponsorLogo
+              logoUrl={e.logo_url}
+              logoNegativeUrl={e.logo_negative_url}
+              alt={e.name}
+              className="size-full object-contain"
+            />
+          ) : (
+            <AvatarFallback>{initials(e.name)}</AvatarFallback>
+          )}
         </Avatar>
         <span className="font-medium">{e.name}</span>
       </div>
@@ -332,6 +342,7 @@ function CreateEnterpriseModal({
       name: "",
       website: "",
       logoUrl: "",
+      logoNegativeUrl: "",
       description: "",
       tierId: "",
       displayPriority: "",
@@ -354,6 +365,7 @@ function CreateEnterpriseModal({
         name: values.name,
         website: values.website || null,
         logoUrl: values.logoUrl || null,
+        logoNegativeUrl: values.logoNegativeUrl || null,
         description: values.description || null,
         tierId: values.tierId ? Number(values.tierId) : null,
         displayPriority: values.displayPriority ? Number(values.displayPriority) : null,
@@ -422,6 +434,22 @@ function CreateEnterpriseModal({
                   <Input type="url" placeholder="https://…/logo.png" {...field} />
                 </FormControl>
                 <FormDescription>Optional — you can also upload a logo later.</FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="logoNegativeUrl"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Logo for dark backgrounds URL</FormLabel>
+                <FormControl>
+                  <Input type="url" placeholder="https://…/logo-negative.png" {...field} />
+                </FormControl>
+                <FormDescription>
+                  Optional — the regular logo is used when this is blank.
+                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}

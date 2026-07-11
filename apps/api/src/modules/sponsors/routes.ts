@@ -1,6 +1,7 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
+import { z } from "zod";
 import { requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { BadRequestError, ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
 import { putObject } from "../../lib/storage.js";
@@ -139,20 +140,29 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
   // which is private behind the app network) and sets logo_url to the public
   // URL. NOTE: for the logo to *display*, S3_PUBLIC_URL must be a
   // browser-reachable host serving the bucket.
-  r.post("/api/enterprises/:id/logo", { schema: { params: enterpriseIdParam } }, async (req) => {
-    await assertCanEditEnterprise(req.userId, req.params.id);
-    const file = await req.file();
-    if (!file) throw new BadRequestError("No file uploaded");
-    const ext = CONTENT_TYPE_EXT[file.mimetype as keyof typeof CONTENT_TYPE_EXT];
-    if (!ext) {
-      throw new BadRequestError(
-        `Unsupported image type ${file.mimetype}. Allowed: ${Object.keys(CONTENT_TYPE_EXT).join(", ")}`,
-      );
-    }
-    const bytes = await file.toBuffer();
-    const key = `enterprises/${req.params.id}/logo-${Date.now()}.${ext}`;
-    const logoUrl = await putObject(key, bytes, file.mimetype);
-    await setEnterpriseLogo(req.params.id, logoUrl, req.userId);
-    return { logoUrl };
-  });
+  r.post(
+    "/api/enterprises/:id/logo",
+    {
+      schema: {
+        params: enterpriseIdParam,
+        querystring: z.object({ variant: z.enum(["default", "negative"]).default("default") }),
+      },
+    },
+    async (req) => {
+      await assertCanEditEnterprise(req.userId, req.params.id);
+      const file = await req.file();
+      if (!file) throw new BadRequestError("No file uploaded");
+      const ext = CONTENT_TYPE_EXT[file.mimetype as keyof typeof CONTENT_TYPE_EXT];
+      if (!ext) {
+        throw new BadRequestError(
+          `Unsupported image type ${file.mimetype}. Allowed: ${Object.keys(CONTENT_TYPE_EXT).join(", ")}`,
+        );
+      }
+      const bytes = await file.toBuffer();
+      const key = `enterprises/${req.params.id}/logo-${req.query.variant}-${Date.now()}.${ext}`;
+      const logoUrl = await putObject(key, bytes, file.mimetype);
+      await setEnterpriseLogo(req.params.id, logoUrl, req.query.variant, req.userId);
+      return { logoUrl, variant: req.query.variant };
+    },
+  );
 }

@@ -11,6 +11,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Brand } from "@/components/common/brand";
 import { Spinner } from "@/components/common/spinner";
+import { SponsorLogo } from "@/components/common/sponsor-logo";
 import { ThemeToggle } from "@/components/common/theme-toggle";
 import type {
   PublicAnnouncement,
@@ -285,9 +286,9 @@ export function PublicPage() {
                   className="hover:border-primary/30 flex min-h-28 items-center justify-center rounded-xl border p-5 text-center shadow-sm transition-colors hover:shadow-md"
                 >
                   {sponsor.logoUrl ? (
-                    // biome-ignore lint/performance/noImgElement: sponsor logos use the deployment-configured public object-store host.
-                    <img
-                      src={sponsor.logoUrl}
+                    <SponsorLogo
+                      logoUrl={sponsor.logoUrl}
+                      logoNegativeUrl={sponsor.logoNegativeUrl}
                       alt={sponsor.name}
                       className="max-h-16 max-w-full object-contain"
                     />

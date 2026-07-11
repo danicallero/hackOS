@@ -11,6 +11,7 @@ import {
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Brand } from "@/components/common/brand";
 import { Spinner } from "@/components/common/spinner";
+import { SponsorLogo } from "@/components/common/sponsor-logo";
 import type {
   PublicAnnouncement,
   PublicEvent,
@@ -590,9 +591,9 @@ function SponsorsView({ sponsors }: { sponsors: PublicSponsor[] }) {
               className="flex min-h-52 items-center justify-center rounded-2xl border bg-card p-8 shadow-sm"
             >
               {sponsor.logoUrl ? (
-                // biome-ignore lint/performance/noImgElement: sponsor logos use the deployment-configured public object-store host.
-                <img
-                  src={sponsor.logoUrl}
+                <SponsorLogo
+                  logoUrl={sponsor.logoUrl}
+                  logoNegativeUrl={sponsor.logoNegativeUrl}
                   alt={sponsor.name}
                   className="max-h-28 max-w-full object-contain"
                 />

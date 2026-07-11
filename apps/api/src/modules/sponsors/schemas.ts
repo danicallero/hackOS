@@ -11,6 +11,7 @@ export const createEnterpriseBody = z
     name: z.string().min(1),
     website: z.string().url().nullish(),
     logoUrl: z.string().url().nullish(),
+    logoNegativeUrl: z.string().url().nullish(),
     description: z.string().nullish(),
     tierId: z.number().int().positive().nullish(),
     displayPriority: z.number().int().positive().nullish(),
@@ -29,6 +30,7 @@ export const updateEnterpriseBody = z
     name: z.string().min(1).optional(),
     website: z.string().url().nullish(),
     logoUrl: z.string().url().nullish(),
+    logoNegativeUrl: z.string().url().nullish(),
     description: z.string().nullish(),
     tierId: z.number().int().positive().nullish(),
     displayPriority: z.number().int().positive().nullish(),
@@ -38,7 +40,12 @@ export const updateEnterpriseBody = z
   .strict()
   .refine((b) => Object.keys(b).length > 0, { message: "no fields to update" });
 
-export const OWNER_EDITABLE_KEYS = ["website", "logoUrl", "description"] as const;
+export const OWNER_EDITABLE_KEYS = [
+  "website",
+  "logoUrl",
+  "logoNegativeUrl",
+  "description",
+] as const;
 
 /** Admin bulk visibility flip from the enterprises list (H45). */
 export const bulkVisibilityBody = z

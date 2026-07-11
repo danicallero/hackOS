@@ -1106,6 +1106,7 @@ export interface PublicChallenge {
     id: number;
     name: string;
     logoUrl: string | null;
+    logoNegativeUrl: string | null;
     website: string | null;
   };
 }
@@ -1135,6 +1136,7 @@ export async function listPublicChallenges(): Promise<PublicChallenge[]> {
             e.id AS enterprise_id,
             e.name AS enterprise_name,
             e.logo_url AS enterprise_logo_url,
+            COALESCE(e.logo_negative_url, e.logo_url) AS enterprise_logo_negative_url,
             e.website AS enterprise_website
        FROM challenges c
        JOIN sponsors s ON s.id = c.author
@@ -1157,6 +1159,7 @@ export async function listPublicChallenges(): Promise<PublicChallenge[]> {
       id: Number(r.enterprise_id),
       name: String(r.enterprise_name),
       logoUrl: (r.enterprise_logo_url as string | null) ?? null,
+      logoNegativeUrl: (r.enterprise_logo_negative_url as string | null) ?? null,
       website: (r.enterprise_website as string | null) ?? null,
     },
   }));
