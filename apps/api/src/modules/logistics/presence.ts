@@ -4,6 +4,7 @@ import { audit } from "../../lib/audit.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
 import { resolveByBadge } from "./badge.js";
+import { loadPersonCard } from "./cards.js";
 import {
   buildPresenceIntervals,
   isPresentAt,
@@ -12,6 +13,21 @@ import {
 } from "./estimate.js";
 
 const MS_PER_HOUR = 3_600_000;
+
+// ── H24: badge lookup — person card + current presence status ─────────────
+
+/**
+ * Resolve a scanned badge to the door operator's person card, plus whether
+ * the estimate currently has them inside, so staff can tell entry from exit
+ * at a glance instead of guessing (mirrors the accreditation lookup UX).
+ * Never a mutation.
+ */
+export async function presenceLookup(badgeId: string) {
+  const userId = await resolveByBadge(pool, badgeId);
+  const card = await loadPersonCard(pool, userId);
+  const events = (await loadEvents(userId)).get(userId) ?? [];
+  return { ...card, badgeId, present: isPresentAt(events, Date.now()) };
+}
 
 // ── H24: door scan (in/out), optional backdated manual entry ──────────────
 

@@ -36,6 +36,7 @@ import { Spinner } from "@/components/common/spinner";
 import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
+import { errorMessage, InlineError } from "@/components/logistics/ui";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -64,7 +65,7 @@ import { ApiError, api } from "@/lib/api";
 import { pickText } from "@/lib/i18n";
 import { logisticsApi, type TicketQrPayload, type TimeLogEntry } from "@/lib/logistics";
 import { type RepoWithExtras, userProjects } from "@/lib/projects";
-import { useCan } from "@/lib/session";
+import { useCan, useSessionContext } from "@/lib/session";
 import type { Tone } from "@/lib/tones";
 import type {
   DerivedRole,
@@ -203,8 +204,7 @@ export default function UserProfilePage() {
         </TabsContent>
         <TabsContent value="presence" className="pt-2">
           <div className="space-y-6">
-            <PresenceTab userId={user.id} />
-            <RawScansSection userId={user.id} />
+            <PresenceSection userId={user.id} />
             <PhysicalActivity userId={user.id} />
           </div>
         </TabsContent>
@@ -1093,10 +1093,10 @@ interface PresenceInterval {
   confirmed: boolean;
 }
 
-interface PresenceHours {
-  userId: number;
+interface PresenceData {
   hours: number;
   intervals: PresenceInterval[];
+  logs: TimeLogEntry[];
 }
 
 const timeFmt = new Intl.DateTimeFormat("en-GB", {
@@ -1106,40 +1106,57 @@ const timeFmt = new Intl.DateTimeFormat("en-GB", {
   minute: "2-digit",
 });
 
-function PresenceTab({ userId }: { userId: number }) {
-  const canStats = useCan(CAPABILITIES.LOGISTICS_STATS);
-  const [data, setData] = useState<PresenceHours | null>(null);
-  const [state, setState] = useState<"loading" | "ready" | "forbidden" | "error">("loading");
+function toDatetimeLocal(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
-  useEffect(() => {
-    if (!canStats) {
+/**
+ * Estimated hours/intervals and the raw scans behind them, in one card with
+ * one loading/error state — both read the same presence:scan|logistics:stats
+ * capability and the same underlying data, so they should never disagree
+ * about whether they loaded.
+ */
+function PresenceSection({ userId }: { userId: number }) {
+  const { canAny } = useSessionContext();
+  const canRead = canAny(CAPABILITIES.PRESENCE_SCAN, CAPABILITIES.LOGISTICS_STATS);
+  const canEdit = useCan(CAPABILITIES.PRESENCE_SCAN);
+  const [data, setData] = useState<PresenceData | null>(null);
+  const [state, setState] = useState<"loading" | "ready" | "forbidden" | "error">("loading");
+  const [loadError, setLoadError] = useState("");
+  const [editing, setEditing] = useState<TimeLogEntry | null>(null);
+  const [deleting, setDeleting] = useState<TimeLogEntry | null>(null);
+
+  const load = useCallback(async () => {
+    if (!canRead) {
       setState("forbidden");
       return;
     }
-    let cancelled = false;
-    setState("loading");
-    api
-      .get<PresenceHours>(`/api/presence/hours/${userId}`)
-      .then((r) => {
-        if (cancelled) return;
-        setData(r);
-        setState("ready");
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setState(err instanceof ApiError && err.status === 403 ? "forbidden" : "error");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [userId, canStats]);
+    setState((current) => (current === "ready" ? "ready" : "loading"));
+    try {
+      const [hours, logs] = await Promise.all([
+        api.get<{ hours: number; intervals: PresenceInterval[] }>(`/api/presence/hours/${userId}`),
+        logisticsApi.presenceLogs(userId),
+      ]);
+      setData({ hours: hours.hours, intervals: hours.intervals, logs: logs.items });
+      setState("ready");
+    } catch (err) {
+      setLoadError(errorMessage(err, "Attendance data is unavailable right now."));
+      setState(err instanceof ApiError && err.status === 403 ? "forbidden" : "error");
+    }
+  }, [userId, canRead]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   if (state === "forbidden") {
     return (
       <EmptyState
         icon={ClockIcon}
         title="Presence unavailable"
-        description="You need the logistics:stats capability to view attendance."
+        description="You need the presence:scan or logistics:stats capability to view attendance."
       />
     );
   }
@@ -1155,7 +1172,12 @@ function PresenceTab({ userId }: { userId: number }) {
       <EmptyState
         icon={ClockIcon}
         title="Could not load presence"
-        description="Attendance estimates are unavailable right now."
+        description={loadError}
+        action={
+          <Button variant="outline" onClick={() => void load()}>
+            Try again
+          </Button>
+        }
       />
     );
   }
@@ -1196,101 +1218,12 @@ function PresenceTab({ userId }: { userId: number }) {
     },
   ];
 
-  return (
-    <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <StatCard
-          label="Estimated hours"
-          value={data.hours.toFixed(1)}
-          hint="From entry and exit activity"
-          icon={ClockIcon}
-        />
-        <StatCard
-          label="Presence intervals"
-          value={String(data.intervals.length)}
-          hint="Estimated visits to the venue"
-        />
-      </div>
-      <DataTable
-        columns={intervalColumns}
-        data={data.intervals}
-        getRowId={(i) => i.start}
-        pageSize={10}
-        empty={{
-          icon: ClockIcon,
-          title: "No presence recorded",
-          description: "This user has no door or activity scans yet.",
-        }}
-      />
-    </div>
-  );
-}
-
-const scanTimeFmt = new Intl.DateTimeFormat("en-GB", {
-  day: "2-digit",
-  month: "short",
-  hour: "2-digit",
-  minute: "2-digit",
-});
-
-function toDatetimeLocal(iso: string): string {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function RawScansSection({ userId }: { userId: number }) {
-  const canStats = useCan(CAPABILITIES.LOGISTICS_STATS);
-  const canEdit = useCan(CAPABILITIES.PRESENCE_SCAN);
-  const canRead = canStats || canEdit;
-  const [logs, setLogs] = useState<TimeLogEntry[]>([]);
-  const [state, setState] = useState<"loading" | "ready" | "forbidden" | "error">("loading");
-  const [editing, setEditing] = useState<TimeLogEntry | null>(null);
-  const [deleting, setDeleting] = useState<TimeLogEntry | null>(null);
-
-  const load = useCallback(async () => {
-    if (!canRead) {
-      setState("forbidden");
-      return;
-    }
-    setState((current) => (current === "ready" ? "ready" : "loading"));
-    try {
-      const data = await logisticsApi.presenceLogs(userId);
-      setLogs(data.items);
-      setState("ready");
-    } catch (err) {
-      setState(err instanceof ApiError && err.status === 403 ? "forbidden" : "error");
-    }
-  }, [userId, canRead]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  if (state === "forbidden") return null;
-  if (state === "loading") {
-    return (
-      <div className="flex justify-center py-12">
-        <Spinner className="size-5" />
-      </div>
-    );
-  }
-  if (state === "error") {
-    return (
-      <EmptyState
-        icon={DoorOpenIcon}
-        title="Could not load raw scans"
-        description="This user's door scans are unavailable right now."
-      />
-    );
-  }
-
-  const columns: Column<TimeLogEntry>[] = [
+  const scanColumns: Column<TimeLogEntry>[] = [
     {
       id: "when",
       header: "When",
       sortValue: (l) => l.scannedAt,
-      cell: (l) => <span className="text-sm">{scanTimeFmt.format(new Date(l.scannedAt))}</span>,
+      cell: (l) => <span className="text-sm">{timeFmt.format(new Date(l.scannedAt))}</span>,
     },
     {
       id: "kind",
@@ -1356,14 +1289,44 @@ function RawScansSection({ userId }: { userId: number }) {
 
   return (
     <SectionCard
-      icon={DoorOpenIcon}
-      title="Raw door scans"
-      description="Every individual entry/exit scan behind the estimate above. Fix a wrong one directly here."
-      bodyClassName="p-0"
+      icon={ClockIcon}
+      title="Presence"
+      description="Door, meal and activity signals, estimated into sessions (H24)."
     >
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <StatCard
+          label="Estimated hours"
+          value={data.hours.toFixed(1)}
+          hint="From entry and exit activity"
+          icon={ClockIcon}
+        />
+        <StatCard
+          label="Presence intervals"
+          value={String(data.intervals.length)}
+          hint="Estimated visits to the venue"
+        />
+      </div>
       <DataTable
-        columns={columns}
-        data={logs}
+        columns={intervalColumns}
+        data={data.intervals}
+        getRowId={(i) => i.start}
+        pageSize={10}
+        empty={{
+          icon: ClockIcon,
+          title: "No presence recorded",
+          description: "This user has no door or activity scans yet.",
+        }}
+      />
+
+      <Separator className="my-6" />
+
+      <h4 className="mb-3 text-sm font-medium">Raw door scans</h4>
+      <p className="text-muted-foreground mb-4 text-sm">
+        Every individual entry/exit scan behind the estimate above. Fix a wrong one directly here.
+      </p>
+      <DataTable
+        columns={scanColumns}
+        data={data.logs}
         getRowId={(l) => String(l.id)}
         pageSize={10}
         empty={{
@@ -1423,7 +1386,7 @@ function EditTimeLogModal({
       toast.success("Scan updated.");
       onSaved();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not update this scan.");
+      setError(errorMessage(err, "Could not update this scan."));
     } finally {
       setPending(false);
     }
@@ -1475,7 +1438,7 @@ function EditTimeLogModal({
             placeholder="gate"
           />
         </div>
-        {error && <p className="text-destructive text-sm">{error}</p>}
+        {error && <InlineError message={error} />}
       </div>
     </Modal>
   );
@@ -1499,7 +1462,7 @@ function DeleteTimeLogModal({
       toast.success("Scan deleted.");
       onDeleted();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not delete this scan.");
+      toast.error(errorMessage(err, "Could not delete this scan."));
       setPending(false);
     }
   }
@@ -1509,7 +1472,7 @@ function DeleteTimeLogModal({
       open
       onOpenChange={(open) => !open && onClose()}
       title="Delete this scan?"
-      description={`Removes the ${log.kind === "in" ? "entry" : "exit"} scan at ${scanTimeFmt.format(new Date(log.scannedAt))}. This can't be undone.`}
+      description={`Removes the ${log.kind === "in" ? "entry" : "exit"} scan at ${timeFmt.format(new Date(log.scannedAt))}. This can't be undone.`}
       footer={
         <>
           <Button variant="outline" onClick={onClose}>

@@ -1,5 +1,6 @@
 import { StatusBadge } from "@/components/common/status-badge";
-import { type AccreditationLookup, type PersonCard, personName } from "@/lib/logistics";
+import type { AccreditationLookup, PersonCard, PresenceLookup } from "@/lib/logistics";
+import { personName } from "@/lib/logistics";
 
 export function labelForIntolerance(item: { label: unknown }): string {
   if (typeof item.label === "string") return item.label;
@@ -10,8 +11,12 @@ export function labelForIntolerance(item: { label: unknown }): string {
   return "Intolerance";
 }
 
-/** Shared person card shown at every scanner station (H22, H25, H26). */
-export function PersonCardView({ card }: { card: AccreditationLookup | PersonCard }) {
+/** Shared person card shown at every scanner station (H22, H24, H25, H26). */
+export function PersonCardView({
+  card,
+}: {
+  card: AccreditationLookup | PresenceLookup | PersonCard;
+}) {
   const intolerances = card.intolerances.map(labelForIntolerance);
   return (
     <div className="rounded-lg border p-4">
@@ -29,6 +34,11 @@ export function PersonCardView({ card }: { card: AccreditationLookup | PersonCar
               {card.alreadyAccredited ? `Badge ${card.currentBadge}` : "No badge"}
             </StatusBadge>
           </div>
+        )}
+        {"present" in card && (
+          <StatusBadge tone={card.present ? "success" : "neutral"}>
+            {card.present ? "Currently inside" : "Currently outside"}
+          </StatusBadge>
         )}
       </div>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
