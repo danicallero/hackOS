@@ -34,6 +34,15 @@ export interface PublicAnnouncement {
   expiresAt: string | null;
 }
 
+/** GET /api/public/applications item — an open form applicants can apply to. */
+export interface PublicApplicationForm {
+  id: number;
+  name: string;
+  type: string;
+  description: string | null;
+  close_at: string | null;
+}
+
 export type { PublicScheduleItem };
 
 export function displayText(value: Record<string, string> | null | undefined): string {
