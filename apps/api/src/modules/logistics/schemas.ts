@@ -33,6 +33,8 @@ export const rotateBody = z
     message: "Provide userId or currentBadgeId",
   });
 
+export const presenceLookupBody = z.object({ badgeId: z.string().min(1) });
+
 export const presenceScanBody = z.object({
   badgeId: z.string().min(1),
   kind: z.enum(["in", "out"]),

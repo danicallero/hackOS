@@ -39,6 +39,21 @@ export interface PresenceEstimate {
   present: number[];
 }
 
+export interface PresenceLookup extends PersonCard {
+  badgeId: string;
+  /** Whether the presence estimate currently has this person inside. */
+  present: boolean;
+}
+
+export interface PresenceScanResult {
+  logged: true;
+  timeLogId: number;
+  userId: number;
+  kind: "in" | "out";
+  scannedAt: string;
+  manual: boolean;
+}
+
 export interface PresenceInterval {
   start: string;
   end: string;
@@ -179,13 +194,15 @@ export const logisticsApi = {
     api.post<RotateBadgeResult>("/api/accreditation/rotate", body, {
       headers: idempotencyHeaders("badge-rotate"),
     }),
+  presenceLookup: (badgeId: string) =>
+    api.post<PresenceLookup>("/api/presence/lookup", { badgeId }),
   presenceScan: (body: {
     badgeId: string;
     kind: "in" | "out";
     location?: string;
     scannedAt?: string;
   }) =>
-    api.post("/api/presence/scan", body, {
+    api.post<PresenceScanResult>("/api/presence/scan", body, {
       headers: idempotencyHeaders("presence"),
     }),
   presenceEstimate: () => api.get<PresenceEstimate>("/api/presence/estimate"),

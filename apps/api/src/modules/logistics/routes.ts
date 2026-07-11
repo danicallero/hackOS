@@ -27,6 +27,7 @@ import {
   deleteTimeLog,
   listTimeLogs,
   occupancyEstimate,
+  presenceLookup,
   presenceScan,
   updateTimeLog,
   userHours,
@@ -53,6 +54,7 @@ import {
   lookupBody,
   lookupUserBody,
   mealScanBatchBody,
+  presenceLookupBody,
   presenceScanBody,
   rotateBody,
   scannableActivitiesQuery,
@@ -197,6 +199,12 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   );
 
   // ── H24 presence ─────────────────────────────────────────────────────────
+
+  typed.post(
+    "/api/presence/lookup",
+    { preHandler: presence, schema: { body: presenceLookupBody } },
+    async (req) => presenceLookup(req.body.badgeId),
+  );
 
   typed.post(
     "/api/presence/scan",

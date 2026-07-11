@@ -2,7 +2,15 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { DoorOpenIcon, LockIcon, UsersIcon } from "lucide-react";
+import {
+  ClockIcon,
+  DoorOpenIcon,
+  LockIcon,
+  LogInIcon,
+  LogOutIcon,
+  ScanLineIcon,
+  UsersIcon,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -11,6 +19,7 @@ import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
 import { StatCard } from "@/components/common/stat-card";
+import { PersonCardView } from "@/components/logistics/person-card";
 import { errorMessage, Field, InlineError } from "@/components/logistics/ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +31,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useLiveQuery } from "@/hooks/use-event-source";
-import { logisticsApi, type PresenceEstimate, type PresenceHours } from "@/lib/logistics";
+import {
+  logisticsApi,
+  type PresenceEstimate,
+  type PresenceHours,
+  type PresenceLookup,
+} from "@/lib/logistics";
 import { useCan } from "@/lib/session";
 
 const PRESENCE_EVENTS = [EVENTS.LOGISTICS_PRESENCE_SCAN, EVENTS.LOGISTICS_ACTIVITY_SCAN];
@@ -60,7 +74,7 @@ export default function PresencePage() {
     <div className="space-y-6" data-wide>
       <PageHeader
         title="Presence"
-        description="Register entries and exits at the door; attendance hours are estimated from all signals (H24)."
+        description="Scan a badge at the door to register an entry or exit; attendance hours are estimated from all signals (H24)."
       />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
@@ -93,28 +107,74 @@ function PresencePanel({
 }) {
   const router = useRouter();
   const [badgeId, setBadgeId] = useState("");
-  const [kind, setKind] = useState<"in" | "out">("in");
+  const [lookup, setLookup] = useState<PresenceLookup | null>(null);
   const [location, setLocation] = useState("");
-  const [scannedAt, setScannedAt] = useState("");
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualKind, setManualKind] = useState<"in" | "out">("in");
+  const [manualScannedAt, setManualScannedAt] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  const scan = async () => {
+  const reset = () => {
+    setBadgeId("");
+    setLookup(null);
+    setLocation("");
+    setManualOpen(false);
+    setManualScannedAt("");
+  };
+
+  const doLookup = async () => {
+    if (!badgeId.trim()) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await logisticsApi.presenceLookup(badgeId.trim());
+      setLookup(result);
+      setManualKind(result.present ? "out" : "in");
+    } catch (err) {
+      setLookup(null);
+      setError(errorMessage(err, "Badge lookup failed."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doScan = async (kind: "in" | "out") => {
+    if (!lookup) return;
     setBusy(true);
     setError("");
     try {
       await logisticsApi.presenceScan({
-        badgeId: badgeId.trim(),
+        badgeId: lookup.badgeId,
         kind,
         location: location.trim() || undefined,
-        scannedAt: scannedAt ? new Date(scannedAt).toISOString() : undefined,
       });
       toast.success(kind === "in" ? "Entry recorded." : "Exit recorded.");
-      setBadgeId("");
-      setScannedAt("");
+      reset();
       onScanned();
     } catch (err) {
       setError(errorMessage(err, "Presence scan failed."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doManualSave = async () => {
+    if (!lookup || !manualScannedAt) return;
+    setBusy(true);
+    setError("");
+    try {
+      await logisticsApi.presenceScan({
+        badgeId: lookup.badgeId,
+        kind: manualKind,
+        location: location.trim() || undefined,
+        scannedAt: new Date(manualScannedAt).toISOString(),
+      });
+      toast.success("Manual record added.");
+      reset();
+      onScanned();
+    } catch (err) {
+      setError(errorMessage(err, "Could not save the manual record."));
     } finally {
       setBusy(false);
     }
@@ -147,48 +207,108 @@ function PresencePanel({
     <div className="grid gap-4 xl:grid-cols-[minmax(320px,0.8fr)_minmax(0,1.2fr)]">
       <SectionCard
         title="Door scan"
-        description="Register entry, exit, or backdated manual passes."
+        description="Scan a badge to load the person, then register an entry or exit."
         icon={DoorOpenIcon}
+        bodyClassName="space-y-4"
       >
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_140px]">
           <Field label="Badge">
             <Input
               value={badgeId}
               onChange={(e) => setBadgeId(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") doLookup();
+              }}
               placeholder="scan badge"
+              autoComplete="off"
             />
           </Field>
-          <Field label="Direction">
-            <Select value={kind} onValueChange={(v) => setKind(v as "in" | "out")}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="in">Entry</SelectItem>
-                <SelectItem value="out">Exit</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
+          <div className="flex items-end">
+            <Button className="w-full" onClick={doLookup} disabled={busy || !badgeId.trim()}>
+              <ScanLineIcon className="size-4" />
+              Lookup
+            </Button>
+          </div>
         </div>
-        <Field label="Location">
-          <Input
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
-            placeholder="main door"
-          />
-        </Field>
-        <Field label="Manual timestamp">
-          <Input
-            type="datetime-local"
-            value={scannedAt}
-            onChange={(e) => setScannedAt(e.target.value)}
-          />
-        </Field>
+
         {error && <InlineError message={error} />}
-        <Button onClick={scan} disabled={busy || !badgeId.trim()}>
-          <DoorOpenIcon className="size-4" />
-          Record {kind === "in" ? "entry" : "exit"}
-        </Button>
+
+        {lookup && (
+          <>
+            <PersonCardView card={lookup} />
+            <Field label="Location">
+              <Input
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                placeholder="main door"
+              />
+            </Field>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Button
+                variant={lookup.present ? "outline" : "default"}
+                onClick={() => doScan("in")}
+                disabled={busy}
+              >
+                <LogInIcon className="size-4" />
+                Register entry
+              </Button>
+              <Button
+                variant={lookup.present ? "default" : "outline"}
+                onClick={() => doScan("out")}
+                disabled={busy}
+              >
+                <LogOutIcon className="size-4" />
+                Register exit
+              </Button>
+            </div>
+
+            <div className="border-t pt-4">
+              <Button
+                variant="link"
+                className="h-auto p-0"
+                onClick={() => setManualOpen((v) => !v)}
+              >
+                <ClockIcon className="size-4" />
+                {manualOpen ? "Cancel manual record" : "Add a backdated manual record"}
+              </Button>
+            </div>
+
+            {manualOpen && (
+              <div className="bg-muted/40 space-y-3 rounded-lg border p-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Direction">
+                    <Select
+                      value={manualKind}
+                      onValueChange={(v) => setManualKind(v as "in" | "out")}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="in">Entry</SelectItem>
+                        <SelectItem value="out">Exit</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field label="Time">
+                    <Input
+                      type="datetime-local"
+                      value={manualScannedAt}
+                      onChange={(e) => setManualScannedAt(e.target.value)}
+                    />
+                  </Field>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={doManualSave}
+                  disabled={busy || !manualScannedAt}
+                >
+                  Save manual record
+                </Button>
+              </div>
+            )}
+          </>
+        )}
       </SectionCard>
 
       <SectionCard
