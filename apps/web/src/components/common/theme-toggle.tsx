@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-/** Light / dark / system theme switcher. Dark is the default (Dokploy-style). */
+/** Light / dark / system theme switcher. Light is the default. */
 export function ThemeToggle() {
   const { setTheme } = useTheme();
   return (

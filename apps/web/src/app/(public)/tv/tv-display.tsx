@@ -157,16 +157,25 @@ function MarqueeText({ text, className }: { text: string; className?: string }) 
       el.style.transform = "translateX(0)";
       if (ownOverflow <= 1) return;
       const ownTravel = (ownOverflow / MARQUEE_PIXELS_PER_SECOND) * 1000;
-      const maxTravel = marqueeCoordinator.maxTravelMs;
+      // A marquee is always part of the coordinator's maximum, but retain
+      // its own travel as a floor while measurements settle.
+      const maxTravel = Math.max(ownTravel, marqueeCoordinator.maxTravelMs);
       const total = MARQUEE_PAUSE_MS * 2 + maxTravel * 2;
       // Own forward travel ends at o2; shorter texts then hold at full
       // offset until o3 (when the longest text arrives). Both pauses (o1-o0,
       // o4-o3) are shared by every instance. The return trip mirrors this.
-      const o1 = MARQUEE_PAUSE_MS / total;
-      const o2 = (MARQUEE_PAUSE_MS + ownTravel) / total;
-      const o3 = (MARQUEE_PAUSE_MS + maxTravel) / total;
-      const o4 = (MARQUEE_PAUSE_MS + maxTravel + MARQUEE_PAUSE_MS) / total;
-      const o5 = (MARQUEE_PAUSE_MS + maxTravel + MARQUEE_PAUSE_MS + ownTravel) / total;
+      // Firefox validates offsets strictly. The longest marquee's o5 is
+      // mathematically 1, but floating-point division can produce a value
+      // just above 1, which makes Element.animate() throw and prevents the
+      // TV screen from loading.
+      const boundedOffset = (value: number) => Math.min(1, Math.max(0, value));
+      const o1 = boundedOffset(MARQUEE_PAUSE_MS / total);
+      const o2 = boundedOffset((MARQUEE_PAUSE_MS + ownTravel) / total);
+      const o3 = boundedOffset((MARQUEE_PAUSE_MS + maxTravel) / total);
+      const o4 = boundedOffset((MARQUEE_PAUSE_MS + maxTravel + MARQUEE_PAUSE_MS) / total);
+      const o5 = boundedOffset(
+        (MARQUEE_PAUSE_MS + maxTravel + MARQUEE_PAUSE_MS + ownTravel) / total,
+      );
       const offset = `translateX(-${ownOverflow}px)`;
       animationRef.current = el.animate(
         [
