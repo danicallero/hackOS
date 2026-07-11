@@ -3,10 +3,11 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { PasswordInput } from "@/components/common/password-input";
+import { Spinner } from "@/components/common/spinner";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,11 +40,25 @@ function safeNext(next: string | null): string {
 function LoginInner() {
   const router = useRouter();
   const next = safeNext(useSearchParams().get("next"));
-  const { refresh } = useSessionContext();
+  const { status, refresh } = useSessionContext();
   const form = useForm<Values>({
     resolver: zodResolver(schema),
     defaultValues: { email: "", password: "" },
   });
+
+  // Already signed in: bounce straight to the destination instead of showing
+  // the form again — /login isn't admin-only, any signed-in user lands here.
+  useEffect(() => {
+    if (status === "authenticated") router.replace(next);
+  }, [status, next, router]);
+
+  if (status === "loading" || status === "authenticated") {
+    return (
+      <div className="flex justify-center py-10">
+        <Spinner className="size-6" />
+      </div>
+    );
+  }
 
   async function onSubmit(values: Values) {
     const { error } = await signIn.email({

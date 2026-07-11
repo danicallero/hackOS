@@ -3,10 +3,12 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { MailCheckIcon } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { PasswordInput } from "@/components/common/password-input";
+import { Spinner } from "@/components/common/spinner";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -26,6 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { signUp } from "@/lib/auth-client";
+import { useSessionContext } from "@/lib/session";
 
 const schema = z.object({
   name: z.string().min(1, "Required"),
@@ -38,11 +41,26 @@ const schema = z.object({
 type Values = z.infer<typeof schema>;
 
 export default function SignUpPage() {
+  const router = useRouter();
+  const { status } = useSessionContext();
   const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
   const form = useForm<Values>({
     resolver: zodResolver(schema),
     defaultValues: { name: "", surname: "", email: "", password: "", language: "es" },
   });
+
+  // Already signed in: no reason to show the sign-up form again.
+  useEffect(() => {
+    if (status === "authenticated") router.replace("/dashboard");
+  }, [status, router]);
+
+  if (status === "loading" || status === "authenticated") {
+    return (
+      <div className="flex justify-center py-10">
+        <Spinner className="size-6" />
+      </div>
+    );
+  }
 
   async function onSubmit(values: Values) {
     // Better Auth is enumeration-safe on sign-up (H1): whether or not the email
