@@ -4,6 +4,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
 import {
   CalendarDaysIcon,
+  CopyIcon,
   EyeIcon,
   EyeOffIcon,
   LockIcon,
@@ -66,6 +67,16 @@ function toForm(item: PublicScheduleItem): ScheduleInput {
   };
 }
 
+function toDuplicateForm(item: PublicScheduleItem): ScheduleInput {
+  return {
+    ...toForm(item),
+    title: `${item.title} (copy)`,
+    // A duplicated item should not unexpectedly appear on the public agenda.
+    visibility: "hidden",
+    publishAt: null,
+  };
+}
+
 function cleanForm(form: ScheduleInput): ScheduleInput {
   return {
     title: form.title.trim(),
@@ -90,6 +101,7 @@ export default function SchedulePage() {
   const [loading, setLoading] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<PublicScheduleItem | null>(null);
+  const [duplicating, setDuplicating] = useState<PublicScheduleItem | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -204,6 +216,8 @@ export default function SchedulePage() {
       cell: (item) => item.location ?? <span className="text-muted-foreground">-</span>,
     },
   ];
+  const selectedItem =
+    selectedIds.size === 1 ? items.find((item) => selectedIds.has(String(item.id))) : undefined;
 
   return (
     <div className="space-y-6" data-wide>
@@ -255,6 +269,17 @@ export default function SchedulePage() {
           selectedIds.size > 0 ? (
             <>
               <span className="text-muted-foreground text-sm">{selectedIds.size} selected</span>
+              {selectedItem && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => setDuplicating(selectedItem)}
+                >
+                  <CopyIcon className="size-4" />
+                  Duplicate
+                </Button>
+              )}
               <Button
                 size="sm"
                 variant="outline"
@@ -308,6 +333,23 @@ export default function SchedulePage() {
             await logisticsApi.updateSchedule(editing.id, cleanForm(values));
             toast.success("Schedule item updated.");
             setEditing(null);
+            await load();
+          }}
+        />
+      )}
+
+      {duplicating && (
+        <ScheduleFormModal
+          open={Boolean(duplicating)}
+          onOpenChange={(open) => {
+            if (!open) setDuplicating(null);
+          }}
+          title="Duplicate schedule item"
+          initial={toDuplicateForm(duplicating)}
+          onSubmit={async (values) => {
+            await logisticsApi.createSchedule(cleanForm(values));
+            toast.success("Schedule item duplicated.");
+            setDuplicating(null);
             await load();
           }}
         />
