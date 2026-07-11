@@ -159,3 +159,155 @@ describe("H24 presence scan + estimation", () => {
     expect(res.statusCode).toBe(403);
   });
 });
+
+describe("H24 raw scan admin (view/edit/delete)", () => {
+  it("lists a user's raw scans, edits one, and audits the change", async () => {
+    const uid = await createUser();
+    await assignBadge(uid, "P-10");
+    await app.inject({
+      method: "POST",
+      url: "/api/presence/scan",
+      headers: asUser(doorStaff),
+      payload: { badgeId: "P-10", kind: "in", location: "gate" },
+    });
+
+    const list = await app.inject({
+      method: "GET",
+      url: `/api/presence/logs/${uid}`,
+      headers: asUser(statsStaff),
+    });
+    expect(list.statusCode).toBe(200);
+    expect(list.json().items).toHaveLength(1);
+    const logId = list.json().items[0].id;
+    expect(list.json().items[0].kind).toBe("in");
+
+    const newTime = new Date(Date.now() - 2 * 3_600_000).toISOString();
+    const patch = await app.inject({
+      method: "PATCH",
+      url: `/api/presence/logs/${logId}`,
+      headers: asUser(doorStaff),
+      payload: { kind: "out", scannedAt: newTime, location: "side door" },
+    });
+    expect(patch.statusCode).toBe(200);
+    expect(patch.json().kind).toBe("out");
+    expect(patch.json().location).toBe("side door");
+
+    const { pool } = await import("../../src/db/pool.js");
+    const audits = await pool.query(
+      `SELECT * FROM audit_log WHERE entity_type = 'presence' AND action = 'edit_time_log' AND entity_id = $1`,
+      [String(uid)],
+    );
+    expect(audits.rows).toHaveLength(1);
+    expect(audits.rows[0].actor_id).toBe(doorStaff);
+  });
+
+  it("rejects editing a scan into the future", async () => {
+    const uid = await createUser();
+    await assignBadge(uid, "P-11");
+    await app.inject({
+      method: "POST",
+      url: "/api/presence/scan",
+      headers: asUser(doorStaff),
+      payload: { badgeId: "P-11", kind: "in" },
+    });
+    const list = await app.inject({
+      method: "GET",
+      url: `/api/presence/logs/${uid}`,
+      headers: asUser(doorStaff),
+    });
+    const logId = list.json().items[0].id;
+
+    const future = new Date(Date.now() + 3_600_000).toISOString();
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/api/presence/logs/${logId}`,
+      headers: asUser(doorStaff),
+      payload: { scannedAt: future },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("404s editing/deleting a time log that doesn't exist", async () => {
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/api/presence/logs/999999`,
+      headers: asUser(doorStaff),
+      payload: { kind: "out" },
+    });
+    expect(res.statusCode).toBe(404);
+
+    const del = await app.inject({
+      method: "DELETE",
+      url: `/api/presence/logs/999999`,
+      headers: asUser(doorStaff),
+    });
+    expect(del.statusCode).toBe(404);
+  });
+
+  it("deletes a bad scan and audits it", async () => {
+    const uid = await createUser();
+    await assignBadge(uid, "P-12");
+    await app.inject({
+      method: "POST",
+      url: "/api/presence/scan",
+      headers: asUser(doorStaff),
+      payload: { badgeId: "P-12", kind: "in" },
+    });
+    const list = await app.inject({
+      method: "GET",
+      url: `/api/presence/logs/${uid}`,
+      headers: asUser(doorStaff),
+    });
+    const logId = list.json().items[0].id;
+
+    const del = await app.inject({
+      method: "DELETE",
+      url: `/api/presence/logs/${logId}`,
+      headers: asUser(doorStaff),
+    });
+    expect(del.statusCode).toBe(200);
+    expect(del.json().deleted).toBe(true);
+
+    const { pool } = await import("../../src/db/pool.js");
+    const remaining = await pool.query(`SELECT * FROM time_logs WHERE id = $1`, [logId]);
+    expect(remaining.rows).toHaveLength(0);
+
+    const audits = await pool.query(
+      `SELECT * FROM audit_log WHERE entity_type = 'presence' AND action = 'delete_time_log' AND entity_id = $1`,
+      [String(uid)],
+    );
+    expect(audits.rows).toHaveLength(1);
+  });
+
+  it("rejects editing/deleting scans without the presence capability", async () => {
+    const uid = await createUser();
+    await assignBadge(uid, "P-13");
+    await app.inject({
+      method: "POST",
+      url: "/api/presence/scan",
+      headers: asUser(doorStaff),
+      payload: { badgeId: "P-13", kind: "in" },
+    });
+    const list = await app.inject({
+      method: "GET",
+      url: `/api/presence/logs/${uid}`,
+      headers: asUser(statsStaff),
+    });
+    const logId = list.json().items[0].id;
+
+    const patch = await app.inject({
+      method: "PATCH",
+      url: `/api/presence/logs/${logId}`,
+      headers: asUser(statsStaff), // stats-only, not presence:scan
+      payload: { kind: "out" },
+    });
+    expect(patch.statusCode).toBe(403);
+
+    const del = await app.inject({
+      method: "DELETE",
+      url: `/api/presence/logs/${logId}`,
+      headers: asUser(statsStaff),
+    });
+    expect(del.statusCode).toBe(403);
+  });
+});

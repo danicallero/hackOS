@@ -8,6 +8,7 @@ import {
   Building2Icon,
   ClipboardListIcon,
   ClockIcon,
+  DoorOpenIcon,
   ExternalLinkIcon,
   FileTextIcon,
   FolderGitIcon,
@@ -20,7 +21,7 @@ import {
   XIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -61,7 +62,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { pickText } from "@/lib/i18n";
-import { logisticsApi, type TicketQrPayload } from "@/lib/logistics";
+import { logisticsApi, type TicketQrPayload, type TimeLogEntry } from "@/lib/logistics";
 import { type RepoWithExtras, userProjects } from "@/lib/projects";
 import { useCan } from "@/lib/session";
 import type { Tone } from "@/lib/tones";
@@ -100,9 +101,25 @@ function initials(u: Pick<UserDetail, "name" | "surname" | "email">): string {
   return u.email.slice(0, 2).toUpperCase();
 }
 
+const TAB_VALUES = [
+  "overview",
+  "qr",
+  "permissions",
+  "presence",
+  "activity",
+  "application",
+  "projects",
+] as const;
+
 export default function UserProfilePage() {
   const params = useParams<{ id: string }>();
   const userId = Number(params.id);
+  const searchParams = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const initialTab =
+    requestedTab && (TAB_VALUES as readonly string[]).includes(requestedTab)
+      ? requestedTab
+      : "overview";
 
   const [user, setUser] = useState<UserDetail | null>(null);
   const [intolerances, setIntolerances] = useState<Intolerance[]>([]);
@@ -164,7 +181,7 @@ export default function UserProfilePage() {
       <BackLink />
       <ProfileHeader user={user} />
 
-      <Tabs defaultValue="overview">
+      <Tabs defaultValue={initialTab}>
         <TabsList className="w-full max-w-3xl">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="qr">QR</TabsTrigger>
@@ -187,6 +204,7 @@ export default function UserProfilePage() {
         <TabsContent value="presence" className="pt-2">
           <div className="space-y-6">
             <PresenceTab userId={user.id} />
+            <RawScansSection userId={user.id} />
             <PhysicalActivity userId={user.id} />
           </div>
         </TabsContent>
@@ -1069,10 +1087,16 @@ function PermissionsTab({ user, onChanged }: { user: UserDetail; onChanged: () =
   );
 }
 
+interface PresenceInterval {
+  start: string;
+  end: string;
+  confirmed: boolean;
+}
+
 interface PresenceHours {
   userId: number;
   hours: number;
-  intervals: { start: string; end: string }[];
+  intervals: PresenceInterval[];
 }
 
 const timeFmt = new Intl.DateTimeFormat("en-GB", {
@@ -1136,7 +1160,7 @@ function PresenceTab({ userId }: { userId: number }) {
     );
   }
 
-  const intervalColumns: Column<{ start: string; end: string }>[] = [
+  const intervalColumns: Column<PresenceInterval>[] = [
     {
       id: "start",
       header: "Entered",
@@ -1145,7 +1169,14 @@ function PresenceTab({ userId }: { userId: number }) {
     {
       id: "end",
       header: "Left",
-      cell: (i) => <span className="text-sm">{timeFmt.format(new Date(i.end))}</span>,
+      cell: (i) => (
+        <div className="flex items-center gap-2">
+          <span className="text-sm">{timeFmt.format(new Date(i.end))}</span>
+          <StatusBadge tone={i.confirmed ? "success" : "neutral"} dot={false} className="text-xs">
+            {i.confirmed ? "Confirmed" : "Estimated"}
+          </StatusBadge>
+        </div>
+      ),
     },
     {
       id: "duration",
@@ -1192,6 +1223,304 @@ function PresenceTab({ userId }: { userId: number }) {
         }}
       />
     </div>
+  );
+}
+
+const scanTimeFmt = new Intl.DateTimeFormat("en-GB", {
+  day: "2-digit",
+  month: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+function toDatetimeLocal(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function RawScansSection({ userId }: { userId: number }) {
+  const canStats = useCan(CAPABILITIES.LOGISTICS_STATS);
+  const canEdit = useCan(CAPABILITIES.PRESENCE_SCAN);
+  const canRead = canStats || canEdit;
+  const [logs, setLogs] = useState<TimeLogEntry[]>([]);
+  const [state, setState] = useState<"loading" | "ready" | "forbidden" | "error">("loading");
+  const [editing, setEditing] = useState<TimeLogEntry | null>(null);
+  const [deleting, setDeleting] = useState<TimeLogEntry | null>(null);
+
+  const load = useCallback(async () => {
+    if (!canRead) {
+      setState("forbidden");
+      return;
+    }
+    setState((current) => (current === "ready" ? "ready" : "loading"));
+    try {
+      const data = await logisticsApi.presenceLogs(userId);
+      setLogs(data.items);
+      setState("ready");
+    } catch (err) {
+      setState(err instanceof ApiError && err.status === 403 ? "forbidden" : "error");
+    }
+  }, [userId, canRead]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  if (state === "forbidden") return null;
+  if (state === "loading") {
+    return (
+      <div className="flex justify-center py-12">
+        <Spinner className="size-5" />
+      </div>
+    );
+  }
+  if (state === "error") {
+    return (
+      <EmptyState
+        icon={DoorOpenIcon}
+        title="Could not load raw scans"
+        description="This user's door scans are unavailable right now."
+      />
+    );
+  }
+
+  const columns: Column<TimeLogEntry>[] = [
+    {
+      id: "when",
+      header: "When",
+      sortValue: (l) => l.scannedAt,
+      cell: (l) => <span className="text-sm">{scanTimeFmt.format(new Date(l.scannedAt))}</span>,
+    },
+    {
+      id: "kind",
+      header: "Direction",
+      cell: (l) => (
+        <StatusBadge tone={l.kind === "in" ? "success" : "warning"} dot={false}>
+          {l.kind === "in" ? "Entry" : "Exit"}
+        </StatusBadge>
+      ),
+    },
+    {
+      id: "location",
+      header: "Location",
+      cell: (l) => <span className="text-sm">{l.location ?? "—"}</span>,
+    },
+    {
+      id: "scannedBy",
+      header: "Scanned by",
+      cell: (l) => (
+        <span className="text-muted-foreground text-sm">
+          {[l.scannedBy.name, l.scannedBy.surname].filter(Boolean).join(" ") ||
+            `#${l.scannedBy.userId}`}
+        </span>
+      ),
+    },
+    ...(canEdit
+      ? [
+          {
+            id: "actions",
+            header: "",
+            align: "right" as const,
+            cell: (l: TimeLogEntry) => (
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={(e: React.MouseEvent) => {
+                    e.stopPropagation();
+                    setEditing(l);
+                  }}
+                >
+                  Edit
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="text-destructive"
+                  onClick={(e: React.MouseEvent) => {
+                    e.stopPropagation();
+                    setDeleting(l);
+                  }}
+                >
+                  Delete
+                </Button>
+              </div>
+            ),
+          },
+        ]
+      : []),
+  ];
+
+  return (
+    <SectionCard
+      icon={DoorOpenIcon}
+      title="Raw door scans"
+      description="Every individual entry/exit scan behind the estimate above. Fix a wrong one directly here."
+      bodyClassName="p-0"
+    >
+      <DataTable
+        columns={columns}
+        data={logs}
+        getRowId={(l) => String(l.id)}
+        pageSize={10}
+        empty={{
+          icon: DoorOpenIcon,
+          title: "No door scans yet",
+          description: "Door scans for this user will appear here.",
+        }}
+      />
+      {editing && (
+        <EditTimeLogModal
+          log={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null);
+            void load();
+          }}
+        />
+      )}
+      {deleting && (
+        <DeleteTimeLogModal
+          log={deleting}
+          onClose={() => setDeleting(null)}
+          onDeleted={() => {
+            setDeleting(null);
+            void load();
+          }}
+        />
+      )}
+    </SectionCard>
+  );
+}
+
+function EditTimeLogModal({
+  log,
+  onClose,
+  onSaved,
+}: {
+  log: TimeLogEntry;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [kind, setKind] = useState<"in" | "out">(log.kind);
+  const [scannedAt, setScannedAt] = useState(toDatetimeLocal(log.scannedAt));
+  const [location, setLocation] = useState(log.location ?? "");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+
+  async function save() {
+    setPending(true);
+    setError("");
+    try {
+      await logisticsApi.updateTimeLog(log.id, {
+        kind,
+        scannedAt: new Date(scannedAt).toISOString(),
+        location: location.trim() || null,
+      });
+      toast.success("Scan updated.");
+      onSaved();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not update this scan.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <Modal
+      open
+      onOpenChange={(open) => !open && onClose()}
+      title="Edit door scan"
+      description="Changes are recorded in the audit log."
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <SubmitButton pending={pending} onClick={save}>
+            Save changes
+          </SubmitButton>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <Label>Direction</Label>
+          <Select value={kind} onValueChange={(v) => setKind(v as "in" | "out")}>
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="in">Entry</SelectItem>
+              <SelectItem value="out">Exit</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label>Time</Label>
+          <Input
+            type="datetime-local"
+            value={scannedAt}
+            onChange={(e) => setScannedAt(e.target.value)}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Location</Label>
+          <Input
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            placeholder="gate"
+          />
+        </div>
+        {error && <p className="text-destructive text-sm">{error}</p>}
+      </div>
+    </Modal>
+  );
+}
+
+function DeleteTimeLogModal({
+  log,
+  onClose,
+  onDeleted,
+}: {
+  log: TimeLogEntry;
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const [pending, setPending] = useState(false);
+
+  async function remove() {
+    setPending(true);
+    try {
+      await logisticsApi.deleteTimeLog(log.id);
+      toast.success("Scan deleted.");
+      onDeleted();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not delete this scan.");
+      setPending(false);
+    }
+  }
+
+  return (
+    <Modal
+      open
+      onOpenChange={(open) => !open && onClose()}
+      title="Delete this scan?"
+      description={`Removes the ${log.kind === "in" ? "entry" : "exit"} scan at ${scanTimeFmt.format(new Date(log.scannedAt))}. This can't be undone.`}
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <SubmitButton variant="destructive" pending={pending} onClick={remove}>
+            Delete
+          </SubmitButton>
+        </>
+      }
+    />
   );
 }
 
