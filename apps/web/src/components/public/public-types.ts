@@ -15,6 +15,7 @@ export interface PublicSponsor {
   id: number;
   name: string;
   logoUrl: string | null;
+  logoNegativeUrl: string | null;
   website: string | null;
   tier?: string | null;
 }
@@ -26,7 +27,13 @@ export interface PublicChallenge {
   criteria: Record<string, string>;
   prizes: unknown;
   availableFrom: string | null;
-  enterprise: { id: number; name: string; logoUrl: string | null; website: string | null };
+  enterprise: {
+    id: number;
+    name: string;
+    logoUrl: string | null;
+    logoNegativeUrl: string | null;
+    website: string | null;
+  };
 }
 
 export interface PublicAnnouncement {

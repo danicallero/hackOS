@@ -3,13 +3,15 @@ import { audit } from "../../lib/audit.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import type { CreateEnterpriseBody, UpdateEnterpriseBody } from "./schemas.js";
 
-const COLUMNS = `id, name, website, logo_url, description, tier_id,
+const COLUMNS = `id, name, website, logo_url,
+  COALESCE(logo_negative_url, logo_url) AS logo_negative_url, description, tier_id,
   display_priority, visibility, available_from, director_id, created_at`;
 
 const COLUMN_FOR: Record<string, string> = {
   name: "name",
   website: "website",
   logoUrl: "logo_url",
+  logoNegativeUrl: "logo_negative_url",
   description: "description",
   tierId: "tier_id",
   displayPriority: "display_priority",
@@ -44,13 +46,14 @@ export async function createEnterprise(input: CreateEnterpriseBody, actorId: num
   try {
     const { rows } = await pool.query(
       `INSERT INTO enterprises
-         (name, website, logo_url, description, tier_id, display_priority, visibility, available_from)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         (name, website, logo_url, logo_negative_url, description, tier_id, display_priority, visibility, available_from)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING ${COLUMNS}`,
       [
         input.name,
         input.website ?? null,
         input.logoUrl ?? null,
+        input.logoNegativeUrl ?? null,
         input.description ?? null,
         input.tierId ?? null,
         input.displayPriority ?? null,
@@ -145,9 +148,15 @@ export async function setEnterprisesVisibility(
   });
 }
 
-export async function setEnterpriseLogo(id: number, logoUrl: string, actorId: number | null) {
+export async function setEnterpriseLogo(
+  id: number,
+  logoUrl: string,
+  variant: "default" | "negative",
+  actorId: number | null,
+) {
+  const column = variant === "negative" ? "logo_negative_url" : "logo_url";
   const { rows } = await pool.query(
-    `UPDATE enterprises SET logo_url = $1 WHERE id = $2 RETURNING ${COLUMNS}`,
+    `UPDATE enterprises SET ${column} = $1 WHERE id = $2 RETURNING ${COLUMNS}`,
     [logoUrl, id],
   );
   if (!rows[0]) throw new NotFoundError("Enterprise not found", { id });
@@ -155,8 +164,8 @@ export async function setEnterpriseLogo(id: number, logoUrl: string, actorId: nu
     actorId,
     entityType: "enterprise",
     entityId: id,
-    action: "logo_updated",
-    after: { logoUrl },
+    action: variant === "negative" ? "negative_logo_updated" : "logo_updated",
+    after: { logoUrl, variant },
   });
   return rows[0];
 }
@@ -273,6 +282,7 @@ export interface PublicSponsor {
   name: string;
   website: string | null;
   logoUrl: string | null;
+  logoNegativeUrl: string | null;
   priority: number;
 }
 
@@ -285,6 +295,7 @@ export interface PublicSponsor {
 export async function listPublicSponsors(client: Queryable = pool): Promise<PublicSponsor[]> {
   const { rows } = await client.query(
     `SELECT e.id AS enterprise_id, e.name, e.website, e.logo_url,
+            COALESCE(e.logo_negative_url, e.logo_url) AS logo_negative_url,
             COALESCE(e.display_priority, st.logo_priority, 9999) AS priority
       FROM enterprises e
        LEFT JOIN sponsor_tiers st ON st.id = e.tier_id
@@ -296,6 +307,7 @@ export async function listPublicSponsors(client: Queryable = pool): Promise<Publ
     name: String(r.name),
     website: (r.website as string | null) ?? null,
     logoUrl: (r.logo_url as string | null) ?? null,
+    logoNegativeUrl: (r.logo_negative_url as string | null) ?? null,
     priority: Number(r.priority),
   }));
 }

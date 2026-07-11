@@ -87,6 +87,42 @@ describe("enterprise management (H43-H45)", () => {
     expect(mine.json().id).toBe(entId);
   });
 
+  it("returns both logo variants, falling back to the standard logo", async () => {
+    const a = await getApp();
+    const admin = await createUserWithCapabilities([CAPABILITIES.SPONSORS_MANAGE]);
+    const original = "https://cdn.example/logo.png";
+    const negative = "https://cdn.example/logo-negative.png";
+
+    const created = await a.inject({
+      method: "POST",
+      url: "/api/enterprises",
+      headers: asUser(admin),
+      payload: { name: "Logo variants", logoUrl: original },
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.json()).toMatchObject({ logo_url: original, logo_negative_url: original });
+
+    const updated = await a.inject({
+      method: "PATCH",
+      url: `/api/enterprises/${created.json().id}`,
+      headers: asUser(admin),
+      payload: { logoNegativeUrl: negative },
+    });
+    expect(updated.statusCode).toBe(200);
+
+    const listed = await a.inject({
+      method: "GET",
+      url: "/api/enterprises",
+      headers: asUser(admin),
+    });
+    expect(listed.statusCode).toBe(200);
+    expect(listed.json().enterprises).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ logo_url: original, logo_negative_url: negative }),
+      ]),
+    );
+  });
+
   it("admin controls visibility, and the public reveal honours priority", async () => {
     const a = await getApp();
     const admin = await createUserWithCapabilities([CAPABILITIES.SPONSORS_MANAGE]);

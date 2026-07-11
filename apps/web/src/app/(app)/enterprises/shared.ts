@@ -13,6 +13,7 @@ export interface Enterprise {
   name: string;
   website: string | null;
   logo_url: string | null;
+  logo_negative_url: string | null;
   description: string | null;
   tier_id: number | null;
   display_priority: number | null;

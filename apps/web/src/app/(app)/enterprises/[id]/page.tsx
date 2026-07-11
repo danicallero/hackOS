@@ -19,8 +19,9 @@ import { EmptyState } from "@/components/common/empty-state";
 import { ScheduledDateTimeField } from "@/components/common/scheduled-datetime-field";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
+import { SponsorLogo } from "@/components/common/sponsor-logo";
 import { SubmitButton } from "@/components/common/submit-button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -56,6 +57,7 @@ const editSchema = z.object({
   name: z.string().min(1, "Required").max(200),
   website: optionalUrl,
   logoUrl: optionalUrl,
+  logoNegativeUrl: optionalUrl,
   description: z.string().max(2000),
   tierId: optionalPositiveInt,
   displayPriority: optionalPositiveInt,
@@ -69,6 +71,7 @@ function toFormValues(e: Enterprise): EditValues {
     name: e.name,
     website: e.website ?? "",
     logoUrl: e.logo_url ?? "",
+    logoNegativeUrl: e.logo_negative_url === e.logo_url ? "" : (e.logo_negative_url ?? ""),
     description: e.description ?? "",
     tierId: e.tier_id != null ? String(e.tier_id) : "",
     displayPriority: e.display_priority != null ? String(e.display_priority) : "",
@@ -136,8 +139,16 @@ export default function EnterpriseDetailPage() {
       <BackLink />
       <div className="flex flex-wrap items-center gap-4">
         <Avatar size="lg">
-          {enterprise.logo_url && <AvatarImage src={enterprise.logo_url} alt={enterprise.name} />}
-          <AvatarFallback>{initials(enterprise.name)}</AvatarFallback>
+          {enterprise.logo_url ? (
+            <SponsorLogo
+              logoUrl={enterprise.logo_url}
+              logoNegativeUrl={enterprise.logo_negative_url}
+              alt={enterprise.name}
+              className="size-full object-contain"
+            />
+          ) : (
+            <AvatarFallback>{initials(enterprise.name)}</AvatarFallback>
+          )}
         </Avatar>
         <h1 className="text-2xl font-semibold tracking-tight">{enterprise.name}</h1>
       </div>
@@ -324,10 +335,11 @@ function LogoCard({
   enterprise: Enterprise;
   onChanged: () => Promise<void>;
 }) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const defaultInputRef = useRef<HTMLInputElement>(null);
+  const negativeInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
-  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>, variant: "default" | "negative") {
     const file = e.target.files?.[0];
     // Reset the input so re-selecting the same file fires change again.
     e.target.value = "";
@@ -341,14 +353,17 @@ function LogoCard({
     setUploading(true);
     try {
       // POST the file to the API (multipart); the API stores it and sets
-      // logo_url server-side, so the browser never touches the object store.
+      // the selected logo variant server-side, so the browser never touches the object store.
       const fd = new FormData();
       fd.append("file", file);
-      const res = await fetch(`${API_URL}/api/enterprises/${enterprise.id}/logo`, {
-        method: "POST",
-        credentials: "include",
-        body: fd,
-      });
+      const res = await fetch(
+        `${API_URL}/api/enterprises/${enterprise.id}/logo?variant=${variant}`,
+        {
+          method: "POST",
+          credentials: "include",
+          body: fd,
+        },
+      );
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as {
           error?: { message?: string };
@@ -356,7 +371,7 @@ function LogoCard({
         throw new Error(body?.error?.message ?? `Upload failed (${res.status})`);
       }
       await onChanged();
-      toast.success("Logo updated.");
+      toast.success(variant === "negative" ? "Dark-background logo updated." : "Logo updated.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not upload the logo.");
     } finally {
@@ -368,37 +383,56 @@ function LogoCard({
     <SectionCard
       icon={ImageIcon}
       title="Logo"
-      description="Shown in the sponsor reveal and lists. Upload a file, or set a URL below."
+      description="Upload a standard logo and, optionally, an alternate logo for dark backgrounds."
     >
       <div className="flex items-center gap-4">
         <Avatar size="lg" className="rounded-md">
-          {enterprise.logo_url && (
-            <AvatarImage
-              src={enterprise.logo_url}
+          {enterprise.logo_url ? (
+            <SponsorLogo
+              logoUrl={enterprise.logo_url}
+              logoNegativeUrl={enterprise.logo_negative_url}
               alt={enterprise.name}
-              className="object-contain"
+              className="size-full object-contain"
             />
+          ) : (
+            <AvatarFallback className="rounded-md">{initials(enterprise.name)}</AvatarFallback>
           )}
-          <AvatarFallback className="rounded-md">{initials(enterprise.name)}</AvatarFallback>
         </Avatar>
-        <div className="space-y-1">
+        <div className="flex flex-wrap gap-2">
           <Button
             type="button"
             variant="outline"
-            onClick={() => inputRef.current?.click()}
+            onClick={() => defaultInputRef.current?.click()}
             disabled={uploading}
           >
             {uploading ? <Spinner /> : <UploadIcon className="size-4" />}
             {enterprise.logo_url ? "Replace logo" : "Upload logo"}
           </Button>
-          <p className="text-muted-foreground text-xs">PNG, JPEG, WebP, SVG or GIF.</p>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => negativeInputRef.current?.click()}
+            disabled={uploading}
+          >
+            {uploading ? <Spinner /> : <UploadIcon className="size-4" />}
+            {enterprise.logo_negative_url === enterprise.logo_url
+              ? "Upload dark-background logo"
+              : "Replace dark-background logo"}
+          </Button>
         </div>
         <input
-          ref={inputRef}
+          ref={defaultInputRef}
           type="file"
           accept={LOGO_ACCEPT}
           className="hidden"
-          onChange={onFile}
+          onChange={(e) => onFile(e, "default")}
+        />
+        <input
+          ref={negativeInputRef}
+          type="file"
+          accept={LOGO_ACCEPT}
+          className="hidden"
+          onChange={(e) => onFile(e, "negative")}
         />
       </div>
     </SectionCard>
@@ -432,6 +466,7 @@ function EditCard({
       const ownerPatch = {
         website: values.website || null,
         logoUrl: values.logoUrl || null,
+        logoNegativeUrl: values.logoNegativeUrl || null,
         description: values.description || null,
       };
       // Admins may edit the full reveal/identity surface. Sponsor reps submit
@@ -505,6 +540,22 @@ function EditCard({
                 </FormControl>
                 <FormDescription>
                   Set directly, or use the uploader above (which fills this in).
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="logoNegativeUrl"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Logo for dark backgrounds URL</FormLabel>
+                <FormControl>
+                  <Input type="url" placeholder="https://…/logo-negative.png" {...field} />
+                </FormControl>
+                <FormDescription>
+                  Optional. The standard logo is used in both themes when left blank.
                 </FormDescription>
                 <FormMessage />
               </FormItem>

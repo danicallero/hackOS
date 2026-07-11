@@ -83,6 +83,7 @@ export function registerProjectRoutes(app: FastifyInstance): void {
       id: z.number().int(),
       name: z.string(),
       logoUrl: z.string().nullable(),
+      logoNegativeUrl: z.string().nullable(),
       website: z.string().nullable(),
     }),
   });

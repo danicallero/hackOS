@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Brand } from "@/components/common/brand";
 import { EmptyState } from "@/components/common/empty-state";
 import { Spinner } from "@/components/common/spinner";
+import { SponsorLogo } from "@/components/common/sponsor-logo";
 import { ThemeToggle } from "@/components/common/theme-toggle";
 import {
   displayText,
@@ -105,9 +106,9 @@ export default function PublicChallengePage() {
         <article>
           <div className="flex items-center gap-3">
             {challenge.enterprise.logoUrl && (
-              // biome-ignore lint/performance/noImgElement: sponsor logos use the deployment-configured public object-store host.
-              <img
-                src={challenge.enterprise.logoUrl}
+              <SponsorLogo
+                logoUrl={challenge.enterprise.logoUrl}
+                logoNegativeUrl={challenge.enterprise.logoNegativeUrl}
                 alt={challenge.enterprise.name}
                 className="size-10 rounded-md object-contain"
               />
