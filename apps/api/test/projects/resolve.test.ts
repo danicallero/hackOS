@@ -8,7 +8,13 @@ import {
   createUserWithCapabilities,
   truncateAll,
 } from "../helpers.js";
-import { EMAILS, participantsCsv, projectsCsv, seedMatchableUsers } from "./fixtures.js";
+import {
+  EMAILS,
+  createChallenge,
+  participantsCsv,
+  projectsCsv,
+  seedMatchableUsers,
+} from "./fixtures.js";
 
 /** H17: list + manually link unmatched Devpost participants, claim emails. */
 
@@ -144,6 +150,126 @@ describe("POST /api/devpost/imports/link (H17)", () => {
       payload: { repoId, email: EMAILS.dave, userId: 999_999 },
     });
     expect(noUser.statusCode).toBe(404);
+  });
+});
+
+describe("POST /api/devpost/imports/link-secondary (H16/H17)", () => {
+  it("links the participant and submission immediately while sending secondary verification", async () => {
+    const server = await getApp();
+    await seedMatchableUsers();
+    const operator = await createUserWithCapabilities([CAPABILITIES.PROJECTS_IMPORT]);
+    const repoId = await importFixtures(operator);
+    const account = await createUser({ email: "dave-real@primary.test", name: "Dave Account" });
+
+    const res = await server.inject({
+      method: "POST",
+      url: "/api/devpost/imports/link-secondary",
+      headers: asUser(operator),
+      payload: { repoId, email: EMAILS.dave, userId: account },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({
+      repoId,
+      email: EMAILS.dave,
+      userId: account,
+      secondaryEmailSent: true,
+      mergeStatus: "manually_linked",
+    });
+
+    const { pool } = await import("../../src/db/pool.js");
+    const participant = await pool.query(
+      `SELECT user_id, merge_status, linked_by, linked_at FROM devpost_participants
+       WHERE repo_id = $1 AND email = $2`,
+      [repoId, EMAILS.dave],
+    );
+    expect(participant.rows[0]).toMatchObject({
+      user_id: account,
+      merge_status: "manually_linked",
+      linked_by: operator,
+    });
+    expect(participant.rows[0].linked_at).not.toBeNull();
+
+    const submission = await pool.query(
+      `SELECT imported_from, external_id FROM submissions WHERE repo_id = $1 AND user_id = $2`,
+      [repoId, account],
+    );
+    expect(submission.rows).toEqual([{ imported_from: "devpost", external_id: "daved" }]);
+    const token = await pool.query(
+      `SELECT email FROM email_verification_tokens
+       WHERE user_id = $1 AND type = 'secondary_email' AND used_at IS NULL`,
+      [account],
+    );
+    expect(token.rows).toEqual([{ email: EMAILS.dave }]);
+
+    const retry = await server.inject({
+      method: "POST",
+      url: "/api/devpost/imports/link-secondary",
+      headers: asUser(operator),
+      payload: { repoId, email: EMAILS.dave, userId: account },
+    });
+    expect(retry.statusCode).toBe(200);
+    const submissions = await pool.query(
+      `SELECT 1 FROM submissions WHERE repo_id = $1 AND user_id = $2`,
+      [repoId, account],
+    );
+    expect(submissions.rows).toHaveLength(1);
+
+    const challengeId = await createChallenge("Queue challenge", []);
+    await pool.query(
+      `INSERT INTO queue_entries (challenge_id, repo_id, status, position) VALUES ($1, $2, 'waiting', 1)`,
+      [challengeId, repoId],
+    );
+    const myQueue = await server.inject({
+      method: "GET",
+      url: "/api/queue/me",
+      headers: asUser(account),
+    });
+    expect(myQueue.statusCode).toBe(200);
+    expect(myQueue.json()).toMatchObject([{ repoId, challengeId, status: "waiting" }]);
+
+    const room = await pool.query(
+      `INSERT INTO rooms (name, slug, status) VALUES ('Judge room', 'judge-room', 'active') RETURNING id`,
+    );
+    const roomId = room.rows[0].id;
+    await pool.query(`INSERT INTO room_queue_state (room_id) VALUES ($1)`, [roomId]);
+    await pool.query(`UPDATE queue_entries SET assigned_room_id = $1, status = 'presenting' WHERE repo_id = $2`, [
+      roomId,
+      repoId,
+    ]);
+    const { roomView } = await import("../../src/modules/queue/reads.js");
+    const view = await roomView(roomId);
+    expect(view.active.repo_members).toEqual(
+      expect.arrayContaining([expect.objectContaining({ userId: account, email: "dave-real@primary.test" })]),
+    );
+  });
+
+  it("links immediately without issuing a secondary token when the address is already primary", async () => {
+    const server = await getApp();
+    await seedMatchableUsers();
+    const operator = await createUserWithCapabilities([CAPABILITIES.PROJECTS_IMPORT]);
+    const repoId = await importFixtures(operator);
+    const account = await createUser({ email: EMAILS.dave });
+
+    const res = await server.inject({
+      method: "POST",
+      url: "/api/devpost/imports/link-secondary",
+      headers: asUser(operator),
+      payload: { repoId, email: EMAILS.dave, userId: account },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ secondaryEmailSent: false, mergeStatus: "manually_linked" });
+
+    const { pool } = await import("../../src/db/pool.js");
+    const participant = await pool.query(
+      `SELECT user_id, merge_status FROM devpost_participants WHERE repo_id = $1 AND email = $2`,
+      [repoId, EMAILS.dave],
+    );
+    expect(participant.rows).toEqual([{ user_id: account, merge_status: "manually_linked" }]);
+    const tokens = await pool.query(
+      `SELECT 1 FROM email_verification_tokens WHERE user_id = $1 AND type = 'secondary_email'`,
+      [account],
+    );
+    expect(tokens.rows).toHaveLength(0);
   });
 });
 

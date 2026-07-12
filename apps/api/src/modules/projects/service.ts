@@ -4,7 +4,7 @@ import { config } from "../../config.js";
 import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
-import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
+import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
 import { enqueueAuthEmail } from "../identity/outbox.js";
 import { assertSecondaryEmailAvailable } from "../identity/routes/secondary-email.js";
@@ -266,7 +266,9 @@ export interface LinkSecondaryResult {
   repoId: number;
   email: string;
   userId: number;
-  secondaryEmailSent: true;
+  /** False when the Devpost address is already the account's primary address. */
+  secondaryEmailSent: boolean;
+  mergeStatus: "manually_linked";
 }
 
 const SECONDARY_EMAIL_TTL_HOURS = 24;
@@ -275,9 +277,10 @@ const SECONDARY_EMAIL_TTL_HOURS = 24;
  * H6/H16: link an unmatched Devpost email to a hackOS account by registering
  * it as that account's SECONDARY email and firing the platform's normal
  * secondary-email verification (identity, H6) — we do NOT invent a new flow.
- * Once the owner verifies, a re-import auto-matches them (plan.ts matches
- * verified secondaries). Reuses identity's uniqueness guard + auth-email
- * enqueue so the verification link reaches the NEW address, never the primary.
+ * The participant is linked to the account immediately, so all project and
+ * queue reads see the team without waiting for a later import. It still
+ * reuses identity's secondary-email verification flow so the new address is
+ * verified through the normal account-security mechanism.
  */
 export async function linkParticipantSecondary(
   actorId: number,
@@ -285,62 +288,88 @@ export async function linkParticipantSecondary(
   email: string,
   userId: number,
 ): Promise<LinkSecondaryResult> {
-  const participant = await pool.query(
-    `SELECT 1 FROM devpost_participants WHERE repo_id = $1 AND email = $2`,
-    [repoId, email],
-  );
-  if (participant.rows.length === 0) {
-    throw new NotFoundError(`No devpost participant ${email} for repo ${repoId}`);
-  }
-  const userRes = await pool.query(`SELECT id, email, name FROM users WHERE id = $1`, [userId]);
-  const user = userRes.rows[0] as { id: number; email: string; name: string | null } | undefined;
-  if (!user) throw new NotFoundError(`User ${userId} not found`);
-  if (user.email.toLowerCase() === email) {
-    throw new BadRequestError("That email is already this account's primary email");
-  }
-  // Uniqueness rule (H6), checked before we touch anything — explicit 409.
-  await assertSecondaryEmailAvailable(email, userId);
-
-  const token = randomBytes(32).toString("base64url");
+  let secondaryEmailSent = false;
   await withTransaction(async (client) => {
-    // A new request supersedes any pending unverified token for this user.
-    await client.query(
-      `UPDATE email_verification_tokens SET used_at = now()
-       WHERE user_id = $1 AND type = 'secondary_email' AND used_at IS NULL`,
-      [userId],
+    const participant = await client.query(
+      `SELECT * FROM devpost_participants WHERE repo_id = $1 AND email = $2 FOR UPDATE`,
+      [repoId, email],
     );
-    await client.query(
-      `INSERT INTO email_verification_tokens (token, type, email, user_id, expires_at)
-       VALUES ($1, 'secondary_email', $2, $3, now() + make_interval(hours => $4))`,
-      [token, email, userId, SECONDARY_EMAIL_TTL_HOURS],
-    );
-    // Pending (not yet verified) address is stored so /me can show it.
-    await client.query(
-      `UPDATE users SET secondary_email = $2, secondary_email_verified_at = NULL WHERE id = $1`,
-      [userId, email],
-    );
-    await enqueueAuthEmail(
-      client,
+    if (participant.rows.length === 0) {
+      throw new NotFoundError(`No devpost participant ${email} for repo ${repoId}`);
+    }
+    const userRes = await client.query(`SELECT id, email, name FROM users WHERE id = $1 FOR UPDATE`, [
       userId,
-      "auth.verify",
-      {
-        name: user.name ?? "",
-        verifyUrl: `${config.WEB_URL}/verify-secondary-email?token=${token}`,
-      },
-      // H6: the verification MUST reach the newly added secondary address.
-      { recipient: email },
+    ]);
+    const user = userRes.rows[0] as { id: number; email: string; name: string | null } | undefined;
+    if (!user) throw new NotFoundError(`User ${userId} not found`);
+
+    const isPrimaryEmail = user.email.toLowerCase() === email;
+    secondaryEmailSent = !isPrimaryEmail;
+    if (!isPrimaryEmail) {
+      // Uniqueness rule (H6), checked before we touch anything — explicit 409.
+      await assertSecondaryEmailAvailable(email, userId);
+      const token = randomBytes(32).toString("base64url");
+
+      // A new request supersedes any pending unverified token for this user.
+      await client.query(
+        `UPDATE email_verification_tokens SET used_at = now()
+         WHERE user_id = $1 AND type = 'secondary_email' AND used_at IS NULL`,
+        [userId],
+      );
+      await client.query(
+        `INSERT INTO email_verification_tokens (token, type, email, user_id, expires_at)
+         VALUES ($1, 'secondary_email', $2, $3, now() + make_interval(hours => $4))`,
+        [token, email, userId, SECONDARY_EMAIL_TTL_HOURS],
+      );
+      // Pending (not yet verified) address is stored so /me can show it.
+      await client.query(
+        `UPDATE users SET secondary_email = $2, secondary_email_verified_at = NULL WHERE id = $1`,
+        [userId, email],
+      );
+      await enqueueAuthEmail(
+        client,
+        userId,
+        "auth.verify",
+        {
+          name: user.name ?? "",
+          verifyUrl: `${config.WEB_URL}/verify-secondary-email?token=${token}`,
+        },
+        // H6: the verification MUST reach the newly added secondary address.
+        { recipient: email },
+      );
+    }
+
+    const before = participant.rows[0];
+    await client.query(
+      `UPDATE devpost_participants
+       SET user_id = $1, merge_status = 'manually_linked', linked_by = $2, linked_at = now()
+       WHERE repo_id = $3 AND email = $4`,
+      [userId, actorId, repoId, email],
+    );
+    await client.query(
+      `INSERT INTO submissions (repo_id, user_id, imported_from, external_id)
+       VALUES ($1, $2, 'devpost', $3)
+       ON CONFLICT (repo_id, user_id) DO NOTHING`,
+      [repoId, userId, before.devpost_username],
     );
     await audit(client, {
       actorId,
-      entityType: "user",
-      entityId: userId,
+      entityType: "devpost_participant",
+      entityId: `${repoId}:${email}`,
       action: "secondary_email_link_requested",
-      after: { secondary_email: email, repoId },
+      before: { mergeStatus: before.merge_status, userId: before.user_id },
+      after: { mergeStatus: "manually_linked", userId, secondaryEmailSent: !isPrimaryEmail },
       source: "admin",
     });
   });
 
-  return { repoId, email, userId, secondaryEmailSent: true as const };
+  return {
+    repoId,
+    email,
+    userId,
+    secondaryEmailSent,
+    mergeStatus: "manually_linked",
+  };
 }
 
 export interface ClaimEmailResult {
