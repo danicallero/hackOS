@@ -170,7 +170,7 @@ export function statusLabel(status: string, t: Translate): string {
     confirmed: t("confirmed"),
     rejected: t("statusNotSelected"),
     declined: t("declined"),
-    expired: t("statusExpired"),
+    expired: t("applicationStatusExpired"),
   };
   return map[status] ?? status;
 }
