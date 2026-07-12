@@ -101,6 +101,42 @@ describe("call_next (H29, H30)", () => {
     expect(outbox.rows).toHaveLength(1);
   });
 
+  it("also lands a readable row in the member's inbox (in_app), not just push", async () => {
+    const { challengeId, roomId } = await setup();
+    const member = await createUser();
+    const { repoId } = await createRepoWithTeam([member]);
+    await enqueueRepo(challengeId, repoId, 1);
+
+    await app.inject({
+      method: "POST",
+      url: `/api/queue/rooms/${roomId}/call-next`,
+      headers: asUser(operatorId),
+      payload: {},
+    });
+
+    const { pool } = await import("../../src/db/pool.js");
+    const inbox = await pool.query(
+      `SELECT * FROM notification_outbox WHERE user_id = $1 AND category = 'queue' AND channel = 'in_app'`,
+      [member],
+    );
+    expect(inbox.rows).toHaveLength(1);
+    // Pre-rendered so the inbox UI (payload.subject/body) shows real text,
+    // not a blank item — see notify()'s withInboxRendering.
+    expect(inbox.rows[0].payload.subject).toBeTruthy();
+    expect(inbox.rows[0].payload.body).toContain((await roomRow(roomId)).name);
+
+    const room = await roomRow(roomId);
+    expect(inbox.rows[0].payload.roomName).toBe(room.name);
+
+    const memberRes = await app.inject({
+      method: "GET",
+      url: "/api/me/notifications",
+      headers: asUser(member),
+    });
+    expect(memberRes.statusCode).toBe(200);
+    expect(memberRes.json().items).toHaveLength(1);
+  });
+
   it("respects max_in_waiting_area (409 when full) and force overrides it", async () => {
     const { challengeId, roomId } = await setup();
     for (let i = 1; i <= 3; i++) {
@@ -262,6 +298,16 @@ describe("notify_enter (H31)", () => {
     expect(history[0].previous_status).toBe("called");
     expect(history[0].new_status).toBe("called");
     expect(await broadcastCount("queue")).toBe(before + 1);
+
+    // H31: "que entre" also reaches the inbox (in_app), same as the initial call.
+    const { pool } = await import("../../src/db/pool.js");
+    const inbox = await pool.query(
+      `SELECT * FROM notification_outbox WHERE user_id = $1 AND category = 'queue' AND channel = 'in_app' AND payload->>'type' = 'notify_enter'`,
+      [member],
+    );
+    expect(inbox.rows).toHaveLength(1);
+    expect(inbox.rows[0].payload.subject).toBeTruthy();
+    expect(inbox.rows[0].payload.roomId).toBe(roomId);
   });
 
   it("409 from waiting", async () => {

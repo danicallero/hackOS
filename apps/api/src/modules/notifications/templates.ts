@@ -134,6 +134,20 @@ const TEMPLATES: Record<string, TemplateDefinition> = {
       body: "Ola {{name}},\n\nChamaron ao teu equipo {{teamName}} para {{challengeName}}. Diríxete á sala {{roomName}} e agarda na porta ata que te chamen.",
     },
   },
+  "queue.enter": {
+    en: {
+      subject: "Come on in",
+      body: "Hi {{name}},\n\nIt's your team's turn for {{challengeName}}. Please come in now to room {{roomName}}.",
+    },
+    es: {
+      subject: "Ya puedes entrar",
+      body: "Hola {{name}},\n\nEs el turno de tu equipo para {{challengeName}}. Entra ya a la sala {{roomName}}.",
+    },
+    gl: {
+      subject: "Xa podes entrar",
+      body: "Ola {{name}},\n\nÉ a quenda do teu equipo para {{challengeName}}. Entra xa á sala {{roomName}}.",
+    },
+  },
   "application.decision": {
     en: {
       subject: "A decision on your application",

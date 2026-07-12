@@ -200,11 +200,29 @@ export async function myQueueStatus(userId: number) {
   ).rows.map((r: { repo_id: number }) => r.repo_id);
   if (repoIds.length === 0) return [];
 
+  // H38: participants need to know WHERE to go. `called_room` is the concrete
+  // room the entry was actually assigned to (post call_next/manual_call).
+  // `possible_rooms` is every room currently judging this challenge
+  // (room_challenges) — for a multi-room challenge that's the full set a
+  // waiting team could be called to; once called, the frontend shows only
+  // `called_room` instead.
   const { rows: entries } = await pool.query(
-    `SELECT qe.*, c.title AS challenge_title, r.name AS repo_name
+    `SELECT qe.*, c.title AS challenge_title, r.name AS repo_name,
+            ar.id AS called_room_id, ar.name AS called_room_name, ar.location AS called_room_location,
+            COALESCE(
+              (SELECT jsonb_agg(
+                        jsonb_build_object('id', rm.id, 'name', rm.name, 'location', rm.location)
+                        ORDER BY rm.name ASC
+                      )
+                 FROM room_challenges rc
+                 JOIN rooms rm ON rm.id = rc.room_id
+                WHERE rc.challenge_id = qe.challenge_id),
+              '[]'::jsonb
+            ) AS possible_rooms
        FROM queue_entries qe
       JOIN challenges c ON c.id = qe.challenge_id
       JOIN repos r ON r.id = qe.repo_id
+      LEFT JOIN rooms ar ON ar.id = qe.assigned_room_id
       WHERE qe.repo_id = ANY($1)
         AND qe.status NOT IN ('cancelled', 'disqualified')
       ORDER BY r.name ASC, c.title ASC, qe.id ASC`,
@@ -221,7 +239,10 @@ export async function myQueueStatus(userId: number) {
     status: string;
     position: number | null;
     called_at: string | null;
-    assigned_room_id: number | null;
+    called_room_id: number | null;
+    called_room_name: string | null;
+    called_room_location: string | null;
+    possible_rooms: { id: number; name: string; location: string | null }[];
   }[]) {
     let position: number | null = null;
     let etaMinutes: number | null = null;
@@ -247,7 +268,14 @@ export async function myQueueStatus(userId: number) {
       position,
       etaMinutes,
       calledAt: e.called_at,
-      roomId: e.assigned_room_id,
+      // Concrete room once called; null while still waiting.
+      room: e.called_room_id
+        ? { id: e.called_room_id, name: e.called_room_name, location: e.called_room_location }
+        : null,
+      // Every room that could judge this challenge (multi-room challenges
+      // share one logical queue across several rooms) — the frontend shows
+      // this list while waiting and switches to `room` once called.
+      rooms: e.possible_rooms,
     });
   }
   return results;

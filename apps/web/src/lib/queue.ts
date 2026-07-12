@@ -140,6 +140,12 @@ export interface RoomAssignments {
 }
 
 /** GET /api/queue/me — participant view (H38). */
+export interface MyQueueRoom {
+  id: number;
+  name: string;
+  location: string | null;
+}
+
 export interface MyQueueEntry {
   entryId: number;
   challengeId: number;
@@ -150,7 +156,10 @@ export interface MyQueueEntry {
   position: number | null;
   etaMinutes: number | null;
   calledAt: string | null;
-  roomId: number | null;
+  /** The concrete room the entry was called to; null while still waiting. */
+  room: MyQueueRoom | null;
+  /** Every room currently judging this challenge (multi-room challenges share one queue). */
+  rooms: MyQueueRoom[];
 }
 
 // ── reads ────────────────────────────────────────────────────────────────

@@ -507,7 +507,6 @@ const dict: Record<string, I18nText> = {
   // ---- Participant queue status banner ----
   anyMoment: { es: "en cualquier momento", gl: "en calquera momento", en: "any moment now" },
   yourRoom: { es: "tu sala", gl: "a túa sala", en: "your room" },
-  roomNumber: { es: "sala #{id}", gl: "sala #{id}", en: "room #{id}" },
   queueLoadError: {
     es: "No se ha podido cargar tu estado de cola.",
     gl: "Non se puido cargar o teu estado de cola.",
