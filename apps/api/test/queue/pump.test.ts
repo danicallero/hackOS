@@ -96,12 +96,12 @@ describe("queue pump (H29, plan/07 §5.1)", () => {
     expect(rows[2].status).toBe("waiting");
   });
 
-  it("skips H35-paused rooms but fills any non-paused room regardless of lifecycle status (#60)", async () => {
+  it("skips H35-paused rooms but fills an explicitly non-paused room regardless of lifecycle status", async () => {
     const challengeId = await createChallenge();
     const pausedRoom = await createRoom({ isPaused: true });
     // `rooms.status` is a display/lifecycle field, NOT an auto-fill gate — only
-    // is_paused pauses the pump. A room left at the default 'paused' status
-    // (as every route-created room is) must still auto-fill (#60 regression).
+    // is_paused pauses the pump. This fixture explicitly creates a non-paused
+    // room even though its display status is `paused`.
     const liveRoom = await createRoom({ status: "paused" });
     await assignChallengeToRoom(pausedRoom, challengeId);
     await assignChallengeToRoom(liveRoom, challengeId);
