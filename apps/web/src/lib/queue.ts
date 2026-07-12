@@ -141,6 +141,7 @@ export interface RoomAssignments {
 
 /** GET /api/queue/me — participant view (H38). */
 export interface MyQueueEntry {
+  entryId: number;
   challengeId: number;
   challengeTitle: string;
   repoId: number;

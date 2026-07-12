@@ -3,13 +3,25 @@ import type { Queryable } from "../../db/pool.js";
 import { broadcast } from "../../lib/sse.js";
 
 /**
- * Team members for a repo, via `submissions` (H29/H31/H38: notifications go
- * to every member of the team behind the repo, not just whoever submitted).
+ * Team members for a repo. `submissions` is the normal source, while the
+ * Devpost fallback keeps notifications correct during or after an import even
+ * if a legacy participant row has not yet gained its submission.
  */
 export async function repoMemberIds(client: Queryable, repoId: number): Promise<number[]> {
-  const { rows } = await client.query(`SELECT user_id FROM submissions WHERE repo_id = $1`, [
-    repoId,
-  ]);
+  const { rows } = await client.query(
+    `SELECT user_id FROM submissions WHERE repo_id = $1
+     UNION
+     SELECT user_id FROM devpost_participants WHERE repo_id = $1 AND user_id IS NOT NULL
+     UNION
+     SELECT u.id
+       FROM devpost_participants dp
+       JOIN users u
+         ON lower(dp.email) = lower(u.email)
+         OR (u.secondary_email_verified_at IS NOT NULL
+             AND lower(dp.email) = lower(u.secondary_email))
+      WHERE dp.repo_id = $1`,
+    [repoId],
+  );
   return rows.map((r: { user_id: number }) => r.user_id);
 }
 
@@ -79,9 +91,20 @@ export async function notifyChallengeQueueChanged(
   challengeId: number,
 ): Promise<void> {
   const { rows } = await client.query(
-    `SELECT DISTINCT s.user_id
+    `SELECT DISTINCT members.user_id
        FROM queue_entries qe
-       JOIN submissions s ON s.repo_id = qe.repo_id
+       JOIN (
+         SELECT repo_id, user_id FROM submissions
+         UNION
+         SELECT repo_id, user_id FROM devpost_participants WHERE user_id IS NOT NULL
+         UNION
+         SELECT dp.repo_id, u.id AS user_id
+           FROM devpost_participants dp
+           JOIN users u
+             ON lower(dp.email) = lower(u.email)
+             OR (u.secondary_email_verified_at IS NOT NULL
+                 AND lower(dp.email) = lower(u.secondary_email))
+       ) members ON members.repo_id = qe.repo_id
       WHERE qe.challenge_id = $1`,
     [challengeId],
   );

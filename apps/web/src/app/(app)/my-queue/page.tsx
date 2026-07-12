@@ -25,6 +25,7 @@ import { PageHeader } from "@/components/common/page-header";
 import { QueueStatusBadge } from "@/components/common/queue-status-badge";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { type SseEnvelope, useEventSource, useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
@@ -73,7 +74,7 @@ export default function MyQueuePage() {
   // The read model only carries `roomId`; the call event carries the room name.
   // Cache names as we see them so the "go to room" notice reads nicely.
   const [roomNames, setRoomNames] = useState<Record<number, string>>({});
-  // Challenges that got a pre-call heads-up but haven't been called yet.
+  // Queue entries that got a pre-call heads-up but haven't been called yet.
   const [precalled, setPrecalled] = useState<Set<number>>(new Set());
 
   // Guard against firing the same toast twice for one call (StrictMode / debounce).
@@ -85,9 +86,9 @@ export default function MyQueuePage() {
         const p = env.data as CalledPayload;
         setRoomNames((prev) => (p.roomName ? { ...prev, [p.roomId]: p.roomName } : prev));
         setPrecalled((prev) => {
-          if (!prev.has(p.challengeId)) return prev;
+          if (!prev.has(p.entryId)) return prev;
           const next = new Set(prev);
-          next.delete(p.challengeId);
+          next.delete(p.entryId);
           return next;
         });
         if (!seenCalls.current.has(p.entryId)) {
@@ -98,7 +99,7 @@ export default function MyQueuePage() {
         }
       } else if (env.type === EVENTS.USER_QUEUE_PRECALL) {
         const p = env.data as PrecallPayload;
-        setPrecalled((prev) => new Set(prev).add(p.challengeId));
+        setPrecalled((prev) => new Set(prev).add(p.entryId));
         const eta = formatEta(p.etaMinutes, t("anyMoment"));
         toast(`${t("getReady")}${eta ? ` (${eta})` : ""}`);
       }
@@ -117,9 +118,18 @@ export default function MyQueuePage() {
   const list = entries ?? [];
   const called = useMemo(() => list.filter((e) => e.status === "called"), [list]);
   const heading = useMemo(
-    () => list.filter((e) => e.status === "waiting" && precalled.has(e.challengeId)),
+    () => list.filter((e) => e.status === "waiting" && precalled.has(e.entryId)),
     [list, precalled],
   );
+  const projects = useMemo(() => {
+    const grouped = new Map<number, { repoName: string; entries: MyQueueEntry[] }>();
+    for (const entry of list) {
+      const project = grouped.get(entry.repoId) ?? { repoName: entry.repoName, entries: [] };
+      project.entries.push(entry);
+      grouped.set(entry.repoId, project);
+    }
+    return [...grouped.entries()].map(([repoId, project]) => ({ repoId, ...project }));
+  }, [list]);
 
   if (loading && !entries) {
     return (
@@ -147,17 +157,43 @@ export default function MyQueuePage() {
       <SectionCard
         icon={TicketIcon}
         title={t("yourQueues")}
-        bodyClassName={list.length === 0 ? "p-0" : "space-y-2"}
+        bodyClassName={list.length === 0 ? "p-0" : "space-y-3"}
       >
         {list.length === 0 ? (
           <EmptyState icon={TicketIcon} title={t("noJudgingQueue")} />
         ) : (
-          list.map((e) => (
-            <QueueRow key={`${e.repoId}-${e.challengeId}`} entry={e} roomNames={roomNames} />
+          projects.map((project) => (
+            <ProjectQueueCard key={project.repoId} {...project} roomNames={roomNames} />
           ))
         )}
       </SectionCard>
     </div>
+  );
+}
+
+/** A project may be queued for several challenges; keep its live statuses together. */
+function ProjectQueueCard({
+  repoName,
+  entries,
+  roomNames,
+}: {
+  repoName: string;
+  entries: MyQueueEntry[];
+  roomNames: Record<number, string>;
+}) {
+  const { t } = useLocale();
+  return (
+    <Card className="gap-0 py-0 shadow-none">
+      <CardHeader className="gap-1 px-4 py-4">
+        <p className="text-muted-foreground text-xs font-medium">{t("projectLabel")}</p>
+        <CardTitle className="text-balance text-base">{repoName}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2 border-t px-4 py-3">
+        {entries.map((entry) => (
+          <QueueRow key={`${entry.repoId}-${entry.challengeId}`} entry={entry} roomNames={roomNames} />
+        ))}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -176,7 +212,6 @@ function QueueRow({
         <div className="truncate font-medium">
           {textForDisplay(entry.challengeTitle as TranslatedText)}
         </div>
-        <div className="text-muted-foreground truncate text-xs">{entry.repoName}</div>
       </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
         {entry.status === "waiting" && entry.position != null && (

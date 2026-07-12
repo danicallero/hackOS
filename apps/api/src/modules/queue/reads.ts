@@ -14,9 +14,21 @@ const QUEUE_ENTRY_SELECT = `qe.*, r.name AS repo_name, r.description AS repo_des
                )
                ORDER BY u.name ASC NULLS LAST, u.surname ASC NULLS LAST, u.email ASC
              )
-        FROM submissions s
-        JOIN users u ON u.id = s.user_id
-       WHERE s.repo_id = qe.repo_id
+        FROM users u
+        JOIN (
+          SELECT user_id FROM submissions WHERE repo_id = qe.repo_id
+          UNION
+          SELECT user_id FROM devpost_participants
+           WHERE repo_id = qe.repo_id AND user_id IS NOT NULL
+          UNION
+          SELECT u.id
+            FROM devpost_participants dp
+            JOIN users u
+              ON lower(dp.email) = lower(u.email)
+              OR (u.secondary_email_verified_at IS NOT NULL
+                  AND lower(dp.email) = lower(u.secondary_email))
+           WHERE dp.repo_id = qe.repo_id
+        ) members ON members.user_id = u.id
     ),
     '[]'::jsonb
   ) AS repo_members`;
@@ -172,17 +184,30 @@ async function challengeEtaMinutesPerSlot(challengeId: number): Promise<number> 
 /** H38: for each repo the user is in, their status/position/ETA in that challenge's queue. */
 export async function myQueueStatus(userId: number) {
   const repoIds = (
-    await pool.query(`SELECT DISTINCT repo_id FROM submissions WHERE user_id = $1`, [userId])
+    await pool.query(
+      `SELECT repo_id FROM submissions WHERE user_id = $1
+       UNION
+       SELECT repo_id FROM devpost_participants WHERE user_id = $1
+       UNION
+       SELECT dp.repo_id
+         FROM devpost_participants dp
+         JOIN users u ON u.id = $1
+        WHERE lower(dp.email) = lower(u.email)
+           OR (u.secondary_email_verified_at IS NOT NULL
+               AND lower(dp.email) = lower(u.secondary_email))`,
+      [userId],
+    )
   ).rows.map((r: { repo_id: number }) => r.repo_id);
   if (repoIds.length === 0) return [];
 
   const { rows: entries } = await pool.query(
     `SELECT qe.*, c.title AS challenge_title, r.name AS repo_name
        FROM queue_entries qe
-       JOIN challenges c ON c.id = qe.challenge_id
-       JOIN repos r ON r.id = qe.repo_id
+      JOIN challenges c ON c.id = qe.challenge_id
+      JOIN repos r ON r.id = qe.repo_id
       WHERE qe.repo_id = ANY($1)
-        AND qe.status NOT IN ('cancelled', 'disqualified')`,
+        AND qe.status NOT IN ('cancelled', 'disqualified')
+      ORDER BY r.name ASC, c.title ASC, qe.id ASC`,
     [repoIds],
   );
 
@@ -213,6 +238,7 @@ export async function myQueueStatus(userId: number) {
       etaMinutes = Math.round(rank * perSlot);
     }
     results.push({
+      entryId: e.id,
       challengeId: e.challenge_id,
       challengeTitle: e.challenge_title,
       repoId: e.repo_id,
