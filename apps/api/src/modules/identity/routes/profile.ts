@@ -4,6 +4,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { pool, withTransaction } from "../../../db/pool.js";
 import { audit } from "../../../lib/audit.js";
+import { reconcileDevpostParticipantsForUser } from "../../projects/reconciliation.js";
 import {
   getEffectiveCapabilities,
   invalidateCapabilities,
@@ -557,6 +558,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           `UPDATE users SET email = $2, email_verified = true WHERE id = $1 RETURNING *`,
           [targetId, email],
         );
+        await reconcileDevpostParticipantsForUser(client, targetId);
         await audit(client, {
           actorId: req.userId,
           entityType: "user",

@@ -9,6 +9,7 @@ import { audit } from "../../../lib/audit.js";
 import { requireAuth, requireCapability } from "../../../lib/capabilities.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../../lib/errors.js";
 import { enqueueAuthEmail } from "../outbox.js";
+import { reconcileDevpostParticipantsForUser } from "../../projects/reconciliation.js";
 
 /**
  * Secondary email (H6): lets a participant register the address they used on
@@ -100,6 +101,7 @@ export function registerSecondaryEmailRoutes(app: FastifyInstance): void {
           `UPDATE users SET secondary_email = $2, secondary_email_verified_at = NULL WHERE id = $1`,
           [userId, email],
         );
+        await reconcileDevpostParticipantsForUser(client, userId);
         await enqueueAuthEmail(
           client,
           userId,
@@ -180,6 +182,7 @@ export function registerSecondaryEmailRoutes(app: FastifyInstance): void {
           `UPDATE users SET secondary_email = $2, secondary_email_verified_at = now() WHERE id = $1`,
           [userId, row.email],
         );
+        await reconcileDevpostParticipantsForUser(client, userId);
         await audit(client, {
           actorId: userId,
           entityType: "user",
@@ -235,6 +238,7 @@ export function registerSecondaryEmailRoutes(app: FastifyInstance): void {
           `UPDATE users SET secondary_email = $2, secondary_email_verified_at = NULL WHERE id = $1`,
           [targetId, email],
         );
+        await reconcileDevpostParticipantsForUser(client, targetId);
         await enqueueAuthEmail(client, targetId, "auth.verify", {
           recipient: email,
           name: tgt.name ?? "",

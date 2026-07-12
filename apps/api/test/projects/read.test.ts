@@ -326,7 +326,7 @@ describe("GET /api/repos scoping for judges & sponsors (H8, H44/H46)", () => {
 describe("GET /api/me/projects (participant self-view)", () => {
   it("returns only repos where I have a submission; requires auth", async () => {
     const server = await getApp();
-    const { aliceId } = await seedMatchableUsers();
+    const { aliceId, bobId } = await seedMatchableUsers();
     const operator = await createUserWithCapabilities([CAPABILITIES.PROJECTS_IMPORT]);
     await importFixtures(operator);
 
@@ -343,6 +343,16 @@ describe("GET /api/me/projects (participant self-view)", () => {
     expect(projects).toHaveLength(1);
     expect(projects[0].name).toBe("Neural Beans");
     expect(projects[0].prizes.sort()).toEqual(["Best AI Hack", "Most Caffeinated"]);
+
+    // A verified secondary email is matched during import and gets the same
+    // project self-view as a primary-email participant.
+    const secondaryMatch = await server.inject({
+      method: "GET",
+      url: "/api/me/projects",
+      headers: asUser(bobId),
+    });
+    expect(secondaryMatch.statusCode).toBe(200);
+    expect(secondaryMatch.json().projects).toMatchObject([{ name: "Neural Beans" }]);
 
     const stranger = await createUser();
     const empty = await server.inject({

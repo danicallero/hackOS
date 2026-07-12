@@ -12,6 +12,7 @@ import { writeQueueHistory } from "../queue/history.js";
 import { notifyChallengeQueueChanged } from "../queue/notify.js";
 import { compactChallengePositions, nextBottomPosition } from "../queue/ordering.js";
 import { buildImportPlan, type ImportPlan, type PlannedRepo } from "./plan.js";
+import { reconcileDevpostParticipantsForUser } from "./reconciliation.js";
 
 const CLAIM_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -326,6 +327,7 @@ export async function linkParticipantSecondary(
         `UPDATE users SET secondary_email = $2, secondary_email_verified_at = NULL WHERE id = $1`,
         [userId, email],
       );
+      await reconcileDevpostParticipantsForUser(client, userId);
       await enqueueAuthEmail(
         client,
         userId,
@@ -859,6 +861,13 @@ export async function myProjects(userId: number): Promise<Array<Omit<RepoWithExt
        SELECT repo_id FROM submissions WHERE user_id = $1
        UNION
        SELECT repo_id FROM devpost_participants WHERE user_id = $1
+       UNION
+       SELECT dp.repo_id
+         FROM devpost_participants dp
+         JOIN users u ON u.id = $1
+        WHERE lower(dp.email) = lower(u.email)
+           OR (u.secondary_email_verified_at IS NOT NULL
+               AND lower(dp.email) = lower(u.secondary_email))
      )
      ORDER BY r.name`,
     [userId],

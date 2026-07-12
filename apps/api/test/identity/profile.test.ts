@@ -335,6 +335,24 @@ describe("staff user routes (H7)", () => {
     const reader = await createUserWithCapabilities([CAPABILITIES.USERS_READ]);
     const target = await createUser({ email: "old@example.test" });
     const other = await createUser({ email: "taken@example.test" });
+    const { pool } = await import("../../src/db/pool.js");
+    const oldRepo = await pool.query(`INSERT INTO repos (name) VALUES ('Old primary') RETURNING id`);
+    const repo = await pool.query(`INSERT INTO repos (name) VALUES ('Primary reconciliation') RETURNING id`);
+    const repoId = repo.rows[0].id;
+    await pool.query(
+      `INSERT INTO devpost_participants (repo_id, email, import_batch, merge_status)
+       VALUES ($1, 'old@example.test', 'test-import', 'auto_matched'),
+              ($2, 'new@example.test', 'test-import', 'unmatched')`,
+      [oldRepo.rows[0].id, repoId],
+    );
+    await pool.query(
+      `UPDATE devpost_participants SET user_id = $2 WHERE repo_id = $1`,
+      [oldRepo.rows[0].id, target],
+    );
+    await pool.query(
+      `INSERT INTO submissions (repo_id, user_id, imported_from) VALUES ($1, $2, 'devpost')`,
+      [oldRepo.rows[0].id, target],
+    );
 
     // Needs USERS_WRITE.
     expect(
@@ -371,7 +389,6 @@ describe("staff user routes (H7)", () => {
     expect(ok.json().email).toBe("new@example.test");
     expect(ok.json().emailVerified).toBe(true);
 
-    const { pool } = await import("../../src/db/pool.js");
     const { rows } = await pool.query(
       `SELECT before, after FROM audit_log
          WHERE entity_type = 'user' AND entity_id = $1 AND action = 'primary_email_changed'`,
@@ -380,6 +397,21 @@ describe("staff user routes (H7)", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].before.email).toBe("old@example.test");
     expect(rows[0].after.email).toBe("new@example.test");
+    const reconciled = await pool.query(
+      `SELECT user_id, merge_status FROM devpost_participants WHERE repo_id = $1`,
+      [repoId],
+    );
+    expect(reconciled.rows).toEqual([{ user_id: target, merge_status: "auto_matched" }]);
+    const oldReconciled = await pool.query(
+      `SELECT user_id, merge_status FROM devpost_participants WHERE repo_id = $1`,
+      [oldRepo.rows[0].id],
+    );
+    expect(oldReconciled.rows).toEqual([{ user_id: null, merge_status: "unmatched" }]);
+    const oldSubmission = await pool.query(
+      `SELECT 1 FROM submissions WHERE repo_id = $1 AND user_id = $2`,
+      [oldRepo.rows[0].id, target],
+    );
+    expect(oldSubmission.rows).toHaveLength(0);
     void other;
   });
 

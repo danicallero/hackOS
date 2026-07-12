@@ -134,6 +134,41 @@ describe("participant view (H38)", () => {
     const anon = await app.inject({ method: "GET", url: "/api/queue/me" });
     expect(anon.statusCode).toBe(401);
   });
+
+  it("keeps queue and room reads available for a linked Devpost participant", async () => {
+    const member = await createUser({ email: "secondary-linked@test.local" });
+    const challengeId = await createChallenge();
+    const roomId = await createRoom();
+    await assignChallengeToRoom(roomId, challengeId);
+    const { pool } = await import("../../src/db/pool.js");
+    const repo = await pool.query(`INSERT INTO repos (name) VALUES ('Devpost fallback') RETURNING id`);
+    const repoId = repo.rows[0].id;
+    await pool.query(
+      `INSERT INTO devpost_participants
+         (repo_id, email, user_id, import_batch, merge_status)
+       VALUES ($1, 'secondary-linked@test.local', $2, 'test-import', 'manually_linked')`,
+      [repoId, member],
+    );
+    await pool.query(
+      `INSERT INTO queue_entries (challenge_id, repo_id, status, position, assigned_room_id)
+       VALUES ($1, $2, 'presenting', 1, $3)`,
+      [challengeId, repoId, roomId],
+    );
+
+    const mine = await app.inject({ method: "GET", url: "/api/queue/me", headers: asUser(member) });
+    expect(mine.statusCode).toBe(200);
+    expect(mine.json()).toMatchObject([{ repoId, challengeId, status: "presenting" }]);
+
+    const room = await app.inject({
+      method: "GET",
+      url: `/api/queue/rooms/${roomId}/view`,
+      headers: asUser(operatorId),
+    });
+    expect(room.statusCode).toBe(200);
+    expect(room.json().active.repo_members).toEqual(
+      expect.arrayContaining([expect.objectContaining({ userId: member })]),
+    );
+  });
 });
 
 describe("pace (H39)", () => {
