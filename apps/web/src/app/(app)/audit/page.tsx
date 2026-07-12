@@ -174,7 +174,7 @@ export default function AuditPage() {
             #{r.actor_id}
           </Link>
         ) : (
-          <span className="text-muted-foreground text-sm">{t("system")}</span>
+          <span className="text-muted-foreground text-sm">{t("systemActor")}</span>
         ),
     },
     {
@@ -309,7 +309,7 @@ export default function AuditPage() {
               </DetailField>
               <DetailField label={t("colSource")}>{selected.source ?? "—"}</DetailField>
               <DetailField label={t("colActor")}>
-                {selected.actor_id ? t("userInline", { id: selected.actor_id }) : t("system")}
+                {selected.actor_id ? t("userInline", { id: selected.actor_id }) : t("systemActor")}
               </DetailField>
               <DetailField label={t("reasonLabel")}>{selected.reason ?? "—"}</DetailField>
               <DetailField label={t("ipLabel")}>{selected.ip ?? "—"}</DetailField>
