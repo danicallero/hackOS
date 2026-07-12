@@ -148,19 +148,19 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-3">
         <StatCard
-          label={isMeal ? t("servingsLabel") : t("colScans")}
+          label={isMeal ? t("servingsLabel") : t("columnScans")}
           value={selected ? selected.count : "—"}
           icon={isMeal ? SoupIcon : ActivityIcon}
           hint={selected ? selected.name : t("selectToSeeCounts")}
         />
         <StatCard
-          label={t("colPeople")}
+          label={t("columnPeople")}
           value={selected ? selected.distinctPeople : "—"}
           icon={UsersIcon}
           hint={t("distinctAttendees")}
         />
         <StatCard
-          label={t("colRepeats")}
+          label={t("columnRepeats")}
           value={selected ? selected.repeats : "—"}
           icon={RepeatIcon}
           hint={activities.connected ? t("live") : t("reconnectsAutomatically")}
