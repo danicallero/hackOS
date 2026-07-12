@@ -835,9 +835,9 @@ const dict: Record<string, I18nText> = {
   newBadgeLabel: { es: "Nueva acreditación", gl: "Nova acreditación", en: "New badge" },
   reasonLabel: { es: "Motivo", gl: "Motivo", en: "Reason" },
   reasonPlaceholder: {
-    es: "perdida, dañada, ilegible...",
-    gl: "perdida, danada, ilexible...",
-    en: "lost, damaged, unreadable...",
+    es: "perdida, dañada, ilegible…",
+    gl: "perdida, danada, ilexible…",
+    en: "lost, damaged, unreadable…",
   },
   rotateBadge: { es: "Cambiar acreditación", gl: "Cambiar acreditación", en: "Rotate badge" },
 
@@ -944,7 +944,7 @@ const dict: Record<string, I18nText> = {
     gl: "Estimadas a partir de sinais de porta, comidas e actividades.",
     en: "Estimated from door, meal and activity signals.",
   },
-  filterUsers: { es: "Filtrar usuarios...", gl: "Filtrar usuarios...", en: "Filter users..." },
+  filterUsers: { es: "Filtrar usuarios…", gl: "Filtrar usuarios…", en: "Filter users…" },
   noPresenceYet: {
     es: "Aún no hay presencia",
     gl: "Aínda non hai presenza",
@@ -1985,9 +1985,9 @@ const dict: Record<string, I18nText> = {
   visibilityPublicDefault: { es: "Público", gl: "Público", en: "Public" },
   newItem: { es: "Nuevo elemento", gl: "Novo elemento", en: "New item" },
   searchSchedulePlaceholder: {
-    es: "Buscar en el programa...",
-    gl: "Buscar no programa...",
-    en: "Search schedule...",
+    es: "Buscar en el programa…",
+    gl: "Buscar no programa…",
+    en: "Search schedule…",
   },
   editItemAria: { es: "Editar elemento", gl: "Editar elemento", en: "Edit item" },
   deleteItemAria: { es: "Eliminar elemento", gl: "Eliminar elemento", en: "Delete item" },
@@ -2117,9 +2117,9 @@ const dict: Record<string, I18nText> = {
   },
   newAnnouncement: { es: "Nuevo aviso", gl: "Novo aviso", en: "New announcement" },
   searchAnnouncementsPlaceholder: {
-    es: "Buscar avisos...",
-    gl: "Buscar avisos...",
-    en: "Search announcements...",
+    es: "Buscar avisos…",
+    gl: "Buscar avisos…",
+    en: "Search announcements…",
   },
   editAnnouncementAria: { es: "Editar aviso", gl: "Editar aviso", en: "Edit announcement" },
   deleteAnnouncementAria: { es: "Eliminar aviso", gl: "Eliminar aviso", en: "Delete announcement" },
@@ -2331,9 +2331,9 @@ const dict: Record<string, I18nText> = {
   prizeCountOther: { es: "{count} premios", gl: "{count} premios", en: "{count} prizes" },
   colLinks: { es: "Enlaces", gl: "Ligazóns", en: "Links" },
   searchProjectsPlaceholder: {
-    es: "Buscar proyectos...",
-    gl: "Buscar proxectos...",
-    en: "Search projects...",
+    es: "Buscar proyectos…",
+    gl: "Buscar proxectos…",
+    en: "Search projects…",
   },
   projectsCouldNotLoad: {
     es: "No se han podido cargar los proyectos",
@@ -3140,11 +3140,11 @@ const dict: Record<string, I18nText> = {
   link: { es: "Vincular", gl: "Vincular", en: "Link" },
   addMemberLabel: { es: "Añadir miembro", gl: "Engadir membro", en: "Add member" },
   searchUsersNameEmailPlaceholder: {
-    es: "Buscar usuarios por nombre o correo...",
-    gl: "Buscar usuarios por nome ou correo...",
-    en: "Search users by name or email...",
+    es: "Buscar usuarios por nombre o correo…",
+    gl: "Buscar usuarios por nome ou correo…",
+    en: "Search users by name or email…",
   },
-  searchingEllipsis: { es: "Buscando...", gl: "Buscando...", en: "Searching..." },
+  searchingEllipsis: { es: "Buscando…", gl: "Buscando…", en: "Searching…" },
   noMatchingUsersPeriod: {
     es: "No hay usuarios coincidentes.",
     gl: "Non hai usuarios coincidentes.",
@@ -3636,9 +3636,9 @@ const dict: Record<string, I18nText> = {
   colChallenge: { es: "Reto", gl: "Reto", en: "Challenge" },
   colReveal: { es: "Publicación", gl: "Publicación", en: "Reveal" },
   searchChallengesPlaceholder: {
-    es: "Buscar retos...",
-    gl: "Buscar retos...",
-    en: "Search challenges...",
+    es: "Buscar retos…",
+    gl: "Buscar retos…",
+    en: "Search challenges…",
   },
   makeVisible: { es: "Hacer visible", gl: "Facer visible", en: "Make visible" },
   noChallengesYetTitle: {
