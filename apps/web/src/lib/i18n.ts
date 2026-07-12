@@ -1888,6 +1888,11 @@ const dict: Record<string, I18nText> = {
     gl: "Os avisos e outras mensaxes da app aparecerán aquí.",
     en: "Announcements and other in-app messages will show up here.",
   },
+  noAdditionalDetails: {
+    es: "No hay más detalles para este mensaje.",
+    gl: "Non hai máis detalles para esta mensaxe.",
+    en: "No additional details for this message.",
+  },
   rangeOfTotal: {
     es: "{start}–{end} de {total}",
     gl: "{start}–{end} de {total}",

@@ -14,6 +14,7 @@ import { EVENTS } from "@hackos/shared/events";
 import {
   CalendarClockIcon,
   CheckIcon,
+  ChevronDownIcon,
   InboxIcon,
   PlusIcon,
   SlidersHorizontalIcon,
@@ -37,6 +38,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useLiveQuery } from "@/hooks/use-event-source";
+import { notifyNotificationsRead } from "@/hooks/use-unread-count";
 import { ApiError } from "@/lib/api";
 import { formatScheduledDateTime } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
@@ -79,6 +81,34 @@ function payloadField(payload: unknown, key: "subject" | "body"): string | null 
   return typeof value === "string" && value.trim() ? value : null;
 }
 
+/** Internal to the notify() pipeline (see notifications/templates.ts) — not useful to show a reader. */
+const HIDDEN_PAYLOAD_KEYS = new Set([
+  "subject",
+  "body",
+  "template",
+  "vars",
+  "recipient",
+  "language",
+]);
+
+function humanizeKey(key: string): string {
+  const spaced = key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/** Every other field the sender attached (e.g. roomName, challengeTitle) — the "all data" behind the rendered subject/body. */
+function payloadDetails(payload: unknown): Array<{ key: string; value: string }> {
+  if (!payload || typeof payload !== "object") return [];
+  return Object.entries(payload as Record<string, unknown>)
+    .filter(
+      ([key, value]) => !HIDDEN_PAYLOAD_KEYS.has(key) && value !== null && value !== undefined,
+    )
+    .map(([key, value]) => ({
+      key: humanizeKey(key),
+      value: typeof value === "string" ? value : JSON.stringify(value),
+    }));
+}
+
 function categoryLabel(
   category: string,
   scheduleItems: PublicScheduleItem[],
@@ -119,6 +149,8 @@ function MessagesTab() {
   const { t } = useLocale();
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [offset, setOffset] = useState(0);
+  // Which items are expanded to show the full body + every other payload field.
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
 
   const fetcher = useCallback(
     () => notificationsApi.listInbox({ unread: unreadOnly || undefined, limit: LIMIT, offset }),
@@ -132,9 +164,19 @@ function MessagesTab() {
     { queryKey: [unreadOnly, offset] },
   );
 
+  function toggleExpanded(id: number) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   async function markRead(item: InboxItem) {
     try {
       await notificationsApi.markInboxRead(item.id);
+      notifyNotificationsRead();
       refetch();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("couldNotMarkRead"));
@@ -183,36 +225,69 @@ function MessagesTab() {
             const unread = !item.read_at;
             const subject = payloadField(item.payload, "subject") ?? item.category;
             const body = payloadField(item.payload, "body");
+            const details = payloadDetails(item.payload);
+            const isOpen = expanded.has(item.id);
             return (
-              <li
-                key={item.id}
-                className={`flex items-start gap-3 p-4 ${unread ? "bg-primary/5" : ""}`}
-              >
-                <span
-                  className={`mt-1.5 size-2 shrink-0 rounded-full ${unread ? "bg-primary" : "bg-transparent"}`}
-                  aria-hidden
-                />
-                <div className="min-w-0 flex-1 space-y-1">
-                  <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <p className={`text-sm ${unread ? "font-semibold" : "font-medium"}`}>
-                      {subject}
-                    </p>
-                    <span className="text-muted-foreground text-xs">
-                      {formatScheduledDateTime(item.created_at)}
-                    </span>
+              <li key={item.id} className={unread ? "bg-primary/5" : ""}>
+                <button
+                  type="button"
+                  onClick={() => toggleExpanded(item.id)}
+                  aria-expanded={isOpen}
+                  className="hover:bg-muted/50 flex w-full items-start gap-3 p-4 text-left"
+                >
+                  <span
+                    className={`mt-1.5 size-2 shrink-0 rounded-full ${unread ? "bg-primary" : "bg-transparent"}`}
+                    aria-hidden
+                  />
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <p className={`text-sm ${unread ? "font-semibold" : "font-medium"}`}>
+                        {subject}
+                      </p>
+                      <span className="text-muted-foreground text-xs">
+                        {formatScheduledDateTime(item.created_at)}
+                      </span>
+                    </div>
+                    {body && (
+                      <p
+                        className={`text-muted-foreground text-sm ${isOpen ? "whitespace-pre-line" : "line-clamp-2"}`}
+                      >
+                        {body}
+                      </p>
+                    )}
                   </div>
-                  {body && <p className="text-muted-foreground line-clamp-2 text-sm">{body}</p>}
-                </div>
-                {unread && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => markRead(item)}
-                    aria-label={t("markRead")}
-                  >
-                    <CheckIcon className="size-4" />
-                    {t("markRead")}
-                  </Button>
+                  <ChevronDownIcon
+                    className={`text-muted-foreground mt-1 size-4 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}
+                    aria-hidden
+                  />
+                </button>
+
+                {isOpen && (
+                  <div className="border-border space-y-3 border-t px-4 py-3 pl-10">
+                    {details.length > 0 ? (
+                      <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-sm">
+                        {details.map((d) => (
+                          <div key={d.key} className="contents">
+                            <dt className="text-muted-foreground">{d.key}</dt>
+                            <dd className="min-w-0 break-words">{d.value}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    ) : (
+                      <p className="text-muted-foreground text-sm">{t("noAdditionalDetails")}</p>
+                    )}
+                    {unread && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => markRead(item)}
+                        aria-label={t("markRead")}
+                      >
+                        <CheckIcon className="size-4" />
+                        {t("markRead")}
+                      </Button>
+                    )}
+                  </div>
                 )}
               </li>
             );

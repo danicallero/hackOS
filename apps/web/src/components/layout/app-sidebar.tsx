@@ -14,9 +14,30 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar";
+import { useUnreadCount } from "@/hooks/use-unread-count";
 import { useLocale } from "@/lib/i18n";
 import { NAV, type NavItem } from "@/lib/nav";
 import { useSessionContext } from "@/lib/session";
+
+/** Overlaid on the icon's top-right corner — only shown collapsed to the icon rail, where there's no label to anchor a dot to. */
+function UnreadIconDot() {
+  return (
+    <span
+      aria-hidden
+      className="border-sidebar bg-destructive absolute -top-0.5 -right-0.5 hidden size-2 rounded-full border group-data-[collapsible=icon]:block"
+    />
+  );
+}
+
+/** Pushed to the end of the row next to the label — hidden once collapsed (the icon dot takes over then). */
+function UnreadLabelDot() {
+  return (
+    <span
+      aria-hidden
+      className="bg-destructive ml-auto size-2 shrink-0 rounded-full group-data-[collapsible=icon]:hidden"
+    />
+  );
+}
 
 function useVisible() {
   const { can, canAny, me } = useSessionContext();
@@ -40,6 +61,7 @@ export function AppSidebar() {
   const pathname = usePathname();
   const isVisible = useVisible();
   const { t } = useLocale();
+  const unreadCount = useUnreadCount();
 
   return (
     <Sidebar collapsible="icon">
@@ -96,12 +118,17 @@ export function AppSidebar() {
                       </SidebarMenuItem>
                     );
                   }
+                  const showUnreadDot = item.href === "/inbox" && unreadCount > 0;
                   return (
                     <SidebarMenuItem key={item.href}>
                       <SidebarMenuButton asChild isActive={active} tooltip={t(item.title)}>
                         <Link href={item.href}>
-                          <Icon />
+                          <span className="relative shrink-0">
+                            <Icon />
+                            {showUnreadDot && <UnreadIconDot />}
+                          </span>
                           <span>{t(item.title)}</span>
+                          {showUnreadDot && <UnreadLabelDot />}
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
