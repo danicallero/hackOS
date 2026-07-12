@@ -44,7 +44,7 @@ afterAll(async () => {
 });
 
 describe("rooms CRUD + assignments (QUEUE_ADMIN)", () => {
-  it("creates a room with its queue state row; operators can read but not create", async () => {
+  it("creates an operationally paused room; operators can read but not create", async () => {
     const forbidden = await app.inject({
       method: "POST",
       url: "/api/queue/rooms",
@@ -68,8 +68,49 @@ describe("rooms CRUD + assignments (QUEUE_ADMIN)", () => {
       headers: asUser(operatorId),
     });
     expect(read.statusCode).toBe(200);
+    expect(read.json().status).toBe("paused");
     expect(read.json().queueState.max_in_waiting_area).toBe(2);
-    expect(read.json().queueState.is_paused).toBe(false);
+    expect(read.json().queueState.is_paused).toBe(true);
+  });
+
+  it("does not auto-fill a newly created room until it is resumed", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/queue/rooms",
+      headers: asUser(adminId),
+      payload: { name: "Paused room", slug: "paused-room" },
+    });
+    const roomId = created.json().id;
+    const challengeId = await createChallenge();
+    const { repoId } = await createRepoWithTeam();
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`INSERT INTO room_challenges (room_id, challenge_id) VALUES ($1, $2)`, [
+      roomId,
+      challengeId,
+    ]);
+    const { rows: entries } = await pool.query(
+      `INSERT INTO queue_entries (challenge_id, repo_id, status, position)
+       VALUES ($1, $2, 'waiting', 1) RETURNING id`,
+      [challengeId, repoId],
+    );
+
+    const { pumpTick } = await import("../../src/modules/queue/pump.js");
+    await pumpTick();
+    expect(
+      (await pool.query(`SELECT status FROM queue_entries WHERE id = $1`, [entries[0].id])).rows[0]
+        .status,
+    ).toBe("waiting");
+
+    const resumed = await app.inject({
+      method: "POST",
+      url: `/api/queue/rooms/${roomId}/resume`,
+      headers: asUser(adminId),
+    });
+    expect(resumed.statusCode).toBe(200);
+    expect(
+      (await pool.query(`SELECT status FROM queue_entries WHERE id = $1`, [entries[0].id])).rows[0]
+        .status,
+    ).toBe("called");
   });
 
   it("updates room fields and per-room queue settings (max_in_waiting_area, desired_minutes_per_team)", async () => {

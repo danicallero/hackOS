@@ -225,7 +225,7 @@ CREATE TABLE room_judges (
 
 CREATE TABLE room_queue_state (
   room_id integer PRIMARY KEY REFERENCES rooms(id) ON DELETE CASCADE,
-  is_paused boolean NOT NULL DEFAULT false,
+  is_paused boolean NOT NULL DEFAULT true,
   -- per-room cap on concurrent `called` entries; pump + CallNext both honour it (H29)
   max_in_waiting_area integer NOT NULL DEFAULT 2,
   desired_minutes_per_team integer NOT NULL DEFAULT 8, -- H39

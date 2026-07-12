@@ -96,7 +96,11 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
         [name, slug, location ?? null],
       );
       const room = rows[0];
-      await pool.query(`INSERT INTO room_queue_state (room_id) VALUES ($1)`, [room.id]);
+      // A room is not eligible for auto-fill until a judge/operator explicitly
+      // resumes it from the judging panel.
+      await pool.query(`INSERT INTO room_queue_state (room_id, is_paused) VALUES ($1, true)`, [
+        room.id,
+      ]);
       reply.code(201);
       return room;
     },

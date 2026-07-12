@@ -15,11 +15,10 @@ import { callNextForRoom } from "./service.js";
  * explicitly enqueued).
  *
  * The single auto-fill gate is `room_queue_state.is_paused` — the same flag
- * the H35 Pause/Resume operator lever writes and callNextForRoom checks. We do
- * NOT also require `rooms.status = 'active'`: that column has no operational
- * writer (no UI or endpoint sets it, rooms default to 'paused'), so gating on
- * it silently froze every real room's auto-fill (issue #60). `rooms.status`
- * stays a display/lifecycle field only.
+ * the H35 Pause/Resume operator lever writes and callNextForRoom checks.
+ * Newly created rooms initialise this state as paused, so their queue cannot
+ * fill until a judge/operator explicitly resumes the room. `rooms.status`
+ * remains a display/lifecycle field only.
  */
 export const QUEUE_PUMP_QUEUE_NAME = "queue-pump";
 
