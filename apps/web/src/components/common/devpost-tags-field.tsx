@@ -2,6 +2,7 @@
 
 import { TagIcon } from "lucide-react";
 import { MultiSelect, type MultiSelectOption } from "@/components/common/multi-select";
+import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /**
@@ -15,7 +16,7 @@ export function DevpostTagsField({
   options,
   disabled,
   className,
-  emptyText = "No imported prizes yet.",
+  emptyText,
 }: {
   value: string[];
   onChange: (value: string[]) => void;
@@ -24,24 +25,22 @@ export function DevpostTagsField({
   className?: string;
   emptyText?: string;
 }) {
+  const { t } = useLocale();
   return (
     <div className={cn("space-y-2", className)}>
       <div className="flex items-center gap-1.5">
         <TagIcon className="text-muted-foreground size-4" />
-        <span className="text-sm font-medium">DevPost tags</span>
+        <span className="text-sm font-medium">{t("devpostTags")}</span>
       </div>
       <MultiSelect
         options={options}
         value={value}
         onChange={onChange}
-        placeholder="Select DevPost tags"
-        searchPlaceholder="Search imported prizes..."
-        emptyText={emptyText}
+        placeholder={t("selectDevpostTags")}
+        searchPlaceholder={t("searchImportedPrizes")}
+        emptyText={emptyText ?? t("noImportedPrizes")}
         disabled={disabled}
       />
-      <p className="text-muted-foreground text-xs">
-        These tags determine which imported projects enter the queue for this challenge.
-      </p>
     </div>
   );
 }

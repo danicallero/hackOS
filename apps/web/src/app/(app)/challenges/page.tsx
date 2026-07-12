@@ -6,7 +6,7 @@ import type { I18nText, Question } from "@hackos/shared/questions";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { EyeIcon, EyeOffIcon, LockIcon, PlusIcon, TrophyIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -39,6 +39,7 @@ import {
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { fromDatetimeLocal } from "@/lib/datetime";
+import { type Translate, useLocale } from "@/lib/i18n";
 import { type DevpostPrize, listDevpostPrizes } from "@/lib/projects";
 import { useSessionContext } from "@/lib/session";
 import type { EnterpriseSummary } from "@/lib/types";
@@ -72,82 +73,86 @@ const createSchema = z.object({
 });
 type CreateValues = z.infer<typeof createSchema>;
 
-const columns: Column<Challenge>[] = [
-  {
-    id: "title",
-    header: "Challenge",
-    sortValue: (c) => textForDisplay(c.title).toLowerCase(),
-    cell: (c) => <span className="font-medium">{textForDisplay(c.title)}</span>,
-  },
-  {
-    id: "enterprise",
-    header: "Enterprise",
-    sortValue: (c) => (c.enterprise_name ?? "").toLowerCase(),
-    cell: (c) =>
-      c.enterprise_name ? (
-        <span className="text-muted-foreground text-sm">{c.enterprise_name}</span>
-      ) : (
-        <span className="text-muted-foreground">—</span>
+function buildColumns(t: Translate): Column<Challenge>[] {
+  return [
+    {
+      id: "title",
+      header: t("colChallenge"),
+      sortValue: (c) => textForDisplay(c.title).toLowerCase(),
+      cell: (c) => <span className="font-medium">{textForDisplay(c.title)}</span>,
+    },
+    {
+      id: "enterprise",
+      header: t("colEnterprise"),
+      sortValue: (c) => (c.enterprise_name ?? "").toLowerCase(),
+      cell: (c) =>
+        c.enterprise_name ? (
+          <span className="text-muted-foreground text-sm">{c.enterprise_name}</span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
+    },
+    {
+      id: "visibility",
+      header: t("colVisibility"),
+      sortValue: (c) => c.visibility,
+      cell: (c) => (
+        <StatusBadge tone={visibilityTone(c.visibility)} className="capitalize">
+          {c.visibility}
+        </StatusBadge>
       ),
-  },
-  {
-    id: "visibility",
-    header: "Visibility",
-    sortValue: (c) => c.visibility,
-    cell: (c) => (
-      <StatusBadge tone={visibilityTone(c.visibility)} className="capitalize">
-        {c.visibility}
-      </StatusBadge>
-    ),
-  },
-  {
-    id: "reveal",
-    header: "Reveal",
-    sortValue: (c) => c.available_from ?? "",
-    cell: (c) => {
-      if (c.visibility === "hidden" && isScheduled(c.available_from)) {
-        return (
-          <div className="flex items-center gap-2">
-            <StatusBadge tone="warning">Scheduled</StatusBadge>
-            <span className="text-muted-foreground text-sm">
-              {new Date(c.available_from as string).toLocaleString("es-ES", {
-                day: "2-digit",
-                month: "2-digit",
-                year: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
-                hour12: false,
-              })}
-            </span>
-          </div>
-        );
-      }
-      if (c.visibility === "visible") {
-        return (
-          <span className="text-muted-foreground text-sm">
-            {c.available_from
-              ? new Date(c.available_from).toLocaleString("es-ES", {
+    },
+    {
+      id: "reveal",
+      header: t("colReveal"),
+      sortValue: (c) => c.available_from ?? "",
+      cell: (c) => {
+        if (c.visibility === "hidden" && isScheduled(c.available_from)) {
+          return (
+            <div className="flex items-center gap-2">
+              <StatusBadge tone="warning">{t("statusScheduled")}</StatusBadge>
+              <span className="text-muted-foreground text-sm">
+                {new Date(c.available_from as string).toLocaleString("es-ES", {
                   day: "2-digit",
                   month: "2-digit",
                   year: "numeric",
                   hour: "2-digit",
                   minute: "2-digit",
                   hour12: false,
-                })
-              : "Immediate"}
-          </span>
-        );
-      }
-      return <span className="text-muted-foreground">—</span>;
+                })}
+              </span>
+            </div>
+          );
+        }
+        if (c.visibility === "visible") {
+          return (
+            <span className="text-muted-foreground text-sm">
+              {c.available_from
+                ? new Date(c.available_from).toLocaleString("es-ES", {
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: false,
+                  })
+                : t("immediate")}
+            </span>
+          );
+        }
+        return <span className="text-muted-foreground">—</span>;
+      },
     },
-  },
-];
+  ];
+}
 
 export default function ChallengesPage() {
   const router = useRouter();
+  const { t } = useLocale();
   const { canAny, me } = useSessionContext();
   const canAdmin = canAny(CAPABILITIES.SPONSORS_MANAGE, CAPABILITIES.QUEUE_ADMIN);
   const canSee = canAdmin || me?.role === "sponsor";
+  const columns = useMemo(() => buildColumns(t), [t]);
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
@@ -167,11 +172,11 @@ export default function ChallengesPage() {
       setSelectedIds(new Set());
     } catch (err) {
       setChallenges([]);
-      toast.error(err instanceof ApiError ? err.message : "Could not load challenges.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadChallenges"));
     } finally {
       setLoading(false);
     }
-  }, [canAdmin, canSee]);
+  }, [canAdmin, canSee, t]);
 
   const bulkVisibility = useCallback(
     async (visible: boolean) => {
@@ -182,17 +187,21 @@ export default function ChallengesPage() {
         await api.post("/api/challenges/visibility", { ids, visible });
         toast.success(
           visible
-            ? `Made ${ids.length} challenge${ids.length > 1 ? "s" : ""} visible.`
-            : `Hid ${ids.length} challenge${ids.length > 1 ? "s" : ""}.`,
+            ? ids.length === 1
+              ? t("madeVisibleOne", { count: ids.length })
+              : t("madeVisibleOther", { count: ids.length })
+            : ids.length === 1
+              ? t("hidCountOne", { count: ids.length })
+              : t("hidCountOther", { count: ids.length }),
         );
         await load();
       } catch (err) {
-        toast.error(err instanceof ApiError ? err.message : "Could not update visibility.");
+        toast.error(err instanceof ApiError ? err.message : t("couldNotUpdateVisibility"));
       } finally {
         setBulkBusy(false);
       }
     },
-    [selectedIds, load],
+    [selectedIds, load, t],
   );
 
   // Soft, in-place refresh instead of a hard reload when another admin
@@ -207,11 +216,11 @@ export default function ChallengesPage() {
   if (!canSee) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Challenges" />
+        <PageHeader title={t("challenges")} />
         <EmptyState
           icon={LockIcon}
-          title="You can't access challenges"
-          description="Challenge access is available to admins and linked sponsor representatives."
+          title={t("noAccessChallenges")}
+          description={t("challengesAccessDeniedDesc")}
         />
       </div>
     );
@@ -220,13 +229,13 @@ export default function ChallengesPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={canAdmin ? "Challenges" : "My challenges"}
-        description="Challenge content, prizes, judging panel configuration and public reveal."
+        title={canAdmin ? t("challenges") : t("myChallenges")}
+        description={t("challengesDesc")}
         actions={
           canAdmin ? (
             <Button onClick={() => setCreateOpen(true)}>
               <PlusIcon className="size-4" />
-              New challenge
+              {t("newChallenge")}
             </Button>
           ) : undefined
         }
@@ -240,7 +249,7 @@ export default function ChallengesPage() {
         searchable={(c) =>
           `${textForSearch(c.title)} ${textForSearch(c.description)} ${textForSearch(c.criteria)}`
         }
-        searchPlaceholder="Search challenges..."
+        searchPlaceholder={t("searchChallengesPlaceholder")}
         pageSize={15}
         loading={loading}
         selectable={canAdmin}
@@ -249,7 +258,9 @@ export default function ChallengesPage() {
         toolbar={
           canAdmin && selectedIds.size > 0 ? (
             <>
-              <span className="text-muted-foreground text-sm">{selectedIds.size} selected</span>
+              <span className="text-muted-foreground text-sm">
+                {t("selectedCount", { count: selectedIds.size })}
+              </span>
               <Button
                 variant="outline"
                 size="sm"
@@ -257,7 +268,7 @@ export default function ChallengesPage() {
                 onClick={() => bulkVisibility(true)}
               >
                 <EyeIcon className="size-4" />
-                Make visible
+                {t("makeVisible")}
               </Button>
               <Button
                 variant="outline"
@@ -266,17 +277,15 @@ export default function ChallengesPage() {
                 onClick={() => bulkVisibility(false)}
               >
                 <EyeOffIcon className="size-4" />
-                Hide
+                {t("hide")}
               </Button>
             </>
           ) : undefined
         }
         empty={{
           icon: TrophyIcon,
-          title: "No challenges yet",
-          description: canAdmin
-            ? "Create the first enterprise challenge template."
-            : "Your enterprise has no challenge assigned yet.",
+          title: t("noChallengesYetTitle"),
+          description: canAdmin ? t("createFirstEnterpriseChallenge") : t("noChallengeAssignedYet"),
         }}
       />
 
@@ -304,6 +313,7 @@ function CreateChallengeModal({
   onOpenChange: (open: boolean) => void;
   onCreated: (created: Challenge) => void | Promise<void>;
 }) {
+  const { t } = useLocale();
   const [enterprises, setEnterprises] = useState<EnterpriseSummary[]>([]);
   const [devpostPrizes, setDevpostPrizes] = useState<DevpostPrize[]>([]);
   const [prizes, setPrizes] = useState<Prize[]>([]);
@@ -341,14 +351,14 @@ function CreateChallengeModal({
         setDevpostPrizes(prizesRes.prizes);
       })
       .catch((err) =>
-        toast.error(err instanceof ApiError ? err.message : "Could not load challenge data."),
+        toast.error(err instanceof ApiError ? err.message : t("couldNotLoadChallengeData")),
       );
-  }, [open, reset]);
+  }, [open, reset, t]);
 
   async function onSubmit(values: CreateValues) {
     const title = titleI18n.en.trim();
     if (!title) {
-      toast.error("An English title is required.");
+      toast.error(t("englishTitleRequired"));
       return;
     }
     const descriptionEn = descriptionI18n.en.trim();
@@ -372,10 +382,10 @@ function CreateChallengeModal({
         maxInWaitingArea: values.maxInWaitingArea ? Number(values.maxInWaitingArea) : null,
         availableFrom: fromDatetimeLocal(values.availableFrom),
       });
-      toast.success("Challenge created.");
+      toast.success(t("challengeCreated"));
       await onCreated(created);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Check the builder fields and try again.");
+      toast.error(err instanceof Error ? err.message : t("checkBuilderFields"));
     }
   }
 
@@ -384,12 +394,12 @@ function CreateChallengeModal({
       open={open}
       onOpenChange={onOpenChange}
       icon={TrophyIcon}
-      title="New challenge"
+      title={t("newChallenge")}
       size="lg"
       className="max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto]"
       footer={
         <SubmitButton form="create-challenge-form" pending={form.formState.isSubmitting}>
-          Create challenge
+          {t("createChallenge")}
         </SubmitButton>
       }
     >
@@ -405,7 +415,7 @@ function CreateChallengeModal({
               name="enterpriseId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Enterprise</FormLabel>
+                  <FormLabel>{t("enterpriseLabel")}</FormLabel>
                   <Select
                     value={field.value}
                     onValueChange={field.onChange}
@@ -413,7 +423,7 @@ function CreateChallengeModal({
                   >
                     <FormControl>
                       <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Select an enterprise" />
+                        <SelectValue placeholder={t("selectEnterprisePlaceholder")} />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
@@ -428,23 +438,23 @@ function CreateChallengeModal({
                 </FormItem>
               )}
             />
-            <MultilingualInput label="Title" value={titleI18n} onChange={setTitleI18n} />
+            <MultilingualInput label={t("titleLabel")} value={titleI18n} onChange={setTitleI18n} />
             <MultilingualInput
-              label="Description"
+              label={t("descriptionLabel")}
               optional
               textarea
               value={descriptionI18n}
               onChange={setDescriptionI18n}
             />
             <MultilingualInput
-              label="Public criteria"
+              label={t("publicCriteria")}
               optional
               textarea
               value={criteriaI18n}
               onChange={setCriteriaI18n}
             />
             <section className="space-y-3 rounded-lg border p-4">
-              <h3 className="text-sm font-medium">Prizes</h3>
+              <h3 className="text-sm font-medium">{t("prizesLabel")}</h3>
               <PrizeBuilder value={prizes} onChange={setPrizes} />
             </section>
             <DevpostTagsField
@@ -453,12 +463,15 @@ function CreateChallengeModal({
               options={devpostPrizes.map((prize) => ({
                 value: prize.name,
                 label: prize.name,
-                description: `${prize.repoCount} project${prize.repoCount === 1 ? "" : "s"}`,
+                description:
+                  prize.repoCount === 1
+                    ? t("projectCountOne", { count: prize.repoCount })
+                    : t("projectCountOther", { count: prize.repoCount }),
               }))}
-              emptyText="No imported prizes yet."
+              emptyText={t("noImportedPrizes")}
             />
             <section className="space-y-3 rounded-lg border p-4">
-              <h3 className="text-sm font-medium">Judging panel</h3>
+              <h3 className="text-sm font-medium">{t("judgingPanel")}</h3>
               <JudgingPanelBuilder value={questions} onChange={setQuestions} />
             </section>
             <FormField
@@ -466,7 +479,7 @@ function CreateChallengeModal({
               name="maxPresentationSeconds"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Max presentation time</FormLabel>
+                  <FormLabel>{t("maxPresentationTime")}</FormLabel>
                   <FormControl>
                     <DurationInput value={field.value} onChange={field.onChange} />
                   </FormControl>
@@ -479,7 +492,7 @@ function CreateChallengeModal({
               name="maxInWaitingArea"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Waiting room capacity</FormLabel>
+                  <FormLabel>{t("waitingRoomCapacity")}</FormLabel>
                   <FormControl>
                     <Input
                       type="number"
@@ -497,15 +510,15 @@ function CreateChallengeModal({
               name="availableFrom"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Publish date</FormLabel>
+                  <FormLabel>{t("publishDate")}</FormLabel>
                   <FormControl>
                     <ScheduledDateTimeField
                       value={field.value}
                       onChange={(value) =>
                         form.setValue("availableFrom", value, { shouldDirty: true })
                       }
-                      addLabel="Add publish date"
-                      inputLabel="Publish date and time"
+                      addLabel={t("addPublishDate")}
+                      inputLabel={t("publishDateTime")}
                     />
                   </FormControl>
                   <FormMessage />

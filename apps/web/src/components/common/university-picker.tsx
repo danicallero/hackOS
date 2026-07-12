@@ -20,6 +20,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { ApiError, api } from "@/lib/api";
+import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 interface University {
@@ -43,6 +44,7 @@ export function UniversityPicker({
   className?: string;
   allowPropose?: boolean;
 }) {
+  const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [options, setOptions] = useState<University[]>([]);
@@ -113,11 +115,11 @@ export function UniversityPicker({
     setProposing(true);
     try {
       const created = await api.post<University>("/api/public/universities/propose", { name });
-      toast.success(`Added "${created.name}".`);
+      toast.success(t("addedUniversityInline", { name: created.name }));
       select(created);
       setQuery("");
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not add that university.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotAddUniversity"));
     } finally {
       setProposing(false);
     }
@@ -125,7 +127,7 @@ export function UniversityPicker({
 
   const exactMatch = options.some((o) => o.name.toLowerCase() === query.trim().toLowerCase());
   const canPropose = allowPropose && query.trim().length > 1 && !exactMatch && !loading;
-  const label = value ? (selectedLabel ?? `University #${value}`) : null;
+  const label = value ? (selectedLabel ?? t("universityNumberFallback", { id: value })) : null;
 
   const content = (
     <PopoverPrimitive.Content
@@ -134,10 +136,14 @@ export function UniversityPicker({
       className="bg-popover text-popover-foreground z-50 w-[--radix-popover-trigger-width] rounded-md border shadow-md outline-hidden"
     >
       <Command shouldFilter={false}>
-        <CommandInput placeholder="Search universities…" value={query} onValueChange={setQuery} />
+        <CommandInput
+          placeholder={t("searchUniversitiesShortPlaceholder")}
+          value={query}
+          onValueChange={setQuery}
+        />
         <CommandList className="max-h-64">
           {!loading && options.length === 0 && !canPropose && (
-            <CommandEmpty>Type to search universities.</CommandEmpty>
+            <CommandEmpty>{t("typeToSearchUniversities")}</CommandEmpty>
           )}
           <CommandGroup>
             {options.map((u) => (
@@ -151,7 +157,7 @@ export function UniversityPicker({
             {canPropose && (
               <CommandItem value={`propose-${query}`} onSelect={propose} disabled={proposing}>
                 <PlusIcon className="size-4" />
-                Add "{query.trim()}"
+                {t("addQuotedInline", { query: query.trim() })}
               </CommandItem>
             )}
           </CommandGroup>
@@ -170,7 +176,7 @@ export function UniversityPicker({
           className={cn("h-auto min-h-10 w-full justify-between px-3 py-2 font-normal", className)}
         >
           <span className={cn("flex-1 truncate text-left", !label && "text-muted-foreground")}>
-            {label ?? "Select your university…"}
+            {label ?? t("selectYourUniversityPlaceholder")}
           </span>
           <ChevronsUpDownIcon className="text-muted-foreground size-4 shrink-0" />
         </Button>

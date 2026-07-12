@@ -45,6 +45,7 @@ import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { API_URL } from "@/lib/env";
+import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import { type Enterprise, initials, LOGO_ACCEPT, LOGO_CONTENT_TYPES } from "../shared";
 
@@ -81,6 +82,7 @@ function toFormValues(e: Enterprise): EditValues {
 }
 
 export default function EnterpriseDetailPage() {
+  const { t } = useLocale();
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
   const canManage = useCan(CAPABILITIES.SPONSORS_MANAGE);
@@ -127,8 +129,8 @@ export default function EnterpriseDetailPage() {
         <BackLink />
         <EmptyState
           icon={Building2Icon}
-          title="Enterprise not found"
-          description={errorMsg || "This enterprise could not be loaded."}
+          title={t("enterpriseNotFoundTitle")}
+          description={errorMsg || t("enterpriseNotLoadedDesc")}
         />
       </div>
     );
@@ -176,6 +178,7 @@ interface UserSearchResult {
 }
 
 function MembersCard({ enterpriseId }: { enterpriseId: number }) {
+  const { t } = useLocale();
   const [members, setMembers] = useState<Member[] | null>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<UserSearchResult[]>([]);
@@ -209,8 +212,8 @@ function MembersCard({ enterpriseId }: { enterpriseId: number }) {
     } catch (err) {
       toast.error(
         err instanceof ApiError && err.status === 403
-          ? "You need users:read to search users."
-          : "Search failed.",
+          ? t("needUsersReadSearch")
+          : t("searchFailedGeneric"),
       );
     }
   }
@@ -222,9 +225,9 @@ function MembersCard({ enterpriseId }: { enterpriseId: number }) {
       setQuery("");
       setResults([]);
       await loadMembers();
-      toast.success("User affiliated.");
+      toast.success(t("userAffiliated"));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not add this user.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotAddUser"));
     } finally {
       setBusy(false);
     }
@@ -235,9 +238,9 @@ function MembersCard({ enterpriseId }: { enterpriseId: number }) {
     try {
       await api.delete(`/api/enterprises/${enterpriseId}/members/${userId}`);
       await loadMembers();
-      toast.success("Affiliation removed.");
+      toast.success(t("affiliationRemoved"));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not remove this user.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveUser"));
     } finally {
       setBusy(false);
     }
@@ -246,8 +249,8 @@ function MembersCard({ enterpriseId }: { enterpriseId: number }) {
   return (
     <SectionCard
       icon={Building2Icon}
-      title="Affiliated users"
-      description="People linked to this enterprise (sponsor representatives)."
+      title={t("affiliatedUsersTitle")}
+      description={t("affiliatedUsersDesc")}
     >
       <div className="space-y-4">
         <div className="flex flex-wrap gap-2">
@@ -260,11 +263,11 @@ function MembersCard({ enterpriseId }: { enterpriseId: number }) {
                 search();
               }
             }}
-            placeholder="Search a user by name or email…"
+            placeholder={t("searchUserByNameEmail")}
             className="h-9 max-w-xs"
           />
           <Button variant="outline" size="sm" onClick={search} disabled={busy}>
-            Search
+            {t("search")}
           </Button>
         </div>
 
@@ -277,7 +280,7 @@ function MembersCard({ enterpriseId }: { enterpriseId: number }) {
                   <p className="text-muted-foreground truncate text-xs">{u.email}</p>
                 </div>
                 <Button size="sm" variant="outline" disabled={busy} onClick={() => add(u.id)}>
-                  Add
+                  {t("addAction")}
                 </Button>
               </li>
             ))}
@@ -291,8 +294,8 @@ function MembersCard({ enterpriseId }: { enterpriseId: number }) {
         ) : members.length === 0 ? (
           <EmptyState
             icon={Building2Icon}
-            title="No affiliated users yet"
-            description="Search above to affiliate someone with this enterprise."
+            title={t("noAffiliatedUsersTitle")}
+            description={t("searchAboveToAffiliate")}
           />
         ) : (
           <ul className="divide-border divide-y">
@@ -303,7 +306,7 @@ function MembersCard({ enterpriseId }: { enterpriseId: number }) {
                   <p className="text-muted-foreground truncate text-xs">{m.email}</p>
                 </div>
                 <Button size="sm" variant="ghost" disabled={busy} onClick={() => remove(m.userId)}>
-                  Remove
+                  {t("remove")}
                 </Button>
               </li>
             ))}
@@ -315,13 +318,14 @@ function MembersCard({ enterpriseId }: { enterpriseId: number }) {
 }
 
 function BackLink() {
+  const { t } = useLocale();
   return (
     <Link
       href="/enterprises"
       className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition-colors"
     >
       <ArrowLeftIcon className="size-4" />
-      Back to enterprises
+      {t("backToEnterprises")}
     </Link>
   );
 }
@@ -335,6 +339,7 @@ function LogoCard({
   enterprise: Enterprise;
   onChanged: () => Promise<void>;
 }) {
+  const { t } = useLocale();
   const defaultInputRef = useRef<HTMLInputElement>(null);
   const negativeInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -346,7 +351,7 @@ function LogoCard({
     if (!file) return;
 
     if (!LOGO_CONTENT_TYPES.includes(file.type as (typeof LOGO_CONTENT_TYPES)[number])) {
-      toast.error("Unsupported file type. Use PNG, JPEG, WebP, SVG or GIF.");
+      toast.error(t("unsupportedFileType"));
       return;
     }
 
@@ -371,20 +376,16 @@ function LogoCard({
         throw new Error(body?.error?.message ?? `Upload failed (${res.status})`);
       }
       await onChanged();
-      toast.success(variant === "negative" ? "Dark-background logo updated." : "Logo updated.");
+      toast.success(variant === "negative" ? t("darkLogoUpdated") : t("logoUpdated"));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not upload the logo.");
+      toast.error(err instanceof Error ? err.message : t("couldNotUploadLogo"));
     } finally {
       setUploading(false);
     }
   }
 
   return (
-    <SectionCard
-      icon={ImageIcon}
-      title="Logo"
-      description="Upload a standard logo and, optionally, an alternate logo for dark backgrounds."
-    >
+    <SectionCard icon={ImageIcon} title={t("logoTitle")} description={t("logoDesc")}>
       <div className="flex items-center gap-4">
         <Avatar size="lg" className="rounded-md">
           {enterprise.logo_url ? (
@@ -406,7 +407,7 @@ function LogoCard({
             disabled={uploading}
           >
             {uploading ? <Spinner /> : <UploadIcon className="size-4" />}
-            {enterprise.logo_url ? "Replace logo" : "Upload logo"}
+            {enterprise.logo_url ? t("replaceLogo") : t("uploadLogo")}
           </Button>
           <Button
             type="button"
@@ -416,8 +417,8 @@ function LogoCard({
           >
             {uploading ? <Spinner /> : <UploadIcon className="size-4" />}
             {enterprise.logo_negative_url === enterprise.logo_url
-              ? "Upload dark-background logo"
-              : "Replace dark-background logo"}
+              ? t("uploadDarkLogo")
+              : t("replaceDarkLogo")}
           </Button>
         </div>
         <input
@@ -450,6 +451,7 @@ function EditCard({
   canManage: boolean;
   onSaved: () => Promise<void>;
 }) {
+  const { t } = useLocale();
   const form = useForm<EditValues>({
     resolver: zodResolver(editSchema),
     defaultValues: toFormValues(enterprise),
@@ -485,9 +487,9 @@ function EditCard({
           : ownerPatch,
       );
       await onSaved();
-      toast.success("Enterprise updated.");
+      toast.success(t("enterpriseUpdated"));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not save the enterprise.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveEnterprise"));
     }
   }
 
@@ -496,22 +498,22 @@ function EditCard({
       <form onSubmit={form.handleSubmit(onSubmit)}>
         <SectionCard
           icon={Building2Icon}
-          title="Profile"
-          description="Edit this sponsor's details. Changes are recorded in the audit log (H53)."
-          footer={<SubmitButton pending={form.formState.isSubmitting}>Save changes</SubmitButton>}
+          title={t("profileTitle")}
+          description={t("editSponsorDetailsDesc")}
+          footer={
+            <SubmitButton pending={form.formState.isSubmitting}>{t("saveChanges")}</SubmitButton>
+          }
         >
           <FormField
             control={form.control}
             name="name"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Name</FormLabel>
+                <FormLabel>{t("name")}</FormLabel>
                 <FormControl>
                   <Input disabled={!canManage} {...field} />
                 </FormControl>
-                {!canManage && (
-                  <FormDescription>Contact staff to change the legal name.</FormDescription>
-                )}
+                {!canManage && <FormDescription>{t("contactStaffToChangeName")}</FormDescription>}
                 <FormMessage />
               </FormItem>
             )}
@@ -521,7 +523,7 @@ function EditCard({
             name="website"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Website</FormLabel>
+                <FormLabel>{t("websiteLabel")}</FormLabel>
                 <FormControl>
                   <Input type="url" placeholder="https://acme.com" {...field} />
                 </FormControl>
@@ -534,13 +536,11 @@ function EditCard({
             name="logoUrl"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Logo URL</FormLabel>
+                <FormLabel>{t("logoUrlLabel")}</FormLabel>
                 <FormControl>
                   <Input type="url" placeholder="https://…/logo.png" {...field} />
                 </FormControl>
-                <FormDescription>
-                  Set directly, or use the uploader above (which fills this in).
-                </FormDescription>
+                <FormDescription>{t("setDirectlyOrUpload")}</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -550,13 +550,11 @@ function EditCard({
             name="logoNegativeUrl"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Logo for dark backgrounds URL</FormLabel>
+                <FormLabel>{t("darkBackgroundLogoUrlLabel")}</FormLabel>
                 <FormControl>
                   <Input type="url" placeholder="https://…/logo-negative.png" {...field} />
                 </FormControl>
-                <FormDescription>
-                  Optional. The standard logo is used in both themes when left blank.
-                </FormDescription>
+                <FormDescription>{t("optionalStandardLogoUsedDesc")}</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -566,7 +564,7 @@ function EditCard({
             name="description"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Description</FormLabel>
+                <FormLabel>{t("descriptionLabel")}</FormLabel>
                 <FormControl>
                   <Textarea rows={3} {...field} />
                 </FormControl>
@@ -582,11 +580,11 @@ function EditCard({
                   name="tierId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Tier ID</FormLabel>
+                      <FormLabel>{t("tierIdLabel")}</FormLabel>
                       <FormControl>
                         <Input inputMode="numeric" {...field} />
                       </FormControl>
-                      <FormDescription>Sponsor tier reference.</FormDescription>
+                      <FormDescription>{t("tierReferenceOptionalDesc")}</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -596,11 +594,11 @@ function EditCard({
                   name="displayPriority"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Display priority</FormLabel>
+                      <FormLabel>{t("displayPriorityLabel")}</FormLabel>
                       <FormControl>
                         <Input inputMode="numeric" {...field} />
                       </FormControl>
-                      <FormDescription>Lower shows first in the reveal.</FormDescription>
+                      <FormDescription>{t("lowerShowsFirstDesc")}</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -611,7 +609,7 @@ function EditCard({
                 name="visibility"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Visibility</FormLabel>
+                    <FormLabel>{t("colVisibility")}</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger className="w-full">
@@ -619,8 +617,8 @@ function EditCard({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="hidden">Hidden</SelectItem>
-                        <SelectItem value="visible">Visible</SelectItem>
+                        <SelectItem value="hidden">{t("hiddenOption")}</SelectItem>
+                        <SelectItem value="visible">{t("visibleLabel")}</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -632,15 +630,15 @@ function EditCard({
                 name="availableFrom"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Reveal from</FormLabel>
+                    <FormLabel>{t("revealFromLabel")}</FormLabel>
                     <FormControl>
                       <ScheduledDateTimeField
                         value={field.value}
                         onChange={(value) =>
                           form.setValue("availableFrom", value, { shouldDirty: true })
                         }
-                        addLabel="Add reveal time"
-                        inputLabel="Reveal date and time"
+                        addLabel={t("addRevealTimeField")}
+                        inputLabel={t("revealDateTime")}
                       />
                     </FormControl>
                     <FormMessage />

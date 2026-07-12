@@ -39,6 +39,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError } from "@/lib/api";
 import { formatScheduledDateTime } from "@/lib/datetime";
+import { type Translate, useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem } from "@/lib/logistics";
 import {
   type InboxItem,
@@ -52,18 +53,22 @@ import {
 const LIMIT = 20;
 const PERSONAL_STREAM = "/api/queue/me/stream";
 
-const CATEGORY_LABEL: Record<string, string> = {
-  queue: "Queue calls",
-  announcements: "Announcements",
-  application: "Application updates",
-};
+function categoryLabelMap(t: Translate): Record<string, string> {
+  return {
+    queue: t("categoryQueueCalls"),
+    announcements: t("announcements"),
+    application: t("categoryApplicationUpdates"),
+  };
+}
 
-const CHANNEL_LABEL: Record<NotificationChannel, string> = {
-  in_app: "In-app",
-  email: "Email",
-  push: "Push",
-  discord: "Discord",
-};
+function channelLabelMap(t: Translate): Record<NotificationChannel, string> {
+  return {
+    in_app: t("channelInApp"),
+    email: t("email"),
+    push: t("channelPush"),
+    discord: t("channelDiscord"),
+  };
+}
 
 /** Channels a fresh schedule-reminder opt-in writes explicitly (discord stays post-MVP, same as service.ts DEFAULT_CHANNELS). */
 const REMINDER_DEFAULT_CHANNELS: NotificationChannel[] = ["in_app", "email", "push"];
@@ -74,27 +79,30 @@ function payloadField(payload: unknown, key: "subject" | "body"): string | null 
   return typeof value === "string" && value.trim() ? value : null;
 }
 
-function categoryLabel(category: string, scheduleItems: PublicScheduleItem[]): string {
-  if (CATEGORY_LABEL[category]) return CATEGORY_LABEL[category];
+function categoryLabel(
+  category: string,
+  scheduleItems: PublicScheduleItem[],
+  t: Translate,
+): string {
+  const labels = categoryLabelMap(t);
+  if (labels[category]) return labels[category];
   if (category.startsWith("schedule:")) {
     const id = Number(category.slice("schedule:".length));
     const item = scheduleItems.find((i) => i.id === id);
-    return item ? `Activity: ${item.title}` : `Activity #${id} (unavailable)`;
+    return item ? t("activityLabel", { title: item.title }) : t("activityUnavailable", { id });
   }
   return category;
 }
 
 export default function InboxPage() {
+  const { t } = useLocale();
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Inbox"
-        description="Messages sent to you, and how you want to be notified (H50, H51)."
-      />
+      <PageHeader title={t("inbox")} />
       <Tabs defaultValue="messages">
         <TabsList>
-          <TabsTrigger value="messages">Messages</TabsTrigger>
-          <TabsTrigger value="preferences">Preferences</TabsTrigger>
+          <TabsTrigger value="messages">{t("messages")}</TabsTrigger>
+          <TabsTrigger value="preferences">{t("preferences")}</TabsTrigger>
         </TabsList>
         <TabsContent value="messages" className="pt-4">
           <MessagesTab />
@@ -108,6 +116,7 @@ export default function InboxPage() {
 }
 
 function MessagesTab() {
+  const { t } = useLocale();
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [offset, setOffset] = useState(0);
 
@@ -128,7 +137,7 @@ function MessagesTab() {
       await notificationsApi.markInboxRead(item.id);
       refetch();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not mark this as read.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotMarkRead"));
     }
   }
 
@@ -148,7 +157,7 @@ function MessagesTab() {
           }}
         />
         <Label htmlFor="unread-only" className="font-normal">
-          Unread only
+          {t("unreadOnly")}
         </Label>
       </div>
 
@@ -159,14 +168,14 @@ function MessagesTab() {
       ) : error ? (
         <EmptyState
           icon={InboxIcon}
-          title="Could not load your inbox"
-          description="Something went wrong loading your messages."
+          title={t("couldNotLoadInboxTitle")}
+          description={t("couldNotLoadInboxDesc")}
         />
       ) : items.length === 0 ? (
         <EmptyState
           icon={InboxIcon}
-          title={unreadOnly ? "No unread messages" : "No messages yet"}
-          description="Announcements and other in-app messages will show up here."
+          title={unreadOnly ? t("noUnreadMessages") : t("noMessagesYet")}
+          description={t("messagesWillShowUp")}
         />
       ) : (
         <ul className="divide-border divide-y rounded-lg border">
@@ -199,10 +208,10 @@ function MessagesTab() {
                     variant="ghost"
                     size="sm"
                     onClick={() => markRead(item)}
-                    aria-label="Mark as read"
+                    aria-label={t("markRead")}
                   >
                     <CheckIcon className="size-4" />
-                    Mark read
+                    {t("markRead")}
                   </Button>
                 )}
               </li>
@@ -214,7 +223,7 @@ function MessagesTab() {
       {total > LIMIT && (
         <div className="flex items-center justify-between gap-2">
           <span className="text-muted-foreground text-xs">
-            {offset + 1}–{rangeEnd} of {total}
+            {t("rangeOfTotal", { start: offset + 1, end: rangeEnd, total })}
           </span>
           <div className="flex gap-2">
             <Button
@@ -223,7 +232,7 @@ function MessagesTab() {
               disabled={offset === 0}
               onClick={() => setOffset((o) => Math.max(0, o - LIMIT))}
             >
-              Previous
+              {t("previous")}
             </Button>
             <Button
               variant="outline"
@@ -231,7 +240,7 @@ function MessagesTab() {
               disabled={rangeEnd >= total}
               onClick={() => setOffset((o) => o + LIMIT)}
             >
-              Next
+              {t("next")}
             </Button>
           </div>
         </div>
@@ -241,6 +250,8 @@ function MessagesTab() {
 }
 
 function PreferencesTab() {
+  const { t } = useLocale();
+  const channelLabels = channelLabelMap(t);
   const [prefs, setPrefs] = useState<PreferencesResponse | null>(null);
   const [scheduleItems, setScheduleItems] = useState<PublicScheduleItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -256,11 +267,11 @@ function PreferencesTab() {
       setPrefs(prefsRes);
       setScheduleItems(scheduleRes.items);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not load your preferences.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadPreferencesToast"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void load();
@@ -272,7 +283,7 @@ function PreferencesTab() {
       const next = await notificationsApi.setPreferences([{ category, channel, enabled }]);
       setPrefs(next);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not save this preference.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSavePreference"));
     } finally {
       setBusy(false);
     }
@@ -289,9 +300,9 @@ function PreferencesTab() {
       const next = await notificationsApi.setPreferences(items);
       setPrefs(next);
       setAddingActivity("");
-      toast.success("Reminder added.");
+      toast.success(t("reminderAdded"));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not add this reminder.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotAddReminder"));
     } finally {
       setBusy(false);
     }
@@ -308,7 +319,7 @@ function PreferencesTab() {
       const next = await notificationsApi.setPreferences(items);
       setPrefs(next);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not remove this reminder.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveReminder"));
     } finally {
       setBusy(false);
     }
@@ -326,8 +337,8 @@ function PreferencesTab() {
     return (
       <EmptyState
         icon={SlidersHorizontalIcon}
-        title="Could not load your preferences"
-        description="Notification preferences are unavailable right now."
+        title={t("couldNotLoadPreferencesTitle")}
+        description={t("couldNotLoadPreferencesDesc")}
       />
     );
   }
@@ -351,16 +362,16 @@ function PreferencesTab() {
   const rows: { category: string; label: string; mandatory?: boolean }[] = [
     ...prefs.mandatoryCategories.map((category) => ({
       category,
-      label: categoryLabel(category, scheduleItems),
+      label: categoryLabel(category, scheduleItems, t),
       mandatory: true,
     })),
     ...STATIC_CATEGORIES.map((category) => ({
       category,
-      label: categoryLabel(category, scheduleItems),
+      label: categoryLabel(category, scheduleItems, t),
     })),
     ...dynamicCategories.map((category) => ({
       category,
-      label: categoryLabel(category, scheduleItems),
+      label: categoryLabel(category, scheduleItems, t),
     })),
   ];
 
@@ -368,17 +379,16 @@ function PreferencesTab() {
     <div className="space-y-6">
       <SectionCard
         icon={SlidersHorizontalIcon}
-        title="Notification channels"
-        description="Decide what reaches you on each channel. Operational queue calls can't be turned off (H51)."
+        title={t("notificationChannels")}
         bodyClassName="overflow-x-auto p-0"
       >
         <table className="w-full text-sm">
           <thead>
             <tr className="border-border border-b">
-              <th className="px-4 py-3 text-left font-medium">Category</th>
+              <th className="px-4 py-3 text-left font-medium">{t("category")}</th>
               {prefs.channels.map((channel) => (
                 <th key={channel} className="px-4 py-3 text-center font-medium">
-                  {CHANNEL_LABEL[channel]}
+                  {channelLabels[channel]}
                 </th>
               ))}
               <th className="w-10" />
@@ -390,7 +400,7 @@ function PreferencesTab() {
                 <td className="px-4 py-3">
                   {row.label}
                   {row.mandatory && (
-                    <span className="text-muted-foreground ml-2 text-xs">(always on)</span>
+                    <span className="text-muted-foreground ml-2 text-xs">({t("alwaysOn")})</span>
                   )}
                 </td>
                 {prefs.channels.map((channel) => {
@@ -405,7 +415,10 @@ function PreferencesTab() {
                         onCheckedChange={(checked) =>
                           toggle(row.category, channel, checked === true)
                         }
-                        aria-label={`${CHANNEL_LABEL[channel]} for ${row.label}`}
+                        aria-label={t("channelForRow", {
+                          channel: channelLabels[channel],
+                          label: row.label,
+                        })}
                       />
                     </td>
                   );
@@ -418,7 +431,7 @@ function PreferencesTab() {
                       disabled={busy}
                       onClick={() => removeReminder(row.category, prefs.channels)}
                     >
-                      Turn off
+                      {t("turnOff")}
                     </Button>
                   )}
                 </td>
@@ -428,20 +441,14 @@ function PreferencesTab() {
         </table>
       </SectionCard>
 
-      <SectionCard
-        icon={CalendarClockIcon}
-        title="Activity reminders"
-        description="Opt into a reminder for a specific schedule item."
-      >
+      <SectionCard icon={CalendarClockIcon} title={t("activityReminders")}>
         {addableActivities.length === 0 ? (
-          <p className="text-muted-foreground text-sm">
-            No upcoming activities available to opt into right now.
-          </p>
+          <p className="text-muted-foreground text-sm">{t("noUpcomingActivities")}</p>
         ) : (
           <div className="flex flex-wrap items-end gap-2">
             <Select value={addingActivity} onValueChange={setAddingActivity}>
               <SelectTrigger className="w-64">
-                <SelectValue placeholder="Choose an activity…" />
+                <SelectValue placeholder={t("chooseActivity")} />
               </SelectTrigger>
               <SelectContent>
                 {addableActivities.map((item) => (
@@ -456,7 +463,7 @@ function PreferencesTab() {
               onClick={() => addingActivity && addReminder(addingActivity)}
             >
               <PlusIcon className="size-4" />
-              Add reminder
+              {t("addReminder")}
             </Button>
           </div>
         )}

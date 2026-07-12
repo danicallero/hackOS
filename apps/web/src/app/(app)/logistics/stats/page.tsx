@@ -10,6 +10,7 @@ import { SectionCard } from "@/components/common/section-card";
 import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { useLiveQuery } from "@/hooks/use-event-source";
+import { useLocale } from "@/lib/i18n";
 import { type LogisticsStats, logisticsApi } from "@/lib/logistics";
 import { useCan } from "@/lib/session";
 
@@ -23,6 +24,7 @@ const LOGISTICS_EVENTS = [
 ];
 
 export default function LogisticsStatsPage() {
+  const { t } = useLocale();
   const canStats = useCan(CAPABILITIES.LOGISTICS_STATS);
   const stats = useLiveQuery<LogisticsStats>(
     logisticsApi.stats,
@@ -34,11 +36,11 @@ export default function LogisticsStatsPage() {
   if (!canStats) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Logistics stats" />
+        <PageHeader title={t("logisticsStats")} />
         <EmptyState
           icon={LockIcon}
-          title="You can't view logistics stats"
-          description="The logistics stats capability is required."
+          title={t("logisticsStatsDeniedTitle")}
+          description={t("logisticsStatsDeniedDesc")}
         />
       </div>
     );
@@ -49,27 +51,27 @@ export default function LogisticsStatsPage() {
   const mealColumns: Column<LogisticsStats["meals"][number]>[] = [
     {
       id: "name",
-      header: "Meal",
+      header: t("columnMeal"),
       sortValue: (m) => m.name,
       cell: (m) => <span className="font-medium">{m.name}</span>,
     },
     {
       id: "served",
-      header: "Served",
+      header: t("columnServed"),
       align: "right",
       sortValue: (m) => m.served,
       cell: (m) => m.served,
     },
     {
       id: "people",
-      header: "People",
+      header: t("columnPeople"),
       align: "right",
       sortValue: (m) => m.distinctPeople,
       cell: (m) => m.distinctPeople,
     },
     {
       id: "repeat",
-      header: "Repeats",
+      header: t("columnRepeats"),
       align: "right",
       sortValue: (m) => m.repeats,
       cell: (m) => m.repeats,
@@ -78,26 +80,26 @@ export default function LogisticsStatsPage() {
   const activityColumns: Column<LogisticsStats["activities"][number]>[] = [
     {
       id: "name",
-      header: "Activity",
+      header: t("columnActivity"),
       sortValue: (a) => a.name,
       cell: (a) => <span className="font-medium">{a.name}</span>,
     },
     {
       id: "category",
-      header: "Category",
+      header: t("columnCategory"),
       sortValue: (a) => a.category,
       cell: (a) => <StatusBadge tone="neutral">{a.category}</StatusBadge>,
     },
     {
       id: "scans",
-      header: "Scans",
+      header: t("columnScans"),
       align: "right",
       sortValue: (a) => a.scans,
       cell: (a) => a.scans,
     },
     {
       id: "attendees",
-      header: "People",
+      header: t("columnPeople"),
       align: "right",
       sortValue: (a) => a.attendees,
       cell: (a) => a.attendees,
@@ -106,55 +108,52 @@ export default function LogisticsStatsPage() {
 
   return (
     <div className="space-y-6" data-wide>
-      <PageHeader
-        title="Logistics stats"
-        description="Live operational panels for accreditation, presence, meals and activities (H27)."
-      />
+      <PageHeader title={t("logisticsStats")} description={t("logisticsStatsDescription")} />
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          label="Accredited"
+          label={t("accredited")}
           value={s?.accreditedCount ?? "—"}
           icon={BadgeCheckIcon}
-          hint="Current badge assignments"
+          hint={t("accreditedHint")}
         />
         <StatCard
-          label="Present now"
+          label={t("presentNow")}
           value={s?.currentlyPresent ?? "—"}
           icon={UsersIcon}
-          hint="Estimated from scans"
+          hint={t("presentNowHint")}
         />
         <StatCard
-          label="Meals served"
+          label={t("mealsServed")}
           value={s ? s.meals.reduce((sum, meal) => sum + meal.served, 0) : "—"}
           icon={SoupIcon}
-          hint="Includes repeat servings"
+          hint={t("mealsServedHint")}
         />
         <StatCard
-          label="Activity scans"
+          label={t("activityScans")}
           value={s ? s.activities.reduce((sum, activity) => sum + activity.scans, 0) : "—"}
           icon={ActivityIcon}
-          hint={stats.connected ? "Live" : "Reconnects automatically"}
+          hint={stats.connected ? t("live") : t("reconnectsAutomatically")}
         />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <SectionCard title="Meals" icon={SoupIcon}>
+        <SectionCard title={t("meals")} icon={SoupIcon}>
           <DataTable
             columns={mealColumns}
             data={s?.meals ?? []}
             getRowId={(row) => String(row.activityId)}
             loading={stats.loading}
-            empty={{ icon: SoupIcon, title: "No meal scans yet" }}
+            empty={{ icon: SoupIcon, title: t("noMealScansYet") }}
           />
         </SectionCard>
-        <SectionCard title="Registrable activities" icon={ActivityIcon}>
+        <SectionCard title={t("registrableActivities")} icon={ActivityIcon}>
           <DataTable
             columns={activityColumns}
             data={s?.activities ?? []}
             getRowId={(row) => String(row.activityId)}
             loading={stats.loading}
-            empty={{ icon: ActivityIcon, title: "No activity scans yet" }}
+            empty={{ icon: ActivityIcon, title: t("noActivityScansYet") }}
           />
         </SectionCard>
       </div>

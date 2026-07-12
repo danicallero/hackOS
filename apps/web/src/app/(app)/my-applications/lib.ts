@@ -6,7 +6,7 @@
 // but only ever hits the applicant endpoints (me.routes.ts / confirm.routes.ts /
 // the public read of open forms). Types are declared locally per module rules.
 
-import type { I18nText } from "@/lib/i18n";
+import type { I18nText, Translate } from "@/lib/i18n";
 import type { Tone } from "@/lib/tones";
 
 export const FIELD_KINDS = [
@@ -157,23 +157,22 @@ const STATUS_TONE: Record<string, Tone> = {
   expired: "warning",
 };
 
-const STATUS_LABEL: Record<string, string> = {
-  draft: "Draft",
-  submitted: "Submitted",
-  review: "In review",
-  accepted: "Accepted",
-  confirmed: "Confirmed",
-  rejected: "Not selected",
-  declined: "Declined",
-  expired: "Expired",
-};
-
 export function statusTone(status: string): Tone {
   return STATUS_TONE[status] ?? "neutral";
 }
 
-export function statusLabel(status: string): string {
-  return STATUS_LABEL[status] ?? status;
+export function statusLabel(status: string, t: Translate): string {
+  const map: Record<string, string> = {
+    draft: t("statusDraft"),
+    submitted: t("statusSubmitted"),
+    review: t("statusInReview"),
+    accepted: t("statusAccepted"),
+    confirmed: t("confirmed"),
+    rejected: t("statusNotSelected"),
+    declined: t("declined"),
+    expired: t("statusExpired"),
+  };
+  return map[status] ?? status;
 }
 
 // ── datetime ──────────────────────────────────────────────────────────────────

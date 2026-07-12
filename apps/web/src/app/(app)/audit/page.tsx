@@ -22,6 +22,7 @@ import { Label } from "@/components/ui/label";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError } from "@/lib/api";
 import { fromDatetimeLocal } from "@/lib/datetime";
+import { useLocale } from "@/lib/i18n";
 import { type AuditRow, notificationsApi } from "@/lib/notifications";
 import { useCan } from "@/lib/session";
 
@@ -54,6 +55,7 @@ const EMPTY_FILTERS: FilterState = {
 };
 
 export default function AuditPage() {
+  const { t } = useLocale();
   const canRead = useCan(CAPABILITIES.AUDIT_READ);
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [debounced, setDebounced] = useState(EMPTY_FILTERS);
@@ -105,7 +107,7 @@ export default function AuditPage() {
         if (cancelled) return;
         setItems([]);
         setTotal(0);
-        toast.error(err instanceof ApiError ? err.message : "Could not load the audit log.");
+        toast.error(err instanceof ApiError ? err.message : t("couldNotLoadAuditLog"));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -113,16 +115,16 @@ export default function AuditPage() {
     return () => {
       cancelled = true;
     };
-  }, [canRead, debounced, offset, liveRefresh]);
+  }, [canRead, debounced, offset, liveRefresh, t]);
 
   if (!canRead) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Audit log" />
+        <PageHeader title={t("auditLog")} />
         <EmptyState
           icon={LockIcon}
-          title="You can't view the audit log"
-          description="The audit log requires the audit:read capability."
+          title={t("noAccessAuditLog")}
+          description={t("auditLogAccessDeniedDesc")}
         />
       </div>
     );
@@ -133,17 +135,17 @@ export default function AuditPage() {
   const columns: Column<AuditRow>[] = [
     {
       id: "when",
-      header: "When",
+      header: t("colWhen"),
       cell: (r) => <span className="text-sm">{timeFmt.format(new Date(r.created_at))}</span>,
     },
     {
       id: "action",
-      header: "Action",
+      header: t("colAction"),
       cell: (r) => <span className="font-mono text-xs">{r.action}</span>,
     },
     {
       id: "entity",
-      header: "Entity",
+      header: t("colEntity"),
       cell: (r) =>
         r.entity_type === "user" ? (
           <Link
@@ -151,7 +153,7 @@ export default function AuditPage() {
             className="text-sm hover:underline"
             onClick={(e) => e.stopPropagation()}
           >
-            user #{r.entity_id}
+            {t("userInline", { id: r.entity_id })}
           </Link>
         ) : (
           <span className="text-sm">
@@ -161,7 +163,7 @@ export default function AuditPage() {
     },
     {
       id: "actor",
-      header: "Actor",
+      header: t("colActor"),
       cell: (r) =>
         r.actor_id ? (
           <Link
@@ -172,12 +174,12 @@ export default function AuditPage() {
             #{r.actor_id}
           </Link>
         ) : (
-          <span className="text-muted-foreground text-sm">system</span>
+          <span className="text-muted-foreground text-sm">{t("system")}</span>
         ),
     },
     {
       id: "source",
-      header: "Source",
+      header: t("colSource"),
       cell: (r) =>
         r.source ? (
           <Badge variant="outline" className="capitalize">
@@ -194,36 +196,33 @@ export default function AuditPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Audit log"
-        description="Sensitive actions across hackOS: who, what, when and from where (H53)."
-      />
+      <PageHeader title={t("auditLog")} description={t("auditLogPageDesc")} />
 
       <div className="flex flex-wrap items-end gap-3">
-        <FilterField label="Action">
+        <FilterField label={t("colAction")}>
           <Input
             value={filters.action}
             onChange={(e) => setFilters((f) => ({ ...f, action: e.target.value }))}
-            placeholder="e.g. create, update"
+            placeholder={`${t("egPrefix")} create, update`}
             className="h-9 w-40"
           />
         </FilterField>
-        <FilterField label="Entity type">
+        <FilterField label={t("entityTypeLabel")}>
           <Input
             value={filters.entityType}
             onChange={(e) => setFilters((f) => ({ ...f, entityType: e.target.value }))}
-            placeholder="e.g. user, announcement"
+            placeholder={`${t("egPrefix")} user, announcement`}
             className="h-9 w-44"
           />
         </FilterField>
-        <FilterField label="Entity ID">
+        <FilterField label={t("entityIdLabel")}>
           <Input
             value={filters.entityId}
             onChange={(e) => setFilters((f) => ({ ...f, entityId: e.target.value }))}
             className="h-9 w-28"
           />
         </FilterField>
-        <FilterField label="Actor user ID">
+        <FilterField label={t("actorUserIdLabel")}>
           <Input
             type="number"
             value={filters.actorId}
@@ -231,7 +230,7 @@ export default function AuditPage() {
             className="h-9 w-28"
           />
         </FilterField>
-        <FilterField label="From">
+        <FilterField label={t("fromLabel")}>
           <Input
             type="datetime-local"
             value={filters.dateFrom}
@@ -239,7 +238,7 @@ export default function AuditPage() {
             className="h-9"
           />
         </FilterField>
-        <FilterField label="To">
+        <FilterField label={t("toLabel")}>
           <Input
             type="datetime-local"
             value={filters.dateTo}
@@ -249,7 +248,7 @@ export default function AuditPage() {
         </FilterField>
         {hasFilters && (
           <Button variant="ghost" size="sm" onClick={() => setFilters(EMPTY_FILTERS)}>
-            Clear filters
+            {t("clearFilters")}
           </Button>
         )}
       </div>
@@ -262,17 +261,15 @@ export default function AuditPage() {
         onRowClick={setSelected}
         empty={{
           icon: ScrollTextIcon,
-          title: "No audit entries",
-          description: hasFilters
-            ? "No entries match these filters."
-            : "Sensitive actions will appear here as they happen.",
+          title: t("noAuditEntriesTitle"),
+          description: hasFilters ? t("noEntriesMatchFilters") : t("sensitiveActionsAppearDesc"),
         }}
       />
 
       {total > 0 && (
         <div className="flex items-center justify-between gap-2">
           <span className="text-muted-foreground text-xs">
-            {rangeStart}–{rangeEnd} of {total}
+            {t("rangeOfTotal", { start: rangeStart, end: rangeEnd, total })}
           </span>
           <div className="flex gap-2">
             <Button
@@ -281,7 +278,7 @@ export default function AuditPage() {
               disabled={offset === 0}
               onClick={() => setOffset((o) => Math.max(0, o - LIMIT))}
             >
-              Previous
+              {t("previous")}
             </Button>
             <Button
               variant="outline"
@@ -289,7 +286,7 @@ export default function AuditPage() {
               disabled={rangeEnd >= total}
               onClick={() => setOffset((o) => o + LIMIT)}
             >
-              Next
+              {t("next")}
             </Button>
           </div>
         </div>
@@ -307,20 +304,20 @@ export default function AuditPage() {
         >
           <div className="space-y-4 text-sm">
             <dl className="grid grid-cols-2 gap-3">
-              <DetailField label="When">
+              <DetailField label={t("colWhen")}>
                 {timeFmt.format(new Date(selected.created_at))}
               </DetailField>
-              <DetailField label="Source">{selected.source ?? "—"}</DetailField>
-              <DetailField label="Actor">
-                {selected.actor_id ? `user #${selected.actor_id}` : "system"}
+              <DetailField label={t("colSource")}>{selected.source ?? "—"}</DetailField>
+              <DetailField label={t("colActor")}>
+                {selected.actor_id ? t("userInline", { id: selected.actor_id }) : t("system")}
               </DetailField>
-              <DetailField label="Reason">{selected.reason ?? "—"}</DetailField>
-              <DetailField label="IP">{selected.ip ?? "—"}</DetailField>
-              <DetailField label="User agent">{selected.user_agent ?? "—"}</DetailField>
+              <DetailField label={t("reasonLabel")}>{selected.reason ?? "—"}</DetailField>
+              <DetailField label={t("ipLabel")}>{selected.ip ?? "—"}</DetailField>
+              <DetailField label={t("userAgentLabel")}>{selected.user_agent ?? "—"}</DetailField>
             </dl>
             <div className="grid gap-3 sm:grid-cols-2">
-              <JsonBlock label="Before" value={selected.before} />
-              <JsonBlock label="After" value={selected.after} />
+              <JsonBlock label={t("beforeLabel")} value={selected.before} />
+              <JsonBlock label={t("afterLabel")} value={selected.after} />
             </div>
           </div>
         </Modal>

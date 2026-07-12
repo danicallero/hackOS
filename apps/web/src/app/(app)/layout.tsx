@@ -1,3 +1,4 @@
+import { LanguageSelect } from "@/components/common/language-select";
 import { ThemeToggle } from "@/components/common/theme-toggle";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { AuthGuard } from "@/components/layout/auth-guard";
@@ -24,6 +25,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <Separator orientation="vertical" className="mr-1 !h-4" />
             <HeaderTitle />
             <div className="ml-auto flex items-center gap-1">
+              <LanguageSelect />
               <ThemeToggle />
               <UserMenu />
             </div>

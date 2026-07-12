@@ -8,11 +8,13 @@ import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { API_URL } from "@/lib/env";
+import { useLocale } from "@/lib/i18n";
 import { logisticsApi, type TicketQrPayload } from "@/lib/logistics";
 import { useMe } from "@/lib/session";
 
 export default function WalletPage() {
   const me = useMe();
+  const { t } = useLocale();
   const [payload, setPayload] = useState<TicketQrPayload | null>(null);
 
   useEffect(() => {
@@ -24,37 +26,31 @@ export default function WalletPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Wallet"
-        description="Carry your entrance ticket and active badge in Apple Wallet."
-      />
+      <PageHeader title={t("wallet")} />
 
       <div className="grid gap-4 md:grid-cols-2">
         <WalletPassCard
           icon={TicketIcon}
-          title="Entrance ticket"
-          description="Your ticket QR is permanent once your place is confirmed."
+          title={t("entranceTicket")}
           purpose="ticket"
-          status="Available after confirmation"
+          status={t("availableAfterConfirmation")}
         />
         <WalletPassCard
           icon={IdCardIcon}
-          title="Badge"
-          description="Your badge pass follows your current physical badge and old passes are voided after rotation."
+          title={t("badge")}
           purpose="badge"
-          status={me?.badgeId ? `Badge ${me.badgeId}` : "Badge not assigned"}
+          status={me?.badgeId ? `${t("badge")} ${me.badgeId}` : t("badgeNotAssigned")}
           disabled={!me?.badgeId}
         />
       </div>
 
       <SectionCard
-        title="QR codes"
-        description="Use these directly when you do not want to add a mobile pass."
+        title={t("qrCodes")}
         icon={WalletCardsIcon}
         bodyClassName="grid gap-4 md:grid-cols-2"
       >
-        <QrCode value={payload?.ticketToken} label="Entrance ticket" />
-        <QrCode value={payload?.badgeId} label="Current badge" />
+        <QrCode value={payload?.ticketToken} label={t("entranceTicket")} />
+        <QrCode value={payload?.badgeId} label={t("currentBadge")} />
       </SectionCard>
     </div>
   );
@@ -70,12 +66,13 @@ function WalletPassCard({
 }: {
   icon: typeof TicketIcon;
   title: string;
-  description: string;
+  description?: string;
   purpose: "ticket" | "badge";
   status: string;
   disabled?: boolean;
 }) {
   const Icon = icon;
+  const { t } = useLocale();
   return (
     <SectionCard
       title={title}
@@ -93,7 +90,7 @@ function WalletPassCard({
         onClick={() => window.open(`${API_URL}/api/me/wallet/apple/${purpose}.pkpass`, "_blank")}
       >
         <DownloadIcon className="size-4" />
-        Add to Apple Wallet
+        {t("addToAppleWallet")}
       </Button>
     </SectionCard>
   );

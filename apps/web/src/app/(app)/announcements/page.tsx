@@ -30,6 +30,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError } from "@/lib/api";
 import { formatScheduledDateTime, fromDatetimeLocal } from "@/lib/datetime";
+import { type Translate, useLocale } from "@/lib/i18n";
 import { type Announcement, type AnnouncementInput, notificationsApi } from "@/lib/notifications";
 import { useCan } from "@/lib/session";
 import type { Tone } from "@/lib/tones";
@@ -69,17 +70,21 @@ const STATUS_TONE: Record<AnnouncementStatus, Tone> = {
   expired: "neutral",
 };
 
-const STATUS_LABEL: Record<AnnouncementStatus, string> = {
-  scheduled: "Scheduled",
-  live: "Live",
-  expired: "Expired",
-};
+function statusLabel(status: AnnouncementStatus, t: Translate): string {
+  const map: Record<AnnouncementStatus, string> = {
+    scheduled: t("statusScheduled"),
+    live: t("statusLive"),
+    expired: t("statusExpired"),
+  };
+  return map[status];
+}
 
-function audienceLabel(targetRole: string | null): string {
-  return targetRole === "participant" ? "Participants" : "Everyone";
+function audienceLabel(targetRole: string | null, t: Translate): string {
+  return targetRole === "participant" ? t("participantsAudience") : t("everyoneAudience");
 }
 
 export default function AnnouncementsPage() {
+  const { t } = useLocale();
   const canManage = useCan(CAPABILITIES.ANNOUNCEMENTS_MANAGE);
   const [items, setItems] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
@@ -94,11 +99,11 @@ export default function AnnouncementsPage() {
       const result = await notificationsApi.listAnnouncements();
       setItems(result.items);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not load announcements.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadAnnouncements"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   // Soft, in-place refresh instead of a hard reload when another admin
   // publishes/edits/deletes an announcement elsewhere (H50).
@@ -114,11 +119,11 @@ export default function AnnouncementsPage() {
     setBusy(true);
     try {
       await notificationsApi.deleteAnnouncement(item.id);
-      toast.success("Announcement deleted.");
+      toast.success(t("announcementDeleted"));
       setDeleting(null);
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not delete announcement.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotDeleteAnnouncement"));
     } finally {
       setBusy(false);
     }
@@ -127,11 +132,11 @@ export default function AnnouncementsPage() {
   if (!canManage) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Announcements" />
+        <PageHeader title={t("announcements")} />
         <EmptyState
           icon={LockIcon}
-          title="You can't manage announcements"
-          description="Announcements require the announcements:manage capability."
+          title={t("noAccessAnnouncements")}
+          description={t("announcementsDeniedDesc")}
         />
       </div>
     );
@@ -140,7 +145,7 @@ export default function AnnouncementsPage() {
   const columns: Column<Announcement>[] = [
     {
       id: "title",
-      header: "Announcement",
+      header: t("colAnnouncement"),
       sortValue: (a) => a.title.toLowerCase(),
       cell: (a) => (
         <div>
@@ -151,34 +156,34 @@ export default function AnnouncementsPage() {
     },
     {
       id: "audience",
-      header: "Audience",
-      sortValue: (a) => audienceLabel(a.target_role),
-      cell: (a) => <StatusBadge tone="neutral">{audienceLabel(a.target_role)}</StatusBadge>,
+      header: t("colAudience"),
+      sortValue: (a) => audienceLabel(a.target_role, t),
+      cell: (a) => <StatusBadge tone="neutral">{audienceLabel(a.target_role, t)}</StatusBadge>,
     },
     {
       id: "status",
-      header: "Status",
+      header: t("columnStatus"),
       sortValue: (a) => announcementStatus(a),
       cell: (a) => {
         const status = announcementStatus(a);
-        return <StatusBadge tone={STATUS_TONE[status]}>{STATUS_LABEL[status]}</StatusBadge>;
+        return <StatusBadge tone={STATUS_TONE[status]}>{statusLabel(status, t)}</StatusBadge>;
       },
     },
     {
       id: "window",
-      header: "Window",
+      header: t("colWindow"),
       sortValue: (a) => a.publish_at ?? "",
       cell: (a) => (
         <span className="text-muted-foreground text-xs">
-          {a.publish_at ? formatScheduledDateTime(a.publish_at) : "Immediate"}
+          {a.publish_at ? formatScheduledDateTime(a.publish_at) : t("immediate")}
           {" → "}
-          {a.expires_at ? formatScheduledDateTime(a.expires_at) : "No end"}
+          {a.expires_at ? formatScheduledDateTime(a.expires_at) : t("noEnd")}
         </span>
       ),
     },
     {
       id: "created",
-      header: "Created",
+      header: t("colCreated"),
       sortValue: (a) => a.created_at,
       cell: (a) => (
         <span className="text-muted-foreground text-xs">
@@ -191,12 +196,12 @@ export default function AnnouncementsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Announcements"
-        description="Publish timed messages to screens, mobiles and the in-app inbox (H50)."
+        title={t("announcements")}
+        description={t("announcementsDesc")}
         actions={
           <Button onClick={() => setCreateOpen(true)}>
             <PlusIcon className="size-4" />
-            New announcement
+            {t("newAnnouncement")}
           </Button>
         }
       />
@@ -207,14 +212,14 @@ export default function AnnouncementsPage() {
         getRowId={(a) => String(a.id)}
         loading={loading}
         searchable={(a) => `${a.title} ${a.body}`}
-        searchPlaceholder="Search announcements..."
+        searchPlaceholder={t("searchAnnouncementsPlaceholder")}
         pageSize={15}
         rowActions={(a) => (
           <div className="flex justify-end gap-1">
             <Button
               variant="ghost"
               size="icon"
-              aria-label="Edit announcement"
+              aria-label={t("editAnnouncementAria")}
               onClick={() => setEditing(a)}
             >
               <PencilIcon className="size-4" />
@@ -222,7 +227,7 @@ export default function AnnouncementsPage() {
             <Button
               variant="ghost"
               size="icon"
-              aria-label="Delete announcement"
+              aria-label={t("deleteAnnouncementAria")}
               className="text-destructive"
               onClick={() => setDeleting(a)}
             >
@@ -232,19 +237,19 @@ export default function AnnouncementsPage() {
         )}
         empty={{
           icon: MegaphoneIcon,
-          title: "No announcements yet",
-          description: "Publish the first one — it fans out to screens, push and the inbox.",
+          title: t("noAnnouncementsYet"),
+          description: t("publishFirstOne"),
         }}
       />
 
       <AnnouncementFormModal
         open={createOpen}
         onOpenChange={setCreateOpen}
-        title="New announcement"
+        title={t("newAnnouncement")}
         initial={EMPTY_FORM}
         onSubmit={async (values) => {
           await notificationsApi.createAnnouncement(values);
-          toast.success("Announcement created.");
+          toast.success(t("announcementCreated"));
           setCreateOpen(false);
           await load();
         }}
@@ -256,11 +261,11 @@ export default function AnnouncementsPage() {
           onOpenChange={(open) => {
             if (!open) setEditing(null);
           }}
-          title="Edit announcement"
+          title={t("editAnnouncementAria")}
           initial={toForm(editing)}
           onSubmit={async (values) => {
             await notificationsApi.updateAnnouncement(editing.id, values);
-            toast.success("Announcement updated.");
+            toast.success(t("announcementUpdated"));
             setEditing(null);
             await load();
           }}
@@ -273,20 +278,20 @@ export default function AnnouncementsPage() {
           onOpenChange={(open) => {
             if (!open) setDeleting(null);
           }}
-          title="Delete this announcement?"
-          description={`"${deleting.title}" will stop appearing everywhere it was fanned out to.`}
+          title={t("deleteThisAnnouncement")}
+          description={t("willStopAppearing", { title: deleting.title })}
           footer={
             <>
               <Button variant="outline" onClick={() => setDeleting(null)}>
-                Cancel
+                {t("cancel")}
               </Button>
               <SubmitButton variant="destructive" pending={busy} onClick={() => remove(deleting)}>
-                Delete
+                {t("deleteAction")}
               </SubmitButton>
             </>
           }
         >
-          <p className="text-muted-foreground text-sm">This can&apos;t be undone.</p>
+          <p className="text-muted-foreground text-sm">{t("cantBeUndone")}</p>
         </Modal>
       )}
     </div>
@@ -306,6 +311,7 @@ function AnnouncementFormModal({
   initial: AnnouncementInput;
   onSubmit: (values: AnnouncementInput) => Promise<void>;
 }) {
+  const { t } = useLocale();
   const [values, setValues] = useState(initial);
   const [pending, setPending] = useState(false);
 
@@ -325,14 +331,14 @@ function AnnouncementFormModal({
     const publishAt = values.publishAt ? fromDatetimeLocal(values.publishAt) : null;
     const expiresAt = values.expiresAt ? fromDatetimeLocal(values.expiresAt) : null;
     if ((values.publishAt && !publishAt) || (values.expiresAt && !expiresAt)) {
-      toast.error("Enter valid dates and times before saving the announcement.");
+      toast.error(t("enterValidDatesTimes"));
       return;
     }
     setPending(true);
     try {
       await onSubmit({ ...values, publishAt, expiresAt });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not save announcement.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveAnnouncement"));
     } finally {
       setPending(false);
     }
@@ -341,22 +347,22 @@ function AnnouncementFormModal({
   return (
     <Modal open={open} onOpenChange={onOpenChange} title={title} icon={MegaphoneIcon} size="lg">
       <div className="space-y-4">
-        <Field label="Title">
+        <Field label={t("titleLabel")}>
           <Input
             value={values.title}
             onChange={(e) => setValues((v) => ({ ...v, title: e.target.value }))}
-            placeholder="Dinner is ready"
+            placeholder={t("dinnerReadyPlaceholder")}
           />
         </Field>
-        <Field label="Message">
+        <Field label={t("messageLabel")}>
           <Textarea
             rows={4}
             value={values.body}
             onChange={(e) => setValues((v) => ({ ...v, body: e.target.value }))}
-            placeholder="Head to the main hall — dinner is served until 9pm."
+            placeholder={t("headToMainHallPlaceholder")}
           />
         </Field>
-        <Field label="Audience">
+        <Field label={t("colAudience")}>
           <Select
             value={values.targetRole ?? EVERYONE}
             onValueChange={(value) =>
@@ -367,44 +373,40 @@ function AnnouncementFormModal({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={EVERYONE}>Everyone</SelectItem>
-              <SelectItem value="participant">
-                Participants (confirmed spot or a project)
-              </SelectItem>
+              <SelectItem value={EVERYONE}>{t("everyoneAudience")}</SelectItem>
+              <SelectItem value="participant">{t("participantsConfirmedOption")}</SelectItem>
             </SelectContent>
           </Select>
         </Field>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Visible from">
+          <Field label={t("visibleFrom")}>
             <ScheduledDateTimeField
               value={values.publishAt ?? ""}
               onChange={(publishAt) => setValues((v) => ({ ...v, publishAt: publishAt || null }))}
-              emptyLabel="Immediately"
-              addLabel="Schedule start"
+              emptyLabel={t("immediatelyLabel")}
+              addLabel={t("scheduleStart")}
             />
           </Field>
-          <Field label="Visible until">
+          <Field label={t("visibleUntil")}>
             <ScheduledDateTimeField
               value={values.expiresAt ?? ""}
               onChange={(expiresAt) => setValues((v) => ({ ...v, expiresAt: expiresAt || null }))}
-              emptyLabel="No end date"
-              addLabel="Schedule end"
+              emptyLabel={t("noEndDate")}
+              addLabel={t("scheduleEnd")}
             />
           </Field>
         </div>
-        {invalidWindow && (
-          <p className="text-destructive text-sm">The end time must be after the start time.</p>
-        )}
+        {invalidWindow && <p className="text-destructive text-sm">{t("endTimeAfterStart")}</p>}
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("cancel")}
           </Button>
           <SubmitButton
             pending={pending}
             onClick={submit}
             disabled={!values.title.trim() || !values.body.trim() || invalidWindow}
           >
-            Save
+            {t("save")}
           </SubmitButton>
         </div>
       </div>

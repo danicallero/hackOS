@@ -21,6 +21,7 @@ import { EventPhaseDisplay, EventTimer, useEventPhase } from "@/components/publi
 import { type SseEnvelope, useEventSource } from "@/hooks/use-event-source";
 import { useFitToViewport } from "@/hooks/use-fit-to-viewport";
 import { api } from "@/lib/api";
+import { type Translate, useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem } from "@/lib/logistics";
 import {
   getAllRoomViews,
@@ -224,7 +225,7 @@ function MarqueeText({ text, className }: { text: string; className?: string }) 
 
 /** A room considered "ready" (not paused) vs. paused — mirrors the room's own
  * control-panel state (H35) rather than a TV-only concept. */
-function RoomStatusPill({ paused }: { paused: boolean }) {
+function RoomStatusPill({ paused, t }: { paused: boolean; t: Translate }) {
   return (
     <span
       className={cn(
@@ -233,7 +234,7 @@ function RoomStatusPill({ paused }: { paused: boolean }) {
       )}
     >
       <span className={cn("size-1.5 rounded-full", paused ? "bg-destructive" : "bg-success")} />
-      {paused ? "Paused" : "Ready"}
+      {paused ? t("paused") : t("readyStatus")}
     </span>
   );
 }
@@ -278,9 +279,13 @@ function RoomHeader({ room }: { room: RoomView }) {
 
 /** "Current team inside" — in_room and presenting are both physically in the
  * room (H41), only the label differs. */
-function PresentingBlock({ active }: { active: QueueEntry | null }) {
+function PresentingBlock({ active, t }: { active: QueueEntry | null; t: Translate }) {
   const label =
-    active?.status === "presenting" ? "Presenting now" : active ? "In the room" : "Room empty";
+    active?.status === "presenting"
+      ? t("presentingNow")
+      : active
+        ? t("inTheRoom")
+        : t("roomEmptyLabel");
   return (
     <div className="bg-muted/60 mt-4 rounded-xl p-4">
       <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">{label}</p>
@@ -298,13 +303,13 @@ function PresentingBlock({ active }: { active: QueueEntry | null }) {
  * card (mirroring the "presenting now" block) holds every entry, tinted
  * yellow to read as "waiting" at a glance, with each row sized down a touch
  * as more teams show up so the card doesn't grow unbounded. */
-function WaitingRoomList({ room }: { room: RoomView }) {
+function WaitingRoomList({ room, t }: { room: RoomView; t: Translate }) {
   const entries = room.called;
   const rowSize = waitingRoomRowSize(entries.length);
   return (
     <div className="bg-warning/20 mt-4 rounded-xl p-4">
       <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-        Waiting room
+        {t("waitingRoomButton")}
       </p>
       <ol className="mt-1.5 space-y-1">
         {entries.length ? (
@@ -316,12 +321,12 @@ function WaitingRoomList({ room }: { room: RoomView }) {
             >
               <span className="tabular-nums">{index + 1}.</span>
               <span className="min-w-0 flex-1">
-                <MarqueeText text={entry.repo_name ?? "Team"} />
+                <MarqueeText text={entry.repo_name ?? t("teamFallback")} />
               </span>
             </li>
           ))
         ) : (
-          <li className="text-muted-foreground text-lg font-normal">Empty</li>
+          <li className="text-muted-foreground text-lg font-normal">{t("emptyLabel")}</li>
         )}
       </ol>
     </div>
@@ -334,18 +339,22 @@ function WaitingRoomList({ room }: { room: RoomView }) {
 function NextInQueueFooter({
   entry,
   waitingCount,
+  t,
 }: {
   entry: QueueEntry | null;
   waitingCount: number;
+  t: Translate;
 }) {
   return (
     <div className="mt-auto border-t pt-3">
       <div className="flex items-baseline justify-between gap-2">
         <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-          Next in queue
+          {t("nextInQueue")}
         </p>
         {waitingCount > 0 && (
-          <span className="text-muted-foreground text-xs tabular-nums">{waitingCount} waiting</span>
+          <span className="text-muted-foreground text-xs tabular-nums">
+            {t("waitingCountSuffix", { count: waitingCount })}
+          </span>
         )}
       </div>
       <p className="mt-1 text-xl font-semibold">
@@ -359,8 +368,8 @@ function NextInQueueFooter({
  * ready/paused pill always sits in the card's top-right corner — next to the
  * challenge heading when there is one, next to the room header otherwise —
  * matching where it sits on a joint card's per-room mini-cards. */
-function StandaloneRoomCard({ room }: { room: RoomView }) {
-  const pill = <RoomStatusPill paused={Boolean(room.state?.is_paused)} />;
+function StandaloneRoomCard({ room, t }: { room: RoomView; t: Translate }) {
+  const pill = <RoomStatusPill paused={Boolean(room.state?.is_paused)} t={t} />;
   return (
     <article className="flex min-w-0 flex-col rounded-2xl border bg-card p-5 shadow-sm">
       <div className="flex items-start justify-between gap-3">
@@ -376,9 +385,9 @@ function StandaloneRoomCard({ room }: { room: RoomView }) {
           <RoomHeader room={room} />
         </div>
       )}
-      <PresentingBlock active={room.active} />
-      <WaitingRoomList room={room} />
-      <NextInQueueFooter entry={room.next[0] ?? null} waitingCount={room.next.length} />
+      <PresentingBlock active={room.active} t={t} />
+      <WaitingRoomList room={room} t={t} />
+      <NextInQueueFooter entry={room.next[0] ?? null} waitingCount={room.next.length} t={t} />
     </article>
   );
 }
@@ -386,7 +395,15 @@ function StandaloneRoomCard({ room }: { room: RoomView }) {
 /** Multiple rooms tied to the same joint challenge, clustered into one card:
  * the challenge name and the topmost queue entry each render exactly once,
  * per-room state (name, location, current team, waiting room) repeats. */
-function JointGroupCard({ group, maxSpan }: { group: RoomGroup; maxSpan: number }) {
+function JointGroupCard({
+  group,
+  maxSpan,
+  t,
+}: {
+  group: RoomGroup;
+  maxSpan: number;
+  t: Translate;
+}) {
   const shared = group.rooms[0]?.next ?? [];
   return (
     <section
@@ -399,7 +416,7 @@ function JointGroupCard({ group, maxSpan }: { group: RoomGroup; maxSpan: number 
           <ChallengeHeading challenge={group.challenge} />
         </div>
         <span className="text-muted-foreground shrink-0 text-sm">
-          {group.rooms.length} rooms · shared queue
+          {t("groupSharedQueue", { count: group.rooms.length })}
         </span>
       </div>
       <div
@@ -410,14 +427,14 @@ function JointGroupCard({ group, maxSpan }: { group: RoomGroup; maxSpan: number 
           <div key={room.room.id} className="min-w-0 rounded-xl border bg-card p-4">
             <div className="flex items-start justify-between gap-3">
               <RoomHeader room={room} />
-              <RoomStatusPill paused={Boolean(room.state?.is_paused)} />
+              <RoomStatusPill paused={Boolean(room.state?.is_paused)} t={t} />
             </div>
-            <PresentingBlock active={room.active} />
-            <WaitingRoomList room={room} />
+            <PresentingBlock active={room.active} t={t} />
+            <WaitingRoomList room={room} t={t} />
           </div>
         ))}
       </div>
-      <NextInQueueFooter entry={shared[0] ?? null} waitingCount={shared.length} />
+      <NextInQueueFooter entry={shared[0] ?? null} waitingCount={shared.length} t={t} />
     </section>
   );
 }
@@ -449,6 +466,7 @@ function groupRoomsByChallenge(rooms: RoomView[]): RoomGroup[] {
 const clockFormatter = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" });
 
 function RoomsView({ rooms }: { rooms: RoomView[] }) {
+  const { t } = useLocale();
   const groups = useMemo(() => groupRoomsByChallenge(rooms), [rooms]);
   const { containerRef, contentRef, scale, containerWidth, contentWidthPercent } =
     useFitToViewport();
@@ -478,7 +496,7 @@ function RoomsView({ rooms }: { rooms: RoomView[] }) {
             <span className="text-muted-foreground text-2xl font-light">·</span>
             <div className="flex items-center gap-2 text-2xl font-semibold">
               <UsersRoundIcon className="size-6" aria-hidden="true" />
-              Judging rooms
+              {t("judgingRoomsTitle")}
             </div>
           </div>
           <time
@@ -503,14 +521,15 @@ function RoomsView({ rooms }: { rooms: RoomView[] }) {
                     key={group.id}
                     group={group}
                     maxSpan={Math.min(MAX_GROUP_SPAN, columns)}
+                    t={t}
                   />
                 ) : (
-                  <StandaloneRoomCard key={group.id} room={group.rooms[0]} />
+                  <StandaloneRoomCard key={group.id} room={group.rooms[0]} t={t} />
                 ),
               )}
             </div>
           ) : (
-            <TvEmpty text="Judging rooms will appear here when they are configured." />
+            <TvEmpty text={t("judgingRoomsEmptyDesc")} />
           )}
         </div>
       </div>
@@ -555,6 +574,7 @@ function ScheduleView({
   schedule: PublicScheduleItem[];
   timezone: string;
 }) {
+  const { t } = useLocale();
   const format = (date: string) =>
     new Intl.DateTimeFormat(undefined, {
       weekday: "short",
@@ -563,7 +583,7 @@ function ScheduleView({
       timeZone: timezone,
     }).format(new Date(date));
   return (
-    <TvFrame title="Schedule" icon={CalendarDaysIcon}>
+    <TvFrame title={t("schedule")} icon={CalendarDaysIcon}>
       {schedule.length ? (
         <ol className="divide-y rounded-2xl border px-6">
           {schedule.map((item) => (
@@ -584,14 +604,15 @@ function ScheduleView({
           ))}
         </ol>
       ) : (
-        <TvEmpty text="The schedule will appear here when published." />
+        <TvEmpty text={t("scheduleEmptyDesc")} />
       )}
     </TvFrame>
   );
 }
 function SponsorsView({ sponsors }: { sponsors: PublicSponsor[] }) {
+  const { t } = useLocale();
   return (
-    <TvFrame title="Sponsors" icon={UsersRoundIcon}>
+    <TvFrame title={t("sponsors")} icon={UsersRoundIcon}>
       {sponsors.length ? (
         <ul className="grid grid-cols-2 gap-5 md:grid-cols-3 xl:grid-cols-4">
           {sponsors.map((sponsor) => (
@@ -613,23 +634,24 @@ function SponsorsView({ sponsors }: { sponsors: PublicSponsor[] }) {
           ))}
         </ul>
       ) : (
-        <TvEmpty text="Sponsors will appear here when published." />
+        <TvEmpty text={t("sponsorsEmptyDesc")} />
       )}
     </TvFrame>
   );
 }
 function WifiView({ payload }: { payload: unknown }) {
-  const ssid = textPayload(payload, "ssid") ?? "Wi-Fi details";
+  const { t } = useLocale();
+  const ssid = textPayload(payload, "ssid") ?? t("wifiDetailsFallback");
   const password = textPayload(payload, "password");
   const instructions = textPayload(payload, "instructions");
   return (
-    <TvFrame title="Wi-Fi" icon={WifiIcon}>
+    <TvFrame title={t("modeWifi")} icon={WifiIcon}>
       <div className="mx-auto max-w-4xl rounded-2xl border bg-card p-10 text-center shadow-sm">
-        <p className="text-muted-foreground text-xl">Network</p>
+        <p className="text-muted-foreground text-xl">{t("networkLabel")}</p>
         <p className="mt-2 break-words text-5xl font-semibold">{ssid}</p>
         {password && (
           <>
-            <p className="text-muted-foreground mt-10 text-xl">Password</p>
+            <p className="text-muted-foreground mt-10 text-xl">{t("password")}</p>
             <p className="mt-2 break-all font-mono text-4xl font-semibold tabular-nums">
               {password}
             </p>
@@ -643,19 +665,20 @@ function WifiView({ payload }: { payload: unknown }) {
   );
 }
 function TimerView({ event, payload }: { event: PublicEvent; payload: unknown }) {
+  const { t } = useLocale();
   // An operator's manual override (H42) always wins; otherwise fall back to
   // the same hacking/judging phase logic as the public landing page.
   const override = textPayload(payload, "endsAt") ?? textPayload(payload, "label");
   const phase = useEventPhase(event);
   const timerClassName = "mt-5 block font-mono text-7xl font-semibold tabular-nums sm:text-9xl";
   return (
-    <TvFrame title="Event timer" icon={Clock3Icon}>
+    <TvFrame title={t("eventTimerTitle")} icon={Clock3Icon}>
       <div className="grid min-h-[60dvh] place-items-center text-center">
         <div>
           {override ? (
             <>
               <p className="text-3xl text-muted-foreground">
-                {textPayload(payload, "label") ?? "Time remaining"}
+                {textPayload(payload, "label") ?? t("timeRemaining")}
               </p>
               <EventTimer
                 endsAt={textPayload(payload, "endsAt") ?? event.hackingEndsAt}
@@ -681,12 +704,13 @@ function AnnouncementView({
   announcements: PublicAnnouncement[];
   payload: unknown;
 }) {
+  const { t } = useLocale();
   const title = textPayload(payload, "title");
   const body = textPayload(payload, "body");
   const item =
-    title || body ? { title: title ?? "Announcement", body: body ?? "" } : announcements[0];
+    title || body ? { title: title ?? t("modeAnnouncement"), body: body ?? "" } : announcements[0];
   return (
-    <TvFrame title="Announcement" icon={AlertCircleIcon}>
+    <TvFrame title={t("modeAnnouncement")} icon={AlertCircleIcon}>
       {item ? (
         <div className="grid min-h-[60dvh] place-items-center text-center">
           <article className="max-w-5xl">
@@ -697,13 +721,14 @@ function AnnouncementView({
           </article>
         </div>
       ) : (
-        <TvEmpty text="There are no active announcements." />
+        <TvEmpty text={t("announcementEmptyDesc")} />
       )}
     </TvFrame>
   );
 }
 
 export function TvDisplay() {
+  const { t } = useLocale();
   const [data, setData] = useState<TvData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const requestId = useRef(0);
@@ -737,10 +762,10 @@ export function TvDisplay() {
       setError(null);
     } catch {
       if (currentRequest === requestId.current) {
-        setError("The display is reconnecting to the event service.");
+        setError(t("tvReconnecting"));
       }
     }
-  }, []);
+  }, [t]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -751,9 +776,9 @@ export function TvDisplay() {
       setData((current) => (current ? { ...current, mode } : current));
       setError(null);
     } catch {
-      setError("The display is reconnecting to the event service.");
+      setError(t("tvReconnecting"));
     }
-  }, []);
+  }, [t]);
 
   const refreshRooms = useCallback(async () => {
     try {
@@ -761,9 +786,9 @@ export function TvDisplay() {
       setData((current) => (current ? { ...current, rooms } : current));
       setError(null);
     } catch {
-      setError("The display is reconnecting to the event service.");
+      setError(t("tvReconnecting"));
     }
-  }, []);
+  }, [t]);
 
   const refreshSchedule = useCallback(async () => {
     try {
@@ -771,9 +796,9 @@ export function TvDisplay() {
       setData((current) => (current ? { ...current, schedule: schedule.items } : current));
       setError(null);
     } catch {
-      setError("The display is reconnecting to the event service.");
+      setError(t("tvReconnecting"));
     }
-  }, []);
+  }, [t]);
 
   const refreshAnnouncements = useCallback(async () => {
     try {
@@ -785,9 +810,9 @@ export function TvDisplay() {
       );
       setError(null);
     } catch {
-      setError("The display is reconnecting to the event service.");
+      setError(t("tvReconnecting"));
     }
-  }, []);
+  }, [t]);
 
   const refreshContent = useCallback(
     (event: SseEnvelope) => {
@@ -813,7 +838,7 @@ export function TvDisplay() {
     return (
       <div className="grid min-h-dvh place-items-center" role="status" aria-busy="true">
         <Spinner className="size-10" />
-        <span className="sr-only">Loading TV display</span>
+        <span className="sr-only">{t("loadingTvDisplay")}</span>
       </div>
     );
   if (!data)

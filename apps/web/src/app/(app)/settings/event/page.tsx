@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { ApiError, api } from "@/lib/api";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
+import { useLocale } from "@/lib/i18n";
 import { getQueueSettings, updateQueueSettings } from "@/lib/queue";
 import type { EventConfig } from "@/lib/types";
 
@@ -76,6 +77,7 @@ export default function EventSettingsPage() {
 }
 
 function HackingWindowSection() {
+  const { t } = useLocale();
   const form = useForm<Values>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -104,9 +106,9 @@ function HackingWindowSection() {
         }),
       )
       .catch((err) =>
-        toast.error(err instanceof ApiError ? err.message : "Could not load event settings."),
+        toast.error(err instanceof ApiError ? err.message : t("couldNotLoadEventSettings")),
       );
-  }, [reset]);
+  }, [reset, t]);
 
   async function onSubmit(values: Values) {
     try {
@@ -127,10 +129,10 @@ function HackingWindowSection() {
         hackingEndsAt: toLocalInputValue(next.hackingEndsAt),
         showStartCountdown: next.showStartCountdown,
       });
-      toast.success("Event settings saved.");
+      toast.success(t("eventSettingsSaved"));
     } catch (err) {
       // Surfaces API business errors verbatim (e.g. "hackingEndsAt must be after hackingStartsAt").
-      toast.error(err instanceof ApiError ? err.message : "Could not save event settings.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveEventSettings"));
     }
   }
 
@@ -139,18 +141,20 @@ function HackingWindowSection() {
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <SectionCard
           icon={CalendarClockIcon}
-          title="Event"
-          description="Identity and the public hacking window. Start/end times drive the countdown on the website and TV panels."
-          footer={<SubmitButton pending={form.formState.isSubmitting}>Save changes</SubmitButton>}
+          title={t("eventTitle")}
+          description={t("eventDesc")}
+          footer={
+            <SubmitButton pending={form.formState.isSubmitting}>{t("saveChanges")}</SubmitButton>
+          }
         >
           <FormField
             control={form.control}
             name="name"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Name</FormLabel>
+                <FormLabel>{t("name")}</FormLabel>
                 <FormControl>
-                  <Input placeholder="e.g. HackUDC 2026" {...field} />
+                  <Input placeholder={`${t("egPrefix")} HackUDC 2026`} {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -161,9 +165,9 @@ function HackingWindowSection() {
             name="tagline"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Tagline</FormLabel>
+                <FormLabel>{t("taglineLabel")}</FormLabel>
                 <FormControl>
-                  <Input placeholder="A short line shown alongside the name" {...field} />
+                  <Input placeholder={t("taglineShortLinePlaceholder")} {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -174,14 +178,11 @@ function HackingWindowSection() {
             name="timezone"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Timezone</FormLabel>
+                <FormLabel>{t("timezoneLabel")}</FormLabel>
                 <FormControl>
                   <Input placeholder="Europe/Madrid" {...field} />
                 </FormControl>
-                <FormDescription>
-                  IANA timezone name (e.g. Europe/Madrid). Set the hacking times from a machine in
-                  this zone — the fields below use your browser&apos;s local time.
-                </FormDescription>
+                <FormDescription>{t("timezoneHintDesc")}</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -191,7 +192,7 @@ function HackingWindowSection() {
             name="hackingStartsAt"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Hacking starts</FormLabel>
+                <FormLabel>{t("hackingStartsLabel")}</FormLabel>
                 <FormControl>
                   <DateTimeInput value={field.value} onChange={field.onChange} />
                 </FormControl>
@@ -204,11 +205,11 @@ function HackingWindowSection() {
             name="hackingEndsAt"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Hacking ends</FormLabel>
+                <FormLabel>{t("hackingEndsLabel")}</FormLabel>
                 <FormControl>
                   <DateTimeInput value={field.value} onChange={field.onChange} />
                 </FormControl>
-                <FormDescription>Must be after the start time.</FormDescription>
+                <FormDescription>{t("mustBeAfterStartTime")}</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -220,11 +221,8 @@ function HackingWindowSection() {
               <FormItem>
                 <div className="flex items-center justify-between gap-4 rounded-md border p-3">
                   <div>
-                    <FormLabel>Countdown to start</FormLabel>
-                    <FormDescription>
-                      Before hacking starts, show a live countdown to the start time instead of a
-                      locked duration.
-                    </FormDescription>
+                    <FormLabel>{t("countdownToStartLabel")}</FormLabel>
+                    <FormDescription>{t("countdownDesc")}</FormDescription>
                   </div>
                   <FormControl>
                     <Switch checked={field.value} onCheckedChange={field.onChange} />
@@ -256,6 +254,7 @@ type JudgingValues = z.infer<typeof judgingSchema>;
  * (/api/queue/settings, capability QUEUE_ADMIN) from the hacking window above.
  */
 function JudgingWindowSection() {
+  const { t } = useLocale();
   const form = useForm<JudgingValues>({
     resolver: zodResolver(judgingSchema),
     defaultValues: { judgingStartsAt: "", judgingEndsAt: "" },
@@ -271,9 +270,9 @@ function JudgingWindowSection() {
         }),
       )
       .catch((err) =>
-        toast.error(err instanceof ApiError ? err.message : "Could not load the judging window."),
+        toast.error(err instanceof ApiError ? err.message : t("couldNotLoadJudgingWindow")),
       );
-  }, [reset]);
+  }, [reset, t]);
 
   async function onSubmit(values: JudgingValues) {
     try {
@@ -285,9 +284,9 @@ function JudgingWindowSection() {
         judgingStartsAt: toDatetimeLocal(next.schedule_start_at),
         judgingEndsAt: toDatetimeLocal(next.schedule_end_at),
       });
-      toast.success("Judging window saved.");
+      toast.success(t("judgingWindowSaved"));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not save the judging window.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveJudgingWindow"));
     }
   }
 
@@ -296,16 +295,18 @@ function JudgingWindowSection() {
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <SectionCard
           icon={GavelIcon}
-          title="Judging window"
-          description="Sizes how much time judging rooms have per project — room pacing (H39) tightens automatically as this window's end approaches."
-          footer={<SubmitButton pending={form.formState.isSubmitting}>Save changes</SubmitButton>}
+          title={t("judgingWindowTitle")}
+          description={t("judgingWindowDesc")}
+          footer={
+            <SubmitButton pending={form.formState.isSubmitting}>{t("saveChanges")}</SubmitButton>
+          }
         >
           <FormField
             control={form.control}
             name="judgingStartsAt"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Judging starts</FormLabel>
+                <FormLabel>{t("judgingStartsLabel")}</FormLabel>
                 <FormControl>
                   <DateTimeInput value={field.value} onChange={field.onChange} />
                 </FormControl>
@@ -318,7 +319,7 @@ function JudgingWindowSection() {
             name="judgingEndsAt"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Judging ends</FormLabel>
+                <FormLabel>{t("judgingEndsLabel")}</FormLabel>
                 <FormControl>
                   <DateTimeInput value={field.value} onChange={field.onChange} />
                 </FormControl>

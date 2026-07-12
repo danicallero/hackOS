@@ -7,6 +7,7 @@ import { useEffect } from "react";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { Spinner } from "@/components/common/spinner";
+import { useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 
 /** First station a user can reach, in operator-priority order. */
@@ -23,6 +24,7 @@ const STATIONS: { href: string; capability: Capability }[] = [
  */
 export default function LogisticsIndexPage() {
   const router = useRouter();
+  const { t } = useLocale();
   const { status, can } = useSessionContext();
   const target = STATIONS.find((s) => can(s.capability))?.href;
 
@@ -34,11 +36,11 @@ export default function LogisticsIndexPage() {
   if (status !== "loading" && !target) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Logistics" />
+        <PageHeader title={t("logistics")} />
         <EmptyState
           icon={LockIcon}
-          title="You can't access logistics"
-          description="Accreditation, meal/activity scan, presence or logistics stats capability is required."
+          title={t("logisticsDeniedTitle")}
+          description={t("logisticsDeniedDesc")}
         />
       </div>
     );

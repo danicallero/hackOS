@@ -12,7 +12,7 @@ import { PasswordInput } from "@/components/common/password-input";
 import { Spinner } from "@/components/common/spinner";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Form,
   FormControl,
@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
-import { pickText } from "@/lib/i18n";
+import { languageName, pickText, useLocale } from "@/lib/i18n";
 import type { Intolerance, InviteKind, Language } from "@/lib/types";
 
 const SHIRT_SIZES = ["XS", "S", "M", "L", "XL", "XXL"] as const;
@@ -51,6 +51,7 @@ type Values = z.infer<typeof schema>;
 const NONE = "__none__";
 
 function ClaimInner() {
+  const { t } = useLocale();
   const token = useSearchParams().get("token");
   const router = useRouter();
   const [lookup, setLookup] = useState<
@@ -114,7 +115,7 @@ function ClaimInner() {
       setDone(true);
     } catch (err) {
       form.setError("root", {
-        message: err instanceof ApiError ? err.message : "Could not create your account.",
+        message: err instanceof ApiError ? err.message : t("couldNotCreateAccount"),
       });
     }
   }
@@ -133,15 +134,11 @@ function ClaimInner() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Invite unavailable</CardTitle>
-          <CardDescription>
-            This invitation link is invalid, already used or expired. Ask the organization to send a
-            new one.
-          </CardDescription>
+          <CardTitle>{t("inviteUnavailable")}</CardTitle>
         </CardHeader>
         <CardContent>
           <Link href="/login" className="text-sm underline underline-offset-4">
-            Go to sign in
+            {t("signIn")}
           </Link>
         </CardContent>
       </Card>
@@ -157,12 +154,7 @@ function ClaimInner() {
           <div className="bg-success/10 text-success mb-2 grid size-12 place-items-center rounded-full">
             <CheckCircle2Icon className="size-6" />
           </div>
-          <CardTitle>Account created</CardTitle>
-          <CardDescription>
-            {invitedAsParticipant
-              ? "Sign in and we'll take you straight to your application."
-              : "You can sign in now with your email and password."}
-          </CardDescription>
+          <CardTitle>{t("accountCreated")}</CardTitle>
         </CardHeader>
         <CardContent className="text-center">
           <SubmitButton
@@ -176,7 +168,7 @@ function ClaimInner() {
               )
             }
           >
-            Continue to sign in
+            {t("signIn")}
           </SubmitButton>
         </CardContent>
       </Card>
@@ -191,10 +183,7 @@ function ClaimInner() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Create your account</CardTitle>
-        <CardDescription>
-          You were invited as <strong>{lookup.kind}</strong> — <span>{lookup.email}</span>.
-        </CardDescription>
+        <CardTitle>{t("createYourAccount")}</CardTitle>
       </CardHeader>
       <CardContent>
         <Form {...form}>
@@ -210,7 +199,7 @@ function ClaimInner() {
                 name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Name</FormLabel>
+                    <FormLabel>{t("name")}</FormLabel>
                     <FormControl>
                       <Input {...field} />
                     </FormControl>
@@ -223,7 +212,7 @@ function ClaimInner() {
                 name="surname"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Surname</FormLabel>
+                    <FormLabel>{t("surname")}</FormLabel>
                     <FormControl>
                       <Input {...field} />
                     </FormControl>
@@ -237,7 +226,7 @@ function ClaimInner() {
               name="password"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Password</FormLabel>
+                  <FormLabel>{t("password")}</FormLabel>
                   <FormControl>
                     <PasswordInput autoComplete="new-password" {...field} />
                   </FormControl>
@@ -250,7 +239,7 @@ function ClaimInner() {
               name="language"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Language</FormLabel>
+                  <FormLabel>{t("language")}</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger className="w-full">
@@ -258,9 +247,11 @@ function ClaimInner() {
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="es">Castellano</SelectItem>
-                      <SelectItem value="gl">Galego</SelectItem>
-                      <SelectItem value="en">English</SelectItem>
+                      {(["es", "gl", "en"] as Language[]).map((language) => (
+                        <SelectItem key={language} value={language}>
+                          {languageName(language)}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -273,15 +264,15 @@ function ClaimInner() {
                 name="shirtSize"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Shirt size{invitedAsParticipant ? "" : " (optional)"}</FormLabel>
+                    <FormLabel>{t("shirtSize")}</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Not set" />
+                          <SelectValue placeholder={t("notSet")} />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value={NONE}>Not set</SelectItem>
+                        <SelectItem value={NONE}>{t("notSet")}</SelectItem>
                         {SHIRT_SIZES.map((s) => (
                           <SelectItem key={s} value={s}>
                             {s}
@@ -299,15 +290,15 @@ function ClaimInner() {
               name="foodIntolerances"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Food intolerances (optional)</FormLabel>
+                  <FormLabel>{t("foodIntolerances")}</FormLabel>
                   <FormControl>
                     <MultiSelect
                       options={intoleranceOptions}
                       value={field.value}
                       onChange={field.onChange}
-                      placeholder="Select any that apply…"
-                      searchPlaceholder="Search…"
-                      emptyText="None in the catalogue yet."
+                      placeholder={t("selectIntolerances")}
+                      searchPlaceholder={t("searchIntolerances")}
+                      emptyText={t("noIntolerances")}
                     />
                   </FormControl>
                   <FormMessage />
@@ -319,20 +310,16 @@ function ClaimInner() {
               name="foodIntoleranceNotes"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Dietary notes (optional)</FormLabel>
+                  <FormLabel>{t("otherDietaryNotes")}</FormLabel>
                   <FormControl>
-                    <Textarea
-                      rows={3}
-                      placeholder="Anything else the kitchen should know (allergies severity, preferences…)"
-                      {...field}
-                    />
+                    <Textarea rows={3} placeholder={t("cateringNotes")} {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
             <SubmitButton className="w-full" pending={form.formState.isSubmitting}>
-              Create account
+              {t("createAccount")}
             </SubmitButton>
           </form>
         </Form>

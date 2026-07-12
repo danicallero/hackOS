@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ApiError, api } from "@/lib/api";
+import { useLocale } from "@/lib/i18n";
 import type { EnterpriseSummary, Invite, InviteKind, PermissionGroupSummary } from "@/lib/types";
 
 /**
@@ -25,6 +26,7 @@ import type { EnterpriseSummary, Invite, InviteKind, PermissionGroupSummary } fr
  * invites require an enterprise; the account is auto-linked to it when accepted.
  */
 export function InviteUserDialog() {
+  const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [kind, setKind] = useState<InviteKind>("staff");
@@ -65,9 +67,9 @@ export function InviteUserDialog() {
         groupIds: groupIds.map(Number),
       });
       setCreated(invite);
-      toast.success("Invite created — the link was emailed and is shown below.");
+      toast.success(t("inviteCreatedDesc"));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not create the invite.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotCreateInvite"));
     } finally {
       setPending(false);
     }
@@ -86,18 +88,18 @@ export function InviteUserDialog() {
       }}
       trigger={
         <Button>
-          <UserPlusIcon className="size-4" /> Invite user
+          <UserPlusIcon className="size-4" /> {t("inviteUser")}
         </Button>
       }
       icon={UserPlusIcon}
-      title="Invite a user"
-      description="They follow a link to create their own account — you never fill their data."
+      title={t("inviteAUser")}
+      description={t("inviteUserDesc")}
       footer={
         created ? (
-          <Button onClick={() => setOpen(false)}>Done</Button>
+          <Button onClick={() => setOpen(false)}>{t("done")}</Button>
         ) : (
           <SubmitButton pending={pending} disabled={!email.includes("@")} onClick={submit}>
-            Send invite
+            {t("sendInvite")}
           </SubmitButton>
         )
       }
@@ -105,8 +107,8 @@ export function InviteUserDialog() {
       {created ? (
         <div className="space-y-3">
           <p className="text-muted-foreground text-sm">
-            Invite sent to <strong className="text-foreground">{created.email}</strong>. Share this
-            link if the email doesn&apos;t arrive:
+            {t("inviteSentToPrefix")} <strong className="text-foreground">{created.email}</strong>.{" "}
+            {t("inviteSentToSuffix")}
           </p>
           <div className="flex items-center gap-2">
             <Input value={claimUrl} readOnly className="font-mono text-xs" />
@@ -116,7 +118,7 @@ export function InviteUserDialog() {
               size="icon"
               onClick={() => {
                 navigator.clipboard.writeText(claimUrl);
-                toast.success("Link copied.");
+                toast.success(t("copied"));
               }}
             >
               <CopyIcon className="size-4" />
@@ -126,17 +128,17 @@ export function InviteUserDialog() {
       ) : (
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="invite-email">Email</Label>
+            <Label htmlFor="invite-email">{t("email")}</Label>
             <Input
               id="invite-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="person@example.com"
+              placeholder={t("emailPlaceholder")}
             />
           </div>
           <div className="space-y-2">
-            <Label>Account type</Label>
+            <Label>{t("accountTypeLabel")}</Label>
             <Select
               value={kind}
               onValueChange={(v) => {
@@ -152,18 +154,18 @@ export function InviteUserDialog() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="staff">Staff / organization</SelectItem>
-                <SelectItem value="sponsor">Sponsor</SelectItem>
-                <SelectItem value="participant">Participant</SelectItem>
+                <SelectItem value="staff">{t("staffOrg")}</SelectItem>
+                <SelectItem value="sponsor">{t("sponsorOption")}</SelectItem>
+                <SelectItem value="participant">{t("participantOption")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
           {kind === "sponsor" && (
             <div className="space-y-2">
-              <Label>Enterprise</Label>
+              <Label>{t("enterpriseLabel")}</Label>
               <Select value={enterpriseId} onValueChange={setEnterpriseId}>
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select the sponsor's enterprise" />
+                  <SelectValue placeholder={t("selectSponsorEnterprise")} />
                 </SelectTrigger>
                 <SelectContent>
                   {enterprises.map((e) => (
@@ -173,9 +175,7 @@ export function InviteUserDialog() {
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-muted-foreground text-xs">
-                They&apos;re linked to this enterprise automatically when they accept.
-              </p>
+              <p className="text-muted-foreground text-xs">{t("linkedAutomatically")}</p>
             </div>
           )}
           {/* Capability groups are staff-only (H8): sponsors control just their
@@ -184,19 +184,17 @@ export function InviteUserDialog() {
               staff capabilities. groupIds is still POSTed (empty []) for them. */}
           {kind === "staff" && (
             <div className="space-y-2">
-              <Label>Capability groups</Label>
+              <Label>{t("capabilityGroupsLabel")}</Label>
               <MultiSelect
                 inDialog
                 options={groups.map((g) => ({ value: String(g.id), label: g.name }))}
                 value={groupIds}
                 onChange={setGroupIds}
-                placeholder="Optional — pre-assign permission groups"
-                searchPlaceholder="Search groups…"
-                emptyText="No permission groups yet."
+                placeholder={t("optionalPreassignGroups")}
+                searchPlaceholder={t("searchGroupsPlaceholder")}
+                emptyText={t("noPermissionGroupsYet")}
               />
-              <p className="text-muted-foreground text-xs">
-                The account holds these permissions the moment they join.
-              </p>
+              <p className="text-muted-foreground text-xs">{t("accountHoldsPermissions")}</p>
             </div>
           )}
         </div>

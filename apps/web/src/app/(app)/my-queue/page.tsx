@@ -27,6 +27,7 @@ import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { type SseEnvelope, useEventSource, useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError } from "@/lib/api";
+import { useLocale } from "@/lib/i18n";
 import { getMyQueue, type MyQueueEntry } from "@/lib/queue";
 import { cn } from "@/lib/utils";
 import { type TranslatedText, textForDisplay } from "../challenges/shared";
@@ -42,21 +43,27 @@ const CALL_EVENTS = [
   EVENTS.USER_QUEUE_CHANGED,
 ] as const;
 
-function formatEta(minutes: number | null): string | null {
+function formatEta(minutes: number | null, anyMoment = "any moment now"): string | null {
   if (minutes == null) return null;
-  if (minutes <= 0) return "any moment now";
+  if (minutes <= 0) return anyMoment;
   if (minutes < 60) return `~${minutes} min`;
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   return m ? `~${h}h ${m}m` : `~${h}h`;
 }
 
-function roomLabel(roomId: number | null, names: Record<number, string>): string {
-  if (roomId == null) return "your room";
-  return names[roomId] ?? `room #${roomId}`;
+function roomLabel(
+  roomId: number | null,
+  names: Record<number, string>,
+  fallback = "your room",
+  roomNumber = "room #{id}",
+): string {
+  if (roomId == null) return fallback;
+  return names[roomId] ?? roomNumber.replace("{id}", String(roomId));
 }
 
 export default function MyQueuePage() {
+  const { t } = useLocale();
   const {
     data: entries,
     error,
@@ -72,37 +79,40 @@ export default function MyQueuePage() {
   // Guard against firing the same toast twice for one call (StrictMode / debounce).
   const seenCalls = useRef<Set<number>>(new Set());
 
-  const onStreamEvent = useCallback((env: SseEnvelope) => {
-    if (env.type === EVENTS.USER_QUEUE_CALLED) {
-      const p = env.data as CalledPayload;
-      setRoomNames((prev) => (p.roomName ? { ...prev, [p.roomId]: p.roomName } : prev));
-      setPrecalled((prev) => {
-        if (!prev.has(p.challengeId)) return prev;
-        const next = new Set(prev);
-        next.delete(p.challengeId);
-        return next;
-      });
-      if (!seenCalls.current.has(p.entryId)) {
-        seenCalls.current.add(p.entryId);
-        toast.success(`It's your turn — head to ${p.roomName ?? "your room"} now`, {
-          duration: 12_000,
+  const onStreamEvent = useCallback(
+    (env: SseEnvelope) => {
+      if (env.type === EVENTS.USER_QUEUE_CALLED) {
+        const p = env.data as CalledPayload;
+        setRoomNames((prev) => (p.roomName ? { ...prev, [p.roomId]: p.roomName } : prev));
+        setPrecalled((prev) => {
+          if (!prev.has(p.challengeId)) return prev;
+          const next = new Set(prev);
+          next.delete(p.challengeId);
+          return next;
         });
+        if (!seenCalls.current.has(p.entryId)) {
+          seenCalls.current.add(p.entryId);
+          toast.success(t("yourTurn", { room: p.roomName ?? t("yourRoom") }), {
+            duration: 12_000,
+          });
+        }
+      } else if (env.type === EVENTS.USER_QUEUE_PRECALL) {
+        const p = env.data as PrecallPayload;
+        setPrecalled((prev) => new Set(prev).add(p.challengeId));
+        const eta = formatEta(p.etaMinutes, t("anyMoment"));
+        toast(`${t("getReady")}${eta ? ` (${eta})` : ""}`);
       }
-    } else if (env.type === EVENTS.USER_QUEUE_PRECALL) {
-      const p = env.data as PrecallPayload;
-      setPrecalled((prev) => new Set(prev).add(p.challengeId));
-      const eta = formatEta(p.etaMinutes);
-      toast(`Get ready — you're up soon${eta ? ` (${eta})` : ""}`);
-    }
-  }, []);
+    },
+    [t],
+  );
 
   useEventSource("/api/queue/me/stream", { events: CALL_EVENTS, onEvent: onStreamEvent });
 
   useEffect(() => {
     if (error) {
-      toast.error(error instanceof ApiError ? error.message : "Could not load your queue status.");
+      toast.error(error instanceof ApiError ? error.message : t("queueLoadError"));
     }
-  }, [error]);
+  }, [error, t]);
 
   const list = entries ?? [];
   const called = useMemo(() => list.filter((e) => e.status === "called"), [list]);
@@ -114,7 +124,7 @@ export default function MyQueuePage() {
   if (loading && !entries) {
     return (
       <div className="space-y-6">
-        <PageHeader title="My queue" />
+        <PageHeader title={t("myQueue")} />
         <div className="flex justify-center py-16">
           <Spinner className="size-6" />
         </div>
@@ -124,10 +134,7 @@ export default function MyQueuePage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="My queue"
-        description="Live status of every project your team presents to — where you are in line, how long the wait looks, and when to head to your room."
-      />
+      <PageHeader title={t("myQueue")} />
 
       {called.map((e) => (
         <CalledNotice key={`called-${e.repoId}-${e.challengeId}`} entry={e} roomNames={roomNames} />
@@ -139,16 +146,11 @@ export default function MyQueuePage() {
 
       <SectionCard
         icon={TicketIcon}
-        title="Your queues"
-        description="One row per challenge your team is queued for."
+        title={t("yourQueues")}
         bodyClassName={list.length === 0 ? "p-0" : "space-y-2"}
       >
         {list.length === 0 ? (
-          <EmptyState
-            icon={TicketIcon}
-            title="You're not in any judging queue"
-            description="When your project is queued for a challenge, its live status will appear here."
-          />
+          <EmptyState icon={TicketIcon} title={t("noJudgingQueue")} />
         ) : (
           list.map((e) => (
             <QueueRow key={`${e.repoId}-${e.challengeId}`} entry={e} roomNames={roomNames} />
@@ -166,7 +168,8 @@ function QueueRow({
   entry: MyQueueEntry;
   roomNames: Record<number, string>;
 }) {
-  const eta = formatEta(entry.etaMinutes);
+  const { t } = useLocale();
+  const eta = formatEta(entry.etaMinutes, t("anyMoment"));
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3">
       <div className="min-w-0 space-y-0.5">
@@ -178,13 +181,13 @@ function QueueRow({
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
         {entry.status === "waiting" && entry.position != null && (
           <span className="text-muted-foreground">
-            Position <span className="text-foreground font-semibold">#{entry.position}</span>
+            {t("position")} <span className="text-foreground font-semibold">#{entry.position}</span>
           </span>
         )}
         {entry.status === "waiting" && eta && <span className="text-muted-foreground">{eta}</span>}
         {entry.roomId != null && entry.status !== "waiting" && (
           <span className="text-muted-foreground capitalize">
-            {roomLabel(entry.roomId, roomNames)}
+            {roomLabel(entry.roomId, roomNames, t("yourRoom"), t("roomNumber"))}
           </span>
         )}
         <QueueStatusBadge status={entry.status} />
@@ -201,6 +204,7 @@ function CalledNotice({
   entry: MyQueueEntry;
   roomNames: Record<number, string>;
 }) {
+  const { t } = useLocale();
   return (
     <div
       className={cn(
@@ -213,11 +217,12 @@ function CalledNotice({
       </div>
       <div className="min-w-0 space-y-1">
         <p className="text-base font-semibold">
-          It's your turn — head to {roomLabel(entry.roomId, roomNames)}
+          {t("yourTurn", {
+            room: roomLabel(entry.roomId, roomNames, t("yourRoom"), t("roomNumber")),
+          })}
         </p>
         <p className="text-success/90 text-sm">
-          {textForDisplay(entry.challengeTitle as TranslatedText)} · {entry.repoName}. Make your way
-          over now; the judges are ready for you.
+          {textForDisplay(entry.challengeTitle as TranslatedText)} · {entry.repoName}
         </p>
       </div>
     </div>
@@ -241,7 +246,7 @@ function PrecallNotice({ entry }: { entry: MyQueueEntry }) {
         <p className="text-base font-semibold">You're up soon — get ready</p>
         <p className="text-warning/90 text-sm">
           {textForDisplay(entry.challengeTitle as TranslatedText)} · {entry.repoName}
-          {eta ? `. Estimated wait ${eta}.` : "."} Wrap up and stay close to your room.
+          {eta ? ` · ${eta}` : ""}
         </p>
       </div>
     </div>

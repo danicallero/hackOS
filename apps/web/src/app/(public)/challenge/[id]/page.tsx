@@ -16,6 +16,7 @@ import {
 } from "@/components/public/public-types";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
+import { useLocale } from "@/lib/i18n";
 
 interface Prize {
   name: string;
@@ -30,6 +31,7 @@ function asPrizes(value: unknown): Prize[] {
 }
 
 export default function PublicChallengePage() {
+  const { t } = useLocale();
   const { id } = useParams<{ id: string }>();
   const [challenge, setChallenge] = useState<PublicChallenge | null | undefined>(undefined);
   const [hasOpenApplications, setHasOpenApplications] = useState(false);
@@ -78,25 +80,25 @@ export default function PublicChallengePage() {
       <Button variant="ghost" size="sm" asChild className="mb-6">
         <Link href="/">
           <ArrowLeftIcon className="size-4" />
-          Back to event
+          {t("backToEvent")}
         </Link>
       </Button>
 
       {challenge === undefined && (
         <div className="grid place-items-center py-24" role="status" aria-busy="true">
           <Spinner className="size-7" />
-          <span className="sr-only">Loading challenge</span>
+          <span className="sr-only">{t("loadingChallenge")}</span>
         </div>
       )}
 
       {challenge === null && (
         <EmptyState
           icon={TrophyIcon}
-          title="Challenge not found"
-          description="It may have been unpublished or the link is incorrect."
+          title={t("challengeNotFoundTitle")}
+          description={t("challengeUnpublishedDesc")}
           action={
             <Button asChild>
-              <Link href="/">Back to event</Link>
+              <Link href="/">{t("backToEvent")}</Link>
             </Button>
           }
         />
@@ -124,7 +126,7 @@ export default function PublicChallengePage() {
 
           {displayText(challenge.criteria) && (
             <section className="mt-8 border-t pt-6">
-              <h2 className="text-lg font-medium">Judging criteria</h2>
+              <h2 className="text-lg font-medium">{t("judgingCriteriaTitle")}</h2>
               <p className="text-muted-foreground text-pretty mt-2 whitespace-pre-wrap text-sm">
                 {displayText(challenge.criteria)}
               </p>
@@ -133,7 +135,7 @@ export default function PublicChallengePage() {
 
           {asPrizes(challenge.prizes).length > 0 && (
             <section className="mt-8 border-t pt-6">
-              <h2 className="text-lg font-medium">Prizes</h2>
+              <h2 className="text-lg font-medium">{t("prizesLabel")}</h2>
               <ul className="mt-3 space-y-2">
                 {asPrizes(challenge.prizes).map((prize) => (
                   <li
@@ -161,7 +163,7 @@ export default function PublicChallengePage() {
           {hasOpenApplications && (
             <div className="mt-10 border-t pt-6">
               <Button size="lg" asChild>
-                <Link href="/signup">Apply now</Link>
+                <Link href="/signup">{t("applyNow")}</Link>
               </Button>
             </div>
           )}

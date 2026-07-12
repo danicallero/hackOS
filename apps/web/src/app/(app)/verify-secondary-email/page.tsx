@@ -8,6 +8,7 @@ import { Spinner } from "@/components/common/spinner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiError, api } from "@/lib/api";
+import { useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 
 type State =
@@ -16,13 +17,14 @@ type State =
   | { status: "error"; message: string };
 
 function VerifySecondaryInner() {
+  const { t } = useLocale();
   const token = useSearchParams().get("token");
   const { refresh } = useSessionContext();
   const [state, setState] = useState<State>({ status: "loading" });
 
   useEffect(() => {
     if (!token) {
-      setState({ status: "error", message: "This link is missing its token." });
+      setState({ status: "error", message: t("linkMissingToken") });
       return;
     }
     api
@@ -34,10 +36,10 @@ function VerifySecondaryInner() {
       .catch((err) =>
         setState({
           status: "error",
-          message: err instanceof ApiError ? err.message : "Could not verify this link.",
+          message: err instanceof ApiError ? err.message : t("couldNotVerifyLink"),
         }),
       );
-  }, [token, refresh]);
+  }, [token, refresh, t]);
 
   return (
     <div className="flex min-h-[60vh] items-center justify-center">
@@ -45,7 +47,7 @@ function VerifySecondaryInner() {
         {state.status === "loading" ? (
           <CardContent className="flex flex-col items-center gap-3 py-10">
             <Spinner className="size-6" />
-            <p className="text-muted-foreground text-sm">Verifying your secondary email…</p>
+            <p className="text-muted-foreground text-sm">{t("verifyingSecondaryEmail")}</p>
           </CardContent>
         ) : state.status === "ok" ? (
           <>
@@ -53,16 +55,14 @@ function VerifySecondaryInner() {
               <div className="bg-success/10 text-success mb-2 grid size-12 place-items-center rounded-full">
                 <CheckCircle2Icon className="size-6" />
               </div>
-              <CardTitle>Secondary email verified</CardTitle>
+              <CardTitle>{t("secondaryEmailVerified")}</CardTitle>
               <CardDescription>
-                {state.already
-                  ? "This address was already verified."
-                  : "We'll use it to match your Devpost projects on import."}
+                {state.already ? t("alreadyVerifiedAddress") : t("willUseToMatchDevpost")}
               </CardDescription>
             </CardHeader>
             <CardContent className="text-center">
               <Button asChild>
-                <Link href="/settings/profile">Back to profile</Link>
+                <Link href="/settings/profile">{t("backToProfile")}</Link>
               </Button>
             </CardContent>
           </>
@@ -72,12 +72,12 @@ function VerifySecondaryInner() {
               <div className="bg-destructive/10 text-destructive mb-2 grid size-12 place-items-center rounded-full">
                 <MailWarningIcon className="size-6" />
               </div>
-              <CardTitle>Couldn&apos;t verify</CardTitle>
+              <CardTitle>{t("couldntVerifyTitle")}</CardTitle>
               <CardDescription>{state.message}</CardDescription>
             </CardHeader>
             <CardContent className="text-center">
               <Button asChild variant="outline">
-                <Link href="/settings/profile">Back to profile</Link>
+                <Link href="/settings/profile">{t("backToProfile")}</Link>
               </Button>
             </CardContent>
           </>

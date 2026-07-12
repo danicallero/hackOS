@@ -32,22 +32,24 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
+import { useLocale } from "@/lib/i18n";
 import { type AccreditationLookup, logisticsApi, personName } from "@/lib/logistics";
 import { useCan } from "@/lib/session";
 import type { UserList, UserListItem } from "@/lib/types";
 
 export default function AccreditationPage() {
+  const { t } = useLocale();
   const canAccredit = useCan(CAPABILITIES.ACCREDIT_SCAN);
   const [sessionCount, setSessionCount] = useState(0);
 
   if (!canAccredit) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Accreditation" />
+        <PageHeader title={t("accreditation")} />
         <EmptyState
           icon={LockIcon}
-          title="You can't accredit"
-          description="The accreditation scan capability is required."
+          title={t("accreditationDeniedTitle")}
+          description={t("accreditationDeniedDesc")}
         />
       </div>
     );
@@ -55,16 +57,13 @@ export default function AccreditationPage() {
 
   return (
     <div className="space-y-6" data-wide>
-      <PageHeader
-        title="Accreditation"
-        description="Check people in against their entrance ticket and assign a physical badge (H22, H23)."
-      />
+      <PageHeader title={t("accreditation")} description={t("accreditationDescription")} />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          label="Checked in this session"
+          label={t("checkedInSession")}
           value={sessionCount}
           icon={BadgeCheckIcon}
-          hint="On this device"
+          hint={t("onThisDevice")}
         />
       </div>
       <AccreditationPanel onAccredited={() => setSessionCount((n) => n + 1)} />
@@ -73,6 +72,7 @@ export default function AccreditationPage() {
 }
 
 function AccreditationPanel({ onAccredited }: { onAccredited: () => void }) {
+  const { t } = useLocale();
   const searchParams = useSearchParams();
   const [ticketToken, setTicketToken] = useState("");
   const [badgeId, setBadgeId] = useState("");
@@ -100,7 +100,7 @@ function AccreditationPanel({ onAccredited }: { onAccredited: () => void }) {
       if (result.currentBadge && !badgeId) setBadgeId(result.currentBadge);
     } catch (err) {
       setLookup(null);
-      setError(errorMessage(err, "Ticket lookup failed."));
+      setError(errorMessage(err, t("ticketLookupFailed")));
     } finally {
       setBusy(false);
     }
@@ -116,7 +116,7 @@ function AccreditationPanel({ onAccredited }: { onAccredited: () => void }) {
       setUserResults(result.users);
     } catch (err) {
       setUserResults([]);
-      setError(errorMessage(err, "User search failed."));
+      setError(errorMessage(err, t("userSearchFailed")));
     } finally {
       setBusy(false);
     }
@@ -133,12 +133,12 @@ function AccreditationPanel({ onAccredited }: { onAccredited: () => void }) {
         if (result.currentBadge && !badgeId) setBadgeId(result.currentBadge);
       } catch (err) {
         setLookup(null);
-        setError(errorMessage(err, "User lookup failed."));
+        setError(errorMessage(err, t("userLookupFailed")));
       } finally {
         setBusy(false);
       }
     },
-    [badgeId],
+    [badgeId, t],
   );
 
   useEffect(() => {
@@ -164,7 +164,7 @@ function AccreditationPanel({ onAccredited }: { onAccredited: () => void }) {
               badgeId: badgeId.trim(),
               method,
             });
-      toast.success(`Badge ${result.badgeId} assigned to ${personName(result)}.`);
+      toast.success(t("badgeAssigned", { badgeId: result.badgeId, name: personName(result) }));
       onAccredited();
       setLookup({
         ...(lookup as AccreditationLookup),
@@ -172,7 +172,7 @@ function AccreditationPanel({ onAccredited }: { onAccredited: () => void }) {
         currentBadge: result.badgeId,
       });
     } catch (err) {
-      setError(errorMessage(err, "Check-in failed."));
+      setError(errorMessage(err, t("checkInFailed")));
     } finally {
       setBusy(false);
     }
@@ -188,10 +188,10 @@ function AccreditationPanel({ onAccredited }: { onAccredited: () => void }) {
         newBadgeId: rotate.newBadgeId.trim(),
         reason: rotate.reason.trim(),
       });
-      toast.success(`Badge rotated to ${result.newBadge}.`);
+      toast.success(t("badgeRotatedTo", { badge: result.newBadge }));
       setRotate({ userId: "", currentBadgeId: "", newBadgeId: "", reason: "" });
     } catch (err) {
-      setError(errorMessage(err, "Badge rotation failed."));
+      setError(errorMessage(err, t("badgeRotationFailed")));
     } finally {
       setBusy(false);
     }
@@ -200,43 +200,43 @@ function AccreditationPanel({ onAccredited }: { onAccredited: () => void }) {
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
       <SectionCard
-        title="Ticket check-in"
-        description="Scan an entrance QR, confirm the person card, then assign the physical badge."
+        title={t("ticketCheckIn")}
+        description={t("ticketCheckInDesc")}
         icon={IdCardIcon}
         bodyClassName="space-y-4"
       >
         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_160px]">
           <div className="space-y-2">
-            <Label htmlFor="ticket-token">Ticket token</Label>
+            <Label htmlFor="ticket-token">{t("ticketTokenLabel")}</Label>
             <Input
               id="ticket-token"
               value={ticketToken}
               onChange={(e) => setTicketToken(e.target.value)}
-              placeholder="ticket QR payload"
+              placeholder={t("ticketTokenPlaceholder")}
               autoComplete="off"
             />
           </div>
           <div className="flex items-end">
             <Button className="w-full" onClick={doLookup} disabled={busy || !ticketToken.trim()}>
               {busy ? <Spinner /> : <ScanLineIcon className="size-4" />}
-              Lookup
+              {t("lookup")}
             </Button>
           </div>
         </div>
 
         <div className="grid gap-3 border-t pt-4 md:grid-cols-[minmax(0,1fr)_160px]">
           <div className="space-y-2">
-            <Label htmlFor="user-search">Find user</Label>
+            <Label htmlFor="user-search">{t("findUser")}</Label>
             <Input
               id="user-search"
               value={userQuery}
               onChange={(e) => setUserQuery(e.target.value)}
-              placeholder="name, surname or email"
+              placeholder={t("findUserPlaceholder")}
             />
           </div>
           <div className="flex items-end">
             <Button className="w-full" variant="outline" onClick={searchUsers} disabled={busy}>
-              Search
+              {t("search")}
             </Button>
           </div>
         </div>
@@ -257,7 +257,9 @@ function AccreditationPanel({ onAccredited }: { onAccredited: () => void }) {
                   <span className="text-muted-foreground block text-xs">{user.email}</span>
                 </span>
                 <StatusBadge tone={user.confirmedSpot ? "success" : "neutral"} dot={false}>
-                  {user.confirmedSpot ? "confirmed" : (user.applicationStatus ?? "no app")}
+                  {user.confirmedSpot
+                    ? t("confirmedStatus")
+                    : (user.applicationStatus ?? t("noAppStatus"))}
                 </StatusBadge>
               </button>
             ))}
@@ -269,24 +271,24 @@ function AccreditationPanel({ onAccredited }: { onAccredited: () => void }) {
 
         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_160px_160px]">
           <div className="space-y-2">
-            <Label htmlFor="badge-id">Badge ID</Label>
+            <Label htmlFor="badge-id">{t("badgeIdLabel")}</Label>
             <Input
               id="badge-id"
               value={badgeId}
               onChange={(e) => setBadgeId(e.target.value)}
-              placeholder="B-1024"
+              placeholder={t("badgeIdPlaceholder")}
               autoComplete="off"
             />
           </div>
           <div className="space-y-2">
-            <Label>Method</Label>
+            <Label>{t("methodLabel")}</Label>
             <Select value={method} onValueChange={(v) => setMethod(v as typeof method)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="qr">QR</SelectItem>
-                <SelectItem value="manual">Manual</SelectItem>
+                <SelectItem value="manual">{t("manual")}</SelectItem>
                 <SelectItem value="nfc">NFC</SelectItem>
               </SelectContent>
             </Select>
@@ -298,20 +300,20 @@ function AccreditationPanel({ onAccredited }: { onAccredited: () => void }) {
               disabled={busy || !lookup || !badgeId.trim()}
             >
               <CheckIcon className="size-4" />
-              Check in
+              {t("checkIn")}
             </Button>
           </div>
         </div>
       </SectionCard>
 
       <SectionCard
-        title="Lost badge"
-        description="Rotate a badge and void active badge wallet passes (H23)."
+        title={t("lostBadge")}
+        description={t("lostBadgeDesc")}
         icon={RotateCcwIcon}
         bodyClassName="space-y-4"
       >
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="User ID">
+          <Field label={t("userIdLabel")}>
             <Input
               value={rotate.userId}
               onChange={(e) => setRotate((r) => ({ ...r, userId: e.target.value }))}
@@ -319,26 +321,26 @@ function AccreditationPanel({ onAccredited }: { onAccredited: () => void }) {
               placeholder="42"
             />
           </Field>
-          <Field label="Current badge">
+          <Field label={t("currentBadgeLabel")}>
             <Input
               value={rotate.currentBadgeId}
               onChange={(e) => setRotate((r) => ({ ...r, currentBadgeId: e.target.value }))}
-              placeholder="or scan old badge"
+              placeholder={t("currentBadgePlaceholder")}
             />
           </Field>
         </div>
-        <Field label="New badge">
+        <Field label={t("newBadgeLabel")}>
           <Input
             value={rotate.newBadgeId}
             onChange={(e) => setRotate((r) => ({ ...r, newBadgeId: e.target.value }))}
             placeholder="B-2048"
           />
         </Field>
-        <Field label="Reason">
+        <Field label={t("reasonLabel")}>
           <Textarea
             value={rotate.reason}
             onChange={(e) => setRotate((r) => ({ ...r, reason: e.target.value }))}
-            placeholder="lost, damaged, unreadable..."
+            placeholder={t("reasonPlaceholder")}
           />
         </Field>
         <Button
@@ -351,7 +353,7 @@ function AccreditationPanel({ onAccredited }: { onAccredited: () => void }) {
           }
         >
           <RotateCcwIcon className="size-4" />
-          Rotate badge
+          {t("rotateBadge")}
         </Button>
       </SectionCard>
     </div>

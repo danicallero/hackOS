@@ -5,19 +5,21 @@ import { LockIcon } from "lucide-react";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { ActivityScannerCard } from "@/components/logistics/activity-scanner";
+import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 
 export default function ActivitiesPage() {
+  const { t } = useLocale();
   const canScan = useCan(CAPABILITIES.ACTIVITY_SCAN);
 
   if (!canScan) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Activities" />
+        <PageHeader title={t("activities")} />
         <EmptyState
           icon={LockIcon}
-          title="You can't scan activities"
-          description="The activity scan capability is required."
+          title={t("activitiesDeniedTitle")}
+          description={t("activitiesDeniedDesc")}
         />
       </div>
     );
@@ -25,10 +27,7 @@ export default function ActivitiesPage() {
 
   return (
     <div className="space-y-6" data-wide>
-      <PageHeader
-        title="Activities"
-        description="Register attendance at talks, workshops and other scannable activities (H26)."
-      />
+      <PageHeader title={t("activities")} description={t("activitiesDescription")} />
       <ActivityScannerCard category="activity" />
     </div>
   );

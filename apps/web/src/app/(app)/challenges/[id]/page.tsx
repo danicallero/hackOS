@@ -32,6 +32,7 @@ import { Switch } from "@/components/ui/switch";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
+import { useLocale } from "@/lib/i18n";
 import { listDevpostPrizes } from "@/lib/projects";
 import { useSessionContext } from "@/lib/session";
 import {
@@ -93,6 +94,7 @@ type DevpostPrize = {
 export default function ChallengeDetailPage() {
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
+  const { t } = useLocale();
   const { can, canAny } = useSessionContext();
   const canAdmin = canAny(CAPABILITIES.SPONSORS_MANAGE, CAPABILITIES.QUEUE_ADMIN);
   const canMapPrizes = can(CAPABILITIES.QUEUE_ADMIN);
@@ -116,10 +118,10 @@ export default function ChallengeDetailPage() {
       }
       setStatus("ready");
     } catch (err) {
-      setErrorMsg(err instanceof ApiError ? err.message : "Could not load this challenge.");
+      setErrorMsg(err instanceof ApiError ? err.message : t("couldNotLoadChallenge"));
       setStatus("error");
     }
-  }, [canMapPrizes, id]);
+  }, [canMapPrizes, id, t]);
 
   // Soft, in-place refresh instead of a hard reload when another admin edits
   // this challenge elsewhere.
@@ -145,8 +147,8 @@ export default function ChallengeDetailPage() {
         <BackLink />
         <EmptyState
           icon={TrophyIcon}
-          title="Challenge not found"
-          description={errorMsg || "This challenge could not be loaded."}
+          title={t("challengeNotFoundTitle")}
+          description={errorMsg || t("challengeNotLoadedDesc")}
         />
       </div>
     );
@@ -161,7 +163,7 @@ export default function ChallengeDetailPage() {
           {challenge.visibility}
         </StatusBadge>
         {challenge.visibility === "hidden" && isScheduled(challenge.available_from) && (
-          <StatusBadge tone="warning">Scheduled</StatusBadge>
+          <StatusBadge tone="warning">{t("statusScheduled")}</StatusBadge>
         )}
       </div>
 
@@ -177,13 +179,14 @@ export default function ChallengeDetailPage() {
 }
 
 function BackLink() {
+  const { t } = useLocale();
   return (
     <Link
       href="/challenges"
       className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition-colors"
     >
       <ArrowLeftIcon className="size-4" />
-      Back to challenges
+      {t("backToChallenges")}
     </Link>
   );
 }
@@ -201,6 +204,7 @@ function EditCard({
   devpostPrizes: DevpostPrize[];
   onSaved: () => Promise<void>;
 }) {
+  const { t } = useLocale();
   const [prizes, setPrizes] = useState<Prize[]>(asPrizes(challenge.prizes));
   const [questions, setQuestions] = useState<Question[]>(
     asQuestions(challenge.judging_panel_criteria),
@@ -247,7 +251,7 @@ function EditCard({
     const canEditGeneral = canAdmin || challenge.visibility !== "visible";
     const title = titleI18n.en.trim();
     if (!title) {
-      toast.error("An English title is required.");
+      toast.error(t("englishTitleRequired"));
       return;
     }
     const descriptionEn = descriptionI18n.en.trim();
@@ -280,9 +284,9 @@ function EditCard({
           : {}),
       });
       await onSaved();
-      toast.success("Challenge updated.");
+      toast.success(t("challengeUpdated"));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Check the builder fields and try again.");
+      toast.error(err instanceof Error ? err.message : t("checkBuilderFields"));
     }
   }
 
@@ -293,28 +297,30 @@ function EditCard({
       <form onSubmit={form.handleSubmit(onSubmit)}>
         <SectionCard
           icon={TrophyIcon}
-          title="Challenge"
-          description="Edit public content, prizes and the judging panel configuration."
-          footer={<SubmitButton pending={form.formState.isSubmitting}>Save changes</SubmitButton>}
+          title={t("challengeLabel")}
+          description={t("editPublicContentDesc")}
+          footer={
+            <SubmitButton pending={form.formState.isSubmitting}>{t("saveChanges")}</SubmitButton>
+          }
         >
           <fieldset disabled={generalDisabled} className="space-y-5 disabled:opacity-60">
-            <MultilingualInput label="Title" value={titleI18n} onChange={setTitleI18n} />
+            <MultilingualInput label={t("titleLabel")} value={titleI18n} onChange={setTitleI18n} />
             <MultilingualInput
-              label="Description"
+              label={t("descriptionLabel")}
               optional
               textarea
               value={descriptionI18n}
               onChange={setDescriptionI18n}
             />
             <MultilingualInput
-              label="Public criteria"
+              label={t("publicCriteria")}
               optional
               textarea
               value={criteriaI18n}
               onChange={setCriteriaI18n}
             />
             <section className="space-y-3 rounded-lg border p-4">
-              <h3 className="text-sm font-medium">Prizes</h3>
+              <h3 className="text-sm font-medium">{t("prizesLabel")}</h3>
               <PrizeBuilder value={prizes} onChange={setPrizes} />
             </section>
             {canMapPrizes && (
@@ -324,14 +330,17 @@ function EditCard({
                 options={devpostPrizes.map((prize) => ({
                   value: prize.name,
                   label: prize.name,
-                  description: `${prize.repoCount} project${prize.repoCount === 1 ? "" : "s"}`,
+                  description:
+                    prize.repoCount === 1
+                      ? t("projectCountOne", { count: prize.repoCount })
+                      : t("projectCountOther", { count: prize.repoCount }),
                 }))}
-                emptyText="No imported prizes yet."
+                emptyText={t("noImportedPrizes")}
               />
             )}
           </fieldset>
           <section className="space-y-3 rounded-lg border p-4">
-            <h3 className="text-sm font-medium">Judging panel</h3>
+            <h3 className="text-sm font-medium">{t("judgingPanel")}</h3>
             <JudgingPanelBuilder value={questions} onChange={setQuestions} />
           </section>
           <FormField
@@ -339,7 +348,7 @@ function EditCard({
             name="maxPresentationSeconds"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Max presentation time</FormLabel>
+                <FormLabel>{t("maxPresentationTime")}</FormLabel>
                 <FormControl>
                   <DurationInput value={field.value} onChange={field.onChange} />
                 </FormControl>
@@ -352,7 +361,7 @@ function EditCard({
             name="maxInWaitingArea"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Waiting room capacity</FormLabel>
+                <FormLabel>{t("waitingRoomCapacity")}</FormLabel>
                 <FormControl>
                   <Input
                     type="number"
@@ -372,7 +381,7 @@ function EditCard({
             render={({ field }) => (
               <FormItem>
                 <div className="flex items-center justify-between gap-4 rounded-md border p-3">
-                  <FormLabel>Visible</FormLabel>
+                  <FormLabel>{t("visibleLabel")}</FormLabel>
                   <FormControl>
                     <Switch
                       checked={field.value === "visible"}
@@ -390,7 +399,7 @@ function EditCard({
             name="availableFrom"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Publish date</FormLabel>
+                <FormLabel>{t("publishDate")}</FormLabel>
                 <FormControl>
                   <ScheduledDateTimeField
                     value={field.value}
@@ -398,8 +407,8 @@ function EditCard({
                     onChange={(value) =>
                       form.setValue("availableFrom", value, { shouldDirty: true })
                     }
-                    addLabel="Add publish date"
-                    inputLabel="Publish date and time"
+                    addLabel={t("addPublishDate")}
+                    inputLabel={t("publishDateTime")}
                   />
                 </FormControl>
                 <FormMessage />
@@ -409,13 +418,13 @@ function EditCard({
         </SectionCard>
         {canMapPrizes && (
           <SectionCard
-            title="Imported DevPost prizes"
-            description="Reference data from the latest import batch. Selected tags on this challenge decide who enters the queue."
+            title={t("importedDevpostPrizesTitle")}
+            description={t("importedDevpostPrizesDesc")}
             className="mt-6"
           >
             <div className="mt-4 space-y-2">
               {devpostPrizes.length === 0 ? (
-                <p className="text-muted-foreground text-sm">No imported prizes yet.</p>
+                <p className="text-muted-foreground text-sm">{t("noImportedPrizes")}</p>
               ) : (
                 devpostPrizes.map((prize) => (
                   <div
@@ -425,15 +434,17 @@ function EditCard({
                     <div className="min-w-0">
                       <p className="font-medium">{prize.name}</p>
                       <p className="text-muted-foreground text-xs">
-                        {prize.repoCount} project{prize.repoCount === 1 ? "" : "s"}
+                        {prize.repoCount === 1
+                          ? t("projectCountOne", { count: prize.repoCount })
+                          : t("projectCountOther", { count: prize.repoCount })}
                       </p>
                     </div>
                     {prize.mappedChallengeId ? (
                       <StatusBadge tone="success">
-                        Mapped to {prize.mappedChallengeTitle}
+                        {t("mappedToInline", { title: prize.mappedChallengeTitle ?? "" })}
                       </StatusBadge>
                     ) : (
-                      <StatusBadge tone="neutral">Unmapped</StatusBadge>
+                      <StatusBadge tone="neutral">{t("unmappedBadge")}</StatusBadge>
                     )}
                   </div>
                 ))

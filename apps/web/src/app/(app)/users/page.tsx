@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/select";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
+import { type Translate, useLocale } from "@/lib/i18n";
 import { logisticsApi } from "@/lib/logistics";
 import { useCan } from "@/lib/session";
 import type { Tone } from "@/lib/tones";
@@ -55,13 +56,15 @@ const dateFmt = new Intl.DateTimeFormat("en-GB", {
   year: "numeric",
 });
 
-const ROLE_LABEL: Record<DerivedRole, string> = {
-  admin: "Admin",
-  judge: "Judge",
-  sponsor: "Sponsor",
-  staff: "Staff",
-  participant: "Participant",
-};
+function roleLabel(t: Translate): Record<DerivedRole, string> {
+  return {
+    admin: t("roleAdmin"),
+    judge: t("roleJudge"),
+    sponsor: t("roleSponsor"),
+    staff: t("roleStaff"),
+    participant: t("roleParticipant"),
+  };
+}
 
 /** Distinct tone per role so Admin/Judge/Sponsor/Staff never share a color.
  * Kept in sync with the profile header (users/[id]/page.tsx). */
@@ -87,18 +90,20 @@ const COLUMN_OPTIONS = [
 ] as const;
 type UserColumnId = (typeof COLUMN_OPTIONS)[number];
 
-const COLUMN_LABEL: Record<UserColumnId, string> = {
-  name: "Name",
-  role: "Role",
-  email: "Email",
-  application: "Application",
-  badge: "Badge",
-  presence: "Presence",
-  phone: "Phone",
-  shirt: "Shirt",
-  language: "Language",
-  created: "Joined",
-};
+function columnLabel(t: Translate): Record<UserColumnId, string> {
+  return {
+    name: t("name"),
+    role: t("colRole"),
+    email: t("email"),
+    application: t("colApplication"),
+    badge: t("badge"),
+    presence: t("presence"),
+    phone: t("phone"),
+    shirt: t("colShirt"),
+    language: t("language"),
+    created: t("colJoined"),
+  };
+}
 
 const DEFAULT_COLUMNS = new Set<UserColumnId>([
   "name",
@@ -128,10 +133,10 @@ function loadStoredColumns(): Set<UserColumnId> {
   }
 }
 
-function applicationLabel(status: string | null): string {
-  if (!status) return "No application";
-  if (status === "accepted_internal") return "Accepted (unsent)";
-  if (status === "rejected_internal") return "Rejected (unsent)";
+function applicationLabel(status: string | null, t: Translate): string {
+  if (!status) return t("noApplication");
+  if (status === "accepted_internal") return t("acceptedUnsent");
+  if (status === "rejected_internal") return t("rejectedUnsent");
   return status.replace(/_/g, " ");
 }
 
@@ -145,11 +150,12 @@ function applicationTone(status: string | null): "success" | "warning" | "danger
 
 /** Presence needs the live occupancy set, so the column list is built per-render
  * (see `useCan(PRESENCE_SCAN | LOGISTICS_STATS)` in the page component). */
-function buildColumns(presentIds: Set<number> | null): Column<UserListItem>[] {
+function buildColumns(presentIds: Set<number> | null, t: Translate): Column<UserListItem>[] {
+  const roleLabels = roleLabel(t);
   return [
     {
       id: "name",
-      header: "Name",
+      header: t("name"),
       sortValue: (u) => `${u.surname ?? ""} ${u.name ?? ""}`.trim().toLowerCase(),
       cell: (u) => (
         <div className="flex items-center gap-3">
@@ -162,17 +168,17 @@ function buildColumns(presentIds: Set<number> | null): Column<UserListItem>[] {
     },
     {
       id: "role",
-      header: "Role",
+      header: t("colRole"),
       sortValue: (u) => u.role,
       cell: (u) => (
         <StatusBadge tone={ROLE_TONE[u.role]} dot={false}>
-          {ROLE_LABEL[u.role]}
+          {roleLabels[u.role]}
         </StatusBadge>
       ),
     },
     {
       id: "email",
-      header: "Email",
+      header: t("email"),
       sortValue: (u) => u.email.toLowerCase(),
       cell: (u) => (
         <div className="flex items-center gap-2">
@@ -181,7 +187,7 @@ function buildColumns(presentIds: Set<number> | null): Column<UserListItem>[] {
             dot={false}
             className="w-24 shrink-0 justify-center"
           >
-            {u.emailVerified ? "Verified" : "Unverified"}
+            {u.emailVerified ? t("verified") : t("unverified")}
           </StatusBadge>
           <span className="text-muted-foreground">{u.email}</span>
         </div>
@@ -189,17 +195,17 @@ function buildColumns(presentIds: Set<number> | null): Column<UserListItem>[] {
     },
     {
       id: "application",
-      header: "Application",
+      header: t("colApplication"),
       sortValue: (u) => u.applicationStatus ?? "",
       cell: (u) => (
         <StatusBadge tone={applicationTone(u.applicationStatus)} dot={false} className="capitalize">
-          {applicationLabel(u.applicationStatus)}
+          {applicationLabel(u.applicationStatus, t)}
         </StatusBadge>
       ),
     },
     {
       id: "badge",
-      header: "Badge",
+      header: t("badge"),
       cell: (u) =>
         u.badgeId ? (
           <span className="font-mono text-xs">{u.badgeId}</span>
@@ -209,22 +215,22 @@ function buildColumns(presentIds: Set<number> | null): Column<UserListItem>[] {
     },
     {
       id: "presence",
-      header: "Presence",
+      header: t("presence"),
       sortValue: (u) => (presentIds?.has(u.id) ? 1 : 0),
       cell: (u) =>
         presentIds == null ? (
           <span className="text-muted-foreground">—</span>
         ) : presentIds.has(u.id) ? (
-          <StatusBadge tone="success">Present</StatusBadge>
+          <StatusBadge tone="success">{t("present")}</StatusBadge>
         ) : (
           <StatusBadge tone="neutral" dot={false}>
-            Away
+            {t("away")}
           </StatusBadge>
         ),
     },
     {
       id: "phone",
-      header: "Phone",
+      header: t("phone"),
       cell: (u) =>
         u.phone ? (
           <span className="text-sm">{u.phone}</span>
@@ -234,7 +240,7 @@ function buildColumns(presentIds: Set<number> | null): Column<UserListItem>[] {
     },
     {
       id: "shirt",
-      header: "Shirt",
+      header: t("colShirt"),
       cell: (u) =>
         u.shirtSize ? (
           <span className="text-sm">{u.shirtSize}</span>
@@ -244,12 +250,12 @@ function buildColumns(presentIds: Set<number> | null): Column<UserListItem>[] {
     },
     {
       id: "language",
-      header: "Language",
+      header: t("language"),
       cell: (u) => <span className="text-sm uppercase">{u.language}</span>,
     },
     {
       id: "created",
-      header: "Joined",
+      header: t("colJoined"),
       align: "right",
       sortValue: (u) => u.createdAt,
       cell: (u) => (
@@ -263,6 +269,9 @@ function buildColumns(presentIds: Set<number> | null): Column<UserListItem>[] {
 
 export default function UsersPage() {
   const router = useRouter();
+  const { t } = useLocale();
+  const ROLE_LABEL = useMemo(() => roleLabel(t), [t]);
+  const COLUMN_LABEL = useMemo(() => columnLabel(t), [t]);
   const [q, setQ] = useState("");
   const [users, setUsers] = useState<UserListItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -335,7 +344,7 @@ export default function UsersPage() {
           if (cancelled) return;
           setUsers([]);
           setTotal(0);
-          toast.error(err instanceof ApiError ? err.message : "Could not load users.");
+          toast.error(err instanceof ApiError ? err.message : t("couldNotLoadUsers"));
         })
         .finally(() => {
           if (!cancelled) setLoading(false);
@@ -345,7 +354,7 @@ export default function UsersPage() {
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [q, liveRefresh]);
+  }, [q, liveRefresh, t]);
 
   const filteredUsers = useMemo(
     () =>
@@ -374,12 +383,12 @@ export default function UsersPage() {
 
   const columns = useMemo(
     () =>
-      buildColumns(presentIds).filter(
+      buildColumns(presentIds, t).filter(
         (column) =>
           visibleColumns.has(column.id as UserColumnId) &&
           (column.id !== "presence" || showPresence),
       ),
-    [visibleColumns, presentIds, showPresence],
+    [visibleColumns, presentIds, showPresence, t],
   );
 
   function toggleColumn(id: UserColumnId, checked: boolean) {
@@ -394,13 +403,19 @@ export default function UsersPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Users"
+        title={t("users")}
         description={
           total > 0
-            ? `${total} ${total === 1 ? "person" : "people"}${
-                total > users.length ? ` — showing first ${users.length}, refine your search` : ""
-              }`
-            : "Browse everyone registered in hackOS."
+            ? (() => {
+                const base =
+                  total === 1
+                    ? t("peopleCountOne", { count: total })
+                    : t("peopleCountOther", { count: total });
+                const suffix =
+                  total > users.length ? ` — ${t("showingFirst", { shown: users.length })}` : "";
+                return `${base}${suffix}`;
+              })()
+            : t("browseEveryone")
         }
         actions={
           <CapabilityGate capability={CAPABILITIES.INVITES_MANAGE}>
@@ -414,7 +429,7 @@ export default function UsersPage() {
         <Input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search by name, surname or email…"
+          placeholder={t("searchUsersPlaceholder")}
           className="h-9 max-w-sm"
         />
         <Select value={emailFilter} onValueChange={setEmailFilter}>
@@ -422,9 +437,9 @@ export default function UsersPage() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Any email</SelectItem>
-            <SelectItem value="verified">Verified</SelectItem>
-            <SelectItem value="unverified">Unverified</SelectItem>
+            <SelectItem value="all">{t("anyEmail")}</SelectItem>
+            <SelectItem value="verified">{t("verified")}</SelectItem>
+            <SelectItem value="unverified">{t("unverified")}</SelectItem>
           </SelectContent>
         </Select>
         <Select value={roleFilter} onValueChange={setRoleFilter}>
@@ -432,7 +447,7 @@ export default function UsersPage() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Any role</SelectItem>
+            <SelectItem value="all">{t("anyRole")}</SelectItem>
             {Object.entries(ROLE_LABEL).map(([value, label]) => (
               <SelectItem key={value} value={value}>
                 {label}
@@ -445,22 +460,22 @@ export default function UsersPage() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Any spot</SelectItem>
-            <SelectItem value="confirmed">Confirmed</SelectItem>
-            <SelectItem value="accepted_pending">Accepted pending</SelectItem>
-            <SelectItem value="declined">Declined</SelectItem>
-            <SelectItem value="not_confirmed">Not confirmed</SelectItem>
+            <SelectItem value="all">{t("anySpot")}</SelectItem>
+            <SelectItem value="confirmed">{t("confirmed")}</SelectItem>
+            <SelectItem value="accepted_pending">{t("acceptedPending")}</SelectItem>
+            <SelectItem value="declined">{t("declined")}</SelectItem>
+            <SelectItem value="not_confirmed">{t("notConfirmed")}</SelectItem>
           </SelectContent>
         </Select>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm" className="h-9">
               <SlidersHorizontalIcon />
-              Columns
+              {t("columnsLabel")}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuLabel>Visible fields</DropdownMenuLabel>
+            <DropdownMenuLabel>{t("visibleFields")}</DropdownMenuLabel>
             <DropdownMenuSeparator />
             {availableColumnOptions.map((id) => (
               <DropdownMenuCheckboxItem
@@ -485,10 +500,8 @@ export default function UsersPage() {
         loading={loading}
         empty={{
           icon: UsersIcon,
-          title: q.trim() ? "No matching users" : "No users yet",
-          description: q.trim()
-            ? "Try a different name or email."
-            : "Users appear here once they register.",
+          title: q.trim() ? t("noMatchingUsers") : t("noUsersYet"),
+          description: q.trim() ? t("tryDifferentNameEmail") : t("usersAppearHere"),
         }}
       />
     </div>

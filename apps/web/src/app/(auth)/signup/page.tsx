@@ -28,6 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { signUp } from "@/lib/auth-client";
+import { LANGS, languageName, useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 
 const schema = z.object({
@@ -43,10 +44,11 @@ type Values = z.infer<typeof schema>;
 export default function SignUpPage() {
   const router = useRouter();
   const { status } = useSessionContext();
+  const { t, language } = useLocale();
   const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
   const form = useForm<Values>({
     resolver: zodResolver(schema),
-    defaultValues: { name: "", surname: "", email: "", password: "", language: "es" },
+    defaultValues: { name: "", surname: "", email: "", password: "", language },
   });
 
   // Already signed in: no reason to show the sign-up form again.
@@ -73,7 +75,7 @@ export default function SignUpPage() {
       language: values.language,
     });
     if (error && error.status !== 200) {
-      form.setError("root", { message: error.message ?? "Could not create the account" });
+      form.setError("root", { message: error.message ?? t("couldNotCreateAccount") });
       return;
     }
     setSubmittedEmail(values.email);
@@ -86,16 +88,13 @@ export default function SignUpPage() {
           <div className="bg-success/10 text-success mb-2 grid size-12 place-items-center rounded-full">
             <MailCheckIcon className="size-6" />
           </div>
-          <CardTitle>Check your inbox</CardTitle>
-          <CardDescription>
-            We sent a verification code to <strong>{submittedEmail}</strong>. Follow the link to
-            unlock the rest of the system.
-          </CardDescription>
+          <CardTitle>{t("checkInbox")}</CardTitle>
+          <CardDescription>{t("verificationSent", { email: submittedEmail })}</CardDescription>
         </CardHeader>
         <CardContent className="text-muted-foreground text-center text-sm">
-          Didn&apos;t get it?{" "}
+          {t("didntGetIt")}{" "}
           <Link href="/verify-email" className="text-foreground underline underline-offset-4">
-            Resend verification
+            {t("resendVerification")}
           </Link>
         </CardContent>
       </Card>
@@ -105,8 +104,8 @@ export default function SignUpPage() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Create your account</CardTitle>
-        <CardDescription>Sign up with your name, email and a password.</CardDescription>
+        <CardTitle>{t("createYourAccount")}</CardTitle>
+        <CardDescription>{t("signUpDescription")}</CardDescription>
       </CardHeader>
       <CardContent>
         <Form {...form}>
@@ -117,7 +116,7 @@ export default function SignUpPage() {
                 name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Name</FormLabel>
+                    <FormLabel>{t("name")}</FormLabel>
                     <FormControl>
                       <Input autoComplete="given-name" {...field} />
                     </FormControl>
@@ -130,7 +129,7 @@ export default function SignUpPage() {
                 name="surname"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Surname</FormLabel>
+                    <FormLabel>{t("surname")}</FormLabel>
                     <FormControl>
                       <Input autoComplete="family-name" {...field} />
                     </FormControl>
@@ -144,7 +143,7 @@ export default function SignUpPage() {
               name="email"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Email</FormLabel>
+                  <FormLabel>{t("email")}</FormLabel>
                   <FormControl>
                     <Input type="email" autoComplete="email" {...field} />
                   </FormControl>
@@ -157,7 +156,7 @@ export default function SignUpPage() {
               name="password"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Password</FormLabel>
+                  <FormLabel>{t("password")}</FormLabel>
                   <FormControl>
                     <PasswordInput autoComplete="new-password" {...field} />
                   </FormControl>
@@ -170,7 +169,7 @@ export default function SignUpPage() {
               name="language"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Language</FormLabel>
+                  <FormLabel>{t("language")}</FormLabel>
                   <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
                       <SelectTrigger className="w-full">
@@ -178,9 +177,11 @@ export default function SignUpPage() {
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="es">Castellano</SelectItem>
-                      <SelectItem value="gl">Galego</SelectItem>
-                      <SelectItem value="en">English</SelectItem>
+                      {LANGS.map((l) => (
+                        <SelectItem key={l} value={l}>
+                          {languageName(l)}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -191,15 +192,15 @@ export default function SignUpPage() {
               <p className="text-destructive text-sm">{form.formState.errors.root.message}</p>
             )}
             <SubmitButton className="w-full" pending={form.formState.isSubmitting}>
-              Create account
+              {t("createAccount")}
             </SubmitButton>
           </form>
         </Form>
       </CardContent>
       <div className="text-muted-foreground px-6 pb-6 text-center text-sm">
-        Already have an account?{" "}
+        {t("alreadyHaveAccount")}{" "}
         <Link href="/login" className="text-foreground underline underline-offset-4">
-          Sign in
+          {t("signIn")}
         </Link>
       </div>
     </Card>

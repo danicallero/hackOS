@@ -1,4 +1,5 @@
 import { StatusBadge } from "@/components/common/status-badge";
+import { useLocale } from "@/lib/i18n";
 
 /**
  * A meal scan captured on-device and awaiting server confirmation (H25). It
@@ -33,10 +34,11 @@ export function saveOfflineQueue(items: OfflineScan[]) {
 
 /** Local, not-yet-synced meal scans queued on this device (H25). */
 export function OfflineQueue({ items }: { items: OfflineScan[] }) {
+  const { t } = useLocale();
   return (
     <div className="rounded-lg border">
       <div className="border-b px-4 py-2">
-        <p className="text-sm font-medium">Local queue</p>
+        <p className="text-sm font-medium">{t("localQueueTitle")}</p>
       </div>
       <div className="divide-y">
         {items.map((item) => (

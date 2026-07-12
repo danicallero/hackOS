@@ -2,6 +2,7 @@ import { CopyIcon } from "lucide-react";
 import Image from "next/image";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export function QrCode({
@@ -13,6 +14,7 @@ export function QrCode({
   label: string;
   className?: string;
 }) {
+  const { t } = useLocale();
   if (!value) {
     return (
       <div className={cn("rounded-lg border p-4 text-center", className)}>
@@ -46,11 +48,11 @@ export function QrCode({
             className="w-full"
             onClick={() => {
               void navigator.clipboard.writeText(value);
-              toast.success("Copied.");
+              toast.success(t("copied"));
             }}
           >
             <CopyIcon className="size-4" />
-            Copy
+            {t("copy")}
           </Button>
         </div>
       </div>

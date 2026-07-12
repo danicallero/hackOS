@@ -35,7 +35,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
-import { pickText } from "@/lib/i18n";
+import { pickText, useLocale } from "@/lib/i18n";
 import type { Intolerance } from "@/lib/types";
 
 const FORM_ID = "intolerance-form";
@@ -79,6 +79,7 @@ const EMPTY: Values = {
 };
 
 export function IntolerancesManager() {
+  const { t } = useLocale();
   const [entries, setEntries] = useState<Intolerance[]>([]);
   const [loading, setLoading] = useState(true);
   // `null` => closed; a partial with no id => create; with id => edit.
@@ -97,11 +98,11 @@ export function IntolerancesManager() {
       );
       setEntries(intolerances);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not load the dictionary.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadDictionary"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   // Soft, in-place refresh instead of a hard reload when another admin
   // edits the intolerances library elsewhere.
@@ -141,15 +142,15 @@ export function IntolerancesManager() {
     try {
       if (editing) {
         await api.patch<Intolerance>(`/api/food-intolerances/${editing.id}`, payload);
-        toast.success("Intolerance updated.");
+        toast.success(t("intoleranceUpdated"));
       } else {
         await api.post<Intolerance>("/api/food-intolerances", payload);
-        toast.success("Intolerance added.");
+        toast.success(t("intoleranceAdded"));
       }
       setEditing(undefined);
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not save the entry.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveEntry"));
     }
   }
 
@@ -158,11 +159,11 @@ export function IntolerancesManager() {
     setDeleting(true);
     try {
       await api.delete(`/api/food-intolerances/${deleteTarget.id}`);
-      toast.success("Intolerance deleted.");
+      toast.success(t("intoleranceDeleted"));
       setDeleteTarget(null);
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not delete the entry.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotDeleteEntry"));
     } finally {
       setDeleting(false);
     }
@@ -171,7 +172,7 @@ export function IntolerancesManager() {
   const columns: Column<Intolerance>[] = [
     {
       id: "label",
-      header: "Label",
+      header: t("labelField"),
       sortValue: (row) => pickText(row.label, "es").toLowerCase(),
       cell: (row) => (
         <div className="space-y-0.5">
@@ -184,7 +185,7 @@ export function IntolerancesManager() {
     },
     {
       id: "description",
-      header: "Description",
+      header: t("descriptionLabel"),
       cell: (row) => (
         <span className="text-muted-foreground">
           {row.description ? pickText(row.description, "es") : "—"}
@@ -196,13 +197,10 @@ export function IntolerancesManager() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-muted-foreground text-sm">
-          The shared, translatable catalogue used by the registration and profile pickers and the
-          application dietary field.
-        </p>
+        <p className="text-muted-foreground text-sm">{t("sharedCatalogueDesc")}</p>
         <Button onClick={() => setEditing(null)}>
           <PlusIcon />
-          New
+          {t("newAction")}
         </Button>
       </div>
 
@@ -212,24 +210,24 @@ export function IntolerancesManager() {
         getRowId={(row) => String(row.id)}
         loading={loading}
         searchable={(row) => `${pickText(row.label, "es")} ${row.label.en} ${row.label.gl}`}
-        searchPlaceholder="Search intolerances…"
+        searchPlaceholder={t("searchIntolerances")}
         empty={{
           icon: UtensilsCrossedIcon,
-          title: "No intolerances yet",
-          description: "Add the first entry so participants can pick it during registration.",
+          title: t("noIntolerancesYetTitle"),
+          description: t("addFirstEntryDietaryDesc"),
         }}
         rowActions={(row) => (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="size-8">
                 <MoreHorizontalIcon />
-                <span className="sr-only">Open menu</span>
+                <span className="sr-only">{t("openMenuAria")}</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => setEditing(row)}>Edit</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setEditing(row)}>{t("edit")}</DropdownMenuItem>
               <DropdownMenuItem variant="destructive" onSelect={() => setDeleteTarget(row)}>
-                Delete
+                {t("deleteAction")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -241,15 +239,15 @@ export function IntolerancesManager() {
         open={formOpen}
         onOpenChange={(o) => !o && setEditing(undefined)}
         icon={UtensilsCrossedIcon}
-        title={editing ? "Edit intolerance" : "New intolerance"}
-        description="Provide the label in every locale. The description is optional but all-or-nothing."
+        title={editing ? t("editIntoleranceTitle") : t("newIntoleranceTitle")}
+        description={t("provideLabelEveryLocaleDesc")}
         footer={
           <>
             <Button type="button" variant="outline" onClick={() => setEditing(undefined)}>
-              Cancel
+              {t("cancel")}
             </Button>
             <SubmitButton form={FORM_ID} pending={form.formState.isSubmitting}>
-              {editing ? "Save changes" : "Add intolerance"}
+              {editing ? t("saveChanges") : t("addIntolerance")}
             </SubmitButton>
           </>
         }
@@ -257,7 +255,7 @@ export function IntolerancesManager() {
         <Form {...form}>
           <form id={FORM_ID} onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
             <div className="space-y-3">
-              <p className="text-sm font-medium">Label</p>
+              <p className="text-sm font-medium">{t("labelField")}</p>
               {(["es", "en", "gl"] as const).map((loc) => (
                 <FormField
                   key={loc}
@@ -278,7 +276,7 @@ export function IntolerancesManager() {
               ))}
             </div>
             <div className="space-y-3">
-              <p className="text-sm font-medium">Description (optional)</p>
+              <p className="text-sm font-medium">{t("descriptionOptionalLabel")}</p>
               {(["es", "en", "gl"] as const).map((loc) => (
                 <FormField
                   key={loc}
@@ -306,24 +304,24 @@ export function IntolerancesManager() {
       <Modal
         open={deleteTarget !== null}
         onOpenChange={(o) => !o && setDeleteTarget(null)}
-        title="Delete intolerance"
+        title={t("deleteIntoleranceTitle")}
         description={
           deleteTarget
-            ? `Remove "${pickText(deleteTarget.label, "es")}" from the dictionary? Existing participant selections keep their id but stop resolving.`
+            ? t("removeFromDictionaryInline", { label: pickText(deleteTarget.label, "es") })
             : undefined
         }
         footer={
           <>
             <Button type="button" variant="outline" onClick={() => setDeleteTarget(null)}>
-              Cancel
+              {t("cancel")}
             </Button>
             <Button variant="destructive" disabled={deleting} onClick={onDelete}>
-              Delete
+              {t("deleteAction")}
             </Button>
           </>
         }
       >
-        <span className="sr-only">Confirm deletion</span>
+        <span className="sr-only">{t("confirmDeletionAria")}</span>
       </Modal>
     </div>
   );

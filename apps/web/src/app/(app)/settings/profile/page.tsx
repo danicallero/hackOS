@@ -12,7 +12,6 @@ import { SubmitButton } from "@/components/common/submit-button";
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -28,7 +27,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
-import { pickText } from "@/lib/i18n";
+import { languageName, pickText, useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 import type { Intolerance, Language, Me } from "@/lib/types";
 import { EmailCard } from "./email-card";
@@ -52,6 +51,7 @@ const NONE = "__none__";
 
 export default function ProfileSettingsPage() {
   const { me, refresh } = useSessionContext();
+  const { t } = useLocale();
   const [intolerances, setIntolerances] = useState<Intolerance[]>([]);
   const lang = (me?.language as Language) ?? "es";
 
@@ -103,9 +103,9 @@ export default function ProfileSettingsPage() {
         foodIntoleranceNotes: values.foodIntoleranceNotes || null,
       });
       await refresh();
-      toast.success("Profile updated.");
+      toast.success(t("profileUpdated"));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not save your profile.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveProfile"));
     }
   }
 
@@ -123,16 +123,17 @@ export default function ProfileSettingsPage() {
         <form onSubmit={form.handleSubmit(onSubmit)}>
           <SectionCard
             icon={UserIcon}
-            title="Personal details"
-            description="Keep your details current so accreditation and catering use the right data."
-            footer={<SubmitButton pending={form.formState.isSubmitting}>Save changes</SubmitButton>}
+            title={t("personalDetails")}
+            footer={
+              <SubmitButton pending={form.formState.isSubmitting}>{t("saveChanges")}</SubmitButton>
+            }
           >
             <FormField
               control={form.control}
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>First name</FormLabel>
+                  <FormLabel>{t("firstName")}</FormLabel>
                   <FormControl>
                     <Input autoComplete="given-name" {...field} />
                   </FormControl>
@@ -145,7 +146,7 @@ export default function ProfileSettingsPage() {
               name="surname"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Last name</FormLabel>
+                  <FormLabel>{t("lastName")}</FormLabel>
                   <FormControl>
                     <Input autoComplete="family-name" {...field} />
                   </FormControl>
@@ -158,7 +159,7 @@ export default function ProfileSettingsPage() {
               name="phone"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Phone</FormLabel>
+                  <FormLabel>{t("phone")}</FormLabel>
                   <FormControl>
                     <Input type="tel" autoComplete="tel" {...field} />
                   </FormControl>
@@ -171,7 +172,7 @@ export default function ProfileSettingsPage() {
               name="language"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Language</FormLabel>
+                  <FormLabel>{t("language")}</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger className="w-full">
@@ -179,12 +180,13 @@ export default function ProfileSettingsPage() {
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="es">Castellano</SelectItem>
-                      <SelectItem value="gl">Galego</SelectItem>
-                      <SelectItem value="en">English</SelectItem>
+                      {LANGS.map((language) => (
+                        <SelectItem key={language} value={language}>
+                          {languageName(language)}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
-                  <FormDescription>Applies to emails and screens.</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -194,15 +196,15 @@ export default function ProfileSettingsPage() {
               name="shirtSize"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Shirt size</FormLabel>
+                  <FormLabel>{t("shirtSize")}</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Not set" />
+                        <SelectValue placeholder={t("notSet")} />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value={NONE}>Not set</SelectItem>
+                      <SelectItem value={NONE}>{t("notSet")}</SelectItem>
                       {SHIRT_SIZES.map((s) => (
                         <SelectItem key={s} value={s}>
                           {s}
@@ -219,20 +221,17 @@ export default function ProfileSettingsPage() {
               name="foodIntolerances"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Food intolerances (optional)</FormLabel>
+                  <FormLabel>{t("foodIntolerances")}</FormLabel>
                   <FormControl>
                     <MultiSelect
                       options={intoleranceOptions}
                       value={field.value}
                       onChange={field.onChange}
-                      placeholder="Select any that apply…"
-                      searchPlaceholder="Search intolerances…"
-                      emptyText="No intolerances in the dictionary yet."
+                      placeholder={t("selectIntolerances")}
+                      searchPlaceholder={t("searchIntolerances")}
+                      emptyText={t("noIntolerances")}
                     />
                   </FormControl>
-                  <FormDescription>
-                    From the shared catalogue maintained by the org.
-                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -242,13 +241,9 @@ export default function ProfileSettingsPage() {
               name="foodIntoleranceNotes"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Other dietary notes</FormLabel>
+                  <FormLabel>{t("otherDietaryNotes")}</FormLabel>
                   <FormControl>
-                    <Textarea
-                      rows={3}
-                      placeholder="Anything else catering should know…"
-                      {...field}
-                    />
+                    <Textarea rows={3} placeholder={t("cateringNotes")} {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

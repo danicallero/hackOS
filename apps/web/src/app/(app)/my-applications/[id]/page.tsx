@@ -30,6 +30,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
+import { useLocale } from "@/lib/i18n";
 import { useMe } from "@/lib/session";
 import type { Language } from "@/lib/types";
 import {
@@ -54,6 +55,7 @@ function fieldErrorsFromApi(err: unknown): Record<string, string> {
 }
 
 export default function MyApplicationDetailPage() {
+  const { t } = useLocale();
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
   const me = useMe();
@@ -167,7 +169,7 @@ export default function MyApplicationDetailPage() {
         (typeof v === "string" && v.trim() === "") ||
         (Array.isArray(v) && v.length === 0) ||
         (f.kind === "checkbox" && v !== true);
-      if (empty) errors[f.key] = "This field is required";
+      if (empty) errors[f.key] = t("fieldRequired");
     }
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
@@ -182,9 +184,9 @@ export default function MyApplicationDetailPage() {
       setResponse(saved);
       setValues(saved.responses ?? {});
       setFieldErrors({});
-      toast.success("Draft saved.");
+      toast.success(t("draftSaved"));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not save your draft.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveDraft"));
     } finally {
       setSaving(false);
     }
@@ -192,7 +194,7 @@ export default function MyApplicationDetailPage() {
 
   async function handleSubmit() {
     if (!checkRequired()) {
-      toast.error("Please fill in all required fields.");
+      toast.error(t("fillRequiredFields"));
       return;
     }
     setSubmitting(true);
@@ -224,13 +226,13 @@ export default function MyApplicationDetailPage() {
       setValues(res.response.responses ?? {});
       setPrivacyNotice(res.privacy_notice);
       setFieldErrors({});
-      toast.success("Application submitted.");
+      toast.success(t("applicationSubmitted"));
     } catch (err) {
       if (err instanceof ApiError) {
         setFieldErrors(fieldErrorsFromApi(err));
         toast.error(err.message);
       } else {
-        toast.error("Could not submit your application.");
+        toast.error(t("couldNotSubmitApplication"));
       }
     } finally {
       setSubmitting(false);
@@ -242,10 +244,10 @@ export default function MyApplicationDetailPage() {
     setActing(true);
     try {
       await api.post(`/api/me/responses/${response.id}/confirm`);
-      toast.success("Your place is confirmed. See you there!");
+      toast.success(t("placeConfirmedSeeYou"));
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not confirm your place.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotConfirmPlace"));
     } finally {
       setActing(false);
     }
@@ -256,11 +258,11 @@ export default function MyApplicationDetailPage() {
     setActing(true);
     try {
       await api.post(`/api/me/responses/${response.id}/decline`);
-      toast.success("You've released your place.");
+      toast.success(t("placeReleasedMsg"));
       setReleaseOpen(false);
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not release your place.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotReleasePlace"));
     } finally {
       setActing(false);
     }
@@ -269,7 +271,7 @@ export default function MyApplicationDetailPage() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Application" />
+        <PageHeader title={t("tabApplication")} />
         <div className="flex justify-center py-16">
           <Spinner className="size-6" />
         </div>
@@ -281,15 +283,15 @@ export default function MyApplicationDetailPage() {
   if (!form && !response) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Application" />
-        <SectionCard title="Not available" bodyClassName="p-0">
+        <PageHeader title={t("tabApplication")} />
+        <SectionCard title={t("notAvailable")} bodyClassName="p-0">
           <EmptyState
             icon={ClipboardListIcon}
-            title="This application isn't open"
-            description="The form may have closed or doesn't exist. Head back to see what's open."
+            title={t("applicationNotOpenTitle")}
+            description={t("applicationNotOpenDesc")}
             action={
               <Button asChild variant="outline">
-                <Link href="/my-applications">Back to my applications</Link>
+                <Link href="/my-applications">{t("backToMyApplications")}</Link>
               </Button>
             }
           />
@@ -298,7 +300,7 @@ export default function MyApplicationDetailPage() {
     );
   }
 
-  const title = form?.name ?? "Your application";
+  const title = form?.name ?? t("yourApplicationFallback");
 
   return (
     <div className="space-y-6">
@@ -308,7 +310,7 @@ export default function MyApplicationDetailPage() {
         actions={
           status ? (
             <StatusBadge tone={statusTone(status)} dot={false}>
-              {statusLabel(status)}
+              {statusLabel(status, t)}
             </StatusBadge>
           ) : undefined
         }
@@ -318,23 +320,21 @@ export default function MyApplicationDetailPage() {
       {canConfirm && (
         <SectionCard
           icon={CheckCircle2Icon}
-          title="You're in — confirm your place"
-          description="You've been accepted. Confirm to lock in your spot before the window closes, or decline if you can't make it."
+          title={t("youreInConfirmTitle")}
+          description={t("youreInConfirmDesc")}
         >
           <Alert>
             <ShieldAlertIcon />
-            <AlertTitle>Heads up</AlertTitle>
-            <AlertDescription>
-              If you decline (or don't confirm in time), any dietary data you shared is deleted.
-            </AlertDescription>
+            <AlertTitle>{t("headsUp")}</AlertTitle>
+            <AlertDescription>{t("dietaryDataDeletedWarn")}</AlertDescription>
           </Alert>
           <div className="flex flex-wrap gap-2">
             <Button onClick={handleConfirm} disabled={acting}>
               {acting && <Spinner />}
-              Confirm place
+              {t("confirmPlace")}
             </Button>
             <Button variant="outline" onClick={handleDecline} disabled={acting}>
-              Decline
+              {t("decline")}
             </Button>
           </div>
         </SectionCard>
@@ -343,57 +343,50 @@ export default function MyApplicationDetailPage() {
       {status === "confirmed" && (
         <SectionCard
           icon={CheckCircle2Icon}
-          title="Your place is confirmed"
-          description="You're all set. See you at the event!"
+          title={t("placeConfirmedTitle")}
+          description={t("placeConfirmedDesc")}
         >
-          <p className="text-muted-foreground text-sm">
-            Can't make it after all? You can release your place at any time so the organizers can
-            offer it to someone else.
-          </p>
+          <p className="text-muted-foreground text-sm">{t("canReleaseAnytime")}</p>
           <div>
             <Button variant="outline" onClick={() => setReleaseOpen(true)} disabled={acting}>
-              <XCircleIcon />I can't attend — release my place
+              <XCircleIcon />
+              {t("cantAttendRelease")}
             </Button>
           </div>
           <Modal
             open={releaseOpen}
             onOpenChange={setReleaseOpen}
             icon={ShieldAlertIcon}
-            title="Release your place?"
-            description="This gives up your confirmed spot at the event."
+            title={t("releaseYourPlace")}
+            description={t("releaseYourPlaceDesc")}
             footer={
               <>
                 <Button variant="outline" onClick={() => setReleaseOpen(false)} disabled={acting}>
-                  Keep my place
+                  {t("keepMyPlace")}
                 </Button>
                 <Button variant="destructive" onClick={handleDecline} disabled={acting}>
                   {acting && <Spinner />}
-                  Yes, release my place
+                  {t("yesReleaseMyPlace")}
                 </Button>
               </>
             }
           >
-            <p className="text-muted-foreground text-sm">
-              This can't be undone from here — you'd need the organizers to re-invite you. Any
-              dietary data you shared is deleted when you release your place.
-            </p>
+            <p className="text-muted-foreground text-sm">{t("releaseCantBeUndone")}</p>
           </Modal>
         </SectionCard>
       )}
       {status === "declined" && (
         <Alert>
           <XCircleIcon />
-          <AlertTitle>You declined this place</AlertTitle>
-          <AlertDescription>If this was a mistake, contact the organizers.</AlertDescription>
+          <AlertTitle>{t("declinedThisPlaceTitle")}</AlertTitle>
+          <AlertDescription>{t("declinedThisPlaceDesc")}</AlertDescription>
         </Alert>
       )}
       {status === "expired" && (
         <Alert>
           <XCircleIcon />
-          <AlertTitle>Your confirmation window expired</AlertTitle>
-          <AlertDescription>
-            Ask the organization to resend your acceptance if you'd still like to attend.
-          </AlertDescription>
+          <AlertTitle>{t("confirmationExpiredTitle")}</AlertTitle>
+          <AlertDescription>{t("confirmationExpiredDesc")}</AlertDescription>
         </Alert>
       )}
 
@@ -401,25 +394,21 @@ export default function MyApplicationDetailPage() {
       {privacyNotice && (
         <Alert>
           <ShieldAlertIcon />
-          <AlertTitle>Privacy notice</AlertTitle>
+          <AlertTitle>{t("privacyNoticeTitle")}</AlertTitle>
           <AlertDescription>{privacyNotice}</AlertDescription>
         </Alert>
       )}
 
       <SectionCard
         icon={ClipboardListIcon}
-        title={editable ? "Your answers" : "Your submitted answers"}
-        description={
-          editable
-            ? "Fill in the form below. Save a draft anytime; submit when you're ready."
-            : "This application is locked and can no longer be edited."
-        }
+        title={editable ? t("yourAnswers") : t("yourSubmittedAnswers")}
+        description={editable ? t("fillFormBelowDesc") : t("applicationLockedDesc")}
         footer={
           editable ? (
             <>
               <Button variant="outline" onClick={handleSaveDraft} disabled={saving || submitting}>
                 {saving && <Spinner />}
-                Save draft
+                {t("saveDraft")}
               </Button>
               <SubmitButton
                 type="button"
@@ -427,7 +416,7 @@ export default function MyApplicationDetailPage() {
                 pending={submitting}
                 disabled={saving}
               >
-                Submit application
+                {t("submitApplication")}
               </SubmitButton>
             </>
           ) : undefined
@@ -436,10 +425,8 @@ export default function MyApplicationDetailPage() {
         {editable && me && !me.emailVerified && (
           <Alert variant="destructive">
             <ShieldAlertIcon />
-            <AlertTitle>Verify your email to submit</AlertTitle>
-            <AlertDescription>
-              You can save a draft now, but submitting requires a verified email address.
-            </AlertDescription>
+            <AlertTitle>{t("verifyEmailToSubmitTitle")}</AlertTitle>
+            <AlertDescription>{t("verifyEmailToSubmitDesc")}</AlertDescription>
           </Alert>
         )}
 
@@ -458,7 +445,7 @@ export default function MyApplicationDetailPage() {
           ))
         ) : form ? (
           // Open form with no questions — nothing to fill in but a submit is valid.
-          <p className="text-muted-foreground text-sm">This form has no questions to answer.</p>
+          <p className="text-muted-foreground text-sm">{t("formHasNoQuestions")}</p>
         ) : (
           // No template available (closed form): show stored answers read-only.
           <ReadOnlyAnswers responses={response?.responses ?? {}} />
@@ -467,7 +454,7 @@ export default function MyApplicationDetailPage() {
 
       {response?.submitted_at && (
         <p className="text-muted-foreground text-center text-xs">
-          Submitted {fmtDateTime(response.submitted_at)}
+          {t("submittedOnPrefix", { date: fmtDateTime(response.submitted_at) })}
         </p>
       )}
     </div>
@@ -476,9 +463,10 @@ export default function MyApplicationDetailPage() {
 
 /** Fallback for a closed form whose template we can't fetch: raw stored answers. */
 function ReadOnlyAnswers({ responses }: { responses: Record<string, unknown> }) {
+  const { t } = useLocale();
   const entries = Object.entries(responses);
   if (entries.length === 0) {
-    return <p className="text-muted-foreground text-sm">No answers were saved.</p>;
+    return <p className="text-muted-foreground text-sm">{t("noAnswersSaved")}</p>;
   }
   return (
     <dl className="space-y-3">

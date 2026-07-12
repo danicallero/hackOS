@@ -19,12 +19,14 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { authClient } from "@/lib/auth-client";
+import { useLocale } from "@/lib/i18n";
 
 const schema = z.object({ email: z.string().email("Enter a valid email") });
 type Values = z.infer<typeof schema>;
 
 function ForgotPasswordForm() {
   const params = useSearchParams();
+  const { t } = useLocale();
   const [sent, setSent] = useState(false);
   const form = useForm<Values>({
     resolver: zodResolver(schema),
@@ -49,14 +51,12 @@ function ForgotPasswordForm() {
           <div className="bg-success/10 text-success mb-2 grid size-12 place-items-center rounded-full">
             <MailCheckIcon className="size-6" />
           </div>
-          <CardTitle>Check your email</CardTitle>
-          <CardDescription>
-            If an account exists for that address, we&apos;ve sent a link to reset your password.
-          </CardDescription>
+          <CardTitle>{t("checkEmail")}</CardTitle>
+          <CardDescription>{t("resetEmailSent")}</CardDescription>
         </CardHeader>
         <CardContent className="text-center">
           <Link href="/login" className="text-sm underline underline-offset-4">
-            Back to sign in
+            {t("backToSignIn")}
           </Link>
         </CardContent>
       </Card>
@@ -66,8 +66,7 @@ function ForgotPasswordForm() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Reset your password</CardTitle>
-        <CardDescription>Enter your email and we&apos;ll send you a reset link.</CardDescription>
+        <CardTitle>{t("resetPassword")}</CardTitle>
       </CardHeader>
       <CardContent>
         <Form {...form}>
@@ -77,7 +76,7 @@ function ForgotPasswordForm() {
               name="email"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Email</FormLabel>
+                  <FormLabel>{t("email")}</FormLabel>
                   <FormControl>
                     <Input type="email" autoComplete="email" {...field} />
                   </FormControl>
@@ -86,15 +85,15 @@ function ForgotPasswordForm() {
               )}
             />
             <SubmitButton className="w-full" pending={form.formState.isSubmitting}>
-              Send reset link
+              {t("sendResetLink")}
             </SubmitButton>
           </form>
         </Form>
       </CardContent>
       <div className="text-muted-foreground px-6 pb-6 text-center text-sm">
-        Remembered it?{" "}
+        {t("rememberedIt")}{" "}
         <Link href="/login" className="text-foreground underline underline-offset-4">
-          Sign in
+          {t("signIn")}
         </Link>
       </div>
     </Card>

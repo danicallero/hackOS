@@ -8,6 +8,7 @@
  * exact fields with real types. We coerce the loose wrapper results into these
  * — we never re-implement the wrappers themselves.
  */
+import type { Translate } from "@/lib/i18n";
 import type {
   ImportPlan,
   MemberMatchType,
@@ -159,18 +160,17 @@ const MATCH_TONE: Record<MemberMatchType, Tone> = {
   unmatched: "warning",
 };
 
-const MATCH_LABEL: Record<MemberMatchType, string> = {
-  primary_email: "Matched",
-  secondary_email: "Matched (secondary)",
-  unmatched: "Unmatched",
-};
-
 export function matchTone(type: MemberMatchType): Tone {
   return MATCH_TONE[type] ?? "neutral";
 }
 
-export function matchLabel(type: MemberMatchType): string {
-  return MATCH_LABEL[type] ?? type;
+export function matchLabel(type: MemberMatchType, t: Translate): string {
+  const map: Record<MemberMatchType, string> = {
+    primary_email: t("matchedLabel"),
+    secondary_email: t("matchedSecondaryLabel"),
+    unmatched: t("unmatchedBadge"),
+  };
+  return map[type] ?? type;
 }
 
 /** merge_status on a persisted devpost_participant → tone. */

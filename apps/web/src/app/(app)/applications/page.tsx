@@ -11,7 +11,7 @@ import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ClipboardListIcon, PlusIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/select";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
+import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import {
   APPLICATION_TYPES,
@@ -51,6 +52,9 @@ import {
 
 const CREATE_FORM_ID = "application-create-form";
 
+// Module-level schema kept only for type inference (z.infer); the runtime
+// validator used by the form is built inside the component with useMemo so
+// its error message can be localized via t("required").
 const createSchema = z.object({
   name: z.string().min(1, "Required").max(200),
   type: z.enum(APPLICATION_TYPES),
@@ -72,12 +76,29 @@ const EMPTY: CreateValues = {
 
 export default function ApplicationsPage() {
   const router = useRouter();
+  const { t } = useLocale();
   const canManage = useCan(CAPABILITIES.APPLICATIONS_MANAGE);
   const [forms, setForms] = useState<ApplicationForm[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
 
-  const form = useForm<CreateValues>({ resolver: zodResolver(createSchema), defaultValues: EMPTY });
+  const localizedCreateSchema = useMemo(
+    () =>
+      z.object({
+        name: z.string().min(1, t("required")).max(200),
+        type: z.enum(APPLICATION_TYPES),
+        open_at: z.string(),
+        close_at: z.string(),
+        capacity: z.string(),
+        confirmation_window_hours: z.string(),
+      }),
+    [t],
+  );
+
+  const form = useForm<CreateValues>({
+    resolver: zodResolver(localizedCreateSchema),
+    defaultValues: EMPTY,
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -87,11 +108,11 @@ export default function ApplicationsPage() {
       );
       setForms(applications);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not load application forms.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadApplicationForms"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   // Soft, in-place refresh instead of a hard reload when another admin
   // creates/edits a form elsewhere.
@@ -105,14 +126,14 @@ export default function ApplicationsPage() {
   async function onCreate(values: CreateValues) {
     const capacityNum = values.capacity.trim() ? Number(values.capacity) : null;
     if (capacityNum !== null && (!Number.isInteger(capacityNum) || capacityNum < 1)) {
-      form.setError("capacity", { message: "Must be a positive whole number" });
+      form.setError("capacity", { message: t("mustBePositiveWholeNumber") });
       return;
     }
     const windowHours = values.confirmation_window_hours.trim()
       ? Number(values.confirmation_window_hours)
       : 168;
     if (!Number.isInteger(windowHours) || windowHours < 1) {
-      form.setError("confirmation_window_hours", { message: "Must be a positive whole number" });
+      form.setError("confirmation_window_hours", { message: t("mustBePositiveWholeNumber") });
       return;
     }
     try {
@@ -127,40 +148,42 @@ export default function ApplicationsPage() {
         capacity: capacityNum,
         confirmation_window_hours: windowHours,
       });
-      toast.success("Form created.");
+      toast.success(t("formCreated"));
       setCreating(false);
       form.reset(EMPTY);
       router.push(`/applications/${created.id}`);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not create the form.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotCreateForm"));
     }
   }
 
   const columns: Column<ApplicationForm>[] = [
     {
       id: "name",
-      header: "Form",
+      header: t("colForm"),
       sortValue: (f) => f.name.toLowerCase(),
       cell: (f) => (
         <div className="space-y-0.5">
           <div className="font-medium">{f.name}</div>
           <div className="text-muted-foreground text-xs">
-            {f.template.length} {f.template.length === 1 ? "question" : "questions"}
+            {f.template.length === 1
+              ? t("questionCountOne", { count: f.template.length })
+              : t("questionCountOther", { count: f.template.length })}
           </div>
         </div>
       ),
     },
     {
       id: "type",
-      header: "Type",
+      header: t("colType"),
       sortValue: (f) => f.type,
       cell: (f) => <span className="text-sm capitalize">{f.type}</span>,
     },
     {
       id: "status",
-      header: "Window",
+      header: t("colWindow"),
       cell: (f) => {
-        const w = windowState(f);
+        const w = windowState(f, t);
         return (
           <StatusBadge tone={w.tone} dot={false}>
             {w.label}
@@ -170,23 +193,23 @@ export default function ApplicationsPage() {
     },
     {
       id: "opens",
-      header: "Opens",
+      header: t("colOpens"),
       sortValue: (f) => f.open_at ?? "",
       cell: (f) => <span className="text-muted-foreground text-sm">{fmtDateTime(f.open_at)}</span>,
     },
     {
       id: "closes",
-      header: "Closes",
+      header: t("colCloses"),
       sortValue: (f) => f.close_at ?? "",
       cell: (f) => <span className="text-muted-foreground text-sm">{fmtDateTime(f.close_at)}</span>,
     },
     {
       id: "capacity",
-      header: "Quota",
+      header: t("colQuota"),
       align: "right",
       sortValue: (f) => f.capacity ?? Number.MAX_SAFE_INTEGER,
       cell: (f) => (
-        <span className="text-sm">{f.capacity != null ? f.capacity : "— unlimited"}</span>
+        <span className="text-sm">{f.capacity != null ? f.capacity : t("unlimitedDash")}</span>
       ),
     },
   ];
@@ -194,13 +217,13 @@ export default function ApplicationsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Applications"
-        description="Define application forms per person type, set their open/close windows and quota, then review responses and send decisions."
+        title={t("applications")}
+        description={t("applicationsDesc")}
         actions={
           canManage ? (
             <Button onClick={() => setCreating(true)}>
               <PlusIcon />
-              New form
+              {t("newForm")}
             </Button>
           ) : undefined
         }
@@ -213,13 +236,11 @@ export default function ApplicationsPage() {
         loading={loading}
         onRowClick={(f) => router.push(`/applications/${f.id}`)}
         searchable={(f) => `${f.name} ${f.type}`}
-        searchPlaceholder="Search forms…"
+        searchPlaceholder={t("searchFormsPlaceholder")}
         empty={{
           icon: ClipboardListIcon,
-          title: "No application forms yet",
-          description: canManage
-            ? "Create the first form so people can apply to your event."
-            : "Forms will appear here once an organizer creates them.",
+          title: t("noApplicationFormsYet"),
+          description: canManage ? t("createFirstFormDesc") : t("formsWillAppear"),
         }}
       />
 
@@ -230,15 +251,15 @@ export default function ApplicationsPage() {
           if (!o) form.reset(EMPTY);
         }}
         icon={ClipboardListIcon}
-        title="New application form"
-        description="Pick the person type and window. You'll add questions on the next screen."
+        title={t("newApplicationForm")}
+        description={t("newApplicationFormDesc")}
         footer={
           <>
             <Button type="button" variant="outline" onClick={() => setCreating(false)}>
-              Cancel
+              {t("cancel")}
             </Button>
             <SubmitButton form={CREATE_FORM_ID} pending={form.formState.isSubmitting}>
-              Create form
+              {t("createForm")}
             </SubmitButton>
           </>
         }
@@ -250,9 +271,9 @@ export default function ApplicationsPage() {
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Name</FormLabel>
+                  <FormLabel>{t("name")}</FormLabel>
                   <FormControl>
-                    <Input placeholder="Hacker application 2026" {...field} />
+                    <Input placeholder={t("exampleFormNamePlaceholder")} {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -263,7 +284,7 @@ export default function ApplicationsPage() {
               name="type"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Person type</FormLabel>
+                  <FormLabel>{t("personTypeLabel")}</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger className="w-full capitalize">
@@ -288,11 +309,11 @@ export default function ApplicationsPage() {
                 name="open_at"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Opens</FormLabel>
+                    <FormLabel>{t("colOpens")}</FormLabel>
                     <FormControl>
                       <Input type="datetime-local" {...field} />
                     </FormControl>
-                    <FormDescription>Blank = open now.</FormDescription>
+                    <FormDescription>{t("blankOpenNow")}</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -302,11 +323,11 @@ export default function ApplicationsPage() {
                 name="close_at"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Closes</FormLabel>
+                    <FormLabel>{t("colCloses")}</FormLabel>
                     <FormControl>
                       <Input type="datetime-local" {...field} />
                     </FormControl>
-                    <FormDescription>Blank = never closes.</FormDescription>
+                    <FormDescription>{t("blankNeverCloses")}</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -318,11 +339,16 @@ export default function ApplicationsPage() {
                 name="capacity"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Quota</FormLabel>
+                    <FormLabel>{t("colQuota")}</FormLabel>
                     <FormControl>
-                      <Input type="number" min={1} placeholder="Unlimited" {...field} />
+                      <Input
+                        type="number"
+                        min={1}
+                        placeholder={t("unlimitedPlaceholder")}
+                        {...field}
+                      />
                     </FormControl>
-                    <FormDescription>Optional cap on accepted spots.</FormDescription>
+                    <FormDescription>{t("optionalCapDesc")}</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -332,11 +358,11 @@ export default function ApplicationsPage() {
                 name="confirmation_window_hours"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Confirm window (h)</FormLabel>
+                    <FormLabel>{t("confirmWindowLabel")}</FormLabel>
                     <FormControl>
                       <Input type="number" min={1} {...field} />
                     </FormControl>
-                    <FormDescription>Hours to confirm a spot.</FormDescription>
+                    <FormDescription>{t("hoursToConfirmDesc")}</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}

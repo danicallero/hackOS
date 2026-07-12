@@ -7,21 +7,20 @@
 
 import { PageHeader } from "@/components/common/page-header";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useLocale } from "@/lib/i18n";
 import { IntolerancesManager } from "./intolerances-manager";
 import { UniversitiesManager } from "./universities-manager";
 
 export default function LibrariesSettingsPage() {
+  const { t } = useLocale();
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Libraries"
-        description="Shared reference lists used across registration, profiles and application forms."
-      />
+      <PageHeader title={t("libraries")} description={t("librariesDesc")} />
 
       <Tabs defaultValue="intolerances">
         <TabsList className="w-full max-w-md">
-          <TabsTrigger value="intolerances">Food intolerances</TabsTrigger>
-          <TabsTrigger value="universities">Universities</TabsTrigger>
+          <TabsTrigger value="intolerances">{t("foodIntolerances")}</TabsTrigger>
+          <TabsTrigger value="universities">{t("universitiesTab")}</TabsTrigger>
         </TabsList>
         <TabsContent value="intolerances" className="pt-2">
           <IntolerancesManager />

@@ -16,7 +16,7 @@ import {
   UsersIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { EmptyState } from "@/components/common/empty-state";
@@ -29,6 +29,7 @@ import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api";
+import { type Translate, useLocale } from "@/lib/i18n";
 import { confirmImport, previewImport } from "@/lib/projects";
 import { useSessionContext } from "@/lib/session";
 import {
@@ -56,6 +57,7 @@ function CsvInput({
   onChange: (text: string, fileName?: string) => void;
   disabled?: boolean;
 }) {
+  const { t } = useLocale();
   const inputRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState<string | null>(null);
 
@@ -65,7 +67,7 @@ function CsvInput({
       setFileName(file.name);
       onChange(text, file.name);
     } catch {
-      toast.error(`Could not read ${file.name}.`);
+      toast.error(t("couldNotReadFile", { file: file.name }));
     }
   }
 
@@ -77,7 +79,7 @@ function CsvInput({
         <span className="text-sm font-medium">{label}</span>
         {value ? (
           <StatusBadge tone="success">
-            {fileName ?? "Pasted"} · {Math.max(0, lineCount - 1)} rows
+            {fileName ?? t("pastedLabel")} · {t("rowsCount", { count: Math.max(0, lineCount - 1) })}
           </StatusBadge>
         ) : null}
       </div>
@@ -103,7 +105,7 @@ function CsvInput({
           onClick={() => inputRef.current?.click()}
         >
           <UploadIcon className="size-4" />
-          Choose CSV
+          {t("chooseCsv")}
         </Button>
         {value && (
           <Button
@@ -116,14 +118,14 @@ function CsvInput({
               onChange("");
             }}
           >
-            Clear
+            {t("clear")}
           </Button>
         )}
       </div>
       <Textarea
         value={value}
         disabled={disabled}
-        placeholder="…or paste the raw CSV text here"
+        placeholder={t("pasteRawCsvPlaceholder")}
         className="h-28 font-mono text-xs"
         onChange={(e) => {
           setFileName(null);
@@ -140,67 +142,71 @@ function repoUnmatched(repo: PlanRepo): number {
   return repo.members.filter((m) => m.matchType === "unmatched").length;
 }
 
-const repoColumns: Column<PlanRepo>[] = [
-  {
-    id: "title",
-    header: "Project",
-    sortValue: (r) => r.title.toLowerCase(),
-    cell: (r) => <span className="font-medium">{r.title}</span>,
-  },
-  {
-    id: "action",
-    header: "Action",
-    align: "center",
-    sortValue: (r) => r.action,
-    cell: (r) => (
-      <StatusBadge tone={r.action === "create" ? "success" : "info"}>
-        {r.action === "create" ? "Create" : "Update"}
-      </StatusBadge>
-    ),
-  },
-  {
-    id: "team",
-    header: "Team",
-    align: "center",
-    sortValue: (r) => r.members.length,
-    cell: (r) => (
-      <span className="text-muted-foreground inline-flex items-center gap-1 text-sm">
-        <UsersIcon className="size-3.5" />
-        {r.members.length}
-      </span>
-    ),
-  },
-  {
-    id: "matched",
-    header: "Members",
-    align: "center",
-    sortValue: (r) => repoUnmatched(r),
-    cell: (r) => {
-      const unmatched = repoUnmatched(r);
-      if (r.members.length === 0) return <span className="text-muted-foreground text-sm">—</span>;
-      return unmatched === 0 ? (
-        <StatusBadge tone="success">All matched</StatusBadge>
-      ) : (
-        <StatusBadge tone="warning">{unmatched} unmatched</StatusBadge>
-      );
+function buildRepoColumns(t: Translate): Column<PlanRepo>[] {
+  return [
+    {
+      id: "title",
+      header: t("colProject"),
+      sortValue: (r) => r.title.toLowerCase(),
+      cell: (r) => <span className="font-medium">{r.title}</span>,
     },
-  },
-  {
-    id: "prizes",
-    header: "Prizes",
-    sortValue: (r) => r.prizes.length,
-    cell: (r) =>
-      r.prizes.length === 0 ? (
-        <span className="text-muted-foreground text-sm">—</span>
-      ) : (
-        <span className="text-muted-foreground text-sm">{r.prizes.length}</span>
+    {
+      id: "action",
+      header: t("colAction"),
+      align: "center",
+      sortValue: (r) => r.action,
+      cell: (r) => (
+        <StatusBadge tone={r.action === "create" ? "success" : "info"}>
+          {r.action === "create" ? t("create") : t("update")}
+        </StatusBadge>
       ),
-  },
-];
+    },
+    {
+      id: "team",
+      header: t("colTeam"),
+      align: "center",
+      sortValue: (r) => r.members.length,
+      cell: (r) => (
+        <span className="text-muted-foreground inline-flex items-center gap-1 text-sm">
+          <UsersIcon className="size-3.5" />
+          {r.members.length}
+        </span>
+      ),
+    },
+    {
+      id: "matched",
+      header: t("colMembers"),
+      align: "center",
+      sortValue: (r) => repoUnmatched(r),
+      cell: (r) => {
+        const unmatched = repoUnmatched(r);
+        if (r.members.length === 0) return <span className="text-muted-foreground text-sm">—</span>;
+        return unmatched === 0 ? (
+          <StatusBadge tone="success">{t("allMatched")}</StatusBadge>
+        ) : (
+          <StatusBadge tone="warning">{t("unmatchedCount", { count: unmatched })}</StatusBadge>
+        );
+      },
+    },
+    {
+      id: "prizes",
+      header: t("colPrizes"),
+      sortValue: (r) => r.prizes.length,
+      cell: (r) =>
+        r.prizes.length === 0 ? (
+          <span className="text-muted-foreground text-sm">—</span>
+        ) : (
+          <span className="text-muted-foreground text-sm">{r.prizes.length}</span>
+        ),
+    },
+  ];
+}
 
 export default function ImportProjectsPage() {
+  const { t } = useLocale();
   const { can } = useSessionContext();
   const canImport = can(CAPABILITIES.PROJECTS_IMPORT);
+  const repoColumns = useMemo(() => buildRepoColumns(t), [t]);
 
   const [projectsCsv, setProjectsCsv] = useState("");
   const [participantsCsv, setParticipantsCsv] = useState("");
@@ -215,7 +221,7 @@ export default function ImportProjectsPage() {
 
   const runPreview = useCallback(async () => {
     if (!projectsCsv.trim() || !participantsCsv.trim()) {
-      toast.error("Provide both the projects and participants CSV exports.");
+      toast.error(t("provideBothCsvExports"));
       return;
     }
     setPreviewing(true);
@@ -224,11 +230,11 @@ export default function ImportProjectsPage() {
       setPlan(toImportPlanView(p));
       idemKey.current = crypto.randomUUID();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not preview the import.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotPreviewImport"));
     } finally {
       setPreviewing(false);
     }
-  }, [projectsCsv, participantsCsv]);
+  }, [projectsCsv, participantsCsv, t]);
 
   const runConfirm = useCallback(async () => {
     if (!plan) return;
@@ -237,13 +243,13 @@ export default function ImportProjectsPage() {
     try {
       const res = await confirmImport(projectsCsv, participantsCsv, idemKey.current);
       setResult(res as unknown as ConfirmResult);
-      toast.success("Import applied.");
+      toast.success(t("importApplied"));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not apply the import.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotApplyImport"));
     } finally {
       setConfirming(false);
     }
-  }, [plan, projectsCsv, participantsCsv]);
+  }, [plan, projectsCsv, participantsCsv, t]);
 
   function reset() {
     setPlan(null);
@@ -254,11 +260,11 @@ export default function ImportProjectsPage() {
   if (!canImport) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Import from Devpost" />
+        <PageHeader title={t("importFromDevpost")} />
         <EmptyState
           icon={LockIcon}
-          title="You can't import projects"
-          description="Importing requires the projects:import capability."
+          title={t("noAccessImportProjects")}
+          description={t("importDeniedDesc")}
         />
       </div>
     );
@@ -269,36 +275,40 @@ export default function ImportProjectsPage() {
     const c = result.counts;
     return (
       <div className="space-y-6">
-        <PageHeader title="Import complete" description={`Batch ${result.batchId}`} />
+        <PageHeader
+          title={t("importCompleteTitle")}
+          description={t("batchInline", { id: result.batchId })}
+        />
         <SectionCard
-          title="Import applied"
-          description="Devpost submissions were written into hackOS."
+          title={t("importAppliedTitle")}
+          description={t("devpostWrittenDesc")}
           icon={CheckCircle2Icon}
         >
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <StatCard label="Projects created" value={c.reposCreated} />
-            <StatCard label="Projects updated" value={c.reposUpdated} />
-            <StatCard label="Members matched" value={c.participantsMatched} />
-            <StatCard label="Members unmatched" value={c.participantsUnmatched} />
-            <StatCard label="Prizes seen" value={c.prizesSeen} />
+            <StatCard label={t("colProjectsCreated")} value={c.reposCreated} />
+            <StatCard label={t("colProjectsUpdated")} value={c.reposUpdated} />
+            <StatCard label={t("colMembersMatched")} value={c.participantsMatched} />
+            <StatCard label={t("colMembersUnmatched")} value={c.participantsUnmatched} />
+            <StatCard label={t("colPrizesSeen")} value={c.prizesSeen} />
           </div>
           {c.participantsUnmatched > 0 && (
             <p className="text-muted-foreground text-sm">
-              {c.participantsUnmatched} participant{c.participantsUnmatched > 1 ? "s" : ""} didn’t
-              match an account. Resolve them on the unmatched page.
+              {c.participantsUnmatched === 1
+                ? t("participantsUnmatchedNoteOne", { count: c.participantsUnmatched })
+                : t("participantsUnmatchedNoteOther", { count: c.participantsUnmatched })}
             </p>
           )}
           <div className="flex flex-wrap gap-2">
             <Button asChild>
-              <Link href="/projects">View projects</Link>
+              <Link href="/projects">{t("viewProjects")}</Link>
             </Button>
             {c.participantsUnmatched > 0 && (
               <Button asChild variant="outline">
-                <Link href="/projects/unmatched">Resolve unmatched</Link>
+                <Link href="/projects/unmatched">{t("resolveUnmatched")}</Link>
               </Button>
             )}
             <Button variant="ghost" onClick={reset}>
-              Import another
+              {t("importAnother")}
             </Button>
           </div>
         </SectionCard>
@@ -308,20 +318,20 @@ export default function ImportProjectsPage() {
 
   // ── phase 2: review plan ───────────────────────────────────────────────────
   if (plan) {
-    const t = plan.totals;
+    const totals = plan.totals;
     return (
       <div className="space-y-6">
         <PageHeader
-          title="Review import"
-          description="Nothing has been written yet. Confirm to apply this plan."
+          title={t("reviewImport")}
+          description={t("reviewImportDesc")}
           actions={
             <>
               <Button variant="outline" onClick={reset} disabled={confirming}>
                 <ArrowLeftIcon className="size-4" />
-                Back
+                {t("back")}
               </Button>
               <SubmitButton type="button" pending={confirming} onClick={runConfirm}>
-                Confirm import
+                {t("confirmImport")}
               </SubmitButton>
             </>
           }
@@ -329,17 +339,20 @@ export default function ImportProjectsPage() {
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
-            label="Projects"
-            value={t.repos}
-            hint={`${t.reposToCreate} new · ${t.reposToUpdate} update`}
+            label={t("colProjectsLabel")}
+            value={totals.repos}
+            hint={t("newUpdateHint", { new: totals.reposToCreate, update: totals.reposToUpdate })}
           />
           <StatCard
-            label="Members"
-            value={t.members}
-            hint={`${t.membersMatched} matched · ${t.membersUnmatched} unmatched`}
+            label={t("colMembers")}
+            value={totals.members}
+            hint={t("matchedUnmatchedHint", {
+              matched: totals.membersMatched,
+              unmatched: totals.membersUnmatched,
+            })}
           />
-          <StatCard label="Prizes" value={t.prizes} />
-          <StatCard label="Unassigned rows" value={plan.unassignedParticipants.length} />
+          <StatCard label={t("prizesLabel")} value={totals.prizes} />
+          <StatCard label={t("unassignedRows")} value={plan.unassignedParticipants.length} />
         </div>
 
         <DataTable
@@ -348,16 +361,13 @@ export default function ImportProjectsPage() {
           getRowId={(r) => `${r.title}::${r.url ?? ""}`}
           onRowClick={(r) => setDetailRepo(r)}
           searchable={(r) => `${r.title} ${r.prizes.join(" ")}`}
-          searchPlaceholder="Search projects…"
+          searchPlaceholder={t("searchProjectsPlaceholder")}
           pageSize={15}
-          empty={{ icon: FileTextIcon, title: "No projects parsed" }}
+          empty={{ icon: FileTextIcon, title: t("noProjectsParsed") }}
         />
 
         {plan.prizes.length > 0 && (
-          <SectionCard
-            title="Prizes"
-            description="Devpost opt-in prizes and whether they already map to a challenge."
-          >
+          <SectionCard title={t("prizesLabel")} description={t("devpostOptInPrizesDesc")}>
             <div className="flex flex-col gap-2">
               {plan.prizes.map((p) => (
                 <div
@@ -367,13 +377,15 @@ export default function ImportProjectsPage() {
                   <div className="space-y-0.5">
                     <span className="text-sm font-medium">{p.name}</span>
                     <span className="text-muted-foreground ml-2 text-xs">
-                      {p.repoCount} project{p.repoCount > 1 ? "s" : ""}
+                      {p.repoCount === 1
+                        ? t("projectCountOne", { count: p.repoCount })
+                        : t("projectCountOther", { count: p.repoCount })}
                     </span>
                   </div>
                   {p.mappedChallengeId ? (
                     <StatusBadge tone="success">→ {p.mappedChallengeTitle}</StatusBadge>
                   ) : (
-                    <StatusBadge tone="neutral">Unmapped</StatusBadge>
+                    <StatusBadge tone="neutral">{t("unmappedBadge")}</StatusBadge>
                   )}
                 </div>
               ))}
@@ -383,8 +395,8 @@ export default function ImportProjectsPage() {
 
         {plan.unassignedParticipants.length > 0 && (
           <SectionCard
-            title="Unassigned participants"
-            description="Rows in the participants export whose project reference matched no project row — they won’t be imported."
+            title={t("unassignedParticipantsTitle")}
+            description={t("unassignedParticipantsDesc")}
           >
             <div className="flex flex-col gap-1.5">
               {plan.unassignedParticipants.map((u) => (
@@ -403,14 +415,14 @@ export default function ImportProjectsPage() {
         <Modal
           open={detailRepo !== null}
           onOpenChange={(o) => !o && setDetailRepo(null)}
-          title={detailRepo?.title ?? "Project"}
+          title={detailRepo?.title ?? t("colProject")}
           description={detailRepo?.url ?? undefined}
           icon={UsersIcon}
           size="lg"
         >
           <div className="max-h-[60vh] space-y-2 overflow-y-auto">
             {detailRepo?.members.length === 0 && (
-              <p className="text-muted-foreground text-sm">No team members.</p>
+              <p className="text-muted-foreground text-sm">{t("noTeamMembersPeriod")}</p>
             )}
             {detailRepo?.members.map((m) => (
               <div
@@ -426,7 +438,9 @@ export default function ImportProjectsPage() {
                     </span>
                   )}
                 </div>
-                <StatusBadge tone={matchTone(m.matchType)}>{matchLabel(m.matchType)}</StatusBadge>
+                <StatusBadge tone={matchTone(m.matchType)}>
+                  {matchLabel(m.matchType, t)}
+                </StatusBadge>
               </div>
             ))}
           </div>
@@ -439,21 +453,21 @@ export default function ImportProjectsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Import from Devpost"
-        description="Upload or paste the two Devpost CSV exports. Preview is read-only — nothing is written until you confirm."
+        title={t("importFromDevpost")}
+        description={t("devpostImportDesc")}
         actions={
           <Button variant="outline" asChild>
             <Link href="/projects">
               <ArrowLeftIcon className="size-4" />
-              Projects
+              {t("projects")}
             </Link>
           </Button>
         }
       />
 
       <SectionCard
-        title="Devpost exports"
-        description="The projects (submissions) export and the participants (registrants) export."
+        title={t("devpostExportsTitle")}
+        description={t("devpostExportsDesc")}
         icon={FileTextIcon}
         footer={
           <SubmitButton
@@ -462,21 +476,21 @@ export default function ImportProjectsPage() {
             disabled={!projectsCsv.trim() || !participantsCsv.trim()}
             onClick={runPreview}
           >
-            Preview import
+            {t("previewImport")}
           </SubmitButton>
         }
       >
         <div className="grid gap-6 lg:grid-cols-2">
           <CsvInput
-            label="Projects CSV"
-            hint="Devpost “projects/submissions” export — columns like Project Title, Submission Url, Opt-In Prizes, Team Member N Email."
+            label={t("projectsCsvLabel")}
+            hint={t("projectsCsvHint")}
             value={projectsCsv}
             onChange={(text) => setProjectsCsv(text)}
             disabled={previewing}
           />
           <CsvInput
-            label="Participants CSV"
-            hint="Devpost “participants/registrants” export — columns like Email, First Name, Last Name, Project URLs."
+            label={t("participantsCsvLabel")}
+            hint={t("participantsCsvHint")}
             value={participantsCsv}
             onChange={(text) => setParticipantsCsv(text)}
             disabled={previewing}

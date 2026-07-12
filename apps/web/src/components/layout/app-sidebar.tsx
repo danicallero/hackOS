@@ -14,6 +14,7 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar";
+import { useLocale } from "@/lib/i18n";
 import { NAV, type NavItem } from "@/lib/nav";
 import { useSessionContext } from "@/lib/session";
 
@@ -38,6 +39,7 @@ function useVisible() {
 export function AppSidebar() {
   const pathname = usePathname();
   const isVisible = useVisible();
+  const { t } = useLocale();
 
   return (
     <Sidebar collapsible="icon">
@@ -69,7 +71,7 @@ export function AppSidebar() {
           if (items.length === 0) return null;
           return (
             <SidebarGroup key={section.label ?? `section-${i}`}>
-              {section.label && <SidebarGroupLabel>{section.label}</SidebarGroupLabel>}
+              {section.label && <SidebarGroupLabel>{t(section.label)}</SidebarGroupLabel>}
               <SidebarMenu>
                 {items.map((item) => {
                   const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -80,15 +82,15 @@ export function AppSidebar() {
                         <SidebarMenuButton
                           disabled
                           className="cursor-not-allowed opacity-55"
-                          tooltip={`${item.title} — coming soon`}
+                          tooltip={`${t(item.title)} — ${t("comingSoon")}`}
                         >
                           <Icon />
-                          <span>{item.title}</span>
+                          <span>{t(item.title)}</span>
                           <Badge
                             variant="outline"
                             className="ml-auto text-[10px] group-data-[collapsible=icon]:hidden"
                           >
-                            Soon
+                            {t("soon")}
                           </Badge>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
@@ -96,10 +98,10 @@ export function AppSidebar() {
                   }
                   return (
                     <SidebarMenuItem key={item.href}>
-                      <SidebarMenuButton asChild isActive={active} tooltip={item.title}>
+                      <SidebarMenuButton asChild isActive={active} tooltip={t(item.title)}>
                         <Link href={item.href}>
                           <Icon />
-                          <span>{item.title}</span>
+                          <span>{t(item.title)}</span>
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>

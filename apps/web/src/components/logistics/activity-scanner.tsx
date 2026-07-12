@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useLiveQuery } from "@/hooks/use-event-source";
+import { useLocale } from "@/lib/i18n";
 import { type ActivityScanResult, logisticsApi } from "@/lib/logistics";
 import {
   loadOfflineQueue,
@@ -37,6 +38,7 @@ const SCAN_EVENTS = [EVENTS.LOGISTICS_ACTIVITY_SCAN, EVENTS.LOGISTICS_MEAL_SCAN_
  * Meals additionally support an on-device offline queue.
  */
 export function ActivityScannerCard({ category }: { category: "meal" | "activity" }) {
+  const { t } = useLocale();
   const isMeal = category === "meal";
   const activities = useLiveQuery(
     () => logisticsApi.scannableActivities(category),
@@ -75,12 +77,12 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
         allowRepeat,
       });
       setResult(scan);
-      toast.success(scan.firstTime ? "Scan registered." : "Repeat registered.");
+      toast.success(scan.firstTime ? t("scanRegistered") : t("repeatRegistered"));
       setBadgeId("");
       setAllowRepeat(false);
       activities.refetch();
     } catch (err) {
-      setError(errorMessage(err, "Scan failed."));
+      setError(errorMessage(err, t("scanFailed")));
     } finally {
       setBusy(false);
     }
@@ -102,7 +104,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
     ]);
     setBadgeId("");
     setAllowRepeat(false);
-    toast.success("Scan queued locally.");
+    toast.success(t("scanQueuedLocally"));
   };
 
   const syncOffline = async () => {
@@ -129,7 +131,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
           (scan) => !scans.some((sent) => sent.clientScanId === scan.clientScanId),
         );
       } catch (err) {
-        const message = errorMessage(err, "Offline sync failed.");
+        const message = errorMessage(err, t("offlineSyncFailed"));
         next = next.map((scan) =>
           scans.some((sent) => sent.clientScanId === scan.clientScanId)
             ? { ...scan, status: "failed", error: message }
@@ -146,32 +148,28 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-3">
         <StatCard
-          label={isMeal ? "Servings" : "Scans"}
+          label={isMeal ? t("servingsLabel") : t("colScans")}
           value={selected ? selected.count : "—"}
           icon={isMeal ? SoupIcon : ActivityIcon}
-          hint={selected ? selected.name : "Select to see counts"}
+          hint={selected ? selected.name : t("selectToSeeCounts")}
         />
         <StatCard
-          label="People"
+          label={t("colPeople")}
           value={selected ? selected.distinctPeople : "—"}
           icon={UsersIcon}
-          hint="Distinct attendees"
+          hint={t("distinctAttendees")}
         />
         <StatCard
-          label="Repeats"
+          label={t("colRepeats")}
           value={selected ? selected.repeats : "—"}
           icon={RepeatIcon}
-          hint={activities.connected ? "Live" : "Reconnects automatically"}
+          hint={activities.connected ? t("live") : t("reconnectsAutomatically")}
         />
       </div>
 
       <SectionCard
-        title={isMeal ? "Meal line" : "Activity door"}
-        description={
-          isMeal
-            ? "Scan each badge as it passes. Repeats need explicit confirmation."
-            : "Scan badges at the entrance of a registrable activity."
-        }
+        title={isMeal ? t("mealLineTitle") : t("activityDoorTitle")}
+        description={isMeal ? t("scanEachBadgeDesc") : t("scanBadgesEntranceDesc")}
         icon={ScanLineIcon}
         bodyClassName="space-y-5"
       >
@@ -182,20 +180,20 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
         ) : items.length === 0 ? (
           <EmptyState
             icon={isMeal ? SoupIcon : ActivityIcon}
-            title={isMeal ? "No meals defined yet" : "No registrable activities yet"}
+            title={isMeal ? t("noMealsDefinedTitle") : t("noRegistrableActivitiesTitle")}
             description={
-              isMeal
-                ? "Meals are created in schedule management."
-                : "Mark activities as requires-scan in schedule management."
+              isMeal ? t("mealsCreatedInScheduleDesc") : t("markActivitiesRequiresScanDesc")
             }
           />
         ) : (
           <>
             <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_minmax(180px,0.8fr)_140px_140px]">
-              <Field label="Activity">
+              <Field label={t("colActivity")}>
                 <Select value={activityId} onValueChange={setActivityId}>
                   <SelectTrigger>
-                    <SelectValue placeholder={isMeal ? "Choose meal" : "Choose activity"} />
+                    <SelectValue
+                      placeholder={isMeal ? t("chooseMeal") : t("chooseActivityOption")}
+                    />
                   </SelectTrigger>
                   <SelectContent>
                     {items.map((activity) => (
@@ -206,11 +204,11 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
                   </SelectContent>
                 </Select>
               </Field>
-              <Field label="Badge">
+              <Field label={t("badgeLabel")}>
                 <Input
                   value={badgeId}
                   onChange={(e) => setBadgeId(e.target.value)}
-                  placeholder="scan badge"
+                  placeholder={t("badgePlaceholder")}
                   autoComplete="off"
                 />
               </Field>
@@ -220,7 +218,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
                   className="w-full"
                   onClick={() => setAllowRepeat((v) => !v)}
                 >
-                  {allowRepeat ? "Repeat on" : "No repeat"}
+                  {allowRepeat ? t("repeatOn") : t("noRepeat")}
                 </Button>
               </div>
               <div className="flex items-end">
@@ -230,7 +228,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
                   disabled={busy || !activityId || !badgeId.trim()}
                 >
                   <ScanLineIcon className="size-4" />
-                  Scan
+                  {t("scan")}
                 </Button>
               </div>
             </div>
@@ -246,18 +244,18 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
                     onClick={queueOffline}
                     disabled={!activityId || !badgeId.trim()}
                   >
-                    Queue locally
+                    {t("queueLocally")}
                   </Button>
                   <Button
                     variant="outline"
                     onClick={syncOffline}
                     disabled={busy || offline.length === 0}
                   >
-                    Sync {offline.length} pending
+                    {t("syncPending", { count: offline.length })}
                   </Button>
                   {offline.length > 0 && (
                     <Button variant="ghost" onClick={() => persistOffline([])} disabled={busy}>
-                      Clear local queue
+                      {t("clearLocalQueue")}
                     </Button>
                   )}
                 </div>

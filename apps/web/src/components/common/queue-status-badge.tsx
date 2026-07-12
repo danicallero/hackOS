@@ -1,4 +1,5 @@
 import { StatusBadge } from "@/components/common/status-badge";
+import { type Translate, useLocale } from "@/lib/i18n";
 import type { QueueStatus } from "@/lib/queue";
 import type { Tone } from "@/lib/tones";
 
@@ -7,14 +8,16 @@ import type { Tone } from "@/lib/tones";
  * label + tone so the stage means the same color everywhere (panel, TV,
  * participant view). Unknown/legacy statuses fall back to neutral.
  */
-const CONFIG: Record<QueueStatus, { label: string; tone: Tone }> = {
-  waiting: { label: "In queue", tone: "neutral" },
-  called: { label: "Called", tone: "warning" },
-  in_room: { label: "In room", tone: "info" },
-  presenting: { label: "Presenting", tone: "brand" },
-  completed: { label: "Evaluated", tone: "success" },
-  disqualified: { label: "Disqualified", tone: "danger" },
-};
+function buildConfig(t: Translate): Record<QueueStatus, { label: string; tone: Tone }> {
+  return {
+    waiting: { label: t("queueStatusWaiting"), tone: "neutral" },
+    called: { label: t("queueStatusCalled"), tone: "warning" },
+    in_room: { label: t("queueStatusInRoom"), tone: "info" },
+    presenting: { label: t("queueStatusPresenting"), tone: "brand" },
+    completed: { label: t("queueStatusCompleted"), tone: "success" },
+    disqualified: { label: t("queueStatusDisqualified"), tone: "danger" },
+  };
+}
 
 export function QueueStatusBadge({
   status,
@@ -23,7 +26,9 @@ export function QueueStatusBadge({
   status: QueueStatus | string;
   className?: string;
 }) {
-  const cfg = CONFIG[status as QueueStatus] ?? { label: status, tone: "neutral" as Tone };
+  const { t } = useLocale();
+  const config = buildConfig(t);
+  const cfg = config[status as QueueStatus] ?? { label: status, tone: "neutral" as Tone };
   return (
     <StatusBadge tone={cfg.tone} className={className}>
       {cfg.label}

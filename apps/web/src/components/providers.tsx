@@ -5,6 +5,7 @@ import { ThemeProvider } from "next-themes";
 import { CookieNotice } from "@/components/layout/cookie-notice";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { LocaleProvider } from "@/lib/i18n";
 import { SessionProvider } from "@/lib/session";
 
 /**
@@ -28,9 +29,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
       <SessionProvider>
-        <TooltipProvider delayDuration={200}>{children}</TooltipProvider>
-        {!isKiosk && <CookieNotice />}
-        <Toaster position="bottom-right" />
+        <LocaleProvider>
+          <TooltipProvider delayDuration={200}>{children}</TooltipProvider>
+          {!isKiosk && <CookieNotice />}
+          <Toaster position="bottom-right" />
+        </LocaleProvider>
       </SessionProvider>
     </ThemeProvider>
   );

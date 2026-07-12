@@ -42,13 +42,14 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
+import { useLocale } from "@/lib/i18n";
 import type {
   PermissionGroupDetail,
   PermissionGroupSummary,
   UserList,
   UserListItem,
 } from "@/lib/types";
-import { CAPABILITY_OPTIONS, userDisplayName } from "../helpers";
+import { capabilityOptions, userDisplayName } from "../helpers";
 
 // H8: group detail — edit name/description, set capabilities, manage members
 // and nested included groups. Every mutation hits the permission-group API and
@@ -61,6 +62,7 @@ const detailsSchema = z.object({
 type DetailsValues = z.infer<typeof detailsSchema>;
 
 export default function PermissionGroupDetailPage() {
+  const { t } = useLocale();
   const router = useRouter();
   const params = useParams<{ groupId: string }>();
   const groupId = Number(params.groupId);
@@ -114,11 +116,11 @@ export default function PermissionGroupDetailPage() {
       mergeUsers(directory.users);
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) setNotFound(true);
-      else toast.error(err instanceof ApiError ? err.message : "Could not load the group.");
+      else toast.error(err instanceof ApiError ? err.message : t("couldNotLoadGroup"));
     } finally {
       setLoading(false);
     }
-  }, [groupId, applyGroup, mergeUsers]);
+  }, [groupId, applyGroup, mergeUsers, t]);
 
   useEffect(() => {
     if (Number.isFinite(groupId)) load();
@@ -148,9 +150,9 @@ export default function PermissionGroupDetailPage() {
         description: values.description || null,
       });
       applyGroup(g);
-      toast.success("Group updated.");
+      toast.success(t("groupUpdated"));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not save the group.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveGroup"));
     }
   }
 
@@ -162,9 +164,9 @@ export default function PermissionGroupDetailPage() {
         { capabilities: caps },
       );
       applyGroup(g);
-      toast.success("Capabilities saved.");
+      toast.success(t("capabilitiesSaved"));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not save capabilities.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveCapabilities"));
     } finally {
       setSavingCaps(false);
     }
@@ -177,10 +179,10 @@ export default function PermissionGroupDetailPage() {
         { childGroupId },
       );
       applyGroup(g);
-      toast.success("Group included.");
+      toast.success(t("groupIncluded"));
     } catch (err) {
       // 409: would create a cycle (server-enforced, plan/07).
-      toast.error(err instanceof ApiError ? err.message : "Could not include the group.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotIncludeGroup"));
     }
   }
 
@@ -191,7 +193,7 @@ export default function PermissionGroupDetailPage() {
       );
       applyGroup(g);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not remove the included group.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveIncludedGroup"));
     }
   }
 
@@ -202,10 +204,10 @@ export default function PermissionGroupDetailPage() {
       });
       if (user) mergeUsers([user]);
       applyGroup(g);
-      toast.success("Member added.");
+      toast.success(t("memberAdded"));
       setAddMemberOpen(false);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not add the member.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotAddMemberGroup"));
     }
   }
 
@@ -216,7 +218,7 @@ export default function PermissionGroupDetailPage() {
       );
       applyGroup(g);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not remove the member.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveMemberGroup"));
     }
   }
 
@@ -224,10 +226,10 @@ export default function PermissionGroupDetailPage() {
     setDeleting(true);
     try {
       await api.delete<{ deleted: true }>(`/api/permission-groups/${groupId}`);
-      toast.success("Group deleted.");
+      toast.success(t("groupDeleted"));
       router.push("/permissions");
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not delete the group.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotDeleteGroup"));
       setDeleting(false);
     }
   }
@@ -236,7 +238,8 @@ export default function PermissionGroupDetailPage() {
     () => allGroups.filter((g) => g.id !== groupId && !(group?.includes ?? []).includes(g.id)),
     [allGroups, group?.includes, groupId],
   );
-  const groupName = (id: number) => allGroups.find((g) => g.id === id)?.name ?? `Group #${id}`;
+  const groupName = (id: number) =>
+    allGroups.find((g) => g.id === id)?.name ?? t("groupNumberFallback", { id });
 
   // Kept current every render so the live-refresh effect above always reads
   // the latest dirty state without needing it in its dependency array.
@@ -257,9 +260,9 @@ export default function PermissionGroupDetailPage() {
   if (notFound || !group) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Group not found" description="This permission group no longer exists." />
+        <PageHeader title={t("groupNotFoundTitle")} description={t("groupNotFoundDesc")} />
         <Button variant="outline" onClick={() => router.push("/permissions")}>
-          <ArrowLeftIcon /> Back to permissions
+          <ArrowLeftIcon /> {t("backToPermissions")}
         </Button>
       </div>
     );
@@ -277,25 +280,30 @@ export default function PermissionGroupDetailPage() {
           className="-ml-2 text-muted-foreground"
           onClick={() => router.push("/permissions")}
         >
-          <ArrowLeftIcon /> Permissions
+          <ArrowLeftIcon /> {t("permissions")}
         </Button>
-        <PageHeader title={group.name} description={group.description ?? "No description."} />
+        <PageHeader
+          title={group.name}
+          description={group.description ?? t("noDescriptionPeriod")}
+        />
       </div>
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSaveDetails)}>
           <SectionCard
             icon={SettingsIcon}
-            title="Group details"
-            description="Rename the group or update its description."
-            footer={<SubmitButton pending={form.formState.isSubmitting}>Save changes</SubmitButton>}
+            title={t("groupDetailsTitle")}
+            description={t("renameOrUpdateDescDesc")}
+            footer={
+              <SubmitButton pending={form.formState.isSubmitting}>{t("saveChanges")}</SubmitButton>
+            }
           >
             <FormField
               control={form.control}
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Name</FormLabel>
+                  <FormLabel>{t("name")}</FormLabel>
                   <FormControl>
                     <Input {...field} />
                   </FormControl>
@@ -308,9 +316,9 @@ export default function PermissionGroupDetailPage() {
               name="description"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Description</FormLabel>
+                  <FormLabel>{t("descriptionLabel")}</FormLabel>
                   <FormControl>
-                    <Textarea rows={3} placeholder="What this group is for…" {...field} />
+                    <Textarea rows={3} placeholder={t("whatGroupForPlaceholder")} {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -322,38 +330,38 @@ export default function PermissionGroupDetailPage() {
 
       <SectionCard
         icon={KeyRoundIcon}
-        title="Capabilities"
-        description="The capabilities this group grants to its members."
+        title={t("capabilitiesLabel")}
+        description={t("capabilitiesGrantDesc")}
         footer={
           <Button onClick={onSaveCaps} disabled={!capsDirty || savingCaps}>
             {savingCaps && <Spinner />}
-            Save capabilities
+            {t("saveCapabilities")}
           </Button>
         }
       >
         <MultiSelect
-          options={CAPABILITY_OPTIONS}
+          options={capabilityOptions(t)}
           value={caps}
           onChange={setCaps}
-          placeholder="Select capabilities…"
-          searchPlaceholder="Search capabilities…"
-          emptyText="No matching capability."
+          placeholder={t("selectCapabilitiesPlaceholder")}
+          searchPlaceholder={t("searchCapabilitiesPlaceholder")}
+          emptyText={t("noMatchingCapability")}
         />
       </SectionCard>
 
       <SectionCard
         icon={UsersIcon}
-        title="Members"
-        description="Users who belong to this group directly."
+        title={t("membersTitle")}
+        description={t("usersInGroupDesc")}
         action={
           <Button size="sm" variant="outline" onClick={() => setAddMemberOpen(true)}>
-            <UserPlusIcon /> Add member
+            <UserPlusIcon /> {t("addMemberLabel")}
           </Button>
         }
         bodyClassName={group.members.length === 0 ? undefined : "p-0"}
       >
         {group.members.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No members yet.</p>
+          <p className="text-muted-foreground text-sm">{t("noMembersYetPeriod")}</p>
         ) : (
           <ul className="divide-border divide-y">
             {group.members.map((id) => {
@@ -362,7 +370,7 @@ export default function PermissionGroupDetailPage() {
                 <li key={id} className="flex items-center justify-between gap-3 px-6 py-3">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">
-                      {user ? userDisplayName(user) : `User #${id}`}
+                      {user ? userDisplayName(user, t) : t("userNumberFallback", { id })}
                     </p>
                     {user?.email && (
                       <p className="text-muted-foreground truncate text-xs">{user.email}</p>
@@ -373,7 +381,7 @@ export default function PermissionGroupDetailPage() {
                     variant="ghost"
                     className="text-muted-foreground hover:text-destructive"
                     onClick={() => removeMember(id)}
-                    aria-label={`Remove member ${id}`}
+                    aria-label={t("removeMemberAria", { id })}
                   >
                     <Trash2Icon />
                   </Button>
@@ -386,8 +394,8 @@ export default function PermissionGroupDetailPage() {
 
       <SectionCard
         icon={LayersIcon}
-        title="Included groups"
-        description="Members inherit the capabilities of every included group (no cycles)."
+        title={t("includedGroupsTitle")}
+        description={t("membersInheritDesc")}
         action={
           includeOptions.length > 0 ? (
             <Select
@@ -398,7 +406,7 @@ export default function PermissionGroupDetailPage() {
               }}
             >
               <SelectTrigger size="sm" className="w-48">
-                <SelectValue placeholder="Include a group…" />
+                <SelectValue placeholder={t("includeGroupPlaceholder")} />
               </SelectTrigger>
               <SelectContent>
                 {includeOptions.map((g) => (
@@ -413,7 +421,7 @@ export default function PermissionGroupDetailPage() {
         bodyClassName={group.includes.length === 0 ? undefined : "p-0"}
       >
         {group.includes.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No included groups.</p>
+          <p className="text-muted-foreground text-sm">{t("noIncludedGroupsPeriod")}</p>
         ) : (
           <ul className="divide-border divide-y">
             {group.includes.map((id) => (
@@ -430,7 +438,7 @@ export default function PermissionGroupDetailPage() {
                   variant="ghost"
                   className="text-muted-foreground hover:text-destructive"
                   onClick={() => removeInclude(id)}
-                  aria-label={`Remove included group ${id}`}
+                  aria-label={t("removeIncludedGroupAria", { id })}
                 >
                   <Trash2Icon />
                 </Button>
@@ -442,17 +450,15 @@ export default function PermissionGroupDetailPage() {
 
       <SectionCard
         icon={Trash2Icon}
-        title="Danger zone"
-        description="Deleting a group removes it from every member and parent group."
+        title={t("dangerZoneTitle")}
+        description={t("deletingGroupRemovesDesc")}
         action={
           <Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)}>
-            Delete group
+            {t("deleteGroup")}
           </Button>
         }
       >
-        <p className="text-muted-foreground text-sm">
-          This cannot be undone. Members lose the capabilities this group granted them.
-        </p>
+        <p className="text-muted-foreground text-sm">{t("cannotBeUndoneMembersLose")}</p>
       </SectionCard>
 
       <AddMemberModal
@@ -466,23 +472,22 @@ export default function PermissionGroupDetailPage() {
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
         icon={Trash2Icon}
-        title={`Delete "${group.name}"?`}
-        description="This permanently removes the group and its assignments."
+        title={t("deleteGroupQuestionInline", { name: group.name })}
+        description={t("permanentlyRemovesGroupDesc")}
         footer={
           <>
             <Button variant="outline" onClick={() => setDeleteOpen(false)}>
-              Cancel
+              {t("cancel")}
             </Button>
             <Button variant="destructive" onClick={onDelete} disabled={deleting}>
               {deleting && <Spinner />}
-              Delete group
+              {t("deleteGroup")}
             </Button>
           </>
         }
       >
         <p className="text-muted-foreground text-sm">
-          Type-free confirmation: click delete to remove{" "}
-          <span className="font-medium">{group.name}</span>.
+          {t("typeFreeConfirmInline", { name: group.name })}
         </p>
       </Modal>
     </div>
@@ -501,6 +506,7 @@ function AddMemberModal({
   existing: number[];
   onAdd: (userId: number, user?: UserListItem) => void;
 }) {
+  const { t } = useLocale();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<UserListItem[]>([]);
   const [searching, setSearching] = useState(false);
@@ -516,8 +522,7 @@ function AddMemberModal({
           if (active) setResults(r.users);
         })
         .catch((err) => {
-          if (active)
-            toast.error(err instanceof ApiError ? err.message : "Could not search users.");
+          if (active) toast.error(err instanceof ApiError ? err.message : t("couldNotSearchUsers"));
         })
         .finally(() => {
           if (active) setSearching(false);
@@ -527,7 +532,7 @@ function AddMemberModal({
       active = false;
       clearTimeout(handle);
     };
-  }, [query, open]);
+  }, [query, open, t]);
 
   const existingSet = new Set(existing);
 
@@ -539,15 +544,15 @@ function AddMemberModal({
         if (!o) setQuery("");
       }}
       icon={UserPlusIcon}
-      title="Add member"
-      description="Search the user directory by name or email."
+      title={t("addMemberLabel")}
+      description={t("searchDirectoryDesc")}
     >
       <div className="space-y-3">
         <Input
           autoFocus
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search users…"
+          placeholder={t("searchUsersEllipsisPlaceholder")}
         />
         <div className="max-h-72 overflow-y-auto">
           {searching && results.length === 0 ? (
@@ -555,7 +560,9 @@ function AddMemberModal({
               <Spinner />
             </div>
           ) : results.length === 0 ? (
-            <p className="text-muted-foreground py-6 text-center text-sm">No users found.</p>
+            <p className="text-muted-foreground py-6 text-center text-sm">
+              {t("noUsersFoundPeriod")}
+            </p>
           ) : (
             <ul className="divide-border divide-y">
               {results.map((user) => {
@@ -563,7 +570,7 @@ function AddMemberModal({
                 return (
                   <li key={user.id} className="flex items-center justify-between gap-3 py-2">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{userDisplayName(user)}</p>
+                      <p className="truncate text-sm font-medium">{userDisplayName(user, t)}</p>
                       <p className="text-muted-foreground truncate text-xs">{user.email}</p>
                     </div>
                     <Button
@@ -572,7 +579,7 @@ function AddMemberModal({
                       disabled={already}
                       onClick={() => onAdd(user.id, user)}
                     >
-                      {already ? "Added" : "Add"}
+                      {already ? t("added") : t("addAction")}
                     </Button>
                   </li>
                 );

@@ -3,6 +3,7 @@
 import { XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /**
@@ -21,6 +22,7 @@ export function DateTimeInput({
   onChange: (value: string) => void;
   className?: string;
 } & Omit<React.ComponentProps<typeof Input>, "value" | "onChange" | "type">) {
+  const { t } = useLocale();
   return (
     <div className="relative">
       <Input
@@ -37,7 +39,7 @@ export function DateTimeInput({
           size="icon"
           onClick={() => onChange("")}
           className="text-muted-foreground absolute top-1/2 right-1 size-7 -translate-y-1/2"
-          aria-label="Clear date"
+          aria-label={t("clearDate")}
         >
           <XIcon className="size-4" />
         </Button>

@@ -4,39 +4,38 @@ import { KeyRoundIcon, ShieldIcon, UserCheckIcon } from "lucide-react";
 import { PageHeader } from "@/components/common/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useLocale } from "@/lib/i18n";
 import { useMe } from "@/lib/session";
 
 export default function DashboardPage() {
   const me = useMe();
+  const { t } = useLocale();
   if (!me) return null;
 
   const stats = [
     {
-      label: "Account role",
+      label: t("accountRole"),
       value: me.role,
-      hint: "Illustrative only — access is by capability",
+      hint: "",
       icon: ShieldIcon,
     },
     {
-      label: "Email",
-      value: me.emailVerified ? "Verified" : "Unverified",
+      label: t("email"),
+      value: me.emailVerified ? t("verified") : t("unverified"),
       hint: me.email,
       icon: UserCheckIcon,
     },
     {
-      label: "Capabilities",
+      label: t("capabilities"),
       value: String(me.capabilities.length),
-      hint: "Granted permission groups",
+      hint: "",
       icon: KeyRoundIcon,
     },
   ];
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title={`Welcome${me.name ? `, ${me.name}` : ""}`}
-        description="Your hackOS control center."
-      />
+      <PageHeader title={`${t("welcome")}${me.name ? `, ${me.name}` : ""}`} />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {stats.map((s) => (
           <Card key={s.label}>
@@ -55,7 +54,7 @@ export default function DashboardPage() {
       {me.capabilities.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Your capabilities</CardTitle>
+            <CardTitle className="text-base">{t("yourCapabilities")}</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
             {me.capabilities.map((c) => (
