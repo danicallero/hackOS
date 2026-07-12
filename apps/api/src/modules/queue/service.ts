@@ -4,6 +4,7 @@ import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
+import { notify } from "../notifications/service.js";
 import { isRepoBlockedByBusyMember } from "./guard.js";
 import { writeQueueHistory } from "./history.js";
 import {
@@ -131,6 +132,7 @@ export async function callNextForRoom(
         repoId: entry.repo_id,
         roomId,
         roomName: room.name,
+        roomLocation: room.location,
       });
       return entry;
     }
@@ -154,12 +156,41 @@ export async function notifyEnter(entryId: number, actorId: number): Promise<Que
       newStatus: entry.status,
       action: "notify_enter",
     });
+
     const memberIds = await repoMemberIds(client, entry.repo_id);
+    const { rows: ctxRows } = await client.query(
+      `SELECT c.title AS challenge_name, r.name AS room_name, r.location AS room_location
+         FROM challenges c, rooms r
+        WHERE c.id = $1 AND r.id = $2`,
+      [entry.challenge_id, entry.assigned_room_id],
+    );
+    const challengeName: string = ctxRows[0]?.challenge_name ?? "";
+    const roomName: string = ctxRows[0]?.room_name ?? "";
+    const roomLocation: string | null = ctxRows[0]?.room_location ?? null;
+
+    const { rows: userRows } = await client.query(`SELECT id, name FROM users WHERE id = ANY($1)`, [
+      memberIds,
+    ]);
+    const nameById = new Map<number, string | null>(
+      userRows.map((u: { id: number; name: string | null }) => [u.id, u.name]),
+    );
+
+    // H31: "que entre" — routed through notify() (H51/H53) so it lands in the
+    // inbox and every configured channel, same as the initial call (H29/H38).
     for (const userId of memberIds) {
-      await client.query(
-        `INSERT INTO notification_outbox (user_id, category, channel, payload) VALUES ($1, 'queue', 'push', $2)`,
-        [userId, JSON.stringify({ entryId, type: "notify_enter" })],
-      );
+      await notify(client, {
+        userId,
+        category: "queue",
+        payload: {
+          entryId,
+          type: "notify_enter",
+          roomId: entry.assigned_room_id,
+          roomName,
+          roomLocation,
+          template: "queue.enter",
+          vars: { name: nameById.get(userId) ?? "", challengeName, roomName },
+        },
+      });
     }
     return { entry, memberIds };
   });
@@ -675,6 +706,7 @@ export async function manualCall(
         repoId: updated.repo_id,
         roomId,
         roomName: room.name,
+        roomLocation: room.location,
       });
     }
     return updated;

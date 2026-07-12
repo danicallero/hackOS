@@ -1,6 +1,7 @@
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import type { Queryable } from "../../db/pool.js";
 import { broadcast } from "../../lib/sse.js";
+import { notify } from "../notifications/service.js";
 
 /**
  * Team members for a repo. `submissions` is the normal source, while the
@@ -26,9 +27,12 @@ export async function repoMemberIds(client: Queryable, repoId: number): Promise<
 }
 
 /**
- * H29/H38: "ve a esperar a la sala X". Writes a durable notification_outbox
- * row per member (delivery is another workstream's job) and broadcasts on
- * the member's personal SSE topic so an open participant view updates live.
+ * H29/H38: "ve a esperar a la sala X". Goes through the generic notify()
+ * module (H51/H53) so a call reaches the recipient's inbox AND every other
+ * configured channel (email/push), not just push — `queue` is a mandatory
+ * category so every requested channel is enqueued regardless of preference.
+ * Also broadcasts on the member's personal SSE topic so an open participant
+ * view updates live.
  */
 export async function notifyTeamCalled(
   client: Queryable,
@@ -38,22 +42,51 @@ export async function notifyTeamCalled(
     repoId: number;
     roomId: number;
     roomName: string;
+    roomLocation?: string | null;
   },
 ): Promise<void> {
   const memberIds = await repoMemberIds(client, params.repoId);
+  if (memberIds.length === 0) return;
+
+  const { rows: ctxRows } = await client.query(
+    `SELECT c.title AS challenge_name, r.name AS team_name FROM challenges c, repos r
+      WHERE c.id = $1 AND r.id = $2`,
+    [params.challengeId, params.repoId],
+  );
+  const challengeName: string = ctxRows[0]?.challenge_name ?? "";
+  const teamName: string = ctxRows[0]?.team_name ?? "";
+
+  const { rows: userRows } = await client.query(`SELECT id, name FROM users WHERE id = ANY($1)`, [
+    memberIds,
+  ]);
+  const nameById = new Map<number, string | null>(
+    userRows.map((u: { id: number; name: string | null }) => [u.id, u.name]),
+  );
+
   const payload = {
     entryId: params.entryId,
     challengeId: params.challengeId,
     roomId: params.roomId,
     roomName: params.roomName,
+    roomLocation: params.roomLocation ?? null,
   };
   for (const userId of memberIds) {
-    await client.query(
-      `INSERT INTO notification_outbox (user_id, category, channel, payload) VALUES ($1, 'queue', 'push', $2)`,
-      [userId, JSON.stringify(payload)],
-    );
+    await notify(client, {
+      userId,
+      category: "queue",
+      payload: {
+        ...payload,
+        template: "queue.called",
+        vars: {
+          name: nameById.get(userId) ?? "",
+          teamName,
+          challengeName,
+          roomName: params.roomName,
+        },
+      },
+    });
   }
-  // Broadcast after the row is durably queued but still inside the caller's
+  // Broadcast after the rows are durably queued but still inside the caller's
   // transaction boundary is fine — SSE has no rollback semantics either way,
   // and callers only reach here once the domain write already validated.
   for (const userId of memberIds) {
@@ -124,6 +157,8 @@ export async function notifyRoomQueueChanged(client: Queryable, roomId: number):
     [roomId],
   );
   await Promise.all(
-    rows.map((row: { challenge_id: number }) => notifyChallengeQueueChanged(client, row.challenge_id)),
+    rows.map((row: { challenge_id: number }) =>
+      notifyChallengeQueueChanged(client, row.challenge_id),
+    ),
   );
 }

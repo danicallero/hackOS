@@ -2,9 +2,11 @@
 
 // Participant "my queue" status (H38): the authenticated user sees, for each
 // project/challenge their team presents to, its live queue stage, position in
-// line, estimated wait and assigned room. When their team is called they get a
-// prominent "go to room X" notice; a pre-call gives them a heads-up to get
-// ready. No capability gate — this is the participant-facing view, auth only.
+// line, estimated wait and room. While waiting, every room that could judge a
+// multi-room challenge is listed; once their team is called, only the room
+// they were actually called to is shown, in a prominent "go to room X" notice.
+// A pre-call gives them a heads-up to get ready. No capability gate — this is
+// the participant-facing view, auth only.
 //
 // Data:
 //   GET  /api/queue/me          → MyQueueEntry[] (read model, refetched by SSE)
@@ -13,8 +15,7 @@
 //
 // Realtime (plan §4): the SSE payload is a signal, so we refetch the read model
 // on every event (useLiveQuery). We additionally listen to the same stream to
-// fire toasts and to capture the room *name* the call event carries — the read
-// model only exposes `roomId`.
+// fire toasts.
 
 import { EVENTS } from "@hackos/shared/events";
 import { DoorOpenIcon, HourglassIcon, TicketIcon } from "lucide-react";
@@ -29,14 +30,29 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { type SseEnvelope, useEventSource, useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
-import { getMyQueue, type MyQueueEntry } from "@/lib/queue";
+import { getMyQueue, type MyQueueEntry, type MyQueueRoom } from "@/lib/queue";
 import { cn } from "@/lib/utils";
 import { type TranslatedText, textForDisplay } from "../challenges/shared";
 
-/** Payload of `user.queue.called` (notify.ts): includes the human room name. */
-type CalledPayload = { entryId: number; challengeId: number; roomId: number; roomName: string };
+/** Payload of `user.queue.called` (notify.ts): includes the human room name/location. */
+type CalledPayload = {
+  entryId: number;
+  challengeId: number;
+  roomId: number;
+  roomName: string;
+  roomLocation: string | null;
+};
 /** Payload of `user.queue.precall`. */
 type PrecallPayload = { entryId: number; challengeId: number; etaMinutes: number };
+
+/** "Room A (Building 1)" — falls back to just the name when there's no location. */
+function formatRoom(room: MyQueueRoom): string {
+  return room.location ? `${room.name} (${room.location})` : room.name;
+}
+
+function formatRooms(rooms: MyQueueRoom[]): string {
+  return rooms.map(formatRoom).join(", ");
+}
 
 const CALL_EVENTS = [
   EVENTS.USER_QUEUE_CALLED,
@@ -53,16 +69,6 @@ function formatEta(minutes: number | null, anyMoment = "any moment now"): string
   return m ? `~${h}h ${m}m` : `~${h}h`;
 }
 
-function roomLabel(
-  roomId: number | null,
-  names: Record<number, string>,
-  fallback = "your room",
-  roomNumber = "room #{id}",
-): string {
-  if (roomId == null) return fallback;
-  return names[roomId] ?? roomNumber.replace("{id}", String(roomId));
-}
-
 export default function MyQueuePage() {
   const { t } = useLocale();
   const {
@@ -71,9 +77,6 @@ export default function MyQueuePage() {
     loading,
   } = useLiveQuery<MyQueueEntry[]>(getMyQueue, "/api/queue/me/stream", CALL_EVENTS);
 
-  // The read model only carries `roomId`; the call event carries the room name.
-  // Cache names as we see them so the "go to room" notice reads nicely.
-  const [roomNames, setRoomNames] = useState<Record<number, string>>({});
   // Queue entries that got a pre-call heads-up but haven't been called yet.
   const [precalled, setPrecalled] = useState<Set<number>>(new Set());
 
@@ -84,7 +87,6 @@ export default function MyQueuePage() {
     (env: SseEnvelope) => {
       if (env.type === EVENTS.USER_QUEUE_CALLED) {
         const p = env.data as CalledPayload;
-        setRoomNames((prev) => (p.roomName ? { ...prev, [p.roomId]: p.roomName } : prev));
         setPrecalled((prev) => {
           if (!prev.has(p.entryId)) return prev;
           const next = new Set(prev);
@@ -93,9 +95,10 @@ export default function MyQueuePage() {
         });
         if (!seenCalls.current.has(p.entryId)) {
           seenCalls.current.add(p.entryId);
-          toast.success(t("yourTurn", { room: p.roomName ?? t("yourRoom") }), {
-            duration: 12_000,
-          });
+          const room = p.roomName
+            ? formatRoom({ id: p.roomId, name: p.roomName, location: p.roomLocation })
+            : t("yourRoom");
+          toast.success(t("yourTurn", { room }), { duration: 12_000 });
         }
       } else if (env.type === EVENTS.USER_QUEUE_PRECALL) {
         const p = env.data as PrecallPayload;
@@ -147,7 +150,7 @@ export default function MyQueuePage() {
       <PageHeader title={t("myQueue")} />
 
       {called.map((e) => (
-        <CalledNotice key={`called-${e.repoId}-${e.challengeId}`} entry={e} roomNames={roomNames} />
+        <CalledNotice key={`called-${e.repoId}-${e.challengeId}`} entry={e} />
       ))}
 
       {heading.map((e) => (
@@ -162,9 +165,7 @@ export default function MyQueuePage() {
         {list.length === 0 ? (
           <EmptyState icon={TicketIcon} title={t("noJudgingQueue")} />
         ) : (
-          projects.map((project) => (
-            <ProjectQueueCard key={project.repoId} {...project} roomNames={roomNames} />
-          ))
+          projects.map((project) => <ProjectQueueCard key={project.repoId} {...project} />)
         )}
       </SectionCard>
     </div>
@@ -172,15 +173,7 @@ export default function MyQueuePage() {
 }
 
 /** A project may be queued for several challenges; keep its live statuses together. */
-function ProjectQueueCard({
-  repoName,
-  entries,
-  roomNames,
-}: {
-  repoName: string;
-  entries: MyQueueEntry[];
-  roomNames: Record<number, string>;
-}) {
+function ProjectQueueCard({ repoName, entries }: { repoName: string; entries: MyQueueEntry[] }) {
   const { t } = useLocale();
   return (
     <Card className="gap-0 py-0 shadow-none">
@@ -190,20 +183,14 @@ function ProjectQueueCard({
       </CardHeader>
       <CardContent className="space-y-2 border-t px-4 py-3">
         {entries.map((entry) => (
-          <QueueRow key={`${entry.repoId}-${entry.challengeId}`} entry={entry} roomNames={roomNames} />
+          <QueueRow key={`${entry.repoId}-${entry.challengeId}`} entry={entry} />
         ))}
       </CardContent>
     </Card>
   );
 }
 
-function QueueRow({
-  entry,
-  roomNames,
-}: {
-  entry: MyQueueEntry;
-  roomNames: Record<number, string>;
-}) {
+function QueueRow({ entry }: { entry: MyQueueEntry }) {
   const { t } = useLocale();
   const eta = formatEta(entry.etaMinutes, t("anyMoment"));
   return (
@@ -220,10 +207,13 @@ function QueueRow({
           </span>
         )}
         {entry.status === "waiting" && eta && <span className="text-muted-foreground">{eta}</span>}
-        {entry.roomId != null && entry.status !== "waiting" && (
-          <span className="text-muted-foreground capitalize">
-            {roomLabel(entry.roomId, roomNames, t("yourRoom"), t("roomNumber"))}
-          </span>
+        {/* Waiting: show every room that could judge this challenge (multi-room aware).
+            Called or beyond: show only the room the team was actually called to. */}
+        {entry.status === "waiting" && entry.rooms.length > 0 && (
+          <span className="text-muted-foreground">{formatRooms(entry.rooms)}</span>
+        )}
+        {entry.status !== "waiting" && entry.room && (
+          <span className="text-muted-foreground">{formatRoom(entry.room)}</span>
         )}
         <QueueStatusBadge status={entry.status} />
       </div>
@@ -232,13 +222,7 @@ function QueueRow({
 }
 
 /** H38: prominent "go to room X" call-to-action when the team is called. */
-function CalledNotice({
-  entry,
-  roomNames,
-}: {
-  entry: MyQueueEntry;
-  roomNames: Record<number, string>;
-}) {
+function CalledNotice({ entry }: { entry: MyQueueEntry }) {
   const { t } = useLocale();
   return (
     <div
@@ -252,9 +236,7 @@ function CalledNotice({
       </div>
       <div className="min-w-0 space-y-1">
         <p className="text-base font-semibold">
-          {t("yourTurn", {
-            room: roomLabel(entry.roomId, roomNames, t("yourRoom"), t("roomNumber")),
-          })}
+          {t("yourTurn", { room: entry.room ? formatRoom(entry.room) : t("yourRoom") })}
         </p>
         <p className="text-success/90 text-sm">
           {textForDisplay(entry.challengeTitle as TranslatedText)} · {entry.repoName}

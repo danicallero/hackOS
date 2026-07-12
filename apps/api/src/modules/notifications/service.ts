@@ -1,5 +1,6 @@
 import type { Queryable } from "../../db/pool.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
+import { type EmailPayload, normalizeLanguage, renderEmailTemplate } from "./templates.js";
 
 /**
  * Public contract for the rest of the codebase (H51, H52, plan/07 §5.4):
@@ -51,16 +52,42 @@ async function resolveChannels(
   return candidates.filter((channel) => overrides.get(channel) ?? true);
 }
 
+/**
+ * The in_app row IS the inbox item (dispatchInApp just fans it out over SSE,
+ * unrendered) and the inbox UI reads `payload.subject`/`payload.body`
+ * directly — but callers that only name a `template` + `vars` (the pattern
+ * every other channel uses, see templates.ts) never set those. Pre-render
+ * them here so a caller can pass one payload shape and land readably on
+ * every channel, in_app included, without knowing about templates itself.
+ * Callers that already set an explicit subject/body keep it verbatim.
+ */
+async function withInboxRendering(
+  db: Queryable,
+  userId: number,
+  channel: NotificationChannel,
+  payload: unknown,
+): Promise<unknown> {
+  if (channel !== "in_app") return payload;
+  if (typeof payload !== "object" || payload === null) return payload;
+  const p = payload as EmailPayload & Record<string, unknown>;
+  if (typeof p.subject === "string" || !p.template) return payload;
+  const { rows } = await db.query(`SELECT language FROM users WHERE id = $1`, [userId]);
+  const language = normalizeLanguage((rows[0] as { language?: string } | undefined)?.language);
+  const rendered = renderEmailTemplate(p, language);
+  return { ...p, subject: rendered.subject, body: rendered.text };
+}
+
 /** Enqueues outbox rows for `opts.userId`, one per resolved channel. Returns the inserted row ids. */
 export async function notify(db: Queryable, opts: NotifyOptions): Promise<number[]> {
   const candidates = opts.channels ?? DEFAULT_CHANNELS;
   const channels = await resolveChannels(db, opts.userId, opts.category, candidates);
   const ids: number[] = [];
   for (const channel of channels) {
+    const rowPayload = await withInboxRendering(db, opts.userId, channel, opts.payload);
     const { rows } = await db.query(
       `INSERT INTO notification_outbox (user_id, category, channel, payload)
        VALUES ($1, $2, $3, $4) RETURNING id`,
-      [opts.userId, opts.category, channel, JSON.stringify(opts.payload ?? {})],
+      [opts.userId, opts.category, channel, JSON.stringify(rowPayload ?? {})],
     );
     ids.push(rows[0].id);
   }

@@ -169,6 +169,50 @@ describe("participant view (H38)", () => {
       expect.arrayContaining([expect.objectContaining({ userId: member })]),
     );
   });
+
+  it("lists every room judging a multi-room challenge while waiting, and only the called room once called", async () => {
+    const me = await createUser();
+    const challengeId = await createChallenge();
+    const roomA = await createRoom({ name: "Room A" });
+    const roomB = await createRoom({ name: "Room B" });
+    await assignChallengeToRoom(roomA, challengeId);
+    await assignChallengeToRoom(roomB, challengeId);
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`UPDATE rooms SET location = 'Building 1, 2nd floor' WHERE id = $1`, [roomA]);
+
+    const { repoId: mine } = await createRepoWithTeam([me]);
+    await enqueueRepo(challengeId, mine, 1);
+
+    const waiting = await app.inject({ method: "GET", url: "/api/queue/me", headers: asUser(me) });
+    expect(waiting.statusCode).toBe(200);
+    const waitingEntry = waiting.json()[0];
+    expect(waitingEntry.room).toBeNull();
+    expect(waitingEntry.rooms).toEqual(
+      expect.arrayContaining([
+        { id: roomA, name: "Room A", location: "Building 1, 2nd floor" },
+        { id: roomB, name: "Room B", location: null },
+      ]),
+    );
+
+    const callRes = await app.inject({
+      method: "POST",
+      url: `/api/queue/rooms/${roomA}/call-next`,
+      headers: asUser(operatorId),
+      payload: {},
+    });
+    expect(callRes.statusCode).toBe(200);
+
+    const called = await app.inject({ method: "GET", url: "/api/queue/me", headers: asUser(me) });
+    expect(called.statusCode).toBe(200);
+    const calledEntry = called.json()[0];
+    // Once called, the human-readable room name/location is the concrete one
+    // the team was actually assigned to (H38) — not an opaque room id.
+    expect(calledEntry.room).toEqual({
+      id: roomA,
+      name: "Room A",
+      location: "Building 1, 2nd floor",
+    });
+  });
 });
 
 describe("pace (H39)", () => {
