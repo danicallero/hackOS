@@ -31,7 +31,7 @@ function asPrizes(value: unknown): Prize[] {
 }
 
 export default function PublicChallengePage() {
-  const { t } = useLocale();
+  const { language, t } = useLocale();
   const { id } = useParams<{ id: string }>();
   const [challenge, setChallenge] = useState<PublicChallenge | null | undefined>(undefined);
   const [hasOpenApplications, setHasOpenApplications] = useState(false);
@@ -65,8 +65,8 @@ export default function PublicChallengePage() {
   }, [loadApplications]);
 
   useEffect(() => {
-    if (challenge) document.title = displayText(challenge.title);
-  }, [challenge]);
+    if (challenge) document.title = displayText(challenge.title, language);
+  }, [challenge, language]);
 
   return (
     <div className="mx-auto max-w-3xl px-5 py-6 sm:px-8 sm:py-10">
@@ -118,17 +118,17 @@ export default function PublicChallengePage() {
             <p className="text-muted-foreground text-sm font-medium">{challenge.enterprise.name}</p>
           </div>
           <h1 className="text-balance mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
-            {displayText(challenge.title)}
+            {displayText(challenge.title, language)}
           </h1>
           <p className="text-muted-foreground text-pretty mt-4 whitespace-pre-wrap text-base">
-            {displayText(challenge.description)}
+            {displayText(challenge.description, language)}
           </p>
 
-          {displayText(challenge.criteria) && (
+          {displayText(challenge.criteria, language) && (
             <section className="mt-8 border-t pt-6">
               <h2 className="text-lg font-medium">{t("judgingCriteriaTitle")}</h2>
               <p className="text-muted-foreground text-pretty mt-2 whitespace-pre-wrap text-sm">
-                {displayText(challenge.criteria)}
+                {displayText(challenge.criteria, language)}
               </p>
             </section>
           )}
