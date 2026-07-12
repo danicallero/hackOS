@@ -21,6 +21,7 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
+import { useLocale } from "@/lib/i18n";
 import {
   fmtDateTime,
   type MyResponseSummary,
@@ -30,6 +31,7 @@ import {
 } from "./lib";
 
 export default function MyApplicationsPage() {
+  const { t } = useLocale();
   const [responses, setResponses] = useState<MyResponseSummary[]>([]);
   const [forms, setForms] = useState<PublicForm[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,11 +51,11 @@ export default function MyApplicationsPage() {
       setForms(open.applications);
       hasLoadedRef.current = true;
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not load your applications.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadYourApplications"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   // Soft, in-place refresh instead of a hard reload when staff decides on
   // one of your applications elsewhere.
@@ -71,7 +73,7 @@ export default function MyApplicationsPage() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <PageHeader title="My applications" />
+        <PageHeader title={t("myApplications")} />
         <div className="flex justify-center py-16">
           <Spinner className="size-6" />
         </div>
@@ -81,22 +83,19 @@ export default function MyApplicationsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="My applications"
-        description="Track the forms you've applied to, finish any drafts, and confirm your place once you're accepted."
-      />
+      <PageHeader title={t("myApplications")} description={t("myApplicationsDesc")} />
 
       <SectionCard
         icon={ClipboardListIcon}
-        title="My responses"
-        description="Everything you've started or submitted, with its current status."
+        title={t("myResponses")}
+        description={t("myResponsesDesc")}
         bodyClassName={responses.length === 0 ? "p-0" : "space-y-2"}
       >
         {responses.length === 0 ? (
           <EmptyState
             icon={InboxIcon}
-            title="You haven't applied to anything yet"
-            description="Open forms you can apply to are listed below."
+            title={t("notAppliedYetTitle")}
+            description={t("notAppliedYetDesc")}
           />
         ) : (
           responses.map((r) => (
@@ -109,12 +108,12 @@ export default function MyApplicationsPage() {
                 <div className="truncate font-medium">{r.application_name}</div>
                 <div className="text-muted-foreground text-xs">
                   {r.submitted_at
-                    ? `Submitted ${fmtDateTime(r.submitted_at)}`
-                    : "Not submitted yet"}
+                    ? t("submittedOnPrefix", { date: fmtDateTime(r.submitted_at) })
+                    : t("notSubmittedYet")}
                 </div>
               </div>
               <StatusBadge tone={statusTone(r.status)} dot={false}>
-                {statusLabel(r.status)}
+                {statusLabel(r.status, t)}
               </StatusBadge>
             </Link>
           ))
@@ -123,15 +122,15 @@ export default function MyApplicationsPage() {
 
       <SectionCard
         icon={FilePlus2Icon}
-        title="Open to apply"
-        description="Forms currently accepting new applications."
+        title={t("openToApply")}
+        description={t("openToApplyDesc")}
         bodyClassName={openToApply.length === 0 ? "p-0" : "space-y-2"}
       >
         {openToApply.length === 0 ? (
           <EmptyState
             icon={InboxIcon}
-            title="No open forms right now"
-            description="Check back later — new application windows will show up here."
+            title={t("noOpenFormsTitle")}
+            description={t("noOpenFormsDesc")}
           />
         ) : (
           openToApply.map((f) => (
@@ -143,11 +142,11 @@ export default function MyApplicationsPage() {
                 <div className="truncate font-medium">{f.name}</div>
                 <div className="text-muted-foreground text-xs">
                   <span className="capitalize">{f.type}</span>
-                  {f.close_at ? ` · closes ${fmtDateTime(f.close_at)}` : ""}
+                  {f.close_at ? t("closesInline", { date: fmtDateTime(f.close_at) }) : ""}
                 </div>
               </div>
               <Button asChild size="sm">
-                <Link href={`/my-applications/${f.id}`}>Apply</Link>
+                <Link href={`/my-applications/${f.id}`}>{t("apply")}</Link>
               </Button>
             </div>
           ))

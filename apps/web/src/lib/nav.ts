@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 
 export interface NavItem {
-  title: string;
+  title: import("./i18n").MessageKey;
   href: string;
   icon: LucideIcon;
   /** Required capability to see the item (H8/H55). Omit = visible to all. */
@@ -46,7 +46,7 @@ export interface NavItem {
 }
 
 export interface NavSection {
-  label?: string;
+  label?: import("./i18n").MessageKey;
   items: NavItem[];
 }
 
@@ -59,18 +59,18 @@ export interface NavSection {
 export const NAV: NavSection[] = [
   {
     items: [
-      { title: "Dashboard", href: "/dashboard", icon: LayoutDashboardIcon },
+      { title: "dashboard", href: "/dashboard", icon: LayoutDashboardIcon },
       // Participant-facing: everyone can apply (H12-H15). No capability gate.
-      { title: "My applications", href: "/my-applications", icon: FileTextIcon },
+      { title: "myApplications", href: "/my-applications", icon: FileTextIcon },
       // Participant-facing queue status (H38). No capability gate — auth only.
-      { title: "My queue", href: "/my-queue", icon: TicketIcon },
+      { title: "myQueue", href: "/my-queue", icon: TicketIcon },
     ],
   },
   {
-    label: "Operations",
+    label: "operations",
     items: [
       {
-        title: "Queue operations",
+        title: "queueOperations",
         href: "/queue",
         icon: ListOrderedIcon,
         anyCapability: [
@@ -82,31 +82,31 @@ export const NAV: NavSection[] = [
       // Logistics is split per physical station (H22-H27); each entry shows
       // only for operators who hold that station's capability (H55).
       {
-        title: "Accreditation",
+        title: "accreditation",
         href: "/logistics/accreditation",
         icon: BadgeCheckIcon,
         capability: CAPABILITIES.ACCREDIT_SCAN,
       },
       {
-        title: "Meals",
+        title: "meals",
         href: "/logistics/meals",
         icon: SoupIcon,
         capability: CAPABILITIES.ACTIVITY_SCAN,
       },
       {
-        title: "Activities",
+        title: "activities",
         href: "/logistics/activities",
         icon: ActivityIcon,
         capability: CAPABILITIES.ACTIVITY_SCAN,
       },
       {
-        title: "Presence",
+        title: "presence",
         href: "/logistics/presence",
         icon: DoorOpenIcon,
         capability: CAPABILITIES.PRESENCE_SCAN,
       },
       {
-        title: "Logistics stats",
+        title: "logisticsStats",
         href: "/logistics/stats",
         icon: ChartColumnIcon,
         capability: CAPABILITIES.LOGISTICS_STATS,
@@ -114,10 +114,10 @@ export const NAV: NavSection[] = [
     ],
   },
   {
-    label: "Administration",
+    label: "administration",
     items: [
       {
-        title: "Judging",
+        title: "judging",
         href: "/judging",
         icon: GavelIcon,
         anyCapability: [
@@ -130,7 +130,7 @@ export const NAV: NavSection[] = [
       {
         // H8/H55: judges + sponsor reps get a scoped projects view (backend
         // scopes GET /api/repos by their challenges); full access via projects:*.
-        title: "Projects",
+        title: "projects",
         href: "/projects",
         icon: FolderGitIcon,
         anyCapability: [
@@ -142,77 +142,77 @@ export const NAV: NavSection[] = [
         judgeVisible: true,
       },
       {
-        title: "Applications",
+        title: "applications",
         href: "/applications",
         icon: ClipboardListIcon,
         anyCapability: [CAPABILITIES.APPLICATIONS_REVIEW, CAPABILITIES.APPLICATIONS_MANAGE],
       },
       {
-        title: "Schedule",
+        title: "schedule",
         href: "/schedule",
         icon: CalendarDaysIcon,
         capability: CAPABILITIES.SCHEDULE_MANAGE,
         judgeVisible: true,
       },
       {
-        title: "Announcements",
+        title: "announcements",
         href: "/announcements",
         icon: MegaphoneIcon,
         capability: CAPABILITIES.ANNOUNCEMENTS_MANAGE,
       },
       {
-        title: "Enterprises",
+        title: "enterprises",
         href: "/enterprises",
         icon: HandshakeIcon,
         capability: CAPABILITIES.SPONSORS_MANAGE,
         sponsorVisible: true,
       },
       {
-        title: "Challenges",
+        title: "challenges",
         href: "/challenges",
         icon: TrophyIcon,
         anyCapability: [CAPABILITIES.SPONSORS_MANAGE, CAPABILITIES.QUEUE_ADMIN],
         sponsorVisible: true,
       },
       {
-        title: "Users",
+        title: "users",
         href: "/users",
         icon: UsersIcon,
         capability: CAPABILITIES.USERS_READ,
       },
       {
-        title: "Permissions",
+        title: "permissions",
         href: "/permissions",
         icon: ShieldCheckIcon,
         capability: CAPABILITIES.PERMISSIONS_MANAGE,
       },
       {
-        title: "Event settings",
+        title: "eventSettings",
         href: "/settings/event",
         icon: SettingsIcon,
         capability: CAPABILITIES.SCHEDULE_MANAGE,
       },
       {
-        title: "TV control",
+        title: "tvControl",
         href: "/tv/control",
         icon: TvIcon,
         capability: CAPABILITIES.TV_CONTROL,
       },
       {
-        title: "Rooms",
+        title: "rooms",
         href: "/queue/rooms",
         icon: Building2Icon,
         anyCapability: [CAPABILITIES.QUEUE_ADMIN],
         sponsorVisible: true,
       },
       {
-        title: "Libraries",
+        title: "libraries",
         href: "/settings/libraries",
         icon: LibraryBigIcon,
         capability: CAPABILITIES.INTOLERANCES_MANAGE,
       },
       {
-        title: "Audit log",
+        title: "auditLog",
         href: "/audit",
         icon: ScrollTextIcon,
         capability: CAPABILITIES.AUDIT_READ,
@@ -220,12 +220,12 @@ export const NAV: NavSection[] = [
     ],
   },
   {
-    label: "Account",
+    label: "account",
     items: [
       // Everyone has an inbox — auth only, no capability (H50/H51).
-      { title: "Inbox", href: "/inbox", icon: InboxIcon },
-      { title: "Wallet", href: "/wallet", icon: WalletCardsIcon },
-      { title: "My profile", href: "/settings/profile", icon: UserIcon },
+      { title: "inbox", href: "/inbox", icon: InboxIcon },
+      { title: "wallet", href: "/wallet", icon: WalletCardsIcon },
+      { title: "myProfile", href: "/settings/profile", icon: UserIcon },
     ],
   },
 ];

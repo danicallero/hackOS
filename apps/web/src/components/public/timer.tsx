@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { type Translate, useLocale } from "@/lib/i18n";
 import type { PublicEvent } from "./public-types";
 
 function remaining(target: string | null) {
@@ -42,7 +43,11 @@ export type EventPhase =
  * opted in) counts down toward the start instead. Once hacking ends, the same
  * widget hands off to the judging window (queue_settings, H39) if one is set.
  */
-export function computeEventPhase(event: PublicEvent | null, now: number): EventPhase {
+export function computeEventPhase(
+  event: PublicEvent | null,
+  now: number,
+  t: Translate,
+): EventPhase {
   if (!event) return { kind: "none" };
   const start = event.hackingStartsAt ? new Date(event.hackingStartsAt).getTime() : null;
   const end = event.hackingEndsAt ? new Date(event.hackingEndsAt).getTime() : null;
@@ -53,7 +58,7 @@ export function computeEventPhase(event: PublicEvent | null, now: number): Event
     // No start configured: keep the legacy plain countdown-to-end behaviour.
     return {
       kind: "hacking-remaining",
-      label: "Time remaining",
+      label: t("timeRemaining"),
       target: event.hackingEndsAt as string,
     };
   }
@@ -62,16 +67,16 @@ export function computeEventPhase(event: PublicEvent | null, now: number): Event
     return event.showStartCountdown
       ? {
           kind: "hacking-starts-in",
-          label: "Hacking starts in",
+          label: t("hackingStartsIn"),
           target: event.hackingStartsAt as string,
         }
-      : { kind: "hacking-frozen", label: "Hacking window", ms: end - start };
+      : { kind: "hacking-frozen", label: t("hackingWindow"), ms: end - start };
   }
 
   if (now < end) {
     return {
       kind: "hacking-remaining",
-      label: "Time remaining",
+      label: t("timeRemaining"),
       target: event.hackingEndsAt as string,
     };
   }
@@ -82,14 +87,14 @@ export function computeEventPhase(event: PublicEvent | null, now: number): Event
   if (judgingStart !== null && now < judgingStart) {
     return {
       kind: "judging-starts-in",
-      label: "Judging starts in",
+      label: t("judgingStartsIn"),
       target: event.judgingStartsAt as string,
     };
   }
   if (judgingEnd !== null && now < judgingEnd) {
     return {
       kind: "judging-remaining",
-      label: "Judging ends in",
+      label: t("judgingEndsIn"),
       target: event.judgingEndsAt as string,
     };
   }
@@ -98,6 +103,7 @@ export function computeEventPhase(event: PublicEvent | null, now: number): Event
 
 /** Ticks every second so callers can decide whether/how to render the current phase. */
 export function useEventPhase(event: PublicEvent | null): EventPhase {
+  const { t } = useLocale();
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -105,7 +111,7 @@ export function useEventPhase(event: PublicEvent | null): EventPhase {
     return () => window.clearInterval(interval);
   }, []);
 
-  return computeEventPhase(event, now);
+  return computeEventPhase(event, now, t);
 }
 
 export function EventPhaseDisplay({

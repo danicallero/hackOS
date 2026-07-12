@@ -22,6 +22,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ApiError, api } from "@/lib/api";
+import { useLocale } from "@/lib/i18n";
 import type { InviteListItem } from "@/lib/types";
 
 const dateFmt = new Intl.DateTimeFormat("en-GB", {
@@ -32,13 +33,13 @@ const dateFmt = new Intl.DateTimeFormat("en-GB", {
   minute: "2-digit",
 });
 
-const kindLabel: Record<string, string> = {
-  staff: "Staff",
-  sponsor: "Sponsor",
-  participant: "Participant",
-};
-
 export function ActiveInvitationsModal() {
+  const { t } = useLocale();
+  const kindLabel: Record<string, string> = {
+    staff: t("roleStaff"),
+    sponsor: t("roleSponsor"),
+    participant: t("roleParticipant"),
+  };
   const [open, setOpen] = useState(false);
   const [invites, setInvites] = useState<InviteListItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -50,11 +51,11 @@ export function ActiveInvitationsModal() {
       const data = await api.get<InviteListItem[]>("/api/invites");
       setInvites(data);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not load invitations.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadInvitations"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (open) void load();
@@ -68,7 +69,7 @@ export function ActiveInvitationsModal() {
       toast.success(successMsg);
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : `Could not ${action} invite.`);
+      toast.error(err instanceof ApiError ? err.message : t("couldNotInviteAction"));
     } finally {
       setBusy((prev) => {
         const next = new Set(prev);
@@ -81,19 +82,19 @@ export function ActiveInvitationsModal() {
   const columns: Column<InviteListItem>[] = [
     {
       id: "email",
-      header: "Email",
+      header: t("email"),
       sortValue: (i) => i.email.toLowerCase(),
       cell: (i) => <span className="font-medium">{i.email}</span>,
     },
     {
       id: "kind",
-      header: "Type",
+      header: t("colType"),
       sortValue: (i) => i.kind,
       cell: (i) => <StatusBadge tone="neutral">{kindLabel[i.kind] ?? i.kind}</StatusBadge>,
     },
     {
       id: "enterprise",
-      header: "Enterprise",
+      header: t("colEnterprise"),
       cell: (i) =>
         i.enterpriseId ? (
           <span className="text-muted-foreground text-sm">#{i.enterpriseId}</span>
@@ -103,7 +104,7 @@ export function ActiveInvitationsModal() {
     },
     {
       id: "expiresAt",
-      header: "Expires",
+      header: t("colExpires"),
       sortValue: (i) => i.expiresAt,
       cell: (i) => (
         <span className="flex items-center gap-2">
@@ -115,7 +116,7 @@ export function ActiveInvitationsModal() {
     },
     {
       id: "createdAt",
-      header: "Created",
+      header: t("colCreated"),
       sortValue: (i) => i.createdAt,
       cell: (i) => (
         <span className="text-muted-foreground text-sm">
@@ -134,12 +135,12 @@ export function ActiveInvitationsModal() {
       }}
       trigger={
         <Button variant="outline">
-          <MailIcon className="size-4" /> Active invitations
+          <MailIcon className="size-4" /> {t("activeInvitations")}
         </Button>
       }
       icon={MailIcon}
-      title="Active invitations"
-      description="Pending invites that haven't been accepted yet. Renew to extend the window, resend the email, regenerate for a brand-new link, or expire to invalidate immediately."
+      title={t("activeInvitations")}
+      description={t("activeInvitationsDesc")}
       size="xl"
     >
       <DataTable
@@ -147,7 +148,7 @@ export function ActiveInvitationsModal() {
         data={invites}
         getRowId={(i) => String(i.id)}
         searchable={(i) => `${i.email} ${i.kind}`}
-        searchPlaceholder="Search by email or type…"
+        searchPlaceholder={t("searchByEmailType")}
         rowActions={(i) => {
           const isBusy = (action: string) => busy.has(`${i.id}:${action}`);
           return (
@@ -160,36 +161,34 @@ export function ActiveInvitationsModal() {
               <DropdownMenuContent align="end" className="w-44">
                 <DropdownMenuItem
                   disabled={isBusy("renew")}
-                  onClick={() => doAction(i.id, "renew", "Expiry window extended.")}
+                  onClick={() => doAction(i.id, "renew", t("expiryExtended"))}
                 >
                   <TimerResetIcon className="size-4" />
-                  Renew
+                  {t("renew")}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   disabled={isBusy("resend")}
-                  onClick={() => doAction(i.id, "resend", "Invite email re-sent.")}
+                  onClick={() => doAction(i.id, "resend", t("inviteResent"))}
                 >
                   <MailPlusIcon className="size-4" />
-                  Resend email
+                  {t("resendEmail")}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   disabled={isBusy("regenerate")}
-                  onClick={() =>
-                    doAction(i.id, "regenerate", "New invite link created and emailed.")
-                  }
+                  onClick={() => doAction(i.id, "regenerate", t("newInviteCreated"))}
                 >
                   <RefreshCwIcon className="size-4" />
-                  Regenerate
+                  {t("regenerate")}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   variant="destructive"
                   disabled={isBusy("expire")}
-                  onClick={() => doAction(i.id, "expire", "Invite expired.")}
+                  onClick={() => doAction(i.id, "expire", t("inviteExpired"))}
                 >
                   <BanIcon className="size-4" />
-                  Expire
+                  {t("expire")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -199,8 +198,8 @@ export function ActiveInvitationsModal() {
         loading={loading}
         empty={{
           icon: MailIcon,
-          title: "No active invitations",
-          description: "Invite someone to get started.",
+          title: t("noActiveInvitations"),
+          description: t("inviteSomeone"),
         }}
       />
     </Modal>

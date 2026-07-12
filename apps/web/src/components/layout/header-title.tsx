@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { useLocale } from "@/lib/i18n";
 import { NAV } from "@/lib/nav";
 
 /**
@@ -10,11 +11,14 @@ import { NAV } from "@/lib/nav";
  */
 export function HeaderTitle() {
   const pathname = usePathname();
+  const { t } = useLocale();
   const item = NAV.flatMap((s) => s.items)
     .filter((i) => pathname === i.href || pathname.startsWith(`${i.href}/`))
     .sort((a, b) => b.href.length - a.href.length)[0];
 
   return (
-    <span className="text-muted-foreground text-sm font-medium">{item?.title ?? "hackOS"}</span>
+    <span className="text-muted-foreground text-sm font-medium">
+      {item ? t(item.title) : "hackOS"}
+    </span>
   );
 }

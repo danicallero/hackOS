@@ -10,6 +10,7 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Brand } from "@/components/common/brand";
+import { LanguageSelect } from "@/components/common/language-select";
 import { Spinner } from "@/components/common/spinner";
 import { SponsorLogo } from "@/components/common/sponsor-logo";
 import { ThemeToggle } from "@/components/common/theme-toggle";
@@ -24,6 +25,7 @@ import { displayText } from "@/components/public/public-types";
 import { EventPhaseDisplay, useEventPhase } from "@/components/public/timer";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
+import { LOCALE_CODES, useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem } from "@/lib/logistics";
 
 type Content = {
@@ -35,14 +37,15 @@ type Content = {
   openApplications: PublicApplicationForm[];
 };
 
-const dateTime = (value: string, timezone: string) =>
-  new Intl.DateTimeFormat(undefined, {
+const dateTime = (value: string, timezone: string, language: "es" | "gl" | "en") =>
+  new Intl.DateTimeFormat(LOCALE_CODES[language], {
     dateStyle: "medium",
     timeStyle: "short",
     timeZone: timezone,
   }).format(new Date(value));
 
 export function PublicPage() {
+  const { language, t } = useLocale();
   const [content, setContent] = useState<Content | null>(null);
   const [error, setError] = useState<string | null>(null);
   const load = useCallback(async () => {
@@ -72,9 +75,9 @@ export function PublicPage() {
       });
       setError(null);
     } catch {
-      setError("The public event information is temporarily unavailable.");
+      setError(t("publicEventUnavailable"));
     }
-  }, []);
+  }, [t]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -89,7 +92,7 @@ export function PublicPage() {
     return (
       <div className="grid min-h-dvh place-items-center" role="status" aria-busy="true">
         <Spinner className="size-7" />
-        <span className="sr-only">Loading public event information</span>
+        <span className="sr-only">{t("loadingPublicEventInfo")}</span>
       </div>
     );
   if (!content)
@@ -102,7 +105,7 @@ export function PublicPage() {
             onClick={() => void load()}
             className="mt-4 underline underline-offset-4"
           >
-            Try again
+            {t("tryAgain")}
           </button>
         </div>
       </div>
@@ -120,13 +123,14 @@ export function PublicPage() {
         <header className="flex flex-wrap items-center justify-between gap-4 py-6">
           <Brand />
           <div className="flex items-center gap-2">
+            <LanguageSelect />
             <ThemeToggle />
             <Button variant="ghost" asChild>
-              <Link href="/login">Log in</Link>
+              <Link href="/login">{t("logIn")}</Link>
             </Button>
             <Button asChild>
               <Link href="/signup">
-                Create account
+                {t("createAccount")}
                 <ArrowRightIcon className="size-4" />
               </Link>
             </Button>
@@ -146,13 +150,13 @@ export function PublicPage() {
             {openApplications.length > 0 && (
               <Button size="lg" asChild>
                 <Link href="/signup">
-                  Apply now
+                  {t("applyNow")}
                   <ArrowRightIcon className="size-4" />
                 </Link>
               </Button>
             )}
             <Button size="lg" variant="outline" asChild>
-              <Link href="/login">Log in</Link>
+              <Link href="/login">{t("logIn")}</Link>
             </Button>
           </div>
           {eventPhase.kind !== "none" && (
@@ -168,7 +172,7 @@ export function PublicPage() {
         {openApplications.length > 0 && (
           <section aria-labelledby="applications-title" className="border-t py-12">
             <SectionHeading icon={ClipboardListIcon} id="applications-title">
-              Open applications
+              {t("openApplications")}
             </SectionHeading>
             <div className="mt-6 grid gap-3 md:grid-cols-2">
               {openApplications.map((form) => (
@@ -180,11 +184,13 @@ export function PublicPage() {
                     <h3 className="font-medium">{form.name}</h3>
                     <p className="text-muted-foreground mt-1 text-sm">
                       <span className="capitalize">{form.type}</span>
-                      {form.close_at ? ` · closes ${dateTime(form.close_at, event.timezone)}` : ""}
+                      {form.close_at
+                        ? ` · ${t("closes")} ${dateTime(form.close_at, event.timezone, language)}`
+                        : ""}
                     </p>
                   </div>
                   <Button asChild size="sm">
-                    <Link href="/signup">Apply</Link>
+                    <Link href="/signup">{t("apply")}</Link>
                   </Button>
                 </div>
               ))}
@@ -195,7 +201,7 @@ export function PublicPage() {
         {announcements.length > 0 && (
           <section aria-labelledby="announcements-title" className="border-t py-12">
             <SectionHeading icon={MegaphoneIcon} id="announcements-title">
-              Announcements
+              {t("publicAnnouncements")}
             </SectionHeading>
             <div className="mt-6 grid gap-3 md:grid-cols-2">
               {announcements.map((item) => (
@@ -215,7 +221,7 @@ export function PublicPage() {
 
         <section aria-labelledby="schedule-title" className="border-t py-12">
           <SectionHeading icon={CalendarDaysIcon} id="schedule-title">
-            Schedule
+            {t("publicSchedule")}
           </SectionHeading>
           {schedule.length ? (
             <ol className="mt-6 divide-y overflow-hidden rounded-xl border">
@@ -225,7 +231,7 @@ export function PublicPage() {
                   className="hover:bg-accent/50 grid gap-1 p-4 transition-colors sm:grid-cols-[12rem_1fr_auto] sm:gap-4"
                 >
                   <time className="text-muted-foreground text-sm tabular-nums">
-                    {dateTime(item.startsAt, event.timezone)}
+                    {dateTime(item.startsAt, event.timezone, language)}
                   </time>
                   <div>
                     <h3 className="font-medium">{item.title}</h3>
@@ -242,13 +248,13 @@ export function PublicPage() {
               ))}
             </ol>
           ) : (
-            <EmptyNotice>The schedule will be published soon.</EmptyNotice>
+            <EmptyNotice>{t("schedulePending")}</EmptyNotice>
           )}
         </section>
 
         <section aria-labelledby="challenges-title" className="border-t py-12">
           <SectionHeading icon={TrophyIcon} id="challenges-title">
-            Challenges and prizes
+            {t("challengesAndPrizes")}
           </SectionHeading>
           {challenges.length ? (
             <div className="mt-6 grid gap-4 md:grid-cols-2">
@@ -259,24 +265,26 @@ export function PublicPage() {
                   className="hover:border-primary/30 block rounded-xl border p-5 shadow-sm transition-colors hover:shadow-md"
                 >
                   <p className="text-muted-foreground text-sm">{challenge.enterprise.name}</p>
-                  <h3 className="mt-1 text-lg font-medium">{displayText(challenge.title)}</h3>
+                  <h3 className="mt-1 text-lg font-medium">
+                    {displayText(challenge.title, language)}
+                  </h3>
                   <p className="text-muted-foreground text-pretty mt-2 line-clamp-3 text-sm">
-                    {displayText(challenge.description)}
+                    {displayText(challenge.description, language)}
                   </p>
                   {Array.isArray(challenge.prizes) && challenge.prizes.length > 0 && (
-                    <p className="text-primary mt-3 text-sm font-medium">Prizes available</p>
+                    <p className="text-primary mt-3 text-sm font-medium">{t("prizesAvailable")}</p>
                   )}
                 </Link>
               ))}
             </div>
           ) : (
-            <EmptyNotice>Challenges will be published soon.</EmptyNotice>
+            <EmptyNotice>{t("challengesPending")}</EmptyNotice>
           )}
         </section>
 
         <section aria-labelledby="sponsors-title" className="border-t py-12">
           <h2 id="sponsors-title" className="text-balance text-2xl font-semibold">
-            Sponsors
+            {t("sponsors")}
           </h2>
           {sponsors.length ? (
             <ul className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
@@ -299,12 +307,12 @@ export function PublicPage() {
               ))}
             </ul>
           ) : (
-            <EmptyNotice>Sponsors will be announced soon.</EmptyNotice>
+            <EmptyNotice>{t("sponsorsPending")}</EmptyNotice>
           )}
         </section>
 
         <footer className="text-muted-foreground border-t py-8 text-center text-xs">
-          hackOS — hackathon management platform
+          {t("hackathonPlatformTagline")}
         </footer>
       </div>
     </div>

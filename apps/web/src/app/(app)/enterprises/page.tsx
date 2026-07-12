@@ -10,7 +10,7 @@ import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Building2Icon, EyeIcon, EyeOffIcon, LockIcon, PlusIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -45,6 +45,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { fromDatetimeLocal } from "@/lib/datetime";
+import { type Translate, useLocale } from "@/lib/i18n";
 import { useCan, useMe } from "@/lib/session";
 import { type Enterprise, initials, isScheduled, visibilityTone } from "./shared";
 
@@ -68,91 +69,94 @@ const createSchema = z.object({
 });
 type CreateValues = z.infer<typeof createSchema>;
 
-const columns: Column<Enterprise>[] = [
-  {
-    id: "name",
-    header: "Enterprise",
-    sortValue: (e) => e.name.toLowerCase(),
-    cell: (e) => (
-      <div className="flex items-center gap-3">
-        <Avatar size="sm">
-          {e.logo_url ? (
-            <SponsorLogo
-              logoUrl={e.logo_url}
-              logoNegativeUrl={e.logo_negative_url}
-              alt={e.name}
-              className="size-full object-contain"
-            />
-          ) : (
-            <AvatarFallback>{initials(e.name)}</AvatarFallback>
-          )}
-        </Avatar>
-        <span className="font-medium">{e.name}</span>
-      </div>
-    ),
-  },
-  {
-    id: "website",
-    header: "Website",
-    cell: (e) =>
-      e.website ? (
-        <span className="text-muted-foreground text-sm">
-          {e.website.replace(/^https?:\/\//, "")}
-        </span>
-      ) : (
-        <span className="text-muted-foreground">—</span>
+function buildColumns(t: Translate): Column<Enterprise>[] {
+  return [
+    {
+      id: "name",
+      header: t("enterprises"),
+      sortValue: (e) => e.name.toLowerCase(),
+      cell: (e) => (
+        <div className="flex items-center gap-3">
+          <Avatar size="sm">
+            {e.logo_url ? (
+              <SponsorLogo
+                logoUrl={e.logo_url}
+                logoNegativeUrl={e.logo_negative_url}
+                alt={e.name}
+                className="size-full object-contain"
+              />
+            ) : (
+              <AvatarFallback>{initials(e.name)}</AvatarFallback>
+            )}
+          </Avatar>
+          <span className="font-medium">{e.name}</span>
+        </div>
       ),
-  },
-  {
-    id: "visibility",
-    header: "Visibility",
-    sortValue: (e) => e.visibility,
-    cell: (e) => (
-      <StatusBadge tone={visibilityTone(e.visibility)} className="capitalize">
-        {e.visibility}
-      </StatusBadge>
-    ),
-  },
-  {
-    id: "reveal",
-    header: "Reveal",
-    sortValue: (e) => e.available_from ?? "",
-    cell: (e) => {
-      if (isScheduled(e.available_from)) {
-        return (
-          <div className="flex items-center gap-2">
-            <StatusBadge tone="warning">Scheduled</StatusBadge>
-            <span className="text-muted-foreground text-sm">
-              {new Date(e.available_from as string).toLocaleString()}
-            </span>
-          </div>
-        );
-      }
-      if (e.visibility === "visible") {
-        return (
-          <span className="text-muted-foreground text-sm">
-            {e.available_from ? new Date(e.available_from).toLocaleString() : "Immediate"}
-          </span>
-        );
-      }
-      return <span className="text-muted-foreground">—</span>;
     },
-  },
-  {
-    id: "priority",
-    header: "Priority",
-    align: "right",
-    sortValue: (e) => e.display_priority ?? Number.POSITIVE_INFINITY,
-    cell: (e) =>
-      e.display_priority != null ? (
-        <span className="text-sm">{e.display_priority}</span>
-      ) : (
-        <span className="text-muted-foreground">—</span>
+    {
+      id: "website",
+      header: t("colWebsite"),
+      cell: (e) =>
+        e.website ? (
+          <span className="text-muted-foreground text-sm">
+            {e.website.replace(/^https?:\/\//, "")}
+          </span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
+    },
+    {
+      id: "visibility",
+      header: t("colVisibility"),
+      sortValue: (e) => e.visibility,
+      cell: (e) => (
+        <StatusBadge tone={visibilityTone(e.visibility)} className="capitalize">
+          {e.visibility}
+        </StatusBadge>
       ),
-  },
-];
+    },
+    {
+      id: "reveal",
+      header: t("colReveal"),
+      sortValue: (e) => e.available_from ?? "",
+      cell: (e) => {
+        if (isScheduled(e.available_from)) {
+          return (
+            <div className="flex items-center gap-2">
+              <StatusBadge tone="warning">{t("statusScheduled")}</StatusBadge>
+              <span className="text-muted-foreground text-sm">
+                {new Date(e.available_from as string).toLocaleString()}
+              </span>
+            </div>
+          );
+        }
+        if (e.visibility === "visible") {
+          return (
+            <span className="text-muted-foreground text-sm">
+              {e.available_from ? new Date(e.available_from).toLocaleString() : t("immediate")}
+            </span>
+          );
+        }
+        return <span className="text-muted-foreground">—</span>;
+      },
+    },
+    {
+      id: "priority",
+      header: t("priorityLabel"),
+      align: "right",
+      sortValue: (e) => e.display_priority ?? Number.POSITIVE_INFINITY,
+      cell: (e) =>
+        e.display_priority != null ? (
+          <span className="text-sm">{e.display_priority}</span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
+    },
+  ];
+}
 
 export default function EnterprisesPage() {
+  const { t } = useLocale();
   const router = useRouter();
   const canManage = useCan(CAPABILITIES.SPONSORS_MANAGE);
   const me = useMe();
@@ -162,6 +166,8 @@ export default function EnterprisesPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
 
+  const columns = useMemo(() => buildColumns(t), [t]);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -170,11 +176,11 @@ export default function EnterprisesPage() {
       setSelectedIds(new Set());
     } catch (err) {
       setEnterprises([]);
-      toast.error(err instanceof ApiError ? err.message : "Could not load enterprises.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadEnterprises"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   const bulkVisibility = useCallback(
     async (visible: boolean) => {
@@ -185,17 +191,21 @@ export default function EnterprisesPage() {
         await api.post("/api/enterprises/visibility", { ids, visible });
         toast.success(
           visible
-            ? `Made ${ids.length} enterprise${ids.length > 1 ? "s" : ""} visible.`
-            : `Hid ${ids.length} enterprise${ids.length > 1 ? "s" : ""}.`,
+            ? ids.length === 1
+              ? t("madeVisibleEnterpriseOne", { count: ids.length })
+              : t("madeVisibleEnterpriseOther", { count: ids.length })
+            : ids.length === 1
+              ? t("hidEnterpriseOne", { count: ids.length })
+              : t("hidEnterpriseOther", { count: ids.length }),
         );
         await load();
       } catch (err) {
-        toast.error(err instanceof ApiError ? err.message : "Could not update visibility.");
+        toast.error(err instanceof ApiError ? err.message : t("couldNotUpdateVisibility"));
       } finally {
         setBulkBusy(false);
       }
     },
-    [selectedIds, load],
+    [selectedIds, load, t],
   );
 
   // Soft, in-place refresh instead of a hard reload when another admin
@@ -221,24 +231,24 @@ export default function EnterprisesPage() {
       })
       .catch((err) => {
         if (!alive) return;
-        toast.error(err instanceof ApiError ? err.message : "Could not load your enterprise.");
+        toast.error(err instanceof ApiError ? err.message : t("couldNotLoadYourEnterprise"));
         setLoading(false);
       });
     return () => {
       alive = false;
     };
-  }, [canManage, load, me?.role, router, liveRefresh]);
+  }, [canManage, load, me?.role, router, liveRefresh, t]);
 
   if (!canManage && me?.role === "sponsor" && loading) {
     return (
       <div className="space-y-6">
-        <PageHeader title="My enterprise" />
+        <PageHeader title={t("myEnterprise")} />
         <DataTable
           columns={columns}
           data={[]}
           getRowId={(e) => String(e.id)}
           loading
-          empty={{ icon: Building2Icon, title: "Loading enterprise" }}
+          empty={{ icon: Building2Icon, title: t("loadingEnterprise") }}
         />
       </div>
     );
@@ -247,11 +257,11 @@ export default function EnterprisesPage() {
   if (!canManage) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Enterprises" />
+        <PageHeader title={t("enterprises")} />
         <EmptyState
           icon={LockIcon}
-          title="You can't manage sponsors"
-          description="You need the sponsors:manage capability to view and manage enterprises."
+          title={t("noAccessSponsors")}
+          description={t("sponsorsAccessDeniedDesc")}
         />
       </div>
     );
@@ -260,12 +270,12 @@ export default function EnterprisesPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Enterprises"
-        description="Sponsor organisations. Create one before inviting its representatives — they auto-link on acceptance (H44)."
+        title={t("enterprises")}
+        description={t("enterprisesDesc")}
         actions={
           <Button onClick={() => setCreateOpen(true)}>
             <PlusIcon className="size-4" />
-            New enterprise
+            {t("newEnterprise")}
           </Button>
         }
       />
@@ -276,7 +286,7 @@ export default function EnterprisesPage() {
         getRowId={(e) => String(e.id)}
         onRowClick={(e) => router.push(`/enterprises/${e.id}`)}
         searchable={(e) => `${e.name} ${e.website ?? ""}`}
-        searchPlaceholder="Search enterprises…"
+        searchPlaceholder={t("searchEnterprisesPlaceholder")}
         pageSize={15}
         loading={loading}
         selectable
@@ -285,7 +295,9 @@ export default function EnterprisesPage() {
         toolbar={
           selectedIds.size > 0 ? (
             <>
-              <span className="text-muted-foreground text-sm">{selectedIds.size} selected</span>
+              <span className="text-muted-foreground text-sm">
+                {t("selectedCount", { count: selectedIds.size })}
+              </span>
               <Button
                 variant="outline"
                 size="sm"
@@ -293,7 +305,7 @@ export default function EnterprisesPage() {
                 onClick={() => bulkVisibility(true)}
               >
                 <EyeIcon className="size-4" />
-                Make visible
+                {t("makeVisible")}
               </Button>
               <Button
                 variant="outline"
@@ -302,15 +314,15 @@ export default function EnterprisesPage() {
                 onClick={() => bulkVisibility(false)}
               >
                 <EyeOffIcon className="size-4" />
-                Hide
+                {t("hide")}
               </Button>
             </>
           ) : undefined
         }
         empty={{
           icon: Building2Icon,
-          title: "No enterprises yet",
-          description: "Create the first sponsor enterprise to get started.",
+          title: t("noEnterprisesYetTitle"),
+          description: t("createFirstSponsorEnterprise"),
         }}
       />
 
@@ -336,6 +348,7 @@ function CreateEnterpriseModal({
   onOpenChange: (open: boolean) => void;
   onCreated: (created: Enterprise) => void | Promise<void>;
 }) {
+  const { t } = useLocale();
   const form = useForm<CreateValues>({
     resolver: zodResolver(createSchema),
     defaultValues: {
@@ -372,10 +385,10 @@ function CreateEnterpriseModal({
         visibility: values.visibility,
         availableFrom: fromDatetimeLocal(values.availableFrom),
       });
-      toast.success("Enterprise created.");
+      toast.success(t("enterpriseCreated"));
       await onCreated(created);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not create the enterprise.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotCreateEnterprise"));
     }
   }
 
@@ -384,11 +397,11 @@ function CreateEnterpriseModal({
       open={open}
       onOpenChange={onOpenChange}
       icon={Building2Icon}
-      title="New enterprise"
-      description="Add a sponsor organisation. You can refine its profile and logo afterwards."
+      title={t("newEnterprise")}
+      description={t("newEnterpriseModalDesc")}
       footer={
         <SubmitButton form="create-enterprise-form" pending={form.formState.isSubmitting}>
-          Create enterprise
+          {t("createEnterprise")}
         </SubmitButton>
       }
     >
@@ -403,9 +416,9 @@ function CreateEnterpriseModal({
             name="name"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Name</FormLabel>
+                <FormLabel>{t("name")}</FormLabel>
                 <FormControl>
-                  <Input placeholder="Acme Corp" {...field} />
+                  <Input placeholder={t("acmeCorpPlaceholder")} {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -416,7 +429,7 @@ function CreateEnterpriseModal({
             name="website"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Website</FormLabel>
+                <FormLabel>{t("websiteLabel")}</FormLabel>
                 <FormControl>
                   <Input type="url" placeholder="https://acme.com" {...field} />
                 </FormControl>
@@ -429,11 +442,11 @@ function CreateEnterpriseModal({
             name="logoUrl"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Logo URL</FormLabel>
+                <FormLabel>{t("logoUrlLabel")}</FormLabel>
                 <FormControl>
                   <Input type="url" placeholder="https://…/logo.png" {...field} />
                 </FormControl>
-                <FormDescription>Optional — you can also upload a logo later.</FormDescription>
+                <FormDescription>{t("optionalUploadLater")}</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -443,13 +456,11 @@ function CreateEnterpriseModal({
             name="logoNegativeUrl"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Logo for dark backgrounds URL</FormLabel>
+                <FormLabel>{t("darkBackgroundLogoUrlLabel")}</FormLabel>
                 <FormControl>
                   <Input type="url" placeholder="https://…/logo-negative.png" {...field} />
                 </FormControl>
-                <FormDescription>
-                  Optional — the regular logo is used when this is blank.
-                </FormDescription>
+                <FormDescription>{t("regularLogoUsedDesc")}</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -459,9 +470,9 @@ function CreateEnterpriseModal({
             name="description"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Description</FormLabel>
+                <FormLabel>{t("descriptionLabel")}</FormLabel>
                 <FormControl>
-                  <Textarea rows={3} placeholder="What this sponsor does…" {...field} />
+                  <Textarea rows={3} placeholder={t("whatSponsorDoesPlaceholder")} {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -473,11 +484,11 @@ function CreateEnterpriseModal({
               name="tierId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Tier ID</FormLabel>
+                  <FormLabel>{t("tierIdLabel")}</FormLabel>
                   <FormControl>
-                    <Input inputMode="numeric" placeholder="e.g. 1" {...field} />
+                    <Input inputMode="numeric" placeholder={`${t("egPrefix")} 1`} {...field} />
                   </FormControl>
-                  <FormDescription>Sponsor tier reference (optional).</FormDescription>
+                  <FormDescription>{t("tierReferenceOptionalDesc")}</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -487,11 +498,11 @@ function CreateEnterpriseModal({
               name="displayPriority"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Display priority</FormLabel>
+                  <FormLabel>{t("displayPriorityLabel")}</FormLabel>
                   <FormControl>
                     <Input inputMode="numeric" placeholder="1 = first" {...field} />
                   </FormControl>
-                  <FormDescription>Lower shows first in the reveal.</FormDescription>
+                  <FormDescription>{t("lowerShowsFirstDesc")}</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -502,7 +513,7 @@ function CreateEnterpriseModal({
             name="visibility"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Visibility</FormLabel>
+                <FormLabel>{t("colVisibility")}</FormLabel>
                 <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
                     <SelectTrigger className="w-full">
@@ -510,8 +521,8 @@ function CreateEnterpriseModal({
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="hidden">Hidden</SelectItem>
-                    <SelectItem value="visible">Visible</SelectItem>
+                    <SelectItem value="hidden">{t("hiddenOption")}</SelectItem>
+                    <SelectItem value="visible">{t("visibleLabel")}</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -523,15 +534,15 @@ function CreateEnterpriseModal({
             name="availableFrom"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Reveal from</FormLabel>
+                <FormLabel>{t("revealFromLabel")}</FormLabel>
                 <FormControl>
                   <ScheduledDateTimeField
                     value={field.value}
                     onChange={(value) =>
                       form.setValue("availableFrom", value, { shouldDirty: true })
                     }
-                    addLabel="Add reveal time"
-                    inputLabel="Reveal date and time"
+                    addLabel={t("addRevealTimeField")}
+                    inputLabel={t("revealDateTime")}
                   />
                 </FormControl>
                 <FormMessage />

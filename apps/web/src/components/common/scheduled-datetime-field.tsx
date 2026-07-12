@@ -5,17 +5,18 @@ import { useEffect, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatScheduledDateTime, toDatetimeLocal } from "@/lib/datetime";
+import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export function ScheduledDateTimeField({
   value,
   onChange,
   className,
-  emptyLabel = "No date/time set",
-  addLabel = "Add reveal time",
-  editLabel = "Edit",
-  clearLabel = "Clear",
-  inputLabel = "Date and time",
+  emptyLabel,
+  addLabel,
+  editLabel,
+  clearLabel,
+  inputLabel,
   description,
   disabled,
 }: {
@@ -30,6 +31,12 @@ export function ScheduledDateTimeField({
   description?: string;
   disabled?: boolean;
 }) {
+  const { t } = useLocale();
+  const resolvedEmptyLabel = emptyLabel ?? t("noDateTime");
+  const resolvedAddLabel = addLabel ?? t("addRevealTime");
+  const resolvedEditLabel = editLabel ?? t("edit");
+  const resolvedClearLabel = clearLabel ?? t("clear");
+  const resolvedInputLabel = inputLabel ?? t("dateAndTime");
   const inputId = useId();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -40,7 +47,7 @@ export function ScheduledDateTimeField({
   }, [editing, value]);
 
   const hasValue = Boolean(value);
-  const display = hasValue ? formatScheduledDateTime(value) : emptyLabel;
+  const display = hasValue ? formatScheduledDateTime(value, undefined) : resolvedEmptyLabel;
   const fieldChrome =
     "h-10 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm dark:bg-input/50";
 
@@ -54,7 +61,7 @@ export function ScheduledDateTimeField({
       {editing ? (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <label htmlFor={inputId} className="sr-only">
-            {inputLabel}
+            {resolvedInputLabel}
           </label>
           <Input
             id={inputId}
@@ -75,7 +82,7 @@ export function ScheduledDateTimeField({
           <div className="flex items-center gap-2">
             <Button type="button" variant="outline" disabled={disabled} onClick={commitDraft}>
               <CheckIcon className="size-4" />
-              OK
+              {t("confirm")}
             </Button>
             <Button
               type="button"
@@ -88,7 +95,7 @@ export function ScheduledDateTimeField({
               }}
             >
               <XIcon className="size-4" />
-              {clearLabel}
+              {resolvedClearLabel}
             </Button>
           </div>
         </div>
@@ -105,7 +112,7 @@ export function ScheduledDateTimeField({
             disabled={disabled}
             onClick={() => setEditing(true)}
           >
-            {hasValue ? display : addLabel || emptyLabel}
+            {hasValue ? display : resolvedAddLabel || resolvedEmptyLabel}
           </button>
           {hasValue ? (
             <div className="flex items-center gap-1">
@@ -113,7 +120,7 @@ export function ScheduledDateTimeField({
                 type="button"
                 variant="ghost"
                 size="icon"
-                aria-label={editLabel}
+                aria-label={resolvedEditLabel}
                 disabled={disabled}
                 onClick={() => setEditing(true)}
               >
@@ -123,7 +130,7 @@ export function ScheduledDateTimeField({
                 type="button"
                 variant="ghost"
                 size="icon"
-                aria-label={clearLabel}
+                aria-label={resolvedClearLabel}
                 disabled={disabled}
                 onClick={() => onChange("")}
               >

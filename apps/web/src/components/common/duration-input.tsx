@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Input } from "@/components/ui/input";
+import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 type DurationInputProps = Omit<React.ComponentProps<"input">, "onChange" | "type" | "value"> & {
@@ -36,6 +37,7 @@ function toDurationSeconds(minutes: string, seconds: string) {
 
 const DurationInput = React.forwardRef<HTMLInputElement, DurationInputProps>(
   ({ value, onChange, className, disabled, id, ...props }, ref) => {
+    const { t } = useLocale();
     const {
       "aria-describedby": ariaDescribedBy,
       "aria-invalid": ariaInvalid,
@@ -92,7 +94,7 @@ const DurationInput = React.forwardRef<HTMLInputElement, DurationInputProps>(
             onChange={(event) => updateMinutes(event.target.value)}
           />
           <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-muted-foreground text-sm">
-            min
+            {t("minLabel")}
           </span>
         </div>
         <div className="relative">
@@ -105,11 +107,11 @@ const DurationInput = React.forwardRef<HTMLInputElement, DurationInputProps>(
             value={seconds}
             disabled={disabled}
             className="pr-12 tabular-nums"
-            aria-label="Presentation seconds"
+            aria-label={t("presentationSecondsAria")}
             onChange={(event) => updateSeconds(event.target.value)}
           />
           <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-muted-foreground text-sm">
-            sec
+            {t("secLabel")}
           </span>
         </div>
       </div>

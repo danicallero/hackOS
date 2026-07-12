@@ -20,7 +20,7 @@ import {
   Trash2Icon,
   TypeIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -41,25 +41,30 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { type Translate, useLocale } from "@/lib/i18n";
 import { i18nWithEnglishFallback, type Prize } from "./shared";
 
 type BuilderKind = QuestionKind;
 
-const QUESTION_TYPES: { kind: BuilderKind; label: string; description: string }[] = [
-  { kind: "scale", label: "Numeric 0-10", description: "Score slider or number from 0 to 10" },
-  { kind: "integer", label: "Integer", description: "Whole number input" },
-  { kind: "float", label: "Float", description: "Decimal number input" },
-  { kind: "short_text", label: "Short text", description: "One-line text answer" },
-  { kind: "long_text", label: "Long text", description: "Long written answer" },
-  { kind: "boolean", label: "Boolean", description: "Yes or no answer" },
-  { kind: "single_choice", label: "Single choice", description: "One option only" },
-  { kind: "multi_choice", label: "Multiple choice", description: "One or more checkbox options" },
-];
+function buildQuestionTypes(
+  t: Translate,
+): { kind: BuilderKind; label: string; description: string }[] {
+  return [
+    { kind: "scale", label: t("typeNumeric010"), description: t("typeNumeric010Desc") },
+    { kind: "integer", label: t("typeInteger"), description: t("typeIntegerDesc") },
+    { kind: "float", label: t("typeFloat"), description: t("typeFloatDesc") },
+    { kind: "short_text", label: t("typeShortText"), description: t("typeShortTextDesc") },
+    { kind: "long_text", label: t("typeLongTextQ"), description: t("typeLongTextDesc") },
+    { kind: "boolean", label: t("typeBoolean"), description: t("typeBooleanDesc") },
+    { kind: "single_choice", label: t("typeSingleChoice"), description: t("typeSingleChoiceDesc") },
+    { kind: "multi_choice", label: t("typeMultiChoice"), description: t("typeMultiChoiceDesc") },
+  ];
+}
 
 const EMPTY_I18N: I18nText = { en: "", es: "", gl: "" };
 
-function questionTypeLabel(kind: string): string {
-  return QUESTION_TYPES.find((type) => type.kind === kind)?.label ?? kind;
+function questionTypeLabel(kind: string, t: Translate): string {
+  return buildQuestionTypes(t).find((type) => type.kind === kind)?.label ?? kind;
 }
 
 function slug(value: string): string {
@@ -71,10 +76,10 @@ function slug(value: string): string {
     .slice(0, 40);
 }
 
-function defaultQuestion(kind: BuilderKind, index: number): Question {
+function defaultQuestion(kind: BuilderKind, index: number, t: Translate): Question {
   const base = {
     key: `${kind}_${index + 1}`,
-    label: { ...EMPTY_I18N, en: questionTypeLabel(kind) },
+    label: { ...EMPTY_I18N, en: questionTypeLabel(kind, t) },
     required: false,
   };
   if (kind === "scale") return { ...base, kind, min: 0, max: 10 };
@@ -140,6 +145,7 @@ export function PrizeBuilder({
   value: Prize[];
   onChange: (value: Prize[]) => void;
 }) {
+  const { t } = useLocale();
   const add = () => onChange([...value, { name: "", link: null }]);
   const update = (index: number, patch: Partial<Prize>) =>
     onChange(value.map((prize, i) => (i === index ? { ...prize, ...patch } : prize)));
@@ -152,25 +158,28 @@ export function PrizeBuilder({
         <div key={index} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-center">
           <Input
             value={prize.name}
-            placeholder="Prize name"
-            aria-label={`Prize ${index + 1} name`}
+            placeholder={t("prizeNameLabel")}
+            aria-label={t("prizeAriaName", { index: index + 1 })}
             onChange={(event) => update(index, { name: event.target.value })}
           />
           <Input
             value={prize.link ?? ""}
             type="url"
-            placeholder="Link (optional)"
-            aria-label={`Prize ${index + 1} link`}
+            placeholder={t("prizeLinkOptionalPlaceholder")}
+            aria-label={t("prizeAriaLink", { index: index + 1 })}
             onChange={(event) => update(index, { link: event.target.value })}
           />
-          <IconButton label={`Remove prize ${index + 1}`} onClick={() => remove(index)}>
+          <IconButton
+            label={t("removePrizeAria", { index: index + 1 })}
+            onClick={() => remove(index)}
+          >
             <Trash2Icon className="size-4" />
           </IconButton>
         </div>
       ))}
       <Button type="button" variant="outline" size="sm" onClick={add}>
         <PlusIcon className="size-4" />
-        {value.length === 0 ? "Add prize" : "Add another prize"}
+        {value.length === 0 ? t("addPrize") : t("addAnotherPrize")}
       </Button>
     </div>
   );
@@ -183,6 +192,8 @@ export function JudgingPanelBuilder({
   value: Question[];
   onChange: (value: Question[]) => void;
 }) {
+  const { t } = useLocale();
+  const questionTypes = useMemo(() => buildQuestionTypes(t), [t]);
   const [openTranslations, setOpenTranslations] = useState<Record<number, boolean>>({});
   const update = (index: number, question: Question) =>
     onChange(value.map((existing, i) => (i === index ? question : existing)));
@@ -199,14 +210,14 @@ export function JudgingPanelBuilder({
       <DropdownMenuTrigger asChild>
         <Button type="button" variant="outline" size="sm">
           <PlusIcon className="size-4" />
-          Add field
+          {t("addField")}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64">
-        {QUESTION_TYPES.map((type) => (
+        {questionTypes.map((type) => (
           <DropdownMenuItem
             key={type.kind}
-            onSelect={() => onChange([...value, defaultQuestion(type.kind, value.length)])}
+            onSelect={() => onChange([...value, defaultQuestion(type.kind, value.length, t)])}
           >
             <QuestionIcon kind={type.kind} />
             <div>
@@ -240,21 +251,21 @@ export function JudgingPanelBuilder({
               </div>
               <div className="flex items-center gap-1">
                 <IconButton
-                  label="Move field up"
+                  label={t("moveFieldUp")}
                   disabled={index === 0}
                   onClick={() => move(index, -1)}
                 >
                   <ArrowUpIcon className="size-4" />
                 </IconButton>
                 <IconButton
-                  label="Move field down"
+                  label={t("moveFieldDown")}
                   disabled={index === value.length - 1}
                   onClick={() => move(index, 1)}
                 >
                   <ArrowDownIcon className="size-4" />
                 </IconButton>
                 <IconButton
-                  label="Remove field"
+                  label={t("removeField")}
                   onClick={() => onChange(value.filter((_, i) => i !== index))}
                 >
                   <Trash2Icon className="size-4" />
@@ -263,18 +274,18 @@ export function JudgingPanelBuilder({
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Type">
+              <Field label={t("colType")}>
                 <Select
                   value={question.kind}
                   onValueChange={(kind) =>
-                    update(index, retargetQuestion(question, kind as BuilderKind))
+                    update(index, retargetQuestion(question, kind as BuilderKind, t))
                   }
                 >
                   <SelectTrigger className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {QUESTION_TYPES.map((type) => (
+                    {questionTypes.map((type) => (
                       <SelectItem key={type.kind} value={type.kind}>
                         {type.label}
                       </SelectItem>
@@ -282,10 +293,7 @@ export function JudgingPanelBuilder({
                   </SelectContent>
                 </Select>
               </Field>
-              <Field
-                label="Field key"
-                hint="The identifier exported with the answers for this field. Keep it stable so exports stay consistent."
-              >
+              <Field label={t("fieldKeyLabel")} hint={t("fieldKeyHint")}>
                 <Input
                   value={question.key}
                   placeholder="innovation"
@@ -297,14 +305,14 @@ export function JudgingPanelBuilder({
             </div>
 
             <MultilingualInput
-              label="Label"
+              label={t("labelField")}
               value={question.label}
               open={translationsOpen}
               onOpenChange={setOpen}
               onChange={(label) => update(index, { ...question, label })}
             />
             <MultilingualInput
-              label="Description"
+              label={t("descriptionLabel")}
               value={question.description ?? EMPTY_I18N}
               open={translationsOpen}
               onOpenChange={setOpen}
@@ -321,7 +329,7 @@ export function JudgingPanelBuilder({
                 checked={question.required}
                 onCheckedChange={(required) => update(index, { ...question, required })}
               />
-              <Label htmlFor={`required-${index}`}>Required</Label>
+              <Label htmlFor={`required-${index}`}>{t("requiredCheckboxLabel")}</Label>
             </div>
           </Card>
         );
@@ -338,28 +346,29 @@ function QuestionSettings({
   question: Question;
   onChange: (question: Question) => void;
 }) {
+  const { t } = useLocale();
   if (question.kind === "scale") {
     return (
       <p className="text-muted-foreground text-sm">
-        Judges score this on a {question.min}–{question.max} scale.
+        {t("judgesScoreScale", { min: question.min, max: question.max })}
       </p>
     );
   }
   if (question.kind === "integer" || question.kind === "float") {
     return (
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Minimum">
+        <Field label={t("minimumLabel")}>
           <Input
             value={question.min ?? ""}
-            placeholder="No limit"
+            placeholder={t("noLimitPlaceholder")}
             inputMode={question.kind === "integer" ? "numeric" : "decimal"}
             onChange={(event) => onChange(numberPatch(question, "min", event.target.value))}
           />
         </Field>
-        <Field label="Maximum">
+        <Field label={t("maximumLabel")}>
           <Input
             value={question.max ?? ""}
-            placeholder="No limit"
+            placeholder={t("noLimitPlaceholder")}
             inputMode={question.kind === "integer" ? "numeric" : "decimal"}
             onChange={(event) => onChange(numberPatch(question, "max", event.target.value))}
           />
@@ -369,7 +378,7 @@ function QuestionSettings({
   }
   if (question.kind === "short_text" || question.kind === "long_text") {
     return (
-      <Field label="Max length">
+      <Field label={t("maxLengthLabel")}>
         <Input
           value={question.maxLength}
           inputMode="numeric"
@@ -393,6 +402,7 @@ function OptionsBuilder({
   question: Extract<Question, { kind: "single_choice" | "multi_choice" }>;
   onChange: (question: Question) => void;
 }) {
+  const { t } = useLocale();
   const [openTranslations, setOpenTranslations] = useState<Record<number, boolean>>({});
   const updateOption = (index: number, patch: Partial<(typeof question.options)[number]>) =>
     onChange({
@@ -404,7 +414,7 @@ function OptionsBuilder({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <Label>Options</Label>
+        <Label>{t("optionsFieldLabel")}</Label>
         <Button
           type="button"
           variant="outline"
@@ -423,7 +433,7 @@ function OptionsBuilder({
           }
         >
           <PlusIcon className="size-4" />
-          Add option
+          {t("addOptionButton")}
         </Button>
       </div>
       {question.options.map((option, index) => {
@@ -432,7 +442,9 @@ function OptionsBuilder({
           // biome-ignore lint/suspicious/noArrayIndexKey: options are positional; a stable id would remount inputs and drop focus.
           <div key={index} className="space-y-3 rounded-md border p-3">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-muted-foreground text-xs">Option {index + 1}</span>
+              <span className="text-muted-foreground text-xs">
+                {t("optionNumberLabel", { index: index + 1 })}
+              </span>
               <div className="flex items-center gap-1">
                 <Button
                   type="button"
@@ -440,10 +452,10 @@ function OptionsBuilder({
                   size="sm"
                   onClick={() => setOpenTranslations((state) => ({ ...state, [index]: !open }))}
                 >
-                  {open ? "Hide translations" : "Add translations"}
+                  {open ? t("hideTranslations") : t("addTranslations")}
                 </Button>
                 <IconButton
-                  label={`Remove option ${index + 1}`}
+                  label={t("removeOptionAria", { index: index + 1 })}
                   onClick={() =>
                     onChange({
                       ...question,
@@ -457,30 +469,30 @@ function OptionsBuilder({
             </div>
             <div className="grid gap-3 sm:grid-cols-[180px_1fr]">
               <TaggedControl
-                tag="Value"
-                hint="The identifier exported when a judge picks this option. Keep it stable so exports stay consistent."
+                tag={t("valueTag")}
+                hint={t("valueHint")}
                 value={option.value}
-                ariaLabel={`Option ${index + 1} value`}
+                ariaLabel={t("optionAriaValue", { index: index + 1 })}
                 onChange={(next) => updateOption(index, { value: slug(next) })}
               />
               <TaggedControl
-                tag="English"
+                tag={t("englishTag")}
                 value={option.label.en}
-                ariaLabel={`Option ${index + 1} label`}
+                ariaLabel={t("optionAriaLabel", { index: index + 1 })}
                 onChange={(next) => updateOption(index, { label: { ...option.label, en: next } })}
               />
             </div>
             {open && (
               <div className="grid gap-3 sm:grid-cols-2">
                 <TaggedControl
-                  tag="Spanish"
-                  placeholder="Defaults to English"
+                  tag={t("spanishTag")}
+                  placeholder={t("defaultsToEnglishPlaceholder")}
                   value={option.label.es}
                   onChange={(next) => updateOption(index, { label: { ...option.label, es: next } })}
                 />
                 <TaggedControl
-                  tag="Galician"
-                  placeholder="Defaults to English"
+                  tag={t("galicianTag")}
+                  placeholder={t("defaultsToEnglishPlaceholder")}
                   value={option.label.gl}
                   onChange={(next) => updateOption(index, { label: { ...option.label, gl: next } })}
                 />
@@ -511,6 +523,7 @@ export function MultilingualInput({
   textarea?: boolean;
   optional?: boolean;
 }) {
+  const { t } = useLocale();
   const [openState, setOpenState] = useState(false);
   const open = openProp ?? openState;
   const setOpen = onOpenChange ?? setOpenState;
@@ -519,14 +532,14 @@ export function MultilingualInput({
       <div className="flex min-h-8 items-center justify-between gap-2">
         <Label>
           {label}
-          {optional ? " (optional)" : ""}
+          {optional ? t("optionalSuffix") : ""}
         </Label>
         <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(!open)}>
-          {open ? "Hide translations" : "Add translations"}
+          {open ? t("hideTranslations") : t("addTranslations")}
         </Button>
       </div>
       <TaggedControl
-        tag="English"
+        tag={t("englishTag")}
         textarea={textarea}
         value={value.en}
         onChange={(next) => onChange({ ...value, en: next })}
@@ -534,15 +547,15 @@ export function MultilingualInput({
       {open && (
         <div className="grid gap-2 sm:grid-cols-2">
           <TaggedControl
-            tag="Spanish"
-            placeholder="Defaults to English"
+            tag={t("spanishTag")}
+            placeholder={t("defaultsToEnglishPlaceholder")}
             textarea={textarea}
             value={value.es}
             onChange={(next) => onChange({ ...value, es: next })}
           />
           <TaggedControl
-            tag="Galician"
-            placeholder="Defaults to English"
+            tag={t("galicianTag")}
+            placeholder={t("defaultsToEnglishPlaceholder")}
             textarea={textarea}
             value={value.gl}
             onChange={(next) => onChange({ ...value, gl: next })}
@@ -614,13 +627,14 @@ function Field({
 
 /** A small "?" affordance that reveals an explanation on hover, focus or tap. */
 function FieldHint({ text }: { text: string }) {
+  const { t } = useLocale();
   return (
     <TooltipProvider delayDuration={150}>
       <Tooltip>
         <TooltipTrigger asChild>
           <button
             type="button"
-            aria-label="More information"
+            aria-label={t("moreInformationAria")}
             className="text-muted-foreground hover:text-foreground focus-visible:text-foreground inline-flex"
           >
             <CircleHelpIcon className="size-3.5" />
@@ -668,8 +682,8 @@ function QuestionIcon({ kind }: { kind: string }) {
   return <TypeIcon className={className} />;
 }
 
-function retargetQuestion(question: Question, kind: BuilderKind): Question {
-  const next = defaultQuestion(kind, 0);
+function retargetQuestion(question: Question, kind: BuilderKind, t: Translate): Question {
+  const next = defaultQuestion(kind, 0, t);
   return {
     ...next,
     key: question.key,

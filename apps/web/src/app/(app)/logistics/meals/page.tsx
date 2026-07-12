@@ -15,22 +15,24 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { api } from "@/lib/api";
+import { useLocale } from "@/lib/i18n";
 import { logisticsApi, type ScannableActivity } from "@/lib/logistics";
 import { useCan } from "@/lib/session";
 import type { UserList, UserListItem } from "@/lib/types";
 
 export default function MealsPage() {
+  const { t } = useLocale();
   const canScan = useCan(CAPABILITIES.ACTIVITY_SCAN);
   const canManage = useCan(CAPABILITIES.SCHEDULE_MANAGE);
 
   if (!canScan) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Meals" />
+        <PageHeader title={t("meals")} />
         <EmptyState
           icon={LockIcon}
-          title="You can't scan meals"
-          description="The activity scan capability is required."
+          title={t("mealsDeniedTitle")}
+          description={t("mealsDeniedDesc")}
         />
       </div>
     );
@@ -38,10 +40,7 @@ export default function MealsPage() {
 
   return (
     <div className="space-y-6" data-wide>
-      <PageHeader
-        title="Meals"
-        description="Serve meals by scanning badges; repeats are flagged and confirmed by staff (H25)."
-      />
+      <PageHeader title={t("meals")} description={t("mealsDescription")} />
       <ActivityScannerCard category="meal" />
       {canManage && <EntitlementPanel />}
     </div>
@@ -49,6 +48,7 @@ export default function MealsPage() {
 }
 
 function EntitlementPanel() {
+  const { t } = useLocale();
   const [meals, setMeals] = useState<ScannableActivity[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [user, setUser] = useState<UserListItem | null>(null);
@@ -79,7 +79,7 @@ function EntitlementPanel() {
       });
       setUserResults(result.users);
     } catch (err) {
-      toast.error(errorMessage(err, "User search failed."));
+      toast.error(errorMessage(err, t("userSearchFailed")));
     }
   };
 
@@ -88,15 +88,13 @@ function EntitlementPanel() {
     setBusy(true);
     try {
       await Promise.all(selected.map((id) => logisticsApi.grantEntitlement(id, user.id)));
-      toast.success(
-        `Granted ${selected.length} meal entitlement${selected.length === 1 ? "" : "s"}.`,
-      );
+      toast.success(t("mealEntitlementsGranted", { count: selected.length }));
       setUser(null);
       setUserResults([]);
       setUserQuery("");
       load();
     } catch (err) {
-      toast.error(errorMessage(err, "Could not grant entitlements."));
+      toast.error(errorMessage(err, t("couldNotGrantEntitlements")));
     } finally {
       setBusy(false);
     }
@@ -107,10 +105,10 @@ function EntitlementPanel() {
     try {
       const results = await Promise.all(selected.map((id) => logisticsApi.bulkGrantConfirmed(id)));
       const total = results.reduce((sum, result) => sum + result.granted, 0);
-      toast.success(`Granted ${total} confirmed-participant meal entitlements.`);
+      toast.success(t("confirmedEntitlementsGranted", { total }));
       load();
     } catch (err) {
-      toast.error(errorMessage(err, "Could not bulk grant entitlements."));
+      toast.error(errorMessage(err, t("couldNotBulkGrant")));
     } finally {
       setBusy(false);
     }
@@ -119,27 +117,27 @@ function EntitlementPanel() {
   const columns: Column<ScannableActivity>[] = [
     {
       id: "name",
-      header: "Meal",
+      header: t("columnMeal"),
       sortValue: (m) => m.name,
       cell: (m) => <span className="font-medium">{m.name}</span>,
     },
     {
       id: "served",
-      header: "Served",
+      header: t("columnServed"),
       align: "right",
       sortValue: (m) => m.count,
       cell: (m) => m.count,
     },
     {
       id: "distinct",
-      header: "People",
+      header: t("columnPeople"),
       align: "right",
       sortValue: (m) => m.distinctPeople,
       cell: (m) => m.distinctPeople,
     },
     {
       id: "repeats",
-      header: "Repeats",
+      header: t("columnRepeats"),
       align: "right",
       sortValue: (m) => m.repeats,
       cell: (m) => m.repeats,
@@ -148,8 +146,8 @@ function EntitlementPanel() {
 
   return (
     <SectionCard
-      title="Meal entitlements"
-      description="Select meals, then grant a searched person or all confirmed participants (H25)."
+      title={t("mealEntitlements")}
+      description={t("mealEntitlementsDesc")}
       icon={SoupIcon}
     >
       <DataTable
@@ -160,11 +158,13 @@ function EntitlementPanel() {
         selectedIds={selectedIds}
         onSelectionChange={setSelectedIds}
         searchable={(meal) => meal.name}
-        empty={{ icon: SoupIcon, title: "No meals yet" }}
+        empty={{ icon: SoupIcon, title: t("noMealsYet") }}
         toolbar={
           selectedIds.size > 0 ? (
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-muted-foreground text-sm">{selectedIds.size} selected</span>
+              <span className="text-muted-foreground text-sm">
+                {t("selectedCount", { count: selectedIds.size })}
+              </span>
               <Input
                 value={
                   user ? `${user.name ?? ""} ${user.surname ?? ""}`.trim() || user.email : userQuery
@@ -173,17 +173,17 @@ function EntitlementPanel() {
                   setUser(null);
                   setUserQuery(e.target.value);
                 }}
-                placeholder="Find user…"
+                placeholder={t("findUserShortPlaceholder")}
                 className="h-9 w-44"
               />
               <Button size="sm" variant="outline" onClick={searchUsers} disabled={busy || !!user}>
-                Search
+                {t("search")}
               </Button>
               <Button size="sm" variant="outline" disabled={busy || !user} onClick={grantSelected}>
-                Grant user
+                {t("grantUser")}
               </Button>
               <Button size="sm" variant="outline" disabled={busy} onClick={bulkConfirmed}>
-                Grant confirmed
+                {t("grantConfirmed")}
               </Button>
             </div>
           ) : undefined

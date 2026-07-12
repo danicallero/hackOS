@@ -13,6 +13,7 @@ import { FileLink } from "@/components/common/file-link";
 import { Spinner } from "@/components/common/spinner";
 import { Button } from "@/components/ui/button";
 import { API_URL } from "@/lib/env";
+import { useLocale } from "@/lib/i18n";
 
 export function FileUploadField({
   applicationId,
@@ -35,6 +36,7 @@ export function FileUploadField({
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const { t } = useLocale();
 
   const accept = allowedTypes?.length ? allowedTypes.join(",") : undefined;
   const maxMb = maxSizeMb ?? 10;
@@ -42,11 +44,11 @@ export function FileUploadField({
   async function upload(file: File) {
     const ext = `.${(file.name.split(".").pop() ?? "").toLowerCase()}`;
     if (allowedTypes?.length && !allowedTypes.includes(ext)) {
-      toast.error(`File type ${ext} is not allowed. Allowed: ${allowedTypes.join(", ")}`);
+      toast.error(t("fileTypeNotAllowed", { ext, allowed: allowedTypes.join(", ") }));
       return;
     }
     if (file.size > maxMb * 1024 * 1024) {
-      toast.error(`File exceeds the ${maxMb} MB limit.`);
+      toast.error(t("fileTooLarge", { maxMb }));
       return;
     }
     setUploading(true);
@@ -66,9 +68,9 @@ export function FileUploadField({
       }
       // Store the private object key; reads resolve to a presigned URL on demand.
       onChange((payload as { key: string }).key);
-      toast.success("File uploaded.");
+      toast.success(t("fileUploaded"));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not upload the file.");
+      toast.error(err instanceof Error ? err.message : t("uploadFailed"));
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = "";
@@ -106,7 +108,7 @@ export function FileUploadField({
               onClick={() => onChange("")}
             >
               <XIcon className="size-4" />
-              <span className="sr-only">Remove file</span>
+              <span className="sr-only">{t("removeFile")}</span>
             </Button>
           )}
         </div>
@@ -118,12 +120,12 @@ export function FileUploadField({
           onClick={() => inputRef.current?.click()}
         >
           {uploading ? <Spinner /> : <UploadIcon />}
-          {uploading ? "Uploading…" : "Choose file"}
+          {uploading ? t("uploading") : t("chooseFile")}
         </Button>
       )}
       <p className="text-muted-foreground flex items-center gap-1 text-xs">
         <PaperclipIcon className="size-3" />
-        {allowedTypes?.length ? allowedTypes.join(", ") : "Any file"} · up to {maxMb} MB
+        {allowedTypes?.length ? allowedTypes.join(", ") : t("anyFile")} · {maxMb} MB
       </p>
     </div>
   );

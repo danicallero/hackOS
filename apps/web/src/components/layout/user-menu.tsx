@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { signOut } from "@/lib/auth-client";
+import { useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 
 function initials(name: string | null, surname: string | null, email: string) {
@@ -26,6 +27,7 @@ function initials(name: string | null, surname: string | null, email: string) {
 export function UserMenu() {
   const router = useRouter();
   const { me, refresh } = useSessionContext();
+  const { t } = useLocale();
   if (!me) return null;
 
   async function handleSignOut() {
@@ -60,12 +62,12 @@ export function UserMenu() {
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
           <Link href="/settings/profile">
-            <UserIcon className="size-4" /> My profile
+            <UserIcon className="size-4" /> {t("profile")}
           </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onClick={handleSignOut}>
-          <LogOutIcon className="size-4" /> Sign out
+          <LogOutIcon className="size-4" /> {t("signOut")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

@@ -9,6 +9,7 @@
 // applications form uses FIELD_KINDS below and i18n labels {en,es,gl}
 // (plan/07 §2). Types are declared locally per module conventions.
 
+import type { Translate } from "@/lib/i18n";
 import type { Tone } from "@/lib/tones";
 
 export interface I18nText {
@@ -36,19 +37,6 @@ export const FIELD_KINDS = [
   "university",
 ] as const;
 export type FieldKind = (typeof FIELD_KINDS)[number];
-
-export const FIELD_KIND_LABEL: Record<FieldKind, string> = {
-  text: "Short text",
-  textarea: "Long text",
-  select: "Single choice",
-  multiselect: "Multiple choice",
-  checkbox: "Checkbox",
-  date: "Date",
-  number: "Number",
-  "file-url": "File URL",
-  file: "File upload",
-  university: "University",
-};
 
 /** Kinds that require a non-empty options array (server refine). */
 export const OPTION_KINDS: FieldKind[] = ["select", "multiselect"];
@@ -197,10 +185,13 @@ export function fmtScore(avg: number | string | null): string {
 
 export function windowState(
   form: ApplicationForm,
+  t: Translate,
   now = new Date(),
 ): { label: string; tone: Tone } {
-  if (!form.active) return { label: "Inactive", tone: "neutral" };
-  if (form.open_at && new Date(form.open_at) > now) return { label: "Scheduled", tone: "info" };
-  if (form.close_at && new Date(form.close_at) <= now) return { label: "Closed", tone: "neutral" };
-  return { label: "Open", tone: "success" };
+  if (!form.active) return { label: t("windowInactive"), tone: "neutral" };
+  if (form.open_at && new Date(form.open_at) > now)
+    return { label: t("windowScheduled"), tone: "info" };
+  if (form.close_at && new Date(form.close_at) <= now)
+    return { label: t("windowClosed"), tone: "neutral" };
+  return { label: t("windowOpen"), tone: "success" };
 }

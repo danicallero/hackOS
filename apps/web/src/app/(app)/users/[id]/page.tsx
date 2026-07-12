@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -62,7 +62,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
-import { pickText } from "@/lib/i18n";
+import { isLanguage, LANGS, languageName, pickText, type Translate, useLocale } from "@/lib/i18n";
 import { logisticsApi, type TicketQrPayload, type TimeLogEntry } from "@/lib/logistics";
 import { type RepoWithExtras, userProjects } from "@/lib/projects";
 import { useCan, useSessionContext } from "@/lib/session";
@@ -79,8 +79,6 @@ import { ReviewModal } from "../../applications/[id]/page";
 import type { ApplicationForm, ResponseRow, TemplateField } from "../../applications/lib";
 
 const SHIRT_SIZES = ["XS", "S", "M", "L", "XL", "XXL"] as const;
-const LANGS: Language[] = ["es", "gl", "en"];
-const LANG_LABEL: Record<string, string> = { es: "Castellano", gl: "Galego", en: "English" };
 
 /** Illustrative role → tone (never used for gating, only for the header pill). */
 const ROLE_TONE: Record<DerivedRole, Tone> = {
@@ -113,6 +111,7 @@ const TAB_VALUES = [
 ] as const;
 
 export default function UserProfilePage() {
+  const { t } = useLocale();
   const params = useParams<{ id: string }>();
   const userId = Number(params.id);
   const searchParams = useSearchParams();
@@ -134,10 +133,10 @@ export default function UserProfilePage() {
       setUser(data);
       setStatus("ready");
     } catch (err) {
-      setErrorMsg(err instanceof ApiError ? err.message : "Could not load this user's profile.");
+      setErrorMsg(err instanceof ApiError ? err.message : t("couldNotLoadUserProfile"));
       setStatus("error");
     }
-  }, [userId]);
+  }, [userId, t]);
 
   // Soft, in-place refresh instead of a hard reload when this user's profile
   // changes elsewhere.
@@ -170,8 +169,8 @@ export default function UserProfilePage() {
         <BackLink />
         <EmptyState
           icon={UsersIcon}
-          title="User not found"
-          description={errorMsg || "This profile could not be loaded."}
+          title={t("userNotFoundTitle")}
+          description={errorMsg || t("profileNotLoaded")}
         />
       </div>
     );
@@ -184,13 +183,13 @@ export default function UserProfilePage() {
 
       <Tabs defaultValue={initialTab}>
         <TabsList className="w-full max-w-3xl">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="overview">{t("tabOverview")}</TabsTrigger>
           <TabsTrigger value="qr">QR</TabsTrigger>
-          <TabsTrigger value="permissions">Permissions</TabsTrigger>
-          <TabsTrigger value="presence">Presence</TabsTrigger>
-          <TabsTrigger value="activity">Logs</TabsTrigger>
-          <TabsTrigger value="application">Application</TabsTrigger>
-          <TabsTrigger value="projects">Projects</TabsTrigger>
+          <TabsTrigger value="permissions">{t("permissions")}</TabsTrigger>
+          <TabsTrigger value="presence">{t("presence")}</TabsTrigger>
+          <TabsTrigger value="activity">{t("tabLogs")}</TabsTrigger>
+          <TabsTrigger value="application">{t("tabApplication")}</TabsTrigger>
+          <TabsTrigger value="projects">{t("projects")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="pt-2">
@@ -222,66 +221,70 @@ export default function UserProfilePage() {
   );
 }
 
-const projectColumns: Column<RepoWithExtras>[] = [
-  {
-    id: "name",
-    header: "Project",
-    sortValue: (project) => project.name.toLowerCase(),
-    cell: (project) => <span className="font-medium">{project.name}</span>,
-  },
-  {
-    id: "challenges",
-    header: "Challenges",
-    sortValue: (project) => project.challenges?.length ?? 0,
-    cell: (project) =>
-      project.challenges?.length ? (
-        <div className="flex flex-wrap gap-1">
-          {project.challenges.map((challenge) => (
-            <StatusBadge key={challenge.id} tone="brand" dot={false}>
-              {challenge.title}
-            </StatusBadge>
-          ))}
-        </div>
-      ) : (
-        <span className="text-muted-foreground text-sm">None</span>
-      ),
-  },
-  {
-    id: "prizes",
-    header: "Prizes",
-    sortValue: (project) => (Array.isArray(project.prizes) ? project.prizes.length : 0),
-    cell: (project) => {
-      const prizes = Array.isArray(project.prizes) ? (project.prizes as string[]) : [];
-      return prizes.length ? (
-        <span className="text-muted-foreground text-sm">
-          {prizes.length} prize{prizes.length === 1 ? "" : "s"}
-        </span>
-      ) : (
-        <span className="text-muted-foreground text-sm">None</span>
-      );
+function buildProjectColumns(t: Translate): Column<RepoWithExtras>[] {
+  return [
+    {
+      id: "name",
+      header: t("colProject"),
+      sortValue: (project) => project.name.toLowerCase(),
+      cell: (project) => <span className="font-medium">{project.name}</span>,
     },
-  },
-  {
-    id: "links",
-    header: "Links",
-    cell: (project) => {
-      const devpostUrl = typeof project.devpost_url === "string" ? project.devpost_url : null;
-      const demoUrl = typeof project.demo_url === "string" ? project.demo_url : null;
-      const githubUrl = typeof project.github_url === "string" ? project.github_url : null;
+    {
+      id: "challenges",
+      header: t("challenges"),
+      sortValue: (project) => project.challenges?.length ?? 0,
+      cell: (project) =>
+        project.challenges?.length ? (
+          <div className="flex flex-wrap gap-1">
+            {project.challenges.map((challenge) => (
+              <StatusBadge key={challenge.id} tone="brand" dot={false}>
+                {challenge.title}
+              </StatusBadge>
+            ))}
+          </div>
+        ) : (
+          <span className="text-muted-foreground text-sm">{t("none")}</span>
+        ),
+    },
+    {
+      id: "prizes",
+      header: t("colPrizes"),
+      sortValue: (project) => (Array.isArray(project.prizes) ? project.prizes.length : 0),
+      cell: (project) => {
+        const prizes = Array.isArray(project.prizes) ? (project.prizes as string[]) : [];
+        return prizes.length ? (
+          <span className="text-muted-foreground text-sm">
+            {prizes.length === 1
+              ? t("prizeCountOne", { count: prizes.length })
+              : t("prizeCountOther", { count: prizes.length })}
+          </span>
+        ) : (
+          <span className="text-muted-foreground text-sm">{t("none")}</span>
+        );
+      },
+    },
+    {
+      id: "links",
+      header: t("colLinks"),
+      cell: (project) => {
+        const devpostUrl = typeof project.devpost_url === "string" ? project.devpost_url : null;
+        const demoUrl = typeof project.demo_url === "string" ? project.demo_url : null;
+        const githubUrl = typeof project.github_url === "string" ? project.github_url : null;
 
-      return (
-        <div className="flex flex-wrap gap-2">
-          {devpostUrl && <ProjectLink href={devpostUrl} label="Devpost" />}
-          {demoUrl && <ProjectLink href={demoUrl} label="Demo" />}
-          {githubUrl && <ProjectLink href={githubUrl} label="Repo" />}
-          {!devpostUrl && !demoUrl && !githubUrl && (
-            <span className="text-muted-foreground text-sm">None</span>
-          )}
-        </div>
-      );
+        return (
+          <div className="flex flex-wrap gap-2">
+            {devpostUrl && <ProjectLink href={devpostUrl} label="Devpost" />}
+            {demoUrl && <ProjectLink href={demoUrl} label="Demo" />}
+            {githubUrl && <ProjectLink href={githubUrl} label="Repo" />}
+            {!devpostUrl && !demoUrl && !githubUrl && (
+              <span className="text-muted-foreground text-sm">{t("none")}</span>
+            )}
+          </div>
+        );
+      },
     },
-  },
-];
+  ];
+}
 
 function ProjectLink({ href, label }: { href: string; label: string }) {
   return (
@@ -295,10 +298,12 @@ function ProjectLink({ href, label }: { href: string; label: string }) {
 }
 
 function ProjectsTab({ userId }: { userId: number }) {
+  const { t } = useLocale();
   const router = useRouter();
   const [projects, setProjects] = useState<RepoWithExtras[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const projectColumns = useMemo(() => buildProjectColumns(t), [t]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -308,11 +313,11 @@ function ProjectsTab({ userId }: { userId: number }) {
       setProjects(data.projects);
     } catch (err) {
       setProjects([]);
-      setError(err instanceof ApiError ? err.message : "Could not load this user's projects.");
+      setError(err instanceof ApiError ? err.message : t("couldNotLoadUserProjects"));
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [userId, t]);
 
   useEffect(() => {
     void load();
@@ -330,11 +335,11 @@ function ProjectsTab({ userId }: { userId: number }) {
     return (
       <EmptyState
         icon={FolderGitIcon}
-        title="Projects could not be loaded"
+        title={t("projectsCouldNotLoad")}
         description={error}
         action={
           <Button variant="outline" onClick={() => void load()}>
-            Try again
+            {t("tryAgain")}
           </Button>
         }
       />
@@ -345,11 +350,11 @@ function ProjectsTab({ userId }: { userId: number }) {
     return (
       <EmptyState
         icon={FolderGitIcon}
-        title="No projects yet"
-        description="Projects appear here once this user is linked as a project member."
+        title={t("noProjectsYet")}
+        description={t("projectsAppearHere")}
         action={
           <Button variant="outline" asChild>
-            <Link href="/projects">Open projects</Link>
+            <Link href="/projects">{t("openProjects")}</Link>
           </Button>
         }
       />
@@ -369,25 +374,27 @@ function ProjectsTab({ userId }: { userId: number }) {
           Array.isArray(project.prizes) ? project.prizes.join(" ") : ""
         }`
       }
-      searchPlaceholder="Search projects..."
+      searchPlaceholder={t("searchProjectsPlaceholder")}
       pageSize={10}
     />
   );
 }
 
 function BackLink() {
+  const { t } = useLocale();
   return (
     <Link
       href="/users"
       className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition-colors"
     >
       <ArrowLeftIcon className="size-4" />
-      Back to users
+      {t("backToUsers")}
     </Link>
   );
 }
 
 function ProfileHeader({ user }: { user: UserDetail }) {
+  const { t } = useLocale();
   return (
     <div className="flex flex-wrap items-start gap-4">
       <Avatar size="lg">
@@ -399,13 +406,15 @@ function ProfileHeader({ user }: { user: UserDetail }) {
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-muted-foreground text-sm">{user.email}</span>
           <StatusBadge tone={user.emailVerified ? "success" : "warning"} dot={false}>
-            {user.emailVerified ? "Verified" : "Unverified"}
+            {user.emailVerified ? t("verified") : t("unverified")}
           </StatusBadge>
           <StatusBadge tone={ROLE_TONE[user.role]} className="capitalize">
             {user.role}
           </StatusBadge>
           {user.badgeId && (
-            <span className="text-muted-foreground font-mono text-xs">badge {user.badgeId}</span>
+            <span className="text-muted-foreground font-mono text-xs">
+              {t("badgeIdInline", { id: user.badgeId })}
+            </span>
           )}
         </div>
       </div>
@@ -414,7 +423,7 @@ function ProfileHeader({ user }: { user: UserDetail }) {
           <Button asChild variant="outline" size="sm">
             <Link href={`/logistics/accreditation?userId=${user.id}`}>
               <IdCardIcon className="size-4" />
-              Accredit
+              {t("accredit")}
             </Link>
           </Button>
           <DeleteAccountButton user={user} />
@@ -425,6 +434,7 @@ function ProfileHeader({ user }: { user: UserDetail }) {
 }
 
 function QrTab({ user }: { user: UserDetail }) {
+  const { t } = useLocale();
   const [payload, setPayload] = useState<TicketQrPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -438,7 +448,7 @@ function QrTab({ user }: { user: UserDetail }) {
         if (alive) setPayload(data);
       })
       .catch((err) => {
-        if (alive) setError(err instanceof ApiError ? err.message : "Could not load QR payloads.");
+        if (alive) setError(err instanceof ApiError ? err.message : t("couldNotLoadQrPayloads"));
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -446,7 +456,7 @@ function QrTab({ user }: { user: UserDetail }) {
     return () => {
       alive = false;
     };
-  }, [user.id]);
+  }, [user.id, t]);
 
   if (loading) {
     return (
@@ -457,23 +467,24 @@ function QrTab({ user }: { user: UserDetail }) {
   }
 
   if (error) {
-    return <EmptyState icon={QrCodeIcon} title="Could not load QR codes" description={error} />;
+    return <EmptyState icon={QrCodeIcon} title={t("couldNotLoadQrCodes")} description={error} />;
   }
 
   return (
     <SectionCard
-      title="Ticket and badge QR"
-      description="Use these when the participant does not want to download a Wallet pass."
+      title={t("ticketAndBadgeQr")}
+      description={t("ticketAndBadgeQrDesc")}
       icon={QrCodeIcon}
       bodyClassName="grid gap-4 md:grid-cols-2"
     >
-      <QrCode value={payload?.ticketToken} label="Entrance ticket" />
-      <QrCode value={payload?.badgeId} label="Current badge" />
+      <QrCode value={payload?.ticketToken} label={t("entranceTicket")} />
+      <QrCode value={payload?.badgeId} label={t("currentBadge")} />
     </SectionCard>
   );
 }
 
 function DeleteAccountButton({ user }: { user: UserDetail }) {
+  const { t } = useLocale();
   const router = useRouter();
   const canDelete = useCan(CAPABILITIES.ADMIN_ALL);
   const [open, setOpen] = useState(false);
@@ -484,10 +495,10 @@ function DeleteAccountButton({ user }: { user: UserDetail }) {
     setPending(true);
     try {
       await api.delete(`/api/users/${user.id}`);
-      toast.success("Account deleted.");
+      toast.success(t("accountDeleted"));
       router.push("/users");
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not delete this account.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotDeleteAccount"));
       setPending(false);
     }
   }
@@ -498,23 +509,23 @@ function DeleteAccountButton({ user }: { user: UserDetail }) {
       onOpenChange={setOpen}
       trigger={
         <Button variant="outline" size="sm" className="text-destructive">
-          Delete account
+          {t("deleteAccount")}
         </Button>
       }
-      title="Delete this account?"
-      description={`This permanently removes ${fullName(user)} (${user.email}). Accounts with activity (audit, scans, evaluations) can't be hard-deleted.`}
+      title={t("deleteThisAccount")}
+      description={t("deleteAccountDesc", { name: fullName(user), email: user.email })}
       footer={
         <>
           <Button variant="outline" onClick={() => setOpen(false)}>
-            Cancel
+            {t("cancel")}
           </Button>
           <SubmitButton variant="destructive" pending={pending} onClick={remove}>
-            Delete
+            {t("deleteAction")}
           </SubmitButton>
         </>
       }
     >
-      <p className="text-muted-foreground text-sm">This can&apos;t be undone.</p>
+      <p className="text-muted-foreground text-sm">{t("cantBeUndone")}</p>
     </Modal>
   );
 }
@@ -563,6 +574,7 @@ function EnterpriseMemberships({
   userId: number;
   onChanged: () => void | Promise<void>;
 }) {
+  const { t } = useLocale();
   const [enterprises, setEnterprises] = useState<{ id: number; name: string }[] | null>(null);
   const [allEnterprises, setAllEnterprises] = useState<EnterpriseSummary[]>([]);
   const [busy, setBusy] = useState(false);
@@ -600,11 +612,11 @@ function EnterpriseMemberships({
     setBusy(true);
     try {
       await api.post(`/api/enterprises/${enterpriseId}/members`, { userId });
-      toast.success("Enterprise added.");
+      toast.success(t("enterpriseAdded"));
       loadMemberships();
       await onChanged();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not add enterprise.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotAddEnterprise"));
     } finally {
       setBusy(false);
     }
@@ -613,13 +625,15 @@ function EnterpriseMemberships({
   return (
     <SectionCard
       icon={Building2Icon}
-      title="Enterprises"
+      title={t("enterprises")}
       action={
         canManage ? (
           <Select value="" onValueChange={addEnterprise} disabled={busy || addable.length === 0}>
             <SelectTrigger className="w-56">
               <SelectValue
-                placeholder={addable.length > 0 ? "Add enterprise…" : "No enterprises to add"}
+                placeholder={
+                  addable.length > 0 ? t("addEnterprisePlaceholder") : t("noEnterprisesToAdd")
+                }
               />
             </SelectTrigger>
             <SelectContent>
@@ -636,7 +650,7 @@ function EnterpriseMemberships({
       {enterprises === null ? (
         <Spinner className="size-4" />
       ) : enterprises.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No enterprise affiliations.</p>
+        <p className="text-muted-foreground text-sm">{t("noEnterpriseAffiliations")}</p>
       ) : (
         <ul className="flex flex-wrap gap-2">
           {enterprises.map((e) => (
@@ -680,31 +694,35 @@ function ReadOnlyOverview({
   user: UserDetail;
   intolerances: Intolerance[];
 }) {
+  const { t } = useLocale();
   const lang = (LANGS.includes(user.language as Language) ? user.language : "es") as Language;
   return (
-    <SectionCard icon={UserIcon} title="Profile details" bodyClassName="space-y-4">
+    <SectionCard icon={UserIcon} title={t("profileDetails")} bodyClassName="space-y-4">
       <dl className="space-y-4">
         <Field
-          label="Secondary email"
+          label={t("secondaryEmailLabel")}
           value={
             user.secondaryEmail ? (
               <span className="inline-flex items-center gap-2">
                 {user.secondaryEmail}
                 <StatusBadge tone={user.secondaryEmailVerified ? "success" : "warning"} dot={false}>
-                  {user.secondaryEmailVerified ? "Verified" : "Pending"}
+                  {user.secondaryEmailVerified ? t("verified") : t("pendingShort")}
                 </StatusBadge>
               </span>
             ) : null
           }
         />
-        <Field label="Phone" value={user.phone} />
-        <Field label="Language" value={LANG_LABEL[user.language] ?? user.language} />
-        <Field label="Shirt size" value={user.shirtSize} />
+        <Field label={t("phone")} value={user.phone} />
         <Field
-          label="Food intolerances"
+          label={t("language")}
+          value={isLanguage(user.language) ? languageName(user.language) : user.language}
+        />
+        <Field label={t("shirtSize")} value={user.shirtSize} />
+        <Field
+          label={t("foodIntolerances")}
           value={intoleranceNames(user.foodIntolerances, intolerances, lang)}
         />
-        <Field label="Dietary notes" value={user.foodIntoleranceNotes} />
+        <Field label={t("dietaryNotesLabel")} value={user.foodIntoleranceNotes} />
         <Field label="DNI" value={user.dni} />
       </dl>
     </SectionCard>
@@ -720,10 +738,27 @@ function StaffEditForm({
   intolerances: Intolerance[];
   onUpdated: () => Promise<void>;
 }) {
+  const { t } = useLocale();
   const lang = (LANGS.includes(user.language as Language) ? user.language : "es") as Language;
 
+  const localizedEditSchema = useMemo(
+    () =>
+      z.object({
+        name: z.string().min(1, t("required")).max(200),
+        surname: z.string().min(1, t("required")).max(200),
+        phone: z.string().max(50),
+        language: z.enum(["en", "es", "gl"]),
+        shirtSize: z.string(),
+        dni: z.string().max(50),
+        foodIntolerances: z.array(z.string()),
+        foodIntoleranceNotes: z.string().max(2000),
+        notes: z.string().max(4000),
+      }),
+    [t],
+  );
+
   const form = useForm<EditValues>({
-    resolver: zodResolver(editSchema),
+    resolver: zodResolver(localizedEditSchema),
     defaultValues: {
       name: user.name ?? "",
       surname: user.surname ?? "",
@@ -760,9 +795,9 @@ function StaffEditForm({
         notes: values.notes || null,
       });
       await onUpdated();
-      toast.success("Profile updated.");
+      toast.success(t("profileUpdated"));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not save this profile.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveProfile"));
     }
   }
 
@@ -772,11 +807,11 @@ function StaffEditForm({
       await api.post(`/api/users/${user.id}/secondary-email`, {
         email: secEmail.trim().toLowerCase(),
       });
-      toast.success("Secondary email set. The user needs to verify it.");
+      toast.success(t("secondaryEmailSetNeedsVerify"));
       setSecEmail("");
       await onUpdated();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not set secondary email.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSetSecondaryEmail"));
     } finally {
       setSecSending(false);
     }
@@ -787,16 +822,18 @@ function StaffEditForm({
       <form onSubmit={form.handleSubmit(onSubmit)}>
         <SectionCard
           icon={UserIcon}
-          title="Profile details"
-          description="Edit this user's details. Changes are recorded in the audit log."
-          footer={<SubmitButton pending={form.formState.isSubmitting}>Save changes</SubmitButton>}
+          title={t("profileDetails")}
+          description={t("editThisUsersDetails")}
+          footer={
+            <SubmitButton pending={form.formState.isSubmitting}>{t("saveChanges")}</SubmitButton>
+          }
         >
           <FormField
             control={form.control}
             name="name"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>First name</FormLabel>
+                <FormLabel>{t("firstName")}</FormLabel>
                 <FormControl>
                   <Input {...field} />
                 </FormControl>
@@ -809,7 +846,7 @@ function StaffEditForm({
             name="surname"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Last name</FormLabel>
+                <FormLabel>{t("lastName")}</FormLabel>
                 <FormControl>
                   <Input {...field} />
                 </FormControl>
@@ -822,7 +859,7 @@ function StaffEditForm({
             name="phone"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Phone</FormLabel>
+                <FormLabel>{t("phone")}</FormLabel>
                 <FormControl>
                   <Input type="tel" {...field} />
                 </FormControl>
@@ -835,7 +872,7 @@ function StaffEditForm({
             name="language"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Language</FormLabel>
+                <FormLabel>{t("language")}</FormLabel>
                 <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
                     <SelectTrigger className="w-full">
@@ -843,9 +880,11 @@ function StaffEditForm({
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="es">Castellano</SelectItem>
-                    <SelectItem value="gl">Galego</SelectItem>
-                    <SelectItem value="en">English</SelectItem>
+                    {LANGS.map((l) => (
+                      <SelectItem key={l} value={l}>
+                        {languageName(l)}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -857,15 +896,15 @@ function StaffEditForm({
             name="shirtSize"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Shirt size</FormLabel>
+                <FormLabel>{t("shirtSize")}</FormLabel>
                 <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
                     <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Not set" />
+                      <SelectValue placeholder={t("notSet")} />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value={NONE}>Not set</SelectItem>
+                    <SelectItem value={NONE}>{t("notSet")}</SelectItem>
                     {SHIRT_SIZES.map((s) => (
                       <SelectItem key={s} value={s}>
                         {s}
@@ -895,15 +934,15 @@ function StaffEditForm({
             name="foodIntolerances"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Food intolerances</FormLabel>
+                <FormLabel>{t("foodIntolerances")}</FormLabel>
                 <FormControl>
                   <MultiSelect
                     options={intoleranceOptions}
                     value={field.value}
                     onChange={field.onChange}
-                    placeholder="Select any that apply…"
-                    searchPlaceholder="Search intolerances…"
-                    emptyText="No intolerances in the dictionary yet."
+                    placeholder={t("selectIntolerances")}
+                    searchPlaceholder={t("searchIntolerances")}
+                    emptyText={t("noIntolerances")}
                   />
                 </FormControl>
                 <FormMessage />
@@ -915,7 +954,7 @@ function StaffEditForm({
             name="foodIntoleranceNotes"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Dietary notes</FormLabel>
+                <FormLabel>{t("dietaryNotesLabel")}</FormLabel>
                 <FormControl>
                   <Textarea rows={3} {...field} />
                 </FormControl>
@@ -928,9 +967,9 @@ function StaffEditForm({
             name="notes"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Staff notes</FormLabel>
+                <FormLabel>{t("staffNotesLabel")}</FormLabel>
                 <FormControl>
-                  <Textarea rows={3} placeholder="Internal notes about this user…" {...field} />
+                  <Textarea rows={3} placeholder={t("internalNotesPlaceholder")} {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -938,18 +977,20 @@ function StaffEditForm({
           />
           <Separator className="my-4" />
           <div className="space-y-4">
-            <h4 className="text-sm font-medium">Secondary email</h4>
+            <h4 className="text-sm font-medium">{t("secondaryEmailLabel")}</h4>
             {user.secondaryEmail && (
               <div className="flex items-center gap-2 text-sm">
-                <span className="text-muted-foreground">Current: {user.secondaryEmail}</span>
+                <span className="text-muted-foreground">
+                  {t("currentEmailInline", { email: user.secondaryEmail })}
+                </span>
                 <StatusBadge tone={user.secondaryEmailVerified ? "success" : "warning"} dot={false}>
-                  {user.secondaryEmailVerified ? "Verified" : "Pending"}
+                  {user.secondaryEmailVerified ? t("verified") : t("pendingShort")}
                 </StatusBadge>
               </div>
             )}
             <div className="flex items-end gap-2">
               <div className="flex-1 space-y-2">
-                <Label htmlFor="admin-sec-email">Set secondary email</Label>
+                <Label htmlFor="admin-sec-email">{t("setSecondaryEmailLabel")}</Label>
                 <Input
                   id="admin-sec-email"
                   type="email"
@@ -963,7 +1004,7 @@ function StaffEditForm({
                 disabled={!secEmail.includes("@") || secSending}
                 onClick={handleSetSecondaryEmail}
               >
-                {secSending ? "Sending…" : user.secondaryEmail ? "Change" : "Set email"}
+                {secSending ? t("sending") : user.secondaryEmail ? t("change") : t("setEmail")}
               </Button>
             </div>
           </div>
@@ -974,6 +1015,7 @@ function StaffEditForm({
 }
 
 function PermissionsTab({ user, onChanged }: { user: UserDetail; onChanged: () => void }) {
+  const { t } = useLocale();
   const canManage = useCan(CAPABILITIES.PERMISSIONS_MANAGE);
   const [allGroups, setAllGroups] = useState<PermissionGroupSummary[]>([]);
   const [busy, setBusy] = useState(false);
@@ -993,10 +1035,10 @@ function PermissionsTab({ user, onChanged }: { user: UserDetail; onChanged: () =
     setBusy(true);
     try {
       await api.post(`/api/permission-groups/${groupId}/members`, { userId: user.id });
-      toast.success("Added to group.");
+      toast.success(t("addedToGroup"));
       onChanged();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not add to group.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotAddToGroup"));
     } finally {
       setBusy(false);
     }
@@ -1006,10 +1048,10 @@ function PermissionsTab({ user, onChanged }: { user: UserDetail; onChanged: () =
     setBusy(true);
     try {
       await api.delete(`/api/permission-groups/${groupId}/members/${user.id}`);
-      toast.success("Removed from group.");
+      toast.success(t("removedFromGroup"));
       onChanged();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not remove from group.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveFromGroup"));
     } finally {
       setBusy(false);
     }
@@ -1019,12 +1061,12 @@ function PermissionsTab({ user, onChanged }: { user: UserDetail; onChanged: () =
     <div className="space-y-6">
       <SectionCard
         icon={UsersIcon}
-        title="Permission groups"
+        title={t("permissionGroupsTitle")}
         action={
           canManage && addable.length > 0 ? (
             <Select value="" onValueChange={addToGroup} disabled={busy}>
               <SelectTrigger className="w-52">
-                <SelectValue placeholder="Add to group…" />
+                <SelectValue placeholder={t("addToGroupPlaceholder")} />
               </SelectTrigger>
               <SelectContent>
                 {addable.map((g) => (
@@ -1038,9 +1080,7 @@ function PermissionsTab({ user, onChanged }: { user: UserDetail; onChanged: () =
         }
       >
         {user.groups.length === 0 ? (
-          <p className="text-muted-foreground text-sm">
-            This user belongs to no permission groups, so they hold no staff capabilities.
-          </p>
+          <p className="text-muted-foreground text-sm">{t("noPermissionGroupsMember")}</p>
         ) : (
           <div className="flex flex-wrap gap-2">
             {user.groups.map((g) => (
@@ -1058,7 +1098,7 @@ function PermissionsTab({ user, onChanged }: { user: UserDetail; onChanged: () =
                     disabled={busy}
                     onClick={() => removeFromGroup(g.id)}
                     className="hover:bg-muted text-muted-foreground hover:text-foreground rounded p-0.5"
-                    aria-label={`Remove from ${g.name}`}
+                    aria-label={t("removeFromGroupAria", { name: g.name })}
                   >
                     <XIcon className="size-3" />
                   </button>
@@ -1069,9 +1109,9 @@ function PermissionsTab({ user, onChanged }: { user: UserDetail; onChanged: () =
         )}
       </SectionCard>
 
-      <SectionCard icon={KeyRoundIcon} title="Effective capabilities">
+      <SectionCard icon={KeyRoundIcon} title={t("effectiveCapabilities")}>
         {user.capabilities.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No capabilities.</p>
+          <p className="text-muted-foreground text-sm">{t("noCapabilities")}</p>
         ) : (
           <div className="flex flex-wrap gap-2">
             {user.capabilities.map((c) => (
@@ -1119,6 +1159,7 @@ function toDatetimeLocal(iso: string): string {
  * about whether they loaded.
  */
 function PresenceSection({ userId }: { userId: number }) {
+  const { t } = useLocale();
   const { canAny } = useSessionContext();
   const canRead = canAny(CAPABILITIES.PRESENCE_SCAN, CAPABILITIES.LOGISTICS_STATS);
   const canEdit = useCan(CAPABILITIES.PRESENCE_SCAN);
@@ -1142,10 +1183,10 @@ function PresenceSection({ userId }: { userId: number }) {
       setData({ hours: hours.hours, intervals: hours.intervals, logs: logs.items });
       setState("ready");
     } catch (err) {
-      setLoadError(errorMessage(err, "Attendance data is unavailable right now."));
+      setLoadError(errorMessage(err, t("attendanceDataUnavailable")));
       setState(err instanceof ApiError && err.status === 403 ? "forbidden" : "error");
     }
-  }, [userId, canRead]);
+  }, [userId, canRead, t]);
 
   useEffect(() => {
     void load();
@@ -1155,8 +1196,8 @@ function PresenceSection({ userId }: { userId: number }) {
     return (
       <EmptyState
         icon={ClockIcon}
-        title="Presence unavailable"
-        description="You need the presence:scan or logistics:stats capability to view attendance."
+        title={t("presenceUnavailableTitle")}
+        description={t("presenceUnavailableDesc")}
       />
     );
   }
@@ -1171,11 +1212,11 @@ function PresenceSection({ userId }: { userId: number }) {
     return (
       <EmptyState
         icon={ClockIcon}
-        title="Could not load presence"
+        title={t("couldNotLoadPresenceTitle")}
         description={loadError}
         action={
           <Button variant="outline" onClick={() => void load()}>
-            Try again
+            {t("tryAgain")}
           </Button>
         }
       />
@@ -1185,24 +1226,24 @@ function PresenceSection({ userId }: { userId: number }) {
   const intervalColumns: Column<PresenceInterval>[] = [
     {
       id: "start",
-      header: "Entered",
+      header: t("columnEntered"),
       cell: (i) => <span className="text-sm">{timeFmt.format(new Date(i.start))}</span>,
     },
     {
       id: "end",
-      header: "Left",
+      header: t("colLeft"),
       cell: (i) => (
         <div className="flex items-center gap-2">
           <span className="text-sm">{timeFmt.format(new Date(i.end))}</span>
           <StatusBadge tone={i.confirmed ? "success" : "neutral"} dot={false} className="text-xs">
-            {i.confirmed ? "Confirmed" : "Estimated"}
+            {i.confirmed ? t("confirmed") : t("estimated")}
           </StatusBadge>
         </div>
       ),
     },
     {
       id: "duration",
-      header: "Duration",
+      header: t("colDuration"),
       align: "right",
       cell: (i) => {
         const ms = new Date(i.end).getTime() - new Date(i.start).getTime();
@@ -1221,22 +1262,22 @@ function PresenceSection({ userId }: { userId: number }) {
   const scanColumns: Column<TimeLogEntry>[] = [
     {
       id: "when",
-      header: "When",
+      header: t("colWhen"),
       sortValue: (l) => l.scannedAt,
       cell: (l) => <span className="text-sm">{timeFmt.format(new Date(l.scannedAt))}</span>,
     },
     {
       id: "kind",
-      header: "Direction",
+      header: t("directionLabel"),
       cell: (l) => (
         <StatusBadge tone={l.kind === "in" ? "success" : "warning"} dot={false}>
-          {l.kind === "in" ? "Entry" : "Exit"}
+          {l.kind === "in" ? t("entryOption") : t("exitOption")}
         </StatusBadge>
       ),
     },
     {
       id: "scannedBy",
-      header: "Scanned by",
+      header: t("colScannedBy"),
       cell: (l) => (
         <span className="text-muted-foreground text-sm">
           {[l.scannedBy.name, l.scannedBy.surname].filter(Boolean).join(" ") ||
@@ -1261,7 +1302,7 @@ function PresenceSection({ userId }: { userId: number }) {
                     setEditing(l);
                   }}
                 >
-                  Edit
+                  {t("edit")}
                 </Button>
                 <Button
                   type="button"
@@ -1273,7 +1314,7 @@ function PresenceSection({ userId }: { userId: number }) {
                     setDeleting(l);
                   }}
                 >
-                  Delete
+                  {t("deleteAction")}
                 </Button>
               </div>
             ),
@@ -1283,22 +1324,18 @@ function PresenceSection({ userId }: { userId: number }) {
   ];
 
   return (
-    <SectionCard
-      icon={ClockIcon}
-      title="Presence"
-      description="Door, meal and activity signals, estimated into sessions (H24)."
-    >
+    <SectionCard icon={ClockIcon} title={t("presence")} description={t("presenceDesc")}>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard
-          label="Estimated hours"
+          label={t("estimatedHours")}
           value={data.hours.toFixed(1)}
-          hint="From entry and exit activity"
+          hint={t("fromEntryExitActivity")}
           icon={ClockIcon}
         />
         <StatCard
-          label="Presence intervals"
+          label={t("presenceIntervals")}
           value={String(data.intervals.length)}
-          hint="Estimated visits to the venue"
+          hint={t("estimatedVisitsVenue")}
         />
       </div>
       <DataTable
@@ -1308,17 +1345,15 @@ function PresenceSection({ userId }: { userId: number }) {
         pageSize={10}
         empty={{
           icon: ClockIcon,
-          title: "No presence recorded",
-          description: "This user has no door or activity scans yet.",
+          title: t("noPresenceRecorded"),
+          description: t("noDoorActivityScans"),
         }}
       />
 
       <Separator className="my-6" />
 
-      <h4 className="mb-3 text-sm font-medium">Raw door scans</h4>
-      <p className="text-muted-foreground mb-4 text-sm">
-        Every individual entry/exit scan behind the estimate above. Fix a wrong one directly here.
-      </p>
+      <h4 className="mb-3 text-sm font-medium">{t("rawDoorScans")}</h4>
+      <p className="text-muted-foreground mb-4 text-sm">{t("rawDoorScansDesc")}</p>
       <DataTable
         columns={scanColumns}
         data={data.logs}
@@ -1326,8 +1361,8 @@ function PresenceSection({ userId }: { userId: number }) {
         pageSize={10}
         empty={{
           icon: DoorOpenIcon,
-          title: "No door scans yet",
-          description: "Door scans for this user will appear here.",
+          title: t("noDoorScansYet"),
+          description: t("doorScansAppearHere"),
         }}
       />
       {editing && (
@@ -1363,6 +1398,7 @@ function EditTimeLogModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const { t } = useLocale();
   const [kind, setKind] = useState<"in" | "out">(log.kind);
   const [scannedAt, setScannedAt] = useState(toDatetimeLocal(log.scannedAt));
   const [pending, setPending] = useState(false);
@@ -1376,10 +1412,10 @@ function EditTimeLogModal({
         kind,
         scannedAt: new Date(scannedAt).toISOString(),
       });
-      toast.success("Scan updated.");
+      toast.success(t("scanUpdated"));
       onSaved();
     } catch (err) {
-      setError(errorMessage(err, "Could not update this scan."));
+      setError(errorMessage(err, t("couldNotUpdateScan")));
     } finally {
       setPending(false);
     }
@@ -1389,34 +1425,34 @@ function EditTimeLogModal({
     <Modal
       open
       onOpenChange={(open) => !open && onClose()}
-      title="Edit door scan"
-      description="Changes are recorded in the audit log."
+      title={t("editDoorScan")}
+      description={t("changesRecordedAuditLog")}
       footer={
         <>
           <Button variant="outline" onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </Button>
           <SubmitButton pending={pending} onClick={save}>
-            Save changes
+            {t("saveChanges")}
           </SubmitButton>
         </>
       }
     >
       <div className="space-y-4">
         <div className="space-y-2">
-          <Label>Direction</Label>
+          <Label>{t("directionLabel")}</Label>
           <Select value={kind} onValueChange={(v) => setKind(v as "in" | "out")}>
             <SelectTrigger className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="in">Entry</SelectItem>
-              <SelectItem value="out">Exit</SelectItem>
+              <SelectItem value="in">{t("entryOption")}</SelectItem>
+              <SelectItem value="out">{t("exitOption")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <div className="space-y-2">
-          <Label>Time</Label>
+          <Label>{t("timeLabel")}</Label>
           <Input
             type="datetime-local"
             value={scannedAt}
@@ -1438,16 +1474,17 @@ function DeleteTimeLogModal({
   onClose: () => void;
   onDeleted: () => void;
 }) {
+  const { t } = useLocale();
   const [pending, setPending] = useState(false);
 
   async function remove() {
     setPending(true);
     try {
       await logisticsApi.deleteTimeLog(log.id);
-      toast.success("Scan deleted.");
+      toast.success(t("scanDeleted"));
       onDeleted();
     } catch (err) {
-      toast.error(errorMessage(err, "Could not delete this scan."));
+      toast.error(errorMessage(err, t("couldNotDeleteScan")));
       setPending(false);
     }
   }
@@ -1456,15 +1493,18 @@ function DeleteTimeLogModal({
     <Modal
       open
       onOpenChange={(open) => !open && onClose()}
-      title="Delete this scan?"
-      description={`Removes the ${log.kind === "in" ? "entry" : "exit"} scan at ${timeFmt.format(new Date(log.scannedAt))}. This can't be undone.`}
+      title={t("deleteThisScan")}
+      description={t("removesEntryExitScan", {
+        direction: log.kind === "in" ? t("entryLower") : t("exitLower"),
+        time: timeFmt.format(new Date(log.scannedAt)),
+      })}
       footer={
         <>
           <Button variant="outline" onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </Button>
           <SubmitButton variant="destructive" pending={pending} onClick={remove}>
-            Delete
+            {t("deleteAction")}
           </SubmitButton>
         </>
       }
@@ -1510,6 +1550,7 @@ interface ResponseDetailPayload {
 }
 
 function ApplicationTab({ userId }: { userId: number }) {
+  const { t } = useLocale();
   const [rows, setRows] = useState<UserApplicationRow[] | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "forbidden" | "error">("loading");
   const [selected, setSelected] = useState<{
@@ -1565,7 +1606,7 @@ function ApplicationTab({ userId }: { userId: number }) {
         template: detail.application.template,
       });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not open this application.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotOpenApplication"));
     } finally {
       setOpeningId(null);
     }
@@ -1582,8 +1623,8 @@ function ApplicationTab({ userId }: { userId: number }) {
     return (
       <EmptyState
         icon={ClipboardListIcon}
-        title="Applications hidden"
-        description="You need the applications:review capability to see this user's applications."
+        title={t("applicationsHiddenTitle")}
+        description={t("needApplicationsReviewCap")}
       />
     );
   }
@@ -1591,8 +1632,8 @@ function ApplicationTab({ userId }: { userId: number }) {
     return (
       <EmptyState
         icon={ClipboardListIcon}
-        title="Could not load applications"
-        description="This user's applications are unavailable right now."
+        title={t("couldNotLoadApplicationsTitle")}
+        description={t("applicationsUnavailable")}
       />
     );
   }
@@ -1600,16 +1641,16 @@ function ApplicationTab({ userId }: { userId: number }) {
     return (
       <EmptyState
         icon={ClipboardListIcon}
-        title="No applications yet"
-        description="This user hasn't started any application form."
+        title={t("noApplicationsYet")}
+        description={t("hasntStartedApplication")}
       />
     );
   }
   return (
     <SectionCard
       icon={ClipboardListIcon}
-      title="Applications"
-      description="Every form this user has responded to. Open one to review or edit it."
+      title={t("applications")}
+      description={t("everyFormResponded")}
     >
       <ul className="divide-border divide-y">
         {rows.map((r) => (
@@ -1619,8 +1660,8 @@ function ApplicationTab({ userId }: { userId: number }) {
               <p className="text-muted-foreground text-xs capitalize">
                 {r.application_type}
                 {r.submitted_at
-                  ? ` · submitted ${new Date(r.submitted_at).toLocaleDateString()}`
-                  : " · draft"}
+                  ? t("submittedOnInline", { date: new Date(r.submitted_at).toLocaleDateString() })
+                  : t("draftInline")}
               </p>
             </div>
             <StatusBadge tone={statusTone(r.status)} dot={false}>
@@ -1633,7 +1674,7 @@ function ApplicationTab({ userId }: { userId: number }) {
               disabled={openingId === r.id}
               onClick={() => openResponse(r.id)}
             >
-              {openingId === r.id ? "Opening…" : "Open"}
+              {openingId === r.id ? t("opening") : t("open")}
             </Button>
           </li>
         ))}
@@ -1661,6 +1702,7 @@ function statusTone(status: string): "success" | "warning" | "danger" | "neutral
 }
 
 function PhysicalActivity({ userId }: { userId: number }) {
+  const { t } = useLocale();
   const [data, setData] = useState<UserActivity | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
 
@@ -1694,8 +1736,8 @@ function PhysicalActivity({ userId }: { userId: number }) {
     return (
       <EmptyState
         icon={ClipboardListIcon}
-        title="Could not load activity"
-        description="This user's passes are unavailable right now."
+        title={t("couldNotLoadActivityTitle")}
+        description={t("passesUnavailable")}
       />
     );
   }
@@ -1703,21 +1745,21 @@ function PhysicalActivity({ userId }: { userId: number }) {
   const passColumns: Column<ActivityPass>[] = [
     {
       id: "activity",
-      header: "Activity",
+      header: t("columnActivity"),
       cell: (p) => <span className="text-sm">{p.activityName}</span>,
     },
     {
       id: "type",
-      header: "Type",
+      header: t("colType"),
       cell: (p) => (
         <StatusBadge tone={p.category === "meal" ? "success" : "info"} dot={false}>
-          {p.category === "meal" ? "Meal" : "Workshop"}
+          {p.category === "meal" ? t("typeMeal") : t("typeWorkshop")}
         </StatusBadge>
       ),
     },
     {
       id: "when",
-      header: "When",
+      header: t("colWhen"),
       sortValue: (p) => p.loggedAt,
       cell: (p) => <span className="text-sm">{timeFmt.format(new Date(p.loggedAt))}</span>,
     },
@@ -1725,7 +1767,7 @@ function PhysicalActivity({ userId }: { userId: number }) {
 
   return (
     <div className="space-y-6">
-      <SectionCard icon={ClipboardListIcon} title="Activity passes" bodyClassName="p-0">
+      <SectionCard icon={ClipboardListIcon} title={t("activityPasses")} bodyClassName="p-0">
         <DataTable
           columns={passColumns}
           data={data.passes}
@@ -1733,8 +1775,8 @@ function PhysicalActivity({ userId }: { userId: number }) {
           pageSize={10}
           empty={{
             icon: ClipboardListIcon,
-            title: "No passes yet",
-            description: "Meal and workshop passes will appear here as they're scanned.",
+            title: t("noPassesYet"),
+            description: t("passesWillAppear"),
           }}
         />
       </SectionCard>
@@ -1753,6 +1795,7 @@ interface AuditRow {
 }
 
 function AuditLogSection({ userId }: { userId: number }) {
+  const { t } = useLocale();
   const canAudit = useCan(CAPABILITIES.AUDIT_READ);
   const [items, setItems] = useState<AuditRow[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "forbidden" | "error">("loading");
@@ -1787,8 +1830,8 @@ function AuditLogSection({ userId }: { userId: number }) {
     return (
       <EmptyState
         icon={FileTextIcon}
-        title="Audit log unavailable"
-        description="You need the audit:read capability to view this user's audit log."
+        title={t("auditLogUnavailableTitle")}
+        description={t("needAuditReadCap")}
       />
     );
   }
@@ -1803,8 +1846,8 @@ function AuditLogSection({ userId }: { userId: number }) {
     return (
       <EmptyState
         icon={FileTextIcon}
-        title="Could not load audit log"
-        description="The audit log is unavailable right now."
+        title={t("couldNotLoadAuditLog")}
+        description={t("auditLogUnavailableNow")}
       />
     );
   }
@@ -1812,12 +1855,12 @@ function AuditLogSection({ userId }: { userId: number }) {
   const columns: Column<AuditRow>[] = [
     {
       id: "action",
-      header: "Action",
+      header: t("colAction"),
       cell: (r) => <span className="font-mono text-xs">{r.action}</span>,
     },
     {
       id: "entity",
-      header: "Entity",
+      header: t("colEntity"),
       cell: (r) => (
         <span className="text-muted-foreground text-sm">
           {r.entity_type} #{r.entity_id}
@@ -1826,13 +1869,13 @@ function AuditLogSection({ userId }: { userId: number }) {
     },
     {
       id: "when",
-      header: "When",
+      header: t("colWhen"),
       sortValue: (r) => r.created_at,
       cell: (r) => <span className="text-sm">{timeFmt.format(new Date(r.created_at))}</span>,
     },
     {
       id: "source",
-      header: "Source",
+      header: t("colSource"),
       cell: (r) =>
         r.source ? (
           <Badge variant="outline" className="capitalize">
@@ -1847,8 +1890,8 @@ function AuditLogSection({ userId }: { userId: number }) {
   return (
     <SectionCard
       icon={FileTextIcon}
-      title="Audit log"
-      description="Staff edits and other audited changes to this user's record."
+      title={t("auditLog")}
+      description={t("auditLogDesc")}
       bodyClassName="p-0"
     >
       <DataTable
@@ -1858,8 +1901,8 @@ function AuditLogSection({ userId }: { userId: number }) {
         pageSize={15}
         empty={{
           icon: FileTextIcon,
-          title: "No audit entries yet",
-          description: "Staff edits and other audited changes to this user will appear here.",
+          title: t("noAuditEntriesYet"),
+          description: t("auditEntriesAppearHere"),
         }}
       />
     </SectionCard>

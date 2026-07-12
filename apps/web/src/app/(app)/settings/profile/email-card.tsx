@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ApiError, api } from "@/lib/api";
+import { useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 
 /**
@@ -20,6 +21,7 @@ import { useSessionContext } from "@/lib/session";
  */
 export function EmailCard() {
   const { me, refresh } = useSessionContext();
+  const { t } = useLocale();
   const [secondary, setSecondary] = useState("");
   const [saving, setSaving] = useState(false);
   if (!me) return null;
@@ -28,11 +30,11 @@ export function EmailCard() {
     setSaving(true);
     try {
       await api.post("/api/me/secondary-email", { email });
-      toast.success("Verification email sent — check that inbox to confirm it.");
+      toast.success(t("verificationEmailSentCheck"));
       setSecondary("");
       await refresh();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not send the verification email.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSendVerificationEmail"));
     } finally {
       setSaving(false);
     }
@@ -43,18 +45,18 @@ export function EmailCard() {
   return (
     <SectionCard
       icon={MailIcon}
-      title="Email addresses"
-      description="Your sign-in email and an optional secondary address."
+      title={t("emailAddressesTitle")}
+      description={t("emailAddressesDesc")}
     >
       {/* Primary */}
       <div className="space-y-2">
-        <Label>Primary email</Label>
+        <Label>{t("primaryEmailLabel")}</Label>
         <div className="flex flex-wrap items-center gap-2">
           <Input value={me.email} disabled readOnly className="max-w-md" />
           {me.emailVerified ? (
-            <StatusBadge tone="success">Verified</StatusBadge>
+            <StatusBadge tone="success">{t("verified")}</StatusBadge>
           ) : (
-            <StatusBadge tone="warning">Unverified</StatusBadge>
+            <StatusBadge tone="warning">{t("unverified")}</StatusBadge>
           )}
         </div>
       </div>
@@ -62,18 +64,15 @@ export function EmailCard() {
       {/* Secondary */}
       <div className="space-y-2">
         <div className="flex items-center gap-1.5">
-          <Label htmlFor="secondary-email">Secondary email</Label>
+          <Label htmlFor="secondary-email">{t("secondaryEmailLabel")}</Label>
           <Tooltip>
             <TooltipTrigger asChild>
               <button type="button" className="text-muted-foreground hover:text-foreground">
                 <HelpCircleIcon className="size-3.5" />
-                <span className="sr-only">Why add a secondary email?</span>
+                <span className="sr-only">{t("whyAddSecondaryEmail")}</span>
               </button>
             </TooltipTrigger>
-            <TooltipContent className="max-w-xs">
-              Register the email you used on Devpost so we can automatically match your projects to
-              your account when imports run (H6/H16).
-            </TooltipContent>
+            <TooltipContent className="max-w-xs">{t("secondaryEmailTooltip")}</TooltipContent>
           </Tooltip>
         </div>
 
@@ -81,9 +80,9 @@ export function EmailCard() {
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm">{me.secondaryEmail}</span>
             {me.secondaryEmailVerified ? (
-              <StatusBadge tone="success">Verified</StatusBadge>
+              <StatusBadge tone="success">{t("verified")}</StatusBadge>
             ) : (
-              <StatusBadge tone="warning">Pending verification</StatusBadge>
+              <StatusBadge tone="warning">{t("pendingVerification")}</StatusBadge>
             )}
             {hasPendingSecondary && (
               <SubmitButton
@@ -93,7 +92,7 @@ export function EmailCard() {
                 pending={saving}
                 onClick={() => me.secondaryEmail && sendSecondaryVerification(me.secondaryEmail)}
               >
-                Resend
+                {t("resend")}
               </SubmitButton>
             )}
           </div>
@@ -105,7 +104,11 @@ export function EmailCard() {
             type="email"
             value={secondary}
             onChange={(e) => setSecondary(e.target.value)}
-            placeholder={me.secondaryEmail ? "Change secondary email…" : "you@devpost-email.com"}
+            placeholder={
+              me.secondaryEmail
+                ? t("changeSecondaryEmailPlaceholder")
+                : t("devpostEmailPlaceholder")
+            }
             className="max-w-md"
           />
           <SubmitButton
@@ -114,7 +117,7 @@ export function EmailCard() {
             disabled={!secondary.includes("@")}
             onClick={() => sendSecondaryVerification(secondary.trim().toLowerCase())}
           >
-            {me.secondaryEmail ? "Update & verify" : "Add & verify"}
+            {me.secondaryEmail ? t("updateAndVerify") : t("addAndVerify")}
           </SubmitButton>
         </div>
       </div>

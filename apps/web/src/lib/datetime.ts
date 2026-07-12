@@ -19,7 +19,7 @@ function padDatePart(value: number): string {
   return String(value).padStart(2, "0");
 }
 
-export function formatScheduledDateTime(value: string): string {
+export function formatScheduledDateTime(value: string, locale?: string): string {
   const localMatch = dateTimeLocalPattern.exec(value);
   if (localMatch) {
     const [, year, month, day, hour, minute] = localMatch;
@@ -29,7 +29,13 @@ export function formatScheduledDateTime(value: string): string {
   const d = new Date(value);
   return Number.isNaN(d.getTime())
     ? value
-    : `${padDatePart(d.getDate())}/${padDatePart(d.getMonth() + 1)}/${d.getFullYear()} ${padDatePart(d.getHours())}:${padDatePart(d.getMinutes())}`;
+    : new Intl.DateTimeFormat(locale, {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(d);
 }
 
 export function parseScheduledDateTime(value: string): string | null {

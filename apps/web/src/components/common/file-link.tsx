@@ -9,6 +9,7 @@
 
 import { FileTextIcon } from "lucide-react";
 import { API_URL } from "@/lib/env";
+import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export function FileLink({
@@ -21,6 +22,7 @@ export function FileLink({
   className?: string;
   children?: React.ReactNode;
 }) {
+  const { t } = useLocale();
   const isDirect = /^https?:\/\//i.test(value);
   const href = isDirect ? value : `${API_URL}/api/files/download?key=${encodeURIComponent(value)}`;
 
@@ -34,7 +36,7 @@ export function FileLink({
       {children ?? (
         <>
           <FileTextIcon className="size-3.5" />
-          View file
+          {t("viewFileLabel")}
         </>
       )}
     </a>

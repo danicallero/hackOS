@@ -22,34 +22,29 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { ApiError, api } from "@/lib/api";
+import { useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 
 const schema = z.object({ email: z.string().email("Enter a valid email") });
 type Values = z.infer<typeof schema>;
 
 /** Maps Better Auth's verify-email error codes to friendly copy (H2). */
-function messageForError(error: string | null): { title: string; body: string } | null {
+function messageForError(
+  error: string | null,
+  t: (key: string) => string,
+): { title: string; body: string } | null {
   if (!error) return null;
-  if (error === "token_expired" || error === "TOKEN_EXPIRED")
-    return {
-      title: "This link has expired",
-      body: "Verification links are short-lived. Request a fresh one below.",
-    };
-  if (error === "invalid_token" || error === "INVALID_TOKEN")
-    return {
-      title: "This link is no longer valid",
-      body: "If you've already verified, just sign in — you're all set.",
-    };
-  return { title: "We couldn't verify that link", body: "Request a new verification email below." };
+  return { title: t("verifyEmail"), body: t("verificationInstructions") };
 }
 
 function VerifyEmailInner() {
   const params = useSearchParams();
   const router = useRouter();
+  const { t } = useLocale();
   const { refresh } = useSessionContext();
   // On failure Better Auth appends `error` to the same callback URL (which
   // already carries verified=1), so an error must take precedence.
-  const errorInfo = messageForError(params.get("error"));
+  const errorInfo = messageForError(params.get("error"), t);
   const verified =
     !errorInfo && (params.get("verified") !== null || params.get("status") === "verified");
   const [cooldown, setCooldown] = useState(0);
@@ -74,7 +69,7 @@ function VerifyEmailInner() {
   async function onSubmit(values: Values) {
     try {
       await api.post("/api/auth/resend-verification", { email: values.email });
-      toast.success("Verification email sent. Check your inbox.");
+      toast.success(t("verificationEmailSent"));
       setCooldown(60); // H3: 60s between attempts
     } catch (err) {
       if (err instanceof ApiError && err.status === 429) {
@@ -83,7 +78,7 @@ function VerifyEmailInner() {
         return;
       }
       form.setError("root", {
-        message: err instanceof ApiError ? err.message : "Could not send the email.",
+        message: err instanceof ApiError ? err.message : t("couldNotSendEmail"),
       });
     }
   }
@@ -95,16 +90,16 @@ function VerifyEmailInner() {
           <div className="bg-success/10 text-success mb-2 grid size-12 place-items-center rounded-full">
             <CheckCircle2Icon className="size-6" />
           </div>
-          <CardTitle>Email verified</CardTitle>
-          <CardDescription>Your address is confirmed and you&apos;re signed in.</CardDescription>
+          <CardTitle>{t("emailVerified")}</CardTitle>
+          <CardDescription>{t("emailVerifiedDescription")}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-2 text-center">
-          <Button onClick={() => router.push("/dashboard")}>Continue to dashboard</Button>
+          <Button onClick={() => router.push("/dashboard")}>{t("continueToDashboard")}</Button>
           <Link
             href="/login"
             className="text-muted-foreground text-sm underline underline-offset-4"
           >
-            Sign in with a different account
+            {t("differentAccount")}
           </Link>
         </CardContent>
       </Card>
@@ -117,10 +112,8 @@ function VerifyEmailInner() {
         <div className="bg-muted text-muted-foreground mb-2 grid size-12 place-items-center rounded-full">
           <MailIcon className="size-6" />
         </div>
-        <CardTitle>Verify your email</CardTitle>
-        <CardDescription>
-          Follow the link we emailed you. Didn&apos;t get it? Resend below.
-        </CardDescription>
+        <CardTitle>{t("verifyEmail")}</CardTitle>
+        <CardDescription>{t("verificationInstructions")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {errorInfo && (
@@ -136,7 +129,7 @@ function VerifyEmailInner() {
               name="email"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Email</FormLabel>
+                  <FormLabel>{t("email")}</FormLabel>
                   <FormControl>
                     <Input type="email" autoComplete="email" {...field} />
                   </FormControl>
@@ -152,14 +145,14 @@ function VerifyEmailInner() {
               pending={form.formState.isSubmitting}
               disabled={cooldown > 0}
             >
-              {cooldown > 0 ? `Resend in ${cooldown}s` : "Resend verification email"}
+              {cooldown > 0 ? t("resendIn", { seconds: cooldown }) : t("resendVerificationEmail")}
             </SubmitButton>
           </form>
         </Form>
       </CardContent>
       <div className="text-muted-foreground px-6 pb-6 text-center text-sm">
         <Link href="/login" className="text-foreground underline underline-offset-4">
-          Back to sign in
+          {t("backToSignIn")}
         </Link>
       </div>
     </Card>

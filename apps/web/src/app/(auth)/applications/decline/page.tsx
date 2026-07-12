@@ -14,6 +14,7 @@ import { Spinner } from "@/components/common/spinner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiError, api } from "@/lib/api";
+import { useLocale } from "@/lib/i18n";
 
 interface DeclineResult {
   status: string;
@@ -23,6 +24,7 @@ interface DeclineResult {
 
 function DeclineInner() {
   const token = useSearchParams().get("token");
+  const { t } = useLocale();
   const [state, setState] = useState<"loading" | "done" | "error">("loading");
   const [result, setResult] = useState<DeclineResult | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
@@ -32,7 +34,7 @@ function DeclineInner() {
     if (ran.current) return;
     ran.current = true;
     if (!token) {
-      setErrorMsg("This link is missing its token.");
+      setErrorMsg(t("linkMissingToken"));
       setState("error");
       return;
     }
@@ -43,19 +45,17 @@ function DeclineInner() {
         setState("done");
       })
       .catch((err) => {
-        setErrorMsg(
-          err instanceof ApiError ? err.message : "We couldn't release your spot from this link.",
-        );
+        setErrorMsg(err instanceof ApiError ? err.message : t("declineFailed"));
         setState("error");
       });
-  }, [token]);
+  }, [token, t]);
 
   if (state === "loading") {
     return (
       <Card>
         <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
           <Spinner className="size-6" />
-          <p className="text-muted-foreground text-sm">Releasing your spot…</p>
+          <p className="text-muted-foreground text-sm">{t("releasingPlace")}</p>
         </CardContent>
       </Card>
     );
@@ -68,12 +68,12 @@ function DeclineInner() {
           <div className="bg-destructive/10 text-destructive mb-2 grid size-12 place-items-center rounded-full">
             <TriangleAlertIcon className="size-6" />
           </div>
-          <CardTitle>We couldn&apos;t process this link</CardTitle>
+          <CardTitle>{t("declineFailed")}</CardTitle>
           <CardDescription>{errorMsg}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-2 text-center">
           <Button asChild variant="outline">
-            <Link href="/my-applications">Go to my applications</Link>
+            <Link href="/my-applications">{t("goToApplications")}</Link>
           </Button>
         </CardContent>
       </Card>
@@ -87,20 +87,11 @@ function DeclineInner() {
         <div className="bg-muted text-muted-foreground mb-2 grid size-12 place-items-center rounded-full">
           <CalendarXIcon className="size-6" />
         </div>
-        <CardTitle>{alreadyDone ? "Your spot was already released" : "Spot released"}</CardTitle>
-        <CardDescription>
-          {alreadyDone
-            ? "You'd already declined this place — nothing else to do."
-            : "Thanks for letting us know. We've released your spot so someone else can take it."}
-        </CardDescription>
+        <CardTitle>{alreadyDone ? t("alreadyReleased") : t("placeReleased")}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-2 text-center">
-        <p className="text-muted-foreground text-sm">
-          Changed your mind? Contact the organizers — if the window is still open they may be able
-          to reinstate you.
-        </p>
         <Button asChild variant="outline">
-          <Link href="/my-applications">View my applications</Link>
+          <Link href="/my-applications">{t("viewApplications")}</Link>
         </Button>
       </CardContent>
     </Card>

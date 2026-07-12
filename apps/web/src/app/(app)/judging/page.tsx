@@ -57,6 +57,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError, api } from "@/lib/api";
 import { API_URL } from "@/lib/env";
+import { type Translate, useLocale } from "@/lib/i18n";
 import {
   callNext,
   closeSession,
@@ -87,12 +88,16 @@ type Scores = Record<string, AnswerValue>;
 
 const SCORE_SCALE = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
 
-function challengeName(challenge?: Challenge | null, fallback?: number): string {
-  return challenge ? textForDisplay(challenge.title) : fallback ? `Challenge #${fallback}` : "—";
+function challengeName(t: Translate, challenge?: Challenge | null, fallback?: number): string {
+  return challenge
+    ? textForDisplay(challenge.title)
+    : fallback
+      ? t("challengeFallbackNumber", { id: fallback })
+      : "—";
 }
 
-function entryLabel(entry: QueueEntry): string {
-  return entry.repo_name ?? `Repo #${entry.repo_id}`;
+function entryLabel(entry: QueueEntry, t: Translate): string {
+  return entry.repo_name ?? t("repoNumber", { id: entry.repo_id });
 }
 
 function secondsLabel(value: number | null | undefined): string {
@@ -154,6 +159,7 @@ function normalizeScores(panel: Question[], raw: Record<string, unknown> | undef
 
 export default function QueuePage() {
   const { can, canAny, me } = useSessionContext();
+  const { t } = useLocale();
   const canOperate = can(CAPABILITIES.QUEUE_OPERATE);
   const canJudge = can(CAPABILITIES.JUDGE_PANEL) || me?.role === "judge";
   const canExport = can(CAPABILITIES.JUDGING_EXPORT);
@@ -216,11 +222,11 @@ export default function QueuePage() {
       setChallenges(challengeRows.challenges);
       setRoomId((current) => current ?? roomRows[0]?.id ?? null);
     } catch (err) {
-      toast.error(errorMessage(err, "Could not load queue setup."));
+      toast.error(errorMessage(err, t("couldNotLoadQueueSetup")));
     } finally {
       setRoomsLoading(false);
     }
-  }, [canUse]);
+  }, [canUse, t]);
 
   useEffect(() => {
     void loadRooms();
@@ -238,12 +244,12 @@ export default function QueuePage() {
         toast.success(success);
         await refreshLive();
       } catch (err) {
-        toast.error(errorMessage(err, "Queue action failed."));
+        toast.error(errorMessage(err, t("queueActionFailed")));
       } finally {
         setBusy(null);
       }
     },
-    [refreshLive],
+    [refreshLive, t],
   );
 
   // H37 search-as-you-type: debounce the query and refresh results as the
@@ -262,7 +268,7 @@ export default function QueuePage() {
         const hits = await searchTeams(effectiveChallengeId, term);
         if (!cancelled) setSearchResults(hits);
       } catch (err) {
-        if (!cancelled) toast.error(errorMessage(err, "Search failed."));
+        if (!cancelled) toast.error(errorMessage(err, t("searchFailed")));
       } finally {
         if (!cancelled) setSearching(false);
       }
@@ -271,16 +277,16 @@ export default function QueuePage() {
       cancelled = true;
       window.clearTimeout(handle);
     };
-  }, [effectiveChallengeId, search]);
+  }, [effectiveChallengeId, search, t]);
 
   if (!canUse) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Judging" />
+        <PageHeader title={t("judging")} />
         <EmptyState
           icon={LockIcon}
-          title="You can't access the judging panel"
-          description="Judging access requires an operator, admin or judge capability."
+          title={t("noAccessJudgingPanel")}
+          description={t("judgingAccessDeniedDesc")}
         />
       </div>
     );
@@ -291,7 +297,7 @@ export default function QueuePage() {
   const state = view?.state ?? null;
   const isPaused = state?.is_paused ?? view?.room.status === "paused";
   const challengeLabel =
-    view?.challenge?.title ?? (activeChallenge ? challengeName(activeChallenge) : "—");
+    view?.challenge?.title ?? (activeChallenge ? challengeName(t, activeChallenge) : "—");
 
   return (
     // App-like layout: the room selector pins to the top, the queue panel stays
@@ -306,14 +312,14 @@ export default function QueuePage() {
             widths — flex-basis + min-width + flex-wrap handle the reflow. */}
         <div className="flex flex-wrap items-end gap-3">
           <div className="min-w-[11rem] flex-1 space-y-2">
-            <Label htmlFor="queue-room">Room</Label>
+            <Label htmlFor="queue-room">{t("roomLabel")}</Label>
             <Select
               value={activeRoomId ? String(activeRoomId) : ""}
               onValueChange={(value) => setRoomId(Number(value))}
               disabled={roomsLoading || rooms.length === 0}
             >
               <SelectTrigger id="queue-room" className="w-full">
-                <SelectValue placeholder="Select room" />
+                <SelectValue placeholder={t("selectRoomPlaceholder")} />
               </SelectTrigger>
               <SelectContent>
                 {rooms.map((room) => (
@@ -328,7 +334,7 @@ export default function QueuePage() {
           {/* A room judges exactly one challenge — informational, read-only.
               Change it from the room admin surface, not here. */}
           <div className="min-w-[11rem] flex-[1.2] space-y-2">
-            <Label>Challenge</Label>
+            <Label>{t("challengeLabel")}</Label>
             <div className="border-input bg-muted/40 text-muted-foreground flex h-9 w-full min-w-0 items-center gap-2 rounded-md border px-3 text-sm">
               <LockIcon className="size-3.5 shrink-0" />
               <span className="text-foreground truncate font-medium">{challengeLabel}</span>
@@ -347,12 +353,12 @@ export default function QueuePage() {
                     isPaused
                       ? resumeRoom(activeRoomId, crypto.randomUUID())
                       : pauseRoom(activeRoomId, crypto.randomUUID()),
-                  isPaused ? "Room resumed." : "Room paused.",
+                  isPaused ? t("roomResumed") : t("roomPaused"),
                 )
               }
             >
               {isPaused ? <PlayIcon className="size-4" /> : <PauseIcon className="size-4" />}
-              {isPaused ? "Resume" : "Pause"}
+              {isPaused ? t("resume") : t("pause")}
             </Button>
 
             {canExport && (
@@ -360,7 +366,7 @@ export default function QueuePage() {
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" disabled={!effectiveChallengeId}>
                     <DownloadIcon className="size-4" />
-                    Export Data
+                    {t("exportData")}
                     <ChevronDownIcon className="size-4" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -369,13 +375,13 @@ export default function QueuePage() {
                     <DropdownMenuItem asChild>
                       <a href={exportHref(exportUrls(effectiveChallengeId).queue)}>
                         <DownloadIcon className="size-4" />
-                        Queue
+                        {t("queueExportLabel")}
                       </a>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
                       <a href={exportHref(exportUrls(effectiveChallengeId).evaluations)}>
                         <DownloadIcon className="size-4" />
-                        Evaluations
+                        {t("evaluationsExport")}
                       </a>
                     </DropdownMenuItem>
                   </DropdownMenuContent>
@@ -394,8 +400,8 @@ export default function QueuePage() {
         <div className="flex flex-1 items-center justify-center">
           <EmptyState
             icon={DoorOpenIcon}
-            title="No room selected"
-            description="Create or select a judging room before operating the queue."
+            title={t("noRoomSelected")}
+            description={t("noRoomSelectedDesc")}
           />
         </div>
       ) : (
@@ -418,7 +424,7 @@ export default function QueuePage() {
                 mutate(
                   "call-next",
                   () => callNext(activeRoomId, crypto.randomUUID()),
-                  "Next team called.",
+                  t("nextTeamCalled"),
                 )
               }
               onManualCall={(entry, targetStatus) =>
@@ -432,7 +438,7 @@ export default function QueuePage() {
                       { targetStatus, roomId: activeRoomId, reason: "Manual queue selection" },
                       crypto.randomUUID(),
                     ),
-                  targetStatus === "in_room" ? "Team brought into room." : "Team called.",
+                  targetStatus === "in_room" ? t("teamBroughtIn") : t("teamCalled"),
                 )
               }
               onEntryAction={(entry, action, body, label) =>
@@ -452,7 +458,7 @@ export default function QueuePage() {
                       { reason: "Search: moved to top of queue" },
                       crypto.randomUUID(),
                     ),
-                  "Team moved to the top of the queue.",
+                  t("teamMovedTop"),
                 )
               }
               onAddWaiting={(entry) =>
@@ -470,7 +476,7 @@ export default function QueuePage() {
                       },
                       crypto.randomUUID(),
                     ),
-                  "Team added to the waiting room.",
+                  t("teamAddedWaiting"),
                 )
               }
             />
@@ -492,7 +498,7 @@ export default function QueuePage() {
                   mutate(
                     `bring-in-${firstCalled.id}`,
                     () => entryAction(firstCalled.id, "bring-in", undefined, crypto.randomUUID()),
-                    "Team brought in.",
+                    t("teamBroughtInShort"),
                   );
                   return;
                 }
@@ -500,7 +506,7 @@ export default function QueuePage() {
                   mutate(
                     "call-next",
                     () => callNext(activeRoomId, crypto.randomUUID()),
-                    "Next team called.",
+                    t("nextTeamCalled"),
                   );
                 }
               }}
@@ -562,6 +568,7 @@ function QueuePanel({
   onAddTop: (entry: QueueSearchResult) => void;
   onAddWaiting: (entry: QueueSearchResult) => void;
 }) {
+  const { t } = useLocale();
   const [searchOpen, setSearchOpen] = useState(false);
   const waitingEntries = view.next;
   const calledEntries = view.called;
@@ -571,30 +578,30 @@ function QueuePanel({
     <Card className="gap-0 overflow-hidden p-0">
       <div className="flex items-center justify-between gap-3 px-5 pt-5 pb-4">
         <div>
-          <h2 className="text-base font-semibold">Queue</h2>
-          <p className="text-muted-foreground text-sm">Waiting room and challenge queue.</p>
+          <h2 className="text-base font-semibold">{t("queueHeading")}</h2>
+          <p className="text-muted-foreground text-sm">{t("waitingRoomQueueDesc")}</p>
         </div>
         <Button disabled={!canOperate || busy === "call-next"} onClick={onCallNext}>
           <BellRingIcon className="size-4" />
-          Call next
+          {t("callNext")}
         </Button>
       </div>
       <Separator />
       <div className="space-y-5 p-5">
         <QueueList
-          title={`Waiting room (${calledEntries.length})`}
+          title={t("waitingRoomCount", { count: calledEntries.length })}
           entries={calledEntries}
-          empty="No teams waiting at the door."
+          empty={t("noTeamsWaitingDoor")}
           compact
           renderActions={(entry) => (
             <div className="grid grid-cols-2 gap-2">
               <Button
                 size="sm"
                 disabled={busy != null || !canJudge}
-                onClick={() => onEntryAction(entry, "bring-in", undefined, "Team brought in.")}
+                onClick={() => onEntryAction(entry, "bring-in", undefined, t("teamBroughtInShort"))}
               >
                 <DoorOpenIcon className="size-4" />
-                Bring in
+                {t("bringIn")}
               </Button>
               <Button
                 size="sm"
@@ -605,34 +612,34 @@ function QueuePanel({
                     entry,
                     "requeue",
                     { position: "bottom", reason: "Returned from waiting room" },
-                    "Team returned to the queue.",
+                    t("teamReturnedQueue"),
                   )
                 }
               >
                 <RotateCcwIcon className="size-4" />
-                Requeue
+                {t("requeue")}
               </Button>
               <Button
                 size="sm"
                 variant="outline"
                 disabled={busy != null || (!canJudge && !canOperate)}
                 onClick={() =>
-                  onEntryAction(entry, "notify-enter", undefined, "Entrance notice sent.")
+                  onEntryAction(entry, "notify-enter", undefined, t("entranceNoticeSent"))
                 }
               >
                 <SendIcon className="size-4" />
-                Notify
+                {t("notify")}
               </Button>
               <Button
                 size="sm"
                 variant="outline"
                 disabled={busy != null || (!canJudge && !canOperate)}
                 onClick={() =>
-                  onEntryAction(entry, "no-show", { reason: "No show" }, "No-show recorded.")
+                  onEntryAction(entry, "no-show", { reason: "No show" }, t("noShowRecorded"))
                 }
               >
                 <AlertTriangleIcon className="size-4" />
-                No-show
+                {t("noShow")}
               </Button>
             </div>
           )}
@@ -643,13 +650,15 @@ function QueuePanel({
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h3 className="text-sm font-semibold">Challenge queue ({waitingEntries.length})</h3>
-              <p className="text-muted-foreground text-xs">Upcoming teams for this room.</p>
+              <h3 className="text-sm font-semibold">
+                {t("challengeQueueCount", { count: waitingEntries.length })}
+              </h3>
+              <p className="text-muted-foreground text-xs">{t("upcomingTeamsRoom")}</p>
             </div>
             <Button
               size="icon"
               variant={searchOpen ? "secondary" : "ghost"}
-              aria-label="Search teams"
+              aria-label={t("searchTeamsAria")}
               aria-pressed={searchOpen}
               disabled={searchDisabled}
               onClick={() => setSearchOpen((open) => !open)}
@@ -675,7 +684,7 @@ function QueuePanel({
           <QueueList
             title=""
             entries={waitingEntries}
-            empty="No teams in the challenge queue."
+            empty={t("noTeamsChallengeQueue")}
             scroll
             renderActions={(entry) => (
               <div className="flex gap-2">
@@ -686,18 +695,23 @@ function QueuePanel({
                   onClick={() => onManualCall(entry, "called")}
                   className="flex-1"
                 >
-                  Call
+                  {t("call")}
                 </Button>
                 <Button
                   size="sm"
                   variant="outline"
                   disabled={busy != null || !canOperate}
                   onClick={() =>
-                    onEntryAction(entry, "skip", { reason: "Skipped by operator" }, "Team skipped.")
+                    onEntryAction(
+                      entry,
+                      "skip",
+                      { reason: "Skipped by operator" },
+                      t("teamSkipped"),
+                    )
                   }
                 >
                   <SkipForwardIcon className="size-4" />
-                  Skip
+                  {t("skip")}
                 </Button>
               </div>
             )}
@@ -734,6 +748,7 @@ function TeamSearch({
   onAddTop: (entry: QueueSearchResult) => void;
   onAddWaiting: (entry: QueueSearchResult) => void;
 }) {
+  const { t } = useLocale();
   return (
     <div className="bg-muted/30 space-y-3 rounded-md border p-3">
       <div className="relative">
@@ -741,30 +756,28 @@ function TeamSearch({
         <Input
           value={query}
           onChange={(event) => onQuery(event.target.value)}
-          placeholder="Search by project, repo id or entry id"
+          placeholder={t("searchProjectPlaceholder")}
           className="pl-9"
         />
       </div>
       {!trimmed ? (
-        <p className="text-muted-foreground py-2 text-center text-xs">
-          Start typing to find a team.
-        </p>
+        <p className="text-muted-foreground py-2 text-center text-xs">{t("startTypingFindTeam")}</p>
       ) : searching && results.length === 0 ? (
         <div className="flex justify-center py-4">
           <Spinner />
         </div>
       ) : results.length === 0 ? (
-        <p className="text-muted-foreground py-2 text-center text-xs">No teams found.</p>
+        <p className="text-muted-foreground py-2 text-center text-xs">{t("noTeamsFound")}</p>
       ) : (
         <ul className="max-h-72 space-y-2 overflow-y-auto pr-1">
           {results.map((entry) => (
             <li key={entry.id} className="bg-background rounded-md border p-3">
-              <p className="truncate text-sm font-medium">{entryLabel(entry)}</p>
+              <p className="truncate text-sm font-medium">{entryLabel(entry, t)}</p>
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 <QueueStatusBadge status={entry.status} />
                 {entry.has_review && (
                   <StatusBadge tone={entry.review_status === "submitted" ? "success" : "warning"}>
-                    {entry.review_status ?? "review"}
+                    {entry.review_status ?? t("reviewFallback")}
                   </StatusBadge>
                 )}
               </div>
@@ -776,7 +789,7 @@ function TeamSearch({
                   onClick={() => onAddTop(entry)}
                 >
                   <ArrowUpToLineIcon className="size-4" />
-                  Top of queue
+                  {t("topOfQueue")}
                 </Button>
                 <Button
                   size="sm"
@@ -784,7 +797,7 @@ function TeamSearch({
                   onClick={() => onAddWaiting(entry)}
                 >
                   <DoorOpenIcon className="size-4" />
-                  Waiting room
+                  {t("waitingRoomButton")}
                 </Button>
               </div>
             </li>
@@ -810,6 +823,7 @@ function QueueList({
   scroll?: boolean;
   renderActions: (entry: QueueEntry) => React.ReactNode;
 }) {
+  const { t } = useLocale();
   return (
     <div className="space-y-3">
       {title && <h3 className="text-sm font-semibold">{title}</h3>}
@@ -825,7 +839,7 @@ function QueueList({
                 <div className="min-w-0">
                   <p className={cn("truncate font-medium", compact ? "text-sm" : "text-xs")}>
                     {!compact && `#${entry.position ?? index + 1} `}
-                    {entryLabel(entry)}
+                    {entryLabel(entry, t)}
                   </p>
                   <div className="mt-1 flex flex-wrap items-center gap-2">
                     <QueueStatusBadge status={entry.status} />
@@ -884,6 +898,7 @@ function PresentationPanel({
     label: string,
   ) => void;
 }) {
+  const { t } = useLocale();
   const isPresenting = entry?.status === "presenting";
   const isReady = entry?.status === "in_room";
   // H33 (#59): a team that already reached the room or the stage can be sent
@@ -896,22 +911,22 @@ function PresentationPanel({
       <div className="flex items-start justify-between gap-4 px-6 pt-6 pb-5">
         <div className="min-w-0">
           <h2 className="truncate text-2xl font-semibold text-balance">
-            {entry ? entryLabel(entry) : "Waiting for next team"}
+            {entry ? entryLabel(entry, t) : t("waitingForNextTeam")}
           </h2>
           <p className="text-muted-foreground text-sm">
             {entry
               ? isPresenting
-                ? "Presentation in progress"
+                ? t("presentationInProgress")
                 : isReady
-                  ? "Ready to start"
-                  : "Team in room"
-              : "Bring in a team to start presentation and scoring."}
+                  ? t("readyToStart")
+                  : t("teamInRoom")
+              : t("bringTeamPrompt")}
           </p>
         </div>
         {entry ? (
           <QueueStatusBadge status={entry.status} />
         ) : (
-          <StatusBadge tone="neutral">Idle</StatusBadge>
+          <StatusBadge tone="neutral">{t("idle")}</StatusBadge>
         )}
       </div>
       <Separator />
@@ -919,11 +934,9 @@ function PresentationPanel({
         {!entry ? (
           <div className="flex min-h-64 flex-col items-center justify-center rounded-md border border-dashed p-6 text-center">
             <DoorOpenIcon className="text-muted-foreground mb-3 size-8" />
-            <p className="text-sm font-medium">No presentation in progress</p>
+            <p className="text-sm font-medium">{t("noPresentationInProgress")}</p>
             <p className="text-muted-foreground mt-1 text-sm">
-              {waitingRoomCount > 0
-                ? "There are teams waiting at the door."
-                : "Call the next team into the waiting room."}
+              {waitingRoomCount > 0 ? t("teamsWaitingDoor") : t("callNextTeamPrompt")}
             </p>
             <Button className="mt-4" disabled={busy != null} onClick={onEmptyAction}>
               {waitingRoomCount > 0 ? (
@@ -931,7 +944,7 @@ function PresentationPanel({
               ) : (
                 <BellRingIcon className="size-4" />
               )}
-              {waitingRoomCount > 0 ? "Bring in" : "Call next"}
+              {waitingRoomCount > 0 ? t("bringIn") : t("callNext")}
             </Button>
           </div>
         ) : (
@@ -949,20 +962,20 @@ function PresentationPanel({
             <div className="grid gap-2 sm:grid-cols-2">
               <Button
                 disabled={!canJudge || !isReady || busy != null}
-                onClick={() => onEntryAction(entry, "start", undefined, "Presentation started.")}
+                onClick={() => onEntryAction(entry, "start", undefined, t("presentationStarted"))}
               >
                 <PlayIcon className="size-4" />
-                Start
+                {t("start")}
               </Button>
               <Button
                 variant="outline"
                 disabled={!canJudge || !isPresenting || busy != null}
                 onClick={() =>
-                  onEntryAction(entry, "complete", undefined, "Presentation completed.")
+                  onEntryAction(entry, "complete", undefined, t("presentationCompleted"))
                 }
               >
                 <CheckCircle2Icon className="size-4" />
-                Complete
+                {t("complete")}
               </Button>
               {canSendBack && (
                 <Button
@@ -974,12 +987,12 @@ function PresentationPanel({
                       entry,
                       "send-back",
                       { reason: "Re-queued to waiting room" },
-                      "Team sent back to the waiting room.",
+                      t("teamSentBackWaiting"),
                     )
                   }
                 >
                   <RotateCcwIcon className="size-4" />
-                  Re-queue to waiting room
+                  {t("requeueWaitingRoom")}
                 </Button>
               )}
             </div>
@@ -991,6 +1004,7 @@ function PresentationPanel({
 }
 
 function ProjectInfo({ entry, challenge }: { entry: QueueEntry; challenge: Challenge | null }) {
+  const { t } = useLocale();
   const members = entry.repo_members ?? [];
   const links = [
     { label: "Demo", href: entry.repo_demo_url },
@@ -1003,7 +1017,7 @@ function ProjectInfo({ entry, challenge }: { entry: QueueEntry; challenge: Chall
       <div className="rounded-md border bg-background p-4">
         <div className="mb-2 flex items-center gap-2">
           <UsersIcon className="text-muted-foreground size-4" />
-          <p className="text-xs font-semibold uppercase">Members</p>
+          <p className="text-xs font-semibold uppercase">{t("membersLabel")}</p>
         </div>
         <p className="text-sm font-medium text-pretty">
           {members.length > 0
@@ -1018,7 +1032,7 @@ function ProjectInfo({ entry, challenge }: { entry: QueueEntry; challenge: Chall
 
       {entry.repo_description && (
         <div className="rounded-md border bg-background p-4">
-          <p className="mb-2 text-xs font-semibold uppercase">Project</p>
+          <p className="mb-2 text-xs font-semibold uppercase">{t("projectLabel")}</p>
           <p className="text-muted-foreground line-clamp-5 text-sm text-pretty">
             {entry.repo_description}
           </p>
@@ -1040,12 +1054,12 @@ function ProjectInfo({ entry, challenge }: { entry: QueueEntry; challenge: Chall
 
       {challenge && (
         <div className="rounded-md border bg-background p-4">
-          <p className="mb-1 text-xs font-semibold uppercase">Current challenge</p>
+          <p className="mb-1 text-xs font-semibold uppercase">{t("currentChallengeLabel")}</p>
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-medium">
-              {challengeName(challenge, entry.challenge_id)}
+              {challengeName(t, challenge, entry.challenge_id)}
             </span>
-            <StatusBadge tone="success">Now</StatusBadge>
+            <StatusBadge tone="success">{t("now")}</StatusBadge>
           </div>
         </div>
       )}
@@ -1062,6 +1076,7 @@ function PresentationTimer({
   maxSeconds: number | null;
   fallbackMinutes: number | null;
 }) {
+  const { t } = useLocale();
   const [now, setNow] = useState(Date.now());
   const totalSeconds =
     maxSeconds ?? (fallbackMinutes != null ? Math.round(fallbackMinutes * 60) : null);
@@ -1079,7 +1094,7 @@ function PresentationTimer({
     totalSeconds > 0 &&
     remainingSeconds <= Math.max(60, Math.ceil(totalSeconds * 0.1));
   const timerTone = isOverTime ? "danger" : isWrappingUp ? "warning" : "default";
-  const cueText = isOverTime ? "Time limit exceeded" : isWrappingUp ? "Wrap up" : "On time";
+  const cueText = isOverTime ? t("timeLimitExceeded") : isWrappingUp ? t("wrapUp") : t("onTime");
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -1090,7 +1105,7 @@ function PresentationTimer({
     <div className="rounded-md border bg-background p-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase">Time remaining</p>
+          <p className="text-xs font-semibold uppercase">{t("timeRemaining")}</p>
           <p
             className={cn(
               "mt-1 font-mono text-3xl font-semibold tabular-nums",
@@ -1112,7 +1127,7 @@ function PresentationTimer({
             {cueText}
           </p>
           <p className="text-muted-foreground text-sm tabular-nums">
-            of {secondsLabel(totalSeconds)}
+            {t("ofDuration", { duration: secondsLabel(totalSeconds) })}
           </p>
         </div>
       </div>
@@ -1139,6 +1154,7 @@ function ReviewForm({
   roomId: number | null;
   canJudge: boolean;
 }) {
+  const { t } = useLocale();
   const panel = challenge?.judging_panel_criteria ?? [];
   const [scores, setScores] = useState<Scores>({});
   const [notes, setNotes] = useState("");
@@ -1168,7 +1184,7 @@ function ReviewForm({
         setStatus(review.status);
         setSessions(activeSessions);
       })
-      .catch((err) => toast.error(errorMessage(err, "Could not load review.")))
+      .catch((err) => toast.error(errorMessage(err, t("couldNotLoadReview"))))
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
@@ -1176,7 +1192,7 @@ function ReviewForm({
       cancelled = true;
       if (canJudge) void closeSession(entry.id).catch(() => undefined);
     };
-  }, [entry, canJudge, panel, roomId]);
+  }, [entry, canJudge, panel, roomId, t]);
 
   const save = useCallback(
     async (submit = false) => {
@@ -1185,28 +1201,28 @@ function ReviewForm({
       try {
         const review = await saveReview(entry.id, { scores, notes, submit });
         setStatus(review.status);
-        toast.success(submit ? "Review submitted." : "Draft saved.");
+        toast.success(submit ? t("reviewSubmitted") : t("draftSaved"));
       } catch (err) {
-        toast.error(errorMessage(err, "Could not save review."));
+        toast.error(errorMessage(err, t("couldNotSaveReview")));
       } finally {
         setSaving(false);
       }
     },
-    [entry, scores, notes],
+    [entry, scores, notes, t],
   );
 
   if (!entry) {
     return (
-      <SectionCard title="Scoring" description="A scoring form appears when a team is in the room.">
-        <p className="text-muted-foreground text-sm">No active entry selected.</p>
+      <SectionCard title={t("scoring")} description={t("scoringFormDesc")}>
+        <p className="text-muted-foreground text-sm">{t("noActiveEntrySelected")}</p>
       </SectionCard>
     );
   }
 
   return (
     <SectionCard
-      title="Scoring"
-      description="Save draft answers while judging, then submit the final review."
+      title={t("scoring")}
+      description={t("scoringSaveDesc")}
       icon={CheckCircle2Icon}
       action={
         <StatusBadge tone={status === "submitted" ? "success" : "warning"}>{status}</StatusBadge>
@@ -1218,14 +1234,14 @@ function ReviewForm({
             disabled={!canJudge || saving || loading}
             onClick={() => save(false)}
           >
-            Save draft
+            {t("saveDraft")}
           </Button>
           <Button
             disabled={!canJudge || saving || loading || requiredUnanswered > 0}
             onClick={() => save(true)}
           >
             <CheckCircle2Icon className="size-4" />
-            Submit review
+            {t("submitReview")}
           </Button>
         </div>
       }
@@ -1233,23 +1249,25 @@ function ReviewForm({
       {loading ? (
         <Spinner />
       ) : panel.length === 0 ? (
-        <p className="text-muted-foreground text-sm">
-          This challenge does not have judging criteria configured yet.
-        </p>
+        <p className="text-muted-foreground text-sm">{t("noJudgingCriteria")}</p>
       ) : (
         <div className="space-y-5">
           {requiredUnanswered > 0 && (
             <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
               <AlertTriangleIcon className="size-4 shrink-0" />
-              {requiredUnanswered} required field{requiredUnanswered === 1 ? "" : "s"} unanswered
+              {requiredUnanswered === 1
+                ? t("requiredFieldUnansweredOne", { count: requiredUnanswered })
+                : t("requiredFieldUnansweredOther", { count: requiredUnanswered })}
             </div>
           )}
           {sessions.length > 0 && (
             <div className="rounded-md border px-3 py-2">
-              <p className="text-sm font-medium">Active judges</p>
+              <p className="text-sm font-medium">{t("activeJudges")}</p>
               <p className="text-muted-foreground text-sm">
                 {sessions
-                  .map((session) => `${session.name ?? "Judge"} ${session.surname ?? ""}`.trim())
+                  .map((session) =>
+                    `${session.name ?? t("judgeFallback")} ${session.surname ?? ""}`.trim(),
+                  )
                   .join(", ")}
               </p>
             </div>
@@ -1264,13 +1282,13 @@ function ReviewForm({
             />
           ))}
           <div className="space-y-2">
-            <Label htmlFor="review-notes">Notes</Label>
+            <Label htmlFor="review-notes">{t("notesLabel")}</Label>
             <Textarea
               id="review-notes"
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
               disabled={!canJudge || status === "submitted"}
-              placeholder="Private judging notes"
+              placeholder={t("privateJudgingNotes")}
             />
           </div>
         </div>
@@ -1290,6 +1308,7 @@ function QuestionField({
   disabled: boolean;
   onChange: (value: AnswerValue) => void;
 }) {
+  const { t } = useLocale();
   const label = textForDisplay(question.label);
   const description = textForDisplay(question.description);
   const id = `question-${question.key}`;
@@ -1324,7 +1343,7 @@ function QuestionField({
               disabled={disabled}
               onClick={() => onChange("")}
             >
-              Clear
+              {t("clear")}
             </Button>
           )}
         </div>
@@ -1348,7 +1367,7 @@ function QuestionField({
             onCheckedChange={(checked) => onChange(checked === true)}
           />
           <Label htmlFor={id} className="font-normal">
-            Yes
+            {t("yesLabel")}
           </Label>
         </div>
       ) : question.kind === "single_choice" ? (
@@ -1358,7 +1377,7 @@ function QuestionField({
           onValueChange={onChange}
         >
           <SelectTrigger id={id} className="w-full">
-            <SelectValue placeholder="Select an option" />
+            <SelectValue placeholder={t("selectOptionPlaceholder")} />
           </SelectTrigger>
           <SelectContent>
             {question.options.map((option) => (
@@ -1412,7 +1431,7 @@ function QuestionField({
         />
       )}
       <p className={cn("text-muted-foreground text-xs", disabled && "opacity-70")}>
-        Key: <span className="font-mono">{question.key}</span>
+        {t("keyLabel")} <span className="font-mono">{question.key}</span>
       </p>
     </div>
   );

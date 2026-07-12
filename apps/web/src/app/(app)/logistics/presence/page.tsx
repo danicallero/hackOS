@@ -33,6 +33,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useLiveQuery } from "@/hooks/use-event-source";
+import { type Translate, useLocale } from "@/lib/i18n";
 import {
   logisticsApi,
   type OpenPresenceSession,
@@ -57,6 +58,7 @@ function hoursSince(iso: string): string {
 const PRESENCE_EVENTS = [EVENTS.LOGISTICS_PRESENCE_SCAN, EVENTS.LOGISTICS_ACTIVITY_SCAN];
 
 export default function PresencePage() {
+  const { t } = useLocale();
   const canPresence = useCan(CAPABILITIES.PRESENCE_SCAN);
 
   const estimate = useLiveQuery<PresenceEstimate>(
@@ -81,11 +83,11 @@ export default function PresencePage() {
   if (!canPresence) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Presence" />
+        <PageHeader title={t("presence")} />
         <EmptyState
           icon={LockIcon}
-          title="You can't scan presence"
-          description="The presence scan capability is required."
+          title={t("presenceDeniedTitle")}
+          description={t("presenceDeniedDesc")}
         />
       </div>
     );
@@ -93,28 +95,25 @@ export default function PresencePage() {
 
   return (
     <div className="space-y-6" data-wide>
-      <PageHeader
-        title="Presence"
-        description="Scan a badge at the door to register an entry or exit; attendance hours are estimated from all signals (H24)."
-      />
+      <PageHeader title={t("presence")} description={t("presenceDescription")} />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          label="Present now"
+          label={t("presentNow")}
           value={estimate.data?.presentCount ?? "—"}
           icon={UsersIcon}
-          hint={estimate.connected ? "Live estimate" : "Reconnects automatically"}
+          hint={estimate.connected ? t("liveEstimate") : t("reconnectsAutomatically")}
         />
         <StatCard
-          label="Open sessions"
+          label={t("openSessions")}
           value={openSessions.data?.length ?? "—"}
           icon={DoorOpenIcon}
-          hint="Entered, not yet exited"
+          hint={t("enteredNotExited")}
         />
         <StatCard
-          label="Stale sessions"
+          label={t("staleSessions")}
           value={openSessions.data?.filter((s) => s.stale).length ?? "—"}
           icon={AlertTriangleIcon}
-          hint="No signal in a while — needs reconciling"
+          hint={t("staleSessionsHint")}
         />
       </div>
       <PresencePanel
@@ -145,6 +144,7 @@ function PresencePanel({
   openSessionsLoading: boolean;
   onScanned: () => void;
 }) {
+  const { t } = useLocale();
   const router = useRouter();
   const [badgeId, setBadgeId] = useState("");
   const [lookup, setLookup] = useState<PresenceLookup | null>(null);
@@ -171,7 +171,7 @@ function PresencePanel({
       setManualKind(result.openSince ? "out" : "in");
     } catch (err) {
       setLookup(null);
-      setError(errorMessage(err, "Badge lookup failed."));
+      setError(errorMessage(err, t("badgeLookupFailed")));
     } finally {
       setBusy(false);
     }
@@ -183,11 +183,11 @@ function PresencePanel({
     setError("");
     try {
       await logisticsApi.presenceScan({ badgeId: lookup.badgeId, kind });
-      toast.success(kind === "in" ? "Entry recorded." : "Exit recorded.");
+      toast.success(kind === "in" ? t("entryRecorded") : t("exitRecorded"));
       reset();
       onScanned();
     } catch (err) {
-      setError(errorMessage(err, "Presence scan failed."));
+      setError(errorMessage(err, t("presenceScanFailed")));
     } finally {
       setBusy(false);
     }
@@ -203,11 +203,11 @@ function PresencePanel({
         kind: manualKind,
         scannedAt: new Date(manualScannedAt).toISOString(),
       });
-      toast.success("Manual record added.");
+      toast.success(t("manualRecordAdded"));
       reset();
       onScanned();
     } catch (err) {
-      setError(errorMessage(err, "Could not save the manual record."));
+      setError(errorMessage(err, t("couldNotSaveManualRecord")));
     } finally {
       setBusy(false);
     }
@@ -216,7 +216,7 @@ function PresencePanel({
   const columns: Column<PresenceHours>[] = [
     {
       id: "user",
-      header: "User",
+      header: t("columnUser"),
       sortValue: (row) => `${row.surname ?? ""} ${row.name ?? ""}`.trim().toLowerCase(),
       cell: (row) => {
         const name = [row.name, row.surname].filter(Boolean).join(" ").trim();
@@ -229,7 +229,7 @@ function PresencePanel({
     },
     {
       id: "hours",
-      header: "Hours",
+      header: t("columnHours"),
       align: "right",
       sortValue: (row) => row.hours,
       cell: (row) => <span className="font-mono tabular-nums">{row.hours.toFixed(2)}</span>,
@@ -239,27 +239,27 @@ function PresencePanel({
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(320px,0.8fr)_minmax(0,1.2fr)]">
       <SectionCard
-        title="Door scan"
-        description="Scan a badge to load the person, then register an entry or exit."
+        title={t("doorScan")}
+        description={t("doorScanDesc")}
         icon={DoorOpenIcon}
         bodyClassName="space-y-4"
       >
         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_140px]">
-          <Field label="Badge">
+          <Field label={t("badgeLabel")}>
             <Input
               value={badgeId}
               onChange={(e) => setBadgeId(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") doLookup();
               }}
-              placeholder="scan badge"
+              placeholder={t("badgePlaceholder")}
               autoComplete="off"
             />
           </Field>
           <div className="flex items-end">
             <Button className="w-full" onClick={doLookup} disabled={busy || !badgeId.trim()}>
               <ScanLineIcon className="size-4" />
-              Lookup
+              {t("lookup")}
             </Button>
           </div>
         </div>
@@ -272,8 +272,10 @@ function PresencePanel({
             {lookup.openSince && (
               <div className="border-warning/40 bg-warning/10 text-warning-foreground flex items-center gap-2 rounded-lg border px-3 py-2 text-sm">
                 <AlertTriangleIcon className="size-4 shrink-0" />
-                Already has an open session since {timeFmt.format(new Date(lookup.openSince))} (
-                {hoursSince(lookup.openSince)}). Register an exit before a new entry.
+                {t("alreadyOpenSession", {
+                  time: timeFmt.format(new Date(lookup.openSince)),
+                  hours: hoursSince(lookup.openSince),
+                })}
               </div>
             )}
             <div className="grid gap-3 sm:grid-cols-2">
@@ -283,7 +285,7 @@ function PresencePanel({
                 disabled={busy || !!lookup.openSince}
               >
                 <LogInIcon className="size-4" />
-                Register entry
+                {t("registerEntry")}
               </Button>
               <Button
                 variant={lookup.openSince ? "default" : "outline"}
@@ -291,7 +293,7 @@ function PresencePanel({
                 disabled={busy || !lookup.openSince}
               >
                 <LogOutIcon className="size-4" />
-                Register exit
+                {t("registerExit")}
               </Button>
             </div>
 
@@ -302,14 +304,14 @@ function PresencePanel({
                 onClick={() => setManualOpen((v) => !v)}
               >
                 <ClockIcon className="size-4" />
-                {manualOpen ? "Cancel manual record" : "Add a backdated manual record"}
+                {manualOpen ? t("cancelManualRecord") : t("addManualRecord")}
               </Button>
             </div>
 
             {manualOpen && (
               <div className="bg-muted/40 space-y-3 rounded-lg border p-3">
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Direction">
+                  <Field label={t("directionLabel")}>
                     <Select
                       value={manualKind}
                       onValueChange={(v) => setManualKind(v as "in" | "out")}
@@ -318,12 +320,12 @@ function PresencePanel({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="in">Entry</SelectItem>
-                        <SelectItem value="out">Exit</SelectItem>
+                        <SelectItem value="in">{t("entryOption")}</SelectItem>
+                        <SelectItem value="out">{t("exitOption")}</SelectItem>
                       </SelectContent>
                     </Select>
                   </Field>
-                  <Field label="Time">
+                  <Field label={t("timeLabel")}>
                     <Input
                       type="datetime-local"
                       value={manualScannedAt}
@@ -336,7 +338,7 @@ function PresencePanel({
                   onClick={doManualSave}
                   disabled={busy || !manualScannedAt}
                 >
-                  Save manual record
+                  {t("saveManualRecord")}
                 </Button>
               </div>
             )}
@@ -345,8 +347,8 @@ function PresencePanel({
       </SectionCard>
 
       <SectionCard
-        title="Attendance hours"
-        description="Estimated from door, meal and activity signals."
+        title={t("attendanceHours")}
+        description={t("attendanceHoursDesc")}
         icon={UsersIcon}
       >
         <DataTable
@@ -356,35 +358,35 @@ function PresencePanel({
           onRowClick={(row) => router.push(`/users/${row.userId}?tab=presence`)}
           loading={loading}
           searchable={(row) => `${row.userId} ${row.name ?? ""} ${row.surname ?? ""} ${row.hours}`}
-          searchPlaceholder="Filter users..."
+          searchPlaceholder={t("filterUsers")}
           pageSize={10}
           empty={{
             icon: UsersIcon,
-            title: "No presence yet",
-            description: "Door, meal or activity scans will appear here.",
+            title: t("noPresenceYet"),
+            description: t("noPresenceYetDesc"),
           }}
         />
       </SectionCard>
 
       <SectionCard
-        title="Open sessions"
-        description="Entered but not yet exited. The system never closes these — reconcile stale ones with a manual exit."
+        title={t("openSessions")}
+        description={t("openSessionsDesc")}
         icon={AlertTriangleIcon}
         className="xl:col-span-2"
       >
         <DataTable
-          columns={openSessionColumns}
+          columns={getOpenSessionColumns(t)}
           data={openSessions}
           getRowId={(row) => String(row.userId)}
           onRowClick={(row) => router.push(`/users/${row.userId}?tab=presence`)}
           loading={openSessionsLoading}
           searchable={(row) => `${row.userId} ${row.name ?? ""} ${row.surname ?? ""}`}
-          searchPlaceholder="Filter users..."
+          searchPlaceholder={t("filterUsers")}
           pageSize={10}
           empty={{
             icon: DoorOpenIcon,
-            title: "No open sessions",
-            description: "Everyone who entered has also exited.",
+            title: t("noOpenSessions"),
+            description: t("noOpenSessionsDesc"),
           }}
         />
       </SectionCard>
@@ -392,43 +394,45 @@ function PresencePanel({
   );
 }
 
-const openSessionColumns: Column<OpenPresenceSession>[] = [
-  {
-    id: "user",
-    header: "User",
-    sortValue: (row) => `${row.surname ?? ""} ${row.name ?? ""}`.trim().toLowerCase(),
-    cell: (row) => {
-      const name = [row.name, row.surname].filter(Boolean).join(" ").trim();
-      return name ? (
-        <span>{name}</span>
-      ) : (
-        <span className="text-muted-foreground font-mono text-sm">#{row.userId}</span>
-      );
+function getOpenSessionColumns(t: Translate): Column<OpenPresenceSession>[] {
+  return [
+    {
+      id: "user",
+      header: t("columnUser"),
+      sortValue: (row) => `${row.surname ?? ""} ${row.name ?? ""}`.trim().toLowerCase(),
+      cell: (row) => {
+        const name = [row.name, row.surname].filter(Boolean).join(" ").trim();
+        return name ? (
+          <span>{name}</span>
+        ) : (
+          <span className="text-muted-foreground font-mono text-sm">#{row.userId}</span>
+        );
+      },
     },
-  },
-  {
-    id: "since",
-    header: "Entered",
-    sortValue: (row) => row.since,
-    cell: (row) => <span className="text-sm">{timeFmt.format(new Date(row.since))}</span>,
-  },
-  {
-    id: "lastSignal",
-    header: "Last signal",
-    sortValue: (row) => row.lastSignal,
-    cell: (row) => (
-      <span className="text-sm">
-        {timeFmt.format(new Date(row.lastSignal))} ({hoursSince(row.lastSignal)})
-      </span>
-    ),
-  },
-  {
-    id: "stale",
-    header: "Status",
-    cell: (row) => (
-      <StatusBadge tone={row.stale ? "warning" : "neutral"} dot={false}>
-        {row.stale ? "Stale — check" : "Fresh"}
-      </StatusBadge>
-    ),
-  },
-];
+    {
+      id: "since",
+      header: t("columnEntered"),
+      sortValue: (row) => row.since,
+      cell: (row) => <span className="text-sm">{timeFmt.format(new Date(row.since))}</span>,
+    },
+    {
+      id: "lastSignal",
+      header: t("columnLastSignal"),
+      sortValue: (row) => row.lastSignal,
+      cell: (row) => (
+        <span className="text-sm">
+          {timeFmt.format(new Date(row.lastSignal))} ({hoursSince(row.lastSignal)})
+        </span>
+      ),
+    },
+    {
+      id: "stale",
+      header: t("columnStatus"),
+      cell: (row) => (
+        <StatusBadge tone={row.stale ? "warning" : "neutral"} dot={false}>
+          {row.stale ? t("staleCheck") : t("fresh")}
+        </StatusBadge>
+      ),
+    },
+  ];
+}

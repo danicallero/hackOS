@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/select";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
+import { useLocale } from "@/lib/i18n";
 import {
   linkParticipant,
   linkSecondaryEmail,
@@ -61,6 +62,7 @@ function userLabel(user: UserOption): string {
 }
 
 export default function UnmatchedProjectsPage() {
+  const { t } = useLocale();
   const { can } = useSessionContext();
   const canImport = can(CAPABILITIES.PROJECTS_IMPORT);
   const [rows, setRows] = useState<UnmatchedRow[]>([]);
@@ -87,11 +89,11 @@ export default function UnmatchedProjectsPage() {
       setRows(unmatched.participants.map(toUnmatchedRow));
       setChallenges(publicChallenges.items);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not load unmatched participants.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadUnmatched"));
     } finally {
       setLoading(false);
     }
-  }, [canImport]);
+  }, [canImport, t]);
 
   const searchUsers = useCallback(async () => {
     try {
@@ -100,9 +102,9 @@ export default function UnmatchedProjectsPage() {
       });
       setUsers(res.users);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not search users.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSearchUsers"));
     }
-  }, [userQuery]);
+  }, [userQuery, t]);
 
   // Soft, in-place refresh instead of a hard reload when a project/repo
   // changes elsewhere.
@@ -127,22 +129,22 @@ export default function UnmatchedProjectsPage() {
         toast.success(success);
         await load();
       } catch (err) {
-        toast.error(err instanceof ApiError ? err.message : "Action failed.");
+        toast.error(err instanceof ApiError ? err.message : t("actionFailedGeneric"));
       } finally {
         setBusy(null);
       }
     },
-    [load],
+    [load, t],
   );
 
   if (!canImport) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Resolve unmatched" />
+        <PageHeader title={t("resolveUnmatched")} />
         <EmptyState
           icon={LockIcon}
-          title="You can't resolve imports"
-          description="Resolving Devpost imports requires the projects:import capability."
+          title={t("noAccessResolveImports")}
+          description={t("resolveImportsDeniedDesc")}
         />
       </div>
     );
@@ -151,21 +153,21 @@ export default function UnmatchedProjectsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Resolve unmatched"
-        description="Link imported Devpost participants to hackOS users or send account-claim emails."
+        title={t("resolveUnmatched")}
+        description={t("resolveUnmatchedDesc")}
         actions={
           <Button variant="outline" asChild>
             <Link href="/projects">
               <ArrowLeftIcon className="size-4" />
-              Projects
+              {t("projects")}
             </Link>
           </Button>
         }
       />
 
       <SectionCard
-        title="Prize mapping"
-        description="Map a Devpost prize/tag to a hackOS challenge so imported projects appear in challenge views."
+        title={t("prizeMappingTitle")}
+        description={t("prizeMappingDesc")}
         icon={TrophyIcon}
         footer={
           <Button
@@ -174,30 +176,30 @@ export default function UnmatchedProjectsPage() {
               mutate(
                 "map-prize",
                 () => mapPrize(prizeName.trim(), Number(challengeId)),
-                "Prize mapped to challenge.",
+                t("prizeMapped"),
               )
             }
           >
             <LinkIcon className="size-4" />
-            Map prize
+            {t("mapPrize")}
           </Button>
         }
       >
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="prize-name">Prize name</Label>
+            <Label htmlFor="prize-name">{t("prizeNameLabel")}</Label>
             <Input
               id="prize-name"
               value={prizeName}
               onChange={(event) => setPrizeName(event.target.value)}
-              placeholder="Exact Devpost prize name"
+              placeholder={t("exactDevpostPrizeNamePlaceholder")}
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="challenge-map">Challenge</Label>
+            <Label htmlFor="challenge-map">{t("challengeLabel")}</Label>
             <Select value={challengeId} onValueChange={setChallengeId}>
               <SelectTrigger id="challenge-map" className="w-full">
-                <SelectValue placeholder="Select challenge" />
+                <SelectValue placeholder={t("selectChallengePlaceholder")} />
               </SelectTrigger>
               <SelectContent>
                 {challenges.map((challenge) => (
@@ -212,17 +214,17 @@ export default function UnmatchedProjectsPage() {
       </SectionCard>
 
       <SectionCard
-        title="Unmatched participants"
-        description="Participants whose Devpost email did not match a hackOS account."
+        title={t("unmatchedParticipantsTitle")}
+        description={t("unmatchedParticipantsDesc")}
         icon={UserPlusIcon}
       >
         <div className="mb-4 space-y-2">
-          <Label htmlFor="user-search">User search</Label>
+          <Label htmlFor="user-search">{t("userSearchLabel")}</Label>
           <Input
             id="user-search"
             value={userQuery}
             onChange={(event) => setUserQuery(event.target.value)}
-            placeholder="Search users by name or email"
+            placeholder={t("searchUsersNameEmail")}
           />
         </div>
 
@@ -231,8 +233,8 @@ export default function UnmatchedProjectsPage() {
         ) : rows.length === 0 ? (
           <EmptyState
             icon={UserPlusIcon}
-            title="No unmatched participants"
-            description="All imported Devpost participants are linked to hackOS accounts."
+            title={t("noUnmatchedParticipantsTitle")}
+            description={t("allImportedLinkedDesc")}
           />
         ) : (
           <ul className="space-y-3">
@@ -246,18 +248,18 @@ export default function UnmatchedProjectsPage() {
                       <p className="truncate font-medium">{memberName(row)}</p>
                       <p className="text-muted-foreground truncate text-sm">{row.email}</p>
                       <p className="text-muted-foreground text-xs">
-                        {row.repo_name} · batch {row.import_batch}
+                        {t("repoNameBatchInline", { repo: row.repo_name, batch: row.import_batch })}
                       </p>
                     </div>
                     {row.claim_email_sent_at ? (
-                      <StatusBadge tone="info">Claim email sent</StatusBadge>
+                      <StatusBadge tone="info">{t("claimEmailSent")}</StatusBadge>
                     ) : (
-                      <StatusBadge tone="warning">Unmatched</StatusBadge>
+                      <StatusBadge tone="warning">{t("unmatchedBadge")}</StatusBadge>
                     )}
                   </div>
                   <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto_auto_auto] lg:items-end">
                     <div className="space-y-2">
-                      <Label htmlFor={`user-${key}`}>Link to user</Label>
+                      <Label htmlFor={`user-${key}`}>{t("linkToUserLabel")}</Label>
                       <Select
                         value={selectedUserId}
                         onValueChange={(value) =>
@@ -265,7 +267,7 @@ export default function UnmatchedProjectsPage() {
                         }
                       >
                         <SelectTrigger id={`user-${key}`} className="w-full">
-                          <SelectValue placeholder="Select user" />
+                          <SelectValue placeholder={t("selectUserPlaceholder")} />
                         </SelectTrigger>
                         <SelectContent>
                           {users.map((user) => (
@@ -283,12 +285,12 @@ export default function UnmatchedProjectsPage() {
                         mutate(
                           key,
                           () => linkParticipant(row.repo_id, row.email, Number(selectedUserId)),
-                          "Participant linked.",
+                          t("participantLinked"),
                         )
                       }
                     >
                       <LinkIcon className="size-4" />
-                      Link
+                      {t("link")}
                     </Button>
                     {/* H6: link by adding this email as the account's secondary and
                         triggering the platform's secondary-email verification. */}
@@ -299,12 +301,12 @@ export default function UnmatchedProjectsPage() {
                         mutate(
                           `${key}:secondary`,
                           () => linkSecondaryEmail(row.repo_id, row.email, Number(selectedUserId)),
-                          "Verification email sent to the linked address.",
+                          t("verificationEmailSentLinked"),
                         )
                       }
                     >
                       <UserPlusIcon className="size-4" />
-                      Link Participant to User
+                      {t("linkParticipantToUser")}
                     </Button>
                     <Button
                       variant="outline"
@@ -313,12 +315,12 @@ export default function UnmatchedProjectsPage() {
                         mutate(
                           `${key}:claim`,
                           () => sendClaimEmail(row.repo_id, row.email),
-                          "Claim email queued.",
+                          t("claimEmailQueued"),
                         )
                       }
                     >
                       <MailIcon className="size-4" />
-                      Claim email
+                      {t("claimEmail")}
                     </Button>
                   </div>
                 </li>

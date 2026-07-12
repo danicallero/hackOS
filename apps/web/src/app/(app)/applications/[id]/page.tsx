@@ -83,14 +83,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
-import { pickText } from "@/lib/i18n";
+import { pickText, type Translate, useLocale } from "@/lib/i18n";
 import { useCan, useMe } from "@/lib/session";
 import type { Intolerance, Language } from "@/lib/types";
 import {
   APPLICATION_TYPES,
   type ApplicationForm,
   type ApplicationStats,
-  FIELD_KIND_LABEL,
   FIELD_KINDS,
   FILE_KIND,
   type FieldKind,
@@ -112,6 +111,7 @@ const LOCALES = ["es", "en", "gl"] as const;
 const EMPTY_I18N: I18nText = { en: "", es: "", gl: "" };
 
 export default function ApplicationDetailPage() {
+  const { t } = useLocale();
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
 
@@ -141,10 +141,10 @@ export default function ApplicationDetailPage() {
         setState("ready");
         return;
       }
-      setErrorMsg(err instanceof ApiError ? err.message : "Could not load this form.");
+      setErrorMsg(err instanceof ApiError ? err.message : t("couldNotLoadForm"));
       setState("error");
     }
-  }, [id, canManage]);
+  }, [id, canManage, t]);
 
   // Soft, in-place refresh instead of a hard reload when someone else edits
   // this form, its questions, or a response changes its stats elsewhere.
@@ -179,15 +179,15 @@ export default function ApplicationDetailPage() {
         <BackLink />
         <EmptyState
           icon={ClipboardListIcon}
-          title="Form not found"
-          description={errorMsg || "This application form could not be loaded."}
+          title={t("formNotFound")}
+          description={errorMsg || t("formCouldNotBeLoaded")}
         />
       </div>
     );
   }
 
   const defaultTab = canManage ? "form" : "responses";
-  const w = form ? windowState(form) : null;
+  const w = form ? windowState(form, t) : null;
 
   return (
     <div className="space-y-6">
@@ -196,7 +196,7 @@ export default function ApplicationDetailPage() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-2">
           <h1 className="text-2xl font-semibold tracking-tight">
-            {form ? form.name : `Application #${id}`}
+            {form ? form.name : t("applicationNumber", { id })}
           </h1>
           <div className="flex flex-wrap items-center gap-2">
             {form && (
@@ -210,7 +210,9 @@ export default function ApplicationDetailPage() {
                   </StatusBadge>
                 )}
                 {form.capacity != null && (
-                  <span className="text-muted-foreground text-xs">quota {form.capacity}</span>
+                  <span className="text-muted-foreground text-xs">
+                    {t("quotaInline", { capacity: form.capacity })}
+                  </span>
                 )}
               </>
             )}
@@ -222,8 +224,8 @@ export default function ApplicationDetailPage() {
 
       <Tabs defaultValue={defaultTab}>
         <TabsList className="w-full max-w-md">
-          {canManage && <TabsTrigger value="form">Form</TabsTrigger>}
-          {canReview && <TabsTrigger value="responses">Responses</TabsTrigger>}
+          {canManage && <TabsTrigger value="form">{t("formTabLabel")}</TabsTrigger>}
+          {canReview && <TabsTrigger value="responses">{t("responsesTabLabel")}</TabsTrigger>}
         </TabsList>
 
         {canManage && (
@@ -236,8 +238,8 @@ export default function ApplicationDetailPage() {
             ) : (
               <EmptyState
                 icon={LockIcon}
-                title="Metadata unavailable"
-                description="The form window is closed, so its definition isn't readable here."
+                title={t("metadataUnavailable")}
+                description={t("metadataUnavailableDesc")}
               />
             )}
           </TabsContent>
@@ -254,13 +256,14 @@ export default function ApplicationDetailPage() {
 }
 
 function BackLink() {
+  const { t } = useLocale();
   return (
     <Link
       href="/applications"
       className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition-colors"
     >
       <ArrowLeftIcon className="size-4" />
-      Back to applications
+      {t("backToApplications")}
     </Link>
   );
 }
@@ -268,6 +271,7 @@ function BackLink() {
 // ── Stats strip (H27, logistics:stats) ────────────────────────────────────────
 
 function StatsStrip({ stats }: { stats: ApplicationStats }) {
+  const { t } = useLocale();
   const c = stats.counts_by_status;
   const nonDraft = Object.entries(c)
     .filter(([s]) => s !== "draft")
@@ -281,17 +285,27 @@ function StatsStrip({ stats }: { stats: ApplicationStats }) {
   const declinedSent = c.rejected ?? 0;
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      <StatCard label="Responses" value={String(nonDraft)} icon={UsersIcon} hint="Non-draft" />
       <StatCard
-        label="Accepted"
-        value={String(accepted)}
-        hint={`${acceptedUnsent} unsent · ${acceptedSent} sent`}
+        label={t("responsesLabel")}
+        value={String(nonDraft)}
+        icon={UsersIcon}
+        hint={t("nonDraftHint")}
       />
-      <StatCard label="Confirmed" value={String(c.confirmed ?? 0)} />
       <StatCard
-        label="Declined"
+        label={t("acceptedLabel")}
+        value={String(accepted)}
+        hint={t("unsentSentHint", { unsent: acceptedUnsent, sent: acceptedSent })}
+      />
+      <StatCard label={t("confirmed")} value={String(c.confirmed ?? 0)} />
+      <StatCard
+        label={t("declined")}
         value={String(declined)}
-        hint={`${declinedUnsent} unsent · ${declinedSent} sent · ${c.declined ?? 0} declined · ${c.expired ?? 0} expired`}
+        hint={t("declinedHint", {
+          unsent: declinedUnsent,
+          sent: declinedSent,
+          declined: c.declined ?? 0,
+          expired: c.expired ?? 0,
+        })}
       />
     </div>
   );
@@ -312,8 +326,23 @@ const metaSchema = z.object({
 type MetaValues = z.infer<typeof metaSchema>;
 
 function MetadataCard({ form, onSaved }: { form: ApplicationForm; onSaved: () => Promise<void> }) {
+  const { t } = useLocale();
+  const localizedMetaSchema = useMemo(
+    () =>
+      z.object({
+        name: z.string().min(1, t("required")).max(200),
+        type: z.enum(APPLICATION_TYPES),
+        description: z.string(),
+        active: z.boolean(),
+        open_at: z.string(),
+        close_at: z.string(),
+        capacity: z.string(),
+        confirmation_window_hours: z.string(),
+      }),
+    [t],
+  );
   const rhf = useForm<MetaValues>({
-    resolver: zodResolver(metaSchema),
+    resolver: zodResolver(localizedMetaSchema),
     defaultValues: {
       name: form.name,
       type: form.type,
@@ -329,12 +358,12 @@ function MetadataCard({ form, onSaved }: { form: ApplicationForm; onSaved: () =>
   async function onSubmit(values: MetaValues) {
     const capacityNum = values.capacity.trim() ? Number(values.capacity) : null;
     if (capacityNum !== null && (!Number.isInteger(capacityNum) || capacityNum < 1)) {
-      rhf.setError("capacity", { message: "Must be a positive whole number" });
+      rhf.setError("capacity", { message: t("mustBePositiveWholeNumber") });
       return;
     }
     const windowHours = Number(values.confirmation_window_hours);
     if (!Number.isInteger(windowHours) || windowHours < 1) {
-      rhf.setError("confirmation_window_hours", { message: "Must be a positive whole number" });
+      rhf.setError("confirmation_window_hours", { message: t("mustBePositiveWholeNumber") });
       return;
     }
     try {
@@ -350,9 +379,9 @@ function MetadataCard({ form, onSaved }: { form: ApplicationForm; onSaved: () =>
         confirmation_window_hours: windowHours,
       });
       await onSaved();
-      toast.success("Form updated.");
+      toast.success(t("formUpdated"));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not save the form.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveForm"));
     }
   }
 
@@ -361,16 +390,17 @@ function MetadataCard({ form, onSaved }: { form: ApplicationForm; onSaved: () =>
       <form onSubmit={rhf.handleSubmit(onSubmit)}>
         <SectionCard
           icon={SettingsIcon}
-          title="Form settings"
-          description="Person type, open/close window and quota. Changes are audited."
-          footer={<SubmitButton pending={rhf.formState.isSubmitting}>Save settings</SubmitButton>}
+          title={t("formSettings")}
+          footer={
+            <SubmitButton pending={rhf.formState.isSubmitting}>{t("saveSettings")}</SubmitButton>
+          }
         >
           <FormField
             control={rhf.control}
             name="name"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Name</FormLabel>
+                <FormLabel>{t("name")}</FormLabel>
                 <FormControl>
                   <Input {...field} />
                 </FormControl>
@@ -383,7 +413,7 @@ function MetadataCard({ form, onSaved }: { form: ApplicationForm; onSaved: () =>
             name="type"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Person type</FormLabel>
+                <FormLabel>{t("personTypeLabel")}</FormLabel>
                 <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
                     <SelectTrigger className="w-full capitalize">
@@ -391,17 +421,15 @@ function MetadataCard({ form, onSaved }: { form: ApplicationForm; onSaved: () =>
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {APPLICATION_TYPES.map((t) => (
-                      <SelectItem key={t} value={t} className="capitalize">
-                        {t}
+                    {APPLICATION_TYPES.map((type) => (
+                      <SelectItem key={type} value={type} className="capitalize">
+                        {type}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
                 {SHIRT_TYPES.includes(field.value) && (
-                  <FormDescription>
-                    Applicants of this type must supply a shirt size.
-                  </FormDescription>
+                  <FormDescription>{t("shirtSizeRequiredDesc")}</FormDescription>
                 )}
                 <FormMessage />
               </FormItem>
@@ -412,9 +440,9 @@ function MetadataCard({ form, onSaved }: { form: ApplicationForm; onSaved: () =>
             name="description"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Description</FormLabel>
+                <FormLabel>{t("descriptionLabel")}</FormLabel>
                 <FormControl>
-                  <Textarea rows={2} placeholder="Shown to applicants (optional)…" {...field} />
+                  <Textarea rows={2} placeholder={t("shownToApplicantsPlaceholder")} {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -426,11 +454,11 @@ function MetadataCard({ form, onSaved }: { form: ApplicationForm; onSaved: () =>
               name="open_at"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Opens</FormLabel>
+                  <FormLabel>{t("colOpens")}</FormLabel>
                   <FormControl>
                     <DateTimeInput value={field.value} onChange={field.onChange} />
                   </FormControl>
-                  <FormDescription>Blank = open now.</FormDescription>
+                  <FormDescription>{t("blankOpenNow")}</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -440,11 +468,11 @@ function MetadataCard({ form, onSaved }: { form: ApplicationForm; onSaved: () =>
               name="close_at"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Closes</FormLabel>
+                  <FormLabel>{t("colCloses")}</FormLabel>
                   <FormControl>
                     <DateTimeInput value={field.value} onChange={field.onChange} />
                   </FormControl>
-                  <FormDescription>Blank = never closes.</FormDescription>
+                  <FormDescription>{t("blankNeverCloses")}</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -456,11 +484,16 @@ function MetadataCard({ form, onSaved }: { form: ApplicationForm; onSaved: () =>
               name="capacity"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Quota</FormLabel>
+                  <FormLabel>{t("colQuota")}</FormLabel>
                   <FormControl>
-                    <Input type="number" min={1} placeholder="Unlimited" {...field} />
+                    <Input
+                      type="number"
+                      min={1}
+                      placeholder={t("unlimitedPlaceholder")}
+                      {...field}
+                    />
                   </FormControl>
-                  <FormDescription>Cap on accepted spots (optional).</FormDescription>
+                  <FormDescription>{t("optionalCapDesc")}</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -470,11 +503,11 @@ function MetadataCard({ form, onSaved }: { form: ApplicationForm; onSaved: () =>
               name="confirmation_window_hours"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Confirm window (h)</FormLabel>
+                  <FormLabel>{t("confirmWindowLabel")}</FormLabel>
                   <FormControl>
                     <Input type="number" min={1} {...field} />
                   </FormControl>
-                  <FormDescription>Hours to confirm an accepted spot.</FormDescription>
+                  <FormDescription>{t("hoursToConfirmDesc")}</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -486,8 +519,8 @@ function MetadataCard({ form, onSaved }: { form: ApplicationForm; onSaved: () =>
             render={({ field }) => (
               <FormItem className="flex items-center justify-between gap-4">
                 <div className="space-y-0.5">
-                  <FormLabel>Active</FormLabel>
-                  <FormDescription>Inactive forms are closed to new applicants.</FormDescription>
+                  <FormLabel>{t("activeLabel")}</FormLabel>
+                  <FormDescription>{t("inactiveFormsDesc")}</FormDescription>
                 </div>
                 <FormControl>
                   <Switch checked={field.value} onCheckedChange={field.onChange} />
@@ -513,6 +546,7 @@ function newField(index: number): TemplateField {
 }
 
 function QuestionsCard({ form, onSaved }: { form: ApplicationForm; onSaved: () => Promise<void> }) {
+  const { t } = useLocale();
   const [fields, setFields] = useState<TemplateField[]>(form.template);
   const [saving, setSaving] = useState(false);
   const [preview, setPreview] = useState(false);
@@ -552,17 +586,17 @@ function QuestionsCard({ form, onSaved }: { form: ApplicationForm; onSaved: () =
   function validate(): string | null {
     const seen = new Set<string>();
     for (const f of fields) {
-      if (!f.key.trim()) return "Every question needs a key.";
-      if (!/^[a-zA-Z0-9_.-]+$/.test(f.key)) return `Key "${f.key}" must be alphanumeric/._-`;
-      if (seen.has(f.key)) return `Duplicate key "${f.key}".`;
+      if (!f.key.trim()) return t("everyQuestionNeedsKey");
+      if (!/^[a-zA-Z0-9_.-]+$/.test(f.key)) return t("keyMustBeAlphanumeric", { key: f.key });
+      if (seen.has(f.key)) return t("duplicateKey", { key: f.key });
       seen.add(f.key);
       if (OPTION_KINDS.includes(f.kind)) {
         const opts = f.options ?? [];
-        if (opts.length === 0) return `"${f.key}" needs at least one option.`;
+        if (opts.length === 0) return t("needsAtLeastOneOption", { key: f.key });
         const optSeen = new Set<string>();
         for (const o of opts) {
-          if (!o.value.trim()) return `"${f.key}" has an option with no value.`;
-          if (optSeen.has(o.value)) return `"${f.key}" has duplicate option "${o.value}".`;
+          if (!o.value.trim()) return t("optionWithNoValue", { key: f.key });
+          if (optSeen.has(o.value)) return t("duplicateOption", { key: f.key, value: o.value });
           optSeen.add(o.value);
         }
       }
@@ -598,9 +632,9 @@ function QuestionsCard({ form, onSaved }: { form: ApplicationForm; onSaved: () =
         })),
       });
       await onSaved();
-      toast.success("Questions saved.");
+      toast.success(t("questionsSaved"));
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "Could not save the questions.");
+      toast.error(e instanceof ApiError ? e.message : t("couldNotSaveQuestions"));
     } finally {
       setSaving(false);
     }
@@ -609,8 +643,7 @@ function QuestionsCard({ form, onSaved }: { form: ApplicationForm; onSaved: () =
   return (
     <SectionCard
       icon={ListChecksIcon}
-      title="Questions"
-      description="Fields applicants fill in, in order. Labels carry all three locales (es/en/gl)."
+      title={t("questions")}
       action={
         <div className="flex gap-2">
           <Button
@@ -621,11 +654,11 @@ function QuestionsCard({ form, onSaved }: { form: ApplicationForm; onSaved: () =
             disabled={fields.length === 0}
           >
             <EyeIcon />
-            Preview
+            {t("preview")}
           </Button>
           <Button type="button" variant="outline" size="sm" onClick={add}>
             <PlusIcon />
-            Add question
+            {t("addQuestion")}
           </Button>
           <FormPreviewModal
             open={preview}
@@ -637,15 +670,15 @@ function QuestionsCard({ form, onSaved }: { form: ApplicationForm; onSaved: () =
       }
       footer={
         <SubmitButton type="button" pending={saving} onClick={save}>
-          Save questions
+          {t("saveQuestions")}
         </SubmitButton>
       }
     >
       {fields.length === 0 ? (
         <EmptyState
           icon={ListChecksIcon}
-          title="No questions yet"
-          description="Add fields applicants will answer. Name, email and logistics are collected separately."
+          title={t("noQuestionsYet")}
+          description={t("noQuestionsYetDesc")}
         />
       ) : (
         <div className="space-y-4">
@@ -680,13 +713,11 @@ function FormPreviewModal({
   name: string;
   fields: TemplateField[];
 }) {
+  const { t } = useLocale();
   return (
-    <Modal open={open} onOpenChange={onOpenChange} title={`Preview — ${name}`} size="lg">
+    <Modal open={open} onOpenChange={onOpenChange} title={t("previewTitle", { name })} size="lg">
       <div className="space-y-4">
-        <p className="text-muted-foreground text-sm">
-          This is how applicants see the form (Spanish labels shown). Name, email and logistics are
-          collected separately.
-        </p>
+        <p className="text-muted-foreground text-sm">{t("previewIntro")}</p>
         {fields.map((f) => {
           const label = pickText(f.label, "es") || f.key;
           const opts = f.options ?? [];
@@ -697,15 +728,15 @@ function FormPreviewModal({
                 {f.required && <span className="text-destructive"> *</span>}
               </Label>
               {f.kind === "textarea" ? (
-                <Textarea disabled rows={2} placeholder="Applicant's answer" />
+                <Textarea disabled rows={2} placeholder={t("applicantsAnswerPlaceholder")} />
               ) : f.kind === "checkbox" ? (
                 <div className="text-muted-foreground flex items-center gap-2 text-sm">
-                  <input type="checkbox" disabled /> Yes / No
+                  <input type="checkbox" disabled /> {t("yesNoText")}
                 </div>
               ) : f.kind === "select" || f.kind === "multiselect" ? (
                 <div className="flex flex-wrap gap-1.5">
                   {opts.length === 0 ? (
-                    <span className="text-muted-foreground text-sm">No options defined</span>
+                    <span className="text-muted-foreground text-sm">{t("noOptionsDefined")}</span>
                   ) : (
                     opts.map((o) => (
                       <span
@@ -717,7 +748,7 @@ function FormPreviewModal({
                     ))
                   )}
                   {f.kind === "multiselect" && (
-                    <span className="text-muted-foreground text-xs">(choose any)</span>
+                    <span className="text-muted-foreground text-xs">{t("chooseAnyHint")}</span>
                   )}
                 </div>
               ) : (
@@ -726,12 +757,12 @@ function FormPreviewModal({
                   type={f.kind === "number" ? "number" : f.kind === "date" ? "date" : "text"}
                   placeholder={
                     f.kind === "file-url"
-                      ? "https://… (link)"
+                      ? t("linkPlaceholder")
                       : f.kind === "file"
-                        ? "File upload"
+                        ? t("fileUploadPlaceholder")
                         : f.kind === "university"
-                          ? "University picker"
-                          : "Applicant's answer"
+                          ? t("universityPickerPlaceholder")
+                          : t("applicantsAnswerPlaceholder")
                   }
                 />
               )}
@@ -741,6 +772,22 @@ function FormPreviewModal({
       </div>
     </Modal>
   );
+}
+
+function fieldKindLabel(kind: FieldKind, t: Translate): string {
+  const map: Record<FieldKind, string> = {
+    text: t("fieldKindText"),
+    textarea: t("fieldKindTextarea"),
+    select: t("fieldKindSelect"),
+    multiselect: t("fieldKindMultiselect"),
+    checkbox: t("fieldKindCheckbox"),
+    date: t("fieldKindDate"),
+    number: t("fieldKindNumber"),
+    "file-url": t("fieldKindFileUrl"),
+    file: t("fieldKindFile"),
+    university: t("fieldKindUniversity"),
+  };
+  return map[kind];
 }
 
 function FieldEditor({
@@ -760,6 +807,7 @@ function FieldEditor({
   onMove: (dir: -1 | 1) => void;
   onRemove: () => void;
 }) {
+  const { t } = useLocale();
   const setLabel = (loc: (typeof LOCALES)[number], val: string) =>
     onChange({ label: { ...field.label, [loc]: val } });
 
@@ -779,7 +827,7 @@ function FieldEditor({
             onClick={() => onMove(-1)}
           >
             <ArrowUpIcon className="size-4" />
-            <span className="sr-only">Move up</span>
+            <span className="sr-only">{t("moveUp")}</span>
           </Button>
           <Button
             type="button"
@@ -790,7 +838,7 @@ function FieldEditor({
             onClick={() => onMove(1)}
           >
             <ArrowDownIcon className="size-4" />
-            <span className="sr-only">Move down</span>
+            <span className="sr-only">{t("moveDown")}</span>
           </Button>
           <Button
             type="button"
@@ -800,14 +848,14 @@ function FieldEditor({
             onClick={onRemove}
           >
             <Trash2Icon className="size-4" />
-            <span className="sr-only">Remove</span>
+            <span className="sr-only">{t("removeAction")}</span>
           </Button>
         </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label className="text-muted-foreground text-xs uppercase">Key</Label>
+          <Label className="text-muted-foreground text-xs uppercase">{t("fieldKeyLabel")}</Label>
           <Input
             value={field.key}
             onChange={(e) => onChange({ key: e.target.value })}
@@ -815,7 +863,7 @@ function FieldEditor({
           />
         </div>
         <div className="space-y-1.5">
-          <Label className="text-muted-foreground text-xs uppercase">Kind</Label>
+          <Label className="text-muted-foreground text-xs uppercase">{t("kindLabel")}</Label>
           <Select value={field.kind} onValueChange={(v) => onKind(v as FieldKind)}>
             <SelectTrigger className="w-full">
               <SelectValue />
@@ -823,7 +871,7 @@ function FieldEditor({
             <SelectContent>
               {FIELD_KINDS.map((k) => (
                 <SelectItem key={k} value={k}>
-                  {FIELD_KIND_LABEL[k]}
+                  {fieldKindLabel(k, t)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -832,7 +880,7 @@ function FieldEditor({
       </div>
 
       <div className="space-y-2">
-        <Label className="text-muted-foreground text-xs uppercase">Label</Label>
+        <Label className="text-muted-foreground text-xs uppercase">{t("fieldLabelLabel")}</Label>
         <div className="grid gap-2 sm:grid-cols-3">
           {LOCALES.map((loc) => (
             <div key={loc} className="space-y-1">
@@ -860,7 +908,7 @@ function FieldEditor({
           id={`required-${index}`}
         />
         <Label htmlFor={`required-${index}`} className="text-sm">
-          Required
+          {t("required")}
         </Label>
       </div>
     </div>
@@ -874,6 +922,7 @@ function OptionsEditor({
   options: NonNullable<TemplateField["options"]>;
   onChange: (options: NonNullable<TemplateField["options"]>) => void;
 }) {
+  const { t } = useLocale();
   const update = (i: number, patch: Partial<{ value: string; label: I18nText }>) =>
     onChange(options.map((o, idx) => (idx === i ? { ...o, ...patch } : o)));
   const add = () => onChange([...options, { value: "", label: { ...EMPTY_I18N } }]);
@@ -882,16 +931,14 @@ function OptionsEditor({
   return (
     <div className="border-border space-y-3 rounded-md border border-dashed p-3">
       <div className="flex items-center justify-between">
-        <Label className="text-muted-foreground text-xs uppercase">Options</Label>
+        <Label className="text-muted-foreground text-xs uppercase">{t("optionsLabel")}</Label>
         <Button type="button" variant="ghost" size="sm" onClick={add}>
           <PlusIcon className="size-3.5" />
-          Add option
+          {t("addOption")}
         </Button>
       </div>
       {options.length === 0 && (
-        <p className="text-muted-foreground text-xs">
-          Add at least one option for a choice question.
-        </p>
+        <p className="text-muted-foreground text-xs">{t("addAtLeastOneOptionDesc")}</p>
       )}
       {options.map((opt, i) => (
         <div
@@ -900,7 +947,7 @@ function OptionsEditor({
           className="grid items-end gap-2 sm:grid-cols-[8rem_1fr_1fr_1fr_auto]"
         >
           <div className="space-y-1">
-            <span className="text-muted-foreground text-[10px] uppercase">value</span>
+            <span className="text-muted-foreground text-[10px] uppercase">{t("valueLabel")}</span>
             <Input
               value={opt.value}
               onChange={(e) => update(i, { value: e.target.value })}
@@ -925,7 +972,7 @@ function OptionsEditor({
             onClick={() => remove(i)}
           >
             <Trash2Icon className="size-4" />
-            <span className="sr-only">Remove option</span>
+            <span className="sr-only">{t("removeOption")}</span>
           </Button>
         </div>
       ))}
@@ -941,10 +988,13 @@ function FileRestrictionsEditor({
   field: TemplateField;
   onChange: (patch: Partial<TemplateField>) => void;
 }) {
+  const { t } = useLocale();
   return (
     <div className="border-border grid gap-4 rounded-md border border-dashed p-3 sm:grid-cols-2">
       <div className="space-y-1.5">
-        <Label className="text-muted-foreground text-xs uppercase">Allowed file types</Label>
+        <Label className="text-muted-foreground text-xs uppercase">
+          {t("allowedFileTypesLabel")}
+        </Label>
         <Input
           value={(field.allowed_file_types ?? []).join(", ")}
           onChange={(e) =>
@@ -957,12 +1007,10 @@ function FileRestrictionsEditor({
           }
           placeholder=".pdf, .png, .jpg"
         />
-        <p className="text-muted-foreground text-xs">
-          Comma-separated extensions. Blank = pdf/doc/images.
-        </p>
+        <p className="text-muted-foreground text-xs">{t("allowedFileTypesDesc")}</p>
       </div>
       <div className="space-y-1.5">
-        <Label className="text-muted-foreground text-xs uppercase">Max size (MB)</Label>
+        <Label className="text-muted-foreground text-xs uppercase">{t("maxSizeMbLabel")}</Label>
         <Input
           type="number"
           min={1}
@@ -972,7 +1020,7 @@ function FileRestrictionsEditor({
           }
           placeholder="10"
         />
-        <p className="text-muted-foreground text-xs">Blank = 10 MB.</p>
+        <p className="text-muted-foreground text-xs">{t("blankMax10MbDesc")}</p>
       </div>
     </div>
   );
@@ -983,6 +1031,7 @@ function FileRestrictionsEditor({
 const ALL = "__all__";
 
 function ResponsesTab({ id, template }: { id: number; template: TemplateField[] | null }) {
+  const { t } = useLocale();
   const canDecide = useCan(CAPABILITIES.APPLICATIONS_DECIDE);
   const [rows, setRows] = useState<ResponseRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1008,11 +1057,11 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
       setRows(responses);
       setSelectedIds(new Set());
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not load responses.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadResponses"));
     } finally {
       setLoading(false);
     }
-  }, [id, statusFilter, search]);
+  }, [id, statusFilter, search, t]);
 
   // Soft, in-place refresh instead of a hard reload when a response changes
   // (submitted, reviewed, decided) elsewhere.
@@ -1045,7 +1094,7 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
   const columns: Column<ResponseRow>[] = [
     {
       id: "applicant",
-      header: "Applicant",
+      header: t("applicantColumn"),
       sortValue: (r) => (r.name ?? r.email).toLowerCase(),
       cell: (r) => (
         <div className="space-y-0.5">
@@ -1056,21 +1105,21 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
     },
     {
       id: "status",
-      header: "Status",
+      header: t("statusColumn"),
       sortValue: (r) => r.status,
       cell: (r) => (
         <StatusBadge tone={statusTone(r.status)} className="capitalize">
           {r.status === "accepted_internal"
-            ? "accepted (unsent)"
+            ? t("acceptedUnsentStatus")
             : r.status === "rejected_internal"
-              ? "rejected (unsent)"
+              ? t("rejectedUnsentStatus")
               : r.status}
         </StatusBadge>
       ),
     },
     {
       id: "score",
-      header: "Score",
+      header: t("scoreColumn"),
       align: "right",
       sortValue: (r) => Number(r.avg_score ?? -1),
       cell: (r) => (
@@ -1084,7 +1133,7 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
     },
     {
       id: "submitted",
-      header: "Submitted",
+      header: t("submittedColumn"),
       align: "right",
       sortValue: (r) => r.submitted_at ?? "",
       cell: (r) => (
@@ -1102,12 +1151,14 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
       // partial batch is no longer silent (previously the flaky-looking case).
       const skipped = result?.skipped ?? [];
       if (skipped.length > 0) {
-        toast.warning(`${label} ${skipped.length} skipped (${skipped[0].reason}).`);
+        toast.warning(
+          t("batchSkipped", { label, count: skipped.length, reason: skipped[0].reason }),
+        );
       } else {
         toast.success(label);
       }
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Batch action failed.");
+      toast.error(err instanceof ApiError ? err.message : t("batchActionFailed"));
     } finally {
       setBatchBusy(false);
     }
@@ -1124,15 +1175,15 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by name or email…"
+          placeholder={t("searchByNameOrEmailPlaceholder")}
           className="h-9 max-w-xs"
         />
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="h-9 w-40 capitalize">
-            <SelectValue placeholder="All statuses" />
+            <SelectValue placeholder={t("allStatuses")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={ALL}>All statuses</SelectItem>
+            <SelectItem value={ALL}>{t("allStatuses")}</SelectItem>
             {RESPONSE_STATUSES.map((s) => (
               <SelectItem key={s} value={s} className="capitalize">
                 {s}
@@ -1143,14 +1194,16 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
         {canDecide && (
           <Button className="ml-auto" variant="outline" onClick={() => setSendOpen(true)}>
             <SendIcon />
-            Send decisions
+            {t("sendDecisions")}
           </Button>
         )}
       </div>
 
       {canDecide && selectedIds.size > 0 && (
         <div className="flex items-center gap-2 rounded-lg border p-3">
-          <span className="text-sm font-medium">{selectedIds.size} selected</span>
+          <span className="text-sm font-medium">
+            {t("selectedCount", { count: selectedIds.size })}
+          </span>
           <div className="ml-auto flex flex-wrap gap-2">
             {/* Primary: decide + send. Everything else lives under "More" to keep
                 the bar uncluttered. */}
@@ -1158,13 +1211,13 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
               <DropdownMenuTrigger asChild>
                 <Button size="sm" variant="outline" disabled={batchBusy}>
                   <CheckCheckIcon />
-                  Decide
+                  {t("decide")}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem
                   onClick={() =>
-                    batchAction("Decisions applied.", () =>
+                    batchAction(t("decisionsApplied"), () =>
                       api.post("/api/responses/batch/decide", {
                         response_ids: selectedArr.map((r) => r.id),
                         decision: "accepted",
@@ -1172,11 +1225,11 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
                     )
                   }
                 >
-                  Accept
+                  {t("accept")}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() =>
-                    batchAction("Decisions applied.", () =>
+                    batchAction(t("decisionsApplied"), () =>
                       api.post("/api/responses/batch/decide", {
                         response_ids: selectedArr.map((r) => r.id),
                         decision: "rejected",
@@ -1184,7 +1237,7 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
                     )
                   }
                 >
-                  Reject
+                  {t("reject")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -1193,7 +1246,7 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
               variant="outline"
               disabled={batchBusy}
               onClick={() =>
-                batchAction("Decisions sent.", () =>
+                batchAction(t("decisionsSent"), () =>
                   api.post("/api/responses/batch/send-decision", {
                     response_ids: selectedArr.map((r) => r.id),
                   }),
@@ -1201,20 +1254,20 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
               }
             >
               <SendIcon />
-              Send
+              {t("send")}
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button size="sm" variant="outline" disabled={batchBusy}>
                   <RotateCcwIcon />
-                  More
+                  {t("more")}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuLabel>Revert</DropdownMenuLabel>
+                <DropdownMenuLabel>{t("revert")}</DropdownMenuLabel>
                 <DropdownMenuItem
                   onClick={() =>
-                    batchAction("Reverted to accepted (internal).", () =>
+                    batchAction(t("revertedToAcceptedInternal"), () =>
                       api.post("/api/responses/batch/revert-decision", {
                         response_ids: selectedArr.map((r) => r.id),
                         decision: "accepted",
@@ -1222,11 +1275,11 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
                     )
                   }
                 >
-                  To accepted (unsend)
+                  {t("toAcceptedUnsend")}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() =>
-                    batchAction("Reverted to rejected (internal).", () =>
+                    batchAction(t("revertedToRejectedInternal"), () =>
                       api.post("/api/responses/batch/revert-decision", {
                         response_ids: selectedArr.map((r) => r.id),
                         decision: "rejected",
@@ -1234,11 +1287,11 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
                     )
                   }
                 >
-                  To rejected (unsend)
+                  {t("toRejectedUnsend")}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() =>
-                    batchAction("Moved back to review.", () =>
+                    batchAction(t("movedBackToReview"), () =>
                       api.post("/api/responses/batch/revert-decision", {
                         response_ids: selectedArr.map((r) => r.id),
                         decision: "review",
@@ -1246,31 +1299,31 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
                     )
                   }
                 >
-                  Back to review
+                  {t("backToReview")}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={() =>
-                    batchAction("Re-accepted.", () =>
+                    batchAction(t("reaccepted"), () =>
                       api.post("/api/responses/batch/re-accept", {
                         response_ids: selectedArr.map((r) => r.id),
                       }),
                     )
                   }
                 >
-                  Re-accept (declined/expired)
+                  {t("reacceptDeclinedExpired")}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   variant="destructive"
                   onClick={() =>
-                    batchAction("Spots revoked.", () =>
+                    batchAction(t("spotsRevoked"), () =>
                       api.post("/api/responses/batch/revoke-spot", {
                         response_ids: selectedArr.map((r) => r.id),
                       }),
                     )
                   }
                 >
-                  Revoke spot
+                  {t("revokeSpot")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -1281,7 +1334,7 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
               onClick={() => setSelectedIds(new Set())}
             >
               <XIcon />
-              Clear
+              {t("clear")}
             </Button>
           </div>
         </div>
@@ -1299,11 +1352,11 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
         pageSize={15}
         empty={{
           icon: FileTextIcon,
-          title: "No responses",
+          title: t("noResponsesTitle"),
           description:
             statusFilter === ALL && !search.trim()
-              ? "Submissions appear here once applicants complete the form."
-              : "No responses match this filter.",
+              ? t("submissionsAppearHereDesc")
+              : t("noResponsesMatchFilterDesc"),
         }}
       />
 
@@ -1331,12 +1384,13 @@ function renderAnswer(
   value: unknown,
   universities: { id: number; name: string }[],
   lang: Language,
+  t: Translate,
 ): string {
   if (value === null || value === undefined || value === "") return "—";
   if (Array.isArray(value) && value.length === 0) return "—";
   switch (field.kind) {
     case "checkbox":
-      return value === true ? "Yes" : "No";
+      return value === true ? t("yesLabel") : t("noLabel");
     case "select": {
       const opt = field.options?.find((o) => o.value === String(value));
       return opt ? pickText(opt.label, lang) : String(value);
@@ -1386,6 +1440,7 @@ function AnswerValue({
   universities: { id: number; name: string }[];
   lang: Language;
 }) {
+  const { t } = useLocale();
   // A file-url is a link the applicant typed: show the URL itself so staff can
   // read and click through to it. A file is a private upload key with no
   // meaningful text, so it stays a generic "View file" link.
@@ -1404,7 +1459,7 @@ function AnswerValue({
   if (field.kind === "file" && typeof value === "string" && value) {
     return <FileLink value={value} />;
   }
-  const rendered = renderAnswer(field, value, universities, lang);
+  const rendered = renderAnswer(field, value, universities, lang, t);
   return <span className="whitespace-pre-wrap">{rendered}</span>;
 }
 
@@ -1421,6 +1476,7 @@ export function ReviewModal({
   onClose: () => void;
   onChanged: () => Promise<void>;
 }) {
+  const { t } = useLocale();
   const canReview = useCan(CAPABILITIES.APPLICATIONS_REVIEW);
   const canDecide = useCan(CAPABILITIES.APPLICATIONS_DECIDE);
   const canOverride = useCan(CAPABILITIES.APPLICATIONS_CONFIRM_OVERRIDE);
@@ -1479,9 +1535,9 @@ export function ReviewModal({
       await api.put(`/api/responses/${response.id}`, { responses: editValues });
       await onChanged();
       setEditing(false);
-      toast.success("Answers updated.");
+      toast.success(t("answersUpdated"));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not save the answers.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveAnswers"));
     } finally {
       setSavingEdit(false);
     }
@@ -1494,7 +1550,7 @@ export function ReviewModal({
       await onChanged();
       toast.success(label);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Action failed.");
+      toast.error(err instanceof ApiError ? err.message : t("actionFailed"));
     } finally {
       setBusy(false);
     }
@@ -1508,9 +1564,9 @@ export function ReviewModal({
         staff_notes: staffNotes.trim() || null,
       });
       await onChanged();
-      toast.success("Staff notes saved.");
+      toast.success(t("staffNotesSaved"));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not save notes.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveNotes"));
     } finally {
       setSavingNotes(false);
     }
@@ -1519,7 +1575,7 @@ export function ReviewModal({
   async function saveMyReview() {
     const scoreNum = myScore.trim() ? Number(myScore) : null;
     if (scoreNum !== null && (!Number.isInteger(scoreNum) || scoreNum < 0 || scoreNum > 100)) {
-      toast.error("Score must be a whole number between 0 and 100.");
+      toast.error(t("scoreMustBeWhole"));
       return;
     }
     setSavingReview(true);
@@ -1530,9 +1586,9 @@ export function ReviewModal({
         notes: myNotes.trim() || null,
       });
       await onChanged();
-      toast.success("Your review was saved.");
+      toast.success(t("reviewSaved"));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not save your review.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveReview"));
     } finally {
       setSavingReview(false);
     }
@@ -1555,18 +1611,18 @@ export function ReviewModal({
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge tone={statusTone(st)} className="capitalize">
             {st === "accepted_internal"
-              ? "accepted (unsent)"
+              ? t("acceptedUnsentStatus")
               : st === "rejected_internal"
-                ? "rejected (unsent)"
+                ? t("rejectedUnsentStatus")
                 : st}
           </StatusBadge>
           <span className="text-muted-foreground text-xs">
             avg {fmtScore(response.avg_score)} · {response.review_count}{" "}
-            {response.review_count === 1 ? "review" : "reviews"}
+            {response.review_count === 1 ? t("reviewWord") : t("reviewsWord")}
           </span>
           {response.shirt_size && (
             <StatusBadge tone="neutral" dot={false}>
-              T-shirt {response.shirt_size}
+              {t("tshirtSize", { size: response.shirt_size })}
             </StatusBadge>
           )}
         </div>
@@ -1574,11 +1630,11 @@ export function ReviewModal({
         {/* Answers */}
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-medium">Answers</p>
+            <p className="text-sm font-medium">{t("answersLabel")}</p>
             {canEdit && template && template.length > 0 && !editing && (
               <Button size="sm" variant="outline" onClick={startEdit}>
                 <PencilIcon />
-                Edit answers
+                {t("editAnswers")}
               </Button>
             )}
           </div>
@@ -1602,11 +1658,11 @@ export function ReviewModal({
                   disabled={savingEdit}
                   onClick={() => setEditing(false)}
                 >
-                  Cancel
+                  {t("cancel")}
                 </Button>
                 <Button size="sm" disabled={savingEdit} onClick={saveEdit}>
                   {savingEdit && <Spinner />}
-                  Save answers
+                  {t("saveAnswers")}
                 </Button>
               </div>
             </div>
@@ -1642,19 +1698,19 @@ export function ReviewModal({
               ))}
             </div>
           ) : (
-            <p className="text-muted-foreground text-sm">No answers recorded.</p>
+            <p className="text-muted-foreground text-sm">{t("noAnswersRecorded")}</p>
           )}
         </div>
 
         {/* Dietary info (from user row) */}
         {(response.food_intolerances?.length > 0 || response.food_intolerance_notes) && (
           <div className="space-y-3">
-            <p className="text-sm font-medium">Dietary info</p>
+            <p className="text-sm font-medium">{t("dietaryInfo")}</p>
             <div className="divide-border divide-y">
               {response.food_intolerances?.length > 0 && (
                 <div className="py-3 first:pt-0">
                   <p className="text-muted-foreground mb-1 text-xs font-medium uppercase tracking-wide">
-                    Dietary restrictions
+                    {t("dietaryRestrictions")}
                   </p>
                   <div className="flex flex-wrap gap-1.5">
                     {response.food_intolerances.map((id) => {
@@ -1671,7 +1727,7 @@ export function ReviewModal({
               {response.food_intolerance_notes && (
                 <div className="py-3 first:pt-0">
                   <p className="text-muted-foreground mb-1 text-xs font-medium uppercase tracking-wide">
-                    Dietary notes
+                    {t("dietaryNotes")}
                   </p>
                   <p className="text-sm whitespace-pre-wrap">{response.food_intolerance_notes}</p>
                 </div>
@@ -1683,17 +1739,17 @@ export function ReviewModal({
         {/* Shared staff notes (H13) */}
         {canReview && (
           <div className="space-y-2">
-            <Label className="text-sm font-medium">Shared staff notes</Label>
+            <Label className="text-sm font-medium">{t("sharedStaffNotes")}</Label>
             <Textarea
               rows={2}
               value={staffNotes}
               onChange={(e) => setStaffNotes(e.target.value)}
-              placeholder="Visible to all reviewers…"
+              placeholder={t("visibleToAllReviewersPlaceholder")}
             />
             <div className="flex justify-end">
               <Button size="sm" variant="outline" disabled={savingNotes} onClick={saveStaffNotes}>
                 {savingNotes && <Spinner />}
-                Save notes
+                {t("saveNotes")}
               </Button>
             </div>
           </div>
@@ -1702,14 +1758,13 @@ export function ReviewModal({
         {/* This reviewer's score (H13) */}
         {canScore && (
           <div className="border-border space-y-3 rounded-lg border p-4">
-            <p className="text-sm font-medium">Your review</p>
-            <p className="text-muted-foreground text-xs">
-              Write-only: the API has no per-reviewer read, so this starts blank and overwrites your
-              previous score on save.
-            </p>
+            <p className="text-sm font-medium">{t("yourReview")}</p>
+            <p className="text-muted-foreground text-xs">{t("reviewWriteOnlyHint")}</p>
             <div className="grid gap-3 sm:grid-cols-[8rem_1fr]">
               <div className="space-y-1.5">
-                <Label className="text-muted-foreground text-xs uppercase">Score (0–100)</Label>
+                <Label className="text-muted-foreground text-xs uppercase">
+                  {t("scoreRangeLabel")}
+                </Label>
                 <Input
                   type="number"
                   min={0}
@@ -1719,14 +1774,14 @@ export function ReviewModal({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-muted-foreground text-xs uppercase">Notes</Label>
+                <Label className="text-muted-foreground text-xs uppercase">{t("notesLabel")}</Label>
                 <Input value={myNotes} onChange={(e) => setMyNotes(e.target.value)} />
               </div>
             </div>
             <div className="flex justify-end">
               <Button size="sm" disabled={savingReview} onClick={saveMyReview}>
                 {savingReview && <Spinner />}
-                Save my review
+                {t("saveMyReview")}
               </Button>
             </div>
           </div>
@@ -1735,7 +1790,7 @@ export function ReviewModal({
         {/* Decision controls (H14) */}
         {(canReview || canDecide) && (
           <div className="border-border space-y-3 rounded-lg border p-4">
-            <p className="text-sm font-medium">Decision</p>
+            <p className="text-sm font-medium">{t("decisionLabel")}</p>
             <div className="flex flex-wrap gap-2">
               {canDecide && st === "review" && (
                 <>
@@ -1743,24 +1798,24 @@ export function ReviewModal({
                     size="sm"
                     disabled={busy}
                     onClick={() =>
-                      run("Accepted (unsent).", () =>
+                      run(t("acceptedUnsentToast"), () =>
                         api.post(`/api/responses/${response.id}/decide`, { decision: "accepted" }),
                       )
                     }
                   >
-                    Accept
+                    {t("accept")}
                   </Button>
                   <Button
                     size="sm"
                     variant="destructive"
                     disabled={busy}
                     onClick={() =>
-                      run("Rejected (unsent).", () =>
+                      run(t("rejectedUnsentToast"), () =>
                         api.post(`/api/responses/${response.id}/decide`, { decision: "rejected" }),
                       )
                     }
                   >
-                    Reject
+                    {t("reject")}
                   </Button>
                 </>
               )}
@@ -1770,27 +1825,27 @@ export function ReviewModal({
                     size="sm"
                     disabled={busy}
                     onClick={() =>
-                      run("Decision sent.", () =>
+                      run(t("decisionSent"), () =>
                         api.post(`/api/responses/${response.id}/send-decision`),
                       )
                     }
                   >
                     <SendIcon />
-                    Send decision
+                    {t("sendDecision")}
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
                     disabled={busy}
                     onClick={() =>
-                      run("Moved back to review.", () =>
+                      run(t("movedBackToReview"), () =>
                         api.post(`/api/responses/${response.id}/revert-decision`, {
                           decision: "review",
                         }),
                       )
                     }
                   >
-                    Back to review
+                    {t("backToReview")}
                   </Button>
                 </>
               )}
@@ -1800,27 +1855,27 @@ export function ReviewModal({
                     size="sm"
                     disabled={busy}
                     onClick={() =>
-                      run("Decision sent.", () =>
+                      run(t("decisionSent"), () =>
                         api.post(`/api/responses/${response.id}/send-decision`),
                       )
                     }
                   >
                     <SendIcon />
-                    Send decision
+                    {t("sendDecision")}
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
                     disabled={busy}
                     onClick={() =>
-                      run("Moved back to review.", () =>
+                      run(t("movedBackToReview"), () =>
                         api.post(`/api/responses/${response.id}/revert-decision`, {
                           decision: "review",
                         }),
                       )
                     }
                   >
-                    Back to review
+                    {t("backToReview")}
                   </Button>
                 </>
               )}
@@ -1830,12 +1885,12 @@ export function ReviewModal({
                   variant="outline"
                   disabled={busy}
                   onClick={() =>
-                    run("Decision resent.", () =>
+                    run(t("decisionResent"), () =>
                       api.post(`/api/responses/${response.id}/resend-decision`),
                     )
                   }
                 >
-                  Resend
+                  {t("resend")}
                 </Button>
               )}
               {canDecide && (st === "accepted" || st === "rejected") && (
@@ -1844,14 +1899,14 @@ export function ReviewModal({
                   variant="outline"
                   disabled={busy}
                   onClick={() =>
-                    run("Moved back to review.", () =>
+                    run(t("movedBackToReview"), () =>
                       api.post(`/api/responses/${response.id}/revert-decision`, {
                         decision: "review",
                       }),
                     )
                   }
                 >
-                  Back to review
+                  {t("backToReview")}
                 </Button>
               )}
               {canDecide && (st === "rejected" || st === "declined" || st === "expired") && (
@@ -1860,12 +1915,12 @@ export function ReviewModal({
                   variant="outline"
                   disabled={busy}
                   onClick={() =>
-                    run("Re-accepted (unsent).", () =>
+                    run(t("reacceptedUnsent"), () =>
                       api.post(`/api/responses/${response.id}/re-accept`),
                     )
                   }
                 >
-                  Re-accept
+                  {t("reaccept")}
                 </Button>
               )}
               {canDecide && ((st === "accepted" && sent) || st === "confirmed") && (
@@ -1874,12 +1929,12 @@ export function ReviewModal({
                   variant="destructive"
                   disabled={busy}
                   onClick={() =>
-                    run("Spot revoked.", () =>
+                    run(t("spotRevoked"), () =>
                       api.post(`/api/responses/${response.id}/revoke-spot`),
                     )
                   }
                 >
-                  Revoke spot
+                  {t("revokeSpot")}
                 </Button>
               )}
               {canOverride && st === "accepted" && (
@@ -1889,30 +1944,30 @@ export function ReviewModal({
                     variant="outline"
                     disabled={busy}
                     onClick={() =>
-                      run("Spot confirmed.", () =>
+                      run(t("spotConfirmed"), () =>
                         api.post(`/api/responses/${response.id}/confirm`),
                       )
                     }
                   >
-                    Confirm (override)
+                    {t("confirmOverride")}
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
                     disabled={busy}
                     onClick={() =>
-                      run("Spot declined.", () => api.post(`/api/responses/${response.id}/decline`))
+                      run(t("spotDeclined"), () =>
+                        api.post(`/api/responses/${response.id}/decline`),
+                      )
                     }
                   >
-                    Decline (override)
+                    {t("declineOverride")}
                   </Button>
                 </>
               )}
             </div>
             {st === "review" && !canDecide && (
-              <p className="text-muted-foreground text-xs">
-                You need applications:decide to accept or reject.
-              </p>
+              <p className="text-muted-foreground text-xs">{t("needDecideCapability")}</p>
             )}
           </div>
         )}
@@ -1934,6 +1989,7 @@ function SendDecisionsModal({
   onOpenChange: (open: boolean) => void;
   onSent: () => Promise<void>;
 }) {
+  const { t } = useLocale();
   const [includeRejected, setIncludeRejected] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -1950,17 +2006,17 @@ function SendDecisionsModal({
         include_rejected: includeRejected,
       });
       await onSent();
-      const tokenCount = tokens.filter((t) => t.token).length;
+      const tokenCount = tokens.filter((tok) => tok.token).length;
       const msg =
         sent === 0
-          ? "Nothing left to send."
+          ? t("nothingLeftToSend")
           : tokenCount > 0
-            ? `Sent ${sent} decision(s) (${tokenCount} with confirm links).`
-            : `Sent ${sent} decision(s).`;
+            ? t("sentDecisionsWithLinks", { sent, tokenCount })
+            : t("sentDecisions", { sent });
       toast.success(msg);
       onOpenChange(false);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not send decisions.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSendDecisions"));
     } finally {
       setBusy(false);
     }
@@ -1971,26 +2027,24 @@ function SendDecisionsModal({
       open={open}
       onOpenChange={onOpenChange}
       icon={SendIcon}
-      title="Send decisions"
-      description="Emails every unsent decision. Accepted applicants get a spot-confirmation link."
+      title={t("sendDecisions")}
+      description={t("sendDecisionsDesc")}
       footer={
         <>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("cancel")}
           </Button>
           <Button disabled={busy} onClick={send}>
             {busy && <Spinner />}
-            Send now
+            {t("sendNow")}
           </Button>
         </>
       }
     >
       <div className="flex items-center justify-between gap-4">
         <div className="space-y-0.5">
-          <Label className="text-sm">Include rejections</Label>
-          <p className="text-muted-foreground text-xs">
-            Also email applicants who were rejected. Off = accepted only.
-          </p>
+          <Label className="text-sm">{t("includeRejectionsLabel")}</Label>
+          <p className="text-muted-foreground text-xs">{t("includeRejectionsDesc")}</p>
         </div>
         <Switch checked={includeRejected} onCheckedChange={setIncludeRejected} />
       </div>

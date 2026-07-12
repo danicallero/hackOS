@@ -16,6 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export interface Column<T> {
@@ -72,7 +73,7 @@ export function DataTable<T>({
   rowActions,
   onRowClick,
   searchable,
-  searchPlaceholder = "Filter…",
+  searchPlaceholder,
   toolbar,
   pageSize,
   loading,
@@ -82,6 +83,7 @@ export function DataTable<T>({
   selectedIds,
   onSelectionChange,
 }: DataTableProps<T>) {
+  const { t } = useLocale();
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<{ id: string; dir: "asc" | "desc" } | null>(null);
   const [page, setPage] = useState(0);
@@ -148,7 +150,7 @@ export function DataTable<T>({
                 setQuery(e.target.value);
                 setPage(0);
               }}
-              placeholder={searchPlaceholder}
+              placeholder={searchPlaceholder ?? t("filterPlaceholder")}
               className="h-9 max-w-xs"
             />
           )}
@@ -164,7 +166,7 @@ export function DataTable<T>({
                   <Checkbox
                     checked={allSelected}
                     onCheckedChange={toggleAll}
-                    aria-label="Select all"
+                    aria-label={t("selectAll")}
                   />
                 </TableHead>
               )}
@@ -216,7 +218,7 @@ export function DataTable<T>({
                 <TableCell colSpan={colCount} className="p-0">
                   <EmptyState
                     icon={empty?.icon}
-                    title={empty?.title ?? "Nothing to show"}
+                    title={empty?.title ?? t("nothingToShow")}
                     description={empty?.description}
                   />
                 </TableCell>
@@ -236,7 +238,7 @@ export function DataTable<T>({
                         <Checkbox
                           checked={checked}
                           onCheckedChange={() => toggleOne(rowId)}
-                          aria-label="Select row"
+                          aria-label={t("selectRow")}
                         />
                       </TableCell>
                     )}

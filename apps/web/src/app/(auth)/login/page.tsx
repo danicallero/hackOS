@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { signIn } from "@/lib/auth-client";
+import { useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 
 const schema = z.object({
@@ -41,8 +42,14 @@ function LoginInner() {
   const router = useRouter();
   const next = safeNext(useSearchParams().get("next"));
   const { status, refresh } = useSessionContext();
+  const { t } = useLocale();
   const form = useForm<Values>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(
+      z.object({
+        email: z.string().email(t("validEmail")),
+        password: z.string().min(1, t("required")),
+      }),
+    ),
     defaultValues: { email: "", password: "" },
   });
 
@@ -68,8 +75,8 @@ function LoginInner() {
     if (error) {
       const message =
         error.code === "INVALID_EMAIL_OR_PASSWORD" || error.status === 401
-          ? "Incorrect email or password."
-          : (error.message ?? "Could not sign in. Please try again.");
+          ? t("incorrectCredentials")
+          : (error.message ?? t("couldNotSignIn"));
       form.setError("root", { message });
       return;
     }
@@ -86,8 +93,8 @@ function LoginInner() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Welcome back</CardTitle>
-        <CardDescription>Sign in to your hackOS account.</CardDescription>
+        <CardTitle>{t("welcomeBack")}</CardTitle>
+        <CardDescription>{t("signInDescription")}</CardDescription>
       </CardHeader>
       <CardContent>
         <Form {...form}>
@@ -102,7 +109,7 @@ function LoginInner() {
               name="email"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Email</FormLabel>
+                  <FormLabel>{t("email")}</FormLabel>
                   <FormControl>
                     <Input type="email" autoComplete="email" {...field} />
                   </FormControl>
@@ -116,12 +123,12 @@ function LoginInner() {
               render={({ field }) => (
                 <FormItem>
                   <div className="flex items-center justify-between">
-                    <FormLabel>Password</FormLabel>
+                    <FormLabel>{t("password")}</FormLabel>
                     <Link
                       href={forgotHref}
                       className="text-muted-foreground text-xs underline underline-offset-4"
                     >
-                      Forgot password?
+                      {t("forgotPassword")}
                     </Link>
                   </div>
                   <FormControl>
@@ -132,15 +139,15 @@ function LoginInner() {
               )}
             />
             <SubmitButton className="w-full" pending={form.formState.isSubmitting}>
-              Sign in
+              {t("signIn")}
             </SubmitButton>
           </form>
         </Form>
       </CardContent>
       <div className="text-muted-foreground px-6 pb-6 text-center text-sm">
-        New to hackOS?{" "}
+        {t("newToHackos")}{" "}
         <Link href="/signup" className="text-foreground underline underline-offset-4">
-          Create an account
+          {t("createAccount")}
         </Link>
       </div>
     </Card>

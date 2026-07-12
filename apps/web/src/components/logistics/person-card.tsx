@@ -1,14 +1,15 @@
 import { StatusBadge } from "@/components/common/status-badge";
+import { useLocale } from "@/lib/i18n";
 import type { AccreditationLookup, PersonCard, PresenceLookup } from "@/lib/logistics";
 import { personName } from "@/lib/logistics";
 
-export function labelForIntolerance(item: { label: unknown }): string {
+export function labelForIntolerance(item: { label: unknown }, fallback: string): string {
   if (typeof item.label === "string") return item.label;
   if (item.label && typeof item.label === "object") {
     const label = item.label as Record<string, unknown>;
-    return String(label.es ?? label.en ?? label.gl ?? "Intolerance");
+    return String(label.es ?? label.en ?? label.gl ?? fallback);
   }
-  return "Intolerance";
+  return fallback;
 }
 
 /** Shared person card shown at every scanner station (H22, H24, H25, H26). */
@@ -17,40 +18,47 @@ export function PersonCardView({
 }: {
   card: AccreditationLookup | PresenceLookup | PersonCard;
 }) {
-  const intolerances = card.intolerances.map(labelForIntolerance);
+  const { t } = useLocale();
+  const intolerances = card.intolerances.map((item) =>
+    labelForIntolerance(item, t("intoleranceFallback")),
+  );
   return (
     <div className="rounded-lg border p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="font-medium">{personName(card)}</p>
-          <p className="text-muted-foreground text-sm">User #{card.userId}</p>
+          <p className="text-muted-foreground text-sm">
+            {t("userNumberFallback", { id: card.userId })}
+          </p>
         </div>
         {"confirmed" in card && (
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone={card.confirmed ? "success" : "warning"}>
-              {card.confirmed ? "Confirmed" : "Not confirmed"}
+              {card.confirmed ? t("confirmed") : t("notConfirmedBadge")}
             </StatusBadge>
             <StatusBadge tone={card.alreadyAccredited ? "info" : "neutral"}>
-              {card.alreadyAccredited ? `Badge ${card.currentBadge}` : "No badge"}
+              {card.alreadyAccredited
+                ? t("badgeCapitalInline", { badge: card.currentBadge ?? "" })
+                : t("noBadge")}
             </StatusBadge>
           </div>
         )}
         {"present" in card && (
           <StatusBadge tone={card.present ? "success" : "neutral"}>
-            {card.present ? "Currently inside" : "Currently outside"}
+            {card.present ? t("currentlyInside") : t("currentlyOutside")}
           </StatusBadge>
         )}
       </div>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <div>
-          <p className="text-muted-foreground text-xs">Food</p>
+          <p className="text-muted-foreground text-xs">{t("foodLabel")}</p>
           <p className="text-sm">
-            {intolerances.length ? intolerances.join(", ") : "No restrictions"}
+            {intolerances.length ? intolerances.join(", ") : t("noRestrictions")}
           </p>
         </div>
         <div>
-          <p className="text-muted-foreground text-xs">Notes</p>
-          <p className="text-sm">{card.foodIntoleranceNotes || card.notes || "No notes"}</p>
+          <p className="text-muted-foreground text-xs">{t("notesLabel")}</p>
+          <p className="text-sm">{card.foodIntoleranceNotes || card.notes || t("noNotes")}</p>
         </div>
       </div>
     </div>

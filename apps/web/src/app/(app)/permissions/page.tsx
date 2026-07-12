@@ -29,8 +29,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
+import { useLocale } from "@/lib/i18n";
 import type { PermissionGroupDetail, PermissionGroupSummary } from "@/lib/types";
-import { CAPABILITY_OPTIONS, capabilitiesByDomain, prettifyCapability } from "./helpers";
+import { capabilitiesByDomain, capabilityOptions, prettifyCapability } from "./helpers";
 
 // H8: admins manage capability groups. This page lists groups, offers a
 // create-group modal and shows the read-only catalogue of every capability kind.
@@ -44,6 +45,7 @@ const createSchema = z.object({
 type CreateValues = z.infer<typeof createSchema>;
 
 export default function PermissionsPage() {
+  const { t } = useLocale();
   const router = useRouter();
   const [groups, setGroups] = useState<PermissionGroupSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,11 +62,11 @@ export default function PermissionsPage() {
       const rows = await api.get<PermissionGroupSummary[]>("/api/permission-groups");
       setGroups(rows);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not load permission groups.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadPermissionGroups"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   // Soft, in-place refresh instead of a hard reload when another admin
   // creates/edits a permission group elsewhere.
@@ -82,30 +84,30 @@ export default function PermissionsPage() {
         description: values.description || undefined,
         capabilities: values.capabilities,
       });
-      toast.success("Group created.");
+      toast.success(t("groupCreated"));
       setCreateOpen(false);
       form.reset({ name: "", description: "", capabilities: [] });
       router.push(`/permissions/${group.id}`);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not create the group.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotCreateGroup"));
     }
   }
 
   const columns: Column<PermissionGroupSummary>[] = [
     {
       id: "name",
-      header: "Name",
+      header: t("name"),
       cell: (g) => <span className="font-medium">{g.name}</span>,
       sortValue: (g) => g.name,
     },
     {
       id: "description",
-      header: "Description",
+      header: t("descriptionLabel"),
       cell: (g) =>
         g.description ? (
           <span className="text-muted-foreground">{g.description}</span>
         ) : (
-          <span className="text-muted-foreground/60 italic">No description</span>
+          <span className="text-muted-foreground/60 italic">{t("noDescriptionItalic")}</span>
         ),
     },
   ];
@@ -115,19 +117,19 @@ export default function PermissionsPage() {
   return (
     <div className="space-y-8">
       <PageHeader
-        title="Permissions"
-        description="Groups grant sets of capabilities and can include other groups (H8)."
+        title={t("permissions")}
+        description={t("permissionsDesc")}
         actions={
           <Button onClick={() => setCreateOpen(true)}>
-            <PlusIcon /> New group
+            <PlusIcon /> {t("newGroup")}
           </Button>
         }
       />
 
       <SectionCard
         icon={ShieldCheckIcon}
-        title="Permission groups"
-        description="Click a group to edit its capabilities, members and nested groups."
+        title={t("permissionGroupsTitle")}
+        description={t("clickGroupToEditDesc")}
         bodyClassName="p-0"
       >
         <DataTable
@@ -136,21 +138,21 @@ export default function PermissionsPage() {
           getRowId={(g) => String(g.id)}
           loading={loading}
           searchable={(g) => `${g.name} ${g.description ?? ""}`}
-          searchPlaceholder="Filter groups…"
+          searchPlaceholder={t("filterGroupsPlaceholder")}
           pageSize={10}
           onRowClick={(g) => router.push(`/permissions/${g.id}`)}
           empty={{
             icon: ShieldCheckIcon,
-            title: "No permission groups yet",
-            description: "Create a group to start assigning capabilities.",
+            title: t("noPermissionGroupsYetTitle"),
+            description: t("createGroupToStart"),
           }}
         />
       </SectionCard>
 
       <SectionCard
         icon={LayersIcon}
-        title="Capabilities catalogue"
-        description="Every capability kind there is, grouped by domain. Read-only reference."
+        title={t("capabilitiesCatalogueTitle")}
+        description={t("capabilitiesCatalogueDesc")}
       >
         <div className="space-y-5">
           {catalogue.map((group) => (
@@ -162,7 +164,7 @@ export default function PermissionsPage() {
                 {group.capabilities.map((cap) => (
                   <StatusBadge key={cap} tone={cap === "*" ? "brand" : "neutral"} dot={false}>
                     <span className="font-mono">{cap}</span>
-                    <span className="text-muted-foreground">· {prettifyCapability(cap)}</span>
+                    <span className="text-muted-foreground">· {prettifyCapability(cap, t)}</span>
                   </StatusBadge>
                 ))}
               </div>
@@ -175,15 +177,15 @@ export default function PermissionsPage() {
         open={createOpen}
         onOpenChange={setCreateOpen}
         icon={KeyRoundIcon}
-        title="New permission group"
-        description="Give it a name and, optionally, the capabilities it grants."
+        title={t("newPermissionGroupTitle")}
+        description={t("giveNameOptionalCapsDesc")}
         footer={
           <>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>
-              Cancel
+              {t("cancel")}
             </Button>
             <SubmitButton form="create-group-form" pending={form.formState.isSubmitting}>
-              Create group
+              {t("createGroup")}
             </SubmitButton>
           </>
         }
@@ -195,9 +197,9 @@ export default function PermissionsPage() {
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Name</FormLabel>
+                  <FormLabel>{t("name")}</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g. Judges" {...field} />
+                    <Input placeholder={`${t("egPrefix")} Judges`} {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -208,9 +210,9 @@ export default function PermissionsPage() {
               name="description"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Description</FormLabel>
+                  <FormLabel>{t("descriptionLabel")}</FormLabel>
                   <FormControl>
-                    <Textarea rows={3} placeholder="What this group is for…" {...field} />
+                    <Textarea rows={3} placeholder={t("whatGroupForPlaceholder")} {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -221,19 +223,19 @@ export default function PermissionsPage() {
               name="capabilities"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Capabilities</FormLabel>
+                  <FormLabel>{t("capabilitiesLabel")}</FormLabel>
                   <FormControl>
                     <MultiSelect
                       inDialog
-                      options={CAPABILITY_OPTIONS}
+                      options={capabilityOptions(t)}
                       value={field.value}
                       onChange={field.onChange}
-                      placeholder="Select capabilities…"
-                      searchPlaceholder="Search capabilities…"
-                      emptyText="No matching capability."
+                      placeholder={t("selectCapabilitiesPlaceholder")}
+                      searchPlaceholder={t("searchCapabilitiesPlaceholder")}
+                      emptyText={t("noMatchingCapability")}
                     />
                   </FormControl>
-                  <FormDescription>You can also change these later.</FormDescription>
+                  <FormDescription>{t("canChangeLaterDesc")}</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

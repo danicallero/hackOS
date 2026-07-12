@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
+import { useLocale } from "@/lib/i18n";
 import {
   assignRoomChallenge,
   assignRoomJudge,
@@ -52,6 +53,7 @@ function emptyRoomEditor(): RoomEditor {
 }
 
 export default function QueueRoomsPage() {
+  const { t } = useLocale();
   const { can, me } = useSessionContext();
   const canAdmin = can(CAPABILITIES.QUEUE_ADMIN);
   const canManageRooms = canAdmin || me?.role === "sponsor";
@@ -93,26 +95,29 @@ export default function QueueRoomsPage() {
       setUsers(userRows.users);
       setCreateDraft((draft) => (draft.name ? draft : { ...emptyRoomEditor() }));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not load room admin data.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadRoomAdminData"));
     } finally {
       setLoading(false);
     }
-  }, [canAdmin, canManageRooms]);
+  }, [canAdmin, canManageRooms, t]);
 
-  const loadRoomDetails = useCallback(async (roomId: number) => {
-    try {
-      const [roomAssignments, judgeCandidates] = await Promise.all([
-        getRoomAssignments(roomId),
-        api.get<UserList>(`/api/queue/rooms/${roomId}/judge-candidates`).catch(() => ({
-          users: [],
-        })),
-      ]);
-      setAssignments((current) => ({ ...current, [roomId]: roomAssignments }));
-      setUsers(judgeCandidates.users);
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not load room details.");
-    }
-  }, []);
+  const loadRoomDetails = useCallback(
+    async (roomId: number) => {
+      try {
+        const [roomAssignments, judgeCandidates] = await Promise.all([
+          getRoomAssignments(roomId),
+          api.get<UserList>(`/api/queue/rooms/${roomId}/judge-candidates`).catch(() => ({
+            users: [],
+          })),
+        ]);
+        setAssignments((current) => ({ ...current, [roomId]: roomAssignments }));
+        setUsers(judgeCandidates.users);
+      } catch (err) {
+        toast.error(err instanceof ApiError ? err.message : t("couldNotLoadRoomDetails"));
+      }
+    },
+    [t],
+  );
 
   const openCreateModal = () => {
     setSelectedRoomId(null);
@@ -173,11 +178,11 @@ export default function QueueRoomsPage() {
   if (!canManageRooms) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Queue rooms" />
+        <PageHeader title={t("queueRooms")} />
         <EmptyState
           icon={LockIcon}
-          title="You can't access room admin"
-          description="Room admin requires the queue:admin capability."
+          title={t("noAccessRoomAdmin")}
+          description={t("roomAdminDeniedDesc")}
         />
       </div>
     );
@@ -185,7 +190,7 @@ export default function QueueRoomsPage() {
 
   const saveCreate = async () => {
     if (!createDraft.name.trim() || !createDraft.slug.trim()) {
-      toast.error("Provide a name and slug.");
+      toast.error(t("provideNameAndSlug"));
       return;
     }
     setSaving("create");
@@ -198,12 +203,12 @@ export default function QueueRoomsPage() {
         },
         crypto.randomUUID(),
       );
-      toast.success("Room created.");
+      toast.success(t("roomCreated"));
       setCreateDraft(emptyRoomEditor());
       closeModal();
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not create room.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotCreateRoom"));
     } finally {
       setSaving(null);
     }
@@ -218,10 +223,10 @@ export default function QueueRoomsPage() {
         slug: roomDraft.slug.trim(),
         location: roomDraft.location.trim() || null,
       });
-      toast.success("Room updated.");
+      toast.success(t("roomUpdated"));
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not update room.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotUpdateRoom"));
     } finally {
       setSaving(null);
     }
@@ -230,13 +235,13 @@ export default function QueueRoomsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Queue rooms"
-        description="Rooms and assignment controls for the judging flow."
+        title={t("queueRooms")}
+        description={t("roomsAdminDescription")}
         actions={
           canAdmin && (
             <Button onClick={openCreateModal}>
               <PlusIcon className="size-4" />
-              Create room
+              {t("createRoom")}
             </Button>
           )
         }
@@ -244,8 +249,8 @@ export default function QueueRoomsPage() {
 
       <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
         <SectionCard
-          title="Rooms"
-          description="Create and manage judging rooms."
+          title={t("rooms")}
+          description={t("roomsManageDesc")}
           icon={Building2Icon}
           bodyClassName="space-y-4"
         >
@@ -254,8 +259,8 @@ export default function QueueRoomsPage() {
           ) : rooms.length === 0 ? (
             <EmptyState
               icon={Building2Icon}
-              title="No rooms configured"
-              description="Create the first judging room to start assigning challenges."
+              title={t("noRoomsConfigured")}
+              description={t("noRoomsConfiguredDesc")}
             />
           ) : (
             <div className="grid gap-3 md:grid-cols-2">
@@ -275,7 +280,7 @@ export default function QueueRoomsPage() {
                   </div>
                   <div className="mt-4 flex justify-end">
                     <Button variant="outline" size="sm" onClick={() => openManageModal(room.id)}>
-                      Manage
+                      {t("manage")}
                     </Button>
                   </div>
                 </div>
@@ -290,19 +295,19 @@ export default function QueueRoomsPage() {
         onOpenChange={(open) => {
           if (!open) closeModal();
         }}
-        title={modalMode === "create" ? "Create room" : (selectedRoom?.name ?? "Room")}
+        title={modalMode === "create" ? t("createRoom") : (selectedRoom?.name ?? t("roomFallback"))}
         description={
-          modalMode === "create" ? "Base room details" : (selectedRoom?.slug ?? undefined)
+          modalMode === "create" ? t("baseRoomDetails") : (selectedRoom?.slug ?? undefined)
         }
         size="xl"
         footer={
           modalMode === "create" ? (
             <>
               <Button variant="outline" onClick={closeModal}>
-                Cancel
+                {t("cancel")}
               </Button>
               <Button disabled={saving === "create"} onClick={() => void saveCreate()}>
-                Create room
+                {t("createRoom")}
               </Button>
             </>
           ) : canAdmin ? (
@@ -315,17 +320,17 @@ export default function QueueRoomsPage() {
                   setSaving(`room-${selectedRoom.id}`);
                   try {
                     await deleteRoom(selectedRoom.id);
-                    toast.success("Room deleted.");
+                    toast.success(t("roomDeleted"));
                     closeModal();
                     await load();
                   } catch (err) {
-                    toast.error(err instanceof ApiError ? err.message : "Could not delete room.");
+                    toast.error(err instanceof ApiError ? err.message : t("couldNotDeleteRoom"));
                   } finally {
                     setSaving(null);
                   }
                 }}
               >
-                Delete room
+                {t("deleteRoom")}
               </Button>
               <div className="flex flex-wrap gap-2">
                 <Button
@@ -333,19 +338,19 @@ export default function QueueRoomsPage() {
                   disabled={saving === `room-${selectedRoom?.id}`}
                   onClick={closeModal}
                 >
-                  Cancel
+                  {t("cancel")}
                 </Button>
                 <Button
                   disabled={saving === `room-${selectedRoom?.id}`}
                   onClick={() => void saveSelectedRoom()}
                 >
-                  Save room
+                  {t("saveRoom")}
                 </Button>
               </div>
             </div>
           ) : (
             <Button variant="outline" onClick={closeModal}>
-              Close
+              {t("close")}
             </Button>
           )
         }
@@ -353,21 +358,21 @@ export default function QueueRoomsPage() {
         {modalMode === "create" && (
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="space-y-2">
-              <Label>Name</Label>
+              <Label>{t("name")}</Label>
               <Input
                 value={createDraft.name}
                 onChange={(e) => setCreateDraft((d) => ({ ...d, name: e.target.value }))}
               />
             </div>
             <div className="space-y-2">
-              <Label>Slug</Label>
+              <Label>{t("slugLabel")}</Label>
               <Input
                 value={createDraft.slug}
                 onChange={(e) => setCreateDraft((d) => ({ ...d, slug: e.target.value }))}
               />
             </div>
             <div className="space-y-2 lg:col-span-2">
-              <Label>Location</Label>
+              <Label>{t("locationLabel")}</Label>
               <Input
                 value={createDraft.location}
                 onChange={(e) => setCreateDraft((d) => ({ ...d, location: e.target.value }))}
@@ -379,7 +384,7 @@ export default function QueueRoomsPage() {
           <div className="space-y-5">
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="space-y-2">
-                <Label>Name</Label>
+                <Label>{t("name")}</Label>
                 <Input
                   value={roomDraft.name}
                   disabled={!canAdmin}
@@ -389,7 +394,7 @@ export default function QueueRoomsPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Slug</Label>
+                <Label>{t("slugLabel")}</Label>
                 <Input
                   value={roomDraft.slug}
                   disabled={!canAdmin}
@@ -399,7 +404,7 @@ export default function QueueRoomsPage() {
                 />
               </div>
               <div className="space-y-2 lg:col-span-2">
-                <Label>Location</Label>
+                <Label>{t("locationLabel")}</Label>
                 <Input
                   value={roomDraft.location}
                   disabled={!canAdmin}
@@ -409,10 +414,7 @@ export default function QueueRoomsPage() {
                 />
               </div>
             </div>
-            <SectionCard
-              title="Assignments"
-              description="Challenge and judges assigned to this room."
-            >
+            <SectionCard title={t("assignments")} description={t("assignmentsDesc")}>
               <AssignmentsEditor
                 roomId={selectedRoom.id}
                 assignments={selectedRoomAssignments}
@@ -463,6 +465,7 @@ function AssignmentsEditor({
   onRemoveJudge: (challengeId: number, userId: number) => Promise<void>;
   canSetChallenge: boolean;
 }) {
+  const { t } = useLocale();
   const assignedChallenge = assignments?.challenges[0] ?? null;
   const [challengeId, setChallengeId] = useState("");
   const effectiveChallengeId = assignedChallenge?.challenge_id ?? Number(challengeId || 0);
@@ -479,17 +482,19 @@ function AssignmentsEditor({
   return (
     <div className="space-y-5">
       <div className="space-y-2">
-        <Label htmlFor={canSetChallenge ? `challenge-${roomId}` : undefined}>Room challenge</Label>
+        <Label htmlFor={canSetChallenge ? `challenge-${roomId}` : undefined}>
+          {t("roomChallengeLabel")}
+        </Label>
         {assignedChallenge ? (
           <p className="text-sm font-medium">{textForDisplay(assignedChallenge.title)}</p>
         ) : (
-          <p className="text-muted-foreground text-sm">No challenge assigned.</p>
+          <p className="text-muted-foreground text-sm">{t("noChallengeAssigned")}</p>
         )}
         {canSetChallenge && (
           <div className="flex flex-col gap-2 sm:flex-row">
             <Select value={challengeId || undefined} onValueChange={setChallengeId}>
               <SelectTrigger id={`challenge-${roomId}`} className="w-full min-w-0 sm:flex-1">
-                <SelectValue placeholder="Select challenge" />
+                <SelectValue placeholder={t("selectChallengePlaceholder")} />
               </SelectTrigger>
               <SelectContent>
                 {challenges.map((challenge) => (
@@ -506,28 +511,26 @@ function AssignmentsEditor({
                 setBusy("challenge");
                 try {
                   await onAddChallenge(Number(challengeId));
-                  toast.success("Challenge assigned.");
+                  toast.success(t("challengeAssigned"));
                 } catch (err) {
-                  toast.error(
-                    err instanceof ApiError ? err.message : "Could not assign challenge.",
-                  );
+                  toast.error(err instanceof ApiError ? err.message : t("couldNotAssignChallenge"));
                 } finally {
                   setBusy(null);
                 }
               }}
             >
-              Set challenge
+              {t("setChallenge")}
             </Button>
           </div>
         )}
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor={`judge-user-${roomId}`}>Assign judge</Label>
+        <Label htmlFor={`judge-user-${roomId}`}>{t("assignJudgeLabel")}</Label>
         <div className="flex flex-col gap-2 sm:flex-row">
           <Select value={userId} onValueChange={setUserId}>
             <SelectTrigger id={`judge-user-${roomId}`} className="w-full min-w-0 sm:flex-1">
-              <SelectValue placeholder="Select judge" />
+              <SelectValue placeholder={t("selectJudgePlaceholder")} />
             </SelectTrigger>
             <SelectContent>
               {users.map((user) => (
@@ -544,21 +547,21 @@ function AssignmentsEditor({
               setBusy("judge");
               try {
                 await onAddJudge(effectiveChallengeId, Number(userId));
-                toast.success("Judge assigned.");
+                toast.success(t("judgeAssigned"));
               } catch (err) {
-                toast.error(err instanceof ApiError ? err.message : "Could not assign judge.");
+                toast.error(err instanceof ApiError ? err.message : t("couldNotAssignJudge"));
               } finally {
                 setBusy(null);
               }
             }}
           >
-            Add judge
+            {t("addJudge")}
           </Button>
         </div>
       </div>
 
       <div className="space-y-2">
-        <Label>Judges ({judges.length})</Label>
+        <Label>{t("judgesCount", { count: judges.length })}</Label>
         {judges.length ? (
           <ul className="divide-y rounded-md border">
             {judges.map((assignment) => {
@@ -586,24 +589,24 @@ function AssignmentsEditor({
                       setBusy(`remove-judge-${assignment.user_id}`);
                       try {
                         await onRemoveJudge(assignment.challenge_id, assignment.user_id);
-                        toast.success("Judge removed.");
+                        toast.success(t("judgeRemoved"));
                       } catch (err) {
                         toast.error(
-                          err instanceof ApiError ? err.message : "Could not remove judge.",
+                          err instanceof ApiError ? err.message : t("couldNotRemoveJudge"),
                         );
                       } finally {
                         setBusy(null);
                       }
                     }}
                   >
-                    Remove
+                    {t("remove")}
                   </Button>
                 </li>
               );
             })}
           </ul>
         ) : (
-          <p className="text-muted-foreground text-sm">No judges assigned.</p>
+          <p className="text-muted-foreground text-sm">{t("noJudgesAssigned")}</p>
         )}
       </div>
     </div>

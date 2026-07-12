@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError } from "@/lib/api";
+import { type Translate, useLocale } from "@/lib/i18n";
 import {
   enqueueAllChallengeQueues,
   entryAction,
@@ -45,6 +46,7 @@ import { cn } from "@/lib/utils";
 import { textForDisplay } from "../challenges/shared";
 
 export default function QueueOperationsPage() {
+  const { t } = useLocale();
   const { can, canAny } = useSessionContext();
   const canUse = canAny(
     CAPABILITIES.QUEUE_OPERATE,
@@ -78,9 +80,9 @@ export default function QueueOperationsPage() {
       for (const item of assignmentRows as RoomAssignments[]) nextAssignments[item.roomId] = item;
       setRoomAssignments(nextAssignments);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not load operations details.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadOperationsDetails"));
     }
-  }, [canAdmin, rooms]);
+  }, [canAdmin, rooms, t]);
 
   useEffect(() => {
     void loadAdminData();
@@ -91,25 +93,25 @@ export default function QueueOperationsPage() {
     try {
       const result = await enqueueAllChallengeQueues(crypto.randomUUID());
       toast.success(
-        `Generated ${result.inserted} queue entr${result.inserted === 1 ? "y" : "ies"} across ${result.challenges.length} challenge${result.challenges.length === 1 ? "" : "s"}.`,
+        t("queuesGenerated", { inserted: result.inserted, challenges: result.challenges.length }),
       );
       roomViews.refetch();
       await loadAdminData();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not generate queues.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotGenerateQueues"));
     } finally {
       setBusy(false);
     }
-  }, [loadAdminData, roomViews]);
+  }, [loadAdminData, roomViews, t]);
 
   if (!canUse) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Queue operations" />
+        <PageHeader title={t("queueOperations")} />
         <EmptyState
           icon={TicketIcon}
-          title="You can't access queue operations"
-          description="Queue operations requires queue or judging access."
+          title={t("noAccessQueueOps")}
+          description={t("queueOpsAccessDeniedDesc")}
         />
       </div>
     );
@@ -126,11 +128,11 @@ export default function QueueOperationsPage() {
   if (roomViews.error) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Queue operations" />
+        <PageHeader title={t("queueOperations")} />
         <EmptyState
           icon={TicketIcon}
-          title="Could not load queue operations"
-          description={roomViews.error instanceof Error ? roomViews.error.message : "Try again."}
+          title={t("couldNotLoadQueueOps")}
+          description={roomViews.error instanceof Error ? roomViews.error.message : t("tryAgain")}
         />
       </div>
     );
@@ -139,20 +141,20 @@ export default function QueueOperationsPage() {
   return (
     <div className="space-y-6" data-wide>
       <PageHeader
-        title="Queue operations"
-        description="Unified room queues and manual recovery actions."
+        title={t("queueOperations")}
+        description={t("roomQueuesDescription")}
         actions={
           <>
             {canAdmin && (
               <Button onClick={() => void onGenerate()} disabled={busy}>
                 <RefreshCwIcon className={cn("size-4", busy && "animate-spin")} />
-                Generate queues
+                {t("generateQueues")}
               </Button>
             )}
             <Button variant="outline" asChild>
               <Link href="/judging">
                 <ArrowRightIcon className="size-4" />
-                Open judging
+                {t("openJudging")}
               </Link>
             </Button>
           </>
@@ -160,16 +162,16 @@ export default function QueueOperationsPage() {
       />
 
       <SectionCard
-        title="Room queues"
-        description="Presenting teams, called teams, next queue head, and fast operator actions."
+        title={t("roomQueues")}
+        description={t("roomQueuesDescription")}
         icon={Building2Icon}
         bodyClassName="space-y-4"
       >
         {rooms.length === 0 ? (
           <EmptyState
             icon={Building2Icon}
-            title="No rooms yet"
-            description="Create rooms in Administration to start building queue views."
+            title={t("noRoomsYet")}
+            description={t("noRoomsYetDescription")}
           />
         ) : (
           <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">
@@ -216,6 +218,7 @@ function RoomQueueCard({
       : challenge.challenge_id
     : null;
   const nextEntry = room.next[0] ?? null;
+  const { t } = useLocale();
 
   useEffect(() => {
     const term = query.trim();
@@ -232,7 +235,7 @@ function RoomQueueCard({
         if (!cancelled) setResults(hits);
       } catch (err) {
         if (!cancelled) {
-          toast.error(err instanceof ApiError ? err.message : "Team search failed.");
+          toast.error(err instanceof ApiError ? err.message : t("teamSearchFailed"));
         }
       } finally {
         if (!cancelled) setSearching(false);
@@ -242,7 +245,7 @@ function RoomQueueCard({
       cancelled = true;
       window.clearTimeout(handle);
     };
-  }, [challengeId, query]);
+  }, [challengeId, query, t]);
 
   const mutate = async (key: string, action: () => Promise<unknown>, success: string) => {
     setBusy(key);
@@ -253,7 +256,7 @@ function RoomQueueCard({
       setResults([]);
       onChanged();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Queue action failed.");
+      toast.error(err instanceof ApiError ? err.message : t("queueActionFailed"));
     } finally {
       setBusy(null);
     }
@@ -267,15 +270,16 @@ function RoomQueueCard({
             <h3 className="truncate text-sm font-semibold">{room.room.name}</h3>
             {challenge && (
               <StatusBadge tone="neutral">
-                {textForDisplay("title" in challenge ? challenge.title : "") || "Challenge"}
+                {textForDisplay("title" in challenge ? challenge.title : "") ||
+                  t("challengeFallback")}
               </StatusBadge>
             )}
             <StatusBadge tone={roomState?.is_paused ? "warning" : "success"}>
-              {roomState?.is_paused ? "Paused" : "Live"}
+              {roomState?.is_paused ? t("paused") : t("live")}
             </StatusBadge>
           </div>
           <p className="text-muted-foreground text-xs">
-            {room.room.location ?? "No location"} · {room.room.slug}
+            {room.room.location ?? t("noLocation")} · {room.room.slug}
           </p>
         </div>
       </div>
@@ -284,16 +288,16 @@ function RoomQueueCard({
 
       <div className="space-y-2 px-3.5 pb-3.5 pt-2.5">
         <QueueEntryBlock
-          label="Presenting"
+          label={t("presenting")}
           entry={room.active}
-          empty="No team presenting."
+          empty={t("noTeamPresenting")}
           onSelect={setSelectedEntry}
         />
 
         <QueueGroup
-          label={`Called teams (${room.called.length})`}
+          label={t("calledTeams", { count: room.called.length })}
           entries={room.called}
-          empty="No teams called."
+          empty={t("noTeamsCalled")}
           onSelect={setSelectedEntry}
           actions={(entry) => (
             <>
@@ -304,12 +308,12 @@ function RoomQueueCard({
                   void mutate(
                     `notify-${entry.id}`,
                     () => entryAction(entry.id, "notify-enter", undefined, crypto.randomUUID()),
-                    "Team renotified.",
+                    t("teamRenotified"),
                   )
                 }
               >
                 <BellRingIcon className="size-4" />
-                Renotify
+                {t("renotify")}
               </Button>
               <Button
                 size="sm"
@@ -319,12 +323,12 @@ function RoomQueueCard({
                   void mutate(
                     `bring-${entry.id}`,
                     () => entryAction(entry.id, "bring-in", undefined, crypto.randomUUID()),
-                    "Team brought into room.",
+                    t("teamBroughtIn"),
                   )
                 }
               >
                 <DoorOpenIcon className="size-4" />
-                Bring in
+                {t("bringIn")}
               </Button>
               <Button
                 size="sm"
@@ -340,12 +344,12 @@ function RoomQueueCard({
                         { position: "bottom", reason: "Queue operations: requeued" },
                         crypto.randomUUID(),
                       ),
-                    "Team requeued.",
+                    t("teamRequeued"),
                   )
                 }
               >
                 <RotateCcwIcon className="size-4" />
-                Requeue
+                {t("requeue")}
               </Button>
               <Button
                 size="sm"
@@ -361,21 +365,21 @@ function RoomQueueCard({
                         { reason: "Queue operations: absent" },
                         crypto.randomUUID(),
                       ),
-                    "Team marked absent.",
+                    t("teamMarkedAbsent"),
                   )
                 }
               >
                 <AlertTriangleIcon className="size-4" />
-                Absent
+                {t("absent")}
               </Button>
             </>
           )}
         />
 
         <QueueEntryBlock
-          label="Next at top"
+          label={t("nextAtTop")}
           entry={nextEntry}
-          empty="No waiting team."
+          empty={t("noWaitingTeam")}
           onSelect={setSelectedEntry}
           actions={(entry) => (
             <Button
@@ -396,12 +400,12 @@ function RoomQueueCard({
                       },
                       crypto.randomUUID(),
                     ),
-                  "Team added to the waiting room.",
+                  t("teamAddedWaiting"),
                 )
               }
             >
               <DoorOpenIcon className="size-4" />
-              Add waiting
+              {t("addWaiting")}
             </Button>
           )}
         />
@@ -413,7 +417,7 @@ function RoomQueueCard({
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               disabled={!canOperate || !challengeId}
-              placeholder="Search project, repo or entry id"
+              placeholder={t("searchProjectPlaceholder")}
               className="h-8 pl-8 text-sm"
             />
           </div>
@@ -422,7 +426,7 @@ function RoomQueueCard({
               {searching && results.length === 0 ? (
                 <Spinner className="size-4" />
               ) : results.length === 0 ? (
-                <p className="text-muted-foreground text-xs">No teams found.</p>
+                <p className="text-muted-foreground text-xs">{t("noTeamsFound")}</p>
               ) : (
                 results.slice(0, 5).map((entry) => (
                   <div
@@ -445,11 +449,11 @@ function RoomQueueCard({
                                 { reason: "Queue operations: moved to top" },
                                 crypto.randomUUID(),
                               ),
-                            "Team moved to the top of the queue.",
+                            t("teamMovedTop"),
                           )
                         }
                       >
-                        Top
+                        {t("top")}
                       </Button>
                       <Button
                         size="sm"
@@ -468,12 +472,12 @@ function RoomQueueCard({
                                 },
                                 crypto.randomUUID(),
                               ),
-                            "Team added to the waiting room.",
+                            t("teamAddedWaiting"),
                           )
                         }
                       >
                         <DoorOpenIcon className="size-4" />
-                        Waiting
+                        {t("waiting")}
                       </Button>
                     </div>
                   </div>
@@ -492,8 +496,8 @@ function RoomQueueCard({
   );
 }
 
-function entryLabel(entry: QueueEntry): string {
-  return entry.repo_name ?? `Repo #${entry.repo_id}`;
+function entryLabel(entry: QueueEntry, t: Translate): string {
+  return entry.repo_name ?? t("repoNumber", { id: entry.repo_id });
 }
 
 function TeamButton({
@@ -503,14 +507,17 @@ function TeamButton({
   entry: QueueEntry;
   onSelect: (entry: QueueEntry) => void;
 }) {
+  const { t } = useLocale();
   return (
     <button
       type="button"
       className="min-w-0 text-left hover:underline"
       onClick={() => onSelect(entry)}
     >
-      <span className="block truncate text-sm font-medium">{entryLabel(entry)}</span>
-      <span className="text-muted-foreground block text-xs tabular-nums">Entry #{entry.id}</span>
+      <span className="block truncate text-sm font-medium">{entryLabel(entry, t)}</span>
+      <span className="text-muted-foreground block text-xs tabular-nums">
+        {t("entryNumber", { id: entry.id })}
+      </span>
     </button>
   );
 }
@@ -596,16 +603,17 @@ function TeamMembersModal({
   onOpenChange: (open: boolean) => void;
 }) {
   const members = entry?.repo_members ?? [];
+  const { t } = useLocale();
   return (
     <Modal
       open={entry != null}
       onOpenChange={onOpenChange}
-      title={entry ? entryLabel(entry) : "Team members"}
-      description="Team members"
+      title={entry ? entryLabel(entry, t) : t("teamMembers")}
+      description={t("teamMembers")}
       size="md"
     >
       {members.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No members linked to this team.</p>
+        <p className="text-muted-foreground text-sm">{t("noMembersLinked")}</p>
       ) : (
         <ul className="divide-y rounded-md border">
           {members.map((member) => {

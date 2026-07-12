@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { PasswordInput } from "@/components/common/password-input";
 import { SubmitButton } from "@/components/common/submit-button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Form,
   FormControl,
@@ -19,6 +19,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { authClient } from "@/lib/auth-client";
+import { useLocale } from "@/lib/i18n";
 
 const schema = z
   .object({
@@ -36,6 +37,7 @@ function ResetPasswordForm() {
   const router = useRouter();
   const params = useSearchParams();
   const token = params.get("token");
+  const { t } = useLocale();
   const form = useForm<Values>({
     resolver: zodResolver(schema),
     defaultValues: { password: "", confirm: "" },
@@ -43,33 +45,32 @@ function ResetPasswordForm() {
 
   async function onSubmit(values: Values) {
     if (!token) {
-      form.setError("root", { message: "Missing or invalid reset token." });
+      form.setError("root", { message: t("resetTokenMissing") });
       return;
     }
     const { error } = await authClient.resetPassword({ newPassword: values.password, token });
     if (error) {
       form.setError("root", {
-        message: error.message ?? "This reset link is invalid or has expired.",
+        message: error.message ?? t("resetLinkInvalid"),
       });
       return;
     }
     // H5: resetting closes all old sessions server-side; send them to sign in.
-    toast.success("Password updated. Please sign in.");
+    toast.success(t("passwordUpdated"));
     router.push("/login");
   }
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Set a new password</CardTitle>
-        <CardDescription>Choose a strong password you don&apos;t use elsewhere.</CardDescription>
+        <CardTitle>{t("setNewPassword")}</CardTitle>
       </CardHeader>
       <CardContent>
         {!token ? (
           <p className="text-destructive text-sm">
-            This reset link is missing its token. Request a new one from{" "}
+            {t("resetTokenMissing")}{" "}
             <Link href="/forgot-password" className="underline underline-offset-4">
-              forgot password
+              {t("resetPassword").toLowerCase()}
             </Link>
             .
           </p>
@@ -81,7 +82,7 @@ function ResetPasswordForm() {
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>New password</FormLabel>
+                    <FormLabel>{t("newPassword")}</FormLabel>
                     <FormControl>
                       <PasswordInput autoComplete="new-password" {...field} />
                     </FormControl>
@@ -94,7 +95,7 @@ function ResetPasswordForm() {
                 name="confirm"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Confirm password</FormLabel>
+                    <FormLabel>{t("confirmPassword")}</FormLabel>
                     <FormControl>
                       <PasswordInput autoComplete="new-password" {...field} />
                     </FormControl>
@@ -106,7 +107,7 @@ function ResetPasswordForm() {
                 <p className="text-destructive text-sm">{form.formState.errors.root.message}</p>
               )}
               <SubmitButton className="w-full" pending={form.formState.isSubmitting}>
-                Update password
+                {t("updatePassword")}
               </SubmitButton>
             </form>
           </Form>

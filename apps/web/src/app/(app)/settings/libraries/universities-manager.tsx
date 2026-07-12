@@ -35,6 +35,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
+import { useLocale } from "@/lib/i18n";
 
 interface University {
   id: number;
@@ -46,6 +47,7 @@ const schema = z.object({ name: z.string().min(1, "Required").max(200) });
 type Values = z.infer<typeof schema>;
 
 export function UniversitiesManager() {
+  const { t } = useLocale();
   const [entries, setEntries] = useState<University[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -66,11 +68,11 @@ export function UniversitiesManager() {
       );
       setEntries(universities);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not load the directory.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadDirectory"));
     } finally {
       setLoading(false);
     }
-  }, [search]);
+  }, [search, t]);
 
   // Soft, in-place refresh instead of a hard reload when another admin
   // edits the universities library elsewhere.
@@ -94,15 +96,15 @@ export function UniversitiesManager() {
     try {
       if (editing) {
         await api.patch<University>(`/api/universities/${editing.id}`, { name });
-        toast.success("University renamed.");
+        toast.success(t("universityRenamed"));
       } else {
         await api.post<University>("/api/universities", { name });
-        toast.success("University added.");
+        toast.success(t("universityAdded"));
       }
       setEditing(undefined);
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not save the university.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveUniversity"));
     }
   }
 
@@ -111,11 +113,11 @@ export function UniversitiesManager() {
     setDeleting(true);
     try {
       await api.delete(`/api/universities/${deleteTarget.id}`);
-      toast.success("University deleted.");
+      toast.success(t("universityDeleted"));
       setDeleteTarget(null);
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not delete the university.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotDeleteUniversity"));
     } finally {
       setDeleting(false);
     }
@@ -124,7 +126,7 @@ export function UniversitiesManager() {
   const columns: Column<University>[] = [
     {
       id: "name",
-      header: "Name",
+      header: t("name"),
       sortValue: (row) => row.name.toLowerCase(),
       cell: (row) => <span className="font-medium">{row.name}</span>,
     },
@@ -133,20 +135,17 @@ export function UniversitiesManager() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-muted-foreground text-sm">
-          The shared directory backing the university picker on application forms. Applicants can
-          propose new ones; you curate them here.
-        </p>
+        <p className="text-muted-foreground text-sm">{t("sharedDirectoryDesc")}</p>
         <Button onClick={() => setEditing(null)}>
           <PlusIcon />
-          New
+          {t("newAction")}
         </Button>
       </div>
 
       <Input
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        placeholder="Search universities…"
+        placeholder={t("searchUniversitiesPlaceholder")}
         className="h-9 max-w-xs"
       />
 
@@ -157,23 +156,21 @@ export function UniversitiesManager() {
         loading={loading}
         empty={{
           icon: GraduationCapIcon,
-          title: search.trim() ? "No matches" : "No universities yet",
-          description: search.trim()
-            ? "No university matches this search. Add it below."
-            : "Add the first entry, or let applicants propose ones from the form.",
+          title: search.trim() ? t("noMatchesTitle") : t("noUniversitiesYetTitle"),
+          description: search.trim() ? t("noUniversityMatchDesc") : t("addFirstOrProposeDesc"),
         }}
         rowActions={(row) => (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="size-8">
                 <MoreHorizontalIcon />
-                <span className="sr-only">Open menu</span>
+                <span className="sr-only">{t("openMenuAria")}</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => setEditing(row)}>Rename</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setEditing(row)}>{t("rename")}</DropdownMenuItem>
               <DropdownMenuItem variant="destructive" onSelect={() => setDeleteTarget(row)}>
-                Delete
+                {t("deleteAction")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -185,19 +182,15 @@ export function UniversitiesManager() {
         open={formOpen}
         onOpenChange={(o) => !o && setEditing(undefined)}
         icon={GraduationCapIcon}
-        title={editing ? "Rename university" : "New university"}
-        description={
-          editing
-            ? "Update the institution's name. Applicant selections keep their id."
-            : "Add an institution to the shared directory."
-        }
+        title={editing ? t("renameUniversityTitle") : t("newUniversityTitle")}
+        description={editing ? t("updateInstitutionNameDesc") : t("addInstitutionDesc")}
         footer={
           <>
             <Button type="button" variant="outline" onClick={() => setEditing(undefined)}>
-              Cancel
+              {t("cancel")}
             </Button>
             <SubmitButton form={FORM_ID} pending={form.formState.isSubmitting}>
-              {editing ? "Save changes" : "Add university"}
+              {editing ? t("saveChanges") : t("addUniversity")}
             </SubmitButton>
           </>
         }
@@ -209,7 +202,7 @@ export function UniversitiesManager() {
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Name</FormLabel>
+                  <FormLabel>{t("name")}</FormLabel>
                   <FormControl>
                     <Input placeholder="Universidade de Santiago de Compostela" {...field} />
                   </FormControl>
@@ -225,24 +218,22 @@ export function UniversitiesManager() {
       <Modal
         open={deleteTarget !== null}
         onOpenChange={(o) => !o && setDeleteTarget(null)}
-        title="Delete university"
+        title={t("deleteUniversityTitle")}
         description={
-          deleteTarget
-            ? `Remove "${deleteTarget.name}" from the directory? Existing applicant selections keep their id but stop resolving.`
-            : undefined
+          deleteTarget ? t("removeFromDirectoryInline", { name: deleteTarget.name }) : undefined
         }
         footer={
           <>
             <Button type="button" variant="outline" onClick={() => setDeleteTarget(null)}>
-              Cancel
+              {t("cancel")}
             </Button>
             <Button variant="destructive" disabled={deleting} onClick={onDelete}>
-              Delete
+              {t("deleteAction")}
             </Button>
           </>
         }
       >
-        <span className="sr-only">Confirm deletion</span>
+        <span className="sr-only">{t("confirmDeletionAria")}</span>
       </Modal>
     </div>
   );

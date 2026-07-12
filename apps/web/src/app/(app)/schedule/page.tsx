@@ -36,6 +36,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError } from "@/lib/api";
 import { formatScheduledDateTime } from "@/lib/datetime";
+import { type Translate, useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem, type ScheduleInput } from "@/lib/logistics";
 import { useCan } from "@/lib/session";
 
@@ -95,7 +96,20 @@ function visibilityTone(visibility: string | undefined) {
   return visibility === "shown" ? "success" : "neutral";
 }
 
+function typeLabel(type: string | null | undefined, t: Translate): string {
+  const map: Record<string, string> = {
+    activity: t("typeActivity"),
+    meal: t("typeMeal"),
+    workshop: t("typeWorkshop"),
+    talk: t("typeTalk"),
+    ceremony: t("typeCeremony"),
+    other: t("typeOther"),
+  };
+  return (type && map[type]) || t("typeActivity");
+}
+
 export default function SchedulePage() {
+  const { t } = useLocale();
   const canManage = useCan(CAPABILITIES.SCHEDULE_MANAGE);
   const [items, setItems] = useState<PublicScheduleItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -112,11 +126,11 @@ export default function SchedulePage() {
       setItems(result.items);
       setSelectedIds(new Set());
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not load schedule.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadSchedule"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   // Soft, in-place refresh instead of a hard reload when another admin
   // edits the schedule elsewhere (H47).
@@ -134,10 +148,10 @@ export default function SchedulePage() {
     setBusy(true);
     try {
       await logisticsApi.setScheduleVisibility(ids, visibility);
-      toast.success(visibility === "shown" ? "Items shown." : "Items hidden.");
+      toast.success(visibility === "shown" ? t("itemsShown") : t("itemsHidden"));
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not update visibility.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotUpdateVisibility"));
     } finally {
       setBusy(false);
     }
@@ -147,10 +161,10 @@ export default function SchedulePage() {
     setBusy(true);
     try {
       await logisticsApi.deleteSchedule(item.id);
-      toast.success("Schedule item deleted.");
+      toast.success(t("scheduleItemDeleted"));
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not delete schedule item.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotDeleteScheduleItem"));
     } finally {
       setBusy(false);
     }
@@ -159,11 +173,11 @@ export default function SchedulePage() {
   if (!canManage) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Schedule" />
+        <PageHeader title={t("schedule")} />
         <EmptyState
           icon={LockIcon}
-          title="You can't manage the schedule"
-          description="The schedule page requires schedule:manage."
+          title={t("noAccessSchedule")}
+          description={t("scheduleDeniedDesc")}
         />
       </div>
     );
@@ -172,7 +186,7 @@ export default function SchedulePage() {
   const columns: Column<PublicScheduleItem>[] = [
     {
       id: "title",
-      header: "Item",
+      header: t("colItem"),
       sortValue: (item) => item.title,
       cell: (item) => (
         <div>
@@ -185,13 +199,13 @@ export default function SchedulePage() {
     },
     {
       id: "type",
-      header: "Type",
+      header: t("colType"),
       sortValue: (item) => item.type ?? "",
-      cell: (item) => <StatusBadge tone="neutral">{item.type ?? "activity"}</StatusBadge>,
+      cell: (item) => <StatusBadge tone="neutral">{typeLabel(item.type, t)}</StatusBadge>,
     },
     {
       id: "starts",
-      header: "Starts",
+      header: t("colStarts"),
       sortValue: (item) => item.startsAt,
       cell: (item) => (
         <span className="font-mono text-xs tabular-nums">
@@ -201,17 +215,21 @@ export default function SchedulePage() {
     },
     {
       id: "visibility",
-      header: "Visibility",
+      header: t("colVisibility"),
       sortValue: (item) => item.visibility ?? "",
       cell: (item) => (
         <StatusBadge tone={visibilityTone(item.visibility)} dot={false}>
-          {item.visibility ?? "public"}
+          {item.visibility === "shown"
+            ? t("shownOption")
+            : item.visibility === "hidden"
+              ? t("hiddenOption")
+              : t("visibilityPublicDefault")}
         </StatusBadge>
       ),
     },
     {
       id: "location",
-      header: "Location",
+      header: t("locationLabel"),
       sortValue: (item) => item.location ?? "",
       cell: (item) => item.location ?? <span className="text-muted-foreground">-</span>,
     },
@@ -222,12 +240,12 @@ export default function SchedulePage() {
   return (
     <div className="space-y-6" data-wide>
       <PageHeader
-        title="Schedule"
-        description="Create event calendar items and batch show/hide them on the public agenda."
+        title={t("schedule")}
+        description={t("scheduleManageDesc")}
         actions={
           <Button onClick={() => setCreateOpen(true)}>
             <PlusIcon className="size-4" />
-            New item
+            {t("newItem")}
           </Button>
         }
       />
@@ -241,14 +259,14 @@ export default function SchedulePage() {
         selectedIds={selectedIds}
         onSelectionChange={setSelectedIds}
         searchable={(item) => `${item.title} ${item.type ?? ""} ${item.location ?? ""}`}
-        searchPlaceholder="Search schedule..."
+        searchPlaceholder={t("searchSchedulePlaceholder")}
         pageSize={20}
         rowActions={(item) => (
           <div className="flex justify-end gap-1">
             <Button
               variant="ghost"
               size="icon"
-              aria-label="Edit item"
+              aria-label={t("editItemAria")}
               onClick={() => setEditing(item)}
             >
               <PencilIcon className="size-4" />
@@ -256,7 +274,7 @@ export default function SchedulePage() {
             <Button
               variant="ghost"
               size="icon"
-              aria-label="Delete item"
+              aria-label={t("deleteItemAria")}
               className="text-destructive"
               disabled={busy}
               onClick={() => void remove(item)}
@@ -268,7 +286,9 @@ export default function SchedulePage() {
         toolbar={
           selectedIds.size > 0 ? (
             <>
-              <span className="text-muted-foreground text-sm">{selectedIds.size} selected</span>
+              <span className="text-muted-foreground text-sm">
+                {t("selectedCount", { count: selectedIds.size })}
+              </span>
               {selectedItem && (
                 <Button
                   size="sm"
@@ -277,7 +297,7 @@ export default function SchedulePage() {
                   onClick={() => setDuplicating(selectedItem)}
                 >
                   <CopyIcon className="size-4" />
-                  Duplicate
+                  {t("duplicate")}
                 </Button>
               )}
               <Button
@@ -287,7 +307,7 @@ export default function SchedulePage() {
                 onClick={() => setVisibility("shown")}
               >
                 <EyeIcon className="size-4" />
-                Show
+                {t("show")}
               </Button>
               <Button
                 size="sm"
@@ -296,26 +316,26 @@ export default function SchedulePage() {
                 onClick={() => setVisibility("hidden")}
               >
                 <EyeOffIcon className="size-4" />
-                Hide
+                {t("hide")}
               </Button>
             </>
           ) : undefined
         }
         empty={{
           icon: CalendarDaysIcon,
-          title: "No schedule items yet",
-          description: "Create the first event calendar item.",
+          title: t("noScheduleItemsYet"),
+          description: t("createFirstEventItem"),
         }}
       />
 
       <ScheduleFormModal
         open={createOpen}
         onOpenChange={setCreateOpen}
-        title="New schedule item"
+        title={t("newScheduleItem")}
         initial={EMPTY_FORM}
         onSubmit={async (values) => {
           await logisticsApi.createSchedule(cleanForm(values));
-          toast.success("Schedule item created.");
+          toast.success(t("scheduleItemCreated"));
           setCreateOpen(false);
           await load();
         }}
@@ -327,11 +347,11 @@ export default function SchedulePage() {
           onOpenChange={(open) => {
             if (!open) setEditing(null);
           }}
-          title="Edit schedule item"
+          title={t("editScheduleItem")}
           initial={toForm(editing)}
           onSubmit={async (values) => {
             await logisticsApi.updateSchedule(editing.id, cleanForm(values));
-            toast.success("Schedule item updated.");
+            toast.success(t("scheduleItemUpdated"));
             setEditing(null);
             await load();
           }}
@@ -344,11 +364,11 @@ export default function SchedulePage() {
           onOpenChange={(open) => {
             if (!open) setDuplicating(null);
           }}
-          title="Duplicate schedule item"
+          title={t("duplicateScheduleItem")}
           initial={toDuplicateForm(duplicating)}
           onSubmit={async (values) => {
             await logisticsApi.createSchedule(cleanForm(values));
-            toast.success("Schedule item duplicated.");
+            toast.success(t("scheduleItemDuplicated"));
             setDuplicating(null);
             await load();
           }}
@@ -371,6 +391,7 @@ function ScheduleFormModal({
   initial: ScheduleInput;
   onSubmit: (values: ScheduleInput) => Promise<void>;
 }) {
+  const { t } = useLocale();
   const [values, setValues] = useState(initial);
   const [pending, setPending] = useState(false);
 
@@ -383,7 +404,7 @@ function ScheduleFormModal({
     try {
       await onSubmit(values);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not save schedule item.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
     } finally {
       setPending(false);
     }
@@ -392,15 +413,15 @@ function ScheduleFormModal({
   return (
     <Modal open={open} onOpenChange={onOpenChange} title={title} icon={CalendarDaysIcon} size="lg">
       <div className="space-y-4">
-        <Field label="Title">
+        <Field label={t("titleLabel")}>
           <Input
             value={values.title}
             onChange={(e) => setValues((v) => ({ ...v, title: e.target.value }))}
-            placeholder="Opening ceremony"
+            placeholder={t("openingCeremonyPlaceholder")}
           />
         </Field>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Type">
+          <Field label={t("colType")}>
             <Select
               value={values.type ?? "activity"}
               onValueChange={(type) =>
@@ -413,13 +434,13 @@ function ScheduleFormModal({
               <SelectContent>
                 {TYPE_OPTIONS.map((type) => (
                   <SelectItem key={type} value={type}>
-                    {type}
+                    {typeLabel(type, t)}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Visibility">
+          <Field label={t("colVisibility")}>
             <Select
               value={values.visibility}
               onValueChange={(visibility) =>
@@ -430,8 +451,8 @@ function ScheduleFormModal({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="hidden">Hidden</SelectItem>
-                <SelectItem value="shown">Shown</SelectItem>
+                <SelectItem value="hidden">{t("hiddenOption")}</SelectItem>
+                <SelectItem value="shown">{t("shownOption")}</SelectItem>
               </SelectContent>
             </Select>
           </Field>
@@ -446,57 +467,58 @@ function ScheduleFormModal({
             }
           />
           <Label htmlFor="requires-scan" className="font-normal">
-            Registrable by scanner{values.type === "meal" ? " (meals are always registrable)" : ""}
+            {t("registrableByScanner")}
+            {values.type === "meal" ? t("mealsAlwaysRegistrable") : ""}
           </Label>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Starts">
+          <Field label={t("colStarts")}>
             <ScheduledDateTimeField
               value={values.startsAt}
               onChange={(startsAt) => setValues((v) => ({ ...v, startsAt }))}
-              addLabel="Add start time"
+              addLabel={t("addStartTime")}
             />
           </Field>
-          <Field label="Ends">
+          <Field label={t("endsLabel")}>
             <ScheduledDateTimeField
               value={values.endsAt}
               onChange={(endsAt) => setValues((v) => ({ ...v, endsAt }))}
-              addLabel="Add end time"
+              addLabel={t("addEndTime")}
             />
           </Field>
         </div>
-        <Field label="Publish at">
+        <Field label={t("publishAtLabel")}>
           <ScheduledDateTimeField
             value={values.publishAt ?? ""}
             onChange={(publishAt) => setValues((v) => ({ ...v, publishAt: publishAt || null }))}
-            emptyLabel="Immediate"
-            addLabel="Schedule publication"
+            emptyLabel={t("immediate")}
+            addLabel={t("schedulePublication")}
           />
         </Field>
-        <Field label="Location">
+        <Field label={t("locationLabel")}>
           <Input
             value={values.location ?? ""}
             onChange={(e) => setValues((v) => ({ ...v, location: e.target.value }))}
-            placeholder="Main hall"
+            placeholder={t("mainHallPlaceholder")}
           />
         </Field>
-        <Field label="Description">
+        <Field label={t("descriptionLabel")}>
           <Textarea
             value={values.description ?? ""}
             onChange={(e) => setValues((v) => ({ ...v, description: e.target.value }))}
-            placeholder="Visible in the public agenda when shown."
+            placeholder={t("visibleInPublicAgenda")}
           />
         </Field>
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("cancel")}
           </Button>
           <SubmitButton
             pending={pending}
             onClick={submit}
             disabled={!values.title || !values.startsAt || !values.endsAt}
           >
-            Save
+            {t("save")}
           </SubmitButton>
         </div>
       </div>

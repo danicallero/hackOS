@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/select";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
+import { useLocale } from "@/lib/i18n";
 import {
   addRepoChallenge,
   addRepoMember,
@@ -76,6 +77,7 @@ function userLabel(user: UserList["users"][number]): string {
 
 export default function ProjectDetailPage() {
   const params = useParams<{ id: string }>();
+  const { t } = useLocale();
   const { can } = useSessionContext();
   const canRead = can(CAPABILITIES.PROJECTS_READ);
   const canEdit = can(CAPABILITIES.PROJECTS_EDIT);
@@ -124,12 +126,12 @@ export default function ProjectDetailPage() {
         }
       }
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not load project.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadProject"));
       setRepo(null);
     } finally {
       setLoading(false);
     }
-  }, [canEdit, canImport, canRead, id]);
+  }, [canEdit, canImport, canRead, id, t]);
 
   // Soft, in-place refresh instead of a hard reload when this project
   // changes elsewhere.
@@ -169,11 +171,11 @@ export default function ProjectDetailPage() {
   if (!canRead) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Project" />
+        <PageHeader title={t("colProject")} />
         <EmptyState
           icon={LockIcon}
-          title="You can't access projects"
-          description="Project access requires the projects:read capability."
+          title={t("noAccessProjects")}
+          description={t("projectAccessDeniedDesc")}
         />
       </div>
     );
@@ -191,17 +193,17 @@ export default function ProjectDetailPage() {
     return (
       <div className="space-y-6">
         <PageHeader
-          title="Project"
+          title={t("colProject")}
           actions={
             <Button variant="outline" asChild>
               <Link href="/projects">
                 <ArrowLeftIcon className="size-4" />
-                Projects
+                {t("projects")}
               </Link>
             </Button>
           }
         />
-        <EmptyState icon={FolderGitIcon} title="Project not found" />
+        <EmptyState icon={FolderGitIcon} title={t("projectNotFoundTitle")} />
       </div>
     );
   }
@@ -210,25 +212,29 @@ export default function ProjectDetailPage() {
     <div className="space-y-6">
       <PageHeader
         title={repo.name}
-        description="Current team membership and queue assignments for this project."
+        description={t("projectMembersDesc")}
         actions={
           <Button variant="outline" asChild>
             <Link href="/projects">
               <ArrowLeftIcon className="size-4" />
-              Projects
+              {t("projects")}
             </Link>
           </Button>
         }
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Team members" value={repo.members.length} />
-        <StatCard label="Manual adds" value={manualMemberCount(repo)} />
-        <StatCard label="Challenges" value={challengeCount} />
-        <StatCard label="Prizes" value={repo.prizes.length} />
+        <StatCard label={t("teamMembers")} value={repo.members.length} />
+        <StatCard label={t("manualAdds")} value={manualMemberCount(repo)} />
+        <StatCard label={t("challenges")} value={challengeCount} />
+        <StatCard label={t("colPrizes")} value={repo.prizes.length} />
       </div>
 
-      <SectionCard title="Links" description="External submission URLs." icon={ExternalLinkIcon}>
+      <SectionCard
+        title={t("linksTitle")}
+        description={t("externalSubmissionUrls")}
+        icon={ExternalLinkIcon}
+      >
         <div className="flex flex-wrap gap-2">
           {repo.devpost_url && (
             <Button variant="outline" asChild>
@@ -255,23 +261,23 @@ export default function ProjectDetailPage() {
             </Button>
           )}
           {!repo.devpost_url && !repo.demo_url && !repo.github_url && (
-            <p className="text-muted-foreground text-sm">No links on this project.</p>
+            <p className="text-muted-foreground text-sm">{t("noLinksProject")}</p>
           )}
         </div>
       </SectionCard>
 
       <div className="grid gap-5 xl:grid-cols-2">
         <SectionCard
-          title="Team"
-          description="Current team membership. Added users are live in the queue surface immediately."
+          title={t("teamSectionTitle")}
+          description={t("teamSectionDesc")}
           icon={UsersIcon}
           bodyClassName="space-y-4"
         >
           {repo.members.length === 0 ? (
             <EmptyState
               icon={UsersIcon}
-              title="No team members"
-              description="Add a user to make this project visible in participant and queue views."
+              title={t("noTeamMembersTitle")}
+              description={t("addUserVisibleDesc")}
             />
           ) : (
             <ul className="space-y-3">
@@ -286,7 +292,7 @@ export default function ProjectDetailPage() {
                       <p className="text-muted-foreground truncate text-sm">{member.email}</p>
                       <p className="text-muted-foreground text-xs">
                         {member.mergeStatus === "manual"
-                          ? "Added manually"
+                          ? t("addedManually")
                           : member.devpostUsername
                             ? `@${member.devpostUsername}`
                             : mergeStatusLabel(member.mergeStatus)}
@@ -333,16 +339,16 @@ export default function ProjectDetailPage() {
         </SectionCard>
 
         <SectionCard
-          title="Challenges"
-          description="Current challenge participation for this project."
+          title={t("challenges")}
+          description={t("challengesSectionDesc")}
           icon={TrophyIcon}
           bodyClassName="space-y-4"
         >
           {repo.challenges.length === 0 ? (
             <EmptyState
               icon={TrophyIcon}
-              title="No challenges assigned"
-              description="Add the project to a challenge to place it in the queue."
+              title={t("noChallengesAssignedTitle")}
+              description={t("addChallengeQueueDesc")}
             />
           ) : (
             <ul className="space-y-3">
@@ -354,18 +360,18 @@ export default function ProjectDetailPage() {
                       <p className="text-muted-foreground text-xs">
                         {challenge.status
                           ? challenge.assignedRoomName
-                            ? `Room: ${challenge.assignedRoomName}`
-                            : "No room assigned"
-                          : `Linked by ${challenge.mappedPrizes.length} prize${
-                              challenge.mappedPrizes.length === 1 ? "" : "s"
-                            }`}
+                            ? t("roomColon", { room: challenge.assignedRoomName })
+                            : t("noRoomAssigned")
+                          : challenge.mappedPrizes.length === 1
+                            ? t("linkedByPrizeOne", { count: challenge.mappedPrizes.length })
+                            : t("linkedByPrizeOther", { count: challenge.mappedPrizes.length })}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
                       {challenge.status ? (
                         <QueueStatusBadge status={challenge.status} />
                       ) : (
-                        <StatusBadge tone="info">Prize</StatusBadge>
+                        <StatusBadge tone="info">{t("prizeBadge")}</StatusBadge>
                       )}
                       {canEdit && challenge.status && (
                         <Button
@@ -374,18 +380,18 @@ export default function ProjectDetailPage() {
                           onClick={async () => {
                             try {
                               await removeRepoChallenge(repo.id, challenge.id);
-                              toast.success("Challenge removed.");
+                              toast.success(t("challengeRemoved"));
                               await load();
                             } catch (err) {
                               toast.error(
                                 err instanceof ApiError
                                   ? err.message
-                                  : "Could not remove challenge.",
+                                  : t("couldNotRemoveChallenge"),
                               );
                             }
                           }}
                         >
-                          Remove
+                          {t("remove")}
                         </Button>
                       )}
                     </div>
@@ -408,16 +414,16 @@ export default function ProjectDetailPage() {
         </SectionCard>
 
         <SectionCard
-          title="Prizes"
-          description="Imported Devpost prize participation for this project."
+          title={t("colPrizes")}
+          description={t("prizesSectionDesc")}
           icon={TrophyIcon}
           bodyClassName="space-y-4"
         >
           {repo.prizes.length === 0 ? (
             <EmptyState
               icon={TrophyIcon}
-              title="No prizes imported"
-              description="Prizes appear here after a Devpost import."
+              title={t("noPrizesImportedTitle")}
+              description={t("prizesAppearAfterImport")}
             />
           ) : (
             <ul className="space-y-3">
@@ -430,13 +436,13 @@ export default function ProjectDetailPage() {
                         <p className="truncate font-medium">{prize}</p>
                         <p className="text-muted-foreground text-xs">
                           {linkedChallenges.length > 0
-                            ? `Linked to ${linkedChallenges.join(", ")}`
-                            : "No linked challenge"}
+                            ? t("linkedToChallenges", { challenges: linkedChallenges.join(", ") })
+                            : t("noLinkedChallenge")}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
                         {linkedChallenges.length === 0 && (
-                          <StatusBadge tone="warning">Unlinked</StatusBadge>
+                          <StatusBadge tone="warning">{t("unlinkedBadge")}</StatusBadge>
                         )}
                         {canEdit && (
                           <Button
@@ -445,16 +451,16 @@ export default function ProjectDetailPage() {
                             onClick={async () => {
                               try {
                                 await removeRepoPrize(repo.id, prize);
-                                toast.success("Prize removed.");
+                                toast.success(t("prizeRemoved"));
                                 await load();
                               } catch (err) {
                                 toast.error(
-                                  err instanceof ApiError ? err.message : "Could not remove prize.",
+                                  err instanceof ApiError ? err.message : t("couldNotRemovePrize"),
                                 );
                               }
                             }}
                           >
-                            Remove
+                            {t("remove")}
                           </Button>
                         )}
                       </div>
@@ -479,6 +485,7 @@ function MemberRemoveButton({
   userId: number;
   onRemoved: () => Promise<void>;
 }) {
+  const { t } = useLocale();
   return (
     <Button
       variant="outline"
@@ -486,14 +493,14 @@ function MemberRemoveButton({
       onClick={async () => {
         try {
           await removeRepoMember(repoId, userId);
-          toast.success("Member removed.");
+          toast.success(t("memberRemoved"));
           await onRemoved();
         } catch (err) {
-          toast.error(err instanceof ApiError ? err.message : "Could not remove member.");
+          toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveMember"));
         }
       }}
     >
-      Remove
+      {t("remove")}
     </Button>
   );
 }
@@ -513,6 +520,7 @@ function DevpostParticipantActions({
   canLink: boolean;
   onChanged: () => Promise<void>;
 }) {
+  const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState("");
   const [busy, setBusy] = useState<"delete" | "link" | null>(null);
@@ -522,10 +530,10 @@ function DevpostParticipantActions({
     setBusy("delete");
     try {
       await removeDevpostParticipant(repoId, email);
-      toast.success("Participant deleted.");
+      toast.success(t("participantDeleted"));
       await onChanged();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not delete participant.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotDeleteParticipant"));
     } finally {
       setBusy(null);
     }
@@ -536,12 +544,12 @@ function DevpostParticipantActions({
     setBusy("link");
     try {
       await linkSecondaryEmail(repoId, email, Number(selectedUserId));
-      toast.success("Verification email sent to the linked address.");
+      toast.success(t("verificationEmailSentLinked"));
       setOpen(false);
       setSelectedUserId("");
       await onChanged();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not link participant to user.");
+      toast.error(err instanceof ApiError ? err.message : t("couldNotLinkParticipant"));
     } finally {
       setBusy(null);
     }
@@ -560,16 +568,16 @@ function DevpostParticipantActions({
             onClick={() => setOpen((current) => !current)}
           >
             <UserPlusIcon className="size-4" />
-            Link Participant to User
+            {t("linkParticipantToUser")}
           </Button>
           {open && (
             <div id={dialogId} className="grid w-full gap-2 sm:grid-cols-[minmax(220px,1fr)_auto]">
               <Label htmlFor={`${dialogId}-user`} className="sr-only">
-                User for {email}
+                {t("userForEmail", { email })}
               </Label>
               <Select value={selectedUserId} onValueChange={setSelectedUserId}>
                 <SelectTrigger id={`${dialogId}-user`}>
-                  <SelectValue placeholder="Select user" />
+                  <SelectValue placeholder={t("selectUserPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
                   {users.map((user) => (
@@ -586,7 +594,7 @@ function DevpostParticipantActions({
                 onClick={linkParticipant}
               >
                 <LinkIcon className="size-4" />
-                Link
+                {t("link")}
               </Button>
             </div>
           )}
@@ -601,7 +609,7 @@ function DevpostParticipantActions({
           onClick={deleteParticipant}
         >
           <Trash2Icon className="size-4" />
-          Delete
+          {t("deleteAction")}
         </Button>
       )}
     </div>
@@ -617,6 +625,7 @@ function ProjectMemberAdder({
   currentMembers: ProjectRepo["members"];
   onAdd: (userId: number) => Promise<void>;
 }) {
+  const { t } = useLocale();
   const [query, setQuery] = useState("");
   const [users, setUsers] = useState<UserList["users"]>([]);
   const [selectedUser, setSelectedUser] = useState<UserList["users"][number] | null>(null);
@@ -641,7 +650,7 @@ function ProjectMemberAdder({
       } catch (err) {
         if (!cancelled) {
           setUsers([]);
-          toast.error(err instanceof ApiError ? err.message : "Could not search users.");
+          toast.error(err instanceof ApiError ? err.message : t("couldNotSearchUsers"));
         }
       } finally {
         if (!cancelled) setSearching(false);
@@ -652,7 +661,7 @@ function ProjectMemberAdder({
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [query]);
+  }, [query, t]);
 
   const memberUserIds = useMemo(
     () =>
@@ -664,7 +673,7 @@ function ProjectMemberAdder({
 
   return (
     <div className="space-y-2 rounded-md border p-3">
-      <Label htmlFor={`member-${repoId}`}>Add member</Label>
+      <Label htmlFor={`member-${repoId}`}>{t("addMemberLabel")}</Label>
       <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
         <div className="space-y-2">
           <div className="relative">
@@ -676,16 +685,18 @@ function ProjectMemberAdder({
                 setQuery(event.target.value);
                 setSelectedUser(null);
               }}
-              placeholder="Search users by name or email..."
+              placeholder={t("searchUsersNameEmailPlaceholder")}
               className="pl-9"
             />
           </div>
           {query.trim().length >= 2 && (
             <div className="max-h-56 overflow-auto rounded-md border">
               {searching ? (
-                <p className="text-muted-foreground px-3 py-2 text-sm">Searching...</p>
+                <p className="text-muted-foreground px-3 py-2 text-sm">{t("searchingEllipsis")}</p>
               ) : availableUsers.length === 0 ? (
-                <p className="text-muted-foreground px-3 py-2 text-sm">No matching users.</p>
+                <p className="text-muted-foreground px-3 py-2 text-sm">
+                  {t("noMatchingUsersPeriod")}
+                </p>
               ) : (
                 availableUsers.map((user) => {
                   const selected = selectedUserId === user.id;
@@ -708,7 +719,7 @@ function ProjectMemberAdder({
                         )}
                       </span>
                       <StatusBadge tone={user.confirmedSpot ? "success" : "neutral"}>
-                        {user.confirmedSpot ? "confirmed" : user.role}
+                        {user.confirmedSpot ? t("confirmedStatus") : user.role}
                       </StatusBadge>
                     </button>
                   );
@@ -727,15 +738,15 @@ function ProjectMemberAdder({
               setQuery("");
               setSelectedUser(null);
               setUsers([]);
-              toast.success("Member added.");
+              toast.success(t("memberAdded"));
             } catch (err) {
-              toast.error(err instanceof ApiError ? err.message : "Could not add member.");
+              toast.error(err instanceof ApiError ? err.message : t("couldNotAddMember"));
             } finally {
               setBusy(false);
             }
           }}
         >
-          Add
+          {t("addAction")}
         </Button>
       </div>
     </div>
@@ -751,6 +762,7 @@ function ProjectChallengeAdder({
   challenges: ChallengeOption[];
   onAdd: (challengeId: number) => Promise<void>;
 }) {
+  const { t } = useLocale();
   const [challengeId, setChallengeId] = useState(challenges[0] ? String(challenges[0].id) : "");
   const [busy, setBusy] = useState(false);
 
@@ -759,16 +771,16 @@ function ProjectChallengeAdder({
   }, [challengeId, challenges]);
 
   if (challenges.length === 0) {
-    return <p className="text-muted-foreground text-sm">No challenges available to add.</p>;
+    return <p className="text-muted-foreground text-sm">{t("noChallengesAvailableAdd")}</p>;
   }
 
   return (
     <div className="space-y-2 rounded-md border p-3">
-      <Label htmlFor={`challenge-${repoId}`}>Add challenge</Label>
+      <Label htmlFor={`challenge-${repoId}`}>{t("addChallengeLabel")}</Label>
       <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
         <Select value={challengeId} onValueChange={setChallengeId}>
           <SelectTrigger id={`challenge-${repoId}`}>
-            <SelectValue placeholder="Select challenge" />
+            <SelectValue placeholder={t("selectChallengePlaceholder")} />
           </SelectTrigger>
           <SelectContent>
             {challenges.map((challenge) => (
@@ -784,15 +796,15 @@ function ProjectChallengeAdder({
             setBusy(true);
             try {
               await onAdd(Number(challengeId));
-              toast.success("Challenge added.");
+              toast.success(t("challengeAddedMsg"));
             } catch (err) {
-              toast.error(err instanceof ApiError ? err.message : "Could not add challenge.");
+              toast.error(err instanceof ApiError ? err.message : t("couldNotAddChallenge"));
             } finally {
               setBusy(false);
             }
           }}
         >
-          Add
+          {t("addAction")}
         </Button>
       </div>
     </div>

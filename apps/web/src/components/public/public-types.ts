@@ -55,7 +55,10 @@ export interface PublicApplicationForm {
 
 export type { PublicScheduleItem };
 
-export function displayText(value: Record<string, string> | null | undefined): string {
+export function displayText(
+  value: Record<string, string> | null | undefined,
+  language = "es",
+): string {
   if (!value) return "";
-  return value.en ?? value.es ?? value.gl ?? Object.values(value)[0] ?? "";
+  return value[language] ?? value.es ?? value.gl ?? value.en ?? Object.values(value)[0] ?? "";
 }

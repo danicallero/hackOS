@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import type { I18nText } from "@/lib/i18n";
-import { pickText } from "@/lib/i18n";
+import { pickText, useLocale } from "@/lib/i18n";
 import type { Language } from "@/lib/types";
 
 export type FieldValue = string | number | boolean | string[] | null | undefined;
@@ -65,6 +65,7 @@ export function TemplateFieldControl({
   applicationId?: number;
   inDialog?: boolean;
 }) {
+  const { t } = useLocale();
   const label = pickText(field.label, lang);
   const options = (field.options ?? []).map((o) => ({
     value: o.value,
@@ -92,7 +93,7 @@ export function TemplateFieldControl({
           disabled={disabled}
         >
           <SelectTrigger className="w-full">
-            <SelectValue placeholder="Select…" />
+            <SelectValue placeholder={t("selectPlaceholder")} />
           </SelectTrigger>
           <SelectContent>
             {!field.required && <SelectItem value={NONE}>—</SelectItem>}
@@ -182,7 +183,7 @@ export function TemplateFieldControl({
         ) : value ? (
           <FileLink value={String(value)} />
         ) : (
-          <p className="text-muted-foreground text-sm">No file uploaded.</p>
+          <p className="text-muted-foreground text-sm">{t("noFileUploadedPeriod")}</p>
         );
       break;
     case "university":

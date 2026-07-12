@@ -13,6 +13,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export interface MultiSelectOption {
@@ -37,9 +38,9 @@ export function MultiSelect({
   options,
   value,
   onChange,
-  placeholder = "Select…",
-  searchPlaceholder = "Search…",
-  emptyText = "No results.",
+  placeholder,
+  searchPlaceholder,
+  emptyText,
   disabled,
   inDialog = false,
   className,
@@ -54,6 +55,7 @@ export function MultiSelect({
   inDialog?: boolean;
   className?: string;
 }) {
+  const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const selected = new Set(value);
   const toggle = (v: string) =>
@@ -67,9 +69,9 @@ export function MultiSelect({
       className="bg-popover text-popover-foreground z-50 w-[--radix-popover-trigger-width] rounded-md border shadow-md outline-hidden"
     >
       <Command>
-        <CommandInput placeholder={searchPlaceholder} />
+        <CommandInput placeholder={searchPlaceholder ?? t("genericSearchPlaceholder")} />
         <CommandList className="max-h-64">
-          <CommandEmpty>{emptyText}</CommandEmpty>
+          <CommandEmpty>{emptyText ?? t("noResultsLabel")}</CommandEmpty>
           <CommandGroup>
             {options.map((opt) => (
               <CommandItem key={opt.value} value={opt.label} onSelect={() => toggle(opt.value)}>
@@ -112,7 +114,7 @@ export function MultiSelect({
         >
           <span className="flex flex-1 flex-wrap gap-1">
             {value.length === 0 ? (
-              <span className="text-muted-foreground">{placeholder}</span>
+              <span className="text-muted-foreground">{placeholder ?? t("selectPlaceholder")}</span>
             ) : (
               value.map((v) => (
                 <Badge key={v} variant="secondary" className="gap-1">
@@ -120,7 +122,7 @@ export function MultiSelect({
                   <button
                     type="button"
                     tabIndex={-1}
-                    aria-label={`Remove ${labelOf(v)}`}
+                    aria-label={t("removeItemLabel", { name: labelOf(v) })}
                     onClick={(e) => {
                       e.stopPropagation();
                       toggle(v);
