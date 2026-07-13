@@ -5,7 +5,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
-import { resolvePassFieldLabels } from "@hackos/shared/wallet-pass-labels";
+import {
+  resolvePassFieldLabels,
+  resolvePassFieldVisibility,
+} from "@hackos/shared/wallet-pass-labels";
 import { config } from "../../config.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
@@ -85,19 +88,26 @@ async function passPayload(pass: PassRow) {
   if (pass.purpose === "badge" && !u.badge_id) throw new BadRequestError("Badge not assigned");
 
   const { rows: eventRows } = await pool.query(
-    `SELECT name, tagline, timezone, hacking_starts_at,
-            venue_name, venue_latitude, venue_longitude, pass_back_fields, pass_field_labels
+    `SELECT name, tagline, timezone, event_starts_at, hacking_starts_at,
+            venue_name, venue_latitude, venue_longitude,
+            pass_back_fields, pass_field_labels, pass_field_visibility
        FROM event_config WHERE id = 1`,
   );
   const event = eventRows[0];
   const eventName = event?.name || ORGANIZATION_NAME;
-  const startsAt: Date | null = event?.hacking_starts_at ? new Date(event.hacking_starts_at) : null;
+  // The time printed on the pass is when attendees can arrive (doors open,
+  // event_starts_at) — NOT hacking_starts_at, which is the countdown clock.
+  // Falls back to the hacking start so passes issued before event_starts_at
+  // is configured still carry a date.
+  const startsAtRaw = event?.event_starts_at ?? event?.hacking_starts_at;
+  const startsAt: Date | null = startsAtRaw ? new Date(startsAtRaw) : null;
   const timezone = event?.timezone || "UTC";
   const venueName: string | null = event?.venue_name ?? null;
   const venueLatitude: number | null = event?.venue_latitude ?? null;
   const venueLongitude: number | null = event?.venue_longitude ?? null;
   const passBackFields: { label: string; value: string }[] = event?.pass_back_fields ?? [];
   const labels = resolvePassFieldLabels(event?.pass_field_labels);
+  const visible = resolvePassFieldVisibility(event?.pass_field_visibility);
 
   const fullName = [u.name, u.surname].filter(Boolean).join(" ") || `User ${pass.user_id}`;
   const barcode = pass.purpose === "ticket" ? u.token : u.badge_id;
@@ -105,18 +115,25 @@ async function passPayload(pass: PassRow) {
   // No primaryFields: the embedded strip image already carries "hackUDC"
   // branding text, and PassKit renders primaryFields overlaid on the strip —
   // putting the name there made it visually collide with the artwork.
+  // Every auto-filled field is behind an admin show/hide toggle (H28).
   const secondaryFields = [
-    { key: "name", label: labels.participant, value: fullName },
-    { key: "role", label: labels.role, value: role },
+    ...(visible.participant ? [{ key: "name", label: labels.participant, value: fullName }] : []),
+    ...(visible.role ? [{ key: "role", label: labels.role, value: role }] : []),
   ];
   const auxiliaryFields = [
-    {
-      key: "purpose",
-      label: labels.passType,
-      value: pass.purpose === "ticket" ? labels.ticketValue : labels.badgeValue,
-    },
-    ...(u.university ? [{ key: "university", label: labels.university, value: u.university }] : []),
-    ...(u.email ? [{ key: "email", label: labels.email, value: u.email }] : []),
+    ...(visible.passType
+      ? [
+          {
+            key: "purpose",
+            label: labels.passType,
+            value: pass.purpose === "ticket" ? labels.ticketValue : labels.badgeValue,
+          },
+        ]
+      : []),
+    ...(visible.university && u.university
+      ? [{ key: "university", label: labels.university, value: u.university }]
+      : []),
+    ...(visible.email && u.email ? [{ key: "email", label: labels.email, value: u.email }] : []),
   ];
   const backFields = [
     { key: "event", label: labels.event, value: eventName },

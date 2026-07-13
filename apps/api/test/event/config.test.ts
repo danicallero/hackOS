@@ -160,6 +160,61 @@ describe("event config (H45/H47)", () => {
     expect(pub.json().passFieldLabels).toEqual({ participant: "Hacker", email: "Contact" });
   });
 
+  it("round-trips the event start (doors open) independently of the hacking window", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const doorsOpen = "2026-07-04T08:00:00.000Z";
+    const put = await a.inject({
+      method: "PUT",
+      url: "/api/event",
+      headers: asUser(manager),
+      payload: { eventStartsAt: doorsOpen, hackingStartsAt: "2026-07-04T10:00:00.000Z" },
+    });
+    expect(put.statusCode).toBe(200);
+    expect(new Date(put.json().eventStartsAt).toISOString()).toBe(doorsOpen);
+
+    const pub = await a.inject({ method: "GET", url: "/api/public/event" });
+    expect(new Date(pub.json().eventStartsAt).toISOString()).toBe(doorsOpen);
+  });
+
+  it("round-trips Wallet pass field-visibility toggles, defaulting to visible", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+
+    const before = await a.inject({ method: "GET", url: "/api/public/event" });
+    expect(before.json().passFieldVisibility).toEqual({});
+
+    const put = await a.inject({
+      method: "PUT",
+      url: "/api/event",
+      headers: asUser(manager),
+      payload: { passFieldVisibility: { email: false, university: false } },
+    });
+    expect(put.statusCode).toBe(200);
+    expect(put.json().passFieldVisibility).toEqual({ email: false, university: false });
+  });
+
+  it("rejects an unknown Wallet pass field-visibility key", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const res = await a.inject({
+      method: "PUT",
+      url: "/api/event",
+      headers: asUser(manager),
+      payload: { passFieldVisibility: { event: false } },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("exposes the organizer name the pass's 'Organized by' field is filled with", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const res = await a.inject({ method: "GET", url: "/api/event", headers: asUser(manager) });
+    expect(res.statusCode).toBe(200);
+    expect(typeof res.json().organizerName).toBe("string");
+    expect(res.json().organizerName.length).toBeGreaterThan(0);
+  });
+
   it("rejects an unknown Wallet pass field-label key", async () => {
     const a = await getApp();
     const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
