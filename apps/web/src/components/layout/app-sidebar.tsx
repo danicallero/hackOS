@@ -13,6 +13,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
+  SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { useUnreadCount } from "@/hooks/use-unread-count";
 import { useLocale } from "@/lib/i18n";
@@ -143,4 +144,11 @@ export function AppSidebar() {
       <SidebarRail />
     </Sidebar>
   );
+}
+
+/** Keeps unread notifications discoverable when the sidebar is collapsed to its icon rail. */
+export function NotificationSidebarTrigger({ className }: { className?: string }) {
+  const unreadCount = useUnreadCount();
+
+  return <SidebarTrigger className={className} hasUnreadNotifications={unreadCount > 0} />;
 }

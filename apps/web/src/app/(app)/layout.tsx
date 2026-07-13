@@ -1,12 +1,12 @@
 import { LanguageSelect } from "@/components/common/language-select";
 import { ThemeToggle } from "@/components/common/theme-toggle";
-import { AppSidebar } from "@/components/layout/app-sidebar";
+import { AppSidebar, NotificationSidebarTrigger } from "@/components/layout/app-sidebar";
 import { AuthGuard } from "@/components/layout/auth-guard";
 import { HeaderTitle } from "@/components/layout/header-title";
 import { UserMenu } from "@/components/layout/user-menu";
 import { VerificationBanner } from "@/components/layout/verification-banner";
 import { Separator } from "@/components/ui/separator";
-import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 
 /**
  * Authenticated app shell (Dokploy-style): capability-filtered sidebar + a
@@ -21,7 +21,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <AppSidebar />
         <SidebarInset className="min-w-0">
           <header className="bg-background/80 sticky top-0 z-10 flex h-14 shrink-0 items-center gap-2 border-b px-4 backdrop-blur sm:px-6">
-            <SidebarTrigger className="-ml-1" />
+            <NotificationSidebarTrigger className="-ml-1" />
             <Separator orientation="vertical" className="mr-1 !h-4" />
             <HeaderTitle />
             <div className="ml-auto flex items-center gap-1">
