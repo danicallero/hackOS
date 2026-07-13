@@ -92,6 +92,8 @@ export interface ChallengeProgress {
   disqualified: number;
   other: number;
   byStatus: Record<string, number>;
+  /** Avg minutes/team across every room judging this challenge; null with no completed teams yet. */
+  avgEvaluationMinutes: number | null;
 }
 
 /** GET /api/queue/rooms/:id/pace (H39). */
@@ -178,6 +180,16 @@ export const getChallengeProgress = (challengeId: number) =>
 export const getRoomPace = (roomId: number) => api.get<RoomPace>(`/api/queue/rooms/${roomId}/pace`);
 export const getRoomAssignments = (roomId: number) =>
   api.get<RoomAssignments>(`/api/queue/rooms/${roomId}/assignments`);
+/** GET /api/queue/repos/:id/challenges — every challenge queue a repo belongs to (H40). */
+export interface RepoChallenge {
+  id: number;
+  title: string;
+  status: QueueStatus | string;
+  room_id: number | null;
+  room_name: string | null;
+}
+export const getRepoChallenges = (repoId: number) =>
+  api.get<RepoChallenge[]>(`/api/queue/repos/${repoId}/challenges`);
 export const getMyQueue = () => api.get<MyQueueEntry[]>("/api/queue/me");
 export const listRooms = () => api.get<Room[]>("/api/queue/rooms");
 /** GET /api/queue/rooms/:id → room fields + attached queue state (not a RoomView). */

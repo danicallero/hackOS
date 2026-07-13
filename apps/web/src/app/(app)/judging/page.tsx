@@ -13,6 +13,7 @@ import {
   BellRingIcon,
   CheckCircle2Icon,
   ChevronDownIcon,
+  ChevronUpIcon,
   DoorOpenIcon,
   DownloadIcon,
   ExternalLinkIcon,
@@ -25,7 +26,8 @@ import {
   SkipForwardIcon,
   UsersIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
@@ -59,10 +61,13 @@ import { ApiError, api } from "@/lib/api";
 import { API_URL } from "@/lib/env";
 import { type Translate, useLocale } from "@/lib/i18n";
 import {
+  type ChallengeProgress,
   callNext,
   closeSession,
   entryAction,
   exportUrls,
+  getChallengeProgress,
+  getRepoChallenges,
   getReview,
   getRoomPace,
   getRoomView,
@@ -73,6 +78,7 @@ import {
   pauseRoom,
   type QueueEntry,
   type QueueSearchResult,
+  type RepoChallenge,
   type Room,
   type RoomPace,
   type RoomView,
@@ -202,6 +208,16 @@ export default function QueuePage() {
     challenges[0]?.id ??
     null;
 
+  const progress = useLiveQuery<ChallengeProgress>(
+    () =>
+      effectiveChallengeId
+        ? getChallengeProgress(effectiveChallengeId)
+        : Promise.resolve(null as never),
+    "/api/queue/stream",
+    [EVENTS.QUEUE_ENTRY_CHANGED, EVENTS.QUEUE_ROOM_CHANGED],
+    { enabled: canUse && effectiveChallengeId != null, queryKey: [effectiveChallengeId] },
+  );
+
   const activeChallenge = useMemo(
     () => challenges.find((c) => c.id === effectiveChallengeId) ?? null,
     [challenges, effectiveChallengeId],
@@ -233,8 +249,8 @@ export default function QueuePage() {
   }, [loadRooms]);
 
   const refreshLive = useCallback(async () => {
-    await Promise.all([roomView.refetch(), pace.refetch()]);
-  }, [roomView, pace]);
+    await Promise.all([roomView.refetch(), pace.refetch(), progress.refetch()]);
+  }, [roomView, pace, progress]);
 
   const mutate = useCallback(
     async (key: string, action: () => Promise<unknown>, success: string) => {
@@ -411,6 +427,8 @@ export default function QueuePage() {
           <div className="xl:min-h-0 xl:overflow-y-auto">
             <QueuePanel
               view={view}
+              progress={progress.data}
+              pace={pace.data}
               canOperate={canOperate}
               canJudge={canJudge}
               busy={busy}
@@ -419,14 +437,6 @@ export default function QueuePage() {
               searching={searching}
               searchDisabled={!effectiveChallengeId}
               onQuery={setSearch}
-              onCallNext={() =>
-                activeRoomId &&
-                mutate(
-                  "call-next",
-                  () => callNext(activeRoomId, crypto.randomUUID()),
-                  t("nextTeamCalled"),
-                )
-              }
               onManualCall={(entry, targetStatus) =>
                 activeRoomId &&
                 mutate(
@@ -532,8 +542,81 @@ export default function QueuePage() {
   );
 }
 
+function QueueStatsCard({
+  progress,
+  pace,
+}: {
+  progress: ChallengeProgress | null;
+  pace: RoomPace | null;
+}) {
+  const { t } = useLocale();
+  const total = progress
+    ? progress.waiting +
+      progress.called +
+      progress.inProgress +
+      progress.evaluated +
+      progress.disqualified +
+      progress.other
+    : 0;
+  const estFinishLabel =
+    pace && pace.pendingCount > 0
+      ? new Date(
+          Date.now() + pace.pendingCount * pace.effectiveMinutesPerTeam * 60_000,
+        ).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      : "—";
+
+  return (
+    <div className="grid grid-cols-2 gap-x-3 gap-y-4 px-5 pt-5 pb-4">
+      <div>
+        <p className="text-muted-foreground text-xs font-semibold uppercase">
+          {t("queueStatsEvaluated")}
+        </p>
+        <p className="mt-0.5 text-lg font-semibold tabular-nums">
+          {progress ? `${progress.evaluated} / ${total}` : "—"}
+        </p>
+      </div>
+      <div>
+        <p className="text-muted-foreground text-xs font-semibold uppercase">
+          {t("queueStatsAvgTime")}
+        </p>
+        <p className="mt-0.5 text-lg font-semibold tabular-nums">
+          {progress?.avgEvaluationMinutes != null
+            ? t("queueStatsMinutes", { count: Math.round(progress.avgEvaluationMinutes) })
+            : "—"}
+        </p>
+      </div>
+      <div>
+        <p className="text-muted-foreground text-xs font-semibold uppercase">
+          {t("queueStatsEstFinish")}
+        </p>
+        <p className="mt-0.5 text-lg font-semibold tabular-nums">{estFinishLabel}</p>
+      </div>
+      <div>
+        <p className="text-muted-foreground text-xs font-semibold uppercase">
+          {t("queueStatsPacingTarget")}
+        </p>
+        <p
+          className={cn(
+            "mt-0.5 text-lg font-semibold tabular-nums",
+            pace?.autoAdjusted && "text-amber-600 dark:text-amber-500",
+          )}
+        >
+          {pace ? t("queueStatsMinutes", { count: Math.round(pace.effectiveMinutesPerTeam) }) : "—"}
+        </p>
+        {pace?.autoAdjusted && (
+          <p className="text-xs text-amber-600 dark:text-amber-500">
+            {t("queueStatsAdjustedHint")}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function QueuePanel({
   view,
+  progress,
+  pace,
   canOperate,
   canJudge,
   busy,
@@ -542,13 +625,14 @@ function QueuePanel({
   searching,
   searchDisabled,
   onQuery,
-  onCallNext,
   onManualCall,
   onEntryAction,
   onAddTop,
   onAddWaiting,
 }: {
   view: RoomView;
+  progress: ChallengeProgress | null;
+  pace: RoomPace | null;
   canOperate: boolean;
   canJudge: boolean;
   busy: string | null;
@@ -557,7 +641,6 @@ function QueuePanel({
   searching: boolean;
   searchDisabled: boolean;
   onQuery: (value: string) => void;
-  onCallNext: () => void;
   onManualCall: (entry: QueueEntry, targetStatus: "called" | "in_room") => void;
   onEntryAction: (
     entry: QueueEntry,
@@ -576,16 +659,7 @@ function QueuePanel({
 
   return (
     <Card className="gap-0 overflow-hidden p-0">
-      <div className="flex items-center justify-between gap-3 px-5 pt-5 pb-4">
-        <div>
-          <h2 className="text-base font-semibold">{t("queueHeading")}</h2>
-          <p className="text-muted-foreground text-sm">{t("waitingRoomQueueDesc")}</p>
-        </div>
-        <Button disabled={!canOperate || busy === "call-next"} onClick={onCallNext}>
-          <BellRingIcon className="size-4" />
-          {t("callNext")}
-        </Button>
-      </div>
+      <QueueStatsCard progress={progress} pace={pace} />
       <Separator />
       <div className="space-y-5 p-5">
         <QueueList
@@ -967,20 +1041,9 @@ function PresentationPanel({
                 <PlayIcon className="size-4" />
                 {t("start")}
               </Button>
-              <Button
-                variant="outline"
-                disabled={!canJudge || !isPresenting || busy != null}
-                onClick={() =>
-                  onEntryAction(entry, "complete", undefined, t("presentationCompleted"))
-                }
-              >
-                <CheckCircle2Icon className="size-4" />
-                {t("complete")}
-              </Button>
               {canSendBack && (
                 <Button
                   variant="outline"
-                  className="sm:col-span-2"
                   disabled={!canJudge || busy != null}
                   onClick={() =>
                     onEntryAction(
@@ -1003,14 +1066,84 @@ function PresentationPanel({
   );
 }
 
+function ProjectDescription({ text }: { text: string }) {
+  const { t } = useLocale();
+  const [expanded, setExpanded] = useState(false);
+  const [overflowing, setOverflowing] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = contentRef.current;
+    if (!el) return;
+    setOverflowing(el.scrollHeight > el.clientHeight + 1);
+  }, []);
+
+  return (
+    <div>
+      <div
+        ref={contentRef}
+        className={cn(
+          "text-muted-foreground text-sm text-pretty",
+          "[&_p]:mb-2 [&_p:last-child]:mb-0 [&_ul]:mb-2 [&_ul]:list-disc [&_ul]:pl-5",
+          "[&_ol]:mb-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mb-0.5",
+          "[&_a]:text-foreground [&_a]:underline [&_strong]:text-foreground [&_strong]:font-semibold",
+          "[&_code]:bg-muted [&_code]:rounded [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-xs",
+          "[&_h1]:text-foreground [&_h1]:mb-1 [&_h1]:text-sm [&_h1]:font-semibold",
+          "[&_h2]:text-foreground [&_h2]:mb-1 [&_h2]:text-sm [&_h2]:font-semibold",
+          "[&_h3]:text-foreground [&_h3]:mb-1 [&_h3]:text-sm [&_h3]:font-semibold",
+          !expanded && "max-h-32 overflow-hidden",
+        )}
+      >
+        <ReactMarkdown>{text}</ReactMarkdown>
+      </div>
+      {(overflowing || expanded) && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="mt-1 h-auto p-0 text-xs"
+          onClick={() => setExpanded((v) => !v)}
+        >
+          {expanded ? (
+            <>
+              <ChevronUpIcon className="size-3.5" />
+              {t("showLess")}
+            </>
+          ) : (
+            <>
+              <ChevronDownIcon className="size-3.5" />
+              {t("showMore")}
+            </>
+          )}
+        </Button>
+      )}
+    </div>
+  );
+}
+
 function ProjectInfo({ entry, challenge }: { entry: QueueEntry; challenge: Challenge | null }) {
   const { t } = useLocale();
   const members = entry.repo_members ?? [];
+  // GitHub first — it's the artifact judges actually need to open.
   const links = [
-    { label: "Demo", href: entry.repo_demo_url },
-    { label: "Devpost", href: entry.repo_devpost_url },
     { label: "GitHub", href: entry.repo_github_url },
+    { label: "Devpost", href: entry.repo_devpost_url },
+    { label: "Demo", href: entry.repo_demo_url },
   ].filter((link): link is { label: string; href: string } => Boolean(link.href));
+
+  const [repoChallenges, setRepoChallenges] = useState<RepoChallenge[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    getRepoChallenges(entry.repo_id)
+      .then((rows) => {
+        if (!cancelled) setRepoChallenges(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setRepoChallenges([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [entry.repo_id]);
 
   return (
     <div className="space-y-3">
@@ -1033,16 +1166,14 @@ function ProjectInfo({ entry, challenge }: { entry: QueueEntry; challenge: Chall
       {entry.repo_description && (
         <div className="rounded-md border bg-background p-4">
           <p className="mb-2 text-xs font-semibold uppercase">{t("projectLabel")}</p>
-          <p className="text-muted-foreground line-clamp-5 text-sm text-pretty">
-            {entry.repo_description}
-          </p>
+          <ProjectDescription text={entry.repo_description} />
         </div>
       )}
 
       {links.length > 0 && (
         <div className="grid gap-2 sm:grid-cols-3">
-          {links.map((link) => (
-            <Button key={link.label} variant="outline" size="sm" asChild>
+          {links.map((link, i) => (
+            <Button key={link.label} variant={i === 0 ? "default" : "outline"} size="sm" asChild>
               <a href={link.href} target="_blank" rel="noreferrer">
                 <ExternalLinkIcon className="size-4" />
                 {link.label}
@@ -1052,15 +1183,41 @@ function ProjectInfo({ entry, challenge }: { entry: QueueEntry; challenge: Chall
         </div>
       )}
 
-      {challenge && (
+      {/* A project can submit to more than one challenge — each has its own
+          queue standing, so list every one instead of just this room's. */}
+      {(repoChallenges.length > 0 || challenge) && (
         <div className="rounded-md border bg-background p-4">
-          <p className="mb-1 text-xs font-semibold uppercase">{t("currentChallengeLabel")}</p>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium">
-              {challengeName(t, challenge, entry.challenge_id)}
-            </span>
-            <StatusBadge tone="success">{t("now")}</StatusBadge>
-          </div>
+          <p className="mb-2 text-xs font-semibold uppercase">{t("challengesLabel")}</p>
+          <ul className="space-y-2">
+            {(repoChallenges.length > 0
+              ? repoChallenges
+              : challenge
+                ? [
+                    {
+                      id: entry.challenge_id,
+                      title: challengeName(t, challenge, entry.challenge_id),
+                      status: entry.status,
+                      room_id: null,
+                      room_name: null,
+                    },
+                  ]
+                : []
+            ).map((rc) => (
+              <li key={rc.id} className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-sm font-medium">{rc.title}</span>
+                <div className="flex items-center gap-2">
+                  {rc.room_name && (
+                    <span className="text-muted-foreground text-xs">{rc.room_name}</span>
+                  )}
+                  {rc.id === entry.challenge_id ? (
+                    <StatusBadge tone="success">{t("now")}</StatusBadge>
+                  ) : (
+                    <QueueStatusBadge status={rc.status} />
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </div>
@@ -1113,7 +1270,9 @@ function PresentationTimer({
               timerTone === "danger" && "text-destructive",
             )}
           >
-            {secondsLabel(remainingSeconds)}
+            {isOverTime
+              ? `+${secondsLabel(-(remainingSeconds as number))}`
+              : secondsLabel(remainingSeconds)}
           </p>
         </div>
         <div className="text-right">

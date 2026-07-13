@@ -35,6 +35,7 @@ export interface PlannedRepo {
   url: string | null;
   description: string;
   demoUrl: string | null;
+  githubUrl: string | null;
   prizes: string[];
   members: PlannedMember[];
   existingRepoId: number | null;
@@ -251,6 +252,7 @@ export async function buildImportPlan(
       url: project.url,
       description: project.description,
       demoUrl: project.demoUrl,
+      githubUrl: project.githubUrl,
       prizes: project.prizes,
       members,
       existingRepoId,

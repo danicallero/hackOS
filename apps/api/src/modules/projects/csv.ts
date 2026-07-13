@@ -35,6 +35,7 @@ export interface DevpostProjectRow {
   url: string | null;
   description: string;
   demoUrl: string | null;
+  githubUrl: string | null;
   prizes: string[];
   teamMemberEmails: string[];
 }
@@ -128,6 +129,33 @@ function parseCsvRows(csvText: string, fileLabel: string): Record<string, string
   }
 }
 
+const URL_RE = /https?:\/\/[^\s,;]+/g;
+
+/**
+ * Devpost has no dedicated "GitHub" column — teams paste the repo link inside
+ * "Try it out Links" alongside the demo/video link. Pull the github.com repo
+ * URL out of that field so it lands in `repos.github_url` instead of being
+ * silently dropped or merged into demo_url. Hostname is checked exactly
+ * against "github.com" (via URL parsing, not substring matching) so a
+ * GitHub Pages demo link (`*.github.io`) or `raw.githubusercontent.com`
+ * asset link never gets misidentified as the repo URL.
+ */
+export function extractGithubUrl(value: string | undefined): string | null {
+  if (!value) return null;
+  const matches = value.match(URL_RE) ?? [];
+  for (const raw of matches) {
+    const candidate = raw.replace(/[),.]+$/, "");
+    let hostname: string;
+    try {
+      hostname = new URL(candidate).hostname.toLowerCase();
+    } catch {
+      continue;
+    }
+    if (hostname === "github.com" || hostname === "www.github.com") return candidate;
+  }
+  return null;
+}
+
 export function splitList(value: string | undefined): string[] {
   if (!value) return [];
   return value
@@ -212,11 +240,13 @@ export function parseProjectsCsv(csvText: string): DevpostProjectRow[] {
     for (const col of numberedEmailColumns) {
       for (const email of extractEmails(raw[col])) memberEmails.add(email);
     }
+    const tryItOutLinks = row.demoUrl?.trim() || null;
     out.push({
       title,
       url,
       description: row.description?.trim() ?? "",
-      demoUrl: row.demoUrl?.trim() || null,
+      demoUrl: tryItOutLinks,
+      githubUrl: extractGithubUrl(tryItOutLinks ?? undefined),
       prizes: splitList(row.prizes),
       teamMemberEmails: [...memberEmails],
     });
