@@ -264,6 +264,7 @@ const schema = z.object({
   timezone: z.string().min(1, "Required").max(100),
   // Held as datetime-local strings ("YYYY-MM-DDTHH:mm"); empty means "unset".
   eventStartsAt: z.string(),
+  eventEndsAt: z.string(),
   hackingStartsAt: z.string(),
   hackingEndsAt: z.string(),
   showStartCountdown: z.boolean(),
@@ -325,6 +326,7 @@ function EventConfigSection() {
       tagline: "",
       timezone: "Europe/Madrid",
       eventStartsAt: "",
+      eventEndsAt: "",
       hackingStartsAt: "",
       hackingEndsAt: "",
       showStartCountdown: false,
@@ -341,6 +343,7 @@ function EventConfigSection() {
       tagline: cfg.tagline ?? "",
       timezone: cfg.timezone || "Europe/Madrid",
       eventStartsAt: toLocalInputValue(cfg.eventStartsAt),
+      eventEndsAt: toLocalInputValue(cfg.eventEndsAt),
       hackingStartsAt: toLocalInputValue(cfg.hackingStartsAt),
       hackingEndsAt: toLocalInputValue(cfg.hackingEndsAt),
       showStartCountdown: cfg.showStartCountdown,
@@ -409,6 +412,7 @@ function EventConfigSection() {
         tagline: values.tagline.trim() || null,
         timezone: values.timezone.trim(),
         eventStartsAt: fromLocalInputValue(values.eventStartsAt),
+        eventEndsAt: fromLocalInputValue(values.eventEndsAt),
         hackingStartsAt: fromLocalInputValue(values.hackingStartsAt),
         hackingEndsAt: fromLocalInputValue(values.hackingEndsAt),
         showStartCountdown: values.showStartCountdown,
@@ -493,6 +497,20 @@ function EventConfigSection() {
                   <DateTimeInput value={field.value} onChange={field.onChange} />
                 </FormControl>
                 <FormDescription>{t("eventStartsDesc")}</FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="eventEndsAt"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t("eventEndsLabel")}</FormLabel>
+                <FormControl>
+                  <DateTimeInput value={field.value} onChange={field.onChange} />
+                </FormControl>
+                <FormDescription>{t("eventEndsDesc")}</FormDescription>
                 <FormMessage />
               </FormItem>
             )}

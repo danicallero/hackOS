@@ -86,6 +86,8 @@ export interface EventConfig {
   timezone: string;
   /** Doors open — the time shown on the Apple Wallet pass. Not the hacking start. */
   eventStartsAt: string | null;
+  /** Event over — the Wallet pass expires then. Not the hacking end. */
+  eventEndsAt: string | null;
   hackingStartsAt: string | null;
   hackingEndsAt: string | null;
   showStartCountdown: boolean;
