@@ -1266,6 +1266,9 @@ function PresentationTimer({
   const startedMs = startedAt ? new Date(startedAt).getTime() : null;
   const elapsedSeconds =
     startedMs && Number.isFinite(startedMs) ? Math.max(0, Math.floor((now - startedMs) / 1000)) : 0;
+  // Stopwatch, not a countdown: always counts up from 0. Only the color
+  // cues (last-minute amber, over-max red) change as elapsed crosses
+  // thresholds — the displayed number itself never resets or jumps.
   const remainingSeconds = totalSeconds != null ? totalSeconds - elapsedSeconds : null;
   const progressValue =
     totalSeconds && totalSeconds > 0 ? Math.min(100, (elapsedSeconds / totalSeconds) * 100) : 0;
@@ -1293,9 +1296,7 @@ function PresentationTimer({
           timerTone === "danger" && "text-destructive",
         )}
       >
-        {isOverTime
-          ? `+${secondsLabel(-(remainingSeconds as number))}`
-          : secondsLabel(remainingSeconds)}
+        {secondsLabel(elapsedSeconds)}
         {totalSeconds != null && (
           <span className="text-muted-foreground font-normal"> / {secondsLabel(totalSeconds)}</span>
         )}
