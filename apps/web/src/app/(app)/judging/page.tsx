@@ -18,6 +18,7 @@ import {
   DownloadIcon,
   ExternalLinkIcon,
   LockIcon,
+  MoreVerticalIcon,
   PauseIcon,
   PlayIcon,
   RotateCcwIcon,
@@ -558,10 +559,11 @@ function QueueStatsCard({
       progress.disqualified +
       progress.other
     : 0;
+  // Pending teams are split across every room sharing this challenge's queue.
   const estFinishLabel =
     pace && pace.pendingCount > 0
       ? new Date(
-          Date.now() + pace.pendingCount * pace.effectiveMinutesPerTeam * 60_000,
+          Date.now() + (pace.pendingCount / pace.roomCount) * pace.effectiveMinutesPerTeam * 60_000,
         ).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
       : "—";
 
@@ -668,9 +670,10 @@ function QueuePanel({
           empty={t("noTeamsWaitingDoor")}
           compact
           renderActions={(entry) => (
-            <div className="grid grid-cols-2 gap-2">
+            <div className="flex items-center gap-2">
               <Button
                 size="sm"
+                className="flex-1"
                 disabled={busy != null || !canJudge}
                 onClick={() => onEntryAction(entry, "bring-in", undefined, t("teamBroughtInShort"))}
               >
@@ -680,41 +683,51 @@ function QueuePanel({
               <Button
                 size="sm"
                 variant="outline"
-                disabled={busy != null || (!canJudge && !canOperate)}
-                onClick={() =>
-                  onEntryAction(
-                    entry,
-                    "requeue",
-                    { position: "bottom", reason: "Returned from waiting room" },
-                    t("teamReturnedQueue"),
-                  )
-                }
-              >
-                <RotateCcwIcon className="size-4" />
-                {t("requeue")}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
+                className="flex-1"
                 disabled={busy != null || (!canJudge && !canOperate)}
                 onClick={() =>
                   onEntryAction(entry, "notify-enter", undefined, t("entranceNoticeSent"))
                 }
               >
                 <SendIcon className="size-4" />
-                {t("notify")}
+                {t("callIn")}
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={busy != null || (!canJudge && !canOperate)}
-                onClick={() =>
-                  onEntryAction(entry, "no-show", { reason: "No show" }, t("noShowRecorded"))
-                }
-              >
-                <AlertTriangleIcon className="size-4" />
-                {t("noShow")}
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    disabled={busy != null || (!canJudge && !canOperate)}
+                    aria-label={t("moreActions")}
+                  >
+                    <MoreVerticalIcon className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={() =>
+                      onEntryAction(
+                        entry,
+                        "requeue",
+                        { position: "bottom", reason: "Returned from waiting room" },
+                        t("teamReturnedQueue"),
+                      )
+                    }
+                  >
+                    <RotateCcwIcon className="size-4" />
+                    {t("requeue")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onClick={() =>
+                      onEntryAction(entry, "no-show", { reason: "No show" }, t("noShowRecorded"))
+                    }
+                  >
+                    <AlertTriangleIcon className="size-4" />
+                    {t("noShow")}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           )}
         />
@@ -916,7 +929,6 @@ function QueueList({
                     {entryLabel(entry, t)}
                   </p>
                   <div className="mt-1 flex flex-wrap items-center gap-2">
-                    <QueueStatusBadge status={entry.status} />
                     {entry.call_count > 0 && (
                       <span className="text-muted-foreground text-xs tabular-nums">
                         Past calls: {entry.call_count}
@@ -982,9 +994,9 @@ function PresentationPanel({
 
   return (
     <Card className={cn("gap-0 overflow-hidden p-0", entry && "border-primary/30 bg-primary/5")}>
-      <div className="flex items-start justify-between gap-4 px-6 pt-6 pb-5">
+      <div className="flex items-start justify-between gap-4 px-5 pt-5 pb-4">
         <div className="min-w-0">
-          <h2 className="truncate text-2xl font-semibold text-balance">
+          <h2 className="truncate text-xl font-semibold text-balance">
             {entry ? entryLabel(entry, t) : t("waitingForNextTeam")}
           </h2>
           <p className="text-muted-foreground text-sm">
@@ -1004,7 +1016,7 @@ function PresentationPanel({
         )}
       </div>
       <Separator />
-      <div className="space-y-5 p-6">
+      <div className="space-y-4 p-5">
         {!entry ? (
           <div className="flex min-h-64 flex-col items-center justify-center rounded-md border border-dashed p-6 text-center">
             <DoorOpenIcon className="text-muted-foreground mb-3 size-8" />
@@ -1028,8 +1040,7 @@ function PresentationPanel({
             {isPresenting && (
               <PresentationTimer
                 startedAt={entry.presentation_started_at}
-                maxSeconds={challenge?.max_presentation_seconds ?? null}
-                fallbackMinutes={pace?.effectiveMinutesPerTeam ?? null}
+                totalMinutes={pace?.effectiveMinutesPerTeam ?? null}
               />
             )}
 
@@ -1146,9 +1157,9 @@ function ProjectInfo({ entry, challenge }: { entry: QueueEntry; challenge: Chall
   }, [entry.repo_id]);
 
   return (
-    <div className="space-y-3">
-      <div className="rounded-md border bg-background p-4">
-        <div className="mb-2 flex items-center gap-2">
+    <div className="space-y-2">
+      <div className="rounded-md border bg-background p-3">
+        <div className="mb-1 flex items-center gap-2">
           <UsersIcon className="text-muted-foreground size-4" />
           <p className="text-xs font-semibold uppercase">{t("membersLabel")}</p>
         </div>
@@ -1164,8 +1175,8 @@ function ProjectInfo({ entry, challenge }: { entry: QueueEntry; challenge: Chall
       </div>
 
       {entry.repo_description && (
-        <div className="rounded-md border bg-background p-4">
-          <p className="mb-2 text-xs font-semibold uppercase">{t("projectLabel")}</p>
+        <div className="rounded-md border bg-background p-3">
+          <p className="mb-1 text-xs font-semibold uppercase">{t("projectLabel")}</p>
           <ProjectDescription text={entry.repo_description} />
         </div>
       )}
@@ -1186,9 +1197,9 @@ function ProjectInfo({ entry, challenge }: { entry: QueueEntry; challenge: Chall
       {/* A project can submit to more than one challenge — each has its own
           queue standing, so list every one instead of just this room's. */}
       {(repoChallenges.length > 0 || challenge) && (
-        <div className="rounded-md border bg-background p-4">
-          <p className="mb-2 text-xs font-semibold uppercase">{t("challengesLabel")}</p>
-          <ul className="space-y-2">
+        <div className="rounded-md border bg-background p-3">
+          <p className="mb-1 text-xs font-semibold uppercase">{t("challengesLabel")}</p>
+          <ul className="space-y-1.5">
             {(repoChallenges.length > 0
               ? repoChallenges
               : challenge
@@ -1226,17 +1237,15 @@ function ProjectInfo({ entry, challenge }: { entry: QueueEntry; challenge: Chall
 
 function PresentationTimer({
   startedAt,
-  maxSeconds,
-  fallbackMinutes,
+  totalMinutes,
 }: {
   startedAt: string | null;
-  maxSeconds: number | null;
-  fallbackMinutes: number | null;
+  /** Already capped by the challenge's max and squeezed for remaining time (H39). */
+  totalMinutes: number | null;
 }) {
   const { t } = useLocale();
   const [now, setNow] = useState(Date.now());
-  const totalSeconds =
-    maxSeconds ?? (fallbackMinutes != null ? Math.round(fallbackMinutes * 60) : null);
+  const totalSeconds = totalMinutes != null ? Math.round(totalMinutes * 60) : null;
   const startedMs = startedAt ? new Date(startedAt).getTime() : null;
   const elapsedSeconds =
     startedMs && Number.isFinite(startedMs) ? Math.max(0, Math.floor((now - startedMs) / 1000)) : 0;
@@ -1259,45 +1268,36 @@ function PresentationTimer({
   }, []);
 
   return (
-    <div className="rounded-md border bg-background p-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase">{t("timeRemaining")}</p>
-          <p
-            className={cn(
-              "mt-1 font-mono text-3xl font-semibold tabular-nums",
-              timerTone === "warning" && "text-amber-600 dark:text-amber-400",
-              timerTone === "danger" && "text-destructive",
-            )}
-          >
-            {isOverTime
-              ? `+${secondsLabel(-(remainingSeconds as number))}`
-              : secondsLabel(remainingSeconds)}
-          </p>
-        </div>
-        <div className="text-right">
-          <p
-            className={cn(
-              "text-sm font-medium",
-              timerTone === "warning" && "text-amber-600 dark:text-amber-400",
-              timerTone === "danger" && "text-destructive",
-            )}
-          >
-            {cueText}
-          </p>
-          <p className="text-muted-foreground text-sm tabular-nums">
-            {t("ofDuration", { duration: secondsLabel(totalSeconds) })}
-          </p>
-        </div>
-      </div>
+    <div className="flex items-center gap-2 rounded-md border bg-background px-3 py-1.5">
+      <span
+        className={cn(
+          "font-mono text-sm font-semibold tabular-nums",
+          timerTone === "warning" && "text-amber-600 dark:text-amber-400",
+          timerTone === "danger" && "text-destructive",
+        )}
+      >
+        {isOverTime
+          ? `+${secondsLabel(-(remainingSeconds as number))}`
+          : secondsLabel(remainingSeconds)}
+      </span>
       <Progress
         value={progressValue}
         className={cn(
-          "mt-3",
+          "h-1.5 flex-1",
           timerTone === "warning" && "[&_[data-slot=progress-indicator]]:bg-amber-500",
           timerTone === "danger" && "[&_[data-slot=progress-indicator]]:bg-destructive",
         )}
       />
+      <span
+        className={cn(
+          "shrink-0 text-xs font-medium whitespace-nowrap",
+          timerTone === "warning" && "text-amber-600 dark:text-amber-400",
+          timerTone === "danger" && "text-destructive",
+          timerTone === "default" && "text-muted-foreground",
+        )}
+      >
+        {cueText}
+      </span>
     </div>
   );
 }
