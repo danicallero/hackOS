@@ -18,7 +18,6 @@ import {
   DownloadIcon,
   ExternalLinkIcon,
   LockIcon,
-  MoreVerticalIcon,
   PauseIcon,
   PlayIcon,
   RotateCcwIcon,
@@ -695,12 +694,13 @@ function QueuePanel({
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
-                    size="icon"
+                    size="sm"
                     variant="outline"
                     disabled={busy != null || (!canJudge && !canOperate)}
                     aria-label={t("moreActions")}
                   >
-                    <MoreVerticalIcon className="size-4" />
+                    {t("requeue")}
+                    <ChevronDownIcon className="size-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
@@ -1245,7 +1245,24 @@ function PresentationTimer({
 }) {
   const { t } = useLocale();
   const [now, setNow] = useState(Date.now());
-  const totalSeconds = totalMinutes != null ? Math.round(totalMinutes * 60) : null;
+
+  // The pace (and its cap/squeeze) is a live value that keeps recomputing as
+  // the schedule and pending count change — refetching it mid-presentation
+  // must not shift the total this timer counts against, or the remaining/
+  // overtime figure would jump around instead of counting smoothly. Freeze it
+  // per presentation (keyed by startedAt), capturing it once if it wasn't
+  // ready yet when the presentation began.
+  const frozen = useRef<{ key: string | null; minutes: number | null }>({
+    key: null,
+    minutes: null,
+  });
+  if (frozen.current.key !== startedAt) {
+    frozen.current = { key: startedAt, minutes: totalMinutes };
+  } else if (frozen.current.minutes == null && totalMinutes != null) {
+    frozen.current.minutes = totalMinutes;
+  }
+  const totalSeconds =
+    frozen.current.minutes != null ? Math.round(frozen.current.minutes * 60) : null;
   const startedMs = startedAt ? new Date(startedAt).getTime() : null;
   const elapsedSeconds =
     startedMs && Number.isFinite(startedMs) ? Math.max(0, Math.floor((now - startedMs) / 1000)) : 0;
@@ -1271,7 +1288,7 @@ function PresentationTimer({
     <div className="flex items-center gap-2 rounded-md border bg-background px-3 py-1.5">
       <span
         className={cn(
-          "font-mono text-sm font-semibold tabular-nums",
+          "font-mono text-sm font-semibold tabular-nums whitespace-nowrap",
           timerTone === "warning" && "text-amber-600 dark:text-amber-400",
           timerTone === "danger" && "text-destructive",
         )}
@@ -1279,6 +1296,9 @@ function PresentationTimer({
         {isOverTime
           ? `+${secondsLabel(-(remainingSeconds as number))}`
           : secondsLabel(remainingSeconds)}
+        {totalSeconds != null && (
+          <span className="text-muted-foreground font-normal"> / {secondsLabel(totalSeconds)}</span>
+        )}
       </span>
       <Progress
         value={progressValue}
