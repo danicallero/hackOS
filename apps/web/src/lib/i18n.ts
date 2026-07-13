@@ -4395,6 +4395,16 @@ const dict: Record<string, I18nText> = {
     gl: "Eliminar campo {index}",
     en: "Remove field {index}",
   },
+  passFieldLabelsSectionTitle: {
+    es: "Etiquetas del pase",
+    gl: "Etiquetas do pase",
+    en: "Pass field labels",
+  },
+  passFieldLabelsSectionDesc: {
+    es: "Personaliza el texto de cada etiqueta del pase de Apple Wallet. Deja un campo en blanco para usar el texto por defecto (mostrado como marcador de posición).",
+    gl: "Personaliza o texto de cada etiqueta do pase de Apple Wallet. Deixa un campo en branco para usar o texto por defecto (amosado como marcador de posición).",
+    en: "Customize the caption text for each field on the Apple Wallet pass. Leave a field blank to use the default (shown as its placeholder).",
+  },
   couldNotLoadJudgingWindow: {
     es: "No se ha podido cargar la ventana de evaluación.",
     gl: "Non se puido cargar a ventá de avaliación.",

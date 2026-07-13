@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
+import { resolvePassFieldLabels } from "@hackos/shared/wallet-pass-labels";
 import { config } from "../../config.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
@@ -85,7 +86,7 @@ async function passPayload(pass: PassRow) {
 
   const { rows: eventRows } = await pool.query(
     `SELECT name, tagline, timezone, hacking_starts_at,
-            venue_name, venue_latitude, venue_longitude, pass_back_fields
+            venue_name, venue_latitude, venue_longitude, pass_back_fields, pass_field_labels
        FROM event_config WHERE id = 1`,
   );
   const event = eventRows[0];
@@ -96,6 +97,7 @@ async function passPayload(pass: PassRow) {
   const venueLatitude: number | null = event?.venue_latitude ?? null;
   const venueLongitude: number | null = event?.venue_longitude ?? null;
   const passBackFields: { label: string; value: string }[] = event?.pass_back_fields ?? [];
+  const labels = resolvePassFieldLabels(event?.pass_field_labels);
 
   const fullName = [u.name, u.surname].filter(Boolean).join(" ") || `User ${pass.user_id}`;
   const barcode = pass.purpose === "ticket" ? u.token : u.badge_id;
@@ -104,23 +106,27 @@ async function passPayload(pass: PassRow) {
   // branding text, and PassKit renders primaryFields overlaid on the strip —
   // putting the name there made it visually collide with the artwork.
   const secondaryFields = [
-    { key: "name", label: "Participant", value: fullName },
-    { key: "role", label: "Role", value: role },
+    { key: "name", label: labels.participant, value: fullName },
+    { key: "role", label: labels.role, value: role },
   ];
   const auxiliaryFields = [
-    { key: "purpose", label: "Pass", value: pass.purpose === "ticket" ? "Ticket" : "Badge" },
-    ...(u.university ? [{ key: "university", label: "University", value: u.university }] : []),
-    ...(u.email ? [{ key: "email", label: "Email", value: u.email }] : []),
+    {
+      key: "purpose",
+      label: labels.passType,
+      value: pass.purpose === "ticket" ? labels.ticketValue : labels.badgeValue,
+    },
+    ...(u.university ? [{ key: "university", label: labels.university, value: u.university }] : []),
+    ...(u.email ? [{ key: "email", label: labels.email, value: u.email }] : []),
   ];
   const backFields = [
-    { key: "event", label: "Event", value: eventName },
-    ...(venueName ? [{ key: "venue", label: "Location", value: venueName }] : []),
+    { key: "event", label: labels.event, value: eventName },
+    ...(venueName ? [{ key: "venue", label: labels.location, value: venueName }] : []),
     ...passBackFields.map((field, i) => ({
       key: `custom-${i}`,
       label: field.label,
       value: field.value,
     })),
-    { key: "org", label: "Organized by", value: ORGANIZATION_NAME },
+    { key: "org", label: labels.organizedBy, value: ORGANIZATION_NAME },
   ];
 
   return {

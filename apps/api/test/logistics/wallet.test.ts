@@ -268,6 +268,50 @@ describe("H28 Apple Wallet PassKit", () => {
     expect(pass.labelColor).toBe("rgb(255,180,0)");
   });
 
+  it("applies admin-overridden pass field labels, falling back to defaults for the rest (H28)", async () => {
+    const { pool } = await import("../../src/db/pool.js");
+    const uid = await createUser({ name: "Ada", email: "ada@test.local" });
+    await pool.query(
+      `INSERT INTO event_config (id, pass_field_labels)
+       VALUES (1, '{"participant":"Hacker","email":"Contact"}'::jsonb)
+       ON CONFLICT (id) DO UPDATE SET pass_field_labels = EXCLUDED.pass_field_labels`,
+    );
+    await issueTicket(uid, "ticket-wallet-labels");
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/me/wallet/apple/ticket.pkpass",
+      headers: asUser(uid),
+    });
+    expect(res.statusCode).toBe(200);
+
+    const entries = readStoredZipEntries(res.rawPayload);
+    const pass = JSON.parse(entries["pass.json"]!.toString());
+
+    // Overridden labels apply...
+    expect(pass.eventTicket.secondaryFields).toContainEqual({
+      key: "name",
+      label: "Hacker",
+      value: "Ada",
+    });
+    expect(pass.eventTicket.auxiliaryFields).toContainEqual({
+      key: "email",
+      label: "Contact",
+      value: "ada@test.local",
+    });
+    // ...and untouched keys keep their default label.
+    expect(pass.eventTicket.secondaryFields).toContainEqual({
+      key: "role",
+      label: "Role",
+      value: "Participant",
+    });
+    expect(pass.eventTicket.auxiliaryFields).toContainEqual({
+      key: "purpose",
+      label: "Pass",
+      value: "Ticket",
+    });
+  });
+
   it("pushes every Apple pass when event config actually changes, but not on a no-op save (H28, H45/H47)", async () => {
     const { pool } = await import("../../src/db/pool.js");
     const { PASS_TYPE_IDENTIFIER } = await import("../../src/modules/logistics/wallet.js");

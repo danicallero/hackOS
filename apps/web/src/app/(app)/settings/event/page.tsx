@@ -4,8 +4,13 @@
 // public "hacking window" that drives the countdown shown on the website and TV
 // panels. Backed by GET/PUT /api/event (capability SCHEDULE_MANAGE).
 
+import {
+  DEFAULT_PASS_FIELD_LABELS,
+  PASS_FIELD_LABEL_KEYS,
+  type PassFieldLabels,
+} from "@hackos/shared/wallet-pass-labels";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CalendarClockIcon, GavelIcon, MapPinIcon, Trash2Icon } from "lucide-react";
+import { CalendarClockIcon, GavelIcon, MapPinIcon, TagIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -31,6 +36,47 @@ import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import { getQueueSettings, updateQueueSettings } from "@/lib/queue";
 import type { EventConfig, PassBackField } from "@/lib/types";
+
+/** Blank overrides are dropped so they fall back to the default, same convention as event_config's other nullable fields. */
+function normalizeFieldLabels(labels: PassFieldLabels): PassFieldLabels {
+  const trimmed: PassFieldLabels = {};
+  for (const key of PASS_FIELD_LABEL_KEYS) {
+    const value = labels[key]?.trim();
+    if (value) trimmed[key] = value;
+  }
+  return trimmed;
+}
+
+/**
+ * One input per customizable pass caption (see packages/shared/src/wallet-pass-labels.ts) —
+ * a fixed list, not an add/remove builder like BackFieldBuilder, since the
+ * set of captions is known. The default English caption doubles as both the
+ * row's own label and the input's placeholder, so there's nothing extra to
+ * translate here as new captions are added to the shared catalogue.
+ */
+function PassFieldLabelsEditor({
+  value,
+  onChange,
+}: {
+  value: PassFieldLabels;
+  onChange: (value: PassFieldLabels) => void;
+}) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      {PASS_FIELD_LABEL_KEYS.map((key) => (
+        <div key={key} className="space-y-1.5">
+          <Label htmlFor={`pass-label-${key}`}>{DEFAULT_PASS_FIELD_LABELS[key]}</Label>
+          <Input
+            id={`pass-label-${key}`}
+            value={value[key] ?? ""}
+            placeholder={DEFAULT_PASS_FIELD_LABELS[key]}
+            onChange={(event) => onChange({ ...value, [key]: event.target.value })}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
 
 /** Empty rows are dropped and label/value are trimmed before saving. */
 function normalizeBackFields(fields: PassBackField[]): PassBackField[] {
@@ -138,6 +184,7 @@ export default function EventSettingsPage() {
 function HackingWindowSection() {
   const { t } = useLocale();
   const [passBackFields, setPassBackFields] = useState<PassBackField[]>([]);
+  const [passFieldLabels, setPassFieldLabels] = useState<PassFieldLabels>({});
   const form = useForm<Values>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -171,6 +218,7 @@ function HackingWindowSection() {
           venueLongitude: cfg.venueLongitude === null ? "" : String(cfg.venueLongitude),
         });
         setPassBackFields(cfg.passBackFields);
+        setPassFieldLabels(cfg.passFieldLabels);
       })
       .catch((err) =>
         toast.error(err instanceof ApiError ? err.message : t("couldNotLoadEventSettings")),
@@ -191,6 +239,7 @@ function HackingWindowSection() {
         venueLatitude: values.venueLatitude.trim() === "" ? null : Number(values.venueLatitude),
         venueLongitude: values.venueLongitude.trim() === "" ? null : Number(values.venueLongitude),
         passBackFields: normalizeBackFields(passBackFields),
+        passFieldLabels: normalizeFieldLabels(passFieldLabels),
       });
       reset({
         name: next.name ?? "",
@@ -204,6 +253,7 @@ function HackingWindowSection() {
         venueLongitude: next.venueLongitude === null ? "" : String(next.venueLongitude),
       });
       setPassBackFields(next.passBackFields);
+      setPassFieldLabels(next.passFieldLabels);
       toast.success(t("eventSettingsSaved"));
     } catch (err) {
       // Surfaces API business errors verbatim (e.g. "hackingEndsAt must be after hackingStartsAt").
@@ -359,6 +409,16 @@ function HackingWindowSection() {
             </div>
             <BackFieldBuilder value={passBackFields} onChange={setPassBackFields} />
           </div>
+        </SectionCard>
+        <SectionCard
+          icon={TagIcon}
+          title={t("passFieldLabelsSectionTitle")}
+          description={t("passFieldLabelsSectionDesc")}
+          footer={
+            <SubmitButton pending={form.formState.isSubmitting}>{t("saveChanges")}</SubmitButton>
+          }
+        >
+          <PassFieldLabelsEditor value={passFieldLabels} onChange={setPassFieldLabels} />
         </SectionCard>
       </form>
     </Form>
