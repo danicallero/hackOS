@@ -2,7 +2,12 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool } from "../../db/pool.js";
-import { requireAuth, requireCapability, userHasCapability } from "../../lib/capabilities.js";
+import {
+  requireAnyCapability,
+  requireAuth,
+  requireCapability,
+  userHasCapability,
+} from "../../lib/capabilities.js";
 import { ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
 import { subscribe } from "../../lib/sse.js";
 import {
@@ -13,11 +18,12 @@ import {
   allRoomViews,
   challengeProgress,
   myQueueStatus,
+  repoChallenges,
   roomAssignments,
   roomPace,
   roomView,
 } from "./reads.js";
-import { challengeIdParam, roomIdParam, tvModeBody } from "./schemas.js";
+import { challengeIdParam, repoIdParam, roomIdParam, tvModeBody } from "./schemas.js";
 import { getTvMode, setTvMode } from "./tv.js";
 
 /** Read APIs (H38-H42): progress, room views, participant status, pace, SSE streams, TV mode. */
@@ -52,6 +58,21 @@ export function registerReadsRoutes(app: FastifyInstance): void {
       schema: { params: challengeIdParam },
     },
     async (req) => challengeProgress(req.params.challengeId),
+  );
+
+  // H40 (judging card): every challenge queue this repo belongs to, not just
+  // the one the current room judges — a project can submit to several.
+  typed.get(
+    "/api/queue/repos/:repoId/challenges",
+    {
+      preHandler: requireAnyCapability(
+        CAPABILITIES.JUDGE_PANEL,
+        CAPABILITIES.QUEUE_OPERATE,
+        CAPABILITIES.QUEUE_ADMIN,
+      ),
+      schema: { params: repoIdParam },
+    },
+    async (req) => repoChallenges(req.params.repoId),
   );
 
   // H41: full room view for operator panels; also the TV data source.

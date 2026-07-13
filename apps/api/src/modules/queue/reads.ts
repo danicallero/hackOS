@@ -46,6 +46,19 @@ export async function challengeProgress(challengeId: number) {
     (acc, [k, v]) => (known.includes(k) ? acc : acc + v),
     0,
   );
+
+  // Shared across every room judging this challenge (multi-room challenges
+  // share one logical queue), so this is a challenge-wide average, not per-room.
+  const { rows: avgRows } = await pool.query(
+    `SELECT AVG(EXTRACT(EPOCH FROM (completed_at - presentation_started_at)) / 60) AS avg_minutes
+       FROM queue_entries
+      WHERE challenge_id = $1 AND status = 'completed'
+        AND completed_at IS NOT NULL AND presentation_started_at IS NOT NULL`,
+    [challengeId],
+  );
+  const avgEvaluationMinutes =
+    avgRows[0].avg_minutes != null ? Number(avgRows[0].avg_minutes) : null;
+
   return {
     challengeId,
     waiting: counts.waiting ?? 0,
@@ -55,6 +68,7 @@ export async function challengeProgress(challengeId: number) {
     disqualified: counts.disqualified ?? 0,
     other,
     byStatus: counts,
+    avgEvaluationMinutes,
   };
 }
 
@@ -335,6 +349,27 @@ export async function roomPace(roomId: number) {
     effectiveMinutesPerTeam,
     autoAdjusted,
   };
+}
+
+/**
+ * Every challenge queue this repo is (or was) part of — a project can submit
+ * to several challenges, each with its own `queue_entries` row, so the
+ * judging card's "current challenge" label understates it. Cancelled entries
+ * are excluded (never actually queued); disqualified/completed ones stay so
+ * the judge sees the project's full standing across challenges.
+ */
+export async function repoChallenges(repoId: number) {
+  const { rows } = await pool.query(
+    `SELECT qe.challenge_id AS id, c.title, qe.status,
+            qe.assigned_room_id AS room_id, r.name AS room_name
+       FROM queue_entries qe
+       JOIN challenges c ON c.id = qe.challenge_id
+       LEFT JOIN rooms r ON r.id = qe.assigned_room_id
+      WHERE qe.repo_id = $1 AND qe.status != 'cancelled'
+      ORDER BY c.title ASC`,
+    [repoId],
+  );
+  return rows;
 }
 
 export async function entryHistory(entryId: number) {

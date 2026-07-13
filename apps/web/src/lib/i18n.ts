@@ -1517,6 +1517,36 @@ const dict: Record<string, I18nText> = {
     gl: "Sala de espera ({count})",
     en: "Waiting room ({count})",
   },
+  queueStatsEvaluated: {
+    es: "Evaluados",
+    gl: "Avaliados",
+    en: "Evaluated",
+  },
+  queueStatsAvgTime: {
+    es: "Tiempo medio/equipo",
+    gl: "Tempo medio/equipo",
+    en: "Avg time/team",
+  },
+  queueStatsEstFinish: {
+    es: "Fin estimado",
+    gl: "Fin estimado",
+    en: "Est. finish",
+  },
+  queueStatsPacingTarget: {
+    es: "Objetivo de ritmo",
+    gl: "Obxectivo de ritmo",
+    en: "Pacing target",
+  },
+  queueStatsAdjustedHint: {
+    es: "Ajustado por el tiempo restante",
+    gl: "Axustado polo tempo restante",
+    en: "Adjusted for remaining time",
+  },
+  queueStatsMinutes: {
+    es: "{count} min",
+    gl: "{count} min",
+    en: "{count} min",
+  },
   noTeamsWaitingDoor: {
     es: "No hay equipos esperando en la puerta.",
     gl: "Non hai equipos esperando na porta.",
@@ -1624,6 +1654,9 @@ const dict: Record<string, I18nText> = {
   membersLabel: { es: "Miembros", gl: "Membros", en: "Members" },
   projectLabel: { es: "Proyecto", gl: "Proxecto", en: "Project" },
   currentChallengeLabel: { es: "Reto actual", gl: "Reto actual", en: "Current challenge" },
+  challengesLabel: { es: "Retos", gl: "Retos", en: "Challenges" },
+  showMore: { es: "Mostrar más", gl: "Amosar máis", en: "Show more" },
+  showLess: { es: "Mostrar menos", gl: "Amosar menos", en: "Show less" },
   now: { es: "Ahora", gl: "Agora", en: "Now" },
   timeRemaining: { es: "Tiempo restante", gl: "Tempo restante", en: "Time remaining" },
   timeLimitExceeded: {
