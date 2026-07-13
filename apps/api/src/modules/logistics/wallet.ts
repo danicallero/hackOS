@@ -30,6 +30,10 @@ const ROLE_LABELS: Record<DerivedRole, string> = {
   participant: "Participant",
 };
 
+// users.language is 'en' | 'es' | 'gl' (0001_initial) — the pass header's
+// month abbreviation follows the holder's language (H28).
+const PASS_LOCALES: Record<string, string> = { en: "en-GB", es: "es-ES", gl: "gl-ES" };
+
 const execFileAsync = promisify(execFile);
 export const PASS_TYPE_IDENTIFIER = config.APPLE_PASS_TYPE_IDENTIFIER ?? "pass.local.hackos";
 const TEAM_IDENTIFIER = config.APPLE_TEAM_IDENTIFIER ?? "LOCALTEAM";
@@ -75,7 +79,7 @@ async function requirePassBySerial(serialNumber: string, authorization?: string)
 
 async function passPayload(pass: PassRow) {
   const { rows } = await pool.query(
-    `SELECT u.name, u.surname, u.email, u.badge_id, un.name AS university, t.token
+    `SELECT u.name, u.surname, u.email, u.badge_id, u.language, un.name AS university, t.token
        FROM users u
        LEFT JOIN tickets t ON t.user_id = u.id
        LEFT JOIN universities un ON un.id = u.university_id
@@ -88,7 +92,7 @@ async function passPayload(pass: PassRow) {
   if (pass.purpose === "badge" && !u.badge_id) throw new BadRequestError("Badge not assigned");
 
   const { rows: eventRows } = await pool.query(
-    `SELECT name, tagline, timezone, event_starts_at, hacking_starts_at,
+    `SELECT name, tagline, timezone, event_starts_at, event_ends_at, hacking_starts_at,
             venue_name, venue_latitude, venue_longitude,
             pass_back_fields, pass_field_labels, pass_field_visibility
        FROM event_config WHERE id = 1`,
@@ -101,6 +105,9 @@ async function passPayload(pass: PassRow) {
   // is configured still carry a date.
   const startsAtRaw = event?.event_starts_at ?? event?.hacking_starts_at;
   const startsAt: Date | null = startsAtRaw ? new Date(startsAtRaw) : null;
+  // When the event ends (multi-day aware, distinct from hacking_ends_at):
+  // becomes the pass's expirationDate so Wallet stops surfacing it afterwards.
+  const endsAt: Date | null = event?.event_ends_at ? new Date(event.event_ends_at) : null;
   const timezone = event?.timezone || "UTC";
   const venueName: string | null = event?.venue_name ?? null;
   const venueLatitude: number | null = event?.venue_latitude ?? null;
@@ -146,6 +153,46 @@ async function passPayload(pass: PassRow) {
     { key: "org", label: labels.organizedBy, value: ORGANIZATION_NAME },
   ];
 
+  // Top corner of the pass, left-aligned within its field. Tickets: doors-open
+  // time + date ("6 feb 2026" — month abbreviated in the holder's language).
+  // Badges are not date-bound, so they say BADGE (the admin-customizable
+  // badgeValue caption, uppercased) instead of a date.
+  const locale = PASS_LOCALES[u.language] ?? "en-GB";
+  // Composed by hand ("20 feb, 2026") instead of toLocaleDateString: es/gl
+  // locale styles insert prepositions ("6 de feb. de 2026") that overflow the
+  // header field — only the month abbreviation itself is localized.
+  const headerDate = (d: Date) => {
+    const day = d.toLocaleString(locale, { day: "numeric", timeZone: timezone });
+    const month = d
+      .toLocaleString(locale, { month: "short", timeZone: timezone })
+      .replace(/\./g, "");
+    const year = d.toLocaleString(locale, { year: "numeric", timeZone: timezone });
+    return `${day} ${month}, ${year}`;
+  };
+  const headerFields =
+    pass.purpose === "badge"
+      ? [
+          {
+            key: "badge",
+            value: labels.badgeValue.toUpperCase(),
+            textAlignment: "PKTextAlignmentLeft",
+          },
+        ]
+      : startsAt
+        ? [
+            {
+              key: "when",
+              label: startsAt.toLocaleTimeString(locale, {
+                hour: "2-digit",
+                minute: "2-digit",
+                timeZone: timezone,
+              }),
+              value: headerDate(startsAt),
+              textAlignment: "PKTextAlignmentLeft",
+            },
+          ]
+        : [];
+
   return {
     formatVersion: 1,
     passTypeIdentifier: PASS_TYPE_IDENTIFIER,
@@ -158,6 +205,7 @@ async function passPayload(pass: PassRow) {
     sharingProhibited: true,
     voided: pass.status === "voided",
     ...(startsAt ? { relevantDate: startsAt.toISOString() } : {}),
+    ...(endsAt ? { expirationDate: endsAt.toISOString() } : {}),
     ...(venueLatitude !== null && venueLongitude !== null
       ? {
           locations: [
@@ -170,26 +218,7 @@ async function passPayload(pass: PassRow) {
         }
       : {}),
     eventTicket: {
-      ...(startsAt
-        ? {
-            headerFields: [
-              {
-                key: "when",
-                label: startsAt.toLocaleTimeString("en-GB", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  timeZone: timezone,
-                }),
-                value: startsAt.toLocaleDateString("en-GB", {
-                  day: "2-digit",
-                  month: "short",
-                  timeZone: timezone,
-                }),
-                textAlignment: "PKTextAlignmentRight",
-              },
-            ],
-          }
-        : {}),
+      ...(headerFields.length > 0 ? { headerFields } : {}),
       secondaryFields,
       auxiliaryFields,
       backFields,

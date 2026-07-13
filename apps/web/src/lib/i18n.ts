@@ -4345,6 +4345,16 @@ const dict: Record<string, I18nText> = {
     gl: "Cando poden chegar os asistentes á sede. Esta é a hora que aparece no pase de Apple Wallet — non ten por que coincidir co inicio do hacking.",
     en: "When attendees can arrive at the venue. This is the time shown on the Apple Wallet pass — it need not match the hacking start.",
   },
+  eventEndsLabel: {
+    es: "Termina el evento",
+    gl: "Remata o evento",
+    en: "Event ends",
+  },
+  eventEndsDesc: {
+    es: "Cuándo acaba el evento (no el hacking — en eventos de varios días no coinciden). El pase de Apple Wallet caduca a esta hora y Wallet deja de mostrarlo.",
+    gl: "Cando remata o evento (non o hacking — en eventos de varios días non coinciden). O pase de Apple Wallet caduca a esta hora e Wallet deixa de amosalo.",
+    en: "When the event is over (not the hacking end — on multi-day events they differ). The Apple Wallet pass expires then and Wallet stops surfacing it.",
+  },
   hackingStartsLabel: {
     es: "Empieza el hacking",
     gl: "Comeza o hacking",

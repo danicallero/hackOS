@@ -177,6 +177,40 @@ describe("event config (H45/H47)", () => {
     expect(new Date(pub.json().eventStartsAt).toISOString()).toBe(doorsOpen);
   });
 
+  it("round-trips the event end (pass expiry) independently of the hacking end", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const eventEnd = "2026-07-06T18:00:00.000Z";
+    const put = await a.inject({
+      method: "PUT",
+      url: "/api/event",
+      headers: asUser(manager),
+      payload: {
+        eventStartsAt: "2026-07-04T08:00:00.000Z",
+        eventEndsAt: eventEnd,
+        hackingEndsAt: "2026-07-05T09:00:00.000Z",
+      },
+    });
+    expect(put.statusCode).toBe(200);
+    expect(new Date(put.json().eventEndsAt).toISOString()).toBe(eventEnd);
+    expect(new Date(put.json().hackingEndsAt).toISOString()).toBe("2026-07-05T09:00:00.000Z");
+  });
+
+  it("rejects an event end before the event start", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const res = await a.inject({
+      method: "PUT",
+      url: "/api/event",
+      headers: asUser(manager),
+      payload: {
+        eventStartsAt: "2026-07-05T09:00:00.000Z",
+        eventEndsAt: "2026-07-04T09:00:00.000Z",
+      },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
   it("round-trips Wallet pass field-visibility toggles, defaulting to visible", async () => {
     const a = await getApp();
     const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);

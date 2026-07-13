@@ -46,6 +46,7 @@ const eventConfigBody = z
     tagline: z.string().nullable().optional(),
     timezone: z.string().min(1).optional(),
     eventStartsAt: z.coerce.date().nullable().optional(),
+    eventEndsAt: z.coerce.date().nullable().optional(),
     hackingStartsAt: z.coerce.date().nullable().optional(),
     hackingEndsAt: z.coerce.date().nullable().optional(),
     showStartCountdown: z.boolean().optional(),
@@ -63,6 +64,7 @@ const DEFAULTS = {
   tagline: null,
   timezone: "Europe/Madrid",
   event_starts_at: null,
+  event_ends_at: null,
   hacking_starts_at: null,
   hacking_ends_at: null,
   show_start_countdown: false,
@@ -79,6 +81,7 @@ interface EventConfigRow {
   tagline: string | null;
   timezone: string;
   event_starts_at: string | null;
+  event_ends_at: string | null;
   hacking_starts_at: string | null;
   hacking_ends_at: string | null;
   show_start_countdown: boolean;
@@ -92,7 +95,8 @@ interface EventConfigRow {
 
 async function readConfig(): Promise<EventConfigRow> {
   const { rows } = await pool.query(
-    `SELECT name, tagline, timezone, event_starts_at, hacking_starts_at, hacking_ends_at,
+    `SELECT name, tagline, timezone, event_starts_at, event_ends_at,
+            hacking_starts_at, hacking_ends_at,
             show_start_countdown, venue_name, venue_latitude, venue_longitude,
             pass_back_fields, pass_field_labels, pass_field_visibility
        FROM event_config WHERE id = 1`,
@@ -128,6 +132,7 @@ function toPublic(
     tagline: row.tagline,
     timezone: row.timezone,
     eventStartsAt: row.event_starts_at,
+    eventEndsAt: row.event_ends_at,
     hackingStartsAt: row.hacking_starts_at,
     hackingEndsAt: row.hacking_ends_at,
     showStartCountdown: row.show_start_countdown,
@@ -185,6 +190,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
         tagline: b.tagline === undefined ? current.tagline : b.tagline,
         timezone: b.timezone ?? current.timezone,
         event_starts_at: b.eventStartsAt === undefined ? current.event_starts_at : b.eventStartsAt,
+        event_ends_at: b.eventEndsAt === undefined ? current.event_ends_at : b.eventEndsAt,
         hacking_starts_at:
           b.hackingStartsAt === undefined ? current.hacking_starts_at : b.hackingStartsAt,
         hacking_ends_at: b.hackingEndsAt === undefined ? current.hacking_ends_at : b.hackingEndsAt,
@@ -211,19 +217,28 @@ export function registerEventRoutes(app: FastifyInstance): void {
       ) {
         throw new BadRequestError("hackingEndsAt must be after hackingStartsAt");
       }
+      if (
+        next.event_starts_at !== null &&
+        next.event_ends_at !== null &&
+        new Date(next.event_ends_at).getTime() <= new Date(next.event_starts_at).getTime()
+      ) {
+        throw new BadRequestError("eventEndsAt must be after eventStartsAt");
+      }
       if ((next.venue_latitude === null) !== (next.venue_longitude === null)) {
         throw new BadRequestError("venueLatitude and venueLongitude must be set together");
       }
 
       const { rows } = await pool.query(
         `INSERT INTO event_config
-            (id, name, tagline, timezone, event_starts_at, hacking_starts_at, hacking_ends_at,
+            (id, name, tagline, timezone, event_starts_at, event_ends_at,
+             hacking_starts_at, hacking_ends_at,
              show_start_countdown, venue_name, venue_latitude, venue_longitude,
              pass_back_fields, pass_field_labels, pass_field_visibility)
-         VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12::jsonb, $13::jsonb)
+         VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14::jsonb)
          ON CONFLICT (id) DO UPDATE
             SET name = EXCLUDED.name, tagline = EXCLUDED.tagline, timezone = EXCLUDED.timezone,
                 event_starts_at = EXCLUDED.event_starts_at,
+                event_ends_at = EXCLUDED.event_ends_at,
                 hacking_starts_at = EXCLUDED.hacking_starts_at,
                 hacking_ends_at = EXCLUDED.hacking_ends_at,
                 show_start_countdown = EXCLUDED.show_start_countdown,
@@ -233,7 +248,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
                 pass_back_fields = EXCLUDED.pass_back_fields,
                 pass_field_labels = EXCLUDED.pass_field_labels,
                 pass_field_visibility = EXCLUDED.pass_field_visibility
-         RETURNING name, tagline, timezone, event_starts_at, hacking_starts_at, hacking_ends_at,
+         RETURNING name, tagline, timezone, event_starts_at, event_ends_at,
+                   hacking_starts_at, hacking_ends_at,
                    show_start_countdown, venue_name, venue_latitude, venue_longitude,
                    pass_back_fields, pass_field_labels, pass_field_visibility`,
         [
@@ -241,6 +257,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
           next.tagline,
           next.timezone,
           next.event_starts_at,
+          next.event_ends_at,
           next.hacking_starts_at,
           next.hacking_ends_at,
           next.show_start_countdown,
