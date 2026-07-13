@@ -260,7 +260,7 @@ function SidebarTrigger({
   hasUnreadNotifications = false,
   ...props
 }: React.ComponentProps<typeof Button> & { hasUnreadNotifications?: boolean }) {
-  const { toggleSidebar } = useSidebar()
+  const { isMobile, state, toggleSidebar } = useSidebar()
   const { t } = useLocale()
 
   return (
@@ -277,10 +277,10 @@ function SidebarTrigger({
       {...props}
     >
       <PanelLeftIcon />
-      {hasUnreadNotifications && (
+      {hasUnreadNotifications && (isMobile || state === "collapsed") && (
         <span
           aria-hidden
-          className="border-background bg-destructive absolute -top-0.5 -right-0.5 hidden size-2 rounded-full border group-data-[state=collapsed]:block"
+          className="border-background bg-destructive absolute -top-0.5 -right-0.5 size-2 rounded-full border"
         />
       )}
       <span className="sr-only">{t("toggleSidebar")}</span>
