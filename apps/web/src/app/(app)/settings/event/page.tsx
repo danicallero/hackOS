@@ -46,6 +46,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { ApiError, api } from "@/lib/api";
+import { parseCoordinate, parseCoordinatePair } from "@/lib/coords";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import { getQueueSettings, updateQueueSettings } from "@/lib/queue";
@@ -364,7 +365,43 @@ function EventConfigSection() {
       );
   }, [reset, t]);
 
+  /** A full pair pasted into either coordinate box ("43°19′58″N 8°24′38″O", "43.33, -8.41") fills both. */
+  function handleCoordinateInput(raw: string, field: { onChange: (value: string) => void }) {
+    const pair = parseCoordinatePair(raw);
+    if (pair) {
+      form.setValue("venueLatitude", String(pair.lat), { shouldDirty: true });
+      form.setValue("venueLongitude", String(pair.lon), { shouldDirty: true });
+    } else {
+      field.onChange(raw);
+    }
+  }
+
+  /** DMS input becomes decimal degrees on blur, so the box shows exactly what will be stored. */
+  function normalizeCoordinateField(name: "venueLatitude" | "venueLongitude", axis: "lat" | "lon") {
+    const raw = form.getValues(name);
+    const parsed = parseCoordinate(raw, axis);
+    if (parsed === null) return;
+    if (String(parsed) !== raw) form.setValue(name, String(parsed), { shouldDirty: true });
+    form.clearErrors(name);
+  }
+
   async function onSubmit(values: Values) {
+    // Coordinates accept decimal degrees or DMS (43°19′58″N) — see lib/coords.ts.
+    const venueLatitude =
+      values.venueLatitude.trim() === "" ? null : parseCoordinate(values.venueLatitude, "lat");
+    const venueLongitude =
+      values.venueLongitude.trim() === "" ? null : parseCoordinate(values.venueLongitude, "lon");
+    let badCoordinate = false;
+    if (values.venueLatitude.trim() !== "" && venueLatitude === null) {
+      form.setError("venueLatitude", { message: t("invalidCoordinate") });
+      badCoordinate = true;
+    }
+    if (values.venueLongitude.trim() !== "" && venueLongitude === null) {
+      form.setError("venueLongitude", { message: t("invalidCoordinate") });
+      badCoordinate = true;
+    }
+    if (badCoordinate) return;
+
     try {
       // Empty strings become null so the API clears the field (name/tagline are nullable).
       const next = await api.put<EventConfig>("/api/event", {
@@ -376,8 +413,8 @@ function EventConfigSection() {
         hackingEndsAt: fromLocalInputValue(values.hackingEndsAt),
         showStartCountdown: values.showStartCountdown,
         venueName: values.venueName.trim() || null,
-        venueLatitude: values.venueLatitude.trim() === "" ? null : Number(values.venueLatitude),
-        venueLongitude: values.venueLongitude.trim() === "" ? null : Number(values.venueLongitude),
+        venueLatitude,
+        venueLongitude,
         passBackFields: normalizeBackFields(passBackFields),
         passFieldLabels: normalizeFieldLabels(passFieldLabels),
         passFieldVisibility,
@@ -534,8 +571,16 @@ function EventConfigSection() {
                 <FormItem>
                   <FormLabel>{t("venueLatitudeLabel")}</FormLabel>
                   <FormControl>
-                    <Input type="number" step="any" {...field} />
+                    <Input
+                      {...field}
+                      onChange={(event) => handleCoordinateInput(event.target.value, field)}
+                      onBlur={() => {
+                        normalizeCoordinateField("venueLatitude", "lat");
+                        field.onBlur();
+                      }}
+                    />
                   </FormControl>
+                  <FormDescription>{t("coordsFormatsHint")}</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -547,7 +592,14 @@ function EventConfigSection() {
                 <FormItem>
                   <FormLabel>{t("venueLongitudeLabel")}</FormLabel>
                   <FormControl>
-                    <Input type="number" step="any" {...field} />
+                    <Input
+                      {...field}
+                      onChange={(event) => handleCoordinateInput(event.target.value, field)}
+                      onBlur={() => {
+                        normalizeCoordinateField("venueLongitude", "lon");
+                        field.onBlur();
+                      }}
+                    />
                   </FormControl>
                   <FormDescription>{t("venueCoordsBothOrNeither")}</FormDescription>
                   <FormMessage />
