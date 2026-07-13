@@ -13,6 +13,16 @@ the current code implements the relevant slices.
   Postgres worker subsystem: job flows, queue structure, retries, concurrency,
   the failure/dead-letter model, and (critically) the **sync-vs-async** event
   map that shows which module work runs in the request and which is handed off.
+- [Challenges & Devpost projects](./challenges-devpost.md) — the `challenges`
+  and `projects` modules and the Devpost intake pipeline.
+- [Environment variables per service](./env-vars.md) — for each container in
+  an isolated deploy (`deploy/services/*`), exactly which env vars it needs and
+  whether they're read at container start or baked in at build time.
+
+See also the root [`README.md`](../README.md) for local dev setup, the API's
+own `/documentation` (Swagger UI, generated from route schemas — not a file in
+this folder), and [`deploy/README.md`](../deploy/README.md) for the full
+deployment story (networking, secrets, Dokploy modes).
 
 ## One-paragraph orientation
 
