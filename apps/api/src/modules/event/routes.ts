@@ -6,6 +6,8 @@ import { pool } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { requireCapability } from "../../lib/capabilities.js";
 import { BadRequestError } from "../../lib/errors.js";
+import { bumpAllAppleWalletUpdateTags } from "../logistics/wallet-passes.js";
+import { enqueueWalletSync } from "../logistics/wallet-sync.js";
 
 /**
  * Event-wide config (H45/H47). The hacking window is the publicly-"spoken"
@@ -207,6 +209,17 @@ export function registerEventRoutes(app: FastifyInstance): void {
         action: "updated",
         after: toPublic(rows[0], judging),
       });
+
+      // Apple Wallet passes render event name/venue/back fields fresh from
+      // event_config on every fetch — push every issued pass so Wallet
+      // refetches now instead of waiting for its next scheduled poll. Only
+      // when something actually changed, so clicking Save with no edits
+      // doesn't push every device.
+      if (JSON.stringify(current) !== JSON.stringify(rows[0])) {
+        const passIds = await bumpAllAppleWalletUpdateTags();
+        await enqueueWalletSync(passIds);
+      }
+
       return toPublic(rows[0], judging);
     },
   );

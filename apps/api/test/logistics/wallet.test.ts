@@ -260,6 +260,70 @@ describe("H28 Apple Wallet PassKit", () => {
     expect(pass.labelColor).toBe("rgb(255,180,0)");
   });
 
+  it("pushes every Apple pass when event config actually changes, but not on a no-op save (H28, H45/H47)", async () => {
+    const { pool } = await import("../../src/db/pool.js");
+    const { PASS_TYPE_IDENTIFIER } = await import("../../src/modules/logistics/wallet.js");
+    const uid = await createUser();
+    await issueTicket(uid, "ticket-wallet-refresh");
+    await app.inject({
+      method: "GET",
+      url: "/api/me/wallet/apple/ticket.pkpass",
+      headers: asUser(uid),
+    });
+    const before = await pool.query(
+      `SELECT id, serial_number, authentication_token, update_tag FROM wallet_passes WHERE user_id = $1`,
+      [uid],
+    );
+    const passId = before.rows[0].id;
+    const serial = before.rows[0].serial_number;
+    const token = before.rows[0].authentication_token;
+    await app.inject({
+      method: "POST",
+      url: `/api/wallet/apple/v1/devices/device-refresh/registrations/${PASS_TYPE_IDENTIFIER}/${serial}`,
+      headers: { authorization: `ApplePass ${token}` },
+      payload: { pushToken: "push-refresh" },
+    });
+
+    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+
+    // A no-op save (identical values) must not bump update_tag or push.
+    const noop = await app.inject({
+      method: "PUT",
+      url: "/api/event",
+      headers: asUser(manager),
+      payload: {},
+    });
+    expect(noop.statusCode).toBe(200);
+    const afterNoop = await pool.query(`SELECT update_tag FROM wallet_passes WHERE id = $1`, [
+      passId,
+    ]);
+    expect(afterNoop.rows[0].update_tag).toBe(before.rows[0].update_tag);
+    expect(pushState.lastRequest).toBeNull();
+
+    // An actual change bumps update_tag and pushes registered devices.
+    const changed = await app.inject({
+      method: "PUT",
+      url: "/api/event",
+      headers: asUser(manager),
+      payload: { name: "hackUDC 2026" },
+    });
+    expect(changed.statusCode).toBe(200);
+    const afterChange = await pool.query(`SELECT update_tag FROM wallet_passes WHERE id = $1`, [
+      passId,
+    ]);
+    expect(afterChange.rows[0].update_tag).not.toBe(before.rows[0].update_tag);
+
+    // The queue job isn't executed inline in this test process — invoke the
+    // processor directly with the bumped pass id, same pattern the badge
+    // rotation sync test uses instead of waiting on worker timing.
+    const { processWalletSync } = await import("../../src/modules/logistics/wallet-sync.js");
+    await processWalletSync({ data: { passIds: [passId] } } as never);
+    expect(pushState.lastRequest).toEqual({
+      path: "/3/device/push-refresh",
+      topic: PASS_TYPE_IDENTIFIER,
+    });
+  });
+
   it("registers and lists changed serials for an Apple device", async () => {
     const { PASS_TYPE_IDENTIFIER } = await import("../../src/modules/logistics/wallet.js");
     const uid = await createUser();

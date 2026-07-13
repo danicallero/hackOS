@@ -83,3 +83,22 @@ export async function ensurePassRecord(
     return created.rows[0];
   });
 }
+
+/**
+ * Bumps every Apple pass's update_tag so `appleChangedSerials` reports them
+ * changed on Wallet's next poll. Pass content (event name, venue, back
+ * fields, ...) is regenerated fresh from the DB on every fetch (`wallet.ts`'s
+ * `passPayload`), so bumping the tag is the only state change needed — the
+ * caller still has to push (`enqueueWalletSync`) so devices refetch promptly
+ * instead of waiting for their next scheduled poll. Includes voided passes:
+ * they're still servable via the webservice re-fetch path and should reflect
+ * up-to-date content too.
+ */
+export async function bumpAllAppleWalletUpdateTags(): Promise<number[]> {
+  const { rows } = await pool.query(
+    `UPDATE wallet_passes SET update_tag = extract(epoch from now())::text
+      WHERE platform = 'apple'
+      RETURNING id`,
+  );
+  return rows.map((r: { id: number }) => r.id);
+}
