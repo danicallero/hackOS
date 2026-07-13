@@ -70,3 +70,7 @@ capability `QUEUE_ADMIN`). Wallet-pass conventions the UI relies on:
 - Auto-filled fields never ask for a value: each row shows a note of what
   fills it, and the built-in back rows display the live value they'll carry
   (event name, venue name, `organizerName`).
+- Venue coordinates accept decimal degrees (dot or comma decimals) or DMS
+  ("43°19′58″N", with `O` accepted for Spanish "Oeste"), and a full pair
+  pasted into either box fills both — parsing lives in
+  `apps/web/src/lib/coords.ts`; the API itself only speaks signed decimals.

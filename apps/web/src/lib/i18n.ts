@@ -4388,6 +4388,16 @@ const dict: Record<string, I18nText> = {
   },
   venueLatitudeLabel: { es: "Latitud", gl: "Latitude", en: "Latitude" },
   venueLongitudeLabel: { es: "Longitud", gl: "Lonxitude", en: "Longitude" },
+  coordsFormatsHint: {
+    es: "Acepta grados decimales (43.3328) o GMS (43°19′58″N). Pega las dos coordenadas juntas en cualquiera de los campos y se repartirán solas.",
+    gl: "Acepta graos decimais (43.3328) ou GMS (43°19′58″N). Pega as dúas coordenadas xuntas en calquera dos campos e repartiranse soas.",
+    en: "Accepts decimal degrees (43.3328) or DMS (43°19′58″N). Paste both coordinates together into either box and they'll split automatically.",
+  },
+  invalidCoordinate: {
+    es: "Coordenada no válida. Usa grados decimales (43.3328) o GMS (43°19′58″N).",
+    gl: "Coordenada non válida. Usa graos decimais (43.3328) ou GMS (43°19′58″N).",
+    en: "Invalid coordinate. Use decimal degrees (43.3328) or DMS (43°19′58″N).",
+  },
   venueCoordsBothOrNeither: {
     es: "La latitud y la longitud deben indicarse juntas.",
     gl: "A latitude e a lonxitude deben indicarse xuntas.",
