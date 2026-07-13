@@ -15,6 +15,9 @@ the current code implements the relevant slices.
   map that shows which module work runs in the request and which is handed off.
 - [Challenges & Devpost projects](./challenges-devpost.md) — the `challenges`
   and `projects` modules and the Devpost intake pipeline.
+- [Event config & the Apple Wallet pass](./event-config-wallet.md) — the
+  `event_config` singleton (identity, doors-open vs hacking window, venue) and
+  how the Wallet pass renders from it (field visibility, captions, back fields).
 - [Environment variables per service](./env-vars.md) — for each container in
   an isolated deploy (`deploy/services/*`), exactly which env vars it needs and
   whether they're read at container start or baked in at build time.

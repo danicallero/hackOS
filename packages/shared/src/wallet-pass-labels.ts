@@ -46,3 +46,30 @@ export function resolvePassFieldLabels(
   }
   return resolved;
 }
+
+/**
+ * Per-field show/hide toggles for the auto-filled front fields of the Apple
+ * Wallet pass (H28). Every field defaults to visible; organizers can hide
+ * e.g. the email from the event settings page. Keys match the pass.json
+ * field keys built in wallet.ts.
+ */
+export const PASS_FIELD_VISIBILITY_KEYS = [
+  "participant",
+  "role",
+  "passType",
+  "university",
+  "email",
+] as const;
+
+export type PassFieldVisibilityKey = (typeof PASS_FIELD_VISIBILITY_KEYS)[number];
+
+export type PassFieldVisibility = Partial<Record<PassFieldVisibilityKey, boolean>>;
+
+/** Missing keys default to visible — hiding a field is always an explicit opt-out. */
+export function resolvePassFieldVisibility(
+  overrides: PassFieldVisibility | null | undefined,
+): Record<PassFieldVisibilityKey, boolean> {
+  const resolved = {} as Record<PassFieldVisibilityKey, boolean>;
+  for (const key of PASS_FIELD_VISIBILITY_KEYS) resolved[key] = overrides?.[key] !== false;
+  return resolved;
+}

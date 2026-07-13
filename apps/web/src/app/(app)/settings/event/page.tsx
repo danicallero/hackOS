@@ -1,16 +1,30 @@
 "use client";
 
-// Event-wide config (H45/H47). Admins set the name/tagline/timezone and the
-// public "hacking window" that drives the countdown shown on the website and TV
-// panels. Backed by GET/PUT /api/event (capability SCHEDULE_MANAGE).
+// Event-wide config (H45/H47, H28). Admins set the identity (name/tagline/
+// timezone), the schedule (doors-open time — what the Apple Wallet pass shows —
+// plus the hacking window that drives the public countdown), the venue, and
+// what the Wallet pass displays. Backed by GET/PUT /api/event (capability
+// SCHEDULE_MANAGE).
 
 import {
   DEFAULT_PASS_FIELD_LABELS,
   PASS_FIELD_LABEL_KEYS,
+  type PassFieldLabelKey,
   type PassFieldLabels,
+  type PassFieldVisibility,
+  type PassFieldVisibilityKey,
+  resolvePassFieldLabels,
+  resolvePassFieldVisibility,
 } from "@hackos/shared/wallet-pass-labels";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CalendarClockIcon, GavelIcon, MapPinIcon, TagIcon, Trash2Icon } from "lucide-react";
+import {
+  CalendarClockIcon,
+  GavelIcon,
+  MapPinIcon,
+  TagIcon,
+  Trash2Icon,
+  WalletCardsIcon,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -37,43 +51,155 @@ import { useLocale } from "@/lib/i18n";
 import { getQueueSettings, updateQueueSettings } from "@/lib/queue";
 import type { EventConfig, PassBackField } from "@/lib/types";
 
-/** Blank overrides are dropped so they fall back to the default, same convention as event_config's other nullable fields. */
+/**
+ * The caption inputs are prefilled with the RESOLVED caption (override or
+ * default) — no placeholders, what you see is what the pass prints. On save,
+ * captions equal to the default (or blank) are dropped so they keep tracking
+ * the default, same convention as event_config's other nullable fields.
+ */
 function normalizeFieldLabels(labels: PassFieldLabels): PassFieldLabels {
-  const trimmed: PassFieldLabels = {};
+  const overrides: PassFieldLabels = {};
   for (const key of PASS_FIELD_LABEL_KEYS) {
     const value = labels[key]?.trim();
-    if (value) trimmed[key] = value;
+    if (value && value !== DEFAULT_PASS_FIELD_LABELS[key]) overrides[key] = value;
   }
-  return trimmed;
+  return overrides;
+}
+
+/** i18n keys for each auto-filled front field: what it is + what fills it. */
+const FRONT_FIELDS: {
+  key: PassFieldVisibilityKey;
+  titleKey: string;
+  fillKey: string;
+}[] = [
+  { key: "participant", titleKey: "passFieldParticipantTitle", fillKey: "passFillParticipant" },
+  { key: "role", titleKey: "passFieldRoleTitle", fillKey: "passFillRole" },
+  { key: "passType", titleKey: "passFieldPassTypeTitle", fillKey: "passFillPassType" },
+  { key: "university", titleKey: "passFieldUniversityTitle", fillKey: "passFillUniversity" },
+  { key: "email", titleKey: "passFieldEmailTitle", fillKey: "passFillEmail" },
+];
+
+/**
+ * One row per auto-filled front field of the pass: a show/hide switch, the
+ * editable caption, and a note saying what the value auto-fills with — the
+ * values themselves are per-attendee, so there is nothing to type here.
+ */
+function PassFrontFieldsEditor({
+  labels,
+  onLabelsChange,
+  visibility,
+  onVisibilityChange,
+}: {
+  labels: PassFieldLabels;
+  onLabelsChange: (value: PassFieldLabels) => void;
+  visibility: PassFieldVisibility;
+  onVisibilityChange: (value: PassFieldVisibility) => void;
+}) {
+  const { t } = useLocale();
+  const setLabel = (key: PassFieldLabelKey, value: string) =>
+    onLabelsChange({ ...labels, [key]: value });
+
+  return (
+    <div className="space-y-2">
+      {FRONT_FIELDS.map(({ key, titleKey, fillKey }) => {
+        const shown = visibility[key] !== false;
+        return (
+          <div key={key} className="space-y-3 rounded-md border p-3">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <Label htmlFor={`pass-visible-${key}`}>{t(titleKey)}</Label>
+                <p className="text-muted-foreground text-sm">{t(fillKey)}</p>
+              </div>
+              <Switch
+                id={`pass-visible-${key}`}
+                checked={shown}
+                onCheckedChange={(checked) => onVisibilityChange({ ...visibility, [key]: checked })}
+              />
+            </div>
+            {shown && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label
+                    htmlFor={`pass-label-${key}`}
+                    className="text-muted-foreground text-xs font-normal"
+                  >
+                    {t("captionOnPassLabel")}
+                  </Label>
+                  <Input
+                    id={`pass-label-${key}`}
+                    value={labels[key] ?? ""}
+                    onChange={(event) => setLabel(key, event.target.value)}
+                  />
+                </div>
+                {key === "passType" && (
+                  <>
+                    <div className="space-y-1.5">
+                      <Label
+                        htmlFor="pass-label-ticketValue"
+                        className="text-muted-foreground text-xs font-normal"
+                      >
+                        {t("passTicketValueText")}
+                      </Label>
+                      <Input
+                        id="pass-label-ticketValue"
+                        value={labels.ticketValue ?? ""}
+                        onChange={(event) => setLabel("ticketValue", event.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label
+                        htmlFor="pass-label-badgeValue"
+                        className="text-muted-foreground text-xs font-normal"
+                      >
+                        {t("passBadgeValueText")}
+                      </Label>
+                      <Input
+                        id="pass-label-badgeValue"
+                        value={labels.badgeValue ?? ""}
+                        onChange={(event) => setLabel("badgeValue", event.target.value)}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 /**
- * One input per customizable pass caption (see packages/shared/src/wallet-pass-labels.ts) —
- * a fixed list, not an add/remove builder like BackFieldBuilder, since the
- * set of captions is known. The default English caption doubles as both the
- * row's own label and the input's placeholder, so there's nothing extra to
- * translate here as new captions are added to the shared catalogue.
+ * A built-in back-of-pass row: editable caption on the left, and the value it
+ * will be filled with on the right (read-only — it comes from the event config
+ * above or from deploy-time config, never typed here).
  */
-function PassFieldLabelsEditor({
+function BuiltinBackFieldRow({
+  caption,
+  onCaptionChange,
   value,
-  onChange,
+  note,
 }: {
-  value: PassFieldLabels;
-  onChange: (value: PassFieldLabels) => void;
+  caption: string;
+  onCaptionChange: (value: string) => void;
+  value: string | null;
+  note?: string;
 }) {
+  const { t } = useLocale();
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      {PASS_FIELD_LABEL_KEYS.map((key) => (
-        <div key={key} className="space-y-1.5">
-          <Label htmlFor={`pass-label-${key}`}>{DEFAULT_PASS_FIELD_LABELS[key]}</Label>
-          <Input
-            id={`pass-label-${key}`}
-            value={value[key] ?? ""}
-            placeholder={DEFAULT_PASS_FIELD_LABELS[key]}
-            onChange={(event) => onChange({ ...value, [key]: event.target.value })}
-          />
-        </div>
-      ))}
+    <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-center">
+      <Input
+        aria-label={t("captionOnPassLabel")}
+        value={caption}
+        onChange={(event) => onCaptionChange(event.target.value)}
+      />
+      <div className="text-muted-foreground flex min-h-9 items-center rounded-md border border-dashed px-3 text-sm">
+        {value || <span className="italic">{t("notSetYet")}</span>}
+        {value && note && <span className="ml-2 text-xs">({note})</span>}
+      </div>
+      {/* Spacer matching the custom rows' delete button, so columns line up. */}
+      <div className="hidden size-9 sm:block" aria-hidden="true" />
     </div>
   );
 }
@@ -136,6 +262,7 @@ const schema = z.object({
   tagline: z.string().max(500),
   timezone: z.string().min(1, "Required").max(100),
   // Held as datetime-local strings ("YYYY-MM-DDTHH:mm"); empty means "unset".
+  eventStartsAt: z.string(),
   hackingStartsAt: z.string(),
   hackingEndsAt: z.string(),
   showStartCountdown: z.boolean(),
@@ -175,22 +302,28 @@ function fromLocalInputValue(value: string): string | null {
 export default function EventSettingsPage() {
   return (
     <div className="space-y-6">
-      <HackingWindowSection />
+      <EventConfigSection />
       <JudgingWindowSection />
     </div>
   );
 }
 
-function HackingWindowSection() {
+function EventConfigSection() {
   const { t } = useLocale();
   const [passBackFields, setPassBackFields] = useState<PassBackField[]>([]);
-  const [passFieldLabels, setPassFieldLabels] = useState<PassFieldLabels>({});
+  // Held RESOLVED (defaults merged in) so inputs show real text, not placeholders.
+  const [passFieldLabels, setPassFieldLabels] = useState<PassFieldLabels>({
+    ...DEFAULT_PASS_FIELD_LABELS,
+  });
+  const [passFieldVisibility, setPassFieldVisibility] = useState<PassFieldVisibility>({});
+  const [organizerName, setOrganizerName] = useState("");
   const form = useForm<Values>({
     resolver: zodResolver(schema),
     defaultValues: {
       name: "",
       tagline: "",
       timezone: "Europe/Madrid",
+      eventStartsAt: "",
       hackingStartsAt: "",
       hackingEndsAt: "",
       showStartCountdown: false,
@@ -201,25 +334,31 @@ function HackingWindowSection() {
   });
   const { reset } = form;
 
+  function applyConfig(cfg: EventConfig) {
+    reset({
+      name: cfg.name ?? "",
+      tagline: cfg.tagline ?? "",
+      timezone: cfg.timezone || "Europe/Madrid",
+      eventStartsAt: toLocalInputValue(cfg.eventStartsAt),
+      hackingStartsAt: toLocalInputValue(cfg.hackingStartsAt),
+      hackingEndsAt: toLocalInputValue(cfg.hackingEndsAt),
+      showStartCountdown: cfg.showStartCountdown,
+      venueName: cfg.venueName ?? "",
+      venueLatitude: cfg.venueLatitude === null ? "" : String(cfg.venueLatitude),
+      venueLongitude: cfg.venueLongitude === null ? "" : String(cfg.venueLongitude),
+    });
+    setPassBackFields(cfg.passBackFields);
+    setPassFieldLabels(resolvePassFieldLabels(cfg.passFieldLabels));
+    setPassFieldVisibility(resolvePassFieldVisibility(cfg.passFieldVisibility));
+    setOrganizerName(cfg.organizerName);
+  }
+
   // Prefill from the current config on mount.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: applyConfig only uses stable setters + reset.
   useEffect(() => {
     api
       .get<EventConfig>("/api/event")
-      .then((cfg) => {
-        reset({
-          name: cfg.name ?? "",
-          tagline: cfg.tagline ?? "",
-          timezone: cfg.timezone || "Europe/Madrid",
-          hackingStartsAt: toLocalInputValue(cfg.hackingStartsAt),
-          hackingEndsAt: toLocalInputValue(cfg.hackingEndsAt),
-          showStartCountdown: cfg.showStartCountdown,
-          venueName: cfg.venueName ?? "",
-          venueLatitude: cfg.venueLatitude === null ? "" : String(cfg.venueLatitude),
-          venueLongitude: cfg.venueLongitude === null ? "" : String(cfg.venueLongitude),
-        });
-        setPassBackFields(cfg.passBackFields);
-        setPassFieldLabels(cfg.passFieldLabels);
-      })
+      .then(applyConfig)
       .catch((err) =>
         toast.error(err instanceof ApiError ? err.message : t("couldNotLoadEventSettings")),
       );
@@ -232,6 +371,7 @@ function HackingWindowSection() {
         name: values.name.trim() || null,
         tagline: values.tagline.trim() || null,
         timezone: values.timezone.trim(),
+        eventStartsAt: fromLocalInputValue(values.eventStartsAt),
         hackingStartsAt: fromLocalInputValue(values.hackingStartsAt),
         hackingEndsAt: fromLocalInputValue(values.hackingEndsAt),
         showStartCountdown: values.showStartCountdown,
@@ -240,20 +380,9 @@ function HackingWindowSection() {
         venueLongitude: values.venueLongitude.trim() === "" ? null : Number(values.venueLongitude),
         passBackFields: normalizeBackFields(passBackFields),
         passFieldLabels: normalizeFieldLabels(passFieldLabels),
+        passFieldVisibility,
       });
-      reset({
-        name: next.name ?? "",
-        tagline: next.tagline ?? "",
-        timezone: next.timezone || "Europe/Madrid",
-        hackingStartsAt: toLocalInputValue(next.hackingStartsAt),
-        hackingEndsAt: toLocalInputValue(next.hackingEndsAt),
-        showStartCountdown: next.showStartCountdown,
-        venueName: next.venueName ?? "",
-        venueLatitude: next.venueLatitude === null ? "" : String(next.venueLatitude),
-        venueLongitude: next.venueLongitude === null ? "" : String(next.venueLongitude),
-      });
-      setPassBackFields(next.passBackFields);
-      setPassFieldLabels(next.passFieldLabels);
+      applyConfig(next);
       toast.success(t("eventSettingsSaved"));
     } catch (err) {
       // Surfaces API business errors verbatim (e.g. "hackingEndsAt must be after hackingStartsAt").
@@ -261,10 +390,15 @@ function HackingWindowSection() {
     }
   }
 
+  // Live values so the Wallet section shows what the built-in back fields
+  // will actually be filled with, instead of a placeholder.
+  const liveEventName = form.watch("name").trim();
+  const liveVenueName = form.watch("venueName").trim();
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <SectionCard icon={CalendarClockIcon} title={t("eventTitle")} description={t("eventDesc")}>
+        <SectionCard icon={TagIcon} title={t("eventTitle")} description={t("eventDesc")}>
           <FormField
             control={form.control}
             name="name"
@@ -305,6 +439,41 @@ function HackingWindowSection() {
               </FormItem>
             )}
           />
+        </SectionCard>
+
+        <SectionCard
+          icon={CalendarClockIcon}
+          title={t("scheduleSectionTitle")}
+          description={t("scheduleSectionDesc")}
+        >
+          <FormField
+            control={form.control}
+            name="eventStartsAt"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t("eventStartsLabel")}</FormLabel>
+                <FormControl>
+                  <DateTimeInput value={field.value} onChange={field.onChange} />
+                </FormControl>
+                <FormDescription>{t("eventStartsDesc")}</FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="hackingStartsAt"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t("hackingStartsLabel")}</FormLabel>
+                <FormControl>
+                  <DateTimeInput value={field.value} onChange={field.onChange} />
+                </FormControl>
+                <FormDescription>{t("hackingStartsDesc")}</FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
           <FormField
             control={form.control}
             name="hackingEndsAt"
@@ -338,28 +507,12 @@ function HackingWindowSection() {
             )}
           />
         </SectionCard>
+
         <SectionCard
           icon={MapPinIcon}
           title={t("venueSectionTitle")}
           description={t("venueSectionDesc")}
-          footer={
-            <SubmitButton pending={form.formState.isSubmitting}>{t("saveChanges")}</SubmitButton>
-          }
         >
-          <FormField
-            control={form.control}
-            name="hackingStartsAt"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("hackingStartsLabel")}</FormLabel>
-                <FormControl>
-                  <DateTimeInput value={field.value} onChange={field.onChange} />
-                </FormControl>
-                <FormDescription>{t("hackingStartsFeedsPassDesc")}</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
           <FormField
             control={form.control}
             name="venueName"
@@ -402,6 +555,51 @@ function HackingWindowSection() {
               )}
             />
           </div>
+        </SectionCard>
+
+        <SectionCard
+          icon={WalletCardsIcon}
+          title={t("walletPassSectionTitle")}
+          description={t("walletPassSectionDesc")}
+          footer={
+            <SubmitButton pending={form.formState.isSubmitting}>{t("saveChanges")}</SubmitButton>
+          }
+        >
+          <div className="space-y-2">
+            <div>
+              <Label>{t("passFrontFieldsLabel")}</Label>
+              <p className="text-muted-foreground text-sm">{t("passFrontFieldsDesc")}</p>
+            </div>
+            <PassFrontFieldsEditor
+              labels={passFieldLabels}
+              onLabelsChange={setPassFieldLabels}
+              visibility={passFieldVisibility}
+              onVisibilityChange={setPassFieldVisibility}
+            />
+          </div>
+          <div className="space-y-2">
+            <div>
+              <Label>{t("passBackBuiltinLabel")}</Label>
+              <p className="text-muted-foreground text-sm">{t("passBackBuiltinDesc")}</p>
+            </div>
+            {/* Same order as on the actual pass: event, venue, then "Organized by" last. */}
+            <BuiltinBackFieldRow
+              caption={passFieldLabels.event ?? ""}
+              onCaptionChange={(v) => setPassFieldLabels({ ...passFieldLabels, event: v })}
+              value={liveEventName || null}
+            />
+            <BuiltinBackFieldRow
+              caption={passFieldLabels.location ?? ""}
+              onCaptionChange={(v) => setPassFieldLabels({ ...passFieldLabels, location: v })}
+              value={liveVenueName || null}
+            />
+            <BuiltinBackFieldRow
+              caption={passFieldLabels.organizedBy ?? ""}
+              onCaptionChange={(v) => setPassFieldLabels({ ...passFieldLabels, organizedBy: v })}
+              value={organizerName || null}
+              note={t("passFillOrganizer")}
+            />
+          </div>
           <div className="space-y-2">
             <div>
               <Label>{t("passBackFieldsLabel")}</Label>
@@ -409,16 +607,6 @@ function HackingWindowSection() {
             </div>
             <BackFieldBuilder value={passBackFields} onChange={setPassBackFields} />
           </div>
-        </SectionCard>
-        <SectionCard
-          icon={TagIcon}
-          title={t("passFieldLabelsSectionTitle")}
-          description={t("passFieldLabelsSectionDesc")}
-          footer={
-            <SubmitButton pending={form.formState.isSubmitting}>{t("saveChanges")}</SubmitButton>
-          }
-        >
-          <PassFieldLabelsEditor value={passFieldLabels} onChange={setPassFieldLabels} />
         </SectionCard>
       </form>
     </Form>

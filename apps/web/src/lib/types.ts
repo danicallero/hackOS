@@ -1,5 +1,5 @@
 import type { Capability } from "@hackos/shared/capabilities";
-import type { PassFieldLabels } from "@hackos/shared/wallet-pass-labels";
+import type { PassFieldLabels, PassFieldVisibility } from "@hackos/shared/wallet-pass-labels";
 import type { I18nText } from "./i18n";
 
 export interface Me {
@@ -84,6 +84,8 @@ export interface EventConfig {
   name: string | null;
   tagline: string | null;
   timezone: string;
+  /** Doors open — the time shown on the Apple Wallet pass. Not the hacking start. */
+  eventStartsAt: string | null;
   hackingStartsAt: string | null;
   hackingEndsAt: string | null;
   showStartCountdown: boolean;
@@ -94,6 +96,9 @@ export interface EventConfig {
   venueLongitude: number | null;
   passBackFields: PassBackField[];
   passFieldLabels: PassFieldLabels;
+  passFieldVisibility: PassFieldVisibility;
+  /** Read-only: what the pass's "Organized by" back field is filled with. */
+  organizerName: string;
 }
 
 export type InviteKind = "staff" | "sponsor" | "participant";
