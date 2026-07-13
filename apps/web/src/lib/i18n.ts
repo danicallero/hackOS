@@ -451,6 +451,34 @@ const dict: Record<string, I18nText> = {
   unverified: { es: "Sin verificar", gl: "Sen verificar", en: "Unverified" },
   yourCapabilities: { es: "Tus permisos", gl: "Os teus permisos", en: "Your capabilities" },
   welcome: { es: "Bienvenido", gl: "Benvida", en: "Welcome" },
+  dashboardDescription: {
+    es: "Consulta lo importante del evento de un vistazo.",
+    gl: "Consulta o importante do evento dunha ollada.",
+    en: "See what matters for the event at a glance.",
+  },
+  loadingDashboard: { es: "Cargando inicio", gl: "Cargando inicio", en: "Loading dashboard" },
+  eventStatus: { es: "Estado del evento", gl: "Estado do evento", en: "Event status" },
+  eventTimingPending: {
+    es: "El horario del evento se publicará próximamente.",
+    gl: "O horario do evento publicarase proximamente.",
+    en: "Event timing will be published soon.",
+  },
+  nextUp: { es: "Lo próximo", gl: "O seguinte", en: "Next up" },
+  nextUpDescription: {
+    es: "La siguiente actividad del programa.",
+    gl: "A seguinte actividade do programa.",
+    en: "The next activity on the schedule.",
+  },
+  noUpcomingSchedule: {
+    es: "No hay más actividades programadas.",
+    gl: "Non hai máis actividades programadas.",
+    en: "There are no more scheduled activities.",
+  },
+  latestAnnouncements: { es: "Últimos avisos", gl: "Últimos avisos", en: "Latest announcements" },
+  yourStatus: { es: "Tu estado", gl: "O teu estado", en: "Your status" },
+  viewAll: { es: "Ver todo", gl: "Ver todo", en: "View all" },
+  viewSchedule: { es: "Ver programa", gl: "Ver programa", en: "View schedule" },
+  viewQueue: { es: "Ver mi cola", gl: "Ver a miña cola", en: "View my queue" },
 
   // ---- Entrance ticket & wallet badge ----
   entranceTicket: { es: "Entrada", gl: "Entrada", en: "Entrance ticket" },

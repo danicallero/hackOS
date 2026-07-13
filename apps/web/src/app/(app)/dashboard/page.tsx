@@ -1,69 +1,251 @@
 "use client";
 
-import { KeyRoundIcon, ShieldIcon, UserCheckIcon } from "lucide-react";
+import {
+  BellIcon,
+  CalendarDaysIcon,
+  ChevronRightIcon,
+  ClipboardListIcon,
+  MapPinIcon,
+  TicketIcon,
+} from "lucide-react";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/common/page-header";
-import { Badge } from "@/components/ui/badge";
+import { QueueStatusBadge } from "@/components/common/queue-status-badge";
+import { Spinner } from "@/components/common/spinner";
+import { StatusBadge } from "@/components/common/status-badge";
+import type { PublicAnnouncement, PublicEvent } from "@/components/public/public-types";
+import { EventPhaseDisplay, useEventPhase } from "@/components/public/timer";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useLocale } from "@/lib/i18n";
+import { api } from "@/lib/api";
+import { LOCALE_CODES, useLocale } from "@/lib/i18n";
+import { logisticsApi, type PublicScheduleItem } from "@/lib/logistics";
+import { getMyQueue, type MyQueueEntry } from "@/lib/queue";
 import { useMe } from "@/lib/session";
+import { type MyResponseSummary, statusLabel, statusTone } from "../my-applications/lib";
+
+type DashboardData = {
+  event: PublicEvent | null;
+  schedule: PublicScheduleItem[];
+  announcements: PublicAnnouncement[];
+  applications: MyResponseSummary[];
+  queue: MyQueueEntry[];
+};
+
+const initialData: DashboardData = {
+  event: null,
+  schedule: [],
+  announcements: [],
+  applications: [],
+  queue: [],
+};
+
+function dateTime(value: string, timezone: string, language: "es" | "gl" | "en") {
+  return new Intl.DateTimeFormat(LOCALE_CODES[language], {
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: timezone,
+  }).format(new Date(value));
+}
 
 export default function DashboardPage() {
   const me = useMe();
-  const { t } = useLocale();
-  if (!me) return null;
+  const { language, t } = useLocale();
+  const [data, setData] = useState<DashboardData>(initialData);
+  const [loading, setLoading] = useState(true);
 
-  const stats = [
-    {
-      label: t("accountRole"),
-      value: me.role,
-      hint: "",
-      icon: ShieldIcon,
-    },
-    {
-      label: t("email"),
-      value: me.emailVerified ? t("verified") : t("unverified"),
-      hint: me.email,
-      icon: UserCheckIcon,
-    },
-    {
-      label: t("capabilities"),
-      value: String(me.capabilities.length),
-      hint: "",
-      icon: KeyRoundIcon,
-    },
-  ];
+  const load = useCallback(async () => {
+    const [event, schedule, announcements, applications, queue] = await Promise.all([
+      api.get<PublicEvent>("/api/public/event").catch(() => null),
+      logisticsApi.publicSchedule().catch(() => ({ items: [] as PublicScheduleItem[] })),
+      api
+        .get<{ items: PublicAnnouncement[] }>("/api/announcements/public")
+        .catch(() => ({ items: [] as PublicAnnouncement[] })),
+      api
+        .get<{ responses: MyResponseSummary[] }>("/api/me/applications")
+        .catch(() => ({ responses: [] as MyResponseSummary[] })),
+      getMyQueue().catch(() => [] as MyQueueEntry[]),
+    ]);
+    setData({
+      event,
+      schedule: schedule.items,
+      announcements: announcements.items,
+      applications: applications.responses,
+      queue,
+    });
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const phase = useEventPhase(data.event);
+  const nextActivity = useMemo(
+    () =>
+      data.schedule
+        .filter((item) => new Date(item.startsAt).getTime() >= Date.now())
+        .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())[0],
+    [data.schedule],
+  );
+  const attentionQueue = useMemo(
+    () => data.queue.find((entry) => entry.status !== "completed") ?? data.queue[0],
+    [data.queue],
+  );
+  if (!me) return null;
 
   return (
     <div className="space-y-6">
-      <PageHeader title={`${t("welcome")}${me.name ? `, ${me.name}` : ""}`} />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {stats.map((s) => (
-          <Card key={s.label}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-muted-foreground text-sm font-medium">{s.label}</CardTitle>
-              <s.icon className="text-muted-foreground size-4" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-semibold capitalize">{s.value}</div>
-              <p className="text-muted-foreground mt-1 truncate text-xs">{s.hint}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <PageHeader
+        title={`${t("welcome")}${me.name ? `, ${me.name}` : ""}`}
+        description={data.event?.tagline ?? t("dashboardDescription")}
+        actions={
+          <Button asChild variant="outline">
+            <Link href="/#schedule-title">
+              <CalendarDaysIcon className="size-4" />
+              {t("viewSchedule")}
+            </Link>
+          </Button>
+        }
+      />
 
-      {me.capabilities.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">{t("yourCapabilities")}</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-wrap gap-2">
-            {me.capabilities.map((c) => (
-              <Badge key={c} variant="secondary" className="font-mono">
-                {c}
-              </Badge>
-            ))}
-          </CardContent>
-        </Card>
+      {loading ? (
+        <div className="flex justify-center py-16" role="status" aria-busy="true">
+          <Spinner className="size-6" />
+          <span className="sr-only">{t("loadingDashboard")}</span>
+        </div>
+      ) : (
+        <>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card>
+              <CardHeader className="flex flex-row items-start justify-between gap-4">
+                <div>
+                  <CardTitle className="text-balance text-lg">{data.event?.name ?? "hackOS"}</CardTitle>
+                  <p className="text-muted-foreground text-pretty mt-1 text-sm">{t("eventStatus")}</p>
+                </div>
+                <CalendarDaysIcon className="text-muted-foreground size-5 shrink-0" aria-hidden="true" />
+              </CardHeader>
+              <CardContent>
+                {phase.kind !== "none" ? (
+                  <EventPhaseDisplay
+                    phase={phase}
+                    className="mt-1 block font-mono text-3xl font-semibold tabular-nums"
+                  />
+                ) : (
+                  <p className="text-muted-foreground text-sm">{t("eventTimingPending")}</p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-start justify-between gap-4">
+                <div>
+                  <CardTitle className="text-balance text-lg">{t("nextUp")}</CardTitle>
+                  <p className="text-muted-foreground text-pretty mt-1 text-sm">{t("nextUpDescription")}</p>
+                </div>
+                <CalendarDaysIcon className="text-muted-foreground size-5 shrink-0" aria-hidden="true" />
+              </CardHeader>
+              <CardContent>
+                {nextActivity ? (
+                  <div className="space-y-1">
+                    <p className="font-medium">{nextActivity.title}</p>
+                    <p className="text-muted-foreground text-sm tabular-nums">
+                      {dateTime(nextActivity.startsAt, data.event?.timezone ?? "UTC", language)}
+                    </p>
+                    {nextActivity.location && (
+                      <p className="text-muted-foreground flex items-center gap-1.5 text-sm">
+                        <MapPinIcon className="size-3.5" aria-hidden="true" />
+                        {nextActivity.location}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-sm">{t("noUpcomingSchedule")}</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(18rem,1fr)]">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-2.5">
+                  <BellIcon className="text-muted-foreground size-5" aria-hidden="true" />
+                  <CardTitle className="text-balance text-lg">{t("latestAnnouncements")}</CardTitle>
+                </div>
+                <Button asChild variant="ghost" size="sm">
+                  <Link href="/inbox">{t("viewAll")}</Link>
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {data.announcements.length ? (
+                  data.announcements.slice(0, 3).map((announcement) => (
+                    <article key={announcement.id} className="border-b pb-3 last:border-0 last:pb-0">
+                      <h2 className="text-balance font-medium">{announcement.title}</h2>
+                      <p className="text-muted-foreground text-pretty mt-1 line-clamp-2 text-sm">
+                        {announcement.body}
+                      </p>
+                    </article>
+                  ))
+                ) : (
+                  <p className="text-muted-foreground text-sm">{t("noAnnouncementsYet")}</p>
+                )}
+              </CardContent>
+            </Card>
+
+            {(data.applications.length > 0 || attentionQueue) && (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-2.5">
+                    <ClipboardListIcon className="text-muted-foreground size-5" aria-hidden="true" />
+                    <CardTitle className="text-balance text-lg">{t("yourStatus")}</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {data.applications.slice(0, 2).map((application) => (
+                    <Link
+                      key={application.id}
+                      href={`/my-applications/${application.application_id}`}
+                      className="hover:bg-muted/50 flex items-center justify-between gap-3 rounded-lg border p-3"
+                    >
+                      <span className="min-w-0 truncate text-sm font-medium">{application.application_name}</span>
+                      <StatusBadge tone={statusTone(application.status)} dot={false}>
+                        {statusLabel(application.status, t)}
+                      </StatusBadge>
+                    </Link>
+                  ))}
+                  {attentionQueue && (
+                    <Link
+                      href="/my-queue"
+                      className="hover:bg-muted/50 flex items-center justify-between gap-3 rounded-lg border p-3"
+                    >
+                      <span className="min-w-0">
+                        <span className="flex items-center gap-2 text-sm font-medium">
+                          <TicketIcon className="size-4 shrink-0" aria-hidden="true" />
+                          <span className="truncate">{attentionQueue.challengeTitle}</span>
+                        </span>
+                        {attentionQueue.position != null && (
+                          <span className="text-muted-foreground mt-1 block text-xs tabular-nums">
+                            {t("position")} #{attentionQueue.position}
+                          </span>
+                        )}
+                      </span>
+                      <QueueStatusBadge status={attentionQueue.status} />
+                    </Link>
+                  )}
+                  <Button asChild variant="ghost" className="w-full justify-between">
+                    <Link href={attentionQueue ? "/my-queue" : "/my-applications"}>
+                      {attentionQueue ? t("viewQueue") : t("viewApplications")}
+                      <ChevronRightIcon className="size-4" />
+                    </Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </>
       )}
     </div>
   );
