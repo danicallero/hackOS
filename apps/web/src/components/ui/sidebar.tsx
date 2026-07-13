@@ -257,8 +257,9 @@ function Sidebar({
 function SidebarTrigger({
   className,
   onClick,
+  hasUnreadNotifications = false,
   ...props
-}: React.ComponentProps<typeof Button>) {
+}: React.ComponentProps<typeof Button> & { hasUnreadNotifications?: boolean }) {
   const { toggleSidebar } = useSidebar()
   const { t } = useLocale()
 
@@ -268,7 +269,7 @@ function SidebarTrigger({
       data-slot="sidebar-trigger"
       variant="ghost"
       size="icon"
-      className={cn("size-7", className)}
+      className={cn("relative size-7", className)}
       onClick={(event) => {
         onClick?.(event)
         toggleSidebar()
@@ -276,6 +277,12 @@ function SidebarTrigger({
       {...props}
     >
       <PanelLeftIcon />
+      {hasUnreadNotifications && (
+        <span
+          aria-hidden
+          className="border-background bg-destructive absolute -top-0.5 -right-0.5 hidden size-2 rounded-full border group-data-[state=collapsed]:block"
+        />
+      )}
       <span className="sr-only">{t("toggleSidebar")}</span>
     </Button>
   )
