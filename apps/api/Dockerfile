@@ -27,6 +27,7 @@ COPY apps/api/tsup.config.ts ./apps/api/
 COPY apps/api/src ./apps/api/src
 COPY apps/api/scripts ./apps/api/scripts
 COPY apps/api/db ./apps/api/db
+COPY apps/api/assets ./apps/api/assets
 # Build with just tsup (skip tsc typecheck to save memory on constrained hosts)
 RUN pnpm --filter @hackos/api exec tsup
 # Copies the built package + only its production deps into /app, resolving

@@ -21,6 +21,16 @@ const execFileAsync = promisify(execFile);
 export const PASS_TYPE_IDENTIFIER = config.APPLE_PASS_TYPE_IDENTIFIER ?? "pass.local.hackos";
 const TEAM_IDENTIFIER = config.APPLE_TEAM_IDENTIFIER ?? "LOCALTEAM";
 const ORGANIZATION_NAME = config.APPLE_PASS_ORGANIZATION;
+// Resolved from cwd, not import.meta.url: tsup bundles this module into a
+// single dist/server.js, which flattens its path depth relative to the
+// package root differently than the unbundled dev (tsx) run does. cwd is
+// the package root in both (pnpm --filter sets it in dev, WORKDIR /app in
+// prod), so it's the one thing that's consistent across both.
+const ASSETS_DIR = join(process.cwd(), "assets", "apple-wallet");
+// PassKit silently refuses to install a pass whose bundle has no icon —
+// the "Add to Wallet" system prompt only checks the response's MIME type,
+// so a bundle missing icon.png still returns 200 but nothing ever appears.
+const ICON_FILES = ["icon.png", "icon@2x.png", "icon@3x.png"];
 
 function appleAuthToken(header: string | undefined): string {
   const prefix = "ApplePass ";
@@ -102,13 +112,18 @@ export async function buildApplePass(
   if (pass.status === "voided" && !lookup) throw new BadRequestError("Pass has been voided");
 
   const passJson = JSON.stringify(await passPayload(pass));
-  const manifest = {
+  const icons = await Promise.all(
+    ICON_FILES.map(async (name) => ({ name, data: await readFile(join(ASSETS_DIR, name)) })),
+  );
+  const manifest: Record<string, string> = {
     "pass.json": createHash("sha1").update(passJson).digest("hex"),
   };
+  for (const icon of icons) manifest[icon.name] = createHash("sha1").update(icon.data).digest("hex");
   const manifestJson = JSON.stringify(manifest);
   const signature = await signManifest(manifestJson);
   return zipStore([
     { name: "pass.json", data: Buffer.from(passJson) },
+    ...icons,
     { name: "manifest.json", data: Buffer.from(manifestJson) },
     { name: "signature", data: signature },
   ]);

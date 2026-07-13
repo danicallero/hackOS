@@ -1,6 +1,7 @@
 import "./env.js";
 import "./wallet-fixtures.js";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -138,6 +139,18 @@ describe("H28 Apple Wallet PassKit", () => {
 
     const entries = readStoredZipEntries(res.rawPayload);
     assertValidDetachedSignature(entries["manifest.json"]!, entries.signature!);
+
+    // PassKit refuses to render a pass whose bundle has no icon, even though
+    // it accepts the download and shows the "Add to Wallet" prompt — a bug
+    // that a status-code/signature-only check like the above would miss.
+    const manifest = JSON.parse(entries["manifest.json"]!.toString());
+    for (const name of ["icon.png", "icon@2x.png", "icon@3x.png"]) {
+      expect(entries[name]).toBeDefined();
+      expect(entries[name]!.subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
+      expect(manifest[name]).toBe(
+        createHash("sha1").update(entries[name]!).digest("hex"),
+      );
+    }
 
     const { pool } = await import("../../src/db/pool.js");
     const pass = await pool.query(
