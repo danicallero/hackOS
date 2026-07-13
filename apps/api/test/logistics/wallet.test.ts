@@ -213,17 +213,25 @@ describe("H28 Apple Wallet PassKit", () => {
 
     expect(pass.relevantDate).toBe(new Date("2026-02-27T16:30:00+01:00").toISOString());
     expect(pass.eventTicket.headerFields[0]).toMatchObject({ key: "when" });
-    expect(pass.eventTicket.primaryFields).toContainEqual({
+    // No primaryFields: PassKit renders them overlaid on the strip image,
+    // which collided with the "hackUDC" branding baked into that artwork.
+    expect(pass.eventTicket.primaryFields).toBeUndefined();
+    expect(pass.eventTicket.secondaryFields).toContainEqual({
       key: "name",
       label: "Participant",
       value: "Ada Lovelace",
     });
     expect(pass.eventTicket.secondaryFields).toContainEqual({
+      key: "role",
+      label: "Role",
+      value: "Participant",
+    });
+    expect(pass.eventTicket.auxiliaryFields).toContainEqual({
       key: "purpose",
       label: "Pass",
       value: "Ticket",
     });
-    expect(pass.eventTicket.secondaryFields).toContainEqual({
+    expect(pass.eventTicket.auxiliaryFields).toContainEqual({
       key: "university",
       label: "University",
       value: "UDC",
@@ -236,7 +244,7 @@ describe("H28 Apple Wallet PassKit", () => {
     expect(pass.eventTicket.backFields).toContainEqual({
       key: "event",
       label: "Event",
-      value: "hackUDC — Build something great",
+      value: "hackUDC",
     });
     expect(pass.eventTicket.backFields).toContainEqual({
       key: "venue",

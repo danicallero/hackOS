@@ -257,19 +257,6 @@ function HackingWindowSection() {
           />
           <FormField
             control={form.control}
-            name="hackingStartsAt"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("hackingStartsLabel")}</FormLabel>
-                <FormControl>
-                  <DateTimeInput value={field.value} onChange={field.onChange} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
             name="hackingEndsAt"
             render={({ field }) => (
               <FormItem>
@@ -309,6 +296,20 @@ function HackingWindowSection() {
             <SubmitButton pending={form.formState.isSubmitting}>{t("saveChanges")}</SubmitButton>
           }
         >
+          <FormField
+            control={form.control}
+            name="hackingStartsAt"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t("hackingStartsLabel")}</FormLabel>
+                <FormControl>
+                  <DateTimeInput value={field.value} onChange={field.onChange} />
+                </FormControl>
+                <FormDescription>{t("hackingStartsFeedsPassDesc")}</FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
           <FormField
             control={form.control}
             name="venueName"

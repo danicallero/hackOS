@@ -15,7 +15,16 @@ import {
   UnauthorizedError,
 } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
+import { computeDerivedRole, type DerivedRole } from "../identity/role.js";
 import { ensurePassRecord, type PassRow, type Purpose } from "./wallet-passes.js";
+
+const ROLE_LABELS: Record<DerivedRole, string> = {
+  admin: "Admin",
+  judge: "Judge",
+  sponsor: "Sponsor",
+  staff: "Staff",
+  participant: "Participant",
+};
 
 const execFileAsync = promisify(execFile);
 export const PASS_TYPE_IDENTIFIER = config.APPLE_PASS_TYPE_IDENTIFIER ?? "pass.local.hackos";
@@ -90,17 +99,21 @@ async function passPayload(pass: PassRow) {
 
   const fullName = [u.name, u.surname].filter(Boolean).join(" ") || `User ${pass.user_id}`;
   const barcode = pass.purpose === "ticket" ? u.token : u.badge_id;
+  const role = ROLE_LABELS[await computeDerivedRole(pool, pass.user_id)];
+  // No primaryFields: the embedded strip image already carries "hackUDC"
+  // branding text, and PassKit renders primaryFields overlaid on the strip —
+  // putting the name there made it visually collide with the artwork.
   const secondaryFields = [
+    { key: "name", label: "Participant", value: fullName },
+    { key: "role", label: "Role", value: role },
+  ];
+  const auxiliaryFields = [
     { key: "purpose", label: "Pass", value: pass.purpose === "ticket" ? "Ticket" : "Badge" },
     ...(u.university ? [{ key: "university", label: "University", value: u.university }] : []),
+    ...(u.email ? [{ key: "email", label: "Email", value: u.email }] : []),
   ];
-  const auxiliaryFields = u.email ? [{ key: "email", label: "Email", value: u.email }] : [];
   const backFields = [
-    {
-      key: "event",
-      label: "Event",
-      value: event?.tagline ? `${eventName} — ${event.tagline}` : eventName,
-    },
+    { key: "event", label: "Event", value: eventName },
     ...(venueName ? [{ key: "venue", label: "Location", value: venueName }] : []),
     ...passBackFields.map((field, i) => ({
       key: `custom-${i}`,
@@ -154,7 +167,6 @@ async function passPayload(pass: PassRow) {
             ],
           }
         : {}),
-      primaryFields: [{ key: "name", label: "Participant", value: fullName }],
       secondaryFields,
       auxiliaryFields,
       backFields,

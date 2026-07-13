@@ -4360,6 +4360,11 @@ const dict: Record<string, I18nText> = {
     gl: "Localización do evento e contido adicional do reverso do pase de Apple Wallet.",
     en: "The event's location and extra back-of-pass content for the Apple Wallet pass.",
   },
+  hackingStartsFeedsPassDesc: {
+    es: "También se muestra como la hora de inicio en el pase de Apple Wallet.",
+    gl: "Tamén se amosa como a hora de inicio no pase de Apple Wallet.",
+    en: "Also shown as the start time on the Apple Wallet pass.",
+  },
   venueNameLabel: {
     es: "Nombre de la sede",
     gl: "Nome da sede",
