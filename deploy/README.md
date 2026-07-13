@@ -59,14 +59,21 @@ posture. Pick one per instance — don't mix them for the same instance.
 
 ## Environment variables: project (shared) vs service-only
 
-Dokploy has **two scopes** for env vars: **Project → Environment** (inherited by
-every service in the project) and **each service's own Environment**. hackOS is
-designed so that **almost everything goes in Project (shared) env** — because the
-same secret is read by several services and MUST match between them (e.g. the
-Postgres password is set on `postgres` *and* embedded in the `DATABASE_URL` that
-`api`/`worker` use). Keeping them in one shared place is what prevents drift.
+Dokploy has **three scopes** for env vars — Project, Environment (a project can
+have several, e.g. staging/production), and each service's own — but **none of
+them auto-inject**: a service only picks up a Project/Environment value if its
+own Environment Variables box contains an explicit reference,
+`${{project.VAR}}` or `${{environment.VAR}}`. hackOS is designed so that
+**almost everything is stored once at the Environment level and referenced
+from every service that needs it** — because the same secret is read by
+several services and MUST match between them (e.g. the Postgres password is
+set on `postgres` *and* embedded in the `DATABASE_URL` that `api`/`worker`
+use). Storing the value once and wiring each service to it is what prevents
+drift; see
+[`docs/env-vars.md`](../docs/env-vars.md#centralizing-values-with-dokploys-projectenvironment-variables)
+for the exact per-service reference lines to paste in.
 
-### Put these in **Project (shared) environment**
+### Store these once (Environment or Project variables), reference from every service that needs them
 
 These are read by two or more services. Secrets are marked 🔒 — generate them
 with `deploy/scripts/gen-secrets.sh` and never reuse across instances.
@@ -113,10 +120,12 @@ sensible defaults, so you can usually skip them entirely.
 | worker | `WORKER_MEM_LIMIT` | Memory cap (default `512m`). |
 
 > **The split in one line:** shared secrets + anything two services touch →
-> **Project env**; per-service memory limits and MinIO image/console toggles →
-> **service env** (or leave them at defaults). The two `.env.*.example` files
-> mirror this: `.env.shared.example` = non-secret shared, `.env.instance.example`
-> = per-instance secrets. Assemble both into Project env.
+> store once as an **Environment variable**, reference it from each service
+> that needs it (`${{environment.VAR}}`); per-service memory limits and MinIO
+> image/console toggles → a plain literal directly in that one service's own
+> box (or leave them at defaults). The two `.env.*.example` files mirror the
+> first group: `.env.shared.example` = non-secret shared, `.env.instance.example`
+> = per-instance secrets. Assemble both into the Dokploy Environment's variables.
 
 ---
 
@@ -130,7 +139,7 @@ at boot instead, so a half-finished setup can't ship by accident.
 
 All values below are **base64-encoded PEM/key content**, not file paths —
 like every other secret in this app, they're single-line values that live
-only in Dokploy's Project (shared) env store (or your gitignored
+only in Dokploy's Environment (or Project) variables store (or your gitignored
 `.env.<instance>` file), never baked into the image or committed to the
 repo.
 
@@ -192,10 +201,12 @@ docker network create hackos-event2026-net
 Use that exact name as `INSTANCE_NETWORK`. The `dokploy-network` (edge) already
 exists on any Dokploy host.
 
-### 2. Create a Dokploy **Project** and set its shared Environment
+### 2. Create a Dokploy **Project** and set its Environment variables
 
-Create a project (e.g. `hackos-event2026`). In **Environment**, paste the
-combined shared values — generate secrets first:
+Create a project (e.g. `hackos-event2026`) and, inside it, an Environment
+(Dokploy usually gives you one by default — e.g. "production"). Paste the
+combined shared values into **that Environment's** variables tab — generate
+secrets first:
 
 ```sh
 ./deploy/scripts/gen-secrets.sh hackos-event2026 api.event2026.example.org > .env.event2026
@@ -203,26 +214,41 @@ combined shared values — generate secrets first:
 # shared values from deploy/.env.shared.example
 ```
 
-### 3. Add five services, each pointing at its compose file
+### 3. Add six services, each pointing at its compose file
 
-For each of `postgres`, `valkey`, `minio`, `api`, `worker`, add a **Compose**
-service in the project that uses this repo and the corresponding file:
+For each of `postgres`, `valkey`, `minio`, `api`, `worker`, `web`, add a
+**Compose** service in the project that uses this repo and the corresponding
+file:
 
 - `deploy/services/postgres/docker-compose.yml`
 - `deploy/services/valkey/docker-compose.yml`
 - `deploy/services/minio/docker-compose.yml`
 - `deploy/services/api/docker-compose.yml`  ← builds the image + runs migrations
 - `deploy/services/worker/docker-compose.yml`
+- `deploy/services/web/docker-compose.yml`  ← its own Traefik router/domain, never behind the api's
 
-Each inherits the project's shared env; add service-only vars only if you want
-to override a default. Attach `API_DOMAIN` as the domain on the **api** service
-(Dokploy fills the Traefik cert); the compose already carries the router labels.
+Nothing inherits automatically: in **each** service's own Environment
+Variables box, paste the matching `deploy/services/<service>/dokploy.env.example`
+file — it already lists a `${{environment.VAR}}` reference line for every
+variable that service needs, with the optional ones commented out (see
+[`docs/env-vars.md`](../docs/env-vars.md#centralizing-values-with-dokploys-projectenvironment-variables)
+for the full per-variable explanation). Uncomment/add service-only vars only
+if you want to override a default. Attach `API_DOMAIN`/`WEB_DOMAIN` as the
+domains on the **api**/**web** services respectively (Dokploy fills the
+Traefik cert); the compose files already carry the router labels.
+
+Not using Dokploy? Skip the `dokploy.env.example` files — they're Dokploy's
+own template syntax, resolved before Docker ever sees it, and never appear
+inside the compose YAML itself. Run the same compose files with a literal
+`.env` instead (see [Mode B](#mode-b--single-stack) below, or
+`docker compose --env-file .env -f deploy/services/api/docker-compose.yml up -d`
+per service) — nothing about the compose files changes either way.
 
 ### 4. Deploy in order
 
 `postgres` → `valkey` → `minio` → `api` (runs migrations, then serves) →
-`worker`. Redeploying `api` re-runs migrations safely (advisory lock). The
-datastores keep their volumes across app redeploys.
+`worker` → `web`. Redeploying `api` re-runs migrations safely (advisory lock).
+The datastores keep their volumes across app redeploys.
 
 ---
 
@@ -318,9 +344,12 @@ deploy/
 ├── scripts/
 │   └── gen-secrets.sh            ← generate a per-instance secret env file
 └── services/                     ← Mode A: one compose per Dokploy service
-    ├── postgres/docker-compose.yml
-    ├── valkey/docker-compose.yml
-    ├── minio/docker-compose.yml
-    ├── api/docker-compose.yml    ← api + one-shot migrate
-    └── worker/docker-compose.yml
+    ├── postgres/
+    │   ├── docker-compose.yml
+    │   └── dokploy.env.example   ← paste into Dokploy's Environment Variables box
+    ├── valkey/    (docker-compose.yml + dokploy.env.example)
+    ├── minio/     (docker-compose.yml + dokploy.env.example)
+    ├── api/       (docker-compose.yml ← api + one-shot migrate; dokploy.env.example)
+    ├── worker/    (docker-compose.yml + dokploy.env.example)
+    └── web/       (docker-compose.yml + dokploy.env.example)
 ```

@@ -1,7 +1,9 @@
+import { createRequire } from "node:module";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
+import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
   jsonSchemaTransform,
@@ -19,9 +21,27 @@ import { broadcast } from "./lib/sse.js";
 import { valkey } from "./lib/valkey.js";
 import { registerModules } from "./modules/index.js";
 import { authContextPlugin } from "./plugins/auth-context.js";
-import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 
 export type App = FastifyInstance;
+
+const require = createRequire(import.meta.url);
+const pkg = require("../package.json") as { version: string };
+
+// One entry per tag `docsTagFor` can return. Keeps /documentation's sidebar
+// grouped and readable instead of an alphabetical dump of every route.
+const TAG_DESCRIPTIONS: Record<string, string> = {
+  foundation: "Liveness and infrastructure — nothing story-specific.",
+  public: "Unauthenticated read-only endpoints for the public event site.",
+  auth: "Better Auth session lifecycle (sign up/in/out, verification, password reset).",
+  identity: "Users, invites, permissions and the caller's own profile (H1–H10).",
+  applications: "Application forms, review, decisions and confirmations (H11–H15).",
+  projects: "Devpost import/sync and project/repo records (H16–H21, H44–H46).",
+  queue: "Judging queue, TV displays and their realtime streams (H29–H42).",
+  logistics: "Accreditation, badge/presence scanning and on-site activities (H22–H27).",
+  notifications: "Announcements and the notification outbox (H47–H51).",
+  audit: "Read access to the audit trail for sensitive mutations (H53).",
+  api: "Everything not yet grouped under a more specific tag above.",
+};
 
 const PUBLIC_OPERATIONS = new Set([
   "GET /healthz",
@@ -283,10 +303,18 @@ export async function buildApp(): Promise<App> {
     openapi: {
       info: {
         title: "hackOS API",
-        version: "0.0.0",
-        description: "Hackathon management API",
+        version: pkg.version,
+        description:
+          "Hackathon management API. Routes are grouped by story area below; " +
+          "each schema is the single source of truth for both validation and " +
+          "this document — see CLAUDE.md's documentation-sync rule before " +
+          "adding a route without a summary/description.",
       },
-      servers: [],
+      servers: [{ url: config.BETTER_AUTH_URL, description: "This deployment" }],
+      tags: Object.entries(TAG_DESCRIPTIONS).map(([name, description]) => ({
+        name,
+        description,
+      })),
       components: {
         securitySchemes: {
           sessionToken: {
@@ -321,6 +349,12 @@ export async function buildApp(): Promise<App> {
 
       if (!("tags" in schema)) schema.tags = [tag];
       if (!("summary" in schema)) schema.summary = `${method} ${transformed.url}`;
+      if (!("description" in schema)) {
+        // Flags routes that shipped without a hand-written description, so
+        // it's obvious in /documentation rather than silently blank — fix by
+        // adding `description` to the route's schema (CLAUDE.md doc rule).
+        schema.description = "No description yet — add one to this route's schema.";
+      }
       if (needsAuth(transformed.url, method) && !("security" in schema)) {
         schema.security = [{ sessionToken: [] }, { bearerToken: [] }];
       }
@@ -357,11 +391,21 @@ export async function buildApp(): Promise<App> {
     });
   });
 
-  app.get("/healthz", async () => {
-    await pool.query("SELECT 1");
-    await valkey.ping();
-    return { status: "ok" };
-  });
+  app.get(
+    "/healthz",
+    {
+      schema: {
+        description:
+          "Liveness/readiness probe. Round-trips Postgres and Valkey; returns " +
+          "non-200 if either is unreachable. Used by container healthchecks.",
+      },
+    },
+    async () => {
+      await pool.query("SELECT 1");
+      await valkey.ping();
+      return { status: "ok" };
+    },
+  );
 
   await registerModules(app);
 

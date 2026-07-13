@@ -6,11 +6,17 @@ conflict, that file wins. Hard invariants live in `plan/07-datos-relevantes-ers.
 
 ## Layout
 
-- `apps/api` — Fastify 5 + BullMQ + Postgres + Valkey. The only app so far
+- `apps/api` — Fastify 5 + BullMQ + Postgres + Valkey.
+- `apps/web` — Next.js 16 frontend. Its own conventions live in `apps/web/README.md`;
+  read that before touching it.
 - `packages/shared` — capability catalogue (`capabilities.ts`) and SSE event
   contract (`events.ts`). Add new capability/event names THERE, never inline.
 - `packages/typescript-config` — shared tsconfig base.
 - `plan/` — normative docs. Read-only.
+- `docs/` — living docs on how the current code implements the stories in
+  `plan/`. Keep in sync with code — see **Documentation** below.
+- `deploy/` — Dokploy / docker-compose deployment; `deploy/README.md` is
+  normative for anything env-var or infrastructure related.
 
 ## Non-negotiable conventions
 
@@ -79,3 +85,29 @@ pnpm lint              # biome
 must keep working. Workers run inline in dev (`WORKERS_INLINE`), as a separate
 container (`node dist/worker.js`) in production. Don't hardcode
 `localhost` — everything configurable comes from `src/config.ts` (zod-validated env).
+
+## Documentation
+
+Docs are not a side project — a change isn't done until the doc that
+describes the thing it touched is still true. There's no separate "update the
+docs" pass at the end of a big feature; update the relevant file in the same
+commit as the code, the way tests are expected in the same commit.
+
+Concrete triggers — if your change does X, update Y:
+
+| You changed | Update |
+|---|---|
+| A route's request/response shape or behavior | Its Zod schema's `summary`/`description` (this **is** the API doc — `/documentation` is generated from it, nothing to hand-sync) |
+| A new module, or a module's schema/state machine | The relevant file in `docs/` (add a new one if the module has none yet; follow the format in `docs/modules-1-5.md` or `docs/challenges-devpost.md`) |
+| A new `docs/*.md` file | Its link in `docs/README.md`'s index |
+| `packages/shared/src/capabilities.ts` or `events.ts` | Any doc that enumerates capabilities/events by name (grep before assuming there are none) |
+| A `deploy/services/*/docker-compose.yml` env var (added/renamed/removed) | The matching row in `docs/env-vars.md`, `deploy/README.md`'s shared/service-only tables, **and** that service's `dokploy.env.example` (add/rename/remove the `${{environment.VAR}}` line to match) |
+| Root-level dev workflow (`pnpm` scripts, ports, infra services) | `README.md` |
+| `apps/web` conventions or component library | `apps/web/README.md` |
+| A conflict between `plan/` and any other doc | Nothing in `plan/` — it's read-only and wins by definition. Fix the other doc, or flag the conflict to a human if `plan/` itself looks wrong. |
+
+New routes are not exempt from having real docs: a route registered without an
+explicit `description` in its schema shows a visible
+`"No description yet — add one to this route's schema."` placeholder in
+`/documentation` (see `apps/api/src/app.ts`) — treat that placeholder the same
+as a failing lint, not as acceptable output.
