@@ -30,15 +30,16 @@ async function upsertRepo(
 ): Promise<{ id: number; wasInsert: boolean }> {
   if (repo.url) {
     const { rows } = await client.query(
-      `INSERT INTO repos (name, description, devpost_url, demo_url)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO repos (name, description, devpost_url, demo_url, github_url)
+       VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (devpost_url) WHERE devpost_url IS NOT NULL DO UPDATE
          SET name = EXCLUDED.name,
              description = EXCLUDED.description,
              demo_url = EXCLUDED.demo_url,
+             github_url = COALESCE(EXCLUDED.github_url, repos.github_url),
              updated_at = now()
        RETURNING id, (xmax = 0) AS was_insert`,
-      [repo.title, repo.description, repo.url, repo.demoUrl],
+      [repo.title, repo.description, repo.url, repo.demoUrl, repo.githubUrl],
     );
     return { id: rows[0].id, wasInsert: rows[0].was_insert };
   }
@@ -53,14 +54,17 @@ async function upsertRepo(
   );
   if (existing.rows[0]) {
     await client.query(
-      `UPDATE repos SET description = $2, demo_url = $3, updated_at = now() WHERE id = $1`,
-      [existing.rows[0].id, repo.description, repo.demoUrl],
+      `UPDATE repos SET description = $2, demo_url = $3,
+              github_url = COALESCE($4, github_url), updated_at = now()
+       WHERE id = $1`,
+      [existing.rows[0].id, repo.description, repo.demoUrl, repo.githubUrl],
     );
     return { id: existing.rows[0].id, wasInsert: false };
   }
   const inserted = await client.query(
-    `INSERT INTO repos (name, description, devpost_url, demo_url) VALUES ($1, $2, NULL, $3) RETURNING id`,
-    [repo.title, repo.description, repo.demoUrl],
+    `INSERT INTO repos (name, description, devpost_url, demo_url, github_url)
+     VALUES ($1, $2, NULL, $3, $4) RETURNING id`,
+    [repo.title, repo.description, repo.demoUrl, repo.githubUrl],
   );
   return { id: inserted.rows[0].id, wasInsert: true };
 }
@@ -298,9 +302,10 @@ export async function linkParticipantSecondary(
     if (participant.rows.length === 0) {
       throw new NotFoundError(`No devpost participant ${email} for repo ${repoId}`);
     }
-    const userRes = await client.query(`SELECT id, email, name FROM users WHERE id = $1 FOR UPDATE`, [
-      userId,
-    ]);
+    const userRes = await client.query(
+      `SELECT id, email, name FROM users WHERE id = $1 FOR UPDATE`,
+      [userId],
+    );
     const user = userRes.rows[0] as { id: number; email: string; name: string | null } | undefined;
     if (!user) throw new NotFoundError(`User ${userId} not found`);
 
