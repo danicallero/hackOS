@@ -14,6 +14,11 @@ import { BadRequestError } from "../../lib/errors.js";
  * missing singleton; writes upsert it.
  */
 
+const backFieldSchema = z.object({
+  label: z.string().min(1).max(80),
+  value: z.string().min(1).max(500),
+});
+
 const eventConfigBody = z
   .object({
     name: z.string().nullable().optional(),
@@ -22,6 +27,10 @@ const eventConfigBody = z
     hackingStartsAt: z.coerce.date().nullable().optional(),
     hackingEndsAt: z.coerce.date().nullable().optional(),
     showStartCountdown: z.boolean().optional(),
+    venueName: z.string().nullable().optional(),
+    venueLatitude: z.number().min(-90).max(90).nullable().optional(),
+    venueLongitude: z.number().min(-180).max(180).nullable().optional(),
+    passBackFields: z.array(backFieldSchema).max(20).optional(),
   })
   .strict();
 
@@ -32,6 +41,10 @@ const DEFAULTS = {
   hacking_starts_at: null,
   hacking_ends_at: null,
   show_start_countdown: false,
+  venue_name: null,
+  venue_latitude: null,
+  venue_longitude: null,
+  pass_back_fields: [],
 } as const;
 
 interface EventConfigRow {
@@ -41,11 +54,16 @@ interface EventConfigRow {
   hacking_starts_at: string | null;
   hacking_ends_at: string | null;
   show_start_countdown: boolean;
+  venue_name: string | null;
+  venue_latitude: number | null;
+  venue_longitude: number | null;
+  pass_back_fields: { label: string; value: string }[];
 }
 
 async function readConfig(): Promise<EventConfigRow> {
   const { rows } = await pool.query(
-    `SELECT name, tagline, timezone, hacking_starts_at, hacking_ends_at, show_start_countdown
+    `SELECT name, tagline, timezone, hacking_starts_at, hacking_ends_at, show_start_countdown,
+            venue_name, venue_latitude, venue_longitude, pass_back_fields
        FROM event_config WHERE id = 1`,
   );
   return rows[0] ?? DEFAULTS;
@@ -83,6 +101,10 @@ function toPublic(
     showStartCountdown: row.show_start_countdown,
     judgingStartsAt: judging.judging_starts_at,
     judgingEndsAt: judging.judging_ends_at,
+    venueName: row.venue_name,
+    venueLatitude: row.venue_latitude,
+    venueLongitude: row.venue_longitude,
+    passBackFields: row.pass_back_fields,
   };
 }
 
@@ -90,17 +112,32 @@ export function registerEventRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
 
   // Anonymous: the public countdown feed for web / TV.
-  r.get("/api/public/event", async () => toPublic(await readConfig(), await readJudgingWindow()));
+  r.get(
+    "/api/public/event",
+    { schema: { summary: "Public event countdown feed (name, hacking/judging window, venue)." } },
+    async () => toPublic(await readConfig(), await readJudgingWindow()),
+  );
 
-  r.get("/api/event", { preHandler: requireCapability(CAPABILITIES.SCHEDULE_MANAGE) }, async () =>
-    toPublic(await readConfig(), await readJudgingWindow()),
+  r.get(
+    "/api/event",
+    {
+      preHandler: requireCapability(CAPABILITIES.SCHEDULE_MANAGE),
+      schema: {
+        summary: "Read the full event config, including venue and Wallet pass back fields.",
+      },
+    },
+    async () => toPublic(await readConfig(), await readJudgingWindow()),
   );
 
   r.put(
     "/api/event",
     {
       preHandler: requireCapability(CAPABILITIES.SCHEDULE_MANAGE),
-      schema: { body: eventConfigBody },
+      schema: {
+        summary:
+          "Update event config: name/tagline/timezone, hacking window, venue (name + GPS), and the Wallet pass back-field list. Fields omitted from the body are left unchanged.",
+        body: eventConfigBody,
+      },
     },
     async (req) => {
       const b = req.body;
@@ -114,6 +151,12 @@ export function registerEventRoutes(app: FastifyInstance): void {
         hacking_ends_at: b.hackingEndsAt === undefined ? current.hacking_ends_at : b.hackingEndsAt,
         show_start_countdown:
           b.showStartCountdown === undefined ? current.show_start_countdown : b.showStartCountdown,
+        venue_name: b.venueName === undefined ? current.venue_name : b.venueName,
+        venue_latitude: b.venueLatitude === undefined ? current.venue_latitude : b.venueLatitude,
+        venue_longitude:
+          b.venueLongitude === undefined ? current.venue_longitude : b.venueLongitude,
+        pass_back_fields:
+          b.passBackFields === undefined ? current.pass_back_fields : b.passBackFields,
       };
 
       if (
@@ -123,17 +166,26 @@ export function registerEventRoutes(app: FastifyInstance): void {
       ) {
         throw new BadRequestError("hackingEndsAt must be after hackingStartsAt");
       }
+      if ((next.venue_latitude === null) !== (next.venue_longitude === null)) {
+        throw new BadRequestError("venueLatitude and venueLongitude must be set together");
+      }
 
       const { rows } = await pool.query(
         `INSERT INTO event_config
-            (id, name, tagline, timezone, hacking_starts_at, hacking_ends_at, show_start_countdown)
-         VALUES (1, $1, $2, $3, $4, $5, $6)
+            (id, name, tagline, timezone, hacking_starts_at, hacking_ends_at, show_start_countdown,
+             venue_name, venue_latitude, venue_longitude, pass_back_fields)
+         VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
          ON CONFLICT (id) DO UPDATE
             SET name = EXCLUDED.name, tagline = EXCLUDED.tagline, timezone = EXCLUDED.timezone,
                 hacking_starts_at = EXCLUDED.hacking_starts_at,
                 hacking_ends_at = EXCLUDED.hacking_ends_at,
-                show_start_countdown = EXCLUDED.show_start_countdown
-         RETURNING name, tagline, timezone, hacking_starts_at, hacking_ends_at, show_start_countdown`,
+                show_start_countdown = EXCLUDED.show_start_countdown,
+                venue_name = EXCLUDED.venue_name,
+                venue_latitude = EXCLUDED.venue_latitude,
+                venue_longitude = EXCLUDED.venue_longitude,
+                pass_back_fields = EXCLUDED.pass_back_fields
+         RETURNING name, tagline, timezone, hacking_starts_at, hacking_ends_at, show_start_countdown,
+                   venue_name, venue_latitude, venue_longitude, pass_back_fields`,
         [
           next.name,
           next.tagline,
@@ -141,6 +193,10 @@ export function registerEventRoutes(app: FastifyInstance): void {
           next.hacking_starts_at,
           next.hacking_ends_at,
           next.show_start_countdown,
+          next.venue_name,
+          next.venue_latitude,
+          next.venue_longitude,
+          JSON.stringify(next.pass_back_fields),
         ],
       );
       const judging = await readJudgingWindow();

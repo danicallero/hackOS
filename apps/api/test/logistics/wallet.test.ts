@@ -144,7 +144,16 @@ describe("H28 Apple Wallet PassKit", () => {
     // it accepts the download and shows the "Add to Wallet" prompt — a bug
     // that a status-code/signature-only check like the above would miss.
     const manifest = JSON.parse(entries["manifest.json"]!.toString());
-    for (const name of ["icon.png", "icon@2x.png", "icon@3x.png"]) {
+    const imageFiles = [
+      "icon.png",
+      "icon@2x.png",
+      "icon@3x.png",
+      "logo.png",
+      "logo@2x.png",
+      "strip.png",
+      "strip@2x.png",
+    ];
+    for (const name of imageFiles) {
       expect(entries[name]).toBeDefined();
       expect(entries[name]!.subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
       expect(manifest[name]).toBe(createHash("sha1").update(entries[name]!).digest("hex"));
@@ -180,10 +189,15 @@ describe("H28 Apple Wallet PassKit", () => {
       uid,
     ]);
     await pool.query(
-      `INSERT INTO event_config (id, name, tagline, hacking_starts_at)
-       VALUES (1, 'hackUDC', 'Build something great', '2026-02-27T16:30:00+01:00')
+      `INSERT INTO event_config
+          (id, name, tagline, hacking_starts_at, venue_name, venue_latitude, venue_longitude, pass_back_fields)
+       VALUES (1, 'hackUDC', 'Build something great', '2026-02-27T16:30:00+01:00',
+               'Facultade de Informática, UDC', 43.3332, -8.4115,
+               '[{"label":"Schedule","value":"https://example.com/schedule"}]'::jsonb)
        ON CONFLICT (id) DO UPDATE SET
-         name = EXCLUDED.name, tagline = EXCLUDED.tagline, hacking_starts_at = EXCLUDED.hacking_starts_at`,
+         name = EXCLUDED.name, tagline = EXCLUDED.tagline, hacking_starts_at = EXCLUDED.hacking_starts_at,
+         venue_name = EXCLUDED.venue_name, venue_latitude = EXCLUDED.venue_latitude,
+         venue_longitude = EXCLUDED.venue_longitude, pass_back_fields = EXCLUDED.pass_back_fields`,
     );
     await issueTicket(uid, "ticket-wallet-fields");
 
@@ -224,6 +238,23 @@ describe("H28 Apple Wallet PassKit", () => {
       label: "Event",
       value: "hackUDC — Build something great",
     });
+    expect(pass.eventTicket.backFields).toContainEqual({
+      key: "venue",
+      label: "Location",
+      value: "Facultade de Informática, UDC",
+    });
+    expect(pass.eventTicket.backFields).toContainEqual({
+      key: "custom-0",
+      label: "Schedule",
+      value: "https://example.com/schedule",
+    });
+    expect(pass.locations).toEqual([
+      {
+        latitude: 43.3332,
+        longitude: -8.4115,
+        relevantText: "Facultade de Informática, UDC",
+      },
+    ]);
     expect(pass.foregroundColor).toBe("rgb(255,255,255)");
     expect(pass.backgroundColor).toBe("rgb(40,40,40)");
     expect(pass.labelColor).toBe("rgb(255,180,0)");

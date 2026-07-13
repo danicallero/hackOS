@@ -4350,6 +4350,46 @@ const dict: Record<string, I18nText> = {
     gl: "Antes de que comece o hackathon, amosa unha conta atrás en directo ata a hora de inicio no canto dunha duración fixa.",
     en: "Before hacking starts, show a live countdown to the start time instead of a locked duration.",
   },
+  venueSectionTitle: {
+    es: "Sede y pase de Wallet",
+    gl: "Sede e pase de Wallet",
+    en: "Venue & Wallet pass",
+  },
+  venueSectionDesc: {
+    es: "Ubicación del evento y contenido adicional del reverso del pase de Apple Wallet.",
+    gl: "Localización do evento e contido adicional do reverso do pase de Apple Wallet.",
+    en: "The event's location and extra back-of-pass content for the Apple Wallet pass.",
+  },
+  venueNameLabel: {
+    es: "Nombre de la sede",
+    gl: "Nome da sede",
+    en: "Venue name",
+  },
+  venueLatitudeLabel: { es: "Latitud", gl: "Latitude", en: "Latitude" },
+  venueLongitudeLabel: { es: "Longitud", gl: "Lonxitude", en: "Longitude" },
+  venueCoordsBothOrNeither: {
+    es: "La latitud y la longitud deben indicarse juntas.",
+    gl: "A latitude e a lonxitude deben indicarse xuntas.",
+    en: "Latitude and longitude must be set together.",
+  },
+  passBackFieldsLabel: {
+    es: "Campos del reverso del pase",
+    gl: "Campos do reverso do pase",
+    en: "Pass back fields",
+  },
+  passBackFieldsDesc: {
+    es: "Pares etiqueta/valor que aparecen al dar la vuelta al pase de Apple Wallet (horario, normas, enlaces...).",
+    gl: "Pares etiqueta/valor que aparecen ao voltear o pase de Apple Wallet (horario, normas, ligazóns...).",
+    en: "Label/value pairs shown on the back of the Apple Wallet pass (schedule, rules, links…).",
+  },
+  backFieldLabelPlaceholder: { es: "Etiqueta", gl: "Etiqueta", en: "Label" },
+  backFieldValuePlaceholder: { es: "Valor", gl: "Valor", en: "Value" },
+  addBackField: { es: "Añadir campo", gl: "Engadir campo", en: "Add field" },
+  removeBackFieldAria: {
+    es: "Eliminar campo {index}",
+    gl: "Eliminar campo {index}",
+    en: "Remove field {index}",
+  },
   couldNotLoadJudgingWindow: {
     es: "No se ha podido cargar la ventana de evaluación.",
     gl: "Non se puido cargar a ventá de avaliación.",

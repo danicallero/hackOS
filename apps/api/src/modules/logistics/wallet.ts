@@ -30,7 +30,17 @@ const ASSETS_DIR = join(process.cwd(), "assets", "apple-wallet");
 // PassKit silently refuses to install a pass whose bundle has no icon —
 // the "Add to Wallet" system prompt only checks the response's MIME type,
 // so a bundle missing icon.png still returns 200 but nothing ever appears.
-const ICON_FILES = ["icon.png", "icon@2x.png", "icon@3x.png"];
+// logo/strip are optional visuals (carried over from the reference pkpass
+// generator this replaces) but embedded the same way.
+const PASS_IMAGE_FILES = [
+  "icon.png",
+  "icon@2x.png",
+  "icon@3x.png",
+  "logo.png",
+  "logo@2x.png",
+  "strip.png",
+  "strip@2x.png",
+];
 
 function appleAuthToken(header: string | undefined): string {
   const prefix = "ApplePass ";
@@ -65,12 +75,18 @@ async function passPayload(pass: PassRow) {
   if (pass.purpose === "badge" && !u.badge_id) throw new BadRequestError("Badge not assigned");
 
   const { rows: eventRows } = await pool.query(
-    `SELECT name, tagline, timezone, hacking_starts_at FROM event_config WHERE id = 1`,
+    `SELECT name, tagline, timezone, hacking_starts_at,
+            venue_name, venue_latitude, venue_longitude, pass_back_fields
+       FROM event_config WHERE id = 1`,
   );
   const event = eventRows[0];
   const eventName = event?.name || ORGANIZATION_NAME;
   const startsAt: Date | null = event?.hacking_starts_at ? new Date(event.hacking_starts_at) : null;
   const timezone = event?.timezone || "UTC";
+  const venueName: string | null = event?.venue_name ?? null;
+  const venueLatitude: number | null = event?.venue_latitude ?? null;
+  const venueLongitude: number | null = event?.venue_longitude ?? null;
+  const passBackFields: { label: string; value: string }[] = event?.pass_back_fields ?? [];
 
   const fullName = [u.name, u.surname].filter(Boolean).join(" ") || `User ${pass.user_id}`;
   const barcode = pass.purpose === "ticket" ? u.token : u.badge_id;
@@ -85,8 +101,12 @@ async function passPayload(pass: PassRow) {
       label: "Event",
       value: event?.tagline ? `${eventName} — ${event.tagline}` : eventName,
     },
-    { key: "entry", label: "Entry", value: "Present this pass when you check in." },
-    { key: "web", label: "More info", value: config.WEB_URL },
+    ...(venueName ? [{ key: "venue", label: "Location", value: venueName }] : []),
+    ...passBackFields.map((field, i) => ({
+      key: `custom-${i}`,
+      label: field.label,
+      value: field.value,
+    })),
     { key: "org", label: "Organized by", value: ORGANIZATION_NAME },
   ];
 
@@ -102,6 +122,17 @@ async function passPayload(pass: PassRow) {
     sharingProhibited: true,
     voided: pass.status === "voided",
     ...(startsAt ? { relevantDate: startsAt.toISOString() } : {}),
+    ...(venueLatitude !== null && venueLongitude !== null
+      ? {
+          locations: [
+            {
+              latitude: venueLatitude,
+              longitude: venueLongitude,
+              relevantText: venueName ?? "Present this pass at the venue entrance.",
+            },
+          ],
+        }
+      : {}),
     eventTicket: {
       ...(startsAt
         ? {
@@ -160,19 +191,19 @@ export async function buildApplePass(
   if (pass.status === "voided" && !lookup) throw new BadRequestError("Pass has been voided");
 
   const passJson = JSON.stringify(await passPayload(pass));
-  const icons = await Promise.all(
-    ICON_FILES.map(async (name) => ({ name, data: await readFile(join(ASSETS_DIR, name)) })),
+  const images = await Promise.all(
+    PASS_IMAGE_FILES.map(async (name) => ({ name, data: await readFile(join(ASSETS_DIR, name)) })),
   );
   const manifest: Record<string, string> = {
     "pass.json": createHash("sha1").update(passJson).digest("hex"),
   };
-  for (const icon of icons)
-    manifest[icon.name] = createHash("sha1").update(icon.data).digest("hex");
+  for (const image of images)
+    manifest[image.name] = createHash("sha1").update(image.data).digest("hex");
   const manifestJson = JSON.stringify(manifest);
   const signature = await signManifest(manifestJson);
   return zipStore([
     { name: "pass.json", data: Buffer.from(passJson) },
-    ...icons,
+    ...images,
     { name: "manifest.json", data: Buffer.from(manifestJson) },
     { name: "signature", data: signature },
   ]);

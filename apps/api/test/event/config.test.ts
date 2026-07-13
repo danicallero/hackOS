@@ -112,6 +112,50 @@ describe("event config (H45/H47)", () => {
     expect(pub.json().showStartCountdown).toBe(true);
   });
 
+  it("upserts the venue and Wallet pass back fields", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const put = await a.inject({
+      method: "PUT",
+      url: "/api/event",
+      headers: asUser(manager),
+      payload: {
+        venueName: "Facultade de Informática, UDC",
+        venueLatitude: 43.3332,
+        venueLongitude: -8.4115,
+        passBackFields: [
+          { label: "Schedule", value: "https://example.com/schedule" },
+          { label: "Code of Conduct", value: "https://example.com/conduct" },
+        ],
+      },
+    });
+    expect(put.statusCode).toBe(200);
+    expect(put.json()).toMatchObject({
+      venueName: "Facultade de Informática, UDC",
+      venueLatitude: 43.3332,
+      venueLongitude: -8.4115,
+      passBackFields: [
+        { label: "Schedule", value: "https://example.com/schedule" },
+        { label: "Code of Conduct", value: "https://example.com/conduct" },
+      ],
+    });
+
+    const pub = await a.inject({ method: "GET", url: "/api/public/event" });
+    expect(pub.json().venueName).toBe("Facultade de Informática, UDC");
+  });
+
+  it("rejects venue coordinates set on only one axis", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const res = await a.inject({
+      method: "PUT",
+      url: "/api/event",
+      headers: asUser(manager),
+      payload: { venueLatitude: 43.3332 },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
   it("exposes the judging window (queue_settings) publicly, read-only", async () => {
     const a = await getApp();
     const admin = await createUserWithCapabilities([CAPABILITIES.QUEUE_ADMIN]);
