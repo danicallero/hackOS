@@ -327,6 +327,10 @@ describe("notify_enter (H31)", () => {
 describe("bring_in / start / complete (H32)", () => {
   it("lists waiting-room teams FIFO while allowing judges to bring in a newer team manually", async () => {
     const { challengeId, roomId } = await setup();
+    // Keep the automatic H29 pump out of this setup: the point here is the
+    // ordering of teams explicitly called into the waiting area.
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`UPDATE room_queue_state SET is_paused = true WHERE room_id = $1`, [roomId]);
     const { repoId: firstRepo } = await createRepoWithTeam();
     const { repoId: secondRepo } = await createRepoWithTeam();
     const first = await enqueueRepo(challengeId, firstRepo, 10);
@@ -343,10 +347,10 @@ describe("bring_in / start / complete (H32)", () => {
     }
 
     // Position differs from waiting-room arrival order: first was called first.
-    const { pool } = await import("../../src/db/pool.js");
-    await pool.query(`UPDATE queue_entries SET called_at = now() - interval '1 minute' WHERE id = $1`, [
-      first,
-    ]);
+    await pool.query(
+      `UPDATE queue_entries SET called_at = now() - interval '1 minute' WHERE id = $1`,
+      [first],
+    );
     await pool.query(`UPDATE queue_entries SET called_at = now() WHERE id = $1`, [second]);
     const view = await app.inject({
       method: "GET",
@@ -849,6 +853,10 @@ describe("manual call (H37)", () => {
 describe("move_to_top (H37, H58)", () => {
   it("sends a waiting team to the TOP of its challenge queue", async () => {
     const { challengeId, roomId } = await setup();
+    // An active room immediately fills its waiting area (H29), which would
+    // legitimately call the moved entry before its queue position is read.
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`UPDATE room_queue_state SET is_paused = true WHERE room_id = $1`, [roomId]);
     const { repoId: r1 } = await createRepoWithTeam();
     const { repoId: r2 } = await createRepoWithTeam();
     const e1 = await enqueueRepo(challengeId, r1, 1);

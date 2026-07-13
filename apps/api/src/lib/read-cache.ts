@@ -16,7 +16,7 @@ function isCacheable(req: FastifyRequest): boolean {
   if (req.method !== "GET" || !req.url.startsWith("/api/")) return false;
   // Streams, auth responses and binary/download endpoints must never be
   // buffered as JSON read models.
-  return !/(?:\/stream(?:[/?]|$)|^\/api\/auth\/|\/download(?:[/?]|$)|\/uploads(?:[/?]|$))/.test(
+  return !/(?:\/stream(?:[/?]|$)|^\/api\/auth\/|\/download(?:[/?]|$)|\/uploads(?:[/?]|$)|\/pace(?:[/?]|$))/.test(
     req.url,
   );
 }

@@ -18,14 +18,6 @@ const QUEUE_ENTRY_SELECT = `qe.*, r.name AS repo_name, r.description AS repo_des
               UNION
               SELECT user_id FROM devpost_participants
                WHERE repo_id = qe.repo_id AND user_id IS NOT NULL
-              UNION
-              SELECT u.id
-                FROM devpost_participants dp
-                JOIN users u
-                  ON lower(dp.email) = lower(u.email)
-                  OR (u.secondary_email_verified_at IS NOT NULL
-                      AND lower(dp.email) = lower(u.secondary_email))
-               WHERE dp.repo_id = qe.repo_id
             ) members ON members.user_id = u.id
           UNION ALL
           -- Devpost participants who never matched a system account still get
@@ -36,12 +28,6 @@ const QUEUE_ENTRY_SELECT = `qe.*, r.name AS repo_name, r.description AS repo_des
             FROM devpost_participants dp
            WHERE dp.repo_id = qe.repo_id
              AND dp.user_id IS NULL
-             AND NOT EXISTS (
-               SELECT 1 FROM users u2
-                WHERE lower(u2.email) = lower(dp.email)
-                   OR (u2.secondary_email_verified_at IS NOT NULL
-                       AND lower(u2.secondary_email) = lower(dp.email))
-             )
         ) all_members
     ),
     '[]'::jsonb
