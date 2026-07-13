@@ -1,4 +1,5 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { PASS_FIELD_LABEL_KEYS, type PassFieldLabels } from "@hackos/shared/wallet-pass-labels";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -21,6 +22,12 @@ const backFieldSchema = z.object({
   value: z.string().min(1).max(500),
 });
 
+const passFieldLabelsSchema = z
+  .object(
+    Object.fromEntries(PASS_FIELD_LABEL_KEYS.map((key) => [key, z.string().max(60).optional()])),
+  )
+  .strict();
+
 const eventConfigBody = z
   .object({
     name: z.string().nullable().optional(),
@@ -33,6 +40,7 @@ const eventConfigBody = z
     venueLatitude: z.number().min(-90).max(90).nullable().optional(),
     venueLongitude: z.number().min(-180).max(180).nullable().optional(),
     passBackFields: z.array(backFieldSchema).max(20).optional(),
+    passFieldLabels: passFieldLabelsSchema.optional(),
   })
   .strict();
 
@@ -47,6 +55,7 @@ const DEFAULTS = {
   venue_latitude: null,
   venue_longitude: null,
   pass_back_fields: [],
+  pass_field_labels: {},
 } as const;
 
 interface EventConfigRow {
@@ -60,12 +69,13 @@ interface EventConfigRow {
   venue_latitude: number | null;
   venue_longitude: number | null;
   pass_back_fields: { label: string; value: string }[];
+  pass_field_labels: PassFieldLabels;
 }
 
 async function readConfig(): Promise<EventConfigRow> {
   const { rows } = await pool.query(
     `SELECT name, tagline, timezone, hacking_starts_at, hacking_ends_at, show_start_countdown,
-            venue_name, venue_latitude, venue_longitude, pass_back_fields
+            venue_name, venue_latitude, venue_longitude, pass_back_fields, pass_field_labels
        FROM event_config WHERE id = 1`,
   );
   return rows[0] ?? DEFAULTS;
@@ -107,6 +117,7 @@ function toPublic(
     venueLatitude: row.venue_latitude,
     venueLongitude: row.venue_longitude,
     passBackFields: row.pass_back_fields,
+    passFieldLabels: row.pass_field_labels,
   };
 }
 
@@ -137,7 +148,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
       preHandler: requireCapability(CAPABILITIES.SCHEDULE_MANAGE),
       schema: {
         summary:
-          "Update event config: name/tagline/timezone, hacking window, venue (name + GPS), and the Wallet pass back-field list. Fields omitted from the body are left unchanged.",
+          "Update event config: name/tagline/timezone, hacking window, venue (name + GPS), the Wallet pass back-field list, and Wallet pass field-label overrides. Fields omitted from the body are left unchanged.",
         body: eventConfigBody,
       },
     },
@@ -159,6 +170,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
           b.venueLongitude === undefined ? current.venue_longitude : b.venueLongitude,
         pass_back_fields:
           b.passBackFields === undefined ? current.pass_back_fields : b.passBackFields,
+        pass_field_labels:
+          b.passFieldLabels === undefined ? current.pass_field_labels : b.passFieldLabels,
       };
 
       if (
@@ -175,8 +188,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
       const { rows } = await pool.query(
         `INSERT INTO event_config
             (id, name, tagline, timezone, hacking_starts_at, hacking_ends_at, show_start_countdown,
-             venue_name, venue_latitude, venue_longitude, pass_back_fields)
-         VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
+             venue_name, venue_latitude, venue_longitude, pass_back_fields, pass_field_labels)
+         VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb)
          ON CONFLICT (id) DO UPDATE
             SET name = EXCLUDED.name, tagline = EXCLUDED.tagline, timezone = EXCLUDED.timezone,
                 hacking_starts_at = EXCLUDED.hacking_starts_at,
@@ -185,9 +198,10 @@ export function registerEventRoutes(app: FastifyInstance): void {
                 venue_name = EXCLUDED.venue_name,
                 venue_latitude = EXCLUDED.venue_latitude,
                 venue_longitude = EXCLUDED.venue_longitude,
-                pass_back_fields = EXCLUDED.pass_back_fields
+                pass_back_fields = EXCLUDED.pass_back_fields,
+                pass_field_labels = EXCLUDED.pass_field_labels
          RETURNING name, tagline, timezone, hacking_starts_at, hacking_ends_at, show_start_countdown,
-                   venue_name, venue_latitude, venue_longitude, pass_back_fields`,
+                   venue_name, venue_latitude, venue_longitude, pass_back_fields, pass_field_labels`,
         [
           next.name,
           next.tagline,
@@ -199,6 +213,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
           next.venue_latitude,
           next.venue_longitude,
           JSON.stringify(next.pass_back_fields),
+          JSON.stringify(next.pass_field_labels),
         ],
       );
       const judging = await readJudgingWindow();

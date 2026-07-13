@@ -7,7 +7,8 @@
     ".": "./src/index.ts",
     "./capabilities": "./src/capabilities.ts",
     "./events": "./src/events.ts",
-    "./questions": "./src/questions.ts"
+    "./questions": "./src/questions.ts",
+    "./wallet-pass-labels": "./src/wallet-pass-labels.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",

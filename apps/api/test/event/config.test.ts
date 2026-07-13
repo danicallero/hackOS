@@ -144,6 +144,34 @@ describe("event config (H45/H47)", () => {
     expect(pub.json().venueName).toBe("Facultade de Informática, UDC");
   });
 
+  it("upserts Wallet pass field-label overrides", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const put = await a.inject({
+      method: "PUT",
+      url: "/api/event",
+      headers: asUser(manager),
+      payload: { passFieldLabels: { participant: "Hacker", email: "Contact" } },
+    });
+    expect(put.statusCode).toBe(200);
+    expect(put.json().passFieldLabels).toEqual({ participant: "Hacker", email: "Contact" });
+
+    const pub = await a.inject({ method: "GET", url: "/api/public/event" });
+    expect(pub.json().passFieldLabels).toEqual({ participant: "Hacker", email: "Contact" });
+  });
+
+  it("rejects an unknown Wallet pass field-label key", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const res = await a.inject({
+      method: "PUT",
+      url: "/api/event",
+      headers: asUser(manager),
+      payload: { passFieldLabels: { notARealKey: "x" } },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
   it("rejects venue coordinates set on only one axis", async () => {
     const a = await getApp();
     const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);

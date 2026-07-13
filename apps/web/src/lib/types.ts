@@ -1,4 +1,5 @@
 import type { Capability } from "@hackos/shared/capabilities";
+import type { PassFieldLabels } from "@hackos/shared/wallet-pass-labels";
 import type { I18nText } from "./i18n";
 
 export interface Me {
@@ -92,6 +93,7 @@ export interface EventConfig {
   venueLatitude: number | null;
   venueLongitude: number | null;
   passBackFields: PassBackField[];
+  passFieldLabels: PassFieldLabels;
 }
 
 export type InviteKind = "staff" | "sponsor" | "participant";

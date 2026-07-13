@@ -4360,6 +4360,11 @@ const dict: Record<string, I18nText> = {
     gl: "Localización do evento e contido adicional do reverso do pase de Apple Wallet.",
     en: "The event's location and extra back-of-pass content for the Apple Wallet pass.",
   },
+  hackingStartsFeedsPassDesc: {
+    es: "También se muestra como la hora de inicio en el pase de Apple Wallet.",
+    gl: "Tamén se amosa como a hora de inicio no pase de Apple Wallet.",
+    en: "Also shown as the start time on the Apple Wallet pass.",
+  },
   venueNameLabel: {
     es: "Nombre de la sede",
     gl: "Nome da sede",
@@ -4389,6 +4394,16 @@ const dict: Record<string, I18nText> = {
     es: "Eliminar campo {index}",
     gl: "Eliminar campo {index}",
     en: "Remove field {index}",
+  },
+  passFieldLabelsSectionTitle: {
+    es: "Etiquetas del pase",
+    gl: "Etiquetas do pase",
+    en: "Pass field labels",
+  },
+  passFieldLabelsSectionDesc: {
+    es: "Personaliza el texto de cada etiqueta del pase de Apple Wallet. Deja un campo en blanco para usar el texto por defecto (mostrado como marcador de posición).",
+    gl: "Personaliza o texto de cada etiqueta do pase de Apple Wallet. Deixa un campo en branco para usar o texto por defecto (amosado como marcador de posición).",
+    en: "Customize the caption text for each field on the Apple Wallet pass. Leave a field blank to use the default (shown as its placeholder).",
   },
   couldNotLoadJudgingWindow: {
     es: "No se ha podido cargar la ventana de evaluación.",
