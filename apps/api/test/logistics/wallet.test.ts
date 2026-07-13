@@ -144,12 +144,19 @@ describe("H28 Apple Wallet PassKit", () => {
     // it accepts the download and shows the "Add to Wallet" prompt — a bug
     // that a status-code/signature-only check like the above would miss.
     const manifest = JSON.parse(entries["manifest.json"]!.toString());
-    for (const name of ["icon.png", "icon@2x.png", "icon@3x.png"]) {
+    const imageFiles = [
+      "icon.png",
+      "icon@2x.png",
+      "icon@3x.png",
+      "logo.png",
+      "logo@2x.png",
+      "strip.png",
+      "strip@2x.png",
+    ];
+    for (const name of imageFiles) {
       expect(entries[name]).toBeDefined();
       expect(entries[name]!.subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
-      expect(manifest[name]).toBe(
-        createHash("sha1").update(entries[name]!).digest("hex"),
-      );
+      expect(manifest[name]).toBe(createHash("sha1").update(entries[name]!).digest("hex"));
     }
 
     const { pool } = await import("../../src/db/pool.js");
@@ -167,6 +174,154 @@ describe("H28 Apple Wallet PassKit", () => {
     });
     expect(native.statusCode).toBe(200);
     expect(native.rawPayload.subarray(0, 4).toString("hex")).toBe("504b0304");
+  });
+
+  it("fills the pass with event, university, and contact fields (H28)", async () => {
+    const { pool } = await import("../../src/db/pool.js");
+    const uid = await createUser({ name: "Ada", email: "ada@test.local" });
+    await pool.query(`UPDATE users SET surname = 'Lovelace' WHERE id = $1`, [uid]);
+    const university = await pool.query(
+      `INSERT INTO universities (name, proposed_by) VALUES ('UDC', $1) RETURNING id`,
+      [uid],
+    );
+    await pool.query(`UPDATE users SET university_id = $1 WHERE id = $2`, [
+      university.rows[0].id,
+      uid,
+    ]);
+    await pool.query(
+      `INSERT INTO event_config
+          (id, name, tagline, hacking_starts_at, venue_name, venue_latitude, venue_longitude, pass_back_fields)
+       VALUES (1, 'hackUDC', 'Build something great', '2026-02-27T16:30:00+01:00',
+               'Facultade de Informática, UDC', 43.3332, -8.4115,
+               '[{"label":"Schedule","value":"https://example.com/schedule"}]'::jsonb)
+       ON CONFLICT (id) DO UPDATE SET
+         name = EXCLUDED.name, tagline = EXCLUDED.tagline, hacking_starts_at = EXCLUDED.hacking_starts_at,
+         venue_name = EXCLUDED.venue_name, venue_latitude = EXCLUDED.venue_latitude,
+         venue_longitude = EXCLUDED.venue_longitude, pass_back_fields = EXCLUDED.pass_back_fields`,
+    );
+    await issueTicket(uid, "ticket-wallet-fields");
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/me/wallet/apple/ticket.pkpass",
+      headers: asUser(uid),
+    });
+    expect(res.statusCode).toBe(200);
+
+    const entries = readStoredZipEntries(res.rawPayload);
+    const pass = JSON.parse(entries["pass.json"]!.toString());
+
+    expect(pass.relevantDate).toBe(new Date("2026-02-27T16:30:00+01:00").toISOString());
+    expect(pass.eventTicket.headerFields[0]).toMatchObject({ key: "when" });
+    expect(pass.eventTicket.primaryFields).toContainEqual({
+      key: "name",
+      label: "Participant",
+      value: "Ada Lovelace",
+    });
+    expect(pass.eventTicket.secondaryFields).toContainEqual({
+      key: "purpose",
+      label: "Pass",
+      value: "Ticket",
+    });
+    expect(pass.eventTicket.secondaryFields).toContainEqual({
+      key: "university",
+      label: "University",
+      value: "UDC",
+    });
+    expect(pass.eventTicket.auxiliaryFields).toContainEqual({
+      key: "email",
+      label: "Email",
+      value: "ada@test.local",
+    });
+    expect(pass.eventTicket.backFields).toContainEqual({
+      key: "event",
+      label: "Event",
+      value: "hackUDC — Build something great",
+    });
+    expect(pass.eventTicket.backFields).toContainEqual({
+      key: "venue",
+      label: "Location",
+      value: "Facultade de Informática, UDC",
+    });
+    expect(pass.eventTicket.backFields).toContainEqual({
+      key: "custom-0",
+      label: "Schedule",
+      value: "https://example.com/schedule",
+    });
+    expect(pass.locations).toEqual([
+      {
+        latitude: 43.3332,
+        longitude: -8.4115,
+        relevantText: "Facultade de Informática, UDC",
+      },
+    ]);
+    expect(pass.foregroundColor).toBe("rgb(255,255,255)");
+    expect(pass.backgroundColor).toBe("rgb(40,40,40)");
+    expect(pass.labelColor).toBe("rgb(255,180,0)");
+  });
+
+  it("pushes every Apple pass when event config actually changes, but not on a no-op save (H28, H45/H47)", async () => {
+    const { pool } = await import("../../src/db/pool.js");
+    const { PASS_TYPE_IDENTIFIER } = await import("../../src/modules/logistics/wallet.js");
+    const uid = await createUser();
+    await issueTicket(uid, "ticket-wallet-refresh");
+    await app.inject({
+      method: "GET",
+      url: "/api/me/wallet/apple/ticket.pkpass",
+      headers: asUser(uid),
+    });
+    const before = await pool.query(
+      `SELECT id, serial_number, authentication_token, update_tag FROM wallet_passes WHERE user_id = $1`,
+      [uid],
+    );
+    const passId = before.rows[0].id;
+    const serial = before.rows[0].serial_number;
+    const token = before.rows[0].authentication_token;
+    await app.inject({
+      method: "POST",
+      url: `/api/wallet/apple/v1/devices/device-refresh/registrations/${PASS_TYPE_IDENTIFIER}/${serial}`,
+      headers: { authorization: `ApplePass ${token}` },
+      payload: { pushToken: "push-refresh" },
+    });
+
+    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+
+    // A no-op save (identical values) must not bump update_tag or push.
+    const noop = await app.inject({
+      method: "PUT",
+      url: "/api/event",
+      headers: asUser(manager),
+      payload: {},
+    });
+    expect(noop.statusCode).toBe(200);
+    const afterNoop = await pool.query(`SELECT update_tag FROM wallet_passes WHERE id = $1`, [
+      passId,
+    ]);
+    expect(afterNoop.rows[0].update_tag).toBe(before.rows[0].update_tag);
+    expect(pushState.lastRequest).toBeNull();
+
+    // An actual change bumps update_tag and pushes registered devices.
+    const changed = await app.inject({
+      method: "PUT",
+      url: "/api/event",
+      headers: asUser(manager),
+      payload: { name: "hackUDC 2026" },
+    });
+    expect(changed.statusCode).toBe(200);
+    const afterChange = await pool.query(`SELECT update_tag FROM wallet_passes WHERE id = $1`, [
+      passId,
+    ]);
+    expect(afterChange.rows[0].update_tag).not.toBe(before.rows[0].update_tag);
+
+    // The queue job isn't executed inline in this test process — invoke the
+    // processor directly with the bumped pass id, same pattern the badge
+    // rotation sync test uses instead of waiting on worker timing.
+    const { processWalletSync } = await import("../../src/modules/logistics/wallet-sync.js");
+    await processWalletSync({ data: { passIds: [passId] } } as never);
+    expect(pushState.lastRequest).toEqual({
+      path: "/3/device/push-refresh",
+      topic: PASS_TYPE_IDENTIFIER,
+    });
   });
 
   it("registers and lists changed serials for an Apple device", async () => {

@@ -73,6 +73,11 @@ export interface Intolerance {
   description: I18nText | null;
 }
 
+export interface PassBackField {
+  label: string;
+  value: string;
+}
+
 /** GET/PUT /api/event. */
 export interface EventConfig {
   name: string | null;
@@ -83,6 +88,10 @@ export interface EventConfig {
   showStartCountdown: boolean;
   judgingStartsAt: string | null;
   judgingEndsAt: string | null;
+  venueName: string | null;
+  venueLatitude: number | null;
+  venueLongitude: number | null;
+  passBackFields: PassBackField[];
 }
 
 export type InviteKind = "staff" | "sponsor" | "participant";

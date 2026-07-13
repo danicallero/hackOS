@@ -5,14 +5,15 @@
 // panels. Backed by GET/PUT /api/event (capability SCHEDULE_MANAGE).
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CalendarClockIcon, GavelIcon } from "lucide-react";
-import { useEffect } from "react";
+import { CalendarClockIcon, GavelIcon, MapPinIcon, Trash2Icon } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { SectionCard } from "@/components/common/section-card";
 import { SubmitButton } from "@/components/common/submit-button";
+import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
@@ -23,12 +24,66 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { ApiError, api } from "@/lib/api";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import { getQueueSettings, updateQueueSettings } from "@/lib/queue";
-import type { EventConfig } from "@/lib/types";
+import type { EventConfig, PassBackField } from "@/lib/types";
+
+/** Empty rows are dropped and label/value are trimmed before saving. */
+function normalizeBackFields(fields: PassBackField[]): PassBackField[] {
+  return fields
+    .map((field) => ({ label: field.label.trim(), value: field.value.trim() }))
+    .filter((field) => field.label.length > 0 && field.value.length > 0);
+}
+
+function BackFieldBuilder({
+  value,
+  onChange,
+}: {
+  value: PassBackField[];
+  onChange: (value: PassBackField[]) => void;
+}) {
+  const { t } = useLocale();
+  const add = () => onChange([...value, { label: "", value: "" }]);
+  const update = (index: number, patch: Partial<PassBackField>) =>
+    onChange(value.map((field, i) => (i === index ? { ...field, ...patch } : field)));
+  const remove = (index: number) => onChange(value.filter((_, i) => i !== index));
+
+  return (
+    <div className="space-y-2">
+      {value.map((field, index) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: rows are positional; a stable id would remount inputs and drop focus.
+        <div key={index} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-center">
+          <Input
+            value={field.label}
+            placeholder={t("backFieldLabelPlaceholder")}
+            onChange={(event) => update(index, { label: event.target.value })}
+          />
+          <Input
+            value={field.value}
+            placeholder={t("backFieldValuePlaceholder")}
+            onChange={(event) => update(index, { value: event.target.value })}
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label={t("removeBackFieldAria", { index: index + 1 })}
+            onClick={() => remove(index)}
+          >
+            <Trash2Icon className="size-4" />
+          </Button>
+        </div>
+      ))}
+      <Button type="button" variant="outline" size="sm" onClick={add}>
+        {t("addBackField")}
+      </Button>
+    </div>
+  );
+}
 
 const schema = z.object({
   name: z.string().max(200),
@@ -38,6 +93,10 @@ const schema = z.object({
   hackingStartsAt: z.string(),
   hackingEndsAt: z.string(),
   showStartCountdown: z.boolean(),
+  venueName: z.string().max(200),
+  // Held as strings so an empty input is representable; parsed to number | null on submit.
+  venueLatitude: z.string(),
+  venueLongitude: z.string(),
 });
 
 type Values = z.infer<typeof schema>;
@@ -78,6 +137,7 @@ export default function EventSettingsPage() {
 
 function HackingWindowSection() {
   const { t } = useLocale();
+  const [passBackFields, setPassBackFields] = useState<PassBackField[]>([]);
   const form = useForm<Values>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -87,6 +147,9 @@ function HackingWindowSection() {
       hackingStartsAt: "",
       hackingEndsAt: "",
       showStartCountdown: false,
+      venueName: "",
+      venueLatitude: "",
+      venueLongitude: "",
     },
   });
   const { reset } = form;
@@ -95,7 +158,7 @@ function HackingWindowSection() {
   useEffect(() => {
     api
       .get<EventConfig>("/api/event")
-      .then((cfg) =>
+      .then((cfg) => {
         reset({
           name: cfg.name ?? "",
           tagline: cfg.tagline ?? "",
@@ -103,8 +166,12 @@ function HackingWindowSection() {
           hackingStartsAt: toLocalInputValue(cfg.hackingStartsAt),
           hackingEndsAt: toLocalInputValue(cfg.hackingEndsAt),
           showStartCountdown: cfg.showStartCountdown,
-        }),
-      )
+          venueName: cfg.venueName ?? "",
+          venueLatitude: cfg.venueLatitude === null ? "" : String(cfg.venueLatitude),
+          venueLongitude: cfg.venueLongitude === null ? "" : String(cfg.venueLongitude),
+        });
+        setPassBackFields(cfg.passBackFields);
+      })
       .catch((err) =>
         toast.error(err instanceof ApiError ? err.message : t("couldNotLoadEventSettings")),
       );
@@ -120,6 +187,10 @@ function HackingWindowSection() {
         hackingStartsAt: fromLocalInputValue(values.hackingStartsAt),
         hackingEndsAt: fromLocalInputValue(values.hackingEndsAt),
         showStartCountdown: values.showStartCountdown,
+        venueName: values.venueName.trim() || null,
+        venueLatitude: values.venueLatitude.trim() === "" ? null : Number(values.venueLatitude),
+        venueLongitude: values.venueLongitude.trim() === "" ? null : Number(values.venueLongitude),
+        passBackFields: normalizeBackFields(passBackFields),
       });
       reset({
         name: next.name ?? "",
@@ -128,7 +199,11 @@ function HackingWindowSection() {
         hackingStartsAt: toLocalInputValue(next.hackingStartsAt),
         hackingEndsAt: toLocalInputValue(next.hackingEndsAt),
         showStartCountdown: next.showStartCountdown,
+        venueName: next.venueName ?? "",
+        venueLatitude: next.venueLatitude === null ? "" : String(next.venueLatitude),
+        venueLongitude: next.venueLongitude === null ? "" : String(next.venueLongitude),
       });
+      setPassBackFields(next.passBackFields);
       toast.success(t("eventSettingsSaved"));
     } catch (err) {
       // Surfaces API business errors verbatim (e.g. "hackingEndsAt must be after hackingStartsAt").
@@ -139,14 +214,7 @@ function HackingWindowSection() {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <SectionCard
-          icon={CalendarClockIcon}
-          title={t("eventTitle")}
-          description={t("eventDesc")}
-          footer={
-            <SubmitButton pending={form.formState.isSubmitting}>{t("saveChanges")}</SubmitButton>
-          }
-        >
+        <SectionCard icon={CalendarClockIcon} title={t("eventTitle")} description={t("eventDesc")}>
           <FormField
             control={form.control}
             name="name"
@@ -232,6 +300,64 @@ function HackingWindowSection() {
               </FormItem>
             )}
           />
+        </SectionCard>
+        <SectionCard
+          icon={MapPinIcon}
+          title={t("venueSectionTitle")}
+          description={t("venueSectionDesc")}
+          footer={
+            <SubmitButton pending={form.formState.isSubmitting}>{t("saveChanges")}</SubmitButton>
+          }
+        >
+          <FormField
+            control={form.control}
+            name="venueName"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t("venueNameLabel")}</FormLabel>
+                <FormControl>
+                  <Input {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField
+              control={form.control}
+              name="venueLatitude"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("venueLatitudeLabel")}</FormLabel>
+                  <FormControl>
+                    <Input type="number" step="any" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="venueLongitude"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("venueLongitudeLabel")}</FormLabel>
+                  <FormControl>
+                    <Input type="number" step="any" {...field} />
+                  </FormControl>
+                  <FormDescription>{t("venueCoordsBothOrNeither")}</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+          <div className="space-y-2">
+            <div>
+              <Label>{t("passBackFieldsLabel")}</Label>
+              <p className="text-muted-foreground text-sm">{t("passBackFieldsDesc")}</p>
+            </div>
+            <BackFieldBuilder value={passBackFields} onChange={setPassBackFields} />
+          </div>
         </SectionCard>
       </form>
     </Form>
