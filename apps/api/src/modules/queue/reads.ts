@@ -6,29 +6,43 @@ const QUEUE_ENTRY_SELECT = `qe.*, r.name AS repo_name, r.description AS repo_des
   COALESCE(
     (
       SELECT jsonb_agg(
-               jsonb_build_object(
-                 'userId', u.id,
-                 'email', u.email,
-                 'name', u.name,
-                 'surname', u.surname
-               )
-               ORDER BY u.name ASC NULLS LAST, u.surname ASC NULLS LAST, u.email ASC
+               m ORDER BY (m->>'name') ASC NULLS LAST, (m->>'surname') ASC NULLS LAST, (m->>'email') ASC
              )
-        FROM users u
-        JOIN (
-          SELECT user_id FROM submissions WHERE repo_id = qe.repo_id
-          UNION
-          SELECT user_id FROM devpost_participants
-           WHERE repo_id = qe.repo_id AND user_id IS NOT NULL
-          UNION
-          SELECT u.id
+        FROM (
+          SELECT jsonb_build_object(
+                   'userId', u.id, 'email', u.email, 'name', u.name, 'surname', u.surname
+                 ) AS m
+            FROM users u
+            JOIN (
+              SELECT user_id FROM submissions WHERE repo_id = qe.repo_id
+              UNION
+              SELECT user_id FROM devpost_participants
+               WHERE repo_id = qe.repo_id AND user_id IS NOT NULL
+              UNION
+              SELECT u.id
+                FROM devpost_participants dp
+                JOIN users u
+                  ON lower(dp.email) = lower(u.email)
+                  OR (u.secondary_email_verified_at IS NOT NULL
+                      AND lower(dp.email) = lower(u.secondary_email))
+               WHERE dp.repo_id = qe.repo_id
+            ) members ON members.user_id = u.id
+          UNION ALL
+          -- Devpost participants who never matched a system account still get
+          -- listed, using the name Devpost imported instead of dropping them.
+          SELECT jsonb_build_object(
+                   'userId', NULL, 'email', dp.email, 'name', dp.name, 'surname', dp.surname
+                 ) AS m
             FROM devpost_participants dp
-            JOIN users u
-              ON lower(dp.email) = lower(u.email)
-              OR (u.secondary_email_verified_at IS NOT NULL
-                  AND lower(dp.email) = lower(u.secondary_email))
            WHERE dp.repo_id = qe.repo_id
-        ) members ON members.user_id = u.id
+             AND dp.user_id IS NULL
+             AND NOT EXISTS (
+               SELECT 1 FROM users u2
+                WHERE lower(u2.email) = lower(dp.email)
+                   OR (u2.secondary_email_verified_at IS NOT NULL
+                       AND lower(u2.secondary_email) = lower(dp.email))
+             )
+        ) all_members
     ),
     '[]'::jsonb
   ) AS repo_members`;
@@ -295,12 +309,35 @@ export async function myQueueStatus(userId: number) {
   return results;
 }
 
-/** H39: desired minutes/team vs remaining schedule time vs pending count. */
+/**
+ * H39: desired minutes/team vs remaining schedule time vs pending count.
+ *
+ * The hard ceiling on time/team is the challenge's own
+ * `max_presentation_seconds` — the operator's desired pace can never exceed
+ * it. That ceiling itself gets squeezed further when the remaining judging
+ * window can't fit every pending team, accounting for every room sharing
+ * this challenge's queue (they work the queue in parallel, so N rooms means
+ * N× the throughput for the same remaining time).
+ */
 export async function roomPace(roomId: number) {
   const state = (await pool.query(`SELECT * FROM room_queue_state WHERE room_id = $1`, [roomId]))
     .rows[0];
   if (!state) throw new NotFoundError("Room not found", { roomId });
   const settings = (await pool.query(`SELECT * FROM queue_settings WHERE id = 1`)).rows[0];
+
+  // H29/H46: a room judges a single challenge — same "first assigned" pick
+  // roomView uses for its read-only challenge label.
+  const primaryChallenge = (
+    await pool.query(
+      `SELECT rc.challenge_id AS id, c.max_presentation_seconds
+         FROM room_challenges rc
+         JOIN challenges c ON c.id = rc.challenge_id
+        WHERE rc.room_id = $1
+        ORDER BY rc.assigned_at ASC, rc.challenge_id ASC
+        LIMIT 1`,
+      [roomId],
+    )
+  ).rows[0] as { id: number; max_presentation_seconds: number | null } | undefined;
 
   const challengeIds = (
     await pool.query(`SELECT challenge_id FROM room_challenges WHERE room_id = $1`, [roomId])
@@ -316,18 +353,43 @@ export async function roomPace(roomId: number) {
       ).rows[0].n
     : 0;
 
+  // Every room (across the whole event) judging the same challenge splits
+  // the pending teams between them — more rooms means more time/team fits
+  // in the same remaining window.
+  const roomCount = primaryChallenge
+    ? Math.max(
+        1,
+        (
+          await pool.query(
+            `SELECT COUNT(DISTINCT room_id)::int AS n FROM room_challenges WHERE challenge_id = $1`,
+            [primaryChallenge.id],
+          )
+        ).rows[0].n,
+      )
+    : 1;
+
+  const challengeMaxMinutes = primaryChallenge?.max_presentation_seconds
+    ? primaryChallenge.max_presentation_seconds / 60
+    : null;
+  const baselineMinutesPerTeam =
+    challengeMaxMinutes != null
+      ? Math.min(state.desired_minutes_per_team, challengeMaxMinutes)
+      : state.desired_minutes_per_team;
+
   const remainingMinutes = settings.schedule_end_at
     ? Math.max(0, (new Date(settings.schedule_end_at).getTime() - Date.now()) / 60_000)
     : null;
-  const requiredMinutes = pendingCount * state.desired_minutes_per_team;
+  const requiredMinutes = (pendingCount / roomCount) * baselineMinutesPerTeam;
   const insufficientTime = remainingMinutes !== null && requiredMinutes > remainingMinutes;
   const suggestedMinutesPerTeam =
-    remainingMinutes !== null && pendingCount > 0 ? remainingMinutes / pendingCount : null;
+    remainingMinutes !== null && pendingCount > 0
+      ? (remainingMinutes * roomCount) / pendingCount
+      : null;
 
   // H39: honour the judging end time. When the desired pace won't fit every
   // pending team before schedule_end_at, the effective time per team is
   // squeezed down to what does fit — so judging finishes on time. Never
-  // stretches beyond the operator's desired pace.
+  // stretches beyond the challenge-capped baseline pace.
   //
   // This is ADVISORY ONLY: `effectiveMinutesPerTeam` is the target the judge's
   // timer counts down from. Going over it never auto-closes or force-ends an
@@ -335,12 +397,14 @@ export async function roomPace(roomId: number) {
   // Nothing server-side ends a judging session on a clock.
   const autoAdjusted = insufficientTime && suggestedMinutesPerTeam !== null;
   const effectiveMinutesPerTeam = autoAdjusted
-    ? Math.min(state.desired_minutes_per_team, suggestedMinutesPerTeam as number)
-    : state.desired_minutes_per_team;
+    ? Math.min(baselineMinutesPerTeam, suggestedMinutesPerTeam as number)
+    : baselineMinutesPerTeam;
 
   return {
     roomId,
     desiredMinutesPerTeam: state.desired_minutes_per_team,
+    challengeMaxMinutes,
+    roomCount,
     pendingCount,
     remainingMinutes,
     requiredMinutes,

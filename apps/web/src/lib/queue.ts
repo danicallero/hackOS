@@ -36,7 +36,8 @@ export interface QueueEntry {
   repo_devpost_url?: string | null;
   repo_demo_url?: string | null;
   repo_members?: Array<{
-    userId: number;
+    /** Null when the Devpost participant never matched a system account. */
+    userId: number | null;
     email: string;
     name: string | null;
     surname: string | null;
@@ -100,6 +101,10 @@ export interface ChallengeProgress {
 export interface RoomPace {
   roomId: number;
   desiredMinutesPerTeam: number;
+  /** The challenge's own max_presentation_seconds, in minutes; null if unset. */
+  challengeMaxMinutes: number | null;
+  /** Rooms (across the event) sharing this challenge's queue. */
+  roomCount: number;
   pendingCount: number;
   remainingMinutes: number | null;
   requiredMinutes: number;

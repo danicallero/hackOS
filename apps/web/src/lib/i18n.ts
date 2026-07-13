@@ -1567,7 +1567,8 @@ const dict: Record<string, I18nText> = {
     gl: "Ausencia rexistrada.",
     en: "No-show recorded.",
   },
-  notify: { es: "Avisar", gl: "Avisar", en: "Notify" },
+  callIn: { es: "Llamar", gl: "Chamar", en: "Call in" },
+  moreActions: { es: "Más acciones", gl: "Máis accións", en: "More actions" },
   noShow: { es: "Ausente", gl: "Ausente", en: "No-show" },
   challengeQueueCount: {
     es: "Cola del reto ({count})",
