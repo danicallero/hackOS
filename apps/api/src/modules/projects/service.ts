@@ -866,13 +866,6 @@ export async function myProjects(userId: number): Promise<Array<Omit<RepoWithExt
        SELECT repo_id FROM submissions WHERE user_id = $1
        UNION
        SELECT repo_id FROM devpost_participants WHERE user_id = $1
-       UNION
-       SELECT dp.repo_id
-         FROM devpost_participants dp
-         JOIN users u ON u.id = $1
-        WHERE lower(dp.email) = lower(u.email)
-           OR (u.secondary_email_verified_at IS NOT NULL
-               AND lower(dp.email) = lower(u.secondary_email))
      )
      ORDER BY r.name`,
     [userId],

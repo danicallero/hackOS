@@ -104,7 +104,9 @@ describe("rooms CRUD + assignments (QUEUE_ADMIN)", () => {
     const resumed = await app.inject({
       method: "POST",
       url: `/api/queue/rooms/${roomId}/resume`,
-      headers: asUser(adminId),
+      // H35 allows the queue operator (or a judge), not the room administrator
+      // who only owns setup/settings (QUEUE_ADMIN).
+      headers: asUser(operatorId),
     });
     expect(resumed.statusCode).toBe(200);
     expect(

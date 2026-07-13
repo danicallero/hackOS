@@ -62,7 +62,13 @@ export async function idempotencyGuard(req: FastifyRequest, reply: FastifyReply)
     throw new ConflictError("Duplicate request still in flight; retry shortly");
   }
   req.idempotency = { key, scope, hash, replayed: true };
-  reply.code(row.response_status).header("idempotency-replayed", "true").send(row.response_body);
+  // Returning the sent reply is significant: merely calling send() from an
+  // async pre-handler still lets Fastify continue to the route handler, which
+  // would repeat side effects despite returning the stored response.
+  return reply
+    .code(row.response_status)
+    .header("idempotency-replayed", "true")
+    .send(row.response_body);
 }
 
 /** Registered globally in app.ts: persists responses for first executions. */
