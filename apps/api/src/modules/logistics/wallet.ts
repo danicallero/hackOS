@@ -158,14 +158,17 @@ async function passPayload(pass: PassRow) {
   // Badges are not date-bound, so they say BADGE (the admin-customizable
   // badgeValue caption, uppercased) instead of a date.
   const locale = PASS_LOCALES[u.language] ?? "en-GB";
-  // Composed by hand ("6 feb 2026") instead of toLocaleDateString: Galician's
-  // date style is "6 de feb. de 2026", which overflows the header field.
-  const headerDate = (d: Date) =>
-    [
-      d.toLocaleString(locale, { day: "numeric", timeZone: timezone }),
-      d.toLocaleString(locale, { month: "short", timeZone: timezone }).replace(/\./g, ""),
-      d.toLocaleString(locale, { year: "numeric", timeZone: timezone }),
-    ].join(" ");
+  // Composed by hand ("20 feb, 2026") instead of toLocaleDateString: es/gl
+  // locale styles insert prepositions ("6 de feb. de 2026") that overflow the
+  // header field — only the month abbreviation itself is localized.
+  const headerDate = (d: Date) => {
+    const day = d.toLocaleString(locale, { day: "numeric", timeZone: timezone });
+    const month = d
+      .toLocaleString(locale, { month: "short", timeZone: timezone })
+      .replace(/\./g, "");
+    const year = d.toLocaleString(locale, { year: "numeric", timeZone: timezone });
+    return `${day} ${month}, ${year}`;
+  };
   const headerFields =
     pass.purpose === "badge"
       ? [
