@@ -52,9 +52,10 @@ async function requirePassBySerial(serialNumber: string, authorization?: string)
 
 async function passPayload(pass: PassRow) {
   const { rows } = await pool.query(
-    `SELECT u.name, u.surname, u.badge_id, t.token
+    `SELECT u.name, u.surname, u.email, u.badge_id, un.name AS university, t.token
        FROM users u
        LEFT JOIN tickets t ON t.user_id = u.id
+       LEFT JOIN universities un ON un.id = u.university_id
       WHERE u.id = $1`,
     [pass.user_id],
   );
@@ -63,8 +64,32 @@ async function passPayload(pass: PassRow) {
   if (pass.purpose === "ticket" && !u.token) throw new NotFoundError("Ticket not issued");
   if (pass.purpose === "badge" && !u.badge_id) throw new BadRequestError("Badge not assigned");
 
+  const { rows: eventRows } = await pool.query(
+    `SELECT name, tagline, timezone, hacking_starts_at FROM event_config WHERE id = 1`,
+  );
+  const event = eventRows[0];
+  const eventName = event?.name || ORGANIZATION_NAME;
+  const startsAt: Date | null = event?.hacking_starts_at ? new Date(event.hacking_starts_at) : null;
+  const timezone = event?.timezone || "UTC";
+
   const fullName = [u.name, u.surname].filter(Boolean).join(" ") || `User ${pass.user_id}`;
   const barcode = pass.purpose === "ticket" ? u.token : u.badge_id;
+  const secondaryFields = [
+    { key: "purpose", label: "Pass", value: pass.purpose === "ticket" ? "Ticket" : "Badge" },
+    ...(u.university ? [{ key: "university", label: "University", value: u.university }] : []),
+  ];
+  const auxiliaryFields = u.email ? [{ key: "email", label: "Email", value: u.email }] : [];
+  const backFields = [
+    {
+      key: "event",
+      label: "Event",
+      value: event?.tagline ? `${eventName} — ${event.tagline}` : eventName,
+    },
+    { key: "entry", label: "Entry", value: "Present this pass when you check in." },
+    { key: "web", label: "More info", value: config.WEB_URL },
+    { key: "org", label: "Organized by", value: ORGANIZATION_NAME },
+  ];
+
   return {
     formatVersion: 1,
     passTypeIdentifier: PASS_TYPE_IDENTIFIER,
@@ -76,9 +101,32 @@ async function passPayload(pass: PassRow) {
     webServiceURL: `${config.BETTER_AUTH_URL}/api/wallet/apple/v1`,
     sharingProhibited: true,
     voided: pass.status === "voided",
+    ...(startsAt ? { relevantDate: startsAt.toISOString() } : {}),
     eventTicket: {
+      ...(startsAt
+        ? {
+            headerFields: [
+              {
+                key: "when",
+                label: startsAt.toLocaleTimeString("en-GB", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  timeZone: timezone,
+                }),
+                value: startsAt.toLocaleDateString("en-GB", {
+                  day: "2-digit",
+                  month: "short",
+                  timeZone: timezone,
+                }),
+                textAlignment: "PKTextAlignmentRight",
+              },
+            ],
+          }
+        : {}),
       primaryFields: [{ key: "name", label: "Participant", value: fullName }],
-      secondaryFields: [{ key: "purpose", label: "Pass", value: pass.purpose }],
+      secondaryFields,
+      auxiliaryFields,
+      backFields,
     },
     barcode: {
       message: barcode,
@@ -93,8 +141,8 @@ async function passPayload(pass: PassRow) {
       },
     ],
     foregroundColor: "rgb(255,255,255)",
-    backgroundColor: "rgb(31,36,48)",
-    labelColor: "rgb(221,227,238)",
+    backgroundColor: "rgb(40,40,40)",
+    labelColor: "rgb(255,180,0)",
   };
 }
 
@@ -118,7 +166,8 @@ export async function buildApplePass(
   const manifest: Record<string, string> = {
     "pass.json": createHash("sha1").update(passJson).digest("hex"),
   };
-  for (const icon of icons) manifest[icon.name] = createHash("sha1").update(icon.data).digest("hex");
+  for (const icon of icons)
+    manifest[icon.name] = createHash("sha1").update(icon.data).digest("hex");
   const manifestJson = JSON.stringify(manifest);
   const signature = await signManifest(manifestJson);
   return zipStore([

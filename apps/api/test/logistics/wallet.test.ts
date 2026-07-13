@@ -147,9 +147,7 @@ describe("H28 Apple Wallet PassKit", () => {
     for (const name of ["icon.png", "icon@2x.png", "icon@3x.png"]) {
       expect(entries[name]).toBeDefined();
       expect(entries[name]!.subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
-      expect(manifest[name]).toBe(
-        createHash("sha1").update(entries[name]!).digest("hex"),
-      );
+      expect(manifest[name]).toBe(createHash("sha1").update(entries[name]!).digest("hex"));
     }
 
     const { pool } = await import("../../src/db/pool.js");
@@ -167,6 +165,68 @@ describe("H28 Apple Wallet PassKit", () => {
     });
     expect(native.statusCode).toBe(200);
     expect(native.rawPayload.subarray(0, 4).toString("hex")).toBe("504b0304");
+  });
+
+  it("fills the pass with event, university, and contact fields (H28)", async () => {
+    const { pool } = await import("../../src/db/pool.js");
+    const uid = await createUser({ name: "Ada", email: "ada@test.local" });
+    await pool.query(`UPDATE users SET surname = 'Lovelace' WHERE id = $1`, [uid]);
+    const university = await pool.query(
+      `INSERT INTO universities (name, proposed_by) VALUES ('UDC', $1) RETURNING id`,
+      [uid],
+    );
+    await pool.query(`UPDATE users SET university_id = $1 WHERE id = $2`, [
+      university.rows[0].id,
+      uid,
+    ]);
+    await pool.query(
+      `INSERT INTO event_config (id, name, tagline, hacking_starts_at)
+       VALUES (1, 'hackUDC', 'Build something great', '2026-02-27T16:30:00+01:00')
+       ON CONFLICT (id) DO UPDATE SET
+         name = EXCLUDED.name, tagline = EXCLUDED.tagline, hacking_starts_at = EXCLUDED.hacking_starts_at`,
+    );
+    await issueTicket(uid, "ticket-wallet-fields");
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/me/wallet/apple/ticket.pkpass",
+      headers: asUser(uid),
+    });
+    expect(res.statusCode).toBe(200);
+
+    const entries = readStoredZipEntries(res.rawPayload);
+    const pass = JSON.parse(entries["pass.json"]!.toString());
+
+    expect(pass.relevantDate).toBe(new Date("2026-02-27T16:30:00+01:00").toISOString());
+    expect(pass.eventTicket.headerFields[0]).toMatchObject({ key: "when" });
+    expect(pass.eventTicket.primaryFields).toContainEqual({
+      key: "name",
+      label: "Participant",
+      value: "Ada Lovelace",
+    });
+    expect(pass.eventTicket.secondaryFields).toContainEqual({
+      key: "purpose",
+      label: "Pass",
+      value: "Ticket",
+    });
+    expect(pass.eventTicket.secondaryFields).toContainEqual({
+      key: "university",
+      label: "University",
+      value: "UDC",
+    });
+    expect(pass.eventTicket.auxiliaryFields).toContainEqual({
+      key: "email",
+      label: "Email",
+      value: "ada@test.local",
+    });
+    expect(pass.eventTicket.backFields).toContainEqual({
+      key: "event",
+      label: "Event",
+      value: "hackUDC — Build something great",
+    });
+    expect(pass.foregroundColor).toBe("rgb(255,255,255)");
+    expect(pass.backgroundColor).toBe("rgb(40,40,40)");
+    expect(pass.labelColor).toBe("rgb(255,180,0)");
   });
 
   it("registers and lists changed serials for an Apple device", async () => {
