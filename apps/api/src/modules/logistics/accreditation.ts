@@ -26,8 +26,15 @@ export async function lookupByTicket(token: string) {
 
 export async function lookupByUserId(userId: number) {
   const card = await loadPersonCard(pool, userId);
-  const u = await pool.query(`SELECT badge_id FROM users WHERE id = $1`, [userId]);
-  const badge = (u.rows[0]?.badge_id ?? null) as string | null;
+  // Identity-verification fields staff needs at the door (H22): the badge is
+  // handed to a physical person, so the card carries DNI, email and shirt
+  // size on top of the shared scanner card.
+  const u = await pool.query(
+    `SELECT badge_id, email, dni, phone, shirt_size FROM users WHERE id = $1`,
+    [userId],
+  );
+  const row = u.rows[0] ?? {};
+  const badge = (row.badge_id ?? null) as string | null;
   const confirmed = await pool.query(
     `SELECT 1 FROM application_responses WHERE user_id = $1 AND status = 'confirmed' LIMIT 1`,
     [userId],
@@ -35,11 +42,110 @@ export async function lookupByUserId(userId: number) {
 
   return {
     ...card,
+    email: (row.email ?? null) as string | null,
+    dni: (row.dni ?? null) as string | null,
+    phone: (row.phone ?? null) as string | null,
+    shirtSize: (row.shirt_size ?? null) as string | null,
     confirmed: confirmed.rows.length > 0,
     hasTicket: await hasTicket(userId),
     alreadyAccredited: badge != null,
     currentBadge: badge,
   };
+}
+
+// ── H22/H23: unified person search ────────────────────────────────────────
+
+export type AccreditationMatch = "ticket" | "badge" | "badge_history" | "profile";
+
+export interface AccreditationSearchResult {
+  userId: number;
+  name: string | null;
+  surname: string | null;
+  email: string;
+  badgeId: string | null;
+  confirmed: boolean;
+  matchedBy: AccreditationMatch;
+}
+
+/**
+ * One search box for the accreditation desk: `q` is tried as an exact ticket
+ * token, then as an exact badge id (current or rotated-away), and finally as
+ * a name/surname/email substring. Exact identifier hits short-circuit the
+ * fuzzy search so a scanned QR always resolves to exactly one person.
+ * Read-only; guarded by ACCREDIT_SCAN (staff at the desk may lack users:list).
+ */
+export async function searchPeople(q: string): Promise<AccreditationSearchResult[]> {
+  const needle = q.trim();
+  if (!needle) return [];
+
+  const ticket = await pool.query(`SELECT user_id FROM tickets WHERE token = $1`, [needle]);
+  if (ticket.rows[0]) {
+    return loadSearchResults([ticket.rows[0].user_id as number], "ticket");
+  }
+
+  const badge = await pool.query(`SELECT id FROM users WHERE badge_id = $1`, [needle]);
+  if (badge.rows[0]) {
+    return loadSearchResults([badge.rows[0].id as number], "badge");
+  }
+
+  const history = await pool.query(`SELECT id FROM users WHERE $1 = ANY(badge_id_history)`, [
+    needle,
+  ]);
+  if (history.rows.length > 0) {
+    return loadSearchResults(
+      history.rows.map((r: { id: number }) => r.id),
+      "badge_history",
+    );
+  }
+
+  const like = `%${needle}%`;
+  const fuzzy = await pool.query(
+    `SELECT id FROM users
+      WHERE name ILIKE $1 OR surname ILIKE $1 OR (name || ' ' || surname) ILIKE $1 OR email ILIKE $1
+      ORDER BY surname NULLS LAST, name NULLS LAST, id
+      LIMIT 10`,
+    [like],
+  );
+  return loadSearchResults(
+    fuzzy.rows.map((r: { id: number }) => r.id),
+    "profile",
+  );
+}
+
+async function loadSearchResults(
+  userIds: number[],
+  matchedBy: AccreditationMatch,
+): Promise<AccreditationSearchResult[]> {
+  if (userIds.length === 0) return [];
+  const { rows } = await pool.query(
+    `SELECT u.id, u.name, u.surname, u.email, u.badge_id,
+            EXISTS (
+              SELECT 1 FROM application_responses ar
+               WHERE ar.user_id = u.id AND ar.status = 'confirmed'
+            ) AS confirmed
+       FROM users u
+      WHERE u.id = ANY($1::int[])
+      ORDER BY array_position($1::int[], u.id)`,
+    [userIds],
+  );
+  return rows.map(
+    (r: {
+      id: number;
+      name: string | null;
+      surname: string | null;
+      email: string;
+      badge_id: string | null;
+      confirmed: boolean;
+    }) => ({
+      userId: r.id,
+      name: r.name,
+      surname: r.surname,
+      email: r.email,
+      badgeId: r.badge_id,
+      confirmed: r.confirmed,
+      matchedBy,
+    }),
+  );
 }
 
 async function hasTicket(userId: number): Promise<boolean> {

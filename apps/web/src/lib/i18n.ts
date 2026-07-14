@@ -774,9 +774,34 @@ const dict: Record<string, I18nText> = {
     en: "The accreditation scan capability is required.",
   },
   accreditationDescription: {
-    es: "Registra la entrada de las personas con su entrada y asígnales una acreditación física.",
-    gl: "Rexistra a entrada das persoas coa súa entrada e asígnalles unha acreditación física.",
-    en: "Check people in against their entrance ticket and assign a physical badge.",
+    es: "Busca a la persona (entrada, acreditación, nombre o correo) y asigna o cambia su acreditación desde su ficha.",
+    gl: "Busca a persoa (entrada, acreditación, nome ou correo) e asigna ou cambia a súa acreditación desde a súa ficha.",
+    en: "Find the person (ticket, badge, name or email) and assign or replace their badge from their card.",
+  },
+  personSearchTitle: { es: "Buscar persona", gl: "Buscar persoa", en: "Find person" },
+  personSearchDesc: {
+    es: "Escanea el QR de la entrada o de una acreditación (también una antigua), o escribe nombre, apellidos o correo.",
+    gl: "Escanea o QR da entrada ou dunha acreditación (tamén unha antiga), ou escribe nome, apelidos ou correo.",
+    en: "Scan an entrance or badge QR (old badges work too), or type a name, surname or email.",
+  },
+  personSearchPlaceholder: {
+    es: "QR de entrada, acreditación, nombre o correo",
+    gl: "QR de entrada, acreditación, nome ou correo",
+    en: "ticket QR, badge, name or email",
+  },
+  matchTicket: { es: "entrada", gl: "entrada", en: "ticket" },
+  matchBadge: { es: "acreditación", gl: "acreditación", en: "badge" },
+  matchOldBadge: { es: "acreditación antigua", gl: "acreditación antiga", en: "old badge" },
+  dniLabel: { es: "DNI", gl: "DNI", en: "ID number" },
+  assignBadgeAction: {
+    es: "Asignar acreditación",
+    gl: "Asignar acreditación",
+    en: "Assign badge",
+  },
+  changeBadgeDesc: {
+    es: "Escanea o escribe la nueva acreditación. La anterior queda rechazada en todos los escáneres y sus pases de wallet se anulan.",
+    gl: "Escanea ou escribe a nova acreditación. A anterior queda rexeitada en todos os escáneres e os seus pases de wallet anúlanse.",
+    en: "Scan or type the new badge. The old one is rejected at every scanner and its wallet passes are voided.",
   },
   checkedInSession: {
     es: "Acreditados en esta sesión",

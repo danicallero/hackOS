@@ -10,6 +10,10 @@ export const userIdParam = z.object({ userId: z.coerce.number().int().positive()
 export const lookupBody = z.object({ ticketToken: z.string().min(1) });
 export const lookupUserBody = z.object({ userId: z.coerce.number().int().positive() });
 
+export const accreditationSearchBody = z.object({
+  q: z.string().min(1).max(200),
+});
+
 export const checkInBody = z.object({
   ticketToken: z.string().min(1),
   badgeId: z.string().min(1),

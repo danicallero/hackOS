@@ -13,6 +13,7 @@ import {
   lookupByTicket,
   lookupByUserId,
   rotateBadge,
+  searchPeople,
 } from "./accreditation.js";
 import {
   activityScan,
@@ -41,6 +42,7 @@ import {
   updateScheduleItem,
 } from "./schedule.js";
 import {
+  accreditationSearchBody,
   activityIdParam,
   activityScanBody,
   appleDeviceParams,
@@ -152,20 +154,54 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   // ── H22 accreditation ────────────────────────────────────────────────────
 
   typed.post(
+    "/api/accreditation/search",
+    {
+      preHandler: accredit,
+      schema: {
+        body: accreditationSearchBody,
+        description:
+          "Unified person search for the accreditation desk (H22/H23): `q` is resolved as an exact ticket token, then an exact badge id (current or rotated-away), then a name/surname/email substring. Exact identifier hits return exactly one person; the fuzzy fallback returns up to 10. Read-only.",
+      },
+    },
+    async (req) => ({ results: await searchPeople(req.body.q) }),
+  );
+
+  typed.post(
     "/api/accreditation/lookup",
-    { preHandler: accredit, schema: { body: lookupBody } },
+    {
+      preHandler: accredit,
+      schema: {
+        body: lookupBody,
+        description:
+          "Resolve an entrance-ticket QR token to the full person card staff needs to accredit (H22): identity fields (name, DNI, email, shirt size), intolerances, notes, confirmed-spot flag and current badge if already accredited. Read-only.",
+      },
+    },
     async (req) => lookupByTicket(req.body.ticketToken),
   );
 
   typed.post(
     "/api/accreditation/lookup-user",
-    { preHandler: accredit, schema: { body: lookupUserBody } },
+    {
+      preHandler: accredit,
+      schema: {
+        body: lookupUserBody,
+        description:
+          "Same person card as /api/accreditation/lookup but keyed by user id — used after a search hit or a deep link from the user profile (H22). Read-only.",
+      },
+    },
     async (req) => lookupByUserId(req.body.userId),
   );
 
   typed.post(
     "/api/accreditation/check-in",
-    { preHandler: [accredit, idempotencyGuard], schema: { body: checkInBody } },
+    {
+      preHandler: [accredit, idempotencyGuard],
+      schema: {
+        body: checkInBody,
+        description:
+          "Assign a badge to the ticket's owner and log the check-in (H22). Idempotency-key replays are safe; 409 if the badge belongs to someone else or the person is already accredited (use /api/accreditation/rotate to replace a badge).",
+      },
+    },
     async (req) =>
       checkIn(actor(req.userId), {
         ticketToken: req.body.ticketToken,
@@ -176,7 +212,14 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
 
   typed.post(
     "/api/accreditation/check-in-user",
-    { preHandler: [accredit, idempotencyGuard], schema: { body: checkInUserBody } },
+    {
+      preHandler: [accredit, idempotencyGuard],
+      schema: {
+        body: checkInUserBody,
+        description:
+          "Same as /api/accreditation/check-in but keyed by user id instead of ticket token (H22) — the person-centric flow after a search hit. Same conflict rules.",
+      },
+    },
     async (req) =>
       checkInUser(actor(req.userId), {
         userId: req.body.userId,
@@ -189,7 +232,14 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
 
   typed.post(
     "/api/accreditation/rotate",
-    { preHandler: [accredit, idempotencyGuard], schema: { body: rotateBody } },
+    {
+      preHandler: [accredit, idempotencyGuard],
+      schema: {
+        body: rotateBody,
+        description:
+          "Replace someone's badge (H23): identify the person by userId (preferred) or by their current badge id. The old badge is revoked everywhere, wallet badge passes are voided, and the change is audited with the given reason. 409 if the new badge is already assigned.",
+      },
+    },
     async (req) =>
       rotateBadge(actor(req.userId), {
         userId: req.body.userId,

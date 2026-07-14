@@ -10,10 +10,24 @@ export interface PersonCard {
 }
 
 export interface AccreditationLookup extends PersonCard {
+  email: string | null;
+  dni: string | null;
+  phone: string | null;
+  shirtSize: string | null;
   confirmed: boolean;
   hasTicket: boolean;
   alreadyAccredited: boolean;
   currentBadge: string | null;
+}
+
+export interface AccreditationSearchResult {
+  userId: number;
+  name: string | null;
+  surname: string | null;
+  email: string;
+  badgeId: string | null;
+  confirmed: boolean;
+  matchedBy: "ticket" | "badge" | "badge_history" | "profile";
 }
 
 export interface CheckInResult {
@@ -186,6 +200,8 @@ export function idempotencyHeaders(prefix: string): Record<string, string> {
 }
 
 export const logisticsApi = {
+  search: (q: string) =>
+    api.post<{ results: AccreditationSearchResult[] }>("/api/accreditation/search", { q }),
   lookup: (ticketToken: string) =>
     api.post<AccreditationLookup>("/api/accreditation/lookup", { ticketToken }),
   lookupUser: (userId: number) =>
