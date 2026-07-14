@@ -201,7 +201,11 @@ async function passPayload(pass: PassRow) {
     description: pass.purpose === "ticket" ? "hackOS ticket" : "hackOS badge",
     serialNumber: pass.serial_number,
     authenticationToken: pass.authentication_token,
-    webServiceURL: `${config.BETTER_AUTH_URL}/api/wallet/apple/v1`,
+    // The device appends `v1/...` to webServiceURL itself (Apple's endpoint
+    // templates are `{webServiceURL}/v1/devices/...`), so the value must NOT
+    // include the version segment — with `/v1` here Wallet called
+    // `/v1/v1/...`, every registration 404'd, and updates never pushed (H28).
+    webServiceURL: `${config.BETTER_AUTH_URL}/api/wallet/apple`,
     sharingProhibited: true,
     voided: pass.status === "voided",
     ...(startsAt ? { relevantDate: startsAt.toISOString() } : {}),
