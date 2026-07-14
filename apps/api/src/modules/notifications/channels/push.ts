@@ -1,6 +1,6 @@
 import type { Queryable } from "../../../db/pool.js";
 import type { EmailPayload } from "../templates.js";
-import { normalizeLanguage, renderEmailTemplate } from "../templates.js";
+import { normalizeLanguage, renderPushTemplate } from "../templates.js";
 
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 
@@ -31,19 +31,28 @@ export async function dispatchPush(
 
   const { rows: userRows } = await db.query(`SELECT language FROM users WHERE id = $1`, [userId]);
   const language = normalizeLanguage((userRows[0] as { language?: string } | undefined)?.language);
-  const rendered = renderEmailTemplate(payload, language);
+  const rendered = renderPushTemplate(payload, language);
 
   // `category`/`template` ride alongside the template vars so the mobile app
   // can route a tap (e.g. queue.called -> queue tab) or trigger an immediate
   // foreground refetch without having to guess from the vars shape alone.
   const data = { ...(payload.vars ?? {}), category, template: payload.template };
+  const timeSensitive =
+    category === "queue"
+      ? {
+          priority: "high" as const,
+          interruptionLevel: "time-sensitive" as const,
+          sound: "default" as const,
+        }
+      : {};
 
   const tokens: string[] = tokenRows.map((r: { token: string }) => r.token);
   const messages = tokens.map((token) => ({
     to: token,
-    title: rendered.subject,
-    body: rendered.text,
+    title: rendered.title,
+    body: rendered.body,
     data,
+    ...timeSensitive,
   }));
 
   const res = await fetch(EXPO_PUSH_URL, {
