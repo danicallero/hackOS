@@ -2,6 +2,7 @@
 
 import { X } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 
@@ -26,7 +27,11 @@ export function CookieNotice() {
   return (
     <aside
       aria-labelledby="cookie-notice-title"
-      className="fixed bottom-4 right-4 z-50 w-[calc(100vw-2rem)] max-w-[36rem] overflow-hidden rounded-lg border border-zinc-200 bg-white text-zinc-700 shadow-xl dark:border-zinc-800 sm:bottom-6 sm:right-6"
+      className="fixed z-50 w-[calc(100vw-2rem)] max-w-[36rem] overflow-hidden rounded-lg border border-zinc-200 bg-white text-zinc-700 shadow-xl dark:border-zinc-800"
+      style={{
+        bottom: "max(1rem, env(safe-area-inset-bottom))",
+        right: "max(1rem, env(safe-area-inset-right))",
+      }}
     >
       <Button
         aria-label="Dismiss cookie notice"
@@ -65,6 +70,11 @@ export function CookieNotice() {
           No ad trackers. No selling your traffic. No trading your information like office supplies.
           <br />
           Ursula von der Leyen may breathe easier now.
+        </p>
+        <p className="mt-2 text-xs sm:text-sm">
+          <Link className="font-medium text-zinc-900 underline underline-offset-4" href="/privacy">
+            Read our privacy policy
+          </Link>
         </p>
       </div>
     </aside>

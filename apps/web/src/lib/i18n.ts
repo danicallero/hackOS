@@ -204,6 +204,22 @@ const dict: Record<string, I18nText> = {
 
   // ---- Public marketing pages ----
   logIn: { es: "Iniciar sesión", gl: "Iniciar sesión", en: "Log in" },
+  termsAndConditions: {
+    es: "Términos y condiciones",
+    gl: "Termos e condicións",
+    en: "Terms and conditions",
+  },
+  privacyPolicy: {
+    es: "Política de privacidad",
+    gl: "Política de privacidade",
+    en: "Privacy policy",
+  },
+  signUpLegalPrefix: {
+    es: "Al crear una cuenta, aceptas los",
+    gl: "Ao crear unha conta, aceptas os",
+    en: "By creating an account, you agree to the",
+  },
+  signUpLegalJoin: { es: "y la", gl: "e a", en: "and" },
   applyNow: { es: "Solicitar plaza", gl: "Solicitar praza", en: "Apply now" },
   apply: { es: "Solicitar", gl: "Solicitar", en: "Apply" },
   openApplications: {

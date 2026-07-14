@@ -194,6 +194,17 @@ export default function SignUpPage() {
             <SubmitButton className="w-full" pending={form.formState.isSubmitting}>
               {t("createAccount")}
             </SubmitButton>
+            <p className="text-muted-foreground text-pretty text-center text-xs leading-5">
+              {t("signUpLegalPrefix")}{" "}
+              <Link className="text-foreground underline underline-offset-4" href="/terms">
+                {t("termsAndConditions").toLocaleLowerCase()}
+              </Link>{" "}
+              {t("signUpLegalJoin")}{" "}
+              <Link className="text-foreground underline underline-offset-4" href="/privacy">
+                {t("privacyPolicy").toLocaleLowerCase()}
+              </Link>
+              .
+            </p>
           </form>
         </Form>
       </CardContent>

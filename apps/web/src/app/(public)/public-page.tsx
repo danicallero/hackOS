@@ -312,7 +312,15 @@ export function PublicPage() {
         </section>
 
         <footer className="text-muted-foreground border-t py-8 text-center text-xs">
-          {t("hackathonPlatformTagline")}
+          <p>{t("hackathonPlatformTagline")}</p>
+          <nav aria-label="Legal" className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-2">
+            <Link className="underline underline-offset-4 hover:text-foreground" href="/terms">
+              {t("termsAndConditions")}
+            </Link>
+            <Link className="underline underline-offset-4 hover:text-foreground" href="/privacy">
+              {t("privacyPolicy")}
+            </Link>
+          </nav>
         </footer>
       </div>
     </div>
