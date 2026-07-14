@@ -1,17 +1,18 @@
 import { EVENTS } from "@hackos/shared/events";
-import * as FileSystem from "expo-file-system/legacy";
-import * as Sharing from "expo-sharing";
+import { SymbolView } from "expo-symbols";
 import { useCallback, useEffect, useState } from "react";
-import { Linking, Pressable, ScrollView, StyleSheet } from "react-native";
+import { Linking, Platform, ScrollView, Text, useColorScheme, View } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 
+import { ActionButton, EmptyState, Section, Separator } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
-import { Text, View } from "@/components/Themed";
+import { SegmentedControl } from "@/components/segmented-control";
 import { apiFetch } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
 import { subscribeToServerEvent } from "@/lib/server-events";
+import { colors } from "@/theme/colors";
 
 interface TicketPayload {
   userId: number;
@@ -19,10 +20,12 @@ interface TicketPayload {
   badgeId: string | null;
 }
 
-/** H28: ticket/badge QR + Apple/Google Wallet entry points. */
+/** Ticket and badge read model shared with web, with native Wallet handoff. */
 export default function WalletScreen() {
+  useColorScheme();
   const { t } = useLocale();
   const [ticket, setTicket] = useState<TicketPayload | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
@@ -50,17 +53,10 @@ export default function WalletScreen() {
   }
 
   async function addToAppleWallet(purpose: "ticket" | "badge") {
-    const destination = `${FileSystem.cacheDirectory}${purpose}.pkpass`;
-    const download = await FileSystem.downloadAsync(
-      `${API_URL}/api/me/wallet/apple/${purpose}.pkpass`,
-      destination,
-      { headers: { cookie: authClient.getCookie() } },
-    );
-    if (download.status !== 200)
-      throw new Error(`Wallet pass download failed (${download.status})`);
-    await Sharing.shareAsync(download.uri, {
-      mimeType: "application/vnd.apple.pkpass",
-      UTI: "com.apple.pkpass",
+    const { default: WalletManager } = await import("react-native-wallet-manager");
+    if (!(await WalletManager.canAddPasses())) throw new Error("Apple Wallet is unavailable");
+    await WalletManager.addPassFromUrl(`${API_URL}/api/me/wallet/apple/${purpose}.pkpass`, {
+      cookie: authClient.getCookie(),
     });
   }
 
@@ -79,100 +75,100 @@ export default function WalletScreen() {
   if (!ticket)
     return <RequestFeedback loading={loading} error={error} onRetry={() => void load()} />;
 
+  const purpose = selectedIndex === 0 ? "ticket" : "badge";
+  const value = purpose === "ticket" ? ticket.ticketToken : ticket.badgeId;
+  const label = purpose === "ticket" ? t("ticketLabel") : t("badgeLabel");
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      contentInsetAdjustmentBehavior="automatic"
+      contentContainerStyle={{ gap: 20, padding: 16, paddingBottom: 32 }}
+    >
       {error ? <RequestFeedback error={error} onRetry={() => void load()} /> : null}
       {actionError ? <RequestFeedback error={actionError} /> : null}
-      {ticket.ticketToken ? (
-        <View style={styles.card}>
-          <Text style={styles.title}>{t("ticketLabel")}</Text>
-          <View style={styles.qrWrap}>
-            <QRCode value={ticket.ticketToken} size={200} />
-          </View>
-          <WalletButtons
-            disabled={actionBusy}
-            onApple={() => void runAction(() => addToAppleWallet("ticket"))}
-            onGoogle={() => void runAction(() => addToGoogleWallet("ticket"))}
-            t={t}
-          />
-        </View>
-      ) : null}
 
-      <View style={styles.card}>
-        <Text style={styles.title}>{t("badgeLabel")}</Text>
-        {ticket.badgeId ? (
-          <>
-            <View style={styles.qrWrap}>
-              <QRCode value={ticket.badgeId} size={200} />
-            </View>
-            <WalletButtons
-              disabled={actionBusy}
-              onApple={() => void runAction(() => addToAppleWallet("badge"))}
-              onGoogle={() => void runAction(() => addToGoogleWallet("badge"))}
-              t={t}
+      <SegmentedControl
+        label={t("tabWallet")}
+        values={[t("ticketLabel"), t("badgeLabel")]}
+        selectedIndex={selectedIndex}
+        onChange={setSelectedIndex}
+      />
+
+      {value ? (
+        <View
+          style={{
+            alignItems: "center",
+            backgroundColor: colors.surface,
+            borderCurve: "continuous",
+            borderRadius: 20,
+            gap: 16,
+            padding: 18,
+          }}
+        >
+          <View style={{ alignItems: "center", gap: 5 }}>
+            <SymbolView
+              name={purpose === "ticket" ? "ticket.fill" : "lanyardcard.fill"}
+              tintColor={colors.accent}
+              size={28}
+              accessible={false}
             />
-          </>
-        ) : (
-          <Text style={styles.meta}>{t("noBadgeYet")}</Text>
-        )}
-      </View>
+            <Text selectable style={{ color: colors.label, fontSize: 22, fontWeight: "700" }}>
+              {label}
+            </Text>
+            <Text
+              selectable
+              style={{ color: colors.secondaryLabel, fontSize: 14, textAlign: "center" }}
+            >
+              {t("walletScanHint")}
+            </Text>
+          </View>
+          <View
+            accessibilityLabel={`${label} QR code`}
+            style={{
+              backgroundColor: "#ffffff",
+              borderCurve: "continuous",
+              borderRadius: 16,
+              padding: 16,
+            }}
+          >
+            <QRCode value={value} size={196} />
+          </View>
+          {purpose === "badge" ? (
+            <Text
+              selectable
+              style={{ color: colors.secondaryLabel, fontFamily: "SpaceMono", fontSize: 13 }}
+            >
+              {ticket.badgeId}
+            </Text>
+          ) : null}
+        </View>
+      ) : (
+        <EmptyState
+          icon="lanyardcard"
+          title={t("badgeNotReadyTitle")}
+          description={t("noBadgeYet")}
+        />
+      )}
+
+      {value ? (
+        <Section title={t("walletAddPass")} footer={t("walletAddPassHint")}>
+          {Platform.OS !== "android" ? (
+            <ActionButton
+              label={t("addToAppleWallet")}
+              icon="wallet.pass.fill"
+              busy={actionBusy}
+              onPress={() => void runAction(() => addToAppleWallet(purpose))}
+            />
+          ) : null}
+          {Platform.OS !== "android" ? <Separator /> : null}
+          <ActionButton
+            label={t("addToGoogleWallet")}
+            icon="wallet.pass"
+            busy={actionBusy}
+            onPress={() => void runAction(() => addToGoogleWallet(purpose))}
+          />
+        </Section>
+      ) : null}
     </ScrollView>
   );
 }
-
-function WalletButtons({
-  onApple,
-  onGoogle,
-  disabled,
-  t,
-}: {
-  onApple: () => void;
-  onGoogle: () => void;
-  disabled: boolean;
-  t: (key: "addToAppleWallet" | "addToGoogleWallet") => string;
-}) {
-  return (
-    <View style={styles.buttonRow}>
-      <Pressable
-        accessibilityRole="button"
-        disabled={disabled}
-        style={styles.button}
-        onPress={onApple}
-      >
-        <Text style={styles.buttonText}>{t("addToAppleWallet")}</Text>
-      </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        disabled={disabled}
-        style={styles.button}
-        onPress={onGoogle}
-      >
-        <Text style={styles.buttonText}>{t("addToGoogleWallet")}</Text>
-      </Pressable>
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  content: { padding: 16, gap: 16 },
-  card: {
-    alignItems: "center",
-    gap: 12,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#ccc",
-  },
-  title: { fontSize: 18, fontWeight: "700" },
-  meta: { opacity: 0.7 },
-  qrWrap: { padding: 12, backgroundColor: "#fff", borderRadius: 8 },
-  buttonRow: { flexDirection: "row", gap: 8 },
-  button: {
-    backgroundColor: "#2f95dc",
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-  },
-  buttonText: { color: "#fff", fontWeight: "600" },
-});

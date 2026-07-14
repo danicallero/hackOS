@@ -1,4 +1,9 @@
-import { emitCategory, subscribeToCategory } from "./notification-events";
+import {
+  emitCategory,
+  emitNotificationChange,
+  subscribeToCategory,
+  subscribeToNotificationChanges,
+} from "./notification-events";
 
 describe("notification-events pub-sub", () => {
   it("only notifies listeners subscribed to the matching category", () => {
@@ -30,5 +35,18 @@ describe("notification-events pub-sub", () => {
     emitCategory(undefined);
 
     expect(listener).not.toHaveBeenCalled();
+  });
+
+  it("notifies global listeners for received and locally changed notifications", () => {
+    const listener = jest.fn();
+    const unsubscribe = subscribeToNotificationChanges(listener);
+
+    emitCategory("announcements");
+    emitNotificationChange();
+    expect(listener).toHaveBeenCalledTimes(2);
+
+    unsubscribe();
+    emitNotificationChange();
+    expect(listener).toHaveBeenCalledTimes(2);
   });
 });

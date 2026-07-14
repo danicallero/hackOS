@@ -1,8 +1,8 @@
-import { ActivityIndicator, Pressable, StyleSheet } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
-import { Text, View } from "@/components/Themed";
 import { ApiError } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
+import { colors } from "@/theme/colors";
 
 function errorKey(error: Error) {
   if (error instanceof ApiError) {
@@ -29,7 +29,9 @@ export function RequestFeedback({
     return (
       <View style={styles.container} accessibilityRole="progressbar">
         <ActivityIndicator />
-        <Text style={styles.message}>{t("loading")}</Text>
+        <Text selectable style={[styles.message, { color: colors.secondaryLabel }]}>
+          {t("loading")}
+        </Text>
       </View>
     );
   }
@@ -37,11 +39,24 @@ export function RequestFeedback({
   if (!error) return null;
 
   return (
-    <View style={styles.container} accessibilityRole="alert">
-      <Text style={styles.error}>{t(errorKey(error))}</Text>
+    <View
+      style={[
+        styles.container,
+        styles.errorContainer,
+        { backgroundColor: colors.destructiveSurface },
+      ]}
+      accessibilityRole="alert"
+    >
+      <Text selectable style={[styles.error, { color: colors.destructive }]}>
+        {t(errorKey(error))}
+      </Text>
       {onRetry ? (
-        <Pressable accessibilityRole="button" onPress={onRetry} style={styles.button}>
-          <Text style={styles.buttonText}>{t("retry")}</Text>
+        <Pressable
+          accessibilityRole="button"
+          onPress={onRetry}
+          style={({ pressed }) => [styles.button, { opacity: pressed ? 0.65 : 1 }]}
+        >
+          <Text style={[styles.buttonText, { color: colors.accent }]}>{t("retry")}</Text>
         </Pressable>
       ) : null}
     </View>
@@ -49,15 +64,16 @@ export function RequestFeedback({
 }
 
 const styles = StyleSheet.create({
-  container: { alignItems: "center", gap: 12, padding: 24 },
+  container: { alignItems: "center", gap: 10, padding: 16 },
+  errorContainer: { borderCurve: "continuous", borderRadius: 12 },
   message: { opacity: 0.7, textAlign: "center" },
-  error: { color: "#b42318", textAlign: "center" },
+  error: { textAlign: "center" },
   button: {
     minHeight: 44,
     justifyContent: "center",
-    borderRadius: 8,
-    backgroundColor: "#2f95dc",
+    borderCurve: "continuous",
+    borderRadius: 10,
     paddingHorizontal: 18,
   },
-  buttonText: { color: "#fff", fontWeight: "600" },
+  buttonText: { fontWeight: "600" },
 });

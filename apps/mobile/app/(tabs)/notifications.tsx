@@ -1,10 +1,16 @@
+import { EVENTS } from "@hackos/shared/events";
+import { SymbolView } from "expo-symbols";
 import { useCallback, useEffect, useState } from "react";
-import { ScrollView, StyleSheet, Switch } from "react-native";
+import { Pressable, ScrollView, Switch, Text, useColorScheme, View } from "react-native";
 
+import { ActionButton, EmptyState, Section, Separator } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
-import { Text, View } from "@/components/Themed";
+import { SegmentedControl } from "@/components/segmented-control";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
+import { emitNotificationChange, subscribeToCategory } from "@/lib/notification-events";
+import { subscribeToServerEvent } from "@/lib/server-events";
+import { colors } from "@/theme/colors";
 
 type Channel = "in_app" | "email" | "push" | "discord";
 
@@ -21,14 +27,294 @@ interface ScheduleItem {
   endsAt: string;
 }
 
-/** H51: which channels a participant wants per notification category (queue calls stay mandatory). */
+interface InboxItem {
+  id: number;
+  category: string;
+  payload: unknown;
+  status: string;
+  sent_at: string | null;
+  read_at: string | null;
+  created_at: string;
+}
+
+interface InboxResponse {
+  items: InboxItem[];
+  total: number;
+}
+
+const LIMIT = 20;
+
+/** Full in-app inbox and notification preferences, matching the web participant view. */
 export default function NotificationsScreen() {
+  useColorScheme();
   const { t } = useLocale();
+  const [selectedIndex, setSelectedIndex] = useState(0);
+
+  return (
+    <ScrollView
+      contentInsetAdjustmentBehavior="automatic"
+      contentContainerStyle={{ gap: 18, padding: 16, paddingBottom: 32 }}
+      keyboardShouldPersistTaps="handled"
+    >
+      <SegmentedControl
+        label={t("tabNotifications")}
+        values={[t("notificationsMessages"), t("notificationsPreferences")]}
+        selectedIndex={selectedIndex}
+        onChange={setSelectedIndex}
+      />
+      {selectedIndex === 0 ? <MessagesView /> : <PreferencesView />}
+    </ScrollView>
+  );
+}
+
+function MessagesView() {
+  const { t, language } = useLocale();
+  const [data, setData] = useState<InboxResponse | null>(null);
+  const [unreadOnly, setUnreadOnly] = useState(false);
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  const load = useCallback(async () => {
+    setError(null);
+    try {
+      const query = unreadOnly ? "&unread=true" : "";
+      setData(
+        await apiFetch<InboxResponse>(`/api/me/notifications?limit=${LIMIT}&offset=0${query}`),
+      );
+    } catch (cause) {
+      setError(cause instanceof Error ? cause : new Error("Failed to load notifications"));
+    } finally {
+      setLoading(false);
+    }
+  }, [unreadOnly]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useEffect(() => subscribeToCategory("announcements", () => void load()), [load]);
+  useEffect(() => subscribeToServerEvent(EVENTS.USER_NOTIFICATION, () => void load()), [load]);
+
+  async function markRead(item: InboxItem) {
+    if (item.read_at) return;
+    try {
+      const result = await apiFetch<{ id: number; read_at: string }>(
+        `/api/me/notifications/${item.id}/read`,
+        {
+          method: "POST",
+        },
+      );
+      setData((current) =>
+        current
+          ? {
+              ...current,
+              items: current.items.map((row) =>
+                row.id === item.id ? { ...row, read_at: result.read_at } : row,
+              ),
+            }
+          : current,
+      );
+      emitNotificationChange();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause : new Error("Failed to mark notification read"));
+    }
+  }
+
+  function toggleExpanded(item: InboxItem) {
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (next.has(item.id)) next.delete(item.id);
+      else next.add(item.id);
+      return next;
+    });
+    if (!item.read_at) void markRead(item);
+  }
+
+  const items = data?.items ?? [];
+
+  return (
+    <View style={{ gap: 16 }}>
+      <Section footer={t("notificationsUnreadHint")}>
+        <View
+          style={{
+            alignItems: "center",
+            flexDirection: "row",
+            minHeight: 50,
+            paddingHorizontal: 16,
+          }}
+        >
+          <Text selectable style={{ color: colors.label, flex: 1, fontSize: 16 }}>
+            {t("notificationsUnreadOnly")}
+          </Text>
+          <Switch
+            accessibilityLabel={t("notificationsUnreadOnly")}
+            value={unreadOnly}
+            onValueChange={setUnreadOnly}
+          />
+        </View>
+      </Section>
+
+      {error ? <RequestFeedback error={error} onRetry={() => void load()} /> : null}
+      {loading && !data ? <RequestFeedback loading /> : null}
+
+      {!loading && !error && items.length === 0 ? (
+        <EmptyState
+          icon="tray"
+          title={unreadOnly ? t("notificationsNoUnread") : t("notificationsEmptyTitle")}
+          description={t("notificationsEmptyHint")}
+        />
+      ) : null}
+
+      {items.length ? (
+        <Section>
+          {items.map((item, index) => (
+            <View key={item.id}>
+              {index > 0 ? <Separator inset={50} /> : null}
+              <NotificationRow
+                item={item}
+                expanded={expanded.has(item.id)}
+                language={language}
+                onPress={() => toggleExpanded(item)}
+              />
+            </View>
+          ))}
+        </Section>
+      ) : null}
+
+      {data && data.total > LIMIT ? (
+        <Text
+          selectable
+          style={{ color: colors.secondaryLabel, fontSize: 13, textAlign: "center" }}
+        >
+          {t("notificationsShowingLatest", { count: String(LIMIT), total: String(data.total) })}
+        </Text>
+      ) : null}
+
+      <ActionButton
+        label={t("refreshNotifications")}
+        icon="arrow.clockwise"
+        onPress={() => void load()}
+      />
+    </View>
+  );
+}
+
+function NotificationRow({
+  item,
+  expanded,
+  language,
+  onPress,
+}: {
+  item: InboxItem;
+  expanded: boolean;
+  language: string;
+  onPress: () => void;
+}) {
+  const subject = payloadField(item.payload, "subject") ?? item.category;
+  const body = payloadField(item.payload, "body");
+  const details = payloadDetails(item.payload);
+  const unread = !item.read_at;
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ expanded }}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        backgroundColor: pressed ? colors.elevatedSurface : colors.surface,
+        gap: 9,
+        paddingHorizontal: 16,
+        paddingVertical: 14,
+      })}
+    >
+      <View style={{ alignItems: "flex-start", flexDirection: "row", gap: 10 }}>
+        <View
+          accessibilityElementsHidden
+          style={{
+            backgroundColor: unread ? colors.accent : "transparent",
+            borderRadius: 4,
+            height: 8,
+            marginTop: 6,
+            width: 8,
+          }}
+        />
+        <View style={{ flex: 1, gap: 5 }}>
+          <View style={{ alignItems: "baseline", flexDirection: "row", gap: 8 }}>
+            <Text
+              selectable
+              style={{
+                color: colors.label,
+                flex: 1,
+                fontSize: 16,
+                fontWeight: unread ? "700" : "500",
+              }}
+            >
+              {subject}
+            </Text>
+            <Text
+              selectable
+              style={{ color: colors.tertiaryLabel, fontSize: 12, fontVariant: ["tabular-nums"] }}
+            >
+              {new Date(item.created_at).toLocaleDateString(language, {
+                month: "short",
+                day: "numeric",
+              })}
+            </Text>
+          </View>
+          {body ? (
+            <Text
+              selectable
+              numberOfLines={expanded ? undefined : 2}
+              style={{ color: colors.secondaryLabel, fontSize: 14, lineHeight: 20 }}
+            >
+              {body}
+            </Text>
+          ) : null}
+          {expanded && details.length ? (
+            <View
+              style={{
+                backgroundColor: colors.background,
+                borderCurve: "continuous",
+                borderRadius: 10,
+                gap: 7,
+                padding: 10,
+              }}
+            >
+              {details.map((detail) => (
+                <View key={detail.key} style={{ flexDirection: "row", gap: 8 }}>
+                  <Text
+                    selectable
+                    style={{ color: colors.secondaryLabel, fontSize: 12, width: 90 }}
+                  >
+                    {detail.key}
+                  </Text>
+                  <Text selectable style={{ color: colors.label, flex: 1, fontSize: 12 }}>
+                    {detail.value}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+        </View>
+        <SymbolView
+          name={expanded ? "chevron.up" : "chevron.down"}
+          tintColor={colors.tertiaryLabel}
+          size={14}
+          accessible={false}
+        />
+      </View>
+    </Pressable>
+  );
+}
+
+function PreferencesView() {
+  const { t, language } = useLocale();
   const [prefs, setPrefs] = useState<Preferences | null>(null);
   const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [savingKey, setSavingKey] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -51,24 +337,22 @@ export default function NotificationsScreen() {
   }, [load]);
 
   function enabledFor(category: string, channel: Channel): boolean {
-    const override = prefs?.overrides.find((o) => o.category === category && o.channel === channel);
+    const override = prefs?.overrides.find(
+      (row) => row.category === category && row.channel === channel,
+    );
     return override ? override.enabled : true;
   }
 
-  async function toggle(category: string, channel: Channel, next: boolean) {
-    setSaving(true);
+  async function toggle(category: string, channel: Channel, enabled: boolean) {
+    const key = `${category}:${channel}`;
+    setSavingKey(key);
     setError(null);
     try {
-      const updated = await apiFetch<Preferences>("/api/me/notification-preferences", {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ preferences: [{ category, channel, enabled: next }] }),
-      });
-      setPrefs(updated);
+      setPrefs(await savePreferences([{ category, channel, enabled }]));
     } catch (cause) {
-      setError(cause instanceof Error ? cause : new Error("Failed to save preferences"));
+      setError(cause instanceof Error ? cause : new Error("Failed to save preference"));
     } finally {
-      setSaving(false);
+      setSavingKey(null);
     }
   }
 
@@ -76,30 +360,24 @@ export default function NotificationsScreen() {
     const category = `schedule:${activityId}`;
     return (
       prefs?.overrides.some(
-        (override) =>
-          override.category === category && override.channel === "push" && override.enabled,
+        (row) => row.category === category && row.channel === "push" && row.enabled,
       ) ?? false
     );
   }
 
   async function toggleReminder(activityId: number, enabled: boolean) {
     if (!prefs) return;
-    setSaving(true);
-    setError(null);
     const category = `schedule:${activityId}`;
+    setSavingKey(category);
+    setError(null);
     try {
-      const updated = await apiFetch<Preferences>("/api/me/notification-preferences", {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          preferences: prefs.channels.map((channel) => ({ category, channel, enabled })),
-        }),
-      });
-      setPrefs(updated);
+      setPrefs(
+        await savePreferences(prefs.channels.map((channel) => ({ category, channel, enabled }))),
+      );
     } catch (cause) {
       setError(cause instanceof Error ? cause : new Error("Failed to save reminder"));
     } finally {
-      setSaving(false);
+      setSavingKey(null);
     }
   }
 
@@ -107,63 +385,173 @@ export default function NotificationsScreen() {
     return <RequestFeedback loading={loading} error={error} onRetry={() => void load()} />;
 
   const editableCategories = ["announcements", "application"];
+  const upcoming = schedule.filter((item) => new Date(item.endsAt).getTime() > Date.now());
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <View style={{ gap: 18 }}>
       {error ? <RequestFeedback error={error} onRetry={() => void load()} /> : null}
-      <Text style={styles.hint}>{t("notificationsMandatoryHint")}</Text>
-      {editableCategories.map((category) => (
-        <View key={category} style={styles.card}>
-          <Text style={styles.title}>{category}</Text>
-          {prefs.channels.map((channel) => (
-            <View key={channel} style={styles.row}>
-              <Text style={styles.channelLabel}>{channel}</Text>
-              <Switch
-                disabled={saving}
-                value={enabledFor(category, channel)}
-                onValueChange={(next) => void toggle(category, channel, next)}
-              />
-            </View>
-          ))}
+      <Section title={t("notificationsRequired")} footer={t("notificationsMandatoryHint")}>
+        <View style={{ alignItems: "center", flexDirection: "row", gap: 12, padding: 16 }}>
+          <SymbolView
+            name="bell.badge.fill"
+            tintColor={colors.accent}
+            size={22}
+            accessible={false}
+          />
+          <Text
+            selectable
+            style={{ color: colors.label, flex: 1, fontSize: 16, fontWeight: "600" }}
+          >
+            {t("queueCalls")}
+          </Text>
+          <Text selectable style={{ color: colors.secondaryLabel, fontSize: 14 }}>
+            {t("notificationsAlwaysOn")}
+          </Text>
         </View>
-      ))}
-      <View style={styles.card}>
-        <Text style={styles.title}>{t("activityReminders")}</Text>
-        <Text style={styles.hint}>{t("activityRemindersHint")}</Text>
-        {schedule
-          .filter((item) => new Date(item.endsAt).getTime() > Date.now())
-          .map((item) => (
-            <View key={item.id} style={styles.row}>
-              <View style={styles.activityText}>
-                <Text>{item.title}</Text>
-                <Text style={styles.hint}>{new Date(item.startsAt).toLocaleString()}</Text>
+      </Section>
+
+      {editableCategories.map((category) => (
+        <Section key={category} title={categoryLabel(category, t)}>
+          {prefs.channels.map((channel, index) => {
+            return (
+              <View key={channel}>
+                {index > 0 ? <Separator /> : null}
+                <View
+                  style={{
+                    alignItems: "center",
+                    flexDirection: "row",
+                    minHeight: 50,
+                    paddingHorizontal: 16,
+                  }}
+                >
+                  <Text selectable style={{ color: colors.label, flex: 1, fontSize: 16 }}>
+                    {channelLabel(channel, t)}
+                  </Text>
+                  <Switch
+                    accessibilityLabel={`${categoryLabel(category, t)}, ${channelLabel(channel, t)}`}
+                    disabled={savingKey !== null}
+                    value={enabledFor(category, channel)}
+                    onValueChange={(enabled) => void toggle(category, channel, enabled)}
+                  />
+                </View>
               </View>
-              <Switch
-                disabled={saving}
-                accessibilityLabel={item.title}
-                value={reminderEnabled(item.id)}
-                onValueChange={(enabled) => void toggleReminder(item.id, enabled)}
-              />
+            );
+          })}
+        </Section>
+      ))}
+
+      <Section title={t("activityReminders")} footer={t("activityRemindersHint")}>
+        {upcoming.length ? (
+          upcoming.map((item, index) => (
+            <View key={item.id}>
+              {index > 0 ? <Separator /> : null}
+              <View
+                style={{
+                  alignItems: "center",
+                  flexDirection: "row",
+                  gap: 12,
+                  minHeight: 58,
+                  paddingHorizontal: 16,
+                  paddingVertical: 8,
+                }}
+              >
+                <View style={{ flex: 1, gap: 3 }}>
+                  <Text selectable style={{ color: colors.label, fontSize: 16 }}>
+                    {item.title}
+                  </Text>
+                  <Text
+                    selectable
+                    style={{
+                      color: colors.secondaryLabel,
+                      fontSize: 13,
+                      fontVariant: ["tabular-nums"],
+                    }}
+                  >
+                    {new Date(item.startsAt).toLocaleString(language, {
+                      weekday: "short",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </Text>
+                </View>
+                <Switch
+                  accessibilityLabel={item.title}
+                  disabled={savingKey !== null}
+                  value={reminderEnabled(item.id)}
+                  onValueChange={(enabled) => void toggleReminder(item.id, enabled)}
+                />
+              </View>
             </View>
-          ))}
-      </View>
-    </ScrollView>
+          ))
+        ) : (
+          <View style={{ padding: 16 }}>
+            <Text selectable style={{ color: colors.secondaryLabel, fontSize: 15 }}>
+              {t("activityRemindersEmpty")}
+            </Text>
+          </View>
+        )}
+      </Section>
+
+      <ActionButton
+        label={t("refreshNotifications")}
+        icon="arrow.clockwise"
+        onPress={() => void load()}
+      />
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  content: { padding: 16, gap: 16 },
-  hint: { opacity: 0.7, fontSize: 13 },
-  card: {
-    gap: 8,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#ccc",
-  },
-  title: { fontSize: 16, fontWeight: "700", textTransform: "capitalize" },
-  row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  channelLabel: { textTransform: "capitalize" },
-  activityText: { flex: 1, gap: 2 },
-});
+function savePreferences(
+  preferences: Array<{ category: string; channel: Channel; enabled: boolean }>,
+) {
+  return apiFetch<Preferences>("/api/me/notification-preferences", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ preferences }),
+  });
+}
+
+function payloadField(payload: unknown, key: "subject" | "body") {
+  if (!payload || typeof payload !== "object") return null;
+  const value = (payload as Record<string, unknown>)[key];
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+const HIDDEN_PAYLOAD_KEYS = new Set([
+  "subject",
+  "body",
+  "template",
+  "vars",
+  "recipient",
+  "language",
+]);
+
+function payloadDetails(payload: unknown) {
+  if (!payload || typeof payload !== "object") return [];
+  return Object.entries(payload as Record<string, unknown>)
+    .filter(
+      ([key, value]) => !HIDDEN_PAYLOAD_KEYS.has(key) && value !== null && value !== undefined,
+    )
+    .map(([key, value]) => ({
+      key: key
+        .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+        .replace(/^./, (letter) => letter.toUpperCase()),
+      value: typeof value === "string" ? value : JSON.stringify(value),
+    }));
+}
+
+function categoryLabel(category: string, t: ReturnType<typeof useLocale>["t"]) {
+  return category === "announcements"
+    ? t("notificationsAnnouncements")
+    : t("notificationsApplications");
+}
+
+function channelLabel(channel: Channel, t: ReturnType<typeof useLocale>["t"]) {
+  const labels: Record<Channel, string> = {
+    in_app: t("notificationsInApp"),
+    email: t("emailLabel"),
+    push: t("notificationsPush"),
+    discord: "Discord",
+  };
+  return labels[channel];
+}

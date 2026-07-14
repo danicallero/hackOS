@@ -1,136 +1,99 @@
-import { Redirect, Tabs } from "expo-router";
-import { SymbolView } from "expo-symbols";
-import { useClientOnlyValue } from "@/components/useClientOnlyValue";
-import { useColorScheme } from "@/components/useColorScheme";
-import Colors from "@/constants/Colors";
+import { EVENTS } from "@hackos/shared/events";
+import { Redirect } from "expo-router";
+import { NativeTabs } from "expo-router/unstable-native-tabs";
+import { useCallback, useEffect, useState } from "react";
+import { AppState, useColorScheme } from "react-native";
+
+import { apiFetch } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { useLocale } from "@/lib/i18n";
-import { useMeContext } from "@/lib/me-context";
-import { type TabKey, visibleTabs } from "@/lib/tabs";
+import { subscribeToNotificationChanges } from "@/lib/notification-events";
+import { subscribeToServerEvent } from "@/lib/server-events";
+import { colors } from "@/theme/colors";
+
+interface UnreadInboxResponse {
+  total: number;
+}
 
 /**
- * Capability-driven tabs (H55): the tab bar reflects `me.capabilities`
- * (refetched on foreground, see lib/use-me.ts) instead of a static list, so a
- * permission change made elsewhere shows up here without reinstalling.
- * `href: null` hides a tab from the bar while keeping the route reachable —
- * Expo Router's documented mechanism for conditional tabs.
+ * A real platform tab bar. On iOS 26, the final `search` role is rendered by
+ * UIKit as the same separate circular Liquid Glass control used by Apple Music.
  */
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
+  useColorScheme();
   const { t } = useLocale();
   const { data: session, isPending } = authClient.useSession();
-  const { me } = useMeContext();
-  const headerShown = useClientOnlyValue(false, true);
+  const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
+
+  const refreshUnreadNotifications = useCallback(async () => {
+    if (!session) return;
+    try {
+      const inbox = await apiFetch<UnreadInboxResponse>(
+        "/api/me/notifications?unread=true&limit=1&offset=0",
+      );
+      setHasUnreadNotifications(inbox.total > 0);
+    } catch {
+      // Keep the last known state during a transient connectivity failure.
+    }
+  }, [session]);
+
+  useEffect(() => {
+    if (!session) {
+      setHasUnreadNotifications(false);
+      return;
+    }
+    void refreshUnreadNotifications();
+    const unsubscribeChanges = subscribeToNotificationChanges(() => {
+      void refreshUnreadNotifications();
+    });
+    const unsubscribeServer = subscribeToServerEvent(EVENTS.USER_NOTIFICATION, () => {
+      void refreshUnreadNotifications();
+    });
+    const appStateSubscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") void refreshUnreadNotifications();
+    });
+    return () => {
+      unsubscribeChanges();
+      unsubscribeServer();
+      appStateSubscription.remove();
+    };
+  }, [refreshUnreadNotifications, session]);
 
   if (isPending) return null;
   if (!session) return <Redirect href="/(auth)/sign-in" />;
 
-  const shown = new Set(visibleTabs(me?.capabilities ?? []));
-  const hideUnless = (key: TabKey) => (shown.has(key) ? undefined : null);
-
   return (
-    <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme].tint,
-        headerShown,
-      }}
-    >
-      <Tabs.Screen
-        name="schedule"
-        options={{
-          title: t("tabSchedule"),
-          href: hideUnless("schedule"),
-          tabBarIcon: ({ color }) => (
-            <SymbolView
-              name={{ ios: "calendar", android: "calendar_month", web: "calendar_month" }}
-              tintColor={color}
-              size={28}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="queue"
-        options={{
-          title: t("tabQueue"),
-          href: hideUnless("queue"),
-          tabBarIcon: ({ color }) => (
-            <SymbolView
-              name={{ ios: "clock", android: "schedule", web: "schedule" }}
-              tintColor={color}
-              size={28}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="wallet"
-        options={{
-          title: t("tabWallet"),
-          href: hideUnless("wallet"),
-          tabBarIcon: ({ color }) => (
-            <SymbolView
-              name={{
-                ios: "wallet.pass",
-                android: "account_balance_wallet",
-                web: "account_balance_wallet",
-              }}
-              tintColor={color}
-              size={28}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="notifications"
-        options={{
-          title: t("tabNotifications"),
-          href: hideUnless("notifications"),
-          tabBarIcon: ({ color }) => (
-            <SymbolView
-              name={{ ios: "bell", android: "notifications", web: "notifications" }}
-              tintColor={color}
-              size={28}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="account"
-        options={{
-          title: t("tabAccount"),
-          href: hideUnless("account"),
-          tabBarIcon: ({ color }) => (
-            <SymbolView
-              name={{
-                ios: "person.crop.circle",
-                android: "account_circle",
-                web: "account_circle",
-              }}
-              tintColor={color}
-              size={28}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="scan"
-        options={{
-          title: t("tabScan"),
-          href: hideUnless("scan"),
-          tabBarIcon: ({ color }) => (
-            <SymbolView
-              name={{
-                ios: "qrcode.viewfinder",
-                android: "qr_code_scanner",
-                web: "qr_code_scanner",
-              }}
-              tintColor={color}
-              size={28}
-            />
-          ),
-        }}
-      />
-    </Tabs>
+    <NativeTabs tintColor={colors.accent} minimizeBehavior="onScrollDown">
+      <NativeTabs.Trigger name="schedule">
+        <NativeTabs.Trigger.Icon
+          sf={{ default: "calendar", selected: "calendar.circle.fill" }}
+          md="calendar_month"
+        />
+        <NativeTabs.Trigger.Label>{t("tabSchedule")}</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="queue">
+        <NativeTabs.Trigger.Icon sf={{ default: "clock", selected: "clock.fill" }} md="schedule" />
+        <NativeTabs.Trigger.Label>{t("tabQueue")}</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="wallet">
+        <NativeTabs.Trigger.Icon
+          sf={{ default: "wallet.pass", selected: "wallet.pass.fill" }}
+          md="account_balance_wallet"
+        />
+        <NativeTabs.Trigger.Label>{t("tabWallet")}</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="notifications">
+        <NativeTabs.Trigger.Icon
+          sf={{ default: "bell", selected: "bell.fill" }}
+          md="notifications"
+        />
+        <NativeTabs.Trigger.Label>{t("tabNotifications")}</NativeTabs.Trigger.Label>
+        {hasUnreadNotifications ? <NativeTabs.Trigger.Badge /> : null}
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="others" role="search" disablePopToTop>
+        <NativeTabs.Trigger.Icon sf="ellipsis" md="more_horiz" />
+        <NativeTabs.Trigger.Label hidden>{t("tabOthers")}</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+    </NativeTabs>
   );
 }
