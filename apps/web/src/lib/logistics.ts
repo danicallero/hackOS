@@ -20,14 +20,29 @@ export interface AccreditationLookup extends PersonCard {
   currentBadge: string | null;
 }
 
-export interface AccreditationSearchResult {
+/** Fields the person search can return; pass the ones your station needs. */
+export type PersonSearchField =
+  | "email"
+  | "badgeId"
+  | "dni"
+  | "phone"
+  | "shirtSize"
+  | "notes"
+  | "confirmed";
+
+export interface PersonSearchResult {
   userId: number;
   name: string | null;
   surname: string | null;
-  email: string;
-  badgeId: string | null;
-  confirmed: boolean;
   matchedBy: "ticket" | "badge" | "badge_history" | "profile";
+  /** Requested fields (defaults: email, badgeId, confirmed). */
+  email?: string | null;
+  badgeId?: string | null;
+  dni?: string | null;
+  phone?: string | null;
+  shirtSize?: string | null;
+  notes?: string | null;
+  confirmed?: boolean;
 }
 
 export interface CheckInResult {
@@ -200,8 +215,8 @@ export function idempotencyHeaders(prefix: string): Record<string, string> {
 }
 
 export const logisticsApi = {
-  search: (q: string) =>
-    api.post<{ results: AccreditationSearchResult[] }>("/api/accreditation/search", { q }),
+  searchPeople: (q: string, fields?: PersonSearchField[]) =>
+    api.post<{ results: PersonSearchResult[] }>("/api/logistics/people/search", { q, fields }),
   lookup: (ticketToken: string) =>
     api.post<AccreditationLookup>("/api/accreditation/lookup", { ticketToken }),
   lookupUser: (userId: number) =>

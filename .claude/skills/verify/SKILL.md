@@ -56,6 +56,9 @@ chromium.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacO
 ## Clean up
 
 Delete seeded rows (`... WHERE email LIKE '%@verify.local'`) from
-`check_in_logs`, `tickets`, `permission_group_members`/`group_capabilities`/
-`permission_groups`, `sessions`, `accounts`, `audit_log` (by `actor_id`), then
-`users`; kill the two dev servers.
+`check_in_logs` (by `user_id` **and** `staff_id`), `tickets`, `wallet_passes`,
+`notification_outbox`, `notifications`, `permission_group_members`/
+`group_capabilities`/`permission_groups`, `sessions`, `accounts`, `audit_log`
+(by `actor_id`), then `users`; kill the two dev servers. Workers create
+notification rows on check-in, so delete those even if you never touched
+notifications.

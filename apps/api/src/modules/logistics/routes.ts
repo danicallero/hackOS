@@ -13,7 +13,6 @@ import {
   lookupByTicket,
   lookupByUserId,
   rotateBadge,
-  searchPeople,
 } from "./accreditation.js";
 import {
   activityScan,
@@ -23,6 +22,7 @@ import {
 } from "./activities.js";
 import { buildGoogleSaveUrl } from "./google-wallet.js";
 import { enqueueMealScanBatch } from "./offline-meals.js";
+import { searchPeople } from "./people.js";
 import {
   allHours,
   deleteTimeLog,
@@ -42,7 +42,6 @@ import {
   updateScheduleItem,
 } from "./schedule.js";
 import {
-  accreditationSearchBody,
   activityIdParam,
   activityScanBody,
   appleDeviceParams,
@@ -57,6 +56,7 @@ import {
   lookupBody,
   lookupUserBody,
   mealScanBatchBody,
+  personSearchBody,
   presenceLookupBody,
   presenceScanBody,
   rotateBody,
@@ -151,20 +151,22 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
     },
   );
 
-  // ── H22 accreditation ────────────────────────────────────────────────────
+  // ── unified person lookup (any logistics station) ────────────────────────
 
   typed.post(
-    "/api/accreditation/search",
+    "/api/logistics/people/search",
     {
-      preHandler: accredit,
+      preHandler: logisticsRead,
       schema: {
-        body: accreditationSearchBody,
+        body: personSearchBody,
         description:
-          "Unified person search for the accreditation desk (H22/H23): `q` is resolved as an exact ticket token, then an exact badge id (current or rotated-away), then a name/surname/email substring. Exact identifier hits return exactly one person; the fuzzy fallback returns up to 10. Read-only.",
+          "Unified person lookup for logistics stations (H22-H27): `q` is resolved as an exact ticket token, then an exact badge id (current or rotated-away), then a name/surname/email substring. Exact identifier hits return exactly one person; the fuzzy fallback returns up to 10. `fields` whitelists which extra user fields come back (email, badgeId, dni, phone, shirtSize, notes, confirmed); defaults to email + badgeId + confirmed. Read-only; any logistics capability grants access.",
       },
     },
-    async (req) => ({ results: await searchPeople(req.body.q) }),
+    async (req) => ({ results: await searchPeople(req.body.q, req.body.fields) }),
   );
+
+  // ── H22 accreditation ────────────────────────────────────────────────────
 
   typed.post(
     "/api/accreditation/lookup",

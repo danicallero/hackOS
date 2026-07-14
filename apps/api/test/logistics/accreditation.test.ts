@@ -205,12 +205,12 @@ describe("H22 accreditation lookup + check-in", () => {
 });
 
 describe("H22/H23 unified person search", () => {
-  const search = (q: string, as = staff) =>
+  const search = (q: string, as = staff, fields?: string[]) =>
     app.inject({
       method: "POST",
-      url: "/api/accreditation/search",
+      url: "/api/logistics/people/search",
       headers: asUser(as),
-      payload: { q },
+      payload: fields ? { q, fields } : { q },
     });
 
   it("resolves an exact ticket token to exactly one person", async () => {
@@ -265,10 +265,33 @@ describe("H22/H23 unified person search", () => {
     }
   });
 
-  it("requires the accredit:scan capability", async () => {
+  it("returns only the default fields unless asked for more", async () => {
+    const uid = await createUser({ name: "Dorothy", email: "dot@test.local" });
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`UPDATE users SET dni = '99999999R', shirt_size = 'L' WHERE id = $1`, [uid]);
+
+    const byDefault = (await search("dot@test.local")).json().results[0];
+    expect(byDefault).toMatchObject({ userId: uid, email: "dot@test.local", badgeId: null });
+    expect(byDefault.dni).toBeUndefined();
+    expect(byDefault.shirtSize).toBeUndefined();
+
+    const picked = (await search("dot@test.local", staff, ["dni", "shirtSize"])).json().results[0];
+    expect(picked).toMatchObject({ userId: uid, dni: "99999999R", shirtSize: "L" });
+    expect(picked.email).toBeUndefined();
+    expect(picked.confirmed).toBeUndefined();
+  });
+
+  it("rejects fields outside the whitelist", async () => {
+    const res = await search("whatever", staff, ["badge_id_history"]);
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("any logistics capability grants access, none denies it", async () => {
+    const door = await createUserWithCapabilities([CAPABILITIES.PRESENCE_SCAN]);
+    expect((await search("anything", door)).statusCode).toBe(200);
+
     const outsider = await createUser();
-    const res = await search("anything", outsider);
-    expect(res.statusCode).toBe(403);
+    expect((await search("anything", outsider)).statusCode).toBe(403);
   });
 });
 

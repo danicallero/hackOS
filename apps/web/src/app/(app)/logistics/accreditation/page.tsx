@@ -34,8 +34,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useLocale } from "@/lib/i18n";
 import {
   type AccreditationLookup,
-  type AccreditationSearchResult,
   logisticsApi,
+  type PersonSearchResult,
   personName,
 } from "@/lib/logistics";
 import { useCan } from "@/lib/session";
@@ -75,7 +75,7 @@ export default function AccreditationPage() {
 }
 
 /** i18n key for how a search result matched — null for the plain name/email fallback. */
-const MATCH_LABEL_KEY: Record<AccreditationSearchResult["matchedBy"], string | null> = {
+const MATCH_LABEL_KEY: Record<PersonSearchResult["matchedBy"], string | null> = {
   ticket: "matchTicket",
   badge: "matchBadge",
   badge_history: "matchOldBadge",
@@ -86,7 +86,7 @@ function AccreditationPanel({ onAccredited }: { onAccredited: () => void }) {
   const { t } = useLocale();
   const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<AccreditationSearchResult[] | null>(null);
+  const [results, setResults] = useState<PersonSearchResult[] | null>(null);
   const [card, setCard] = useState<AccreditationLookup | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -129,7 +129,11 @@ function AccreditationPanel({ onAccredited }: { onAccredited: () => void }) {
     setBusy(true);
     setError("");
     try {
-      const { results: found } = await logisticsApi.search(q);
+      const { results: found } = await logisticsApi.searchPeople(q, [
+        "email",
+        "badgeId",
+        "confirmed",
+      ]);
       // A scanned QR (ticket or badge) resolves to exactly one person — open
       // their card directly so the desk flow stays a single gesture (H22).
       if (found.length === 1) {
