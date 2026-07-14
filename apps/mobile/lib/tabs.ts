@@ -2,6 +2,8 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 
 export type TabKey = "schedule" | "queue" | "wallet" | "notifications" | "account" | "scan";
 
+export const PRIMARY_TAB_KEYS = ["schedule", "queue", "wallet", "notifications"] as const;
+
 const STAFF_SCAN_CAPABILITIES = [
   CAPABILITIES.ACCREDIT_SCAN,
   CAPABILITIES.PRESENCE_SCAN,
@@ -26,4 +28,11 @@ export function visibleTabs(capabilities: string[]): TabKey[] {
     tabs.push("scan");
   }
   return tabs;
+}
+
+/** Tabs represented inside the native Others selector rather than the main bar. */
+export function overflowTabs(capabilities: string[]): TabKey[] {
+  return visibleTabs(capabilities).filter(
+    (tab) => !(PRIMARY_TAB_KEYS as readonly TabKey[]).includes(tab),
+  );
 }
