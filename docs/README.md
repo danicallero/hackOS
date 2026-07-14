@@ -19,8 +19,12 @@ the current code implements the relevant slices.
   an isolated deploy (`deploy/services/*`), exactly which env vars it needs and
   whether they're read at container start or baked in at build time.
 - [Mobile app](./mobile.md) — the Expo Router app (`apps/mobile`): Better Auth
-  Expo integration, capability-driven tabs, and the participant screens built
-  so far, plus what's deferred to a later phase.
+  Expo integration, capability-driven tabs, offline scanners, and participant
+  screens.
+- [Mobile development & store release](./mobile-release.md) — local device
+  setup, prebuild/CNG, EAS profiles and environments, local/cloud compilation,
+  signing and push credentials, icons/store artwork, submission, privacy, and
+  release checklists.
 
 See also the root [`README.md`](../README.md) for local dev setup, the API's
 own `/documentation` (Swagger UI, generated from route schemas — not a file in

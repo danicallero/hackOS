@@ -59,7 +59,7 @@ pnpm --filter @hackos/api superadmin:create   # bootstrap the first admin
 Mailpit (`localhost:8025`) catches every outbound email in dev — nothing
 actually gets sent. MinIO console is at `localhost:9001`.
 
-To run the mobile app against your local API:
+For a quick mobile start against the local API:
 
 ```sh
 cd apps/mobile
@@ -67,7 +67,9 @@ EXPO_PUBLIC_API_URL=http://localhost:3000 pnpm start   # then press w/i/a for we
 ```
 
 See [`docs/mobile.md`](docs/mobile.md) for what's built so far and what's
-deferred to a later phase.
+deferred to device verification. The complete local-build, prebuild, EAS,
+signing, certificates, artwork, and App Store/Play Store runbook is
+[`docs/mobile-release.md`](docs/mobile-release.md).
 
 ## API docs
 

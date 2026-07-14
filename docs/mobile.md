@@ -5,6 +5,10 @@ capability-driven tabs, participant-facing screens, authenticated realtime,
 and offline SQLite scanners for accreditation, badge rotation, presence,
 meals, and registrable activities.
 
+For development builds, prebuild/CNG, EAS profiles, signing, certificates,
+store assets, submission, and the release checklist, see
+[`mobile-release.md`](./mobile-release.md).
+
 ## Story coverage registry (issue #73: H4, H22–H26, H28, H38, H51, H55)
 
 | Story | Scope | Status | Notes |
