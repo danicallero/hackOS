@@ -1,18 +1,28 @@
 import { EVENTS } from "@hackos/shared/events";
-import { Redirect } from "expo-router";
+import { MenuView, type MenuAction } from "@expo/ui/community/menu";
+import { Redirect, useRouter } from "expo-router";
 import { NativeTabs } from "expo-router/unstable-native-tabs";
 import { useCallback, useEffect, useState } from "react";
-import { AppState, useColorScheme } from "react-native";
+import { AppState, useColorScheme, useWindowDimensions, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { apiFetch } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { useLocale } from "@/lib/i18n";
+import { useMeContext } from "@/lib/me-context";
 import { subscribeToNotificationChanges } from "@/lib/notification-events";
 import { subscribeToServerEvent } from "@/lib/server-events";
+import { overflowTabs } from "@/lib/tabs";
 import { colors } from "@/theme/colors";
 
 interface UnreadInboxResponse {
   total: number;
+}
+
+interface OverflowMenuItem extends MenuAction {
+  id: "account" | "scan";
+  label: string;
+  route: "/(tabs)/others/account" | "/(tabs)/others/scan";
 }
 
 /**
@@ -23,6 +33,7 @@ export default function TabLayout() {
   useColorScheme();
   const { t } = useLocale();
   const { data: session, isPending } = authClient.useSession();
+  const { me } = useMeContext();
   const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
 
   const refreshUnreadNotifications = useCallback(async () => {
@@ -63,37 +74,118 @@ export default function TabLayout() {
   if (!session) return <Redirect href="/(auth)/sign-in" />;
 
   return (
-    <NativeTabs tintColor={colors.accent} minimizeBehavior="onScrollDown">
-      <NativeTabs.Trigger name="schedule">
-        <NativeTabs.Trigger.Icon
-          sf={{ default: "calendar", selected: "calendar.circle.fill" }}
-          md="calendar_month"
-        />
-        <NativeTabs.Trigger.Label>{t("tabSchedule")}</NativeTabs.Trigger.Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="queue">
-        <NativeTabs.Trigger.Icon sf={{ default: "clock", selected: "clock.fill" }} md="schedule" />
-        <NativeTabs.Trigger.Label>{t("tabQueue")}</NativeTabs.Trigger.Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="wallet">
-        <NativeTabs.Trigger.Icon
-          sf={{ default: "wallet.pass", selected: "wallet.pass.fill" }}
-          md="account_balance_wallet"
-        />
-        <NativeTabs.Trigger.Label>{t("tabWallet")}</NativeTabs.Trigger.Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="notifications">
-        <NativeTabs.Trigger.Icon
-          sf={{ default: "bell", selected: "bell.fill" }}
-          md="notifications"
-        />
-        <NativeTabs.Trigger.Label>{t("tabNotifications")}</NativeTabs.Trigger.Label>
-        {hasUnreadNotifications ? <NativeTabs.Trigger.Badge /> : null}
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="others" role="search" disablePopToTop>
-        <NativeTabs.Trigger.Icon sf="ellipsis" md="more_horiz" />
-        <NativeTabs.Trigger.Label hidden>{t("tabOthers")}</NativeTabs.Trigger.Label>
-      </NativeTabs.Trigger>
-    </NativeTabs>
+    <View style={{ flex: 1 }}>
+      <NativeTabs tintColor={colors.accent} minimizeBehavior="onScrollDown">
+        <NativeTabs.Trigger name="schedule">
+          <NativeTabs.Trigger.Icon
+            sf={{ default: "calendar", selected: "calendar.circle.fill" }}
+            md="calendar_month"
+          />
+          <NativeTabs.Trigger.Label>{t("tabSchedule")}</NativeTabs.Trigger.Label>
+        </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="queue">
+          <NativeTabs.Trigger.Icon
+            sf={{ default: "clock", selected: "clock.fill" }}
+            md="schedule"
+          />
+          <NativeTabs.Trigger.Label>{t("tabQueue")}</NativeTabs.Trigger.Label>
+        </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="wallet">
+          <NativeTabs.Trigger.Icon
+            sf={{ default: "wallet.pass", selected: "wallet.pass.fill" }}
+            md="account_balance_wallet"
+          />
+          <NativeTabs.Trigger.Label>{t("tabWallet")}</NativeTabs.Trigger.Label>
+        </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="notifications">
+          <NotificationTabIcon unread={hasUnreadNotifications} />
+          <NativeTabs.Trigger.Label>{t("tabNotifications")}</NativeTabs.Trigger.Label>
+        </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="others" role="search">
+          <NativeTabs.Trigger.Icon sf="ellipsis" md="more_horiz" />
+          <NativeTabs.Trigger.Label hidden>{t("tabOthers")}</NativeTabs.Trigger.Label>
+        </NativeTabs.Trigger>
+      </NativeTabs>
+      <NativeOthersMenu capabilities={me?.capabilities ?? []} />
+    </View>
+  );
+}
+
+function NotificationTabIcon({ unread }: { unread: boolean }) {
+  if (!unread) {
+    return (
+      <NativeTabs.Trigger.Icon sf={{ default: "bell", selected: "bell.fill" }} md="notifications" />
+    );
+  }
+
+  return (
+    <NativeTabs.Trigger.Icon
+      sf={{ default: "bell.badge", selected: "bell.badge.fill" }}
+      md="notifications_active"
+    />
+  );
+}
+
+function NativeOthersMenu({ capabilities }: { capabilities: string[] }) {
+  const { bottom } = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const { t } = useLocale();
+  const router = useRouter();
+  const triggerHeight = bottom + 60;
+  const triggerWidth = process.env.EXPO_OS === "ios" ? 76 : width / 5;
+  const items = overflowTabs(capabilities).flatMap<OverflowMenuItem>((tab) => {
+    if (tab === "account") {
+      return [
+        {
+          id: "account",
+          image: "person.crop.circle",
+          label: t("tabAccount"),
+          route: "/(tabs)/others/account" as const,
+          title: t("tabAccount"),
+        },
+      ];
+    }
+    if (tab === "scan") {
+      return [
+        {
+          id: "scan",
+          image: "qrcode.viewfinder",
+          label: t("tabScan"),
+          route: "/(tabs)/others/scan" as const,
+          title: t("tabScan"),
+        },
+      ];
+    }
+    return [];
+  });
+
+  return (
+    <MenuView
+      actions={items}
+      onPressAction={({ nativeEvent }) => {
+        const item = items.find(({ id }) => id === nativeEvent.event);
+        if (item) router.navigate(item.route);
+      }}
+      style={{
+        bottom: 0,
+        height: triggerHeight,
+        position: "absolute",
+        right: 0,
+        width: triggerWidth,
+        zIndex: 2,
+      }}
+      testID="others-native-menu"
+    >
+      <View
+        accessible
+        accessibilityLabel={t("tabOthers")}
+        accessibilityRole="button"
+        style={{
+          backgroundColor: "rgba(0, 0, 0, 0.001)",
+          height: triggerHeight,
+          width: triggerWidth,
+        }}
+      />
+    </MenuView>
   );
 }

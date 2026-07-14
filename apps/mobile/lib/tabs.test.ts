@@ -1,5 +1,5 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { visibleTabs } from "./tabs";
+import { overflowTabs, visibleTabs } from "./tabs";
 
 describe("visibleTabs (H55)", () => {
   it("shows only participant tabs with no staff capabilities", () => {
@@ -18,5 +18,10 @@ describe("visibleTabs (H55)", () => {
 
   it("the admin wildcard unlocks scan like every other capability", () => {
     expect(visibleTabs([CAPABILITIES.ADMIN_ALL])).toContain("scan");
+  });
+
+  it("puts every tab outside the primary bar in the overflow selector", () => {
+    expect(overflowTabs([])).toEqual(["account"]);
+    expect(overflowTabs([CAPABILITIES.ACCREDIT_SCAN])).toEqual(["account", "scan"]);
   });
 });
