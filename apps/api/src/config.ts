@@ -121,6 +121,19 @@ const envSchema = z.object({
   APPLE_WWDR_CERTIFICATE_PEM: z.string().optional(),
   /** Which APNs gateway to push pass updates to (H28). */
   APPLE_APNS_ENVIRONMENT: z.enum(["production", "sandbox"]).default("production"),
+  /**
+   * Numeric App Store ID (Adam ID) of the hackOS mobile app (H28). When set,
+   * passes carry associatedStoreIdentifiers so Wallet links the pass to the
+   * app (back of the pass + lock-screen suggestion); tapping it launches the
+   * app via the MOBILE_APP_SCHEME deep link. Optional: unset until the app
+   * has an App Store Connect record — passes then simply carry no app link.
+   */
+  APPLE_PASS_APP_STORE_ID: z.preprocess(
+    // deploy compose files default unset vars to "" — treat that as unset
+    // instead of letting z.coerce turn it into 0 and fail boot.
+    (v) => (v === "" ? undefined : v),
+    z.coerce.number().int().positive().optional(),
+  ),
 
   /**
    * Google Wallet (H28). Same "optional but never silently broken" posture

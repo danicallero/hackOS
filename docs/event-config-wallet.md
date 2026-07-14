@@ -60,6 +60,12 @@ the event is baked into issued passes. Composition:
   no value.
 - **Back fields**, in order: event name → venue name (if set) → the custom
   `pass_back_fields` list → "Organized by" (`APPLE_PASS_ORGANIZATION`).
+- **App link**: when `APPLE_PASS_APP_STORE_ID` (the mobile app's numeric App
+  Store ID) is set, the pass carries `associatedStoreIdentifiers` — Wallet
+  shows the hackOS app on the back of the pass (Open, or Get if not
+  installed) — plus an `appLaunchURL` deep link built from
+  `MOBILE_APP_SCHEME`. Unset (e.g. before the app ships on the App Store),
+  the pass simply has no app link.
 
 Saving `PUT /api/event` with an actual change bumps every issued Apple pass's
 `update_tag` and enqueues a wallet push, so Wallet devices refetch immediately

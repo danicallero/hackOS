@@ -271,6 +271,10 @@ describe("H28 Apple Wallet PassKit", () => {
         relevantText: "Facultade de Informática, UDC",
       },
     ]);
+    // Links the pass to the mobile app (H28): numeric Adam ID (coerced from
+    // the env string) + deep-link launch URL from MOBILE_APP_SCHEME.
+    expect(pass.associatedStoreIdentifiers).toEqual([1234567890]);
+    expect(pass.appLaunchURL).toBe("hackos://");
     expect(pass.foregroundColor).toBe("rgb(255,255,255)");
     expect(pass.backgroundColor).toBe("rgb(40,40,40)");
     expect(pass.labelColor).toBe("rgb(255,180,0)");

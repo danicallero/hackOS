@@ -50,6 +50,8 @@ process.env.APPLE_PASS_KEY_PEM = Buffer.from(testKeyPem).toString("base64");
 // self-signed cert as a stand-in "WWDR" is enough to exercise the real
 // signing path without needing Apple's real intermediate.
 process.env.APPLE_WWDR_CERTIFICATE_PEM = Buffer.from(testCertPem).toString("base64");
+// Env vars are strings — exercises the zod coercion to a numeric Adam ID.
+process.env.APPLE_PASS_APP_STORE_ID = "1234567890";
 
 const { privateKey: googlePrivateKey } = generateKeyPairSync("rsa", {
   modulusLength: 2048,
