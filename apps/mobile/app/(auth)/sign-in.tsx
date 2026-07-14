@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, Text, type TextInput, View } from "react-native";
+import { Platform, Pressable, Text, type TextInput, View } from "react-native";
 
 import { AuthAlert, AuthButton, AuthField, AuthHeader, AuthScreen } from "@/components/auth-ui";
 import { apiFetch } from "@/lib/api";
@@ -9,6 +9,21 @@ import { EVENT_WEBSITE_DISPLAY } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
 import type { PublicEvent } from "@/lib/types";
 import { colors } from "@/theme/colors";
+
+// React Native recommends choosing one autofill API per platform. Combining
+// autoComplete and textContentType can make iOS credential-provider fills
+// unreliable, especially when both fields are populated in one operation.
+const usernameAutofillProps = Platform.select({
+  ios: { textContentType: "username" as const },
+  android: { autoComplete: "username" as const, importantForAutofill: "yes" as const },
+  default: { autoComplete: "username" as const },
+});
+
+const passwordAutofillProps = Platform.select({
+  ios: { textContentType: "password" as const },
+  android: { autoComplete: "current-password" as const, importantForAutofill: "yes" as const },
+  default: { autoComplete: "current-password" as const },
+});
 
 export default function SignInScreen() {
   const router = useRouter();
@@ -77,35 +92,31 @@ export default function SignInScreen() {
         {error ? <AuthAlert message={error} /> : null}
         <View style={{ gap: 14 }}>
           <AuthField
+            {...usernameAutofillProps}
             label={t("emailLabel")}
             placeholder={t("emailPlaceholder")}
             autoCapitalize="none"
-            autoComplete="username"
             autoCorrect={false}
-            importantForAutofill="yes"
             keyboardType="email-address"
             returnKeyType="next"
             spellCheck={false}
-            textContentType="username"
-            value={email}
             onChangeText={setEmail}
+            onEndEditing={({ nativeEvent }) => setEmail(nativeEvent.text)}
             onSubmitEditing={() => passwordRef.current?.focus()}
           />
           <AuthField
+            {...passwordAutofillProps}
             inputRef={passwordRef}
             label={t("passwordLabel")}
             placeholder={t("passwordPlaceholder")}
             autoCapitalize="none"
-            autoComplete="current-password"
             autoCorrect={false}
             enablesReturnKeyAutomatically
-            importantForAutofill="yes"
             returnKeyType="go"
             secureTextEntry
             spellCheck={false}
-            textContentType="password"
-            value={password}
             onChangeText={setPassword}
+            onEndEditing={({ nativeEvent }) => setPassword(nativeEvent.text)}
             onSubmitEditing={() => void onSubmit()}
           />
         </View>
