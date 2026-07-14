@@ -95,8 +95,11 @@ export async function ensurePassRecord(
  * up-to-date content too.
  */
 export async function bumpAllAppleWalletUpdateTags(): Promise<number[]> {
+  // Canonical update_tag format is integer epoch milliseconds (0504) — must
+  // match ensurePassRecord's Date.now() so appleChangedSerials compares a
+  // single format.
   const { rows } = await pool.query(
-    `UPDATE wallet_passes SET update_tag = extract(epoch from now())::text
+    `UPDATE wallet_passes SET update_tag = ((extract(epoch FROM now()) * 1000)::bigint)::text
       WHERE platform = 'apple'
       RETURNING id`,
   );

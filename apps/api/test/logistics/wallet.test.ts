@@ -26,7 +26,7 @@ import { assignBadge, createBadgePass, issueTicket } from "./fixtures.js";
  */
 
 const pushState = vi.hoisted(() => ({
-  lastRequest: null as { path: string; topic: string } | null,
+  lastRequest: null as { path: string; topic: string; pushType: string } | null,
   status: 200,
 }));
 
@@ -36,7 +36,11 @@ vi.mock("node:http2", () => {
       const session = new EventEmitter() as EventEmitter & Record<string, unknown>;
       session.close = () => {};
       session.request = (headers: Record<string, string>) => {
-        pushState.lastRequest = { path: headers[":path"]!, topic: headers["apns-topic"]! };
+        pushState.lastRequest = {
+          path: headers[":path"]!,
+          topic: headers["apns-topic"]!,
+          pushType: headers["apns-push-type"]!,
+        };
         const stream = new EventEmitter() as EventEmitter & Record<string, unknown>;
         stream.setEncoding = () => {};
         stream.end = () => {
@@ -373,6 +377,7 @@ describe("H28 Apple Wallet PassKit", () => {
     expect(pushState.lastRequest).toEqual({
       path: "/3/device/push-refresh",
       topic: PASS_TYPE_IDENTIFIER,
+      pushType: "alert",
     });
   });
 
@@ -408,6 +413,119 @@ describe("H28 Apple Wallet PassKit", () => {
     });
     expect(changed.statusCode).toBe(200);
     expect(changed.json().serialNumbers).toContain(serial);
+  });
+
+  it("reports an event-config bump on the incremental poll a device actually makes (H28 regression)", async () => {
+    // Pre-0504 regression: issuance wrote millisecond tags, bumps wrote
+    // second tags, and the endpoint compared them AS TEXT — so this exact
+    // sequence (poll, change event, poll again with the stored lastUpdated)
+    // could answer 204 and the device never refetched, which is how both
+    // APNs pushes and pull-to-refresh looked "broken".
+    const { PASS_TYPE_IDENTIFIER } = await import("../../src/modules/logistics/wallet.js");
+    const { pool } = await import("../../src/db/pool.js");
+    const uid = await createUser();
+    await issueTicket(uid, "ticket-wallet-poll");
+    await app.inject({
+      method: "GET",
+      url: "/api/me/wallet/apple/ticket.pkpass",
+      headers: asUser(uid),
+    });
+    const pass = await pool.query(
+      `SELECT serial_number, authentication_token, update_tag FROM wallet_passes WHERE user_id = $1`,
+      [uid],
+    );
+    const serial = pass.rows[0].serial_number;
+    await app.inject({
+      method: "POST",
+      url: `/api/wallet/apple/v1/devices/device-poll/registrations/${PASS_TYPE_IDENTIFIER}/${serial}`,
+      headers: { authorization: `ApplePass ${pass.rows[0].authentication_token}` },
+      payload: { pushToken: "push-poll" },
+    });
+
+    // First poll: device stores lastUpdated, as Wallet does.
+    const first = await app.inject({
+      method: "GET",
+      url: `/api/wallet/apple/v1/devices/device-poll/registrations/${PASS_TYPE_IDENTIFIER}`,
+    });
+    const lastUpdated: string = first.json().lastUpdated;
+
+    // Nothing changed since → 204, so Wallet doesn't refetch pointlessly.
+    const quiet = await app.inject({
+      method: "GET",
+      url: `/api/wallet/apple/v1/devices/device-poll/registrations/${PASS_TYPE_IDENTIFIER}?passesUpdatedSince=${lastUpdated}`,
+    });
+    expect(quiet.statusCode).toBe(204);
+
+    // Event config changes (what an organiser edits before wondering why
+    // their iPhone won't refresh)…
+    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const put = await app.inject({
+      method: "PUT",
+      url: "/api/event",
+      headers: asUser(manager),
+      payload: { name: "hackUDC poll regression" },
+    });
+    expect(put.statusCode).toBe(200);
+
+    // …and the bumped tag is canonical integer millis, strictly newer.
+    const bumped = await pool.query(`SELECT update_tag FROM wallet_passes WHERE user_id = $1`, [
+      uid,
+    ]);
+    expect(bumped.rows[0].update_tag).toMatch(/^\d{13,}$/);
+
+    // The incremental poll now MUST report the pass as changed.
+    const afterChange = await app.inject({
+      method: "GET",
+      url: `/api/wallet/apple/v1/devices/device-poll/registrations/${PASS_TYPE_IDENTIFIER}?passesUpdatedSince=${lastUpdated}`,
+    });
+    expect(afterChange.statusCode).toBe(200);
+    expect(afterChange.json().serialNumbers).toContain(serial);
+    expect(Number(afterChange.json().lastUpdated)).toBeGreaterThan(Number(lastUpdated));
+  });
+
+  it("serves Last-Modified and answers 304 until the pass actually changes (H28)", async () => {
+    const { PASS_TYPE_IDENTIFIER } = await import("../../src/modules/logistics/wallet.js");
+    const { pool } = await import("../../src/db/pool.js");
+    const uid = await createUser();
+    await issueTicket(uid, "ticket-wallet-304");
+    await app.inject({
+      method: "GET",
+      url: "/api/me/wallet/apple/ticket.pkpass",
+      headers: asUser(uid),
+    });
+    const pass = await pool.query(
+      `SELECT id, serial_number, authentication_token FROM wallet_passes WHERE user_id = $1`,
+      [uid],
+    );
+    const serial = pass.rows[0].serial_number;
+    const auth = { authorization: `ApplePass ${pass.rows[0].authentication_token}` };
+    const url = `/api/wallet/apple/v1/passes/${PASS_TYPE_IDENTIFIER}/${serial}`;
+
+    const fresh = await app.inject({ method: "GET", url, headers: auth });
+    expect(fresh.statusCode).toBe(200);
+    const lastModified = fresh.headers["last-modified"] as string;
+    expect(lastModified).toBeTruthy();
+
+    const unchanged = await app.inject({
+      method: "GET",
+      url,
+      headers: { ...auth, "if-modified-since": lastModified },
+    });
+    expect(unchanged.statusCode).toBe(304);
+
+    // Bump the tag past the device's copy (next full second, so the
+    // second-precision HTTP date comparison can't tie) → full 200 again.
+    await pool.query(`UPDATE wallet_passes SET update_tag = $2 WHERE id = $1`, [
+      pass.rows[0].id,
+      String(Date.now() + 1500),
+    ]);
+    const changed = await app.inject({
+      method: "GET",
+      url,
+      headers: { ...auth, "if-modified-since": lastModified },
+    });
+    expect(changed.statusCode).toBe(200);
+    expect(changed.rawPayload.subarray(0, 4).toString("hex")).toBe("504b0304");
   });
 
   it("issues a fresh active badge pass after badge rotation voids the old serial", async () => {
@@ -525,6 +643,7 @@ describe("H28 badge rotation syncs both platforms", () => {
     expect(pushState.lastRequest).toEqual({
       path: "/3/device/push-sync",
       topic: PASS_TYPE_IDENTIFIER,
+      pushType: "alert",
     });
 
     const patchCall = fetchMock.mock.calls.find(([, init]) => init?.method === "PATCH");
