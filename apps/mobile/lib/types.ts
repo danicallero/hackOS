@@ -21,3 +21,9 @@ export interface Me {
   role: "admin" | "judge" | "sponsor" | "staff" | "participant";
   capabilities: string[];
 }
+
+/** Anonymous event details shown before sign-in. */
+export interface PublicEvent {
+  name: string | null;
+  tagline: string | null;
+}

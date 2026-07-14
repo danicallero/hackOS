@@ -76,7 +76,12 @@ route below. No migration needed.
   screen stays reachable. The fetch refetches on app foreground, so a
   capability change made elsewhere (web admin) shows up without a reinstall
   (H55's explicit acceptance bar).
-- `app/(auth)/sign-in.tsx` — email/password only; no in-app registration
+- `app/(auth)/sign-in.tsx` — email/password only; no in-app registration. The
+  anonymous event feed supplies the configured name and tagline, and the screen
+  explains that only accepted participants can sign in and directs them to the
+  configured `EXPO_PUBLIC_EVENT_WEBSITE_URL` to review their application. The
+  fields use the native username/current-password pairing; iOS additionally
+  associates that domain through `webcredentials`.
   (accounts come from the web onboarding/invite flows, H10/H12).
 - `app/(tabs)/schedule.tsx`, `queue.tsx`, `wallet.tsx`, `notifications.tsx`,
   `account.tsx` — the five participant screens. API-backed screens expose

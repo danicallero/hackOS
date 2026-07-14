@@ -6,3 +6,13 @@
  * URL explicitly.
  */
 export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "https://api.hackudc.com";
+
+/** Public website where attendees register and review their application. */
+export const EVENT_WEBSITE_URL =
+  process.env.EXPO_PUBLIC_EVENT_WEBSITE_URL ?? "https://os.hackudc.com";
+
+/** Compact, protocol-free form suitable for explanatory UI copy. */
+export const EVENT_WEBSITE_DISPLAY = EVENT_WEBSITE_URL.replace(/^https?:\/\//, "").replace(
+  /\/$/,
+  "",
+);

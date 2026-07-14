@@ -7,6 +7,10 @@ function iosDynamic(light: string, dark: string) {
 
 /** Platform semantic colors: UIKit on iOS, Material You on Android, fixed fallbacks on web. */
 export const colors = {
+  transparent: "transparent",
+  invisibleHitTarget: "rgba(0, 0, 0, 0.001)",
+  controlShadow: "0 1px 2px rgba(0, 0, 0, 0.14)",
+  qrBackground: "#ffffff",
   label: Platform.select({
     ios: Color.ios.label,
     android: Color.android.dynamic.onSurface,
@@ -48,7 +52,7 @@ export const colors = {
     default: "#007aff",
   })!,
   accentText: Platform.select({
-    ios: Color.ios.white,
+    ios: "#ffffff",
     android: Color.android.dynamic.onPrimary,
     default: "#ffffff",
   })!,

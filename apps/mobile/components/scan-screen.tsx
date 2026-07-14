@@ -23,6 +23,7 @@ import {
 } from "@/lib/scanner-db";
 import type { ScannerActivity, ScannerPerson } from "@/lib/scanner-types";
 import { useScannerSync } from "@/lib/use-scanner";
+import { colors } from "@/theme/colors";
 
 type Mode = "accreditation" | "badge" | "presence" | "activity";
 
@@ -45,7 +46,12 @@ export default function ScanScreen() {
   const [message, setMessage] = useState<string | null>(null);
 
   return (
-    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+    <ScrollView
+      contentInsetAdjustmentBehavior="automatic"
+      contentContainerStyle={styles.container}
+      keyboardShouldPersistTaps="handled"
+      style={{ backgroundColor: colors.background }}
+    >
       <NativeView style={styles.syncRow}>
         <Text style={styles.syncText}>
           {syncState.lastSync
@@ -502,47 +508,63 @@ const styles = StyleSheet.create({
   modeRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   modeButton: {
     borderWidth: 1,
-    borderColor: "#999",
+    borderColor: colors.separator,
+    borderCurve: "continuous",
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 9,
   },
-  modeSelected: { backgroundColor: "#1769aa", borderColor: "#1769aa" },
-  modeSelectedText: { color: "white" },
+  modeSelected: { backgroundColor: colors.accent, borderColor: colors.accent },
+  modeSelectedText: { color: colors.accentText },
   section: {
     gap: 12,
     padding: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#888",
+    borderColor: colors.separator,
+    borderCurve: "continuous",
     borderRadius: 12,
   },
   field: { gap: 6 },
   input: {
     borderWidth: 1,
-    borderColor: "#999",
+    borderColor: colors.separator,
+    borderCurve: "continuous",
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    color: "#111",
-    backgroundColor: "white",
+    color: colors.label,
+    backgroundColor: colors.surface,
   },
-  card: { gap: 5, padding: 12, borderRadius: 8, backgroundColor: "rgba(23,105,170,0.12)" },
+  card: {
+    gap: 5,
+    padding: 12,
+    borderCurve: "continuous",
+    borderRadius: 8,
+    backgroundColor: colors.accentSurface,
+  },
   personName: { fontSize: 18, fontWeight: "600" },
-  warning: { color: "#a34b00", fontWeight: "600" },
-  error: { color: "#b00020" },
+  warning: { color: colors.warning, fontWeight: "600" },
+  error: { color: colors.destructive },
   message: {
     fontWeight: "600",
     padding: 12,
+    borderCurve: "continuous",
     borderRadius: 8,
-    backgroundColor: "rgba(20,130,60,0.15)",
+    backgroundColor: colors.successSurface,
   },
   activityList: { gap: 7 },
-  activityButton: { borderWidth: 1, borderColor: "#999", borderRadius: 8, padding: 10 },
+  activityButton: {
+    borderWidth: 1,
+    borderColor: colors.separator,
+    borderCurve: "continuous",
+    borderRadius: 8,
+    padding: 10,
+  },
   queuePanel: { gap: 10, paddingTop: 8 },
   heading: { fontSize: 18, fontWeight: "600" },
   queueItem: {
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: "#aaa",
+    borderColor: colors.separator,
     paddingVertical: 8,
     gap: 3,
   },

@@ -183,7 +183,7 @@ function NativeOthersMenu({ capabilities }: { capabilities: string[] }) {
         accessibilityLabel={t("tabOthers")}
         accessibilityRole="button"
         style={{
-          backgroundColor: "rgba(0, 0, 0, 0.001)",
+          backgroundColor: colors.invisibleHitTarget,
           height: triggerHeight,
           width: triggerWidth,
         }}

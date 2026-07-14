@@ -2,6 +2,7 @@ import { SymbolView, type SymbolViewProps } from "expo-symbols";
 import type { ReactNode, RefObject } from "react";
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   Pressable,
   ScrollView,
   Text,
@@ -10,11 +11,58 @@ import {
   useColorScheme,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import { colors } from "@/theme/colors";
 
-export function AuthScreen({ children }: { children: ReactNode }) {
+export function AuthScreen({
+  children,
+  footer,
+  scrollable = true,
+}: {
+  children: ReactNode;
+  footer?: ReactNode;
+  scrollable?: boolean;
+}) {
   useColorScheme();
+  if (!scrollable) {
+    return (
+      <SafeAreaView style={{ backgroundColor: colors.background, flex: 1 }}>
+        <KeyboardAvoidingView
+          behavior={process.env.EXPO_OS === "ios" ? "padding" : undefined}
+          style={{ flex: 1 }}
+        >
+          <View
+            style={{
+              alignSelf: "center",
+              flex: 1,
+              gap: 28,
+              justifyContent: "center",
+              maxWidth: 440,
+              paddingHorizontal: 24,
+              paddingVertical: 16,
+              width: "100%",
+            }}
+          >
+            {children}
+          </View>
+        </KeyboardAvoidingView>
+        {footer ? (
+          <View
+            style={{
+              alignSelf: "center",
+              maxWidth: 440,
+              paddingBottom: 12,
+              paddingHorizontal: 24,
+              width: "100%",
+            }}
+          >
+            {footer}
+          </View>
+        ) : null}
+      </SafeAreaView>
+    );
+  }
   return (
     <ScrollView
       automaticallyAdjustKeyboardInsets
@@ -22,8 +70,8 @@ export function AuthScreen({ children }: { children: ReactNode }) {
       contentContainerStyle={{
         flexGrow: 1,
         paddingHorizontal: 24,
-        paddingTop: 48,
-        paddingBottom: 32,
+        paddingTop: 56,
+        paddingBottom: 40,
       }}
       keyboardDismissMode="interactive"
       keyboardShouldPersistTaps="handled"
@@ -37,29 +85,43 @@ export function AuthScreen({ children }: { children: ReactNode }) {
 export function AuthHeader({
   title,
   description,
-  icon = "sparkles",
+  icon,
+  align = "center",
 }: {
   title: string;
   description: string;
   icon?: SymbolViewProps["name"];
+  align?: "center" | "leading";
 }) {
+  const leading = align === "leading";
   return (
-    <View style={{ alignItems: "center", gap: 14 }}>
-      <View
-        style={{
-          alignItems: "center",
-          backgroundColor: colors.accent,
-          borderCurve: "continuous",
-          borderRadius: 20,
-          justifyContent: "center",
-          minHeight: 68,
-          minWidth: 68,
-        }}
-      >
-        <SymbolView name={icon} tintColor={colors.accentText} size={30} accessible={false} />
-      </View>
-      <View style={{ alignItems: "center", gap: 6 }}>
-        <Text selectable style={{ color: colors.label, fontSize: 28, fontWeight: "800" }}>
+    <View style={{ alignItems: leading ? "flex-start" : "center", gap: 14 }}>
+      {icon ? (
+        <View
+          style={{
+            alignItems: "center",
+            backgroundColor: colors.accent,
+            borderCurve: "continuous",
+            borderRadius: 20,
+            justifyContent: "center",
+            minHeight: 68,
+            minWidth: 68,
+          }}
+        >
+          <SymbolView name={icon} tintColor={colors.accentText} size={30} accessible={false} />
+        </View>
+      ) : null}
+      <View style={{ alignItems: leading ? "flex-start" : "center", gap: 6 }}>
+        <Text
+          selectable
+          style={{
+            color: colors.label,
+            fontSize: leading ? 32 : 28,
+            fontWeight: "800",
+            lineHeight: leading ? 38 : 34,
+            textAlign: leading ? "left" : "center",
+          }}
+        >
           {title}
         </Text>
         <Text
@@ -68,7 +130,7 @@ export function AuthHeader({
             color: colors.secondaryLabel,
             fontSize: 16,
             lineHeight: 22,
-            textAlign: "center",
+            textAlign: leading ? "left" : "center",
           }}
         >
           {description}
@@ -82,6 +144,7 @@ export function AuthField({
   label,
   inputRef,
   error,
+  style,
   ...props
 }: TextInputProps & {
   label: string;
@@ -98,17 +161,20 @@ export function AuthField({
         accessibilityLabel={label}
         placeholderTextColor={colors.tertiaryLabel}
         selectionColor={colors.accent}
-        style={{
-          backgroundColor: colors.surface,
-          borderColor: error ? colors.destructive : colors.separator,
-          borderCurve: "continuous",
-          borderRadius: 12,
-          borderWidth: 1,
-          color: colors.label,
-          fontSize: 17,
-          minHeight: 52,
-          paddingHorizontal: 14,
-        }}
+        style={[
+          {
+            backgroundColor: colors.surface,
+            borderColor: error ? colors.destructive : colors.separator,
+            borderCurve: "continuous",
+            borderRadius: 12,
+            borderWidth: 1,
+            color: colors.label,
+            fontSize: 17,
+            minHeight: 52,
+            paddingHorizontal: 14,
+          },
+          style,
+        ]}
         {...props}
       />
       {error ? (
@@ -155,6 +221,7 @@ export function AuthButton({
 }) {
   return (
     <Pressable
+      accessibilityLabel={label}
       accessibilityRole="button"
       accessibilityState={{ disabled: disabled || busy, busy }}
       disabled={disabled || busy}

@@ -233,7 +233,7 @@ function NotificationRow({
         <View
           accessibilityElementsHidden
           style={{
-            backgroundColor: unread ? colors.accent : "transparent",
+            backgroundColor: unread ? colors.accent : colors.transparent,
             borderRadius: 4,
             height: 8,
             marginTop: 6,

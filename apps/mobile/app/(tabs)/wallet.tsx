@@ -141,7 +141,7 @@ export default function WalletScreen() {
           <View
             accessibilityLabel={`${label} QR code`}
             style={{
-              backgroundColor: "#ffffff",
+              backgroundColor: colors.qrBackground,
               borderCurve: "continuous",
               borderRadius: 16,
               padding: 16,

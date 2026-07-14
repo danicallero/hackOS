@@ -12,6 +12,14 @@ const nextConfig: NextConfig = {
   // @hackos/shared ships raw TypeScript (exports point at src/*.ts); let Next
   // compile it as part of the app build.
   transpilePackages: ["@hackos/shared"],
+  async headers() {
+    return [
+      {
+        source: "/.well-known/apple-app-site-association",
+        headers: [{ key: "Content-Type", value: "application/json" }],
+      },
+    ];
+  },
   // The monorepo root is two levels up; needed so `standalone` traces
   // workspace deps (@hackos/shared) correctly.
   outputFileTracingRoot: path.join(dirname, "../../"),

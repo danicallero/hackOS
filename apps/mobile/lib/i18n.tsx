@@ -16,6 +16,16 @@ const dict = {
     es: "Todo lo que necesitas durante el evento.",
     gl: "Todo o que necesitas durante o evento.",
   },
+  eventCompanionSubtitle: {
+    en: "Your companion app for the event.",
+    es: "Tu aplicación de apoyo durante el evento.",
+    gl: "A túa aplicación de apoio durante o evento.",
+  },
+  eventAccessNotice: {
+    en: "Accepted participants only. Sign in with the same email and password you use on {website}. Need help? Contact the organization.",
+    es: "Solo para participantes aceptados. Entra con el mismo correo y contraseña que usas en {website}. ¿Necesitas ayuda? Contacta con la organización.",
+    gl: "Só para participantes aceptados. Entra co mesmo correo e contrasinal que usas en {website}. Necesitas axuda? Contacta coa organización.",
+  },
   emailLabel: { en: "Email", es: "Correo", gl: "Correo" },
   emailPlaceholder: {
     en: "you@example.com",

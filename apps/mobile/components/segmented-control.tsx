@@ -39,10 +39,10 @@ export function SegmentedControl({
             onPress={() => onChange(index)}
             style={({ pressed }) => ({
               alignItems: "center",
-              backgroundColor: selected ? colors.surface : "transparent",
+              backgroundColor: selected ? colors.surface : colors.transparent,
               borderCurve: "continuous",
               borderRadius: 7,
-              boxShadow: selected ? "0 1px 2px rgba(0, 0, 0, 0.14)" : undefined,
+              boxShadow: selected ? colors.controlShadow : undefined,
               flex: 1,
               justifyContent: "center",
               minHeight: 32,

@@ -116,12 +116,13 @@ pnpm dev
 ```
 
 The API listens on `0.0.0.0:3000`; the web app uses `:3001`. The mobile app
-defaults to `https://api.hackudc.com` and embeds one client-side variable only
-when intentionally overriding that default:
+defaults to the production API and event website. Both can be overridden with
+public client-side variables:
 
 ```dotenv
 # apps/mobile/.env.local — never commit this file
 EXPO_PUBLIC_API_URL=http://127.0.0.1:3000
+EXPO_PUBLIC_EVENT_WEBSITE_URL=https://os.hackudc.com
 ```
 
 Choose the URL for the device running the app:
@@ -137,7 +138,7 @@ Choose the URL for the device running the app:
 `EXPO_PUBLIC_*` values are compiled into the JavaScript bundle and are public
 to anyone who installs the app. Never put credentials or private keys in
 these variables. With no override, installed and development builds use the
-production API.
+production API and `https://os.hackudc.com`.
 
 Start Metro from the app directory:
 
@@ -224,6 +225,23 @@ MOBILE_APP_SCHEME=hackos
 Changing the app scheme requires changing both `app.json` and the API's
 `MOBILE_APP_SCHEME`, rebuilding the native app, and redeploying the API.
 
+The event website defaults to `https://os.hackudc.com` and can be changed with
+the public build variable `EXPO_PUBLIC_EVENT_WEBSITE_URL`. The same variable
+drives the informational sign-in copy and iOS `webcredentials` entitlement.
+Keep the matching
+`apps/web/public/.well-known/apple-app-site-association` file deployed at the
+site root and update both entries together if the production web domain, Apple
+team, or bundle identifier changes. This association lets Password AutoFill
+offer the same event accounts on the website and in the installed app; changing
+it requires a new native build.
+
+The sign-in screen mentions the configured website as selectable text; it is
+deliberately not a tappable external link and the app has no purchase flow.
+Re-check App Review Guidelines 3.1 before turning that text into a link or
+adding any paid digital access. In App Review notes, explain that event
+applications and account creation happen on the website, while the native app
+serves accepted attendees during the physical event.
+
 ## 4. EAS environments and API URLs
 
 Use separate EAS environments so a preview binary can never silently point at
@@ -252,6 +270,11 @@ pnpm dlx eas-cli@latest env:create \
 
 pnpm dlx eas-cli@latest env:list --environment production
 ```
+
+Set `EXPO_PUBLIC_EVENT_WEBSITE_URL` the same way in every environment that uses
+a different event site. It controls both the website shown on sign-in and the
+iOS Password AutoFill associated domain, so a changed value requires a new
+native build as well as an association file on that website.
 
 Pull a readable environment for local work when useful:
 
