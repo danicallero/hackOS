@@ -253,16 +253,63 @@ describe("H22/H23 unified person search", () => {
     });
   });
 
-  it("falls back to name/email substring search", async () => {
+  it("falls back to name/surname/email substring search, in any casing or order", async () => {
     const uid = await createUser({ name: "Margaret", email: "peggy@test.local" });
     const { pool } = await import("../../src/db/pool.js");
     await pool.query(`UPDATE users SET surname = 'Hamilton' WHERE id = $1`, [uid]);
 
-    for (const q of ["hamil", "peggy@", "margaret ham"]) {
+    for (const q of [
+      "hamil", // surname fragment
+      "MARGARET", // name, uppercased
+      "peggy@", // email fragment
+      "PEGGY@TEST.LOCAL", // full email, uppercased
+      "margaret ham", // name + surname
+      "Hamilton Margaret", // surname + name
+    ]) {
       const { results } = (await search(q)).json();
-      expect(results.map((r: { userId: number }) => r.userId)).toContain(uid);
+      expect(results.map((r: { userId: number }) => r.userId), q).toContain(uid);
       expect(results[0].matchedBy).toBe("profile");
     }
+  });
+
+  it("exact identifiers (ticket, badge, old badge) match case-insensitively", async () => {
+    const uid = await createUser();
+    await issueTicket(uid, "TkT-CaSe-1");
+    expect((await search("tkt-case-1")).json().results[0]).toMatchObject({
+      userId: uid,
+      matchedBy: "ticket",
+    });
+
+    await assignBadge(uid, "B-CaSe-9");
+    expect((await search("b-case-9")).json().results[0]).toMatchObject({
+      userId: uid,
+      matchedBy: "badge",
+    });
+
+    await app.inject({
+      method: "POST",
+      url: "/api/accreditation/rotate",
+      headers: asUser(staff),
+      payload: { userId: uid, newBadgeId: "B-CASE-10", reason: "lost" },
+    });
+    expect((await search("B-CASE-9")).json().results[0]).toMatchObject({
+      userId: uid,
+      matchedBy: "badge_history",
+    });
+  });
+
+  it("a badge id matches its CURRENT holder even if it lingers in someone's history", async () => {
+    // Manufacture the ambiguous case directly: B-SHARED sits in alice's
+    // history but is bob's current badge — the current holder must win.
+    const alice = await createUser({ name: "Alice" });
+    const bob = await createUser({ name: "Bob" });
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`UPDATE users SET badge_id_history = '{B-SHARED}' WHERE id = $1`, [alice]);
+    await assignBadge(bob, "B-SHARED");
+
+    const { results } = (await search("b-shared")).json();
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ userId: bob, matchedBy: "badge" });
   });
 
   it("returns only the default fields unless asked for more", async () => {

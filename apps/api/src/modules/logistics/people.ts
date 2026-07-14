@@ -34,12 +34,16 @@ export interface PersonSearchResult {
 }
 
 /**
- * One search box for any logistics station: `q` is tried as an exact ticket
- * token, then as an exact badge id (current or rotated-away), and finally as
- * a name/surname/email substring. Exact identifier hits short-circuit the
- * fuzzy search so a scanned QR always resolves to exactly one person.
- * `fields` picks which extra user fields come back (see PERSON_FIELDS).
- * Read-only.
+ * One search box for any logistics station. Every comparison is
+ * case-insensitive. `q` is tried, in order, as:
+ *   1. an exact ticket token,
+ *   2. the CURRENT badge of someone (a rotated-away badge never shadows the
+ *      person who holds that id now),
+ *   3. a rotated-away badge (matchedBy "badge_history", so callers can tell),
+ *   4. a name / surname / "name surname" / "surname name" / email substring.
+ * Exact identifier hits short-circuit the fuzzy search so a scanned QR always
+ * resolves to exactly one person. `fields` picks which extra user fields come
+ * back (see PERSON_FIELDS). Read-only.
  */
 export async function searchPeople(
   q: string,
@@ -48,19 +52,25 @@ export async function searchPeople(
   const needle = q.trim();
   if (!needle) return [];
 
-  const ticket = await pool.query(`SELECT user_id FROM tickets WHERE token = $1`, [needle]);
+  const ticket = await pool.query(`SELECT user_id FROM tickets WHERE upper(token) = upper($1)`, [
+    needle,
+  ]);
   if (ticket.rows[0]) {
     return loadResults([ticket.rows[0].user_id as number], "ticket", fields);
   }
 
-  const badge = await pool.query(`SELECT id FROM users WHERE badge_id = $1`, [needle]);
+  const badge = await pool.query(`SELECT id FROM users WHERE upper(badge_id) = upper($1)`, [
+    needle,
+  ]);
   if (badge.rows[0]) {
     return loadResults([badge.rows[0].id as number], "badge", fields);
   }
 
-  const history = await pool.query(`SELECT id FROM users WHERE $1 = ANY(badge_id_history)`, [
-    needle,
-  ]);
+  const history = await pool.query(
+    `SELECT id FROM users
+      WHERE EXISTS (SELECT 1 FROM unnest(badge_id_history) b WHERE upper(b) = upper($1))`,
+    [needle],
+  );
   if (history.rows.length > 0) {
     return loadResults(
       history.rows.map((r: { id: number }) => r.id),
@@ -72,7 +82,8 @@ export async function searchPeople(
   const like = `%${needle}%`;
   const fuzzy = await pool.query(
     `SELECT id FROM users
-      WHERE name ILIKE $1 OR surname ILIKE $1 OR (name || ' ' || surname) ILIKE $1 OR email ILIKE $1
+      WHERE name ILIKE $1 OR surname ILIKE $1 OR email ILIKE $1
+         OR (name || ' ' || surname) ILIKE $1 OR (surname || ' ' || name) ILIKE $1
       ORDER BY surname NULLS LAST, name NULLS LAST, id
       LIMIT 10`,
     [like],
