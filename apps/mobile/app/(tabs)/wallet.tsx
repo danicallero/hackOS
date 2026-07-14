@@ -1,4 +1,6 @@
 import { EVENTS } from "@hackos/shared/events";
+import * as FileSystem from "expo-file-system/legacy";
+import * as Sharing from "expo-sharing";
 import { SymbolView } from "expo-symbols";
 import { useCallback, useEffect, useState } from "react";
 import { Linking, Platform, ScrollView, Text, useColorScheme, View } from "react-native";
@@ -53,10 +55,38 @@ export default function WalletScreen() {
   }
 
   async function addToAppleWallet(purpose: "ticket" | "badge") {
-    const { default: WalletManager } = await import("react-native-wallet-manager");
-    if (!(await WalletManager.canAddPasses())) throw new Error("Apple Wallet is unavailable");
-    await WalletManager.addPassFromUrl(`${API_URL}/api/me/wallet/apple/${purpose}.pkpass`, {
-      cookie: authClient.getCookie(),
+    const passUrl = `${API_URL}/api/me/wallet/apple/${purpose}.pkpass`;
+    const cookie = authClient.getCookie();
+
+    // Preferred path: react-native-wallet-manager presents the in-app
+    // PKAddPassesViewController (H28). It's a native module, so a binary
+    // built before the dependency landed throws at require time — and its
+    // in-process URLSession fetch can fail where React Native's stack
+    // doesn't. Every failure except the two genuine outcomes of a working
+    // native flow falls back to the previous download + share-sheet flow,
+    // which only needs expo modules present in every build.
+    try {
+      const { default: WalletManager } = await import("react-native-wallet-manager");
+      if (await WalletManager.canAddPasses()) {
+        await WalletManager.addPassFromUrl(passUrl, { cookie });
+        return;
+      }
+    } catch (cause) {
+      const code = (cause as { code?: string } | null)?.code;
+      if (code === "USER_CANCELLED") return;
+      if (code === "PASS_ALREADY_EXISTS") throw cause;
+    }
+
+    const download = await FileSystem.downloadAsync(
+      passUrl,
+      `${FileSystem.cacheDirectory}${purpose}.pkpass`,
+      { headers: { cookie } },
+    );
+    if (download.status !== 200)
+      throw new Error(`Wallet pass download failed (${download.status})`);
+    await Sharing.shareAsync(download.uri, {
+      mimeType: "application/vnd.apple.pkpass",
+      UTI: "com.apple.pkpass",
     });
   }
 

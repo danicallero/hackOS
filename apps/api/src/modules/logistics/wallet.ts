@@ -208,6 +208,16 @@ async function passPayload(pass: PassRow) {
     webServiceURL: `${config.BETTER_AUTH_URL}/api/wallet/apple`,
     sharingProhibited: true,
     voided: pass.status === "voided",
+    // Links the pass to the hackOS mobile app (H28): Wallet shows the app on
+    // the back of the pass (Open/Get button) and tapping it deep-links via
+    // the app scheme. appLaunchURL is ignored by PassKit unless
+    // associatedStoreIdentifiers is present, so both ride the same guard.
+    ...(config.APPLE_PASS_APP_STORE_ID
+      ? {
+          associatedStoreIdentifiers: [config.APPLE_PASS_APP_STORE_ID],
+          appLaunchURL: `${config.MOBILE_APP_SCHEME}://`,
+        }
+      : {}),
     ...(startsAt ? { relevantDate: startsAt.toISOString() } : {}),
     ...(endsAt ? { expirationDate: endsAt.toISOString() } : {}),
     ...(venueLatitude !== null && venueLongitude !== null

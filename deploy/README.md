@@ -154,6 +154,7 @@ repo.
 | `APPLE_PASS_KEY_PASSPHRASE` 🔒 | Only if the key is encrypted. |
 | `APPLE_WWDR_CERTIFICATE_PEM` 🔒 | base64 of Apple's WWDR intermediate certificate (PEM). |
 | `APPLE_APNS_ENVIRONMENT` | `production` (default) or `sandbox` — which APNs gateway pass-update pushes go to. |
+| `APPLE_PASS_APP_STORE_ID` | Numeric App Store ID of the hackOS mobile app (the digits in its App Store URL). Optional; when set, passes link to the app (back of the pass + lock-screen suggestion) and tapping it opens the app via `MOBILE_APP_SCHEME`. |
 | `GOOGLE_WALLET_ISSUER_ID` | Your Google Wallet issuer account ID. |
 | `GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL` | Service account with the Wallet Object Issuer role, scoped to that issuer only. |
 | `GOOGLE_WALLET_PRIVATE_KEY_PEM` 🔒 | base64 of that service account's private key (PEM), from its JSON key file. |
