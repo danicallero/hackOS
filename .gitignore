@@ -11,3 +11,4 @@ coverage/
 !deploy/.env.instance.example
 .DS_Store
 .turbo/
+example-csvs/
