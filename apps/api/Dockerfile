@@ -15,6 +15,7 @@ WORKDIR /repo
 #    prod bundle via `pnpm deploy` (real node_modules, no workspace symlinks) ─
 FROM base AS build
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+COPY patches ./patches
 COPY packages ./packages
 COPY apps/api/package.json ./apps/api/
 # Cache pnpm store across builds — avoids re-downloading all packages each time.

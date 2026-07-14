@@ -20,6 +20,7 @@ FROM base AS build
 # Increase Node memory limit for the Pi's constrained RAM during Next build
 ENV NODE_OPTIONS="--max-old-space-size=2048"
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+COPY patches ./patches
 COPY packages ./packages
 COPY apps/web/package.json ./apps/web/
 RUN --mount=type=cache,id=pnpm-store-web,target=/root/.local/share/pnpm/store/v10 \
