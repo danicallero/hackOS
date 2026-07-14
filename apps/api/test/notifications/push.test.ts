@@ -51,13 +51,46 @@ describe("push channel", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, { body: string }];
     expect(url).toBe("https://exp.host/--/api/v2/push/send");
-    const messages = JSON.parse(init.body) as { to: string; title: string }[];
+    const messages = JSON.parse(init.body) as { to: string; title: string; body: string }[];
     expect(messages.map((m) => m.to).sort()).toEqual([
       "ExponentPushToken[aaa]",
       "ExponentPushToken[bbb]",
     ]);
-    expect(messages[0]!.title).toBe("Your team was called");
+    expect(messages[0]!.title).toBe("Go wait at room Sala 1");
+    expect(messages[0]!.body).toBe("Wait at the door for General. We'll tell you when to enter.");
     expect((await getOutboxRow(id)).status).toBe("sent");
+  });
+
+  it("puts the enter-now action and room in the notification header", async () => {
+    const userId = await createUser();
+    await addPushToken(userId, "ExponentPushToken[enter]");
+    await enqueueOutbox(
+      userId,
+      "push",
+      {
+        template: "queue.enter",
+        vars: { roomName: "Sala 2", challengeName: "Sustainability" },
+      },
+      "queue",
+    );
+
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ data: [{ status: "ok" }] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await drainOutboxOnce();
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, { body: string }];
+    const [message] = JSON.parse(init.body) as { title: string; body: string }[];
+    expect(message).toMatchObject({
+      title: "Enter room Sala 2 now",
+      body: "It's your team's turn for Sustainability.",
+    });
   });
 
   it("includes category and template in the push data payload for client-side routing", async () => {
@@ -85,13 +118,23 @@ describe("push channel", () => {
     await drainOutboxOnce();
 
     const [, init] = fetchMock.mock.calls[0] as unknown as [string, { body: string }];
-    const messages = JSON.parse(init.body) as { data: Record<string, unknown> }[];
+    const messages = JSON.parse(init.body) as {
+      data: Record<string, unknown>;
+      priority: string;
+      interruptionLevel: string;
+      sound: string;
+    }[];
     expect(messages[0]!.data).toMatchObject({
       category: "queue",
       template: "queue.called",
       roomName: "Sala 1",
       teamName: "Rocket",
       challengeName: "General",
+    });
+    expect(messages[0]).toMatchObject({
+      priority: "high",
+      interruptionLevel: "time-sensitive",
+      sound: "default",
     });
   });
 

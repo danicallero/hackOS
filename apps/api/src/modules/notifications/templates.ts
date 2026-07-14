@@ -28,6 +28,11 @@ export interface RenderedEmail {
   text: string;
 }
 
+export interface RenderedPush {
+  title: string;
+  body: string;
+}
+
 export interface EmailLayoutSettings {
   brandName: string;
   headerText: string;
@@ -51,6 +56,13 @@ interface TemplateVariant {
 }
 
 type TemplateDefinition = Record<Language, TemplateVariant>;
+
+interface PushTemplateVariant {
+  title: string;
+  body: string;
+}
+
+type PushTemplateDefinition = Record<Language, PushTemplateVariant>;
 
 /** {{name}} interpolation — deliberately dumb, no HTML escaping beyond entities. */
 function interpolate(str: string, vars: Record<string, unknown>): string {
@@ -188,6 +200,42 @@ const TEMPLATES: Record<string, TemplateDefinition> = {
     gl: {
       subject: "Lembranza: {{title}}",
       body: "Ola,\n\n{{title}} comeza ás {{startsAt}}.{{locationLine}}\n\nVémonos alí!",
+    },
+  },
+};
+
+/**
+ * Compact, action-first copy for time-sensitive queue pushes. Email and inbox
+ * keep their fuller context, while a phone's notification header says exactly
+ * what the participant needs to do at a glance.
+ */
+const PUSH_TEMPLATES: Record<string, PushTemplateDefinition> = {
+  "queue.called": {
+    en: {
+      title: "Go wait at room {{roomName}}",
+      body: "Wait at the door for {{challengeName}}. We'll tell you when to enter.",
+    },
+    es: {
+      title: "Ve a esperar a la sala {{roomName}}",
+      body: "Espera en la puerta para {{challengeName}}. Te avisaremos para entrar.",
+    },
+    gl: {
+      title: "Vai agardar á sala {{roomName}}",
+      body: "Agarda na porta para {{challengeName}}. Avisarémoste cando poidas entrar.",
+    },
+  },
+  "queue.enter": {
+    en: {
+      title: "Enter room {{roomName}} now",
+      body: "It's your team's turn for {{challengeName}}.",
+    },
+    es: {
+      title: "Entra ya en la sala {{roomName}}",
+      body: "Es el turno de tu equipo para {{challengeName}}.",
+    },
+    gl: {
+      title: "Entra xa na sala {{roomName}}",
+      body: "É a quenda do teu equipo para {{challengeName}}.",
     },
   },
 };
@@ -373,6 +421,22 @@ export function renderEmailTemplate(
   const html = brandWrapHtml(subject, renderBodyHtml(rendered, layout), layout);
   const text = bodyToPlainText(rendered);
   return { subject, html, text };
+}
+
+/** Uses action-first push copy when defined, otherwise preserves the email rendering. */
+export function renderPushTemplate(payload: EmailPayload, language: Language): RenderedPush {
+  const definition = payload.template ? PUSH_TEMPLATES[payload.template] : undefined;
+  if (!definition) {
+    const rendered = renderEmailTemplate(payload, language);
+    return { title: rendered.subject, body: rendered.text };
+  }
+
+  const variant = definition[language] ?? definition.en;
+  const vars = payload.vars ?? {};
+  return {
+    title: interpolate(variant.title, vars),
+    body: interpolate(variant.body, vars),
+  };
 }
 
 export const TEMPLATE_NAMES = Object.keys(TEMPLATES);

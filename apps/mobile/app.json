@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "hackOS",
-    "slug": "hackos-mobile",
+    "slug": "hackos",
     "description": "The HackUDC participant and event operations app.",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -15,6 +15,9 @@
       "appleTeamId": "P88YRBYY9T",
       "config": {
         "usesNonExemptEncryption": false
+      },
+      "entitlements": {
+        "com.apple.developer.usernotifications.time-sensitive": true
       }
     },
     "android": {
@@ -35,6 +38,7 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      "expo-notifications",
       "expo-router",
       [
         "expo-splash-screen",
@@ -56,6 +60,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "67dfb15e-eb03-441d-ba61-927e7e1defab"
+      }
+    },
+    "owner": "hack-os"
   }
 }
