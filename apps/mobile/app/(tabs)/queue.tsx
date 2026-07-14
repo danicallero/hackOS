@@ -1,3 +1,4 @@
+import { EVENTS } from "@hackos/shared/events";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { FlatList, RefreshControl, StyleSheet } from "react-native";
@@ -6,6 +7,7 @@ import { Text, View } from "@/components/Themed";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { subscribeToCategory } from "@/lib/notification-events";
+import { subscribeToServerEvent } from "@/lib/server-events";
 
 interface QueueRoom {
   id: number;
@@ -50,6 +52,18 @@ export default function QueueScreen() {
   }, [load]);
 
   useEffect(() => subscribeToCategory("queue", () => void load()), [load]);
+
+  useEffect(() => {
+    const eventTypes = [
+      EVENTS.USER_QUEUE_CALLED,
+      EVENTS.USER_QUEUE_PRECALL,
+      EVENTS.USER_QUEUE_CHANGED,
+    ];
+    const cleanups = eventTypes.map((type) => subscribeToServerEvent(type, () => void load()));
+    return () => {
+      for (const cleanup of cleanups) cleanup();
+    };
+  }, [load]);
 
   useFocusEffect(
     useCallback(() => {

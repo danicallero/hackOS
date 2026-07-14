@@ -1,9 +1,9 @@
 # Mobile app (`apps/mobile`)
 
-Phase 1 of the native app (H4, H51, H55, part of H28/H38): an Expo Router app
-with Better Auth session continuity, capability-driven tabs, and the
-participant-facing screens the issue called out. Offline SQLite scanning
-(H22–H26) is a later phase — see "What's deferred" below.
+Native Expo Router app for issue #73: Better Auth session continuity,
+capability-driven tabs, participant-facing screens, authenticated realtime,
+and offline SQLite scanners for accreditation, badge rotation, presence,
+meals, and registrable activities.
 
 ## Story coverage registry (issue #73: H4, H22–H26, H28, H38, H51, H55)
 
@@ -11,14 +11,14 @@ participant-facing screens the issue called out. Offline SQLite scanning
 | --- | --- | --- | --- |
 | H4 | Login/logout, session persists via Better Auth Expo + `expo-secure-store` | ✅ Done | `lib/auth-client.ts`, `app/(auth)/sign-in.tsx`. Server-side logout (session revocation) reuses the existing Better Auth endpoint — no mobile-specific work needed. |
 | H55 | One app, capability-driven tabs, permission changes apply without reinstall | ✅ Done | `lib/tabs.ts` + `app/(tabs)/_layout.tsx`. Only participant tabs + one staff placeholder tab exist; more staff tabs arrive as scanners are built. |
-| H38 | Participant sees queue status/position/ETA, pre-alert, call notice | 🟡 Partial | `app/(tabs)/queue.tsx` shows status/position/ETA and the call banner. Delivery is push-first now (see below): a `queue.called`/`queue.precall` push refetches the screen immediately via `lib/notification-events.ts`, with a 15s poll as a fallback while focused. Still missing: the SSE stream the web app uses (`GET /api/queue/me/stream`) for a push-independent live path, and end-to-end verification on a real device (only unit-tested server-side so far). |
-| H51 | Notification channel preferences per category; queue calls non-optional | 🟡 Partial | `app/(tabs)/notifications.tsx` toggles `announcements`/`application` categories. Push token registration (`lib/push.ts`) and actual delivery handling (`lib/notifications-setup.ts` — foreground display, tap routing, category-based refetch) are done. Per-activity reminder opt-ins (`schedule:<id>` categories, which the web inbox page supports) are not built. |
-| H28 | Ticket/badge in Apple & Google Wallet; old pass auto-invalidates on badge rotation | 🟡 Partial | `app/(tabs)/wallet.tsx` renders QR codes and the two "Add to Wallet" entry points (existing server endpoints, no new backend work). Automatic pass **push updates** when a badge is rotated (`wallet-sync.ts` already emits them server-side) aren't consumed by the app — the wallet screen only reflects a rotation on next manual refresh. |
-| H22 | Accreditation scanner: local SQLite lookup, badge assignment, server-confirmed | ❌ Not started | `app/(tabs)/scan.tsx` is a placeholder screen shown to capability holders. |
-| H23 | Badge replacement, offline-first, revocation synced later | ❌ Not started | Same placeholder. |
-| H24 | Presence (door in/out) scanner, offline queue, manual back-dated entries | ❌ Not started | Same placeholder. |
-| H25 | Meals scanner, offline queue, repeat-serving confirmation | ❌ Not started | Same placeholder. |
-| H26 | Registrable-activity scanner, same offline contract as H25 | ❌ Not started | Same placeholder. |
+| H38 | Participant sees queue status/position/ETA, pre-alert, call notice | 🟡 Device QA | Push receipt/tap and the authenticated `GET /api/queue/me/stream` native fetch stream both refetch queue state immediately; 15s focused polling is the recovery path. Code/tests are complete, but APNs/FCM delivery still needs real-device verification. |
+| H51 | Notification channel preferences per category; queue calls non-optional | ✅ Done | Static category preferences, mandatory queue notices, and `schedule:<id>` activity-reminder opt-ins are available on mobile. |
+| H28 | Ticket/badge in Apple & Google Wallet; old pass auto-invalidates on badge rotation | 🟡 Device QA | QR wallet, authenticated Apple `.pkpass` download/share, Google save URL, server-side pass invalidation/push, and foreground wallet refetch on `LOGISTICS_WALLET_PASS_UPDATED` are wired. Real Wallet apps/credentials still need device QA. |
+| H22 | Accreditation scanner: local SQLite lookup, badge assignment, server-confirmed | 🟡 Device QA | Ticket/person cards live in SQLite. The assignment is persisted/retried but is explicitly shown as **not accredited** until the API acknowledges the idempotent request. |
+| H23 | Badge replacement, offline-first, revocation synced later | 🟡 Device QA | Rotation updates the originating scanner immediately; each successful full snapshot replaces the complete revoked-badge set so every scanner rejects old badges. |
+| H24 | Presence (door in/out) scanner, offline queue, manual back-dated entries | 🟡 Device QA | In/out and optional ISO backdated timestamps use the durable shared queue and idempotent replay. |
+| H25 | Meals scanner, offline queue, repeat-serving confirmation | 🟡 Device QA | Local entitlement/count data drives first-serving/repeat confirmation; every accepted scan stays queued until API acknowledgement. |
+| H26 | Registrable-activity scanner, same offline contract as H25 | 🟡 Device QA | Scannable activities are synchronized locally and use the same durable idempotent replay contract. |
 
 Legend: ✅ done · 🟡 partial (core flow works, a sub-requirement is missing) · ❌ not started.
 
@@ -49,6 +49,12 @@ route below. No migration needed.
   (schedule), `GET /api/queue/me` (H38 status), `GET /api/me/ticket` +
   `GET /api/me/wallet/apple/:purpose.pkpass` + `GET /api/me/wallet/google/:purpose`
   (H28), `GET`/`PUT /api/me/notification-preferences` (H51).
+- `GET /api/scanner/snapshot` — capability-guarded, replace-all seed for the
+  device SQLite store. It contains only the lightweight person cards, ticket
+  and current/revoked badge mappings, scannable activities, meal
+  entitlements/counts, and last door state needed by H22-H26. A full snapshot
+  is deliberate: badge-history values have no individual timestamp, and a
+  complete replacement guarantees convergence after any missed refresh.
 
 **UI (`apps/mobile`).**
 - `lib/auth-client.ts` — Better Auth client using `expo-secure-store` for
@@ -74,8 +80,11 @@ route below. No migration needed.
   `Linking.openURL`. `queue.tsx` refetches immediately on a "queue" push
   (below) and also polls `GET /api/queue/me` every 15s while focused as a
   fallback.
-- `app/(tabs)/scan.tsx` — placeholder shown only to capability holders,
-  explicitly says offline scanning is coming later.
+- `app/(tabs)/scan.tsx` — camera/manual scanners selected by capability:
+  accreditation, badge replacement, door presence, meals, and activities.
+  `lib/scanner-db.ts` owns the WAL-mode SQLite schema and durable device queue;
+  `lib/scanner-sync.ts` replays in creation order with the persisted scan id as
+  `Idempotency-Key`, then installs the latest server snapshot/revocation set.
 - `lib/push.ts` — best-effort Expo push token registration, called once after
   sign-in from `app/_layout.tsx`.
 - `lib/notifications-setup.ts` — the actual delivery handling: configures
@@ -86,6 +95,9 @@ route below. No migration needed.
   `category` on `lib/notification-events.ts` (a tiny in-process pub-sub); a
   tapped `category: "queue"` notification also navigates to the queue tab.
   Wired once for the app's lifetime from `app/_layout.tsx`.
+- `lib/server-events.ts` — native authenticated SSE reader. It takes the
+  restored cookie from Better Auth's Expo plugin, parses the RN fetch stream,
+  reconnects after interruption, and emits personal queue/wallet events.
 - `lib/notification-events.ts` — `subscribeToCategory`/`emitCategory`, unit
   tested in `lib/notification-events.test.ts`. Lets a mounted screen react to
   a push the moment it arrives instead of waiting out its poll interval.
@@ -93,37 +105,24 @@ route below. No migration needed.
   `apps/web/src/lib/i18n.ts`, but only the strings these screens need), synced
   to `me.language` from `/api/me`.
 
-**State transitions.** None — this phase is read-mostly (schedule, queue
-status, wallet, notification preferences) plus one write (push token
-registration). No new state machines.
+**Scanner state transitions.** A scan is inserted in SQLite before any network
+request: `pending -> acknowledged` only after a 2xx response (including an
+idempotency replay), or `pending -> failed` for an explicit 4xx business
+rejection. Network failures leave it `pending` and stop ordered replay until a
+later foreground/15s/manual sync. Failed items stay visible and can be reset to
+`pending`. Accreditation never applies its badge mapping locally before the
+acknowledgement. Badge rotation, presence, meals, and activities apply local
+operational feedback immediately, then the post-replay full snapshot converges
+them to server truth.
 
 ## What's left
 
-- **Offline SQLite scanners (H22–H26)** — the bulk of the remaining scope.
-  Needs: an on-device SQLite schema for a lightweight local copy of
-  ticket/badge data, a pending-scan queue per scanner (accreditation, badge
-  replacement, presence, meals, activities), idempotent replay against the
-  server when connectivity returns (never assign/serve twice), and revocation
-  sync for rotated badges (H23: the old badge must reject in every scanner,
-  not just the one that rotated it). The acceptance bar from the issue: no
-  duplicate/lost submissions offline, and accreditation specifically must wait
-  for a real server acknowledgement before it's considered final (never
-  optimistically confirm a check-in without an OK from the API).
-- **H38 realtime, device verification**: push delivery is wired end-to-end in
-  code (server includes routing metadata, client shows/handles/routes on it,
-  screen refetches on receipt) but hasn't been exercised on a real device —
-  do that before calling H38 done. Also consider the SSE stream the web app
-  uses (`GET /api/queue/me/stream`) as a push-independent live path for when
-  the app is foregrounded; RN has no native `EventSource`, so this needs
-  either a small polyfill/library or a hand-rolled fetch-stream reader that
-  can carry the app's session (no cookie jar on RN — see `lib/api.ts`).
-- **H51 schedule reminders**: per-activity (`schedule:<id>`) reminder opt-ins,
-  which the web inbox page already supports via the same preferences API.
-- **H28 wallet push updates**: listen for `LOGISTICS_WALLET_PASS_UPDATED`
-  (already broadcast server-side on badge rotation) instead of relying on a
-  manual refresh of the wallet screen.
-- Full i18n parity with the web app (currently a small hand-picked subset of
-  strings).
-- Automated test coverage for replay/idempotency and revoked-badge sync
-  (explicit acceptance criterion in the issue) — can't be written until the
-  scanners above exist.
+- **Real-device acceptance pass.** Exercise airplane-mode queue persistence
+  across a process restart, reconnect/replay, concurrent scanners, QR camera
+  permissions, revoked-badge propagation, APNs/FCM foreground/background/tap
+  behavior, the Android channel, authenticated SSE reconnect, Apple Wallet,
+  and Google Wallet. These cannot be truthfully marked verified by a Node/web
+  export alone.
+- Full i18n parity with the much larger web dictionary. All new scanner and
+  participant controls have en/es/gl copy, but the mobile dictionary remains
+  intentionally smaller than the web app's.

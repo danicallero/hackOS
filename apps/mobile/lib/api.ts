@@ -1,5 +1,17 @@
 import { authClient } from "./auth-client";
 
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+    readonly details?: unknown,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 /**
  * Thin wrapper around the Better Auth client's underlying fetch
  * (`authClient.$fetch`, powered by better-fetch) so every authenticated call
@@ -14,7 +26,16 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     headers: init?.headers as Record<string, string> | undefined,
   });
   if (error) {
-    throw new Error(error.message ?? `Request to ${path} failed (${error.status})`);
+    const envelope = error as {
+      error?: { code?: string; message?: string; details?: unknown };
+      message?: string;
+    };
+    throw new ApiError(
+      envelope.error?.message ?? envelope.message ?? `Request to ${path} failed (${error.status})`,
+      error.status,
+      envelope.error?.code,
+      envelope.error?.details,
+    );
   }
   return data as T;
 }

@@ -10,6 +10,7 @@ import { isSupportedLanguage, LocaleProvider, useLocale } from "@/lib/i18n";
 import { MeProvider, useMeContext } from "@/lib/me-context";
 import { setupNotificationListeners } from "@/lib/notifications-setup";
 import { registerForPushNotifications } from "@/lib/push";
+import { startPersonalEventStream } from "@/lib/server-events";
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -53,9 +54,19 @@ function RootLayoutSession() {
       <LanguageSync />
       <PushRegistration authenticated={Boolean(session)} />
       <NotificationListeners />
+      <PersonalEventStream authenticated={Boolean(session)} />
       <RootLayoutNav />
     </MeProvider>
   );
+}
+
+/** Push-independent foreground updates for queue and wallet state (H28/H38). */
+function PersonalEventStream({ authenticated }: { authenticated: boolean }) {
+  useEffect(() => {
+    if (!authenticated) return;
+    return startPersonalEventStream();
+  }, [authenticated]);
+  return null;
 }
 
 /** Keeps the app's language in sync with the signed-in user's H7 preference. */

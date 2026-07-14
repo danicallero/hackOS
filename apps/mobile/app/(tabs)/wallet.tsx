@@ -1,11 +1,16 @@
+import { EVENTS } from "@hackos/shared/events";
+import * as FileSystem from "expo-file-system/legacy";
+import * as Sharing from "expo-sharing";
 import { useEffect, useState } from "react";
 import { Linking, Pressable, StyleSheet } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 
 import { Text, View } from "@/components/Themed";
 import { apiFetch } from "@/lib/api";
+import { authClient } from "@/lib/auth-client";
 import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
+import { subscribeToServerEvent } from "@/lib/server-events";
 
 interface TicketPayload {
   userId: number;
@@ -19,7 +24,9 @@ export default function WalletScreen() {
   const [ticket, setTicket] = useState<TicketPayload | null>(null);
 
   useEffect(() => {
-    void apiFetch<TicketPayload>("/api/me/ticket").then(setTicket);
+    const load = () => void apiFetch<TicketPayload>("/api/me/ticket").then(setTicket);
+    load();
+    return subscribeToServerEvent(EVENTS.LOGISTICS_WALLET_PASS_UPDATED, load);
   }, []);
 
   async function addToGoogleWallet(purpose: "ticket" | "badge") {
@@ -27,8 +34,19 @@ export default function WalletScreen() {
     await Linking.openURL(saveUrl);
   }
 
-  function addToAppleWallet(purpose: "ticket" | "badge") {
-    return Linking.openURL(`${API_URL}/api/me/wallet/apple/${purpose}.pkpass`);
+  async function addToAppleWallet(purpose: "ticket" | "badge") {
+    const destination = `${FileSystem.cacheDirectory}${purpose}.pkpass`;
+    const download = await FileSystem.downloadAsync(
+      `${API_URL}/api/me/wallet/apple/${purpose}.pkpass`,
+      destination,
+      { headers: { cookie: authClient.getCookie() } },
+    );
+    if (download.status !== 200)
+      throw new Error(`Wallet pass download failed (${download.status})`);
+    await Sharing.shareAsync(download.uri, {
+      mimeType: "application/vnd.apple.pkpass",
+      UTI: "com.apple.pkpass",
+    });
   }
 
   if (!ticket) return null;
@@ -81,10 +99,10 @@ function WalletButtons({
 }) {
   return (
     <View style={styles.buttonRow}>
-      <Pressable style={styles.button} onPress={onApple}>
+      <Pressable accessibilityRole="button" style={styles.button} onPress={onApple}>
         <Text style={styles.buttonText}>{t("addToAppleWallet")}</Text>
       </Pressable>
-      <Pressable style={styles.button} onPress={onGoogle}>
+      <Pressable accessibilityRole="button" style={styles.button} onPress={onGoogle}>
         <Text style={styles.buttonText}>{t("addToGoogleWallet")}</Text>
       </Pressable>
     </View>
