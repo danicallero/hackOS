@@ -1,9 +1,13 @@
+"use client";
+
 import { ArrowLeftIcon } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Brand } from "@/components/common/brand";
+import { LanguageSelect } from "@/components/common/language-select";
 import { ThemeToggle } from "@/components/common/theme-toggle";
 import { Button } from "@/components/ui/button";
+import { useLocale } from "@/lib/i18n";
 
 export function LegalPage({
   title,
@@ -16,18 +20,21 @@ export function LegalPage({
   updatedAt: string;
   children: ReactNode;
 }) {
+  const { t } = useLocale();
+
   return (
     <div className="min-h-dvh">
       <header className="border-b">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-5 py-4 sm:px-8">
-          <Link href="/" aria-label="Ir al inicio">
+          <Link href="/" aria-label={t("backHome")}>
             <Brand />
           </Link>
           <div className="flex items-center gap-1">
+            <LanguageSelect />
             <Button variant="ghost" size="sm" asChild>
-              <Link href="/">
+              <Link href="/" aria-label={t("backHome")}>
                 <ArrowLeftIcon className="size-4" aria-hidden="true" />
-                Volver al inicio
+                <span className="hidden sm:inline">{t("backHome")}</span>
               </Link>
             </Button>
             <ThemeToggle />
@@ -37,38 +44,32 @@ export function LegalPage({
 
       <main className="mx-auto max-w-3xl px-5 py-12 sm:px-8 sm:py-16">
         <header className="border-b pb-8">
-          <p className="text-muted-foreground text-sm">Información legal</p>
+          <p className="text-muted-foreground text-sm">{t("legalInformation")}</p>
           <h1 className="mt-2 text-balance text-3xl font-semibold sm:text-4xl">{title}</h1>
           <p className="text-muted-foreground mt-4 max-w-2xl text-pretty text-base leading-7">
             {description}
           </p>
-          <p className="text-muted-foreground mt-4 text-sm">Última actualización: {updatedAt}</p>
+          <p className="text-muted-foreground mt-4 text-sm">
+            {t("lastUpdated")}: {updatedAt}
+          </p>
         </header>
 
         <article className="space-y-10 py-10">{children}</article>
       </main>
 
       <footer className="text-muted-foreground border-t px-5 py-8 text-center text-sm">
-        <nav aria-label="Enlaces legales" className="flex flex-wrap justify-center gap-x-5 gap-y-2">
+        <nav
+          aria-label={t("legalLinksLabel")}
+          className="flex flex-wrap justify-center gap-x-5 gap-y-2"
+        >
           <Link className="underline underline-offset-4 hover:text-foreground" href="/terms">
-            Términos y condiciones
+            {t("termsAndConditions")}
           </Link>
           <Link className="underline underline-offset-4 hover:text-foreground" href="/privacy">
-            Política de privacidad
+            {t("privacyPolicy")}
           </Link>
         </nav>
       </footer>
     </div>
-  );
-}
-
-export function LegalSection({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section className="space-y-4">
-      <h2 className="text-balance text-xl font-semibold sm:text-2xl">{title}</h2>
-      <div className="text-muted-foreground space-y-4 text-pretty leading-7 [&_a]:text-foreground [&_a]:underline [&_a]:underline-offset-4 [&_h3]:text-foreground [&_h3]:font-medium [&_li]:pl-1 [&_ol]:ml-5 [&_ol]:list-decimal [&_ol]:space-y-2 [&_strong]:text-foreground [&_ul]:ml-5 [&_ul]:list-disc [&_ul]:space-y-2">
-        {children}
-      </div>
-    </section>
   );
 }
