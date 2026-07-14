@@ -214,6 +214,22 @@ const dict: Record<string, I18nText> = {
     gl: "Política de privacidade",
     en: "Privacy policy",
   },
+  legalInformation: {
+    es: "Información legal",
+    gl: "Información legal",
+    en: "Legal information",
+  },
+  backHome: { es: "Volver al inicio", gl: "Volver ao inicio", en: "Back to home" },
+  lastUpdated: {
+    es: "Última actualización",
+    gl: "Última actualización",
+    en: "Last updated",
+  },
+  legalLinksLabel: {
+    es: "Enlaces legales",
+    gl: "Ligazóns legais",
+    en: "Legal links",
+  },
   signUpLegalPrefix: {
     es: "Al crear una cuenta, aceptas los",
     gl: "Ao crear unha conta, aceptas os",
