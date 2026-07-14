@@ -193,12 +193,16 @@ describe("queue pump (H29, plan/07 §5.1)", () => {
 
     const entry = await getEntry(entryId);
     expect(entry.precalled_at).not.toBeNull();
+    // "queue" is mandatory (H51): notify() fans out to every default channel
+    // (in_app, email, push), not just push.
     const outbox = await pool.query(
       `SELECT * FROM notification_outbox WHERE user_id = $1 AND category = 'queue'`,
       [member],
     );
-    expect(outbox.rows).toHaveLength(1);
-    expect(outbox.rows[0].payload.etaMinutes).toBeLessThanOrEqual(10);
+    expect(outbox.rows.map((r) => r.channel).sort()).toEqual(["email", "in_app", "push"]);
+    const push = outbox.rows.find((r) => r.channel === "push");
+    expect(push.payload.etaMinutes).toBeLessThanOrEqual(10);
+    expect(push.payload.template).toBe("queue.precall");
 
     // second tick: no duplicate warning
     await pump();
@@ -206,7 +210,7 @@ describe("queue pump (H29, plan/07 §5.1)", () => {
       `SELECT count(*)::int AS n FROM notification_outbox WHERE user_id = $1 AND category = 'queue'`,
       [member],
     );
-    expect(again.rows[0].n).toBe(1);
+    expect(again.rows[0].n).toBe(3);
   });
 
   it("does not pre-call teams far from the front (ETA above threshold)", async () => {

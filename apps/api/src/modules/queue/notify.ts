@@ -100,16 +100,46 @@ export async function notifyTeamPreCall(
   params: { entryId: number; challengeId: number; repoId: number; etaMinutes: number },
 ): Promise<void> {
   const memberIds = await repoMemberIds(client, params.repoId);
+  if (memberIds.length === 0) return;
+
+  const { rows: ctxRows } = await client.query(
+    `SELECT c.title AS challenge_name, r.name AS team_name FROM challenges c, repos r
+      WHERE c.id = $1 AND r.id = $2`,
+    [params.challengeId, params.repoId],
+  );
+  const challengeName: string = ctxRows[0]?.challenge_name ?? "";
+  const teamName: string = ctxRows[0]?.team_name ?? "";
+
+  const { rows: userRows } = await client.query(`SELECT id, name FROM users WHERE id = ANY($1)`, [
+    memberIds,
+  ]);
+  const nameById = new Map<number, string | null>(
+    userRows.map((u: { id: number; name: string | null }) => [u.id, u.name]),
+  );
+
   const payload = {
     entryId: params.entryId,
     challengeId: params.challengeId,
     etaMinutes: params.etaMinutes,
   };
   for (const userId of memberIds) {
-    await client.query(
-      `INSERT INTO notification_outbox (user_id, category, channel, payload) VALUES ($1, 'queue', 'push', $2)`,
-      [userId, JSON.stringify(payload)],
-    );
+    // Goes through notify() (not a raw INSERT) so it gets a real rendered
+    // template like queue.called does — "queue" is the mandatory category so
+    // every configured channel still fires regardless of preference.
+    await notify(client, {
+      userId,
+      category: "queue",
+      payload: {
+        ...payload,
+        template: "queue.precall",
+        vars: {
+          name: nameById.get(userId) ?? "",
+          teamName,
+          challengeName,
+          etaMinutes: String(params.etaMinutes),
+        },
+      },
+    });
     await broadcast(`${SSE_TOPICS.USER_PREFIX}${userId}`, EVENTS.USER_QUEUE_PRECALL, payload);
   }
 }

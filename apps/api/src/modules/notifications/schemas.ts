@@ -2,6 +2,11 @@ import { z } from "zod";
 
 export const notificationChannelSchema = z.enum(["in_app", "email", "push", "discord"]);
 
+export const registerPushTokenBodySchema = z.object({
+  token: z.string().min(1).max(500),
+  platform: z.enum(["ios", "android"]).optional(),
+});
+
 export const preferenceItemSchema = z.object({
   category: z.string().min(1).max(100),
   channel: notificationChannelSchema,

@@ -18,6 +18,9 @@ the current code implements the relevant slices.
 - [Environment variables per service](./env-vars.md) — for each container in
   an isolated deploy (`deploy/services/*`), exactly which env vars it needs and
   whether they're read at container start or baked in at build time.
+- [Mobile app](./mobile.md) — the Expo Router app (`apps/mobile`): Better Auth
+  Expo integration, capability-driven tabs, and the participant screens built
+  so far, plus what's deferred to a later phase.
 
 See also the root [`README.md`](../README.md) for local dev setup, the API's
 own `/documentation` (Swagger UI, generated from route schemas — not a file in

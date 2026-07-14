@@ -134,6 +134,20 @@ const TEMPLATES: Record<string, TemplateDefinition> = {
       body: "Ola {{name}},\n\nChamaron ao teu equipo {{teamName}} para {{challengeName}}. Diríxete á sala {{roomName}} e agarda na porta ata que te chamen.",
     },
   },
+  "queue.precall": {
+    en: {
+      subject: "You're up soon",
+      body: "Hi {{name}},\n\nYour team {{teamName}} is about {{etaMinutes}} minutes from being called for {{challengeName}}. Start getting ready.",
+    },
+    es: {
+      subject: "Te toca pronto",
+      body: "Hola {{name}},\n\nA tu equipo {{teamName}} le llamarán en unos {{etaMinutes}} minutos para {{challengeName}}. Ve preparándote.",
+    },
+    gl: {
+      subject: "Tócache pronto",
+      body: "Ola {{name}},\n\nAo teu equipo {{teamName}} chamaranlle en uns {{etaMinutes}} minutos para {{challengeName}}. Vai preparándote.",
+    },
+  },
   "queue.enter": {
     en: {
       subject: "Come on in",

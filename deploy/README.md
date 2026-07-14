@@ -117,6 +117,7 @@ sensible defaults, so you can usually skip them entirely.
 | valkey | `VALKEY_MEM_LIMIT` | Memory cap (default `512m`). |
 | minio | `MINIO_IMAGE`, `MINIO_MC_IMAGE`, `MINIO_BROWSER`, `MINIO_MEM_LIMIT` | Pinned image tags; console on/off; memory cap. |
 | api | `API_MEM_LIMIT` | Memory cap (default `512m`). |
+| api | `MOBILE_APP_SCHEME` | Expo app's custom URL scheme, trusted for Better Auth's `expo()` plugin (default `hackos`, H4/H55). Only needed if `apps/mobile`'s scheme is renamed. |
 | worker | `WORKER_MEM_LIMIT` | Memory cap (default `512m`). |
 
 > **The split in one line:** shared secrets + anything two services touch →

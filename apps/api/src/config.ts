@@ -94,6 +94,14 @@ const envSchema = z.object({
    */
   CORS_ORIGINS: z.string().default(""),
 
+  /**
+   * Custom URL scheme of the Expo mobile app (H4, H55). Native requests carry
+   * no real browser Origin, so Better Auth's `expo()` plugin stamps this
+   * scheme on the Origin header instead — it must be in trustedOrigins for
+   * mobile sign-in to pass Better Auth's origin check.
+   */
+  MOBILE_APP_SCHEME: z.string().default("hackos"),
+
   LOG_LEVEL: z.string().default("info"),
 
   /**

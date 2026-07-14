@@ -22,6 +22,7 @@ export async function dispatchPush(
   db: Queryable,
   userId: number,
   payload: EmailPayload,
+  category?: string,
 ): Promise<void> {
   const { rows: tokenRows } = await db.query(`SELECT token FROM push_tokens WHERE user_id = $1`, [
     userId,
@@ -32,12 +33,17 @@ export async function dispatchPush(
   const language = normalizeLanguage((userRows[0] as { language?: string } | undefined)?.language);
   const rendered = renderEmailTemplate(payload, language);
 
+  // `category`/`template` ride alongside the template vars so the mobile app
+  // can route a tap (e.g. queue.called -> queue tab) or trigger an immediate
+  // foreground refetch without having to guess from the vars shape alone.
+  const data = { ...(payload.vars ?? {}), category, template: payload.template };
+
   const tokens: string[] = tokenRows.map((r: { token: string }) => r.token);
   const messages = tokens.map((token) => ({
     to: token,
     title: rendered.subject,
     body: rendered.text,
-    data: payload.vars ?? {},
+    data,
   }));
 
   const res = await fetch(EXPO_PUSH_URL, {

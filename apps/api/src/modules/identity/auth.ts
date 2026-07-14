@@ -1,3 +1,4 @@
+import { expo } from "@better-auth/expo";
 import { betterAuth } from "better-auth";
 import { config } from "../../config.js";
 import { pool } from "../../db/pool.js";
@@ -25,6 +26,9 @@ const trustedOrigins = [
   WEB_URL,
   ...webOrigins,
   ...(config.isProd ? [] : ["http://localhost:3001"]),
+  // The Expo mobile app has no real browser origin; the expo() plugin below
+  // stamps this custom scheme on the Origin header of its requests instead.
+  `${config.MOBILE_APP_SCHEME}://`,
 ];
 
 /**
@@ -81,6 +85,13 @@ function withFrontendCallback(token: string, path: string): string {
  *   this module's own GET/PATCH /me and staff routes (H7), which apply
  *   field-level restrictions, capability guards and audit() that Better
  *   Auth's generic update-user endpoint doesn't know about.
+ * - `plugins: [expo()]` (H4, H55) is the official Better Auth integration for
+ *   the mobile app (`apps/mobile`): it overrides the Origin header on Expo's
+ *   requests to `MOBILE_APP_SCHEME://` (see trustedOrigins above) and adds the
+ *   `/expo-authorization-proxy` endpoint the client's `expoClient()` plugin
+ *   needs for its deep-link auth redirect. Session storage on-device is
+ *   `expo-secure-store`, driven entirely by the client plugin — nothing else
+ *   changes here.
  */
 export const auth = betterAuth({
   appName: "hackOS",
@@ -101,6 +112,7 @@ export const auth = betterAuth({
       : {}),
   },
   disabledPaths: ["/update-user"],
+  plugins: [expo()],
   user: {
     modelName: "users",
     fields: {
