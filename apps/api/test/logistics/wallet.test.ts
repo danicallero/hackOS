@@ -139,6 +139,8 @@ describe("H28 Apple Wallet PassKit", () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.headers["content-type"]).toContain("application/vnd.apple.pkpass");
+    expect(res.headers["x-apple-pass-type-identifier"]).toBe(PASS_TYPE_IDENTIFIER);
+    expect(res.headers["x-apple-pass-serial-number"]).toMatch(/^ticket-/);
     expect(res.rawPayload.subarray(0, 4).toString("hex")).toBe("504b0304");
 
     const entries = readStoredZipEntries(res.rawPayload);

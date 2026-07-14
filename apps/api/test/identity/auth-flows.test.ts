@@ -209,6 +209,34 @@ describe("H2 verify email", () => {
 });
 
 describe("H5 password reset", () => {
+  it("accepts the mobile deep link and redirects the emailed token back into the app", async () => {
+    const a = await getApp();
+    await signUp(a);
+
+    const request = await a.inject({
+      method: "POST",
+      url: "/api/auth/request-password-reset",
+      payload: { email: SIGNUP.email, redirectTo: "hackos://reset-password" },
+    });
+    expect(request.statusCode).toBe(200);
+
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows } = await pool.query(
+      `SELECT o.payload FROM notification_outbox o JOIN users u ON u.id = o.user_id
+       WHERE u.email = $1 AND o.payload->>'template' = 'auth.reset' ORDER BY o.id DESC LIMIT 1`,
+      [SIGNUP.email],
+    );
+    const resetUrl = new URL(rows[0].payload.vars.resetUrl as string);
+    expect(resetUrl.searchParams.get("callbackURL")).toBe("hackos://reset-password");
+
+    const callback = await a.inject({
+      method: "GET",
+      url: `${resetUrl.pathname}${resetUrl.search}`,
+    });
+    expect(callback.statusCode).toBe(302);
+    expect(callback.headers.location).toMatch(/^hackos:\/\/reset-password\?token=/);
+  });
+
   it("same response whether the email exists or not, and the reset email is queued", async () => {
     const a = await getApp();
     await signUp(a);

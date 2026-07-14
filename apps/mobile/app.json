@@ -17,6 +17,7 @@
         "usesNonExemptEncryption": false
       },
       "entitlements": {
+        "com.apple.developer.pass-type-identifiers": ["$(TeamIdentifierPrefix)*"],
         "com.apple.developer.usernotifications.time-sensitive": true
       }
     },

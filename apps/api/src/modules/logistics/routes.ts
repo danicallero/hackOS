@@ -463,10 +463,15 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
     "/api/me/wallet/apple/:purpose.pkpass",
     { schema: { params: walletPurposeParam } },
     async (req, reply) => {
-      const { pkpass } = await buildApplePass(actor(req.userId), req.params.purpose);
+      const { pkpass, passTypeIdentifier, serialNumber } = await buildApplePass(
+        actor(req.userId),
+        req.params.purpose,
+      );
       return reply
         .type("application/vnd.apple.pkpass")
         .header("content-disposition", `attachment; filename="${req.params.purpose}.pkpass"`)
+        .header("x-apple-pass-type-identifier", passTypeIdentifier)
+        .header("x-apple-pass-serial-number", serialNumber)
         .send(pkpass);
     },
   );

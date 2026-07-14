@@ -259,7 +259,12 @@ export async function buildApplePass(
   userId: number | null,
   purpose: Purpose | null,
   lookup?: { passTypeIdentifier: string; serialNumber: string; authorization?: string },
-): Promise<{ pkpass: Buffer; modifiedAt: Date }> {
+): Promise<{
+  pkpass: Buffer;
+  modifiedAt: Date;
+  passTypeIdentifier: string;
+  serialNumber: string;
+}> {
   if (lookup && lookup.passTypeIdentifier !== PASS_TYPE_IDENTIFIER) {
     throw new NotFoundError("Pass type not recognized");
   }
@@ -290,7 +295,12 @@ export async function buildApplePass(
     { name: "manifest.json", data: Buffer.from(manifestJson) },
     { name: "signature", data: signature },
   ]);
-  return { pkpass, modifiedAt };
+  return {
+    pkpass,
+    modifiedAt,
+    passTypeIdentifier: PASS_TYPE_IDENTIFIER,
+    serialNumber: pass.serial_number,
+  };
 }
 
 function decodePem(base64: string): string {

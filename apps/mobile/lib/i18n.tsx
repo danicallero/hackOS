@@ -10,18 +10,117 @@ type I18nText = Record<Lang, string>;
  */
 const dict = {
   signInTitle: { en: "Sign in", es: "Iniciar sesión", gl: "Iniciar sesión" },
+  welcomeBack: { en: "Welcome back", es: "Te damos la bienvenida", gl: "Benvida de novo" },
   signInSubtitle: {
     en: "Everything you need during the event.",
     es: "Todo lo que necesitas durante el evento.",
     gl: "Todo o que necesitas durante o evento.",
   },
   emailLabel: { en: "Email", es: "Correo", gl: "Correo" },
+  emailPlaceholder: {
+    en: "you@example.com",
+    es: "tu@ejemplo.com",
+    gl: "ti@exemplo.com",
+  },
   passwordLabel: { en: "Password", es: "Contraseña", gl: "Contrasinal" },
+  passwordPlaceholder: {
+    en: "Enter your password",
+    es: "Introduce tu contraseña",
+    gl: "Introduce o teu contrasinal",
+  },
   signInButton: { en: "Sign in", es: "Entrar", gl: "Entrar" },
+  forgotPassword: {
+    en: "Forgot password?",
+    es: "¿Has olvidado la contraseña?",
+    gl: "Esqueciches o contrasinal?",
+  },
   signInError: {
     en: "Couldn't sign in — check your email and password.",
     es: "No se pudo iniciar sesión — revisa tu correo y contraseña.",
     gl: "Non se puido iniciar sesión — revisa o teu correo e contrasinal.",
+  },
+  resetPassword: {
+    en: "Reset your password",
+    es: "Restablece la contraseña",
+    gl: "Restablece o contrasinal",
+  },
+  resetPasswordDescription: {
+    en: "Enter your account email and we'll send you a secure reset link.",
+    es: "Introduce el correo de tu cuenta y te enviaremos un enlace seguro.",
+    gl: "Introduce o correo da túa conta e enviarémosche unha ligazón segura.",
+  },
+  sendResetLink: { en: "Send reset link", es: "Enviar enlace", gl: "Enviar ligazón" },
+  checkEmail: { en: "Check your email", es: "Revisa tu correo", gl: "Revisa o teu correo" },
+  resetEmailSent: {
+    en: "If an account exists for that address, we've sent a link to reset your password.",
+    es: "Si existe una cuenta con esa dirección, hemos enviado un enlace para restablecer la contraseña.",
+    gl: "Se existe unha conta con ese enderezo, enviamos unha ligazón para restablecer o contrasinal.",
+  },
+  couldNotSendResetEmail: {
+    en: "We couldn't send the reset email. Try again.",
+    es: "No pudimos enviar el correo. Inténtalo de nuevo.",
+    gl: "Non puidemos enviar o correo. Téntao de novo.",
+  },
+  backToSignIn: {
+    en: "Back to sign in",
+    es: "Volver al inicio de sesión",
+    gl: "Volver ao inicio de sesión",
+  },
+  setNewPassword: {
+    en: "Set a new password",
+    es: "Establece una contraseña nueva",
+    gl: "Establece un contrasinal novo",
+  },
+  newPasswordDescription: {
+    en: "Use at least 8 characters. Your other sessions will be signed out.",
+    es: "Usa al menos 8 caracteres. Se cerrarán tus otras sesiones.",
+    gl: "Usa polo menos 8 caracteres. Pecharanse as túas outras sesións.",
+  },
+  newPassword: { en: "New password", es: "Nueva contraseña", gl: "Novo contrasinal" },
+  confirmPassword: {
+    en: "Confirm password",
+    es: "Confirmar contraseña",
+    gl: "Confirmar contrasinal",
+  },
+  passwordTooShort: {
+    en: "Use at least 8 characters.",
+    es: "Usa al menos 8 caracteres.",
+    gl: "Usa polo menos 8 caracteres.",
+  },
+  passwordsDontMatch: {
+    en: "Passwords don't match.",
+    es: "Las contraseñas no coinciden.",
+    gl: "Os contrasinais non coinciden.",
+  },
+  updatePassword: {
+    en: "Update password",
+    es: "Actualizar contraseña",
+    gl: "Actualizar contrasinal",
+  },
+  resetTokenMissing: {
+    en: "This reset link is missing, invalid, or expired.",
+    es: "Este enlace no existe, no es válido o ha caducado.",
+    gl: "Esta ligazón non existe, non é válida ou caducou.",
+  },
+  resetLinkInvalid: {
+    en: "This reset link is invalid or has expired.",
+    es: "Este enlace no es válido o ha caducado.",
+    gl: "Esta ligazón non é válida ou caducou.",
+  },
+  requestAnotherLink: {
+    en: "Request another link",
+    es: "Solicitar otro enlace",
+    gl: "Solicitar outra ligazón",
+  },
+  passwordUpdatedTitle: {
+    en: "Password updated",
+    es: "Contraseña actualizada",
+    gl: "Contrasinal actualizado",
+  },
+  passwordUpdated: {
+    en: "Your password is ready. Sign in with the new one.",
+    es: "Tu contraseña está lista. Inicia sesión con la nueva.",
+    gl: "O teu contrasinal está listo. Inicia sesión co novo.",
   },
   tabSchedule: { en: "Schedule", es: "Horario", gl: "Horario" },
   tabQueue: { en: "My queue", es: "Mi turno", gl: "A miña quenda" },
@@ -173,6 +272,16 @@ const dict = {
     en: "Wallet passes update automatically when your event credentials change.",
     es: "Los pases se actualizan automáticamente si cambian tus credenciales.",
     gl: "Os pases actualízanse automaticamente se cambian as túas credenciais.",
+  },
+  walletPassAlreadyAddedTitle: {
+    en: "Already in Apple Wallet",
+    es: "Ya está en Apple Wallet",
+    gl: "Xa está en Apple Wallet",
+  },
+  walletPassAlreadyAddedBody: {
+    en: "This pass is already in Apple Wallet. It updates automatically when its details change, so you don't need to add it again.",
+    es: "Este pase ya está en Apple Wallet. Se actualiza automáticamente cuando cambia algún dato, así que no necesitas volver a añadirlo.",
+    gl: "Este pase xa está en Apple Wallet. Actualízase automaticamente cando cambia algún dato, así que non necesitas engadilo de novo.",
   },
   addToAppleWallet: {
     en: "Add to Apple Wallet",

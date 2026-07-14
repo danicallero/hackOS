@@ -149,6 +149,7 @@ function MessagesView() {
           </Text>
           <Switch
             accessibilityLabel={t("notificationsUnreadOnly")}
+            style={{ alignSelf: "center" }}
             value={unreadOnly}
             onValueChange={setUnreadOnly}
           />
@@ -430,6 +431,7 @@ function PreferencesView() {
                   <Switch
                     accessibilityLabel={`${categoryLabel(category, t)}, ${channelLabel(channel, t)}`}
                     disabled={savingKey !== null}
+                    style={{ alignSelf: "center" }}
                     value={enabledFor(category, channel)}
                     onValueChange={(enabled) => void toggle(category, channel, enabled)}
                   />
@@ -477,6 +479,7 @@ function PreferencesView() {
                 <Switch
                   accessibilityLabel={item.title}
                   disabled={savingKey !== null}
+                  style={{ alignSelf: "center" }}
                   value={reminderEnabled(item.id)}
                   onValueChange={(enabled) => void toggleReminder(item.id, enabled)}
                 />

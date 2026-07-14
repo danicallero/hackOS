@@ -36,3 +36,8 @@ export function overflowTabs(capabilities: string[]): TabKey[] {
     (tab) => !(PRIMARY_TAB_KEYS as readonly TabKey[]).includes(tab),
   );
 }
+
+/** Use the native overflow selector only when more than five tabs are visible. */
+export function shouldUseOverflowMenu(capabilities: string[]): boolean {
+  return visibleTabs(capabilities).length > 5;
+}

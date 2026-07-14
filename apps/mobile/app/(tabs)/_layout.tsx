@@ -1,5 +1,5 @@
+import { type MenuAction, MenuView } from "@expo/ui/community/menu";
 import { EVENTS } from "@hackos/shared/events";
-import { MenuView, type MenuAction } from "@expo/ui/community/menu";
 import { Redirect, useRouter } from "expo-router";
 import { NativeTabs } from "expo-router/unstable-native-tabs";
 import { useCallback, useEffect, useState } from "react";
@@ -12,7 +12,7 @@ import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { subscribeToNotificationChanges } from "@/lib/notification-events";
 import { subscribeToServerEvent } from "@/lib/server-events";
-import { overflowTabs } from "@/lib/tabs";
+import { overflowTabs, shouldUseOverflowMenu } from "@/lib/tabs";
 import { colors } from "@/theme/colors";
 
 interface UnreadInboxResponse {
@@ -26,8 +26,9 @@ interface OverflowMenuItem extends MenuAction {
 }
 
 /**
- * A real platform tab bar. On iOS 26, the final `search` role is rendered by
- * UIKit as the same separate circular Liquid Glass control used by Apple Music.
+ * A real platform tab bar. Users with five destinations get five regular tabs.
+ * When a sixth destination is available, the final `search` role becomes the
+ * native overflow selector (and uses iOS 26's separate Liquid Glass control).
  */
 export default function TabLayout() {
   useColorScheme();
@@ -35,6 +36,8 @@ export default function TabLayout() {
   const { data: session, isPending } = authClient.useSession();
   const { me } = useMeContext();
   const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
+  const capabilities = me?.capabilities ?? [];
+  const usesOverflowMenu = shouldUseOverflowMenu(capabilities);
 
   const refreshUnreadNotifications = useCallback(async () => {
     if (!session) return;
@@ -77,10 +80,7 @@ export default function TabLayout() {
     <View style={{ flex: 1 }}>
       <NativeTabs tintColor={colors.accent} minimizeBehavior="onScrollDown">
         <NativeTabs.Trigger name="schedule">
-          <NativeTabs.Trigger.Icon
-            sf={{ default: "calendar", selected: "calendar.circle.fill" }}
-            md="calendar_month"
-          />
+          <NativeTabs.Trigger.Icon sf="calendar" md="calendar_month" />
           <NativeTabs.Trigger.Label>{t("tabSchedule")}</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
         <NativeTabs.Trigger name="queue">
@@ -98,31 +98,33 @@ export default function TabLayout() {
           <NativeTabs.Trigger.Label>{t("tabWallet")}</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
         <NativeTabs.Trigger name="notifications">
-          <NotificationTabIcon unread={hasUnreadNotifications} />
+          <NativeTabs.Trigger.Icon
+            sf={
+              hasUnreadNotifications
+                ? { default: "bell.badge", selected: "bell.badge.fill" }
+                : { default: "bell", selected: "bell.fill" }
+            }
+            md={hasUnreadNotifications ? "notifications_active" : "notifications"}
+          />
           <NativeTabs.Trigger.Label>{t("tabNotifications")}</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
-        <NativeTabs.Trigger name="others" role="search">
-          <NativeTabs.Trigger.Icon sf="ellipsis" md="more_horiz" />
-          <NativeTabs.Trigger.Label hidden>{t("tabOthers")}</NativeTabs.Trigger.Label>
-        </NativeTabs.Trigger>
+        {usesOverflowMenu ? (
+          <NativeTabs.Trigger name="others" role="search">
+            <NativeTabs.Trigger.Icon sf="ellipsis" md="more_horiz" />
+            <NativeTabs.Trigger.Label hidden>{t("tabOthers")}</NativeTabs.Trigger.Label>
+          </NativeTabs.Trigger>
+        ) : (
+          <NativeTabs.Trigger name="others">
+            <NativeTabs.Trigger.Icon
+              sf={{ default: "person.crop.circle", selected: "person.crop.circle.fill" }}
+              md="account_circle"
+            />
+            <NativeTabs.Trigger.Label>{t("tabAccount")}</NativeTabs.Trigger.Label>
+          </NativeTabs.Trigger>
+        )}
       </NativeTabs>
-      <NativeOthersMenu capabilities={me?.capabilities ?? []} />
+      {usesOverflowMenu ? <NativeOthersMenu capabilities={capabilities} /> : null}
     </View>
-  );
-}
-
-function NotificationTabIcon({ unread }: { unread: boolean }) {
-  if (!unread) {
-    return (
-      <NativeTabs.Trigger.Icon sf={{ default: "bell", selected: "bell.fill" }} md="notifications" />
-    );
-  }
-
-  return (
-    <NativeTabs.Trigger.Icon
-      sf={{ default: "bell.badge", selected: "bell.badge.fill" }}
-      md="notifications_active"
-    />
   );
 }
 

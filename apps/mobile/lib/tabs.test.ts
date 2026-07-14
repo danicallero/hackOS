@@ -1,5 +1,5 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { overflowTabs, visibleTabs } from "./tabs";
+import { overflowTabs, shouldUseOverflowMenu, visibleTabs } from "./tabs";
 
 describe("visibleTabs (H55)", () => {
   it("shows only participant tabs with no staff capabilities", () => {
@@ -23,5 +23,11 @@ describe("visibleTabs (H55)", () => {
   it("puts every tab outside the primary bar in the overflow selector", () => {
     expect(overflowTabs([])).toEqual(["account"]);
     expect(overflowTabs([CAPABILITIES.ACCREDIT_SCAN])).toEqual(["account", "scan"]);
+  });
+
+  it("uses five regular tabs until a sixth tab requires overflow", () => {
+    expect(shouldUseOverflowMenu([])).toBe(false);
+    expect(shouldUseOverflowMenu([CAPABILITIES.SCHEDULE_MANAGE])).toBe(false);
+    expect(shouldUseOverflowMenu([CAPABILITIES.ACCREDIT_SCAN])).toBe(true);
   });
 });
