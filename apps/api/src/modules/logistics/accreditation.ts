@@ -26,8 +26,15 @@ export async function lookupByTicket(token: string) {
 
 export async function lookupByUserId(userId: number) {
   const card = await loadPersonCard(pool, userId);
-  const u = await pool.query(`SELECT badge_id FROM users WHERE id = $1`, [userId]);
-  const badge = (u.rows[0]?.badge_id ?? null) as string | null;
+  // Identity-verification fields staff needs at the door (H22): the badge is
+  // handed to a physical person, so the card carries DNI, email and shirt
+  // size on top of the shared scanner card.
+  const u = await pool.query(
+    `SELECT badge_id, email, dni, phone, shirt_size FROM users WHERE id = $1`,
+    [userId],
+  );
+  const row = u.rows[0] ?? {};
+  const badge = (row.badge_id ?? null) as string | null;
   const confirmed = await pool.query(
     `SELECT 1 FROM application_responses WHERE user_id = $1 AND status = 'confirmed' LIMIT 1`,
     [userId],
@@ -35,6 +42,10 @@ export async function lookupByUserId(userId: number) {
 
   return {
     ...card,
+    email: (row.email ?? null) as string | null,
+    dni: (row.dni ?? null) as string | null,
+    phone: (row.phone ?? null) as string | null,
+    shirtSize: (row.shirt_size ?? null) as string | null,
     confirmed: confirmed.rows.length > 0,
     hasTicket: await hasTicket(userId),
     alreadyAccredited: badge != null,

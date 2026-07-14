@@ -64,6 +64,27 @@ describe("H22 accreditation lookup + check-in", () => {
     expect(body.foodIntoleranceNotes).toBe("severe");
   });
 
+  it("person card carries the identity fields staff verifies at the door", async () => {
+    const uid = await createUser({ name: "Ada", email: "ada@test.local" });
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `UPDATE users SET surname = 'Lovelace', dni = '12345678Z', shirt_size = 'M' WHERE id = $1`,
+      [uid],
+    );
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/accreditation/lookup-user",
+      headers: asUser(staff),
+      payload: { userId: uid },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.email).toBe("ada@test.local");
+    expect(body.dni).toBe("12345678Z");
+    expect(body.shirtSize).toBe("M");
+  });
+
   it("unknown ticket returns 404 naming no personal data", async () => {
     const res = await app.inject({
       method: "POST",
@@ -180,6 +201,158 @@ describe("H22 accreditation lookup + check-in", () => {
     ]);
     const codes = [ra.statusCode, rb.statusCode].sort();
     expect(codes).toEqual([200, 409]);
+  });
+});
+
+describe("H22/H23 unified person search", () => {
+  const search = (q: string, as = staff, fields?: string[]) =>
+    app.inject({
+      method: "POST",
+      url: "/api/logistics/people/search",
+      headers: asUser(as),
+      payload: fields ? { q, fields } : { q },
+    });
+
+  it("resolves an exact ticket token to exactly one person", async () => {
+    const uid = await createUser({ name: "Ada" });
+    await makeConfirmed(uid);
+    const token = await issueTicket(uid);
+
+    const res = await search(token);
+    expect(res.statusCode).toBe(200);
+    const { results } = res.json();
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ userId: uid, matchedBy: "ticket", confirmed: true });
+  });
+
+  it("resolves a current badge id", async () => {
+    const uid = await createUser();
+    await assignBadge(uid, "B-500");
+
+    const { results } = (await search("B-500")).json();
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ userId: uid, matchedBy: "badge", badgeId: "B-500" });
+  });
+
+  it("finds the holder of a rotated-away badge", async () => {
+    const uid = await createUser();
+    await assignBadge(uid, "B-LOST");
+    await app.inject({
+      method: "POST",
+      url: "/api/accreditation/rotate",
+      headers: asUser(staff),
+      payload: { userId: uid, newBadgeId: "B-NEW", reason: "lost" },
+    });
+
+    const { results } = (await search("B-LOST")).json();
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({
+      userId: uid,
+      matchedBy: "badge_history",
+      badgeId: "B-NEW",
+    });
+  });
+
+  it("falls back to name/surname/email substring search, in any casing or order", async () => {
+    const uid = await createUser({ name: "Margaret", email: "peggy@test.local" });
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`UPDATE users SET surname = 'Hamilton' WHERE id = $1`, [uid]);
+
+    for (const q of [
+      "hamil", // surname fragment
+      "MARGARET", // name, uppercased
+      "peggy@", // email fragment
+      "PEGGY@TEST.LOCAL", // full email, uppercased
+      "margaret ham", // name + surname
+      "Hamilton Margaret", // surname + name
+    ]) {
+      const { results } = (await search(q)).json();
+      expect(results.map((r: { userId: number }) => r.userId), q).toContain(uid);
+      expect(results[0].matchedBy).toBe("profile");
+    }
+  });
+
+  it("finds accented names from unaccented queries, keeping the stored accents", async () => {
+    const uid = await createUser({ name: "Ana", email: "ana@test.local" });
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`UPDATE users SET surname = 'Pérez Muñoz' WHERE id = $1`, [uid]);
+
+    for (const q of ["perez", "PEREZ MUNOZ", "ana pérez", "ana per", "munoz"]) {
+      const { results } = (await search(q)).json();
+      expect(results.map((r: { userId: number }) => r.userId), q).toContain(uid);
+    }
+
+    const { rows } = await pool.query(`SELECT surname FROM users WHERE id = $1`, [uid]);
+    expect(rows[0].surname).toBe("Pérez Muñoz");
+  });
+
+  it("exact identifiers (ticket, badge, old badge) match case-insensitively", async () => {
+    const uid = await createUser();
+    await issueTicket(uid, "TkT-CaSe-1");
+    expect((await search("tkt-case-1")).json().results[0]).toMatchObject({
+      userId: uid,
+      matchedBy: "ticket",
+    });
+
+    await assignBadge(uid, "B-CaSe-9");
+    expect((await search("b-case-9")).json().results[0]).toMatchObject({
+      userId: uid,
+      matchedBy: "badge",
+    });
+
+    await app.inject({
+      method: "POST",
+      url: "/api/accreditation/rotate",
+      headers: asUser(staff),
+      payload: { userId: uid, newBadgeId: "B-CASE-10", reason: "lost" },
+    });
+    expect((await search("B-CASE-9")).json().results[0]).toMatchObject({
+      userId: uid,
+      matchedBy: "badge_history",
+    });
+  });
+
+  it("a badge id matches its CURRENT holder even if it lingers in someone's history", async () => {
+    // Manufacture the ambiguous case directly: B-SHARED sits in alice's
+    // history but is bob's current badge — the current holder must win.
+    const alice = await createUser({ name: "Alice" });
+    const bob = await createUser({ name: "Bob" });
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`UPDATE users SET badge_id_history = '{B-SHARED}' WHERE id = $1`, [alice]);
+    await assignBadge(bob, "B-SHARED");
+
+    const { results } = (await search("b-shared")).json();
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ userId: bob, matchedBy: "badge" });
+  });
+
+  it("returns only the default fields unless asked for more", async () => {
+    const uid = await createUser({ name: "Dorothy", email: "dot@test.local" });
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`UPDATE users SET dni = '99999999R', shirt_size = 'L' WHERE id = $1`, [uid]);
+
+    const byDefault = (await search("dot@test.local")).json().results[0];
+    expect(byDefault).toMatchObject({ userId: uid, email: "dot@test.local", badgeId: null });
+    expect(byDefault.dni).toBeUndefined();
+    expect(byDefault.shirtSize).toBeUndefined();
+
+    const picked = (await search("dot@test.local", staff, ["dni", "shirtSize"])).json().results[0];
+    expect(picked).toMatchObject({ userId: uid, dni: "99999999R", shirtSize: "L" });
+    expect(picked.email).toBeUndefined();
+    expect(picked.confirmed).toBeUndefined();
+  });
+
+  it("rejects fields outside the whitelist", async () => {
+    const res = await search("whatever", staff, ["badge_id_history"]);
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("any logistics capability grants access, none denies it", async () => {
+    const door = await createUserWithCapabilities([CAPABILITIES.PRESENCE_SCAN]);
+    expect((await search("anything", door)).statusCode).toBe(200);
+
+    const outsider = await createUser();
+    expect((await search("anything", outsider)).statusCode).toBe(403);
   });
 });
 

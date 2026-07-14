@@ -49,6 +49,22 @@ export function PersonCardView({
           </StatusBadge>
         )}
       </div>
+      {"dni" in card && (
+        <div className="mt-3 grid gap-3 border-t pt-3 sm:grid-cols-3">
+          <div>
+            <p className="text-muted-foreground text-xs">{t("dniLabel")}</p>
+            <p className="text-sm font-medium">{card.dni || "—"}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground text-xs">{t("email")}</p>
+            <p className="text-sm break-all">{card.email || "—"}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground text-xs">{t("shirtSize")}</p>
+            <p className="text-sm">{card.shirtSize || "—"}</p>
+          </div>
+        </div>
+      )}
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <div>
           <p className="text-muted-foreground text-xs">{t("foodLabel")}</p>
