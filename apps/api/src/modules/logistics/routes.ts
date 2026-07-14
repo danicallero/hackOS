@@ -34,6 +34,7 @@ import {
   updateTimeLog,
   userHours,
 } from "./presence.js";
+import { scannerSnapshot } from "./scanner-sync.js";
 import {
   createScheduleItem,
   deleteScheduleItem,
@@ -61,6 +62,7 @@ import {
   presenceScanBody,
   rotateBody,
   scannableActivitiesQuery,
+  scannerSnapshotResponse,
   scheduleBody,
   scheduleIdParam,
   schedulePatchBody,
@@ -123,6 +125,22 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
     CAPABILITIES.ACTIVITY_SCAN,
     CAPABILITIES.LOGISTICS_STATS,
     CAPABILITIES.SCHEDULE_MANAGE,
+  );
+
+  // Full replace-all seed for the native SQLite scanners. Each successful
+  // refresh also distributes the complete revoked-badge set (H23).
+  typed.get(
+    "/api/scanner/snapshot",
+    {
+      preHandler: logisticsRead,
+      schema: {
+        summary: "Synchronize native scanner data",
+        description:
+          "Returns the lightweight people, current/revoked badge, activity, entitlement, and scan-count snapshot used by offline native scanners. A successful response replaces the local snapshot; queued mutations remain separate and replay with idempotency keys.",
+        response: { 200: scannerSnapshotResponse },
+      },
+    },
+    scannerSnapshot,
   );
 
   typed.get(

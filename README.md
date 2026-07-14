@@ -17,12 +17,15 @@ you running locally and orients you to the rest of the docs.
   BullMQ + Valkey for background ticks, Better Auth for sessions, SSE for
   realtime, MinIO (S3-compatible) for file storage.
 - **Web** — Next.js 16 (App Router), React 19, Tailwind v4, shadcn/ui.
+- **Mobile** — Expo Router (React Native), Better Auth's Expo plugin +
+  `expo-secure-store` for session continuity (H4, H55).
 - **Shared** — `packages/shared` holds the capability catalogue and the SSE
-  event contract. Both apps import from here; neither hardcodes these strings.
+  event contract. All apps import from here; none hardcodes these strings.
 
 ```
 apps/api        Fastify API + BullMQ workers
 apps/web        Next.js frontend
+apps/mobile     Expo Router mobile app
 packages/shared capability catalogue, SSE event names
 plan/           user stories & architecture decisions (read-only, normative)
 docs/           how the current code implements the stories
@@ -55,6 +58,18 @@ pnpm --filter @hackos/api superadmin:create   # bootstrap the first admin
 
 Mailpit (`localhost:8025`) catches every outbound email in dev — nothing
 actually gets sent. MinIO console is at `localhost:9001`.
+
+For a quick mobile start against the local API:
+
+```sh
+cd apps/mobile
+EXPO_PUBLIC_API_URL=http://localhost:3000 pnpm start   # then press w/i/a for web/iOS/Android
+```
+
+See [`docs/mobile.md`](docs/mobile.md) for what's built so far and what's
+deferred to device verification. The complete local-build, prebuild, EAS,
+signing, certificates, artwork, and App Store/Play Store runbook is
+[`docs/mobile-release.md`](docs/mobile-release.md).
 
 ## API docs
 

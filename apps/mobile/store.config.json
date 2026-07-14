@@ -1,0 +1,10 @@
+{
+  "configVersion": 0,
+  "apple": {
+    "categories": ["BUSINESS", "PRODUCTIVITY"],
+    "release": {
+      "automaticRelease": false,
+      "phasedRelease": false
+    }
+  }
+}

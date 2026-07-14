@@ -60,6 +60,41 @@ describe("push channel", () => {
     expect((await getOutboxRow(id)).status).toBe("sent");
   });
 
+  it("includes category and template in the push data payload for client-side routing", async () => {
+    const userId = await createUser();
+    await addPushToken(userId, "ExponentPushToken[ccc]");
+    await enqueueOutbox(
+      userId,
+      "push",
+      {
+        template: "queue.called",
+        vars: { roomName: "Sala 1", teamName: "Rocket", challengeName: "General" },
+      },
+      "queue",
+    );
+
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ data: [{ status: "ok" }] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await drainOutboxOnce();
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, { body: string }];
+    const messages = JSON.parse(init.body) as { data: Record<string, unknown> }[];
+    expect(messages[0]!.data).toMatchObject({
+      category: "queue",
+      template: "queue.called",
+      roomName: "Sala 1",
+      teamName: "Rocket",
+      challengeName: "General",
+    });
+  });
+
   it("deletes DeviceNotRegistered tokens and still succeeds (token hygiene)", async () => {
     const userId = await createUser();
     await addPushToken(userId, "ExponentPushToken[alive]");

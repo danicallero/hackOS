@@ -24,7 +24,7 @@ export async function dispatchChannel(db: Queryable, row: OutboxRow): Promise<vo
     case "email":
       return sendEmail(db, row.user_id, payload);
     case "push":
-      return dispatchPush(db, row.user_id, payload);
+      return dispatchPush(db, row.user_id, payload, row.category);
     case "discord":
       return dispatchDiscord();
     default:

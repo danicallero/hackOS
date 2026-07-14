@@ -58,6 +58,44 @@ export const scannableActivitiesQuery = z.object({
   category: z.enum(["meal", "activity"]).optional(),
 });
 
+const scannerPersonCard = z.object({
+  userId: z.number().int().positive(),
+  ticketToken: z.string().nullable(),
+  badgeId: z.string().nullable(),
+  revokedBadgeIds: z.array(z.string()),
+  name: z.string().nullable(),
+  surname: z.string().nullable(),
+  confirmed: z.boolean(),
+  intolerances: z.array(
+    z.object({ id: z.number().int().positive(), label: z.record(z.string(), z.string()) }),
+  ),
+  foodIntoleranceNotes: z.string().nullable(),
+  notes: z.string().nullable(),
+  lastPresenceKind: z.enum(["in", "out"]).nullable(),
+  lastPresenceAt: z.string().datetime().nullable(),
+});
+
+export const scannerSnapshotResponse = z.object({
+  generatedAt: z.string().datetime(),
+  people: z.array(scannerPersonCard),
+  activities: z.array(
+    z.object({
+      id: z.number().int().positive(),
+      name: z.string(),
+      category: z.string(),
+      requiresScan: z.boolean(),
+    }),
+  ),
+  activityStates: z.array(
+    z.object({
+      userId: z.number().int().positive(),
+      activityId: z.number().int().positive(),
+      count: z.number().int().nonnegative(),
+      entitled: z.boolean(),
+    }),
+  ),
+});
+
 export const activityScanBody = z.object({
   badgeId: z.string().min(1),
   allowRepeat: z.boolean().default(false),
