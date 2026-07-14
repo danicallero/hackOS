@@ -329,8 +329,14 @@ another.
 - **Scaling**: run more `worker` replicas for notification/queue throughput
   (dispatcher uses `FOR UPDATE SKIP LOCKED`, so replicas won't double-send).
   Multiple `api` replicas are fine — SSE is stateless and fans out via Valkey.
-- **Logs/health**: every long-running service has a healthcheck; the `worker`'s
-  is disabled (it serves no HTTP — liveness is process-based via `restart`).
+- **Logs/health**: every long-running HTTP service has a container healthcheck;
+  the API also configures Traefik to probe `/healthz` so an initializing or
+  unhealthy replacement does not receive requests. The `worker` check is
+  disabled (it serves no HTTP — liveness is process-based via `restart`).
+- **Zero-downtime deploys**: the health checks gate traffic, but a single
+  replacement still leaves a window with no backend. Enable Dokploy's
+  zero-downtime/Swarm rollout for the API service and use `/healthz` as its
+  health route before enabling API auto-deploys.
 
 ---
 

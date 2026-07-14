@@ -44,15 +44,30 @@ export function startPersonalEventStream(): () => void {
   let stopped = false;
   let controller: AbortController | null = null;
   let reconnect: ReturnType<typeof setTimeout> | null = null;
+  let failedConnections = 0;
+
+  const retryAfter = (response: Response): number | null => {
+    const value = response.headers.get("retry-after");
+    if (!value) return null;
+    const seconds = Number(value);
+    if (Number.isFinite(seconds)) return Math.max(0, seconds * 1_000);
+    const date = Date.parse(value);
+    return Number.isNaN(date) ? null : Math.max(0, date - Date.now());
+  };
 
   const connect = async () => {
     controller = new AbortController();
+    let serverDelay: number | null = null;
     try {
       const response = await fetch(`${API_URL}/api/queue/me/stream`, {
         headers: { cookie: authClient.getCookie(), accept: "text/event-stream" },
         signal: controller.signal,
       });
-      if (!response.ok || !response.body) throw new Error(`SSE failed (${response.status})`);
+      if (!response.ok || !response.body) {
+        serverDelay = retryAfter(response);
+        throw new Error(`SSE failed (${response.status})`);
+      }
+      failedConnections = 0;
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
@@ -72,7 +87,13 @@ export function startPersonalEventStream(): () => void {
         // Reconnect below. Screens also retain their bounded polling fallback.
       }
     } finally {
-      if (!stopped) reconnect = setTimeout(() => void connect(), 2_000);
+      if (!stopped) {
+        const backoff = Math.min(1_000 * 2 ** failedConnections, 30_000);
+        failedConnections += 1;
+        // Respect the proxy's Retry-After while bounding recovery time.
+        const delay = Math.min(serverDelay ?? backoff, 60_000);
+        reconnect = setTimeout(() => void connect(), delay);
+      }
     }
   };
   void connect();

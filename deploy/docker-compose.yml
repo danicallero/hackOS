@@ -206,6 +206,11 @@ services:
       - "traefik.http.routers.${STACK_NAME}-api.tls.certresolver=${CERT_RESOLVER:-letsencrypt}"
       - "traefik.http.routers.${STACK_NAME}-api.middlewares=${STACK_NAME}-sec@docker"
       - "traefik.http.services.${STACK_NAME}-api.loadbalancer.server.port=3000"
+      # Docker's healthcheck controls container health, but Traefik needs its
+      # own check to keep an initializing/unhealthy replacement out of ingress.
+      - "traefik.http.services.${STACK_NAME}-api.loadbalancer.healthcheck.path=/healthz"
+      - "traefik.http.services.${STACK_NAME}-api.loadbalancer.healthcheck.interval=5s"
+      - "traefik.http.services.${STACK_NAME}-api.loadbalancer.healthcheck.timeout=3s"
       # SSE (TV/queue streams) must not be buffered by the proxy.
       - "traefik.http.services.${STACK_NAME}-api.loadbalancer.responseforwarding.flushinterval=-1"
       - "traefik.http.middlewares.${STACK_NAME}-sec.headers.stsSeconds=31536000"
