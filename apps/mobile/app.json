@@ -2,13 +2,20 @@
   "expo": {
     "name": "hackOS",
     "slug": "hackos-mobile",
+    "description": "The HackUDC participant and event operations app.",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "hackos",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.hackudc.os",
+      "buildNumber": "1",
+      "appleTeamId": "P88YRBYY9T",
+      "config": {
+        "usesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -17,7 +24,10 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": ["android.permission.CAMERA"],
+      "package": "com.hackudc.os",
+      "versionCode": 1
     },
     "web": {
       "bundler": "metro",
@@ -37,7 +47,8 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow hackOS to scan ticket and badge QR codes."
+          "cameraPermission": "Allow hackOS to scan ticket and badge QR codes.",
+          "recordAudioAndroid": false
         }
       ],
       "expo-sqlite",

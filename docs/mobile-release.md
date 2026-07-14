@@ -15,12 +15,10 @@ Expo, Apple, and Google documentation before each production release.
 As of this document's last update, do **not** submit the app to either store
 without resolving these items:
 
-- `ios.bundleIdentifier` is currently
-  `com.danicallerogpul.hackos-mobile`, while `android.package` is
-  `com.danicallerogpul.hackosmobile`. Confirm that both are permanent,
-  organization-owned identifiers before creating the store records. The two
-  platforms may differ, but document that choice because neither identifier
-  can be renamed after release without creating a different app.
+- `ios.bundleIdentifier` and `android.package` are currently
+  `com.hackudc.os`. Confirm that this is the permanent, organization-owned
+  identifier before creating the store records; it cannot be renamed after
+  release without creating a different app.
 - The project is not linked to an EAS project: `extra.eas.projectId` is absent.
   This ID is also used to attribute Expo push tokens to the correct project.
 - `apps/mobile/eas.json` does not exist, so development, preview, production,
@@ -31,11 +29,6 @@ without resolving these items:
   96×96 all-white transparent PNG and configure it through the
   `expo-notifications` plugin; the full-color launcher icon is not a suitable
   notification-tray icon.
-- Android currently declares `RECORD_AUDIO` although the app only scans QR
-  codes. Remove permissions that the shipped app does not use; for
-  `expo-camera`, set `recordAudioAndroid: false` in its config plugin when no
-  video/audio recording is needed, regenerate native projects, and inspect the
-  merged release manifest.
 - Publish an organization-owned privacy-policy URL, support URL, and account
   deletion/request page, and make privacy/support choices readily accessible
   inside the app. The current mobile UI does not expose those links.
@@ -92,7 +85,8 @@ pnpm exec expo-doctor
 
 ### iOS local builds
 
-- macOS and the current Xcode version accepted by App Store Connect.
+- macOS and Xcode 26.4 or newer, as required by the repository's pinned Expo
+  SDK 57. Check Expo's compatibility table again after every SDK upgrade.
 - Xcode command-line tools, an installed iOS Simulator runtime, and CocoaPods.
 - A paid Apple Developer Program membership for device, TestFlight, and App
   Store builds. Simulator builds do not need store signing.
@@ -122,7 +116,8 @@ pnpm dev
 ```
 
 The API listens on `0.0.0.0:3000`; the web app uses `:3001`. The mobile app
-only embeds one client-side variable:
+defaults to `https://api.hackudc.com` and embeds one client-side variable only
+when intentionally overriding that default:
 
 ```dotenv
 # apps/mobile/.env.local — never commit this file
@@ -141,7 +136,8 @@ Choose the URL for the device running the app:
 
 `EXPO_PUBLIC_*` values are compiled into the JavaScript bundle and are public
 to anyone who installs the app. Never put credentials or private keys in
-these variables.
+these variables. With no override, installed and development builds use the
+production API.
 
 Start Metro from the app directory:
 
@@ -769,6 +765,21 @@ documents the required declarations in
 and [Data Safety](https://support.google.com/googleplay/android-developer/answer/10787469).
 
 ## 14. Create the store records
+
+`apps/mobile/store.config.json` tracks the Apple primary/secondary categories
+as `BUSINESS` and `PRODUCTIVITY`, with manual release enabled. EAS Metadata is
+currently beta and Apple-only. Validate/push it from the mobile directory only
+after the App Store Connect record exists and the remaining localized metadata
+and policy URLs are complete:
+
+```sh
+cd apps/mobile
+pnpm dlx eas-cli@latest metadata:push
+```
+
+For Google Play, select **App → Events** and the most relevant event/ticketing
+tags manually under Grow users → Store presence → Store settings; EAS Metadata
+does not currently configure the Play listing.
 
 ### App Store Connect
 
