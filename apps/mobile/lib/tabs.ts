@@ -1,6 +1,6 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 
-export type TabKey = "schedule" | "queue" | "wallet" | "notifications" | "scan";
+export type TabKey = "schedule" | "queue" | "wallet" | "notifications" | "account" | "scan";
 
 const STAFF_SCAN_CAPABILITIES = [
   CAPABILITIES.ACCREDIT_SCAN,
@@ -21,7 +21,7 @@ function has(capabilities: string[], capability: string): boolean {
  * activity scan capability holders.
  */
 export function visibleTabs(capabilities: string[]): TabKey[] {
-  const tabs: TabKey[] = ["schedule", "queue", "wallet", "notifications"];
+  const tabs: TabKey[] = ["schedule", "queue", "wallet", "notifications", "account"];
   if (STAFF_SCAN_CAPABILITIES.some((cap) => has(capabilities, cap))) {
     tabs.push("scan");
   }

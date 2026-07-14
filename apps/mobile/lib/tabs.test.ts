@@ -3,7 +3,7 @@ import { visibleTabs } from "./tabs";
 
 describe("visibleTabs (H55)", () => {
   it("shows only participant tabs with no staff capabilities", () => {
-    expect(visibleTabs([])).toEqual(["schedule", "queue", "wallet", "notifications"]);
+    expect(visibleTabs([])).toEqual(["schedule", "queue", "wallet", "notifications", "account"]);
   });
 
   it("adds the scan tab for any of the three scan capabilities", () => {

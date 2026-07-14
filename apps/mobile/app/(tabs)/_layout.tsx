@@ -96,6 +96,24 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="account"
+        options={{
+          title: t("tabAccount"),
+          href: hideUnless("account"),
+          tabBarIcon: ({ color }) => (
+            <SymbolView
+              name={{
+                ios: "person.crop.circle",
+                android: "account_circle",
+                web: "account_circle",
+              }}
+              tintColor={color}
+              size={28}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="scan"
         options={{
           title: t("tabScan"),

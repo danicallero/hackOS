@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { FlatList, RefreshControl, StyleSheet } from "react-native";
 
+import { RequestFeedback } from "@/components/RequestFeedback";
 import { Text, View } from "@/components/Themed";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
@@ -19,11 +20,20 @@ interface ScheduleItem {
 export default function ScheduleScreen() {
   const { t, language } = useLocale();
   const [items, setItems] = useState<ScheduleItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
-    const { items: rows } = await apiFetch<{ items: ScheduleItem[] }>("/api/public/activities");
-    setItems(rows);
+    setError(null);
+    try {
+      const { items: rows } = await apiFetch<{ items: ScheduleItem[] }>("/api/public/activities");
+      setItems(rows);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause : new Error("Failed to load schedule"));
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -32,7 +42,7 @@ export default function ScheduleScreen() {
 
   async function onRefresh() {
     setRefreshing(true);
-    await load().catch(() => {});
+    await load();
     setRefreshing(false);
   }
 
@@ -42,7 +52,15 @@ export default function ScheduleScreen() {
         data={items}
         keyExtractor={(item) => String(item.id)}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        ListEmptyComponent={<Text style={styles.empty}>{t("scheduleEmpty")}</Text>}
+        ListEmptyComponent={
+          loading ? (
+            <RequestFeedback loading />
+          ) : error ? (
+            <RequestFeedback error={error} onRetry={() => void load()} />
+          ) : (
+            <Text style={styles.empty}>{t("scheduleEmpty")}</Text>
+          )
+        }
         renderItem={({ item }) => (
           <View style={styles.card}>
             <Text style={styles.time}>

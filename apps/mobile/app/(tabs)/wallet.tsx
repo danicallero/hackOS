@@ -1,10 +1,11 @@
 import { EVENTS } from "@hackos/shared/events";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
-import { useEffect, useState } from "react";
-import { Linking, Pressable, StyleSheet } from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import { Linking, Pressable, ScrollView, StyleSheet } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 
+import { RequestFeedback } from "@/components/RequestFeedback";
 import { Text, View } from "@/components/Themed";
 import { apiFetch } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
@@ -22,12 +23,26 @@ interface TicketPayload {
 export default function WalletScreen() {
   const { t } = useLocale();
   const [ticket, setTicket] = useState<TicketPayload | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [actionError, setActionError] = useState<Error | null>(null);
+
+  const load = useCallback(async () => {
+    setError(null);
+    try {
+      setTicket(await apiFetch<TicketPayload>("/api/me/ticket"));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause : new Error("Failed to load wallet"));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const load = () => void apiFetch<TicketPayload>("/api/me/ticket").then(setTicket);
-    load();
-    return subscribeToServerEvent(EVENTS.LOGISTICS_WALLET_PASS_UPDATED, load);
-  }, []);
+    void load();
+    return subscribeToServerEvent(EVENTS.LOGISTICS_WALLET_PASS_UPDATED, () => void load());
+  }, [load]);
 
   async function addToGoogleWallet(purpose: "ticket" | "badge") {
     const { saveUrl } = await apiFetch<{ saveUrl: string }>(`/api/me/wallet/google/${purpose}`);
@@ -49,10 +64,25 @@ export default function WalletScreen() {
     });
   }
 
-  if (!ticket) return null;
+  async function runAction(action: () => Promise<void>) {
+    setActionBusy(true);
+    setActionError(null);
+    try {
+      await action();
+    } catch (cause) {
+      setActionError(cause instanceof Error ? cause : new Error("Wallet action failed"));
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  if (!ticket)
+    return <RequestFeedback loading={loading} error={error} onRetry={() => void load()} />;
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      {error ? <RequestFeedback error={error} onRetry={() => void load()} /> : null}
+      {actionError ? <RequestFeedback error={actionError} /> : null}
       {ticket.ticketToken ? (
         <View style={styles.card}>
           <Text style={styles.title}>{t("ticketLabel")}</Text>
@@ -60,8 +90,9 @@ export default function WalletScreen() {
             <QRCode value={ticket.ticketToken} size={200} />
           </View>
           <WalletButtons
-            onApple={() => addToAppleWallet("ticket")}
-            onGoogle={() => addToGoogleWallet("ticket")}
+            disabled={actionBusy}
+            onApple={() => void runAction(() => addToAppleWallet("ticket"))}
+            onGoogle={() => void runAction(() => addToGoogleWallet("ticket"))}
             t={t}
           />
         </View>
@@ -75,8 +106,9 @@ export default function WalletScreen() {
               <QRCode value={ticket.badgeId} size={200} />
             </View>
             <WalletButtons
-              onApple={() => addToAppleWallet("badge")}
-              onGoogle={() => addToGoogleWallet("badge")}
+              disabled={actionBusy}
+              onApple={() => void runAction(() => addToAppleWallet("badge"))}
+              onGoogle={() => void runAction(() => addToGoogleWallet("badge"))}
               t={t}
             />
           </>
@@ -84,25 +116,37 @@ export default function WalletScreen() {
           <Text style={styles.meta}>{t("noBadgeYet")}</Text>
         )}
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
 function WalletButtons({
   onApple,
   onGoogle,
+  disabled,
   t,
 }: {
   onApple: () => void;
   onGoogle: () => void;
+  disabled: boolean;
   t: (key: "addToAppleWallet" | "addToGoogleWallet") => string;
 }) {
   return (
     <View style={styles.buttonRow}>
-      <Pressable accessibilityRole="button" style={styles.button} onPress={onApple}>
+      <Pressable
+        accessibilityRole="button"
+        disabled={disabled}
+        style={styles.button}
+        onPress={onApple}
+      >
         <Text style={styles.buttonText}>{t("addToAppleWallet")}</Text>
       </Pressable>
-      <Pressable accessibilityRole="button" style={styles.button} onPress={onGoogle}>
+      <Pressable
+        accessibilityRole="button"
+        disabled={disabled}
+        style={styles.button}
+        onPress={onGoogle}
+      >
         <Text style={styles.buttonText}>{t("addToGoogleWallet")}</Text>
       </Pressable>
     </View>
@@ -110,7 +154,8 @@ function WalletButtons({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, gap: 16 },
+  container: { flex: 1 },
+  content: { padding: 16, gap: 16 },
   card: {
     alignItems: "center",
     gap: 12,

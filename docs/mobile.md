@@ -67,9 +67,9 @@ route below. No migration needed.
   every API call (not just `/api/auth/*`) carries the restored session.
 - `lib/tabs.ts` (`visibleTabs`) — pure function mapping `me.capabilities` to
   the visible tab set; unit-tested in `lib/tabs.test.ts`. Participant tabs
-  (schedule, queue, wallet, notifications) are unconditional; `scan` appears
-  only for `ACCREDIT_SCAN`/`PRESENCE_SCAN`/`ACTIVITY_SCAN` (or the admin `*`
-  wildcard).
+  (schedule, queue, wallet, notifications, account) are unconditional; `scan`
+  appears only for `ACCREDIT_SCAN`/`PRESENCE_SCAN`/`ACTIVITY_SCAN` (or the
+  admin `*` wildcard).
 - `app/(tabs)/_layout.tsx` — reads capabilities from a shared `/api/me` fetch
   (`lib/me-context.tsx`, `lib/use-me.ts`) and hides tabs via Expo Router's
   `href: null` mechanism rather than omitting the route, so the underlying
@@ -78,8 +78,12 @@ route below. No migration needed.
   (H55's explicit acceptance bar).
 - `app/(auth)/sign-in.tsx` — email/password only; no in-app registration
   (accounts come from the web onboarding/invite flows, H10/H12).
-- `app/(tabs)/schedule.tsx`, `queue.tsx`, `wallet.tsx`, `notifications.tsx` —
-  the four participant screens. `wallet.tsx` renders ticket/badge QR codes and
+- `app/(tabs)/schedule.tsx`, `queue.tsx`, `wallet.tsx`, `notifications.tsx`,
+  `account.tsx` — the five participant screens. API-backed screens expose
+  loading, retryable error, and empty states without leaking rejected promises.
+  The account screen displays the shared `/api/me` profile, refreshes it, and
+  provides a confirmed sign-out action for the device session. `wallet.tsx`
+  renders ticket/badge QR codes and
   opens the existing Apple `.pkpass` download / Google `saveUrl` endpoints via
   `Linking.openURL`. `queue.tsx` refetches immediately on a "queue" push
   (below) and also polls `GET /api/queue/me` every 15s while focused as a
@@ -108,6 +112,10 @@ route below. No migration needed.
 - `lib/i18n.tsx` — minimal `{ en, es, gl }`-per-key dictionary (same shape as
   `apps/web/src/lib/i18n.ts`, but only the strings these screens need), synced
   to `me.language` from `/api/me`.
+- `expo-network` is installed as a required peer of `@better-auth/expo`; it
+  lets the auth client refresh session state when the device regains network
+  connectivity. As with every native dependency change, an existing dev client
+  must be rebuilt rather than only reloading its JavaScript bundle.
 
 **Scanner state transitions.** A scan is inserted in SQLite before any network
 request: `pending -> acknowledged` only after a 2xx response (including an

@@ -3,6 +3,7 @@ import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { FlatList, RefreshControl, StyleSheet } from "react-native";
 
+import { RequestFeedback } from "@/components/RequestFeedback";
 import { Text, View } from "@/components/Themed";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
@@ -40,11 +41,20 @@ const POLL_MS = 15_000;
 export default function QueueScreen() {
   const { t } = useLocale();
   const [entries, setEntries] = useState<QueueEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
-    const data = await apiFetch<QueueEntry[]>("/api/queue/me");
-    setEntries(data);
+    setError(null);
+    try {
+      const data = await apiFetch<QueueEntry[]>("/api/queue/me");
+      setEntries(data);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause : new Error("Failed to load queue"));
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -74,7 +84,7 @@ export default function QueueScreen() {
 
   async function onRefresh() {
     setRefreshing(true);
-    await load().catch(() => {});
+    await load();
     setRefreshing(false);
   }
 
@@ -84,7 +94,15 @@ export default function QueueScreen() {
         data={entries}
         keyExtractor={(item) => String(item.entryId)}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        ListEmptyComponent={<Text style={styles.empty}>{t("queueEmpty")}</Text>}
+        ListEmptyComponent={
+          loading ? (
+            <RequestFeedback loading />
+          ) : error ? (
+            <RequestFeedback error={error} onRetry={() => void load()} />
+          ) : (
+            <Text style={styles.empty}>{t("queueEmpty")}</Text>
+          )
+        }
         renderItem={({ item }) => (
           <View style={styles.card}>
             <Text style={styles.title}>{item.challengeTitle}</Text>
