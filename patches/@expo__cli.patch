@@ -1,0 +1,15 @@
+diff --git a/build/src/run/ios/XcodeBuild.js b/build/src/run/ios/XcodeBuild.js
+index 94bedef838ecb2b746a271cb78fce6faf1c788e8..99cfbe6e1802009ad79eb1b4a9f4e179718aa881 100644
+--- a/build/src/run/ios/XcodeBuild.js
++++ b/build/src/run/ios/XcodeBuild.js
+@@ -266,7 +266,9 @@ async function getXcodeBuildArgsAsync(props) {
+         // When building for device, multiple frameworks need to be code signed. By default this
+         // happens sequentially. This flag allows them to run in parallel.
+         // https://github.com/CocoaPods/CocoaPods/pull/6088
+-        'COCOAPODS_PARALLEL_CODE_SIGN=true',
++        // Parallel codesign intermittently leaves prebuilt Expo frameworks
++        // unsigned when securityd returns errSecInternalComponent on Xcode 26.
++        'COCOAPODS_PARALLEL_CODE_SIGN=false',
+         // Disable the Xcode compiler index store during CLI builds.
+         // The index store is used for code completion, refactoring, and navigation in Xcode IDE.
+         // Since CLI builds don't need these features, disabling it saves build time and disk I/O.

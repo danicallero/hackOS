@@ -422,6 +422,13 @@ starts Metro. JavaScript-only changes then use Fast Refresh. Recompile after a
 native dependency, permission, plugin, entitlement, icon, bundle identifier,
 or package-name change.
 
+The workspace currently patches `@expo/cli` 57.0.6 to disable CocoaPods'
+parallel framework signing for local iOS builds. On Xcode 26, parallel
+`codesign` can return `errSecInternalComponent`; Expo then reports a successful
+build but installs an app containing unsigned prebuilt frameworks. Keep the
+pnpm patch until an Expo CLI update fixes the issue, then remove it only after
+a clean physical-device build and installation succeeds.
+
 ### Native release-like compilation
 
 Use this before store builds to catch production-only bundling errors:

@@ -28,6 +28,9 @@
         "arm64",
         "x64"
       ]
+    },
+    "patchedDependencies": {
+      "@expo/cli": "patches/@expo__cli.patch"
     }
   },
   "devDependencies": {
