@@ -94,7 +94,17 @@ export function AppSidebar() {
           if (items.length === 0) return null;
           return (
             <SidebarGroup key={section.label ?? `section-${i}`}>
-              {section.label && <SidebarGroupLabel>{t(section.label)}</SidebarGroupLabel>}
+              {section.label && (
+                <>
+                  <SidebarGroupLabel>{t(section.label)}</SidebarGroupLabel>
+                  <div
+                    aria-hidden
+                    className="hidden h-4 items-center justify-center group-data-[collapsible=icon]:flex"
+                  >
+                    <span className="h-px w-4 bg-sidebar-border" />
+                  </div>
+                </>
+              )}
               <SidebarMenu>
                 {items.map((item) => {
                   const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -124,7 +134,7 @@ export function AppSidebar() {
                     <SidebarMenuItem key={item.href}>
                       <SidebarMenuButton asChild isActive={active} tooltip={t(item.title)}>
                         <Link href={item.href}>
-                          <span className="relative shrink-0">
+                          <span className="relative shrink-0 [&>svg]:size-4">
                             <Icon />
                             {showUnreadDot && <UnreadIconDot />}
                           </span>
