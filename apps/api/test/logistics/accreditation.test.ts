@@ -272,6 +272,20 @@ describe("H22/H23 unified person search", () => {
     }
   });
 
+  it("finds accented names from unaccented queries, keeping the stored accents", async () => {
+    const uid = await createUser({ name: "Ana", email: "ana@test.local" });
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`UPDATE users SET surname = 'Pérez Muñoz' WHERE id = $1`, [uid]);
+
+    for (const q of ["perez", "PEREZ MUNOZ", "ana pérez", "ana per", "munoz"]) {
+      const { results } = (await search(q)).json();
+      expect(results.map((r: { userId: number }) => r.userId), q).toContain(uid);
+    }
+
+    const { rows } = await pool.query(`SELECT surname FROM users WHERE id = $1`, [uid]);
+    expect(rows[0].surname).toBe("Pérez Muñoz");
+  });
+
   it("exact identifiers (ticket, badge, old badge) match case-insensitively", async () => {
     const uid = await createUser();
     await issueTicket(uid, "TkT-CaSe-1");
