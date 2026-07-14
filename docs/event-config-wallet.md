@@ -67,6 +67,13 @@ Saving `PUT /api/event` with an actual change bumps every issued Apple pass's
 
 ### How a device learns about a change (H28)
 
+The pass's `webServiceURL` is `{BETTER_AUTH_URL}/api/wallet/apple` — the
+**base without `/v1`**, because the device appends `v1/…` itself (Apple's
+endpoint templates are `{webServiceURL}/v1/devices/…`). Baking `/v1` into it
+made every device call `/v1/v1/…`, so registrations 404'd and nothing below
+ever ran. Passes installed while the URL was wrong never registered and can't
+be pushed a fix — holders must re-add the pass.
+
 1. The API bumps `wallet_passes.update_tag` — canonical format is **integer
    epoch milliseconds** (`0504`; it was mixed seconds/millis before, which
    broke the text comparison in step 3 and devices never refetched).

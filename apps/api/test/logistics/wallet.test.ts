@@ -215,6 +215,10 @@ describe("H28 Apple Wallet PassKit", () => {
     const entries = readStoredZipEntries(res.rawPayload);
     const pass = JSON.parse(entries["pass.json"]!.toString());
 
+    // The device appends `v1/...` to webServiceURL — baking `/v1` into it made
+    // Wallet call `/v1/v1/...`, so registrations 404'd and updates never
+    // reached devices (H28).
+    expect(pass.webServiceURL).toMatch(/\/api\/wallet\/apple$/);
     expect(pass.relevantDate).toBe(new Date("2026-02-27T16:30:00+01:00").toISOString());
     expect(pass.eventTicket.headerFields[0]).toMatchObject({ key: "when" });
     // No primaryFields: PassKit renders them overlaid on the strip image,
