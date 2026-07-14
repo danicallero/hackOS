@@ -393,11 +393,11 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
     "/api/me/wallet/apple/:purpose.pkpass",
     { schema: { params: walletPurposeParam } },
     async (req, reply) => {
-      const pass = await buildApplePass(actor(req.userId), req.params.purpose);
+      const { pkpass } = await buildApplePass(actor(req.userId), req.params.purpose);
       return reply
         .type("application/vnd.apple.pkpass")
         .header("content-disposition", `attachment; filename="${req.params.purpose}.pkpass"`)
-        .send(pass);
+        .send(pkpass);
     },
   );
 
@@ -405,12 +405,25 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
     "/api/wallet/apple/v1/passes/:passTypeIdentifier/:serialNumber",
     { schema: { params: applePassParams } },
     async (req, reply) => {
-      const pass = await buildApplePass(null, null, {
+      const { pkpass, modifiedAt } = await buildApplePass(null, null, {
         passTypeIdentifier: req.params.passTypeIdentifier,
         serialNumber: req.params.serialNumber,
         authorization: req.headers.authorization,
       });
-      return reply.type("application/vnd.apple.pkpass").send(pass);
+      // PassKit's update protocol: echo back Last-Modified and answer 304
+      // when the pass hasn't changed since the device's copy (HTTP dates
+      // have second precision, hence the flooring).
+      const ifModifiedSince = Date.parse(String(req.headers["if-modified-since"] ?? ""));
+      if (
+        Number.isFinite(ifModifiedSince) &&
+        Math.floor(modifiedAt.getTime() / 1000) <= Math.floor(ifModifiedSince / 1000)
+      ) {
+        return reply.code(304).send();
+      }
+      return reply
+        .type("application/vnd.apple.pkpass")
+        .header("last-modified", modifiedAt.toUTCString())
+        .send(pkpass);
     },
   );
 

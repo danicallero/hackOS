@@ -65,6 +65,25 @@ Saving `PUT /api/event` with an actual change bumps every issued Apple pass's
 `update_tag` and enqueues a wallet push, so Wallet devices refetch immediately
 (no-op saves push nothing).
 
+### How a device learns about a change (H28)
+
+1. The API bumps `wallet_passes.update_tag` — canonical format is **integer
+   epoch milliseconds** (`0504`; it was mixed seconds/millis before, which
+   broke the text comparison in step 3 and devices never refetched).
+2. The `logistics.wallet-sync` worker sends an APNs push per registered device
+   (`apple-push.ts`): empty payload, `apns-topic` = pass type id,
+   `apns-push-type: alert` (background pushes get throttled/dropped by iOS).
+3. The device (pushed or pull-to-refresh) polls
+   `GET /v1/devices/…/registrations/{ptid}?passesUpdatedSince=X`, where `X` is
+   the `lastUpdated` we sent it last time; `appleChangedSerials` compares tags
+   **numerically** and returns the changed serials.
+4. The device refetches each changed pass; the pass GET serves `Last-Modified`
+   (from `update_tag`) and answers `304` to a matching `If-Modified-Since`.
+
+Wallet logs its client-side errors to `POST /v1/log` — those lines are printed
+with a `wallet: device log:` prefix, and are the first place to look when a
+phone won't update.
+
 ## 3. The settings page (apps/web/src/app/(app)/settings/event/page.tsx)
 
 One form over `GET/PUT /api/event`, presented as four cards — Event (identity),

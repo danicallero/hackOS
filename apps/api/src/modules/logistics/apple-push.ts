@@ -36,11 +36,15 @@ export async function sendApplePush(pushToken: string, passTypeIdentifier: strin
   try {
     await new Promise<void>((resolve, reject) => {
       session.on("error", reject);
+      // Pass-update pushes are "alert" type with an empty payload (Apple's
+      // PassKit web service spec) — "background" pushes are app wake-ups
+      // that APNs throttles and iOS may silently drop, which showed up as
+      // event-config changes never reaching installed passes.
       const req = session.request({
         ":method": "POST",
         ":path": `/3/device/${pushToken}`,
         "apns-topic": passTypeIdentifier,
-        "apns-push-type": "background",
+        "apns-push-type": "alert",
       });
       req.setEncoding("utf8");
       let status = 0;

@@ -245,7 +245,7 @@ export async function buildApplePass(
   userId: number | null,
   purpose: Purpose | null,
   lookup?: { passTypeIdentifier: string; serialNumber: string; authorization?: string },
-): Promise<Buffer> {
+): Promise<{ pkpass: Buffer; modifiedAt: Date }> {
   if (lookup && lookup.passTypeIdentifier !== PASS_TYPE_IDENTIFIER) {
     throw new NotFoundError("Pass type not recognized");
   }
@@ -265,12 +265,18 @@ export async function buildApplePass(
     manifest[image.name] = createHash("sha1").update(image.data).digest("hex");
   const manifestJson = JSON.stringify(manifest);
   const signature = await signManifest(manifestJson);
-  return zipStore([
+  // modifiedAt drives the Last-Modified header on the webservice pass GET —
+  // update_tag is integer epoch millis (0504); an unparsable legacy tag
+  // degrades to "now" (always modified) rather than breaking the fetch.
+  const tagMillis = Number(pass.update_tag);
+  const modifiedAt = Number.isFinite(tagMillis) ? new Date(tagMillis) : new Date();
+  const pkpass = zipStore([
     { name: "pass.json", data: Buffer.from(passJson) },
     ...images,
     { name: "manifest.json", data: Buffer.from(manifestJson) },
     { name: "signature", data: signature },
   ]);
+  return { pkpass, modifiedAt };
 }
 
 function decodePem(base64: string): string {
@@ -399,26 +405,38 @@ export async function appleChangedSerials(input: {
   if (input.passTypeIdentifier !== PASS_TYPE_IDENTIFIER) {
     return { lastUpdated: Date.now().toString(), serialNumbers: [] };
   }
+  // update_tag is integer epoch millis (0504) and MUST be compared
+  // numerically: rows written before 0504 mixed seconds and millis, and the
+  // device echoes back whatever lastUpdated we sent it previously — a text
+  // comparison across formats made this endpoint answer "nothing changed"
+  // for passes that HAD changed, breaking both push-triggered refetches and
+  // pull-to-refresh. A passesUpdatedSince we can't parse is treated as
+  // "send everything" rather than erroring the poll.
+  const since = Number(input.passesUpdatedSince);
+  const sinceParam =
+    input.passesUpdatedSince !== undefined && Number.isFinite(since) ? since : null;
   const { rows } = await pool.query(
     `SELECT wp.serial_number, wp.update_tag
        FROM wallet_pass_devices d
        JOIN wallet_passes wp ON wp.id = d.pass_id
       WHERE d.device_library_identifier = $1
-        AND ($2::text IS NULL OR wp.update_tag > $2)
+        AND ($2::double precision IS NULL OR wp.update_tag::double precision > $2)
       ORDER BY wp.serial_number`,
-    [input.deviceLibraryIdentifier, input.passesUpdatedSince ?? null],
+    [input.deviceLibraryIdentifier, sinceParam],
   );
   const serialNumbers = rows.map((r: { serial_number: string }) => r.serial_number);
   const lastUpdated =
-    rows.reduce(
-      (m: string, r: { update_tag: string }) => (r.update_tag > m ? r.update_tag : m),
-      "",
-    ) ||
-    (input.passesUpdatedSince ?? Date.now().toString());
+    rows.length > 0
+      ? String(Math.max(...rows.map((r: { update_tag: string }) => Number(r.update_tag))))
+      : (input.passesUpdatedSince ?? Date.now().toString());
   return { lastUpdated, serialNumbers };
 }
 
 export async function appleLog(logs: string[]) {
+  // Wallet reports its client-side errors here (bad webServiceURL, auth
+  // failures, refused updates...) — printing them is the only visibility we
+  // get into why a device isn't updating.
+  for (const line of logs) console.warn("wallet: device log:", line);
   await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_WALLET_PASS_UPDATED, {
     source: "apple-log",
     count: logs.length,
