@@ -46,14 +46,10 @@ export function PeopleDirectoryScreen() {
   // one rather than reconfiguring it.
   useLayoutEffect(() => {
     navigation.setOptions({
-      // Treat “People” as the page heading, not as a persistent centered
-      // navigation-bar title. It scrolls away with search, leaving only the
-      // native back and filter controls in the compact glass bar.
       title: t("scannerPeople"),
       headerLargeTitle: true,
       headerLargeTitleShadowVisible: false,
       headerLargeTitleStyle: { backgroundColor: colors.transparent, color: colors.label },
-      headerTitleStyle: { color: colors.transparent },
       headerShadowVisible: false,
       headerBackButtonDisplayMode: "minimal",
       headerTransparent: true,
@@ -122,10 +118,11 @@ export function PeopleDirectoryScreen() {
   return (
     <FlatList
       contentInsetAdjustmentBehavior="automatic"
+      style={{ backgroundColor: colors.background }}
       contentContainerStyle={{ flexGrow: 1, paddingBottom: 32 }}
       data={filtered}
       keyExtractor={(person) => String(person.userId)}
-      ItemSeparatorComponent={() => <Separator inset={68} />}
+      ItemSeparatorComponent={() => <Separator inset={68} trailingInset={16} />}
       ListEmptyComponent={
         <EmptyState
           icon="person.2"
@@ -182,7 +179,7 @@ function PersonRow({ person, onPress }: { person: ScannerPerson; onPress: () => 
       onPress={onPress}
       style={({ pressed }) => ({
         alignItems: "center",
-        backgroundColor: pressed ? colors.elevatedSurface : colors.surface,
+        backgroundColor: pressed ? colors.elevatedSurface : colors.background,
         flexDirection: "row",
         gap: 12,
         minHeight: participantWarning ? 82 : 68,

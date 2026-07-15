@@ -64,8 +64,17 @@ export function Section({
   );
 }
 
-export function Separator({ inset = 16 }: { inset?: number }) {
-  return <View style={{ backgroundColor: colors.separator, height: 0.5, marginLeft: inset }} />;
+export function Separator({ inset = 16, trailingInset = 0 }: { inset?: number; trailingInset?: number }) {
+  return (
+    <View
+      style={{
+        backgroundColor: colors.separator,
+        height: 0.5,
+        marginLeft: inset,
+        marginRight: trailingInset,
+      }}
+    />
+  );
 }
 
 export function InfoRow({
