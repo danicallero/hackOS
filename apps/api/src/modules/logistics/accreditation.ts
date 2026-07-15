@@ -1,4 +1,5 @@
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
+import type pg from "pg";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
@@ -81,6 +82,14 @@ export async function checkIn(
   });
 }
 
+/** A ticket QR must never become a badge id — they identify different physical items (H22/H23). */
+async function assertNotTicketToken(client: pg.PoolClient, badgeId: string): Promise<void> {
+  const ticket = await client.query(`SELECT 1 FROM tickets WHERE token = $1`, [badgeId]);
+  if (ticket.rows.length > 0) {
+    throw new ConflictError("A ticket cannot be used as a badge", { badgeId });
+  }
+}
+
 export async function checkInUser(
   actorId: number,
   input: { userId: number; badgeId: string; method: CheckInMethod },
@@ -98,6 +107,8 @@ export async function checkInUser(
         currentBadge: user.badge_id,
       });
     }
+
+    await assertNotTicketToken(client, input.badgeId);
 
     const owner = await client.query(`SELECT id FROM users WHERE badge_id = $1`, [input.badgeId]);
     if (owner.rows[0] && owner.rows[0].id !== input.userId) {
@@ -192,6 +203,8 @@ export async function rotateBadge(
     if (!u.rows[0]) throw new NotFoundError("User not found");
     const user = u.rows[0];
     const oldBadge = user.badge_id as string | null;
+
+    await assertNotTicketToken(client, input.newBadgeId);
 
     const owner = await client.query(`SELECT id FROM users WHERE badge_id = $1`, [
       input.newBadgeId,

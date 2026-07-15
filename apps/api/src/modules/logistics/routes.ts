@@ -224,7 +224,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       schema: {
         body: checkInBody,
         description:
-          "Assign a badge to the ticket's owner and log the check-in (H22). Idempotency-key replays are safe; 409 if the badge belongs to someone else or the person is already accredited (use /api/accreditation/rotate to replace a badge).",
+          "Assign a badge to the ticket's owner and log the check-in (H22). Idempotency-key replays are safe; 409 if the badge belongs to someone else, the badge id is actually a ticket token, or the person is already accredited (use /api/accreditation/rotate to replace a badge).",
       },
     },
     async (req) =>
@@ -262,7 +262,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       schema: {
         body: rotateBody,
         description:
-          "Replace someone's badge (H23): identify the person by userId (preferred) or by their current badge id. The old badge is revoked everywhere, wallet badge passes are voided, and the change is audited with the given reason. 409 if the new badge is already assigned.",
+          "Replace someone's badge (H23): identify the person by userId (preferred) or by their current badge id. The old badge is revoked everywhere, wallet badge passes are voided, and the change is audited with the given reason. 409 if the new badge is already assigned or is actually a ticket token.",
       },
     },
     async (req) =>

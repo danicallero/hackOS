@@ -179,6 +179,25 @@ describe("H22 accreditation lookup + check-in", () => {
     expect(res.json().error.details.currentBadge).toBe("B-OLD");
   });
 
+  it("409 when the scanned badgeId is actually someone's ticket token", async () => {
+    const victim = await createUser();
+    const ticketAsBadge = await issueTicket(victim);
+    const uid = await createUser();
+    const token = await issueTicket(uid);
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/accreditation/check-in",
+      headers: asUser(staff),
+      payload: { ticketToken: token, badgeId: ticketAsBadge },
+    });
+    expect(res.statusCode).toBe(409);
+
+    const { pool } = await import("../../src/db/pool.js");
+    const u = await pool.query(`SELECT badge_id FROM users WHERE id = $1`, [uid]);
+    expect(u.rows[0].badge_id).toBeNull();
+  });
+
   it("two concurrent check-ins of the same badge for different users: one wins", async () => {
     const a = await createUser();
     const b = await createUser();
@@ -405,6 +424,25 @@ describe("H23 badge rotation", () => {
     });
     expect(res.statusCode).toBe(409);
     expect(res.json().error.code).toBe("badge_revoked");
+  });
+
+  it("409 when the new badge is actually someone's ticket token", async () => {
+    const victim = await createUser();
+    const ticketAsBadge = await issueTicket(victim);
+    const uid = await createUser();
+    await assignBadge(uid, "OLD-9");
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/accreditation/rotate",
+      headers: asUser(staff),
+      payload: { userId: uid, newBadgeId: ticketAsBadge, reason: "lost" },
+    });
+    expect(res.statusCode).toBe(409);
+
+    const { pool } = await import("../../src/db/pool.js");
+    const u = await pool.query(`SELECT badge_id FROM users WHERE id = $1`, [uid]);
+    expect(u.rows[0].badge_id).toBe("OLD-9");
   });
 
   it("409 when the new badge is already assigned", async () => {

@@ -20,7 +20,7 @@ import { SegmentedControl } from "@/components/segmented-control";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
-import { enqueueLocalScan, findPersonById } from "@/lib/scanner-db";
+import { enqueueLocalScan, findPersonById, findPersonByTicket } from "@/lib/scanner-db";
 import type { ScannerPerson } from "@/lib/scanner-types";
 import { useScannerSync } from "@/lib/use-scanner";
 import { colors } from "@/theme/colors";
@@ -75,6 +75,10 @@ export function PersonOperationsScreen() {
 
   async function saveBadge(nextBadge: string) {
     if (!person) return;
+    if (await findPersonByTicket(nextBadge)) {
+      Alert.alert(t("personBadgeIsTicketTitle"), t("personBadgeIsTicketBody"));
+      return;
+    }
     const currentBadge = person.badgeId;
     await enqueueLocalScan(
       currentBadge
