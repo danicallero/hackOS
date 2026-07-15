@@ -8,6 +8,7 @@ import { Alert, Pressable, ScrollView, Text, useColorScheme, View } from "react-
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ActionButton, InfoRow, Section, Separator, StatusPill } from "@/components/native-ui";
+import { PresenceManagement } from "@/components/presence-management";
 import { QrCamera } from "@/components/QrCamera";
 import { SegmentedControl } from "@/components/segmented-control";
 import { apiFetch } from "@/lib/api";
@@ -25,13 +26,6 @@ interface PersonDetails extends ScannerPerson {
   currentBadge?: string | null;
 }
 
-interface DoorScan {
-  id: number;
-  kind: string;
-  location: string | null;
-  scannedAt: string;
-}
-
 export function PersonOperationsScreen() {
   useColorScheme();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -46,7 +40,6 @@ export function PersonOperationsScreen() {
   const canAccredit = admin || capabilities.has(CAPABILITIES.ACCREDIT_SCAN);
   const canPresence = admin || capabilities.has(CAPABILITIES.PRESENCE_SCAN);
   const [person, setPerson] = useState<PersonDetails | null>(null);
-  const [history, setHistory] = useState<DoorScan[]>([]);
   const [cameraAction, setCameraAction] = useState<"assign" | "replace" | null>(null);
   const [direction, setDirection] = useState<"in" | "out">("in");
   const [scannedAt, setScannedAt] = useState(new Date());
@@ -68,15 +61,7 @@ export function PersonOperationsScreen() {
         /* The local person card remains available offline. */
       }
     }
-    if (canPresence) {
-      try {
-        const result = await apiFetch<{ items: DoorScan[] }>(`/api/presence/logs/${userId}`);
-        setHistory(result.items);
-      } catch {
-        /* Keep the last locally known state. */
-      }
-    }
-  }, [canAccredit, canPresence, userId]);
+  }, [canAccredit, userId]);
 
   useEffect(() => {
     void load();
@@ -365,17 +350,11 @@ export function PersonOperationsScreen() {
               label={direction === "in" ? t("personRegisterEntry") : t("personRegisterExit")}
               onPress={() => void registerPresence()}
             />
-            {history.map((item) => (
-              <View key={item.id}>
-                <Separator />
-                <InfoRow
-                  label={item.kind === "in" ? t("scannerIn") : t("scannerOut")}
-                  value={new Date(item.scannedAt).toLocaleString(language)}
-                  icon={item.kind === "in" ? "arrow.right.to.line" : "arrow.left.to.line"}
-                />
-              </View>
-            ))}
           </Section>
+        ) : null}
+
+        {canPresence ? (
+          <PresenceManagement refreshKey={sync.lastSync ?? undefined} userId={userId} />
         ) : null}
       </ScrollView>
       <ProfileBackButton top={insets.top + 12} onPress={() => router.back()} />
