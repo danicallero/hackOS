@@ -5,6 +5,12 @@ import { drainOutboxOnce } from "../../src/modules/notifications/dispatcher.js";
 import { notify } from "../../src/modules/notifications/service.js";
 import { createUser } from "../helpers.js";
 import {
+  assignChallengeToRoom,
+  createChallenge,
+  createRepoWithTeam,
+  createRoom,
+} from "../queue/fixtures.js";
+import {
   enqueueOutbox,
   getOutboxRow,
   makeDueNow,
@@ -199,6 +205,52 @@ describe("drainOutboxOnce", () => {
       `SELECT count(*)::int AS n FROM notification_outbox WHERE status = 'sent'`,
     );
     expect(rows[0].n).toBe(10);
+  });
+
+  it("parks a queue.called push as superseded once the entry has moved on (H51, H52)", async () => {
+    const userId = await createUser();
+    await addPushToken(userId, "StaleToken[1]");
+    const challengeId = await createChallenge();
+    const roomId = await createRoom();
+    await assignChallengeToRoom(roomId, challengeId);
+    const { repoId } = await createRepoWithTeam();
+    const { rows: entryRows } = await pool.query(
+      `INSERT INTO queue_entries (challenge_id, repo_id, status, position, assigned_room_id)
+       VALUES ($1, $2, 'waiting', 0, NULL) RETURNING id`,
+      [challengeId, repoId],
+    );
+    const entryId = entryRows[0].id;
+    // Entry was called to roomId when the push was first queued...
+    await pool.query(
+      `UPDATE queue_entries SET status = 'called', assigned_room_id = $1 WHERE id = $2`,
+      [roomId, entryId],
+    );
+    const id = await enqueueOutbox(
+      userId,
+      "push",
+      { entryId, roomId, template: "queue.called", vars: { roomName: "A" } },
+      "queue",
+    );
+    // ...but by the time the push is dispatched the team already requeued —
+    // the delayed "you were called" would now be stale/duplicate-feeling.
+    await pool.query(
+      `UPDATE queue_entries SET status = 'waiting', assigned_room_id = NULL WHERE id = $1`,
+      [entryId],
+    );
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("should never call Expo for a superseded row");
+      }),
+    );
+
+    const result = await drainOutboxOnce();
+    expect(result.superseded).toBe(1);
+    expect(result.sent).toBe(0);
+
+    const row = await getOutboxRow(id);
+    expect(row.status).toBe("superseded");
   });
 
   it("raw INSERT compatibility: sibling-style rows without notify() are dispatched", async () => {

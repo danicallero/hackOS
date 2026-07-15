@@ -2,7 +2,7 @@ import { config } from "../../config.js";
 import { withTransaction } from "../../db/pool.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { dispatchChannel, type OutboxRow } from "./channels/index.js";
-import { PermanentDispatchError } from "./errors.js";
+import { PermanentDispatchError, SupersededDispatchError } from "./errors.js";
 
 /**
  * Outbox dispatcher (H52, plan/07 §5.4). A repeatable BullMQ job claims due
@@ -19,6 +19,9 @@ import { PermanentDispatchError } from "./errors.js";
  *   - failure, attempts reaches MAX_ATTEMPTS, OR a PermanentDispatchError
  *     (e.g. discord's "channel not configured") -> status='failed' — parked,
  *     never deleted, always visible via last_error for the admin/audit surface.
+ *   - a SupersededDispatchError (H51/H52: the queue transition it describes
+ *     is no longer current) -> status='superseded' immediately, no retry —
+ *     this is not a failure, sending it would just be stale/duplicate noise.
  */
 
 const QUEUE_NAME = "notifications-outbox";
@@ -36,6 +39,7 @@ export interface DrainResult {
   sent: number;
   failed: number;
   parked: number;
+  superseded: number;
 }
 
 /** One claim-and-dispatch pass. Exported so tests can invoke it directly instead of waiting on BullMQ repeat timing. */
@@ -54,6 +58,7 @@ export async function drainOutboxOnce(batchSize = 20): Promise<DrainResult> {
     let sent = 0;
     let failed = 0;
     let parked = 0;
+    let superseded = 0;
 
     for (const row of rows as OutboxRow[]) {
       try {
@@ -64,6 +69,16 @@ export async function drainOutboxOnce(batchSize = 20): Promise<DrainResult> {
         );
         sent += 1;
       } catch (err) {
+        if (err instanceof SupersededDispatchError) {
+          await client.query(
+            `UPDATE notification_outbox
+             SET status = 'superseded', attempts = $2, last_error = $3
+             WHERE id = $1`,
+            [row.id, row.attempts + 1, err.message],
+          );
+          superseded += 1;
+          continue;
+        }
         const message = err instanceof Error ? err.message : String(err);
         const attempts = row.attempts + 1;
         const permanent = err instanceof PermanentDispatchError;
@@ -88,7 +103,7 @@ export async function drainOutboxOnce(batchSize = 20): Promise<DrainResult> {
       }
     }
 
-    return { claimed: rows.length, sent, failed, parked };
+    return { claimed: rows.length, sent, failed, parked, superseded };
   });
 }
 

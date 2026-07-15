@@ -128,13 +128,23 @@ async function emitPreCallWarnings(): Promise<void> {
     }[]) {
       const eta = w.rank * perSlot;
       if (w.precalled_at || eta > threshold) continue;
+      // Atomic claim before notifying: if a previous, still-running tick (or
+      // another worker process) already claimed this entry, the WHERE clause
+      // matches zero rows here and this tick skips the notify entirely,
+      // closing the read-then-write race that could double-send a pre-call.
+      const { rows: claimed } = await pool.query(
+        `UPDATE queue_entries SET precalled_at = now()
+          WHERE id = $1 AND precalled_at IS NULL
+          RETURNING id`,
+        [w.id],
+      );
+      if (claimed.length === 0) continue;
       await notifyTeamPreCall(pool, {
         entryId: w.id,
         challengeId,
         repoId: w.repo_id,
         etaMinutes: Math.round(eta),
       });
-      await pool.query(`UPDATE queue_entries SET precalled_at = now() WHERE id = $1`, [w.id]);
     }
   }
 }
