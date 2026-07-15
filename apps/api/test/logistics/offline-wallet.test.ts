@@ -13,14 +13,12 @@ import { assignBadge, createMeal } from "./fixtures.js";
 
 let app: App;
 let scanner: number;
-let manager: number;
 
 beforeEach(async () => {
   await truncateAll();
   const { valkey } = await import("../../src/lib/valkey.js");
   await valkey.flushdb();
   scanner = await createUserWithCapabilities([CAPABILITIES.ACTIVITY_SCAN]);
-  manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
   app ??= await buildTestApp();
 });
 
@@ -34,21 +32,11 @@ afterAll(async () => {
   await pool.end();
 });
 
-async function grant(activityId: number, userId: number) {
-  await app.inject({
-    method: "POST",
-    url: `/api/activities/${activityId}/entitlements`,
-    headers: asUser(manager),
-    payload: { userId },
-  });
-}
-
 describe("H25 offline meal scan queue", () => {
   it("accepts a local scanner batch and the worker processes each scan once", async () => {
     const meal = await createMeal();
     const uid = await createUser();
     await assignBadge(uid, "OFF-1");
-    await grant(meal, uid);
 
     const res = await app.inject({
       method: "POST",
@@ -85,7 +73,6 @@ describe("H25 offline meal scan queue", () => {
     const meal = await createMeal();
     const uid = await createUser();
     await assignBadge(uid, "OFF-2");
-    await grant(meal, uid);
 
     const payload = {
       deviceId: "scanner-b",

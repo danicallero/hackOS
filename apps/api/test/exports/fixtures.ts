@@ -115,13 +115,6 @@ export async function timeLog(userId: number, scannedBy: number, kind = "in"): P
   ]);
 }
 
-export async function mealEntitlement(userId: number, activityId: number): Promise<void> {
-  await pool.query(`INSERT INTO meal_entitlements (user_id, activity_id) VALUES ($1, $2)`, [
-    userId,
-    activityId,
-  ]);
-}
-
 export async function activityLog(
   userId: number,
   activityId: number,

@@ -399,7 +399,7 @@ function ActivityForm({ setCameraSetter, afterSubmit }: FormProps) {
     if (!selected) return setError(t("scannerSelectActivity"));
     const state = await getActivityState(result.person.userId, selected.id);
     setCount(state.count);
-    setError(selected.category === "meal" && !state.entitled ? t("scannerNotEntitled") : null);
+    setError(null);
   };
   const submitWithRepeat = async (allowRepeat: boolean) => {
     if (!person || !selected || error) return;

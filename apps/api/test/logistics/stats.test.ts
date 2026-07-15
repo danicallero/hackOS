@@ -13,7 +13,6 @@ import { assignBadge, createActivity, createMeal } from "./fixtures.js";
 
 let app: App;
 let scanner: number;
-let manager: number;
 let statsStaff: number;
 
 beforeEach(async () => {
@@ -21,7 +20,6 @@ beforeEach(async () => {
   const { valkey } = await import("../../src/lib/valkey.js");
   await valkey.flushdb();
   scanner = await createUserWithCapabilities([CAPABILITIES.ACTIVITY_SCAN]);
-  manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
   statsStaff = await createUserWithCapabilities([CAPABILITIES.LOGISTICS_STATS]);
   app ??= await buildTestApp();
 });
@@ -45,15 +43,6 @@ describe("H27 logistics stats", () => {
     await assignBadge(a, "S-A");
     const b = await createUser();
     await assignBadge(b, "S-B");
-
-    for (const uid of [a, b]) {
-      await app.inject({
-        method: "POST",
-        url: `/api/activities/${meal}/entitlements`,
-        headers: asUser(manager),
-        payload: { userId: uid },
-      });
-    }
 
     // a eats twice (one repeat), b once
     await app.inject({

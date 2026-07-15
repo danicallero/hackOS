@@ -2,10 +2,6 @@ import { z } from "zod";
 import { PERSON_FIELDS } from "./people.js";
 
 export const activityIdParam = z.object({ id: z.coerce.number().int().positive() });
-export const entitlementUserParam = z.object({
-  id: z.coerce.number().int().positive(),
-  userId: z.coerce.number().int().positive(),
-});
 export const userIdParam = z.object({ userId: z.coerce.number().int().positive() });
 
 export const lookupBody = z.object({ ticketToken: z.string().min(1) });
@@ -91,7 +87,6 @@ export const scannerSnapshotResponse = z.object({
       userId: z.number().int().positive(),
       activityId: z.number().int().positive(),
       count: z.number().int().nonnegative(),
-      entitled: z.boolean(),
     }),
   ),
 });
@@ -100,10 +95,6 @@ export const activityScanBody = z.object({
   badgeId: z.string().min(1),
   allowRepeat: z.boolean().default(false),
   scannedAt: z.coerce.date().optional(),
-});
-
-export const grantEntitlementBody = z.object({
-  userId: z.coerce.number().int().positive(),
 });
 
 export const mealScanBatchBody = z.object({

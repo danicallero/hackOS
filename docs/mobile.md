@@ -21,7 +21,7 @@ store assets, submission, and the release checklist, see
 | H22 | Accreditation scanner: local SQLite lookup, badge assignment, server-confirmed | 🟡 Device QA | Ticket/person cards live in SQLite. The assignment is persisted/retried but is explicitly shown as **not accredited** until the API acknowledges the idempotent request. |
 | H23 | Badge replacement, offline-first, revocation synced later | 🟡 Device QA | Rotation updates the originating scanner immediately; each successful full snapshot replaces the complete revoked-badge set so every scanner rejects old badges. |
 | H24 | Presence (door in/out) scanner, offline queue, manual back-dated entries | 🟡 Device QA | In/out and optional ISO backdated timestamps use the durable shared queue and idempotent replay. |
-| H25 | Meals scanner, offline queue, repeat-serving confirmation | 🟡 Device QA | Local entitlement/count data drives first-serving/repeat confirmation; every accepted scan stays queued until API acknowledgement. |
+| H25 | Meals scanner, offline queue, repeat-serving confirmation | 🟡 Device QA | Everyone may eat; local count data drives first-serving/repeat confirmation. Every accepted scan stays queued until API acknowledgement. |
 | H26 | Registrable-activity scanner, same offline contract as H25 | 🟡 Device QA | Scannable activities are synchronized locally and use the same durable idempotent replay contract. |
 
 Legend: ✅ done · 🟡 partial (core flow works, a sub-requirement is missing) · ❌ not started.
@@ -55,8 +55,8 @@ route below. No migration needed.
   (H28), `GET`/`PUT /api/me/notification-preferences` (H51).
 - `GET /api/scanner/snapshot` — capability-guarded, replace-all seed for the
   device SQLite store. It contains only the lightweight person cards, ticket
-  and current/revoked badge mappings, scannable activities, meal
-  entitlements/counts, and last door state needed by H22-H26. A full snapshot
+  and current/revoked badge mappings, scannable activities, meal/activity
+  scan counts, and last door state needed by H22-H26. A full snapshot
   is deliberate: badge-history values have no individual timestamp, and a
   complete replacement guarantees convergence after any missed refresh.
 

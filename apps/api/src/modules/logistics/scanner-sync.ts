@@ -3,8 +3,8 @@ import { pool } from "../../db/pool.js";
 /**
  * H22-H26 scanner seed/sync payload. Native scanners keep this deliberately
  * small dataset in SQLite: identity/card data needed at the point of scan,
- * current and revoked badge mappings, scannable activities, entitlements and
- * per-person scan counts. Mutations still go through the existing server
+ * current and revoked badge mappings, scannable activities and per-person
+ * scan counts. Mutations still go through the existing server
  * endpoints and are replayed with Idempotency-Key headers.
  *
  * The payload is a full snapshot rather than a cursor delta. Badge history has
@@ -46,19 +46,8 @@ export async function scannerSnapshot() {
         ORDER BY name ASC, id ASC`,
     ),
     pool.query(
-      `WITH counts AS (
-         SELECT user_id, activity_id, count(*)::int AS scan_count
-           FROM activity_logs GROUP BY user_id, activity_id
-       ), entitlements AS (
-         SELECT user_id, activity_id, true AS entitled FROM meal_entitlements
-       )
-       SELECT COALESCE(c.user_id, e.user_id) AS user_id,
-              COALESCE(c.activity_id, e.activity_id) AS activity_id,
-              COALESCE(c.scan_count, 0)::int AS scan_count,
-              COALESCE(e.entitled, false) AS entitled
-         FROM counts c
-         FULL OUTER JOIN entitlements e
-           ON e.user_id = c.user_id AND e.activity_id = c.activity_id`,
+      `SELECT user_id, activity_id, count(*)::int AS scan_count
+         FROM activity_logs GROUP BY user_id, activity_id`,
     ),
   ]);
 
@@ -89,7 +78,6 @@ export async function scannerSnapshot() {
       userId: row.user_id as number,
       activityId: row.activity_id as number,
       count: row.scan_count as number,
-      entitled: Boolean(row.entitled),
     })),
   };
 }

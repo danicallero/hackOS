@@ -41,7 +41,6 @@ async function db(): Promise<SQLite.SQLiteDatabase> {
           user_id INTEGER NOT NULL,
           activity_id INTEGER NOT NULL,
           scan_count INTEGER NOT NULL,
-          entitled INTEGER NOT NULL,
           PRIMARY KEY (user_id, activity_id)
         );
         CREATE TABLE IF NOT EXISTS pending_scans (
@@ -57,6 +56,26 @@ async function db(): Promise<SQLite.SQLiteDatabase> {
         CREATE INDEX IF NOT EXISTS pending_scans_status ON pending_scans(status, created_at);
         CREATE TABLE IF NOT EXISTS scanner_metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
       `);
+      // Devices that synced before entitlements were removed still have the
+      // old NOT NULL "entitled" column — drop it so inserts without that
+      // value keep working.
+      const columns = await opened.getAllAsync<{ name: string }>(
+        `PRAGMA table_info(scanner_activity_states)`,
+      );
+      if (columns.some((c) => c.name === "entitled")) {
+        await opened.execAsync(`
+          ALTER TABLE scanner_activity_states RENAME TO scanner_activity_states_old;
+          CREATE TABLE scanner_activity_states (
+            user_id INTEGER NOT NULL,
+            activity_id INTEGER NOT NULL,
+            scan_count INTEGER NOT NULL,
+            PRIMARY KEY (user_id, activity_id)
+          );
+          INSERT INTO scanner_activity_states (user_id, activity_id, scan_count)
+            SELECT user_id, activity_id, scan_count FROM scanner_activity_states_old;
+          DROP TABLE scanner_activity_states_old;
+        `);
+      }
       return opened;
     });
   }
@@ -106,11 +125,10 @@ export async function applyScannerSnapshot(snapshot: ScannerSnapshot): Promise<v
     for (const state of snapshot.activityStates) {
       await database.runAsync(
         `INSERT INTO scanner_activity_states
-          (user_id, activity_id, scan_count, entitled) VALUES (?, ?, ?, ?)`,
+          (user_id, activity_id, scan_count) VALUES (?, ?, ?)`,
         state.userId,
         state.activityId,
         state.count,
-        state.entitled ? 1 : 0,
       );
     }
     await database.runAsync(
@@ -197,9 +215,8 @@ export async function getActivityState(
 ): Promise<ScannerActivityState> {
   const row = await (await db()).getFirstAsync<{
     scan_count: number;
-    entitled: number;
   }>(
-    `SELECT scan_count, entitled FROM scanner_activity_states
+    `SELECT scan_count FROM scanner_activity_states
       WHERE user_id = ? AND activity_id = ?`,
     userId,
     activityId,
@@ -208,7 +225,6 @@ export async function getActivityState(
     userId,
     activityId,
     count: row?.scan_count ?? 0,
-    entitled: row?.entitled === 1,
   };
 }
 
@@ -257,8 +273,8 @@ export async function enqueueLocalScan(payload: ScanPayload): Promise<string> {
       );
       if (owner) {
         await database.runAsync(
-          `INSERT INTO scanner_activity_states (user_id, activity_id, scan_count, entitled)
-           VALUES (?, ?, 1, 0)
+          `INSERT INTO scanner_activity_states (user_id, activity_id, scan_count)
+           VALUES (?, ?, 1)
            ON CONFLICT(user_id, activity_id)
            DO UPDATE SET scan_count = scan_count + 1`,
           owner.user_id,

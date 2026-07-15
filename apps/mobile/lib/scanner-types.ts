@@ -26,7 +26,6 @@ export interface ScannerActivityState {
   userId: number;
   activityId: number;
   count: number;
-  entitled: boolean;
 }
 
 export interface ScannerSnapshot {

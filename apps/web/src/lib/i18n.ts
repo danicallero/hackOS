@@ -1080,48 +1080,14 @@ const dict: Record<string, I18nText> = {
     gl: "Serve comidas escaneando acreditacións; as repeticións márcanse e confírmaas o equipo.",
     en: "Serve meals by scanning badges; repeats are flagged and confirmed by staff.",
   },
-  couldNotGrantEntitlements: {
-    es: "No se han podido conceder las raciones.",
-    gl: "Non se puideron conceder as racións.",
-    en: "Could not grant entitlements.",
-  },
-  mealEntitlementsGranted: {
-    es: "Se han concedido {count} raciones.",
-    gl: "Concedéronse {count} racións.",
-    en: "Granted {count} meal entitlements.",
-  },
-  confirmedEntitlementsGranted: {
-    es: "Se han concedido {total} raciones a participantes confirmados.",
-    gl: "Concedéronse {total} racións a participantes confirmados.",
-    en: "Granted {total} confirmed-participant meal entitlements.",
-  },
-  couldNotBulkGrant: {
-    es: "No se han podido conceder las raciones en bloque.",
-    gl: "Non se puideron conceder as racións en bloque.",
-    en: "Could not bulk grant entitlements.",
-  },
   columnMeal: { es: "Comida", gl: "Comida", en: "Meal" },
   columnServed: { es: "Servidas", gl: "Servidas", en: "Served" },
   columnPeople: { es: "Personas", gl: "Persoas", en: "People" },
   columnRepeats: { es: "Repeticiones", gl: "Repeticións", en: "Repeats" },
-  mealEntitlements: { es: "Raciones", gl: "Racións", en: "Meal entitlements" },
-  mealEntitlementsDesc: {
-    es: "Selecciona comidas y concédelas a una persona buscada o a todos los participantes confirmados.",
-    gl: "Selecciona comidas e concédeas a unha persoa buscada ou a todos os participantes confirmados.",
-    en: "Select meals, then grant a searched person or all confirmed participants.",
-  },
-  noMealsYet: { es: "Aún no hay comidas", gl: "Aínda non hai comidas", en: "No meals yet" },
   selectedCount: {
     es: "{count} seleccionadas",
     gl: "{count} seleccionadas",
     en: "{count} selected",
-  },
-  findUserShortPlaceholder: { es: "Buscar usuario…", gl: "Buscar usuario…", en: "Find user…" },
-  grantUser: { es: "Conceder a usuario", gl: "Conceder a usuario", en: "Grant user" },
-  grantConfirmed: {
-    es: "Conceder a confirmados",
-    gl: "Conceder a confirmados",
-    en: "Grant confirmed",
   },
   activitiesDeniedTitle: {
     es: "No puedes escanear actividades",
