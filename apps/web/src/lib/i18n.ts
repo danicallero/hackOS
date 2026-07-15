@@ -5470,11 +5470,6 @@ const dict: Record<string, I18nText> = {
     gl: "Cargando información pública do evento",
     en: "Loading public event information",
   },
-  hackathonPlatformTagline: {
-    es: "hackOS — plataforma de gestión de hackathons",
-    gl: "hackOS — plataforma de xestión de hackathons",
-    en: "hackOS — hackathon management platform",
-  },
   enterpriseUpdated: {
     es: "Empresa actualizada.",
     gl: "Empresa actualizada.",
