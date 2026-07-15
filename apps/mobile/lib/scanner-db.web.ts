@@ -71,7 +71,7 @@ export async function getActivityState(
   return (
     snapshot.activityStates.find(
       (state) => state.userId === userId && state.activityId === activityId,
-    ) ?? { userId, activityId, count: 0, entitled: false }
+    ) ?? { userId, activityId, count: 0 }
   );
 }
 

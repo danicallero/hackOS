@@ -754,9 +754,9 @@ English, Spanish, and Galician. Use seeded fictional people/QRs only.
 This app handles account/session data, email/name/profile information,
 ticket/badge identifiers, push tokens, notification preferences, queue state,
 and—on authorized staff devices—a local SQLite copy containing attendee names,
-dietary restrictions/notes, badges, entitlements, and pending operational
-scans. Camera frames are used to decode QR values; the implementation does not
-need microphone recording.
+dietary restrictions/notes, badges, and pending operational scans. Camera
+frames are used to decode QR values; the implementation does not need
+microphone recording.
 
 Before answering store forms, inventory the actual production API, mobile
 bundle, and every third-party SDK. Legal/product owners—not this document—must

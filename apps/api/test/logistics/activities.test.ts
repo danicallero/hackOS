@@ -13,14 +13,12 @@ import { assignBadge, createActivity, createMeal } from "./fixtures.js";
 
 let app: App;
 let scanner: number;
-let manager: number;
 
 beforeEach(async () => {
   await truncateAll();
   const { valkey } = await import("../../src/lib/valkey.js");
   await valkey.flushdb();
   scanner = await createUserWithCapabilities([CAPABILITIES.ACTIVITY_SCAN]);
-  manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
   app ??= await buildTestApp();
 });
 
@@ -34,21 +32,11 @@ afterAll(async () => {
   await pool.end();
 });
 
-async function grant(activityId: number, userId: number) {
-  await app.inject({
-    method: "POST",
-    url: `/api/activities/${activityId}/entitlements`,
-    headers: asUser(manager),
-    payload: { userId },
-  });
-}
-
 describe("H25 meals", () => {
   it("first scan auto-registers, reports firstTime + card", async () => {
     const meal = await createMeal();
     const uid = await createUser({ name: "Mel" });
     await assignBadge(uid, "MB-1");
-    await grant(meal, uid);
 
     const res = await app.inject({
       method: "POST",
@@ -64,27 +52,10 @@ describe("H25 meals", () => {
     expect(body.card.name).toBe("Mel");
   });
 
-  it("not entitled returns an explicit error that still shows the name", async () => {
-    const meal = await createMeal();
-    const uid = await createUser({ name: "Uninvited" });
-    await assignBadge(uid, "MB-2");
-
-    const res = await app.inject({
-      method: "POST",
-      url: `/api/activities/${meal}/scan`,
-      headers: asUser(scanner),
-      payload: { badgeId: "MB-2" },
-    });
-    expect(res.statusCode).toBe(409);
-    expect(res.json().error.code).toBe("not_entitled");
-    expect(res.json().error.details.card.name).toBe("Uninvited");
-  });
-
   it("repeat requires explicit confirmation, then registers with allowRepeat", async () => {
     const meal = await createMeal();
     const uid = await createUser();
     await assignBadge(uid, "MB-3");
-    await grant(meal, uid);
     const { pool } = await import("../../src/db/pool.js");
 
     const first = await app.inject({
@@ -129,7 +100,6 @@ describe("H25 meals", () => {
     const meal = await createMeal();
     const uid = await createUser();
     await assignBadge(uid, "MB-RACE");
-    await grant(meal, uid);
 
     const [a, b] = await Promise.all([
       app.inject({
@@ -157,7 +127,6 @@ describe("H25 meals", () => {
     const meal = await createMeal();
     const uid = await createUser();
     await assignBadge(uid, "MB-IDEM");
-    await grant(meal, uid);
     const headers = { ...asUser(scanner), "idempotency-key": "meal-scan-1" };
 
     const first = await app.inject({
@@ -182,7 +151,7 @@ describe("H25 meals", () => {
 });
 
 describe("H26 registrable (non-meal) activities", () => {
-  it("logs every scan without entitlement, flagging repeats", async () => {
+  it("logs every scan, flagging repeats", async () => {
     const workshop = await createActivity({ requiresScan: true, name: "Workshop" });
     const uid = await createUser();
     await assignBadge(uid, "WB-1");
@@ -221,58 +190,5 @@ describe("H26 registrable (non-meal) activities", () => {
       payload: { badgeId: "PB-1" },
     });
     expect(res.statusCode).toBe(400);
-  });
-});
-
-describe("entitlement admin (SCHEDULE_MANAGE)", () => {
-  it("grant, revoke, and bulk-grant to confirmed participants", async () => {
-    const meal = await createMeal();
-    const { pool } = await import("../../src/db/pool.js");
-    const { makeConfirmed } = await import("./fixtures.js");
-
-    const u1 = await createUser();
-    await makeConfirmed(u1);
-    const u2 = await createUser();
-    await makeConfirmed(u2);
-    const unconfirmed = await createUser();
-
-    const bulk = await app.inject({
-      method: "POST",
-      url: `/api/activities/${meal}/entitlements/bulk-grant-confirmed`,
-      headers: asUser(manager),
-    });
-    expect(bulk.statusCode).toBe(200);
-    expect(bulk.json().granted).toBe(2);
-
-    const ent = await pool.query(`SELECT user_id FROM meal_entitlements WHERE activity_id = $1`, [
-      meal,
-    ]);
-    const ids = ent.rows.map((r: { user_id: number }) => r.user_id).sort();
-    expect(ids).toEqual([u1, u2].sort());
-    expect(ids).not.toContain(unconfirmed);
-
-    const revoke = await app.inject({
-      method: "DELETE",
-      url: `/api/activities/${meal}/entitlements/${u1}`,
-      headers: asUser(manager),
-    });
-    expect(revoke.json().revoked).toBe(true);
-    const after = await pool.query(
-      `SELECT 1 FROM meal_entitlements WHERE activity_id = $1 AND user_id = $2`,
-      [meal, u1],
-    );
-    expect(after.rows).toHaveLength(0);
-  });
-
-  it("scanner without SCHEDULE_MANAGE cannot grant entitlements", async () => {
-    const meal = await createMeal();
-    const uid = await createUser();
-    const res = await app.inject({
-      method: "POST",
-      url: `/api/activities/${meal}/entitlements`,
-      headers: asUser(scanner),
-      payload: { userId: uid },
-    });
-    expect(res.statusCode).toBe(403);
   });
 });

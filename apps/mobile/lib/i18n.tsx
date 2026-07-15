@@ -469,11 +469,6 @@ const dict = {
     es: "RECHAZADO: este badge está revocado.",
     gl: "REXEITADO: este badge está revogado.",
   },
-  scannerNotEntitled: {
-    en: "This person is not entitled to this meal.",
-    es: "Esta persona no tiene asignada esta comida.",
-    gl: "Esta persoa non ten asignada esta comida.",
-  },
   scannerPendingAck: {
     en: "Saved locally; waiting for server acknowledgement.",
     es: "Guardado en local; esperando confirmación del servidor.",

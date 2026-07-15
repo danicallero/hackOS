@@ -27,7 +27,6 @@ export async function buildExportBundle(subjectUserId: number): Promise<Record<s
     activityLogs,
     checkInLogs,
     timeLogs,
-    mealEntitlements,
     mealRedemptions,
     notificationPreferences,
     notificationOutbox,
@@ -114,14 +113,6 @@ export async function buildExportBundle(subjectUserId: number): Promise<Record<s
       .then((r) => r.rows),
     pool
       .query(
-        `SELECT me.activity_id, a.name AS activity_name
-           FROM meal_entitlements me JOIN activities a ON a.id = me.activity_id
-          WHERE me.user_id = $1 ORDER BY a.name`,
-        [subjectUserId],
-      )
-      .then((r) => r.rows),
-    pool
-      .query(
         `SELECT al.id, a.name AS activity_name, al.logged_at, al.notes
            FROM activity_logs al JOIN activities a ON a.id = al.activity_id
           WHERE al.user_id = $1 AND a.category = 'meal' ORDER BY al.logged_at`,
@@ -196,7 +187,7 @@ export async function buildExportBundle(subjectUserId: number): Promise<Record<s
     projects: { submissions, devpostParticipant },
     judgingParticipation,
     presence: { activityLogs, checkInLogs, timeLogs },
-    meals: { entitlements: mealEntitlements, redemptions: mealRedemptions },
+    meals: { redemptions: mealRedemptions },
     notifications: {
       preferences: notificationPreferences,
       outbox: notificationOutbox,

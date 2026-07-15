@@ -107,11 +107,6 @@ export function ActivityScannerScreen() {
         return;
       }
       const state = await getActivityState(found.person.userId, activityId);
-      if (activity?.category === "meal" && !state.entitled) {
-        setError(t("scannerNotEntitled"));
-        setResult(null);
-        return;
-      }
       setError(null);
       if (state.count > 0 && activity?.category === "meal") {
         setResult({

@@ -43,7 +43,7 @@ afterAll(async () => {
 });
 
 describe("H22-H26 native scanner snapshot", () => {
-  it("contains the local lookup, revocation, entitlement, and scan-count data", async () => {
+  it("contains the local lookup, revocation, and scan-count data", async () => {
     const userId = await createUser({ name: "Ada" });
     await makeConfirmed(userId);
     const ticketToken = await issueTicket(userId, "ticket-local");
@@ -70,10 +70,6 @@ describe("H22-H26 native scanner snapshot", () => {
     expect(rotate.statusCode).toBe(200);
 
     const { pool } = await import("../../src/db/pool.js");
-    await pool.query(`INSERT INTO meal_entitlements (user_id, activity_id) VALUES ($1, $2)`, [
-      userId,
-      mealId,
-    ]);
     await pool.query(
       `INSERT INTO activity_logs (user_id, activity_id, logged_by) VALUES ($1, $2, $3)`,
       [userId, mealId, scanner],
@@ -104,7 +100,6 @@ describe("H22-H26 native scanner snapshot", () => {
       userId,
       activityId: mealId,
       count: 1,
-      entitled: true,
     });
   });
 

@@ -291,14 +291,6 @@ export const logisticsApi = {
     api.post<MealScanBatchResult>(`/api/activities/${activityId}/meal-scans/batch`, body, {
       headers: idempotencyHeaders("meal-batch"),
     }),
-  grantEntitlement: (activityId: number, userId: number) =>
-    api.post(`/api/activities/${activityId}/entitlements`, { userId }),
-  revokeEntitlement: (activityId: number, userId: number) =>
-    api.delete(`/api/activities/${activityId}/entitlements/${userId}`),
-  bulkGrantConfirmed: (activityId: number) =>
-    api.post<{ activityId: number; granted: number }>(
-      `/api/activities/${activityId}/entitlements/bulk-grant-confirmed`,
-    ),
   myTicket: () => api.get<TicketQrPayload>("/api/me/ticket"),
   userTicket: (userId: number) => api.get<TicketQrPayload>(`/api/users/${userId}/ticket`),
 };

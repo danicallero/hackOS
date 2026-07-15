@@ -15,12 +15,7 @@ import {
   removeBadge,
   rotateBadge,
 } from "./accreditation.js";
-import {
-  activityScan,
-  bulkGrantConfirmed,
-  grantEntitlement,
-  revokeEntitlement,
-} from "./activities.js";
+import { activityScan } from "./activities.js";
 import { buildGoogleSaveUrl } from "./google-wallet.js";
 import { enqueueMealScanBatch } from "./offline-meals.js";
 import { searchPeople } from "./people.js";
@@ -53,8 +48,6 @@ import {
   appleRegistrationsQuery,
   checkInBody,
   checkInUserBody,
-  entitlementUserParam,
-  grantEntitlementBody,
   lookupBody,
   lookupUserBody,
   mealScanBatchBody,
@@ -138,7 +131,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Synchronize native scanner data",
         description:
-          "Returns the lightweight people, current/revoked badge, activity, entitlement, and scan-count snapshot used by offline native scanners. A successful response replaces the local snapshot; queued mutations remain separate and replay with idempotency keys.",
+          "Returns the lightweight people, current/revoked badge, activity, and scan-count snapshot used by offline native scanners. A successful response replaces the local snapshot; queued mutations remain separate and replay with idempotency keys.",
         response: { 200: scannerSnapshotResponse },
       },
     },
@@ -374,25 +367,6 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
         deviceId: req.body.deviceId,
         scans: req.body.scans,
       }),
-  );
-
-  // Entitlement admin (SCHEDULE_MANAGE — activities admin lives in the schedule WS).
-  typed.post(
-    "/api/activities/:id/entitlements",
-    { preHandler: scheduleManage, schema: { params: activityIdParam, body: grantEntitlementBody } },
-    async (req) => grantEntitlement(actor(req.userId), req.params.id, req.body.userId),
-  );
-
-  typed.delete(
-    "/api/activities/:id/entitlements/:userId",
-    { preHandler: scheduleManage, schema: { params: entitlementUserParam } },
-    async (req) => revokeEntitlement(actor(req.userId), req.params.id, req.params.userId),
-  );
-
-  typed.post(
-    "/api/activities/:id/entitlements/bulk-grant-confirmed",
-    { preHandler: scheduleManage, schema: { params: activityIdParam } },
-    async (req) => bulkGrantConfirmed(actor(req.userId), req.params.id),
   );
 
   // ── H27 stats ────────────────────────────────────────────────────────────

@@ -115,12 +115,6 @@ describe("GET /api/activities/scannable (H25/H26)", () => {
     await assignBadge(a, "S-A");
     await app.inject({
       method: "POST",
-      url: `/api/activities/${meal}/entitlements`,
-      headers: asUser(manager),
-      payload: { userId: a },
-    });
-    await app.inject({
-      method: "POST",
       url: `/api/activities/${meal}/scan`,
       headers: asUser(scanner),
       payload: { badgeId: "S-A" },
