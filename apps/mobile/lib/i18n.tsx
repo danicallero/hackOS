@@ -241,6 +241,11 @@ const dict = {
     es: "Todavía no hay horario",
     gl: "Aínda non hai horario",
   },
+  scheduleNow: {
+    en: "Now, {time}",
+    es: "Ahora, {time}",
+    gl: "Agora, {time}",
+  },
   queueEmpty: {
     en: "You're not in any queue right now.",
     es: "No estás en ninguna cola ahora mismo.",
@@ -290,6 +295,9 @@ const dict = {
     es: "Muestra este código al personal cuando te lo pidan.",
     gl: "Amosa este código ao persoal cando cho pidan.",
   },
+  walletHolder: { en: "Holder", es: "Titular", gl: "Titular" },
+  walletHolderName: { en: "Name", es: "Nombre", gl: "Nome" },
+  walletHolderRole: { en: "Role", es: "Rol", gl: "Rol" },
   walletAddPass: { en: "Add pass", es: "Añadir pase", gl: "Engadir pase" },
   walletAddPassHint: {
     en: "Wallet passes update automatically when your event credentials change.",
@@ -365,21 +373,18 @@ const dict = {
     es: "Notificaciones push",
     gl: "Notificacións push",
   },
-  activityReminders: {
-    en: "Activity reminders",
-    es: "Recordatorios de actividades",
-    gl: "Recordatorios de actividades",
+  scheduleReminderOn: {
+    en: "Reminder on for {name}",
+    es: "Recordatorio activado para {name}",
+    gl: "Lembranza activada para {name}",
   },
-  activityRemindersHint: {
-    en: "Enable a reminder for any upcoming schedule item.",
-    es: "Activa un recordatorio para cualquier elemento próximo del horario.",
-    gl: "Activa un recordatorio para calquera elemento próximo do horario.",
+  scheduleReminderOff: {
+    en: "Reminder off for {name}",
+    es: "Recordatorio desactivado para {name}",
+    gl: "Lembranza desactivada para {name}",
   },
-  activityRemindersEmpty: {
-    en: "There are no upcoming schedule items.",
-    es: "No hay actividades próximas en el horario.",
-    gl: "Non hai actividades próximas no horario.",
-  },
+  scheduleShowLess: { en: "Show less", es: "Ver menos", gl: "Ver menos" },
+  scheduleShowMore: { en: "Show more", es: "Ver más", gl: "Ver máis" },
   save: { en: "Save", es: "Guardar", gl: "Gardar" },
   saved: { en: "Saved", es: "Guardado", gl: "Gardado" },
   scannerAccreditation: { en: "Accreditation", es: "Acreditación", gl: "Acreditación" },

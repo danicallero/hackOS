@@ -23,13 +23,6 @@ interface Preferences {
   overrides: { category: string; channel: Channel; enabled: boolean }[];
 }
 
-interface ScheduleItem {
-  id: number;
-  title: string;
-  startsAt: string;
-  endsAt: string;
-}
-
 interface InboxItem {
   id: number;
   category: string;
@@ -43,11 +36,6 @@ interface InboxItem {
 interface InboxResponse {
   items: InboxItem[];
   total: number;
-}
-
-interface PreferencesPayload {
-  prefs: Preferences;
-  schedule: ScheduleItem[];
 }
 
 const LIMIT = 20;
@@ -317,24 +305,23 @@ function NotificationRow({
 }
 
 function PreferencesView() {
-  const { t, language } = useLocale();
+  const { t } = useLocale();
   const { me } = useMeContext();
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [actionError, setActionError] = useState<Error | null>(null);
 
-  const fetchPreferences = useCallback(async (): Promise<PreferencesPayload> => {
-    const [prefs, activities] = await Promise.all([
-      apiFetch<Preferences>("/api/me/notification-preferences"),
-      apiFetch<{ items: ScheduleItem[] }>("/api/public/activities"),
-    ]);
-    return { prefs, schedule: activities.items };
-  }, []);
-  const { data, loading, error, staleSince, load, setData } = useCachedApi(
-    `user:${me?.id ?? "unknown"}:notification-preferences`,
-    fetchPreferences,
+  const fetchPreferences = useCallback(
+    () => apiFetch<Preferences>("/api/me/notification-preferences"),
+    [],
   );
-  const prefs = data?.prefs ?? null;
-  const schedule = data?.schedule ?? [];
+  const {
+    data: prefs,
+    loading,
+    error,
+    staleSince,
+    load,
+    setData,
+  } = useCachedApi(`user:${me?.id ?? "unknown"}:notification-preferences`, fetchPreferences);
 
   useEffect(() => {
     void load();
@@ -353,35 +340,9 @@ function PreferencesView() {
     setActionError(null);
     try {
       const next = await savePreferences([{ category, channel, enabled }]);
-      setData((current) => (current ? { ...current, prefs: next } : current));
+      setData(next);
     } catch (cause) {
       setActionError(cause instanceof Error ? cause : new Error("Failed to save preference"));
-    } finally {
-      setSavingKey(null);
-    }
-  }
-
-  function reminderEnabled(activityId: number): boolean {
-    const category = `schedule:${activityId}`;
-    return (
-      prefs?.overrides.some(
-        (row) => row.category === category && row.channel === "push" && row.enabled,
-      ) ?? false
-    );
-  }
-
-  async function toggleReminder(activityId: number, enabled: boolean) {
-    if (!prefs) return;
-    const category = `schedule:${activityId}`;
-    setSavingKey(category);
-    setActionError(null);
-    try {
-      const next = await savePreferences(
-        prefs.channels.map((channel) => ({ category, channel, enabled })),
-      );
-      setData((current) => (current ? { ...current, prefs: next } : current));
-    } catch (cause) {
-      setActionError(cause instanceof Error ? cause : new Error("Failed to save reminder"));
     } finally {
       setSavingKey(null);
     }
@@ -391,7 +352,6 @@ function PreferencesView() {
     return <RequestFeedback loading={loading} error={error} onRetry={() => void load()} />;
 
   const editableCategories = ["announcements", "application"];
-  const upcoming = schedule.filter((item) => new Date(item.endsAt).getTime() > Date.now());
 
   return (
     <View style={{ gap: 18 }}>
@@ -448,59 +408,6 @@ function PreferencesView() {
         </Section>
       ))}
 
-      <Section title={t("activityReminders")} footer={t("activityRemindersHint")}>
-        {upcoming.length ? (
-          upcoming.map((item, index) => (
-            <View key={item.id}>
-              {index > 0 ? <Separator /> : null}
-              <View
-                style={{
-                  alignItems: "center",
-                  flexDirection: "row",
-                  gap: 12,
-                  minHeight: 58,
-                  paddingHorizontal: 16,
-                  paddingVertical: 8,
-                }}
-              >
-                <View style={{ flex: 1, gap: 3 }}>
-                  <Text selectable style={{ color: colors.label, fontSize: 16 }}>
-                    {item.title}
-                  </Text>
-                  <Text
-                    selectable
-                    style={{
-                      color: colors.secondaryLabel,
-                      fontSize: 13,
-                      fontVariant: ["tabular-nums"],
-                    }}
-                  >
-                    {new Date(item.startsAt).toLocaleString(language, {
-                      weekday: "short",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </Text>
-                </View>
-                <Switch
-                  accessibilityLabel={item.title}
-                  disabled={savingKey !== null}
-                  style={{ alignSelf: "center" }}
-                  value={reminderEnabled(item.id)}
-                  onValueChange={(enabled) => void toggleReminder(item.id, enabled)}
-                />
-              </View>
-            </View>
-          ))
-        ) : (
-          <View style={{ padding: 16 }}>
-            <Text selectable style={{ color: colors.secondaryLabel, fontSize: 15 }}>
-              {t("activityRemindersEmpty")}
-            </Text>
-          </View>
-        )}
-      </Section>
-
       <ActionButton
         label={t("refreshNotifications")}
         icon="arrow.clockwise"
@@ -535,17 +442,27 @@ const HIDDEN_PAYLOAD_KEYS = new Set([
   "language",
 ]);
 
+// Technical identifiers (entryId, roomId, activityId, teamId, …) are only
+// meaningful to the backend; showing them as raw "Entry Id: 42" rows read as
+// ugly, unexplained metadata rather than information a participant can use.
+const TECHNICAL_ID_KEY = /(^id$|Id$)/;
+
 function payloadDetails(payload: unknown) {
   if (!payload || typeof payload !== "object") return [];
   return Object.entries(payload as Record<string, unknown>)
     .filter(
-      ([key, value]) => !HIDDEN_PAYLOAD_KEYS.has(key) && value !== null && value !== undefined,
+      ([key, value]) =>
+        !HIDDEN_PAYLOAD_KEYS.has(key) &&
+        !TECHNICAL_ID_KEY.test(key) &&
+        value !== null &&
+        value !== undefined &&
+        typeof value !== "object",
     )
     .map(([key, value]) => ({
       key: key
         .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
         .replace(/^./, (letter) => letter.toUpperCase()),
-      value: typeof value === "string" ? value : JSON.stringify(value),
+      value: String(value),
     }));
 }
 
