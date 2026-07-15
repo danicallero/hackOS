@@ -1,9 +1,10 @@
-import { Stack, useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import { useEffect } from "react";
 import { ScrollView, Text, useColorScheme, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { EmptyState, StatusPill } from "@/components/native-ui";
+import { EmptyState, FloatingBackButton } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { useLocale } from "@/lib/i18n";
@@ -14,11 +15,10 @@ import { colors } from "@/theme/colors";
 export default function ScheduleDetailScreen() {
   useColorScheme();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { t, language } = useLocale();
-  const { data, loading, error, staleSince, load } = useCachedApi(
-    "schedule",
-    fetchPublicSchedule,
-  );
+  const { data, loading, error, staleSince, load } = useCachedApi("schedule", fetchPublicSchedule);
 
   useEffect(() => {
     void load();
@@ -41,7 +41,13 @@ export default function ScheduleDetailScreen() {
     <>
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{ flexGrow: 1, gap: 16, padding: 20, paddingBottom: 40 }}
+        contentContainerStyle={{
+          flexGrow: 1,
+          gap: 16,
+          padding: 20,
+          paddingBottom: 40,
+          paddingTop: insets.top + 68,
+        }}
         style={{ backgroundColor: colors.background }}
       >
         <StaleDataBanner updatedAt={staleSince} />
@@ -56,79 +62,73 @@ export default function ScheduleDetailScreen() {
             description={t("scheduleItemUnavailable")}
           />
         ) : (
-          <View style={{ gap: 16 }}>
-            {item.type ? (
-              <View style={{ alignItems: "flex-start" }}>
-                <StatusPill>{item.type}</StatusPill>
-              </View>
-            ) : null}
-            <DetailRow icon="clock" label={t("scheduleTime")}>
-              {date ? `${date} · ${time}` : time}
-            </DetailRow>
-            {item.location ? (
-              <DetailRow icon="mappin.and.ellipse" label={t("scheduleLocation")}>
-                {item.location}
-              </DetailRow>
-            ) : null}
-            {item.description ? (
+          <View style={{ gap: 20 }}>
+            <View style={{ gap: 6 }}>
               <View
-                style={{
-                  backgroundColor: colors.surface,
-                  borderCurve: "continuous",
-                  borderRadius: 14,
-                  gap: 8,
-                  padding: 16,
-                }}
+                style={{ alignItems: "center", flexDirection: "row", flexWrap: "wrap", gap: 6 }}
               >
-                <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13 }}>
-                  {t("scheduleDescription")}
-                </Text>
                 <Text
                   selectable
-                  style={{ color: colors.label, fontSize: 16, lineHeight: 23 }}
+                  style={{
+                    color: colors.secondaryLabel,
+                    fontSize: 13,
+                    fontWeight: "700",
+                    letterSpacing: 0.4,
+                    textTransform: "uppercase",
+                  }}
                 >
-                  {item.description}
+                  {item.type ?? t("scheduleDetails")}
                 </Text>
+                {item.location ? (
+                  <>
+                    <Text style={{ color: colors.tertiaryLabel, fontSize: 13 }}>·</Text>
+                    <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13 }}>
+                      {item.location}
+                    </Text>
+                  </>
+                ) : null}
               </View>
+              <Text
+                selectable
+                style={{ color: colors.label, fontSize: 30, fontWeight: "800", lineHeight: 36 }}
+              >
+                {item.title}
+              </Text>
+            </View>
+
+            <View
+              style={{
+                alignItems: "center",
+                alignSelf: "flex-start",
+                backgroundColor: colors.accentSurface,
+                borderCurve: "continuous",
+                borderRadius: 999,
+                flexDirection: "row",
+                gap: 8,
+                paddingHorizontal: 14,
+                paddingVertical: 10,
+              }}
+            >
+              <SymbolView
+                name="clock.fill"
+                tintColor={colors.accent}
+                size={15}
+                accessible={false}
+              />
+              <Text selectable style={{ color: colors.accent, fontSize: 15, fontWeight: "700" }}>
+                {date ? `${date} · ${time}` : time}
+              </Text>
+            </View>
+
+            {item.description ? (
+              <Text selectable style={{ color: colors.label, fontSize: 16, lineHeight: 24 }}>
+                {item.description}
+              </Text>
             ) : null}
           </View>
         )}
       </ScrollView>
-      <Stack.Title>{item?.title ?? t("scheduleDetails")}</Stack.Title>
+      <FloatingBackButton top={insets.top + 12} onPress={() => router.back()} />
     </>
-  );
-}
-
-function DetailRow({
-  children,
-  icon,
-  label,
-}: {
-  children: React.ReactNode;
-  icon: "clock" | "mappin.and.ellipse";
-  label: string;
-}) {
-  return (
-    <View
-      style={{
-        alignItems: "flex-start",
-        backgroundColor: colors.surface,
-        borderCurve: "continuous",
-        borderRadius: 14,
-        flexDirection: "row",
-        gap: 12,
-        padding: 16,
-      }}
-    >
-      <SymbolView name={icon} tintColor={colors.secondaryLabel} size={20} accessible={false} />
-      <View style={{ flex: 1, gap: 3 }}>
-        <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13 }}>
-          {label}
-        </Text>
-        <Text selectable style={{ color: colors.label, fontSize: 16, lineHeight: 22 }}>
-          {children}
-        </Text>
-      </View>
-    </View>
   );
 }

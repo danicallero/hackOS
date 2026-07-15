@@ -1,13 +1,19 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { GlassView } from "expo-glass-effect";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import { useCallback, useEffect, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, useColorScheme, View } from "react-native";
+import { Alert, ScrollView, Text, useColorScheme, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { ActionButton, InfoRow, Section, Separator, StatusPill } from "@/components/native-ui";
+import {
+  ActionButton,
+  FloatingBackButton,
+  InfoRow,
+  Section,
+  Separator,
+  StatusPill,
+} from "@/components/native-ui";
 import { PresenceManagement } from "@/components/presence-management";
 import { QrCamera } from "@/components/QrCamera";
 import { SegmentedControl } from "@/components/segmented-control";
@@ -171,7 +177,7 @@ export function PersonOperationsScreen() {
         }}
       >
         <Text style={{ color: colors.secondaryLabel }}>{t("personLoading")}</Text>
-        <ProfileBackButton top={insets.top + 12} onPress={() => router.back()} />
+        <FloatingBackButton top={insets.top + 12} onPress={() => router.back()} />
       </View>
     );
   }
@@ -357,27 +363,7 @@ export function PersonOperationsScreen() {
           <PresenceManagement refreshKey={sync.lastSync ?? undefined} userId={userId} />
         ) : null}
       </ScrollView>
-      <ProfileBackButton top={insets.top + 12} onPress={() => router.back()} />
+      <FloatingBackButton top={insets.top + 12} onPress={() => router.back()} />
     </>
-  );
-}
-
-function ProfileBackButton({ top, onPress }: { top: number; onPress: () => void }) {
-  const { t } = useLocale();
-  return (
-    <GlassView
-      glassEffectStyle="regular"
-      isInteractive
-      style={{ borderRadius: 22, height: 44, left: 16, position: "absolute", top, width: 44 }}
-    >
-      <Pressable
-        accessibilityLabel={t("back")}
-        accessibilityRole="button"
-        onPress={onPress}
-        style={{ alignItems: "center", flex: 1, justifyContent: "center" }}
-      >
-        <SymbolView name="chevron.left" tintColor={colors.label} size={19} weight="semibold" />
-      </Pressable>
-    </GlassView>
   );
 }
