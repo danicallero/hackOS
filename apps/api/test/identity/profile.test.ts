@@ -46,8 +46,44 @@ describe("GET /api/me (H7)", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().name).toBe("Grace");
     expect(res.json().role).toBe("participant");
+    expect(res.json().mobileAccess).toBe(false);
     // H8/H55: /api/me carries the effective capabilities for UI gating.
     expect(res.json().capabilities).toEqual([]);
+  });
+
+  it("allows event team members and sent acceptances into mobile, but not internal decisions", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const staff = await createUserWithCapabilities([CAPABILITIES.ACCREDIT_SCAN]);
+    const accepted = await createUser();
+    const internal = await createUser();
+    const invited = await createUser();
+    const { rows: applications } = await pool.query(
+      `INSERT INTO applications (name, type, template)
+       VALUES ('Participants', 'participant', '[]'::jsonb) RETURNING id`,
+    );
+    await pool.query(
+      `INSERT INTO application_responses
+         (user_id, application_id, status, decision_sent_at)
+       VALUES ($1, $3, 'accepted', now()), ($2, $3, 'accepted_internal', NULL)`,
+      [accepted, internal, applications[0].id],
+    );
+    await pool.query(
+      `INSERT INTO email_verification_tokens
+         (token, type, email, user_id, kind, expires_at, used_at)
+       SELECT 'mobile-invite', 'account_claim', email, id, 'participant', now(), now()
+       FROM users WHERE id = $1`,
+      [invited],
+    );
+
+    const accessOf = async (id: number) => {
+      const res = await a.inject({ method: "GET", url: "/api/me", headers: asUser(id) });
+      return res.json().mobileAccess;
+    };
+    expect(await accessOf(staff)).toBe(true);
+    expect(await accessOf(accepted)).toBe(true);
+    expect(await accessOf(internal)).toBe(false);
+    expect(await accessOf(invited)).toBe(true);
   });
 
   it("exposes effective capabilities for UI gating (H8/H55)", async () => {

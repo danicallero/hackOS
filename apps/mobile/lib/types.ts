@@ -19,6 +19,7 @@ export interface Me {
   notes: string | null;
   createdAt: string;
   role: "admin" | "judge" | "sponsor" | "staff" | "participant";
+  mobileAccess: boolean;
   capabilities: string[];
 }
 

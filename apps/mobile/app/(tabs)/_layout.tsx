@@ -75,7 +75,7 @@ export default function TabLayout() {
   }, [refreshUnreadNotifications, me]);
 
   if (meLoading) return null;
-  if (!me) return null;
+  if (!me?.mobileAccess) return null;
 
   return (
     <View style={{ flex: 1 }}>

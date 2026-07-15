@@ -1,13 +1,13 @@
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Platform, Pressable, Text, type TextInput, View } from "react-native";
 
 import { AuthAlert, AuthButton, AuthField, AuthHeader, AuthScreen } from "@/components/auth-ui";
 import { apiFetch } from "@/lib/api";
-import { signIn } from "@/lib/auth-client";
+import { signIn, signOut } from "@/lib/auth-client";
 import { EVENT_WEBSITE_DISPLAY } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
-import type { PublicEvent } from "@/lib/types";
+import type { Me, PublicEvent } from "@/lib/types";
 import { colors } from "@/theme/colors";
 
 // React Native recommends choosing one autofill API per platform. Combining
@@ -27,12 +27,15 @@ const passwordAutofillProps = Platform.select({
 
 export default function SignInScreen() {
   const router = useRouter();
+  const { accessDenied } = useLocalSearchParams<{ accessDenied?: string }>();
   const { t } = useLocale();
   const passwordRef = useRef<TextInput>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(
+    accessDenied === "1" ? t("mobileAccessDenied") : null,
+  );
   const [event, setEvent] = useState<PublicEvent | null>(null);
 
   useEffect(() => {
@@ -57,7 +60,17 @@ export default function SignInScreen() {
     setError(null);
     try {
       const { error: signInError } = await signIn.email({ email: email.trim(), password });
-      if (signInError) setError(t("signInError"));
+      if (signInError) {
+        setError(t("signInError"));
+        return;
+      }
+      const me = await apiFetch<Me>("/api/me");
+      if (!me.mobileAccess) {
+        await signOut();
+        setError(t("mobileAccessDenied"));
+        return;
+      }
+      router.replace("/");
     } catch {
       setError(t("signInError"));
     } finally {

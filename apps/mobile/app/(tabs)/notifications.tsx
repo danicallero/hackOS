@@ -361,7 +361,9 @@ function PreferencesView() {
   if (!prefs)
     return <RequestFeedback loading={loading} error={error} onRetry={() => void load()} />;
 
-  const editableCategories = ["announcements", "application"];
+  // Application decisions are email-only and intentionally have no mobile
+  // preference: accepted/rejected applicants must always receive them.
+  const editableCategories = ["announcements"];
 
   return (
     <View style={{ gap: 18 }}>

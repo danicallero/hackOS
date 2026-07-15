@@ -337,6 +337,17 @@ describe("confirm / decline (H15)", () => {
     });
     expect(forbidden.statusCode).toBe(403);
 
+    const walletBefore = await a.inject({
+      method: "GET",
+      url: "/api/me/ticket",
+      headers: asUser(userId),
+    });
+    expect(walletBefore.statusCode).toBe(200);
+    expect(walletBefore.json().ticketToken).toBeNull();
+    expect(walletBefore.json().acceptedSpots).toEqual([
+      expect.objectContaining({ responseId, applicationName: "Participant form" }),
+    ]);
+
     const ok = await a.inject({
       method: "POST",
       url: `/api/me/responses/${responseId}/confirm`,
@@ -344,6 +355,14 @@ describe("confirm / decline (H15)", () => {
     });
     expect(ok.statusCode).toBe(200);
     expect(ok.json().status).toBe("confirmed");
+
+    const walletAfter = await a.inject({
+      method: "GET",
+      url: "/api/me/ticket",
+      headers: asUser(userId),
+    });
+    expect(walletAfter.json().ticketToken).toBe(ok.json().ticket_token);
+    expect(walletAfter.json().acceptedSpots).toEqual([]);
   });
 
   it("admin override can confirm on behalf (audited via=admin_override, requires APPLICATIONS_CONFIRM_OVERRIDE)", async () => {
