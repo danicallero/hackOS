@@ -4,8 +4,10 @@ import { RefreshControl, SectionList, Text, useColorScheme, View } from "react-n
 
 import { EmptyState, StatusPill } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
+import { StaleDataBanner } from "@/components/stale-data-banner";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
+import { useCachedApi } from "@/lib/use-cached-api";
 import { colors } from "@/theme/colors";
 
 interface ScheduleItem {
@@ -28,22 +30,14 @@ interface ScheduleSection {
 export default function ScheduleScreen() {
   useColorScheme();
   const { t, language } = useLocale();
-  const [items, setItems] = useState<ScheduleItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(async () => {
-    setError(null);
-    try {
-      const { items: rows } = await apiFetch<{ items: ScheduleItem[] }>("/api/public/activities");
-      setItems(rows);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause : new Error("Failed to load schedule"));
-    } finally {
-      setLoading(false);
-    }
+  const fetchSchedule = useCallback(async () => {
+    const response = await apiFetch<{ items: ScheduleItem[] }>("/api/public/activities");
+    return response.items;
   }, []);
+  const { data, loading, error, staleSince, load } = useCachedApi("schedule", fetchSchedule);
+  const items = data ?? [];
 
   useEffect(() => {
     void load();
@@ -82,6 +76,8 @@ export default function ScheduleScreen() {
       contentContainerStyle={{ flexGrow: 1, paddingBottom: 24 }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       stickySectionHeadersEnabled={false}
+      ListHeaderComponent={<StaleDataBanner updatedAt={staleSince} />}
+      ListHeaderComponentStyle={{ paddingHorizontal: 16, paddingTop: staleSince ? 16 : 0 }}
       ListEmptyComponent={
         loading ? (
           <RequestFeedback loading />

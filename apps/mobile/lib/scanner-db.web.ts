@@ -27,12 +27,35 @@ export async function findPersonByTicket(ticketToken: string): Promise<ScannerPe
   return snapshot.people.find((person) => person.ticketToken === ticketToken) ?? null;
 }
 
+export async function findPersonById(userId: number): Promise<ScannerPerson | null> {
+  return snapshot.people.find((person) => person.userId === userId) ?? null;
+}
+
+export async function listScannerPeople(query = ""): Promise<ScannerPerson[]> {
+  const needle = query.trim().toLocaleLowerCase();
+  return snapshot.people
+    .filter((person) =>
+      [person.name, person.surname, person.email, person.badgeId]
+        .filter(Boolean)
+        .join(" ")
+        .toLocaleLowerCase()
+        .includes(needle),
+    )
+    .sort((a, b) =>
+      [a.surname, a.name, a.userId]
+        .join(" ")
+        .localeCompare([b.surname, b.name, b.userId].join(" ")),
+    );
+}
+
 export async function findPersonByBadge(
   badgeId: string,
 ): Promise<{ person: ScannerPerson | null; revoked: boolean }> {
+  const person = snapshot.people.find((candidate) => candidate.badgeId === badgeId) ?? null;
+  if (person) return { person, revoked: false };
   const revoked = snapshot.people.some((person) => person.revokedBadgeIds.includes(badgeId));
   return {
-    person: revoked ? null : (snapshot.people.find((person) => person.badgeId === badgeId) ?? null),
+    person: null,
     revoked,
   };
 }

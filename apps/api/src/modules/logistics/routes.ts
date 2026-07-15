@@ -12,6 +12,7 @@ import {
   checkInUser,
   lookupByTicket,
   lookupByUserId,
+  removeBadge,
   rotateBadge,
 } from "./accreditation.js";
 import {
@@ -60,6 +61,7 @@ import {
   personSearchBody,
   presenceLookupBody,
   presenceScanBody,
+  removeBadgeBody,
   rotateBody,
   scannableActivitiesQuery,
   scannerSnapshotResponse,
@@ -267,6 +269,12 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
         newBadgeId: req.body.newBadgeId,
         reason: req.body.reason,
       }),
+  );
+
+  typed.post(
+    "/api/accreditation/remove",
+    { preHandler: [accredit, idempotencyGuard], schema: { body: removeBadgeBody } },
+    async (req) => removeBadge(actor(req.userId), req.body),
   );
 
   // ── H24 presence ─────────────────────────────────────────────────────────
