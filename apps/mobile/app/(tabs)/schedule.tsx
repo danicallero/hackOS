@@ -178,16 +178,6 @@ export default function ScheduleScreen() {
             item={item}
             language={language}
             last={index === section.data.length - 1}
-            now={now}
-            showNow={
-              section.key === todayKey &&
-              section.data.find(
-                (row) =>
-                  row.kind === "item" &&
-                  safeTimestamp(row.startsAt) <= now &&
-                  safeTimestamp(row.endsAt) >= now,
-              )?.id === item.id
-            }
             reminderOn={reminders.ready ? reminders.isEnabled(item.id) : null}
             reminderBusy={reminders.savingId === item.id}
             onToggleReminder={(enabled) => void reminders.toggle(item.id, enabled)}
@@ -219,26 +209,21 @@ function NowMarkerRow({ now }: { now: number }) {
 function NowMarkerLine({
   accessibilityLabel,
   label,
-  top,
 }: {
   accessibilityLabel: string;
   label: string;
-  top?: `${number}%`;
 }) {
   return (
     <View
       accessible
       accessibilityLabel={accessibilityLabel}
       pointerEvents="none"
-      style={{
-        alignItems: "center",
-        flexDirection: "row",
-        ...(top ? { left: 16, position: "absolute", right: 16, top, zIndex: 2 } : null),
-      }}
+      style={{ alignItems: "center", flexDirection: "row" }}
     >
-      <View style={{ alignItems: "center", width: 62 }}>
+      <View style={{ alignItems: "center", width: 70 }}>
         <Text
           selectable
+          numberOfLines={1}
           style={{
             color: colors.destructive,
             fontSize: 12,
@@ -267,8 +252,6 @@ function ScheduleCard({
   item,
   language,
   last,
-  now,
-  showNow,
   reminderOn,
   reminderBusy,
   onToggleReminder,
@@ -276,8 +259,6 @@ function ScheduleCard({
   item: ScheduleItem;
   language: string;
   last: boolean;
-  now: number;
-  showNow: boolean;
   reminderOn: boolean | null;
   reminderBusy: boolean;
   onToggleReminder: (enabled: boolean) => void;
@@ -288,11 +269,6 @@ function ScheduleCard({
   const endsAt = new Date(item.endsAt);
   const time = startsAt.toLocaleTimeString(language, { hour: "2-digit", minute: "2-digit" });
   const end = endsAt.toLocaleTimeString(language, { hour: "2-digit", minute: "2-digit" });
-  const duration = endsAt.getTime() - startsAt.getTime();
-  const progress = Math.max(
-    0.08,
-    Math.min(0.92, duration > 0 ? (now - startsAt.getTime()) / duration : 0.5),
-  );
   const [truncated, setTruncated] = useState(false);
 
   function toggleReminder(event: GestureResponderEvent) {
@@ -310,9 +286,10 @@ function ScheduleCard({
 
   return (
     <View style={{ flexDirection: "row", paddingHorizontal: 16 }}>
-      <View style={{ alignItems: "center", width: 62 }}>
+      <View style={{ alignItems: "center", width: 70 }}>
         <Text
           selectable
+          numberOfLines={1}
           style={{
             color: colors.label,
             fontSize: 15,
@@ -431,21 +408,6 @@ function ScheduleCard({
           </View>
         ) : null}
       </Pressable>
-      {showNow ? (
-        <NowMarkerLine
-          accessibilityLabel={t("scheduleNow", {
-            time: new Date(now).toLocaleTimeString(language, {
-              hour: "2-digit",
-              minute: "2-digit",
-            }),
-          })}
-          label={new Date(now).toLocaleTimeString(language, {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-          top={`${progress * 100}%`}
-        />
-      ) : null}
     </View>
   );
 }
