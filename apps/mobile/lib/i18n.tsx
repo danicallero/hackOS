@@ -22,9 +22,14 @@ const dict = {
     gl: "A túa aplicación de apoio durante o evento.",
   },
   eventAccessNotice: {
-    en: "Accepted participants only. Sign in with the same email and password you use on {website}. Need help? Contact the organization.",
-    es: "Solo para participantes aceptados. Entra con el mismo correo y contraseña que usas en {website}. ¿Necesitas ayuda? Contacta con la organización.",
-    gl: "Só para participantes aceptados. Entra co mesmo correo e contrasinal que usas en {website}. Necesitas axuda? Contacta coa organización.",
+    en: "For accepted participants and event team members. Sign in with the same email and password you use on {website}. Need help? Contact the organization.",
+    es: "Para participantes aceptados y miembros del equipo del evento. Entra con el mismo correo y contraseña que usas en {website}. ¿Necesitas ayuda? Contacta con la organización.",
+    gl: "Para participantes aceptados e membros do equipo do evento. Entra co mesmo correo e contrasinal que usas en {website}. Necesitas axuda? Contacta coa organización.",
+  },
+  mobileAccessDenied: {
+    en: "This account doesn't have access to the event app yet. Access is available to accepted participants and event team members.",
+    es: "Esta cuenta todavía no tiene acceso a la app del evento. El acceso está disponible para participantes aceptados y miembros del equipo.",
+    gl: "Esta conta aínda non ten acceso á app do evento. O acceso está dispoñible para participantes aceptados e membros do equipo.",
   },
   emailLabel: { en: "Email", es: "Correo", gl: "Correo" },
   emailPlaceholder: {
@@ -293,6 +298,36 @@ const dict = {
   queuePosition: { en: "Position {n}", es: "Posición {n}", gl: "Posición {n}" },
   ticketLabel: { en: "Ticket", es: "Entrada", gl: "Entrada" },
   badgeLabel: { en: "Badge", es: "Badge", gl: "Badge" },
+  noTicketYet: {
+    en: "Confirm your accepted spot to receive your ticket.",
+    es: "Confirma tu plaza aceptada para recibir tu entrada.",
+    gl: "Confirma a túa praza aceptada para recibir a entrada.",
+  },
+  ticketNotReadyTitle: {
+    en: "Ticket not ready",
+    es: "Entrada no disponible",
+    gl: "Entrada non dispoñible",
+  },
+  walletConfirmSpotTitle: {
+    en: "Confirm your spot",
+    es: "Confirma tu plaza",
+    gl: "Confirma a túa praza",
+  },
+  walletConfirmSpotDescription: {
+    en: "You've been accepted. Confirm now to secure your place and create your event ticket.",
+    es: "Has sido aceptado. Confirma ahora para asegurar tu plaza y crear tu entrada para el evento.",
+    gl: "Fuches aceptado. Confirma agora para asegurar a túa praza e crear a entrada para o evento.",
+  },
+  walletConfirmSpotAction: {
+    en: "Accept my spot",
+    es: "Aceptar mi plaza",
+    gl: "Aceptar a miña praza",
+  },
+  walletConfirmSpotDeadline: {
+    en: "Confirm before {date}.",
+    es: "Confirma antes del {date}.",
+    gl: "Confirma antes do {date}.",
+  },
   noBadgeYet: {
     en: "You don't have a badge yet — get accredited at check-in.",
     es: "Todavía no tienes badge — acredítate en el check-in.",

@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import "react-native-reanimated";
 
 import { useColorScheme } from "@/components/useColorScheme";
-import { authClient } from "@/lib/auth-client";
+import { authClient, signOut } from "@/lib/auth-client";
 import { isSupportedLanguage, LocaleProvider, useLocale } from "@/lib/i18n";
 import { MeProvider, useMeContext } from "@/lib/me-context";
 import { setupNotificationListeners } from "@/lib/notifications-setup";
@@ -57,11 +57,9 @@ function RootLayoutSession() {
       <LanguageSync />
       <PushRegistration authenticated={Boolean(session)} />
       <NotificationListeners />
+      <MobileAccessGate authenticated={Boolean(session)} />
       <PersonalEventStream authenticated={Boolean(session)} />
-      <RootLayoutNav
-        authenticated={Boolean(session)}
-        pending={isPending && !pendingGraceElapsed}
-      />
+      <RootLayoutNav authenticated={Boolean(session)} pending={isPending && !pendingGraceElapsed} />
     </MeProvider>
   );
 }
@@ -101,53 +99,58 @@ function LanguageSync() {
   return null;
 }
 
-/** Best-effort Expo push token registration once signed in (H51, H55). */
+/** Best-effort Expo push token registration once an eligible user signs in. */
 function PushRegistration({ authenticated }: { authenticated: boolean }) {
   const { me } = useMeContext();
   useEffect(() => {
-    if (authenticated && me) {
+    if (authenticated && me?.mobileAccess) {
       registerForPushNotifications().catch(() => {
-        // Best-effort: permission denial or a simulator with no push
-        // capability shouldn't block using the app.
+        // Permission denial and simulators without push must not block the app.
       });
     }
   }, [authenticated, me]);
   return null;
 }
 
-/**
- * Wires notification received/tap listeners for the app's lifetime (H38, H51).
- *
- * A cold-start tap can fire before the navigator has finished mounting, in
- * which case `router.push` would silently no-op. `useRootNavigationState`
- * reports `undefined` until the navigator is ready, so a pending navigation
- * is stashed in a ref and flushed as soon as it becomes ready.
- */
+/** Routes queue-notification taps after the native navigator is ready. */
 function NotificationListeners() {
   const router = useRouter();
   const navigationState = useRootNavigationState();
   const isReady = useRef(false);
   const pendingNavigation = useRef(false);
+  const navigationReady = Boolean(navigationState?.key);
 
-  isReady.current = Boolean(navigationState?.key);
+  isReady.current = navigationReady;
 
   useEffect(() => {
-    if (pendingNavigation.current && isReady.current) {
+    if (pendingNavigation.current && navigationReady) {
       pendingNavigation.current = false;
       router.push("/(tabs)/queue");
     }
-  }, [navigationState?.key, router]);
+  }, [navigationReady, router]);
 
+  useEffect(
+    () =>
+      setupNotificationListeners(() => {
+        if (isReady.current) router.push("/(tabs)/queue");
+        else pendingNavigation.current = true;
+      }),
+    [router],
+  );
+
+  return null;
+}
+
+/** Signs ordinary applicants back out before they can enter event-day routes. */
+function MobileAccessGate({ authenticated }: { authenticated: boolean }) {
+  const { me, loading } = useMeContext();
+  const router = useRouter();
   useEffect(() => {
-    const cleanup = setupNotificationListeners(() => {
-      if (isReady.current) {
-        router.push("/(tabs)/queue");
-      } else {
-        pendingNavigation.current = true;
-      }
+    if (!authenticated || loading || !me || me.mobileAccess) return;
+    void signOut().finally(() => {
+      router.replace({ pathname: "/(auth)/sign-in", params: { accessDenied: "1" } });
     });
-    return cleanup;
-  }, [router]);
+  }, [authenticated, loading, me, router]);
 
   return null;
 }

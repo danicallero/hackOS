@@ -21,13 +21,19 @@ interface TicketPayload {
   userId: number;
   ticketToken: string | null;
   badgeId: string | null;
+  acceptedSpots: Array<{
+    responseId: number;
+    applicationName: string;
+    applicationType: string;
+    expiresAt: string | null;
+  }>;
 }
 
 /** Ticket and badge read model shared with web, with native Wallet handoff. */
 export default function WalletScreen() {
   useColorScheme();
   const { t } = useLocale();
-  const { me } = useMeContext();
+  const { me, refetch: refetchMe } = useMeContext();
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState<Error | null>(null);
@@ -87,6 +93,13 @@ export default function WalletScreen() {
     }
   }
 
+  async function confirmSpot(responseId: number) {
+    await apiFetch(`/api/me/responses/${responseId}/confirm`, {
+      method: "POST",
+    });
+    await Promise.all([load(), refetchMe()]);
+  }
+
   if (!ticket)
     return <RequestFeedback loading={loading} error={error} onRetry={() => void load()} />;
 
@@ -102,6 +115,40 @@ export default function WalletScreen() {
       <StaleDataBanner updatedAt={staleSince} />
       {error ? <RequestFeedback error={error} onRetry={() => void load()} /> : null}
       {actionError ? <RequestFeedback error={actionError} /> : null}
+
+      {ticket.acceptedSpots.map((spot) => (
+        <Section
+          key={spot.responseId}
+          title={t("walletConfirmSpotTitle")}
+          footer={
+            spot.expiresAt
+              ? t("walletConfirmSpotDeadline", {
+                  date: new Date(spot.expiresAt).toLocaleString(),
+                })
+              : undefined
+          }
+        >
+          <View style={{ gap: 12, padding: 16 }}>
+            <View style={{ gap: 4 }}>
+              <Text selectable style={{ color: colors.label, fontSize: 17, fontWeight: "600" }}>
+                {spot.applicationName}
+              </Text>
+              <Text
+                selectable
+                style={{ color: colors.secondaryLabel, fontSize: 14, lineHeight: 20 }}
+              >
+                {t("walletConfirmSpotDescription")}
+              </Text>
+            </View>
+            <ActionButton
+              label={t("walletConfirmSpotAction")}
+              icon="checkmark.circle.fill"
+              busy={actionBusy}
+              onPress={() => void runAction(() => confirmSpot(spot.responseId))}
+            />
+          </View>
+        </Section>
+      ))}
 
       <SegmentedControl
         label={t("tabWallet")}
@@ -161,8 +208,8 @@ export default function WalletScreen() {
       ) : (
         <EmptyState
           icon="lanyardcard"
-          title={t("badgeNotReadyTitle")}
-          description={t("noBadgeYet")}
+          title={purpose === "ticket" ? t("ticketNotReadyTitle") : t("badgeNotReadyTitle")}
+          description={purpose === "ticket" ? t("noTicketYet") : t("noBadgeYet")}
         />
       )}
 

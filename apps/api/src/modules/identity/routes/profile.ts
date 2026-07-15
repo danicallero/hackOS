@@ -4,7 +4,6 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { pool, withTransaction } from "../../../db/pool.js";
 import { audit } from "../../../lib/audit.js";
-import { reconcileDevpostParticipantsForUser } from "../../projects/reconciliation.js";
 import {
   getEffectiveCapabilities,
   invalidateCapabilities,
@@ -12,8 +11,10 @@ import {
   requireCapability,
 } from "../../../lib/capabilities.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../../lib/errors.js";
+import { reconcileDevpostParticipantsForUser } from "../../projects/reconciliation.js";
 import { myProjects } from "../../projects/service.js";
 import { anonymizeUser } from "../anonymize.js";
+import { hasMobileAccess } from "../mobile-access.js";
 import { computeDerivedRole } from "../role.js";
 
 /**
@@ -222,6 +223,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         response: {
           200: userResponseSchema.extend({
             role: z.enum(["admin", "judge", "sponsor", "staff", "participant"]),
+            mobileAccess: z.boolean(),
             // Effective capabilities (H8) so the web/mobile UI can gate by
             // capability, never by the illustrative role (H55). Authoritative
             // enforcement still happens on every guarded route server-side.
@@ -237,7 +239,8 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         computeDerivedRole(pool, userId),
         getEffectiveCapabilities(userId),
       ]);
-      return { ...serializeUser(row), role, capabilities: [...capabilities] };
+      const mobileAccess = await hasMobileAccess(pool, userId, role);
+      return { ...serializeUser(row), role, mobileAccess, capabilities: [...capabilities] };
     },
   );
 

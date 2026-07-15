@@ -26,7 +26,7 @@ function savePreferences(
 /**
  * Per-activity reminder toggle shared by the calendar card bell and (if ever
  * needed again) the notifications preferences screen. A reminder is "on" when
- * every configured channel has an enabled override for `schedule:<activityId>`.
+ * the push channel has an enabled override for `schedule:<activityId>`.
  */
 export function useActivityReminders() {
   const { me } = useMeContext();
@@ -64,9 +64,7 @@ export function useActivityReminders() {
       const category = `schedule:${activityId}`;
       setSavingId(activityId);
       try {
-        const next = await savePreferences(
-          prefs.channels.map((channel) => ({ category, channel, enabled })),
-        );
+        const next = await savePreferences([{ category, channel: "push", enabled }]);
         setData(next);
         emitNotificationChange();
       } finally {
