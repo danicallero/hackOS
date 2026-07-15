@@ -258,7 +258,7 @@ export function PersonOperationsScreen() {
             <InfoRow
               label={t("personCurrentBadge")}
               value={person.badgeId ?? t("personUnassigned")}
-              icon="lanyardcard"
+              icon="key.card"
             />
             <Separator />
             <ActionButton

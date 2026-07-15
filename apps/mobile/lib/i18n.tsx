@@ -1,6 +1,6 @@
 import { createContext, type ReactNode, useContext, useMemo, useState } from "react";
 
-type Lang = "en" | "es" | "gl";
+export type Lang = "en" | "es" | "gl";
 type I18nText = Record<Lang, string>;
 
 /**

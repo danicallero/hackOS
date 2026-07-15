@@ -1,11 +1,12 @@
+import { type MenuAction, MenuView } from "@expo/ui/community/menu";
 import { useCallback, useEffect, useState } from "react";
-import { Alert, ScrollView, Text, useColorScheme, View } from "react-native";
+import { Alert, Pressable, ScrollView, Text, useColorScheme, View } from "react-native";
 
 import { ActionButton, InfoRow, Section, Separator, StatusPill } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { apiFetch } from "@/lib/api";
 import { signOut } from "@/lib/auth-client";
-import { useLocale } from "@/lib/i18n";
+import { type Lang, useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { colors } from "@/theme/colors";
 
@@ -14,10 +15,7 @@ interface Intolerance {
   label: { en: string; es: string; gl: string };
 }
 
-interface University {
-  id: number;
-  name: string;
-}
+const LANGUAGES: Lang[] = ["en", "es", "gl"];
 
 /** Account overview with the same participant-owned profile fields exposed on web. */
 export default function AccountScreen() {
@@ -25,29 +23,40 @@ export default function AccountScreen() {
   const { t, language } = useLocale();
   const { me, loading, error, refetch } = useMeContext();
   const [intolerances, setIntolerances] = useState<Intolerance[]>([]);
-  const [university, setUniversity] = useState<University | null>(null);
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState<Error | null>(null);
+  const [savingLanguage, setSavingLanguage] = useState(false);
 
   const loadSupportingData = useCallback(async () => {
     if (!me) return;
-    const [intoleranceResult, universityResult] = await Promise.allSettled([
-      apiFetch<{ intolerances: Intolerance[] }>("/api/public/food-intolerances"),
-      me.universityId
-        ? apiFetch<{ universities: University[] }>(
-            `/api/public/universities?ids=${me.universityId}`,
-          )
-        : Promise.resolve({ universities: [] }),
-    ]);
-    if (intoleranceResult.status === "fulfilled")
-      setIntolerances(intoleranceResult.value.intolerances);
-    if (universityResult.status === "fulfilled")
-      setUniversity(universityResult.value.universities[0] ?? null);
+    try {
+      const { intolerances: list } = await apiFetch<{ intolerances: Intolerance[] }>(
+        "/api/public/food-intolerances",
+      );
+      setIntolerances(list);
+    } catch {
+      /* The rest of the profile remains usable without intolerance labels. */
+    }
   }, [me]);
 
   useEffect(() => {
     void loadSupportingData();
   }, [loadSupportingData]);
+
+  async function changeLanguage(nextLanguage: Lang) {
+    if (nextLanguage === me?.language || savingLanguage) return;
+    setSavingLanguage(true);
+    try {
+      await apiFetch("/api/me", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ language: nextLanguage }),
+      });
+      await refetch();
+    } finally {
+      setSavingLanguage(false);
+    }
+  }
 
   async function endSession() {
     setSigningOut(true);
@@ -116,7 +125,7 @@ export default function AccountScreen() {
           <Text selectable style={{ color: colors.secondaryLabel, fontSize: 15 }}>
             {me.email}
           </Text>
-          <StatusPill tone={me.badgeId ? "success" : "neutral"}>
+          <StatusPill tone={me.badgeId ? "success" : "neutral"} style={{ alignSelf: "center" }}>
             {me.badgeId ? t("accountAccredited") : t("accountNotAccredited")}
           </StatusPill>
         </View>
@@ -127,13 +136,20 @@ export default function AccountScreen() {
         <Separator inset={48} />
         <InfoRow label={t("accountPhone")} value={me.phone || t("accountNotSet")} icon="phone" />
         <Separator inset={48} />
-        <InfoRow label={t("accountLanguage")} value={languageName(me.language)} icon="globe" />
-        <Separator inset={48} />
-        <InfoRow
-          label={t("accountUniversity")}
-          value={university?.name || t("accountNotSet")}
-          icon="building.columns"
-        />
+        <MenuView
+          actions={LANGUAGES.map(
+            (lang): MenuAction => ({
+              id: lang,
+              title: languageName(lang),
+              state: lang === me.language ? "on" : "off",
+            }),
+          )}
+          onPressAction={({ nativeEvent }) => void changeLanguage(nativeEvent.event as Lang)}
+        >
+          <Pressable disabled={savingLanguage}>
+            <InfoRow label={t("accountLanguage")} value={languageName(me.language)} icon="globe" />
+          </Pressable>
+        </MenuView>
         <Separator inset={48} />
         <InfoRow
           label={t("accountShirtSize")}
@@ -177,7 +193,7 @@ export default function AccountScreen() {
         <InfoRow
           label={t("accountBadge")}
           value={me.badgeId ?? t("accountNoBadge")}
-          icon="lanyardcard"
+          icon="key.card"
         />
         <Separator inset={48} />
         <InfoRow

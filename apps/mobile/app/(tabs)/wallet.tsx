@@ -170,7 +170,7 @@ export default function WalletScreen() {
         >
           <View style={{ alignItems: "center", gap: 5 }}>
             <SymbolView
-              name={purpose === "ticket" ? "ticket.fill" : "lanyardcard.fill"}
+              name={purpose === "ticket" ? "ticket.fill" : "key.card.fill"}
               tintColor={colors.accent}
               size={28}
               accessible={false}
@@ -207,7 +207,7 @@ export default function WalletScreen() {
         </View>
       ) : (
         <EmptyState
-          icon="lanyardcard"
+          icon="key.card"
           title={purpose === "ticket" ? t("ticketNotReadyTitle") : t("badgeNotReadyTitle")}
           description={purpose === "ticket" ? t("noTicketYet") : t("noBadgeYet")}
         />
