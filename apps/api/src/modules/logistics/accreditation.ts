@@ -170,6 +170,17 @@ export async function checkInUser(
     };
   });
   await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_ACCREDITED, result);
+  // H28: the participant's own wallet screen only refetches on this event —
+  // without it, a first-time badge assignment silently never reaches their
+  // device until they happen to reopen the wallet tab.
+  await broadcast(
+    `${SSE_TOPICS.USER_PREFIX}${result.userId}`,
+    EVENTS.LOGISTICS_WALLET_PASS_UPDATED,
+    {
+      purpose: "badge",
+      status: "assigned",
+    },
+  );
   return result;
 }
 
