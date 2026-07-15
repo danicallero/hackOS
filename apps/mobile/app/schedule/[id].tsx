@@ -50,7 +50,7 @@ export default function ScheduleDetailScreen() {
           gap: 16,
           padding: 20,
           paddingBottom: 40,
-          paddingTop: insets.top + 52,
+          paddingTop: insets.top + 15,
         }}
         style={{ backgroundColor: colors.background }}
       >
