@@ -1,7 +1,7 @@
 import { MenuView } from "@expo/ui/community/menu";
-import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
+import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -12,7 +12,7 @@ import {
   View,
 } from "react-native";
 
-import { EmptyState, Separator, StatusPill } from "@/components/native-ui";
+import { EmptyState, Separator } from "@/components/native-ui";
 import { useLocale } from "@/lib/i18n";
 import { emitManualActivityScan } from "@/lib/manual-activity-scan";
 import { listScannerPeople } from "@/lib/scanner-db";
@@ -29,7 +29,6 @@ export function PeopleDirectoryScreen() {
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<"all" | ScannerPerson["role"]>("all");
   const [people, setPeople] = useState<ScannerPerson[]>([]);
-  const listRef = useRef<FlatList<ScannerPerson>>(null);
 
   const load = useCallback(async () => setPeople(await listScannerPeople()), []);
 
@@ -40,14 +39,6 @@ export function PeopleDirectoryScreen() {
     if (sync.lastSync) void load();
   }, [load, sync.lastSync]);
 
-  // See activities-screen.tsx: keeps the native header's large-title state in
-  // sync with the list's actual scroll offset when this screen regains focus.
-  useFocusEffect(
-    useCallback(() => {
-      listRef.current?.scrollToOffset({ offset: 0, animated: false });
-    }, []),
-  );
-
   // Configuring the header imperatively here — instead of the declarative
   // <Stack.Title>/<Stack.Toolbar>/<Stack.SearchBar> components previously
   // used inline — is what avoids a real double header bar: those components
@@ -55,8 +46,19 @@ export function PeopleDirectoryScreen() {
   // one rather than reconfiguring it.
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: activityId ? t("scannerSearchPerson") : t("scannerPeople"),
+      // Treat “People” as the page heading, not as a persistent centered
+      // navigation-bar title. It scrolls away with search, leaving only the
+      // native back and filter controls in the compact glass bar.
+      title: t("scannerPeople"),
+      headerLargeTitle: true,
+      headerLargeTitleShadowVisible: false,
+      headerLargeTitleStyle: { backgroundColor: colors.transparent, color: colors.label },
+      headerTitleStyle: { color: colors.transparent },
+      headerShadowVisible: false,
+      headerBackButtonDisplayMode: "minimal",
+      headerTransparent: true,
       headerSearchBarOptions: {
+        hideWhenScrolling: true,
         placeholder: t("scannerPeopleSearchPlaceholder"),
         onChangeText: (event: NativeSyntheticEvent<TextInputFocusEventData>) =>
           setQuery(event.nativeEvent.text),
@@ -119,12 +121,11 @@ export function PeopleDirectoryScreen() {
 
   return (
     <FlatList
-      ref={listRef}
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{ flexGrow: 1, paddingBottom: 32 }}
       data={filtered}
       keyExtractor={(person) => String(person.userId)}
-      ItemSeparatorComponent={() => <Separator inset={72} />}
+      ItemSeparatorComponent={() => <Separator inset={68} />}
       ListEmptyComponent={
         <EmptyState
           icon="person.2"
@@ -173,6 +174,10 @@ function PersonRow({ person, onPress }: { person: ScannerPerson; onPress: () => 
 
   return (
     <Pressable
+      accessibilityHint={t("scannerViewPerson")}
+      accessibilityLabel={[name, roleLabel(person.role, t), person.badgeId ?? t("scannerNoBadge")]
+        .filter(Boolean)
+        .join(", ")}
       accessibilityRole="button"
       onPress={onPress}
       style={({ pressed }) => ({
@@ -180,9 +185,9 @@ function PersonRow({ person, onPress }: { person: ScannerPerson; onPress: () => 
         backgroundColor: pressed ? colors.elevatedSurface : colors.surface,
         flexDirection: "row",
         gap: 12,
-        minHeight: 68,
+        minHeight: participantWarning ? 82 : 68,
         paddingHorizontal: 16,
-        paddingVertical: 10,
+        paddingVertical: 9,
       })}
     >
       <View
@@ -190,26 +195,41 @@ function PersonRow({ person, onPress }: { person: ScannerPerson; onPress: () => 
           alignItems: "center",
           backgroundColor: colors.accentSurface,
           borderRadius: 999,
-          height: 44,
+          height: 40,
           justifyContent: "center",
-          width: 44,
+          width: 40,
         }}
       >
-        <SymbolView name="person.fill" tintColor={colors.accent} size={20} />
+        <SymbolView name="person.fill" tintColor={colors.accent} size={18} accessible={false} />
       </View>
-      <View style={{ flex: 1, gap: 5 }}>
-        <Text selectable style={{ color: colors.label, fontSize: 16, fontWeight: "700" }}>
+      <View style={{ flex: 1, gap: 3 }}>
+        <Text
+          numberOfLines={1}
+          selectable
+          style={{ color: colors.label, fontSize: 17, fontWeight: "600" }}
+        >
           {name}
         </Text>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
-          <StatusPill>{roleLabel(person.role, t)}</StatusPill>
-          <StatusPill tone={person.badgeId ? "success" : "neutral"}>
-            {person.badgeId ?? t("scannerNoBadge")}
-          </StatusPill>
-          {participantWarning ? (
-            <StatusPill tone={participantWarning.tone}>{participantWarning.label}</StatusPill>
-          ) : null}
-        </View>
+        <Text numberOfLines={1} selectable style={{ color: colors.secondaryLabel, fontSize: 14 }}>
+          {roleLabel(person.role, t)} · {person.badgeId ?? t("scannerNoBadge")}
+        </Text>
+        {participantWarning ? (
+          <View style={{ alignItems: "center", flexDirection: "row", gap: 5 }}>
+            <SymbolView
+              name="exclamationmark.circle.fill"
+              tintColor={colors.destructive}
+              size={13}
+              accessible={false}
+            />
+            <Text
+              numberOfLines={1}
+              selectable
+              style={{ color: colors.destructive, fontSize: 13, fontWeight: "600" }}
+            >
+              {participantWarning.label}
+            </Text>
+          </View>
+        ) : null}
       </View>
       <SymbolView name="chevron.right" tintColor={colors.tertiaryLabel} size={14} />
     </Pressable>
