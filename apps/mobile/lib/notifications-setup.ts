@@ -38,6 +38,10 @@ function categoryOf(data: Record<string, unknown> | undefined): string | undefin
  * - response (tap): same re-emit, plus navigates queue notifications to the
  *   queue tab — the one screen this phase actually deep-links.
  *
+ * Also checks `getLastNotificationResponseAsync` for the cold-start case:
+ * if the tap is what launched the app, it happened before these listeners
+ * existed, so `addNotificationResponseReceivedListener` alone would miss it.
+ *
  * Returns a cleanup function; call once from the root layout.
  */
 export function setupNotificationListeners(navigateToQueue: () => void): () => void {
@@ -45,10 +49,18 @@ export function setupNotificationListeners(navigateToQueue: () => void): () => v
     emitCategory(categoryOf(event.request.content.data));
   });
 
-  const responded = Notifications.addNotificationResponseReceivedListener((response) => {
-    const category = categoryOf(response.notification.request.content.data);
+  const handleResponse = (data: Record<string, unknown> | undefined) => {
+    const category = categoryOf(data);
     emitCategory(category);
     if (category === "queue") navigateToQueue();
+  };
+
+  const responded = Notifications.addNotificationResponseReceivedListener((response) => {
+    handleResponse(response.notification.request.content.data);
+  });
+
+  void Notifications.getLastNotificationResponseAsync().then((response) => {
+    if (response) handleResponse(response.notification.request.content.data);
   });
 
   return () => {

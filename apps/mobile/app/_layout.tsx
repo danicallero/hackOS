@@ -1,7 +1,14 @@
 import { useFonts } from "expo-font";
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider, useRouter } from "expo-router";
+import {
+  DarkTheme,
+  DefaultTheme,
+  Stack,
+  ThemeProvider,
+  useRootNavigationState,
+  useRouter,
+} from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import "react-native-reanimated";
 
 import { useColorScheme } from "@/components/useColorScheme";
@@ -93,13 +100,40 @@ function PushRegistration({ authenticated }: { authenticated: boolean }) {
   return null;
 }
 
-/** Wires notification received/tap listeners for the app's lifetime (H38, H51). */
+/**
+ * Wires notification received/tap listeners for the app's lifetime (H38, H51).
+ *
+ * A cold-start tap can fire before the navigator has finished mounting, in
+ * which case `router.push` would silently no-op. `useRootNavigationState`
+ * reports `undefined` until the navigator is ready, so a pending navigation
+ * is stashed in a ref and flushed as soon as it becomes ready.
+ */
 function NotificationListeners() {
   const router = useRouter();
+  const navigationState = useRootNavigationState();
+  const isReady = useRef(false);
+  const pendingNavigation = useRef(false);
+
+  isReady.current = Boolean(navigationState?.key);
+
   useEffect(() => {
-    const cleanup = setupNotificationListeners(() => router.push("/(tabs)/queue"));
+    if (pendingNavigation.current && isReady.current) {
+      pendingNavigation.current = false;
+      router.push("/(tabs)/queue");
+    }
+  }, [navigationState?.key, router]);
+
+  useEffect(() => {
+    const cleanup = setupNotificationListeners(() => {
+      if (isReady.current) {
+        router.push("/(tabs)/queue");
+      } else {
+        pendingNavigation.current = true;
+      }
+    });
     return cleanup;
   }, [router]);
+
   return null;
 }
 
