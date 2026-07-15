@@ -1,4 +1,12 @@
-import { Button as NativeButton, Host as NativeHost } from "@expo/ui";
+import { Host as NativeHost } from "@expo/ui";
+import { Button as SwiftButton, Text as SwiftText } from "@expo/ui/swift-ui";
+import {
+  buttonBorderShape,
+  buttonStyle,
+  disabled as disabledModifier,
+  frame,
+  multilineTextAlignment,
+} from "@expo/ui/swift-ui/modifiers";
 import { GlassView } from "expo-glass-effect";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
@@ -250,6 +258,7 @@ function ActivityResultPanel({
   onRegisterAnother: () => void;
 }) {
   const { t } = useLocale();
+  const [actionsRowWidth, setActionsRowWidth] = useState(0);
   const meal = activity?.category === "meal";
   const repeatPending = result.state === "repeat_pending";
   const fullName =
@@ -398,36 +407,90 @@ function ActivityResultPanel({
           ) : null}
 
           {repeatPending ? (
-            <View style={{ flexDirection: "row", gap: 10 }}>
-              <NativeHost colorScheme="dark" style={{ flex: 1, height: 48 }}>
-                <NativeButton
-                  disabled={registering}
-                  label={t("cancel")}
-                  onPress={onCancel}
-                  style={{ height: 48, width: "100%" }}
-                  variant="outlined"
-                />
-              </NativeHost>
-              <NativeHost
-                colorScheme="dark"
-                seedColor={colors.accent}
-                style={{ flex: 1, height: 48 }}
-              >
-                <NativeButton
-                  disabled={registering}
-                  label={t("scannerRegisterAnother")}
-                  onPress={onRegisterAnother}
-                  style={{ height: 48, width: "100%" }}
-                />
-              </NativeHost>
+            <View
+              onLayout={(event) => setActionsRowWidth(event.nativeEvent.layout.width)}
+              style={{ flexDirection: "row", gap: 10 }}
+            >
+              {actionsRowWidth > 0
+                ? (() => {
+                    const halfWidth = (actionsRowWidth - 10) / 2;
+                    const cancelWidth = halfWidth + 2;
+                    const cancelHeight = 50;
+                    const registerWidth = halfWidth;
+                    const registerHeight = 48;
+                    return (
+                      <>
+                        <NativeHost
+                          colorScheme="dark"
+                          style={{ height: cancelHeight, width: cancelWidth }}
+                        >
+                          <SwiftButton
+                            modifiers={[
+                              disabledModifier(registering),
+                              buttonStyle("bordered"),
+                              buttonBorderShape("capsule"),
+                              frame({ height: cancelHeight, width: cancelWidth }),
+                            ]}
+                            onPress={onCancel}
+                          >
+                            <SwiftText
+                              modifiers={[
+                                frame({ maxWidth: Infinity, alignment: "center" }),
+                                multilineTextAlignment("center"),
+                              ]}
+                            >
+                              {t("cancel")}
+                            </SwiftText>
+                          </SwiftButton>
+                        </NativeHost>
+                        <NativeHost
+                          colorScheme="dark"
+                          seedColor={colors.accent}
+                          style={{ height: registerHeight, width: registerWidth }}
+                        >
+                          <SwiftButton
+                            modifiers={[
+                              disabledModifier(registering),
+                              buttonStyle("borderedProminent"),
+                              buttonBorderShape("capsule"),
+                              frame({ height: registerHeight, width: registerWidth }),
+                            ]}
+                            onPress={onRegisterAnother}
+                          >
+                            <SwiftText
+                              modifiers={[
+                                frame({ maxWidth: Infinity, alignment: "center" }),
+                                multilineTextAlignment("center"),
+                              ]}
+                            >
+                              {t("scannerRegisterAnother")}
+                            </SwiftText>
+                          </SwiftButton>
+                        </NativeHost>
+                      </>
+                    );
+                  })()
+                : null}
             </View>
           ) : (
             <NativeHost colorScheme="dark" seedColor={colors.accent} style={{ height: 48 }}>
-              <NativeButton
-                label={result.wasRepeat ? t("close") : t("continue")}
+              <SwiftButton
+                modifiers={[
+                  buttonStyle("borderedProminent"),
+                  buttonBorderShape("capsule"),
+                  frame({ height: 48 }),
+                ]}
                 onPress={onContinue}
-                style={{ height: 48, width: "100%" }}
-              />
+              >
+                <SwiftText
+                  modifiers={[
+                    frame({ maxWidth: Infinity, alignment: "center" }),
+                    multilineTextAlignment("center"),
+                  ]}
+                >
+                  {result.wasRepeat ? t("close") : t("continue")}
+                </SwiftText>
+              </SwiftButton>
             </NativeHost>
           )}
         </View>
