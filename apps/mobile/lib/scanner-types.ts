@@ -29,6 +29,7 @@ export interface ScannerActivity {
   name: string;
   category: string;
   requiresScan: boolean;
+  startsAt: string | null;
 }
 
 export interface ScannerActivityState {

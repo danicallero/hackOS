@@ -17,6 +17,7 @@ export function ActivitiesScreen() {
   const sync = useScannerSync();
   const [items, setItems] = useState<ScannerActivity[]>([]);
   const listRef = useRef<FlatList<ScannerActivity>>(null);
+  const scrollOffset = useRef(0);
   const load = useCallback(
     async () =>
       setItems(
@@ -33,13 +34,13 @@ export function ActivitiesScreen() {
     if (sync.lastSync) void load();
   }, [load, sync.lastSync]);
 
-  // Forces the FlatList back to the top on focus so the native large-title
-  // header re-syncs its collapsed/expanded state with the actual scroll
-  // offset — otherwise returning from a pushed screen can leave the header
-  // (and therefore the list start) stuck lower than it should be.
+  // Re-issuing scrollToOffset at the list's actual current position (rather
+  // than always 0) re-syncs the native large-title header's collapsed state
+  // with the real scroll offset on focus, without visually snapping the list
+  // back to the top when returning from a pushed screen (e.g. the scanner).
   useFocusEffect(
     useCallback(() => {
-      listRef.current?.scrollToOffset({ offset: 0, animated: false });
+      listRef.current?.scrollToOffset({ offset: scrollOffset.current, animated: false });
     }, []),
   );
 
@@ -50,6 +51,10 @@ export function ActivitiesScreen() {
       contentContainerStyle={{ flexGrow: 1, padding: 16, paddingBottom: 32 }}
       data={items}
       keyExtractor={(item) => String(item.id)}
+      onScroll={(e) => {
+        scrollOffset.current = e.nativeEvent.contentOffset.y;
+      }}
+      scrollEventThrottle={16}
       refreshControl={
         <RefreshControl refreshing={sync.syncing} onRefresh={() => void sync.sync().then(load)} />
       }

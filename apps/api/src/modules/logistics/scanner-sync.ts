@@ -66,10 +66,11 @@ export async function scannerSnapshot() {
         ORDER BY u.id`,
     ),
     pool.query(
-      `SELECT id, name, category, requires_scan
-         FROM activities
-        WHERE category = 'meal' OR requires_scan = true
-        ORDER BY name ASC, id ASC`,
+      `SELECT a.id, a.name, a.category, a.requires_scan, s.starts_at
+         FROM activities a
+         LEFT JOIN schedule s ON s.id = a.schedule_id
+        WHERE a.category = 'meal' OR a.requires_scan = true
+        ORDER BY s.starts_at ASC NULLS LAST, a.name ASC, a.id ASC`,
     ),
     pool.query(
       `SELECT user_id, activity_id, count(*)::int AS scan_count
@@ -102,6 +103,7 @@ export async function scannerSnapshot() {
       name: row.name as string,
       category: row.category as string,
       requiresScan: Boolean(row.requires_scan),
+      startsAt: row.starts_at instanceof Date ? row.starts_at.toISOString() : null,
     })),
     activityStates: statesResult.rows.map((row) => ({
       userId: row.user_id as number,

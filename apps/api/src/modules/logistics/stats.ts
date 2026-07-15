@@ -16,7 +16,9 @@ export interface ActivityAggregate {
 /**
  * Per-activity scan aggregation shared by the H27 stats panel and the
  * scannable-activities list (H25/H26). `where` scopes which activities are
- * counted; the LEFT JOIN keeps activities with zero logs visible.
+ * counted; the LEFT JOIN keeps activities with zero logs visible. Ordered by
+ * the linked schedule's start time (nulls last, for activities with no
+ * schedule_id) so operators see activities in chronological order.
  */
 async function aggregateActivities(where: string): Promise<ActivityAggregate[]> {
   const { rows } = await pool.query(
@@ -25,9 +27,10 @@ async function aggregateActivities(where: string): Promise<ActivityAggregate[]> 
             count(DISTINCT al.user_id)::int AS distinct_people
        FROM activities a
        LEFT JOIN activity_logs al ON al.activity_id = a.id
+       LEFT JOIN schedule s ON s.id = a.schedule_id
       WHERE ${where}
-      GROUP BY a.id, a.name, a.category
-      ORDER BY a.name ASC, a.id ASC`,
+      GROUP BY a.id, a.name, a.category, s.starts_at
+      ORDER BY s.starts_at ASC NULLS LAST, a.name ASC, a.id ASC`,
   );
   return rows.map(
     (r: {
