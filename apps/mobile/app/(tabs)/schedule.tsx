@@ -171,9 +171,7 @@ export default function ScheduleScreen() {
         </Text>
       )}
       renderItem={({ item, index, section }) =>
-        item.kind === "now" ? (
-          <NowMarkerRow now={now} />
-        ) : (
+        item.kind === "now" ? null : (
           <ScheduleCard
             item={item}
             language={language}
@@ -191,61 +189,6 @@ export default function ScheduleScreen() {
 function safeTimestamp(value: string) {
   const timestamp = new Date(value).getTime();
   return Number.isFinite(timestamp) ? timestamp : Number.MAX_SAFE_INTEGER;
-}
-
-function NowMarkerRow({ now }: { now: number }) {
-  const { t, language } = useLocale();
-  const label = new Date(now).toLocaleTimeString(language, {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-  return (
-    <View style={{ paddingHorizontal: 16 }}>
-      <NowMarkerLine accessibilityLabel={t("scheduleNow", { time: label })} label={label} />
-    </View>
-  );
-}
-
-function NowMarkerLine({
-  accessibilityLabel,
-  label,
-}: {
-  accessibilityLabel: string;
-  label: string;
-}) {
-  return (
-    <View
-      accessible
-      accessibilityLabel={accessibilityLabel}
-      pointerEvents="none"
-      style={{ alignItems: "center", flexDirection: "row" }}
-    >
-      <View style={{ alignItems: "center", width: 70 }}>
-        <Text
-          selectable
-          numberOfLines={1}
-          style={{
-            color: colors.destructive,
-            fontSize: 12,
-            fontVariant: ["tabular-nums"],
-            fontWeight: "700",
-          }}
-        >
-          {label}
-        </Text>
-      </View>
-      <View
-        style={{
-          backgroundColor: colors.destructive,
-          borderRadius: 999,
-          height: 7,
-          marginLeft: 4,
-          width: 7,
-        }}
-      />
-      <View style={{ backgroundColor: colors.destructive, flex: 1, height: 1.5, marginLeft: 6 }} />
-    </View>
-  );
 }
 
 function ScheduleCard({
