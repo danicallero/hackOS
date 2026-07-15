@@ -109,6 +109,7 @@ export const scannerSnapshotResponse = z.object({
       name: z.string(),
       category: z.string(),
       requiresScan: z.boolean(),
+      startsAt: z.string().datetime().nullable(),
     }),
   ),
   activityStates: z.array(

@@ -38,7 +38,8 @@ async function db(): Promise<SQLite.SQLiteDatabase> {
           id INTEGER PRIMARY KEY,
           name TEXT NOT NULL,
           category TEXT NOT NULL,
-          requires_scan INTEGER NOT NULL
+          requires_scan INTEGER NOT NULL,
+          starts_at TEXT
         );
         CREATE TABLE IF NOT EXISTS scanner_activity_states (
           user_id INTEGER NOT NULL,
@@ -76,6 +77,13 @@ async function db(): Promise<SQLite.SQLiteDatabase> {
         await opened.execAsync(
           "ALTER TABLE scanner_people ADD COLUMN accepted INTEGER NOT NULL DEFAULT 0",
         );
+      const activityColumns = new Set(
+        (await opened.getAllAsync<{ name: string }>("PRAGMA table_info(scanner_activities)")).map(
+          (column) => column.name,
+        ),
+      );
+      if (!activityColumns.has("starts_at"))
+        await opened.execAsync("ALTER TABLE scanner_activities ADD COLUMN starts_at TEXT");
       // Devices that synced before entitlements were removed still have the
       // old NOT NULL "entitled" column — drop it so inserts without that
       // value keep working.
@@ -130,9 +138,10 @@ export async function applyScannerSnapshot(snapshot: ScannerSnapshot): Promise<v
       statements.push(`INSERT INTO revoked_badges (badge_id) VALUES (${sqlLiteral(revoked)});`);
     }
     for (const activity of snapshot.activities) {
-      statements.push(`INSERT INTO scanner_activities (id, name, category, requires_scan)
+      statements.push(`INSERT INTO scanner_activities (id, name, category, requires_scan, starts_at)
         VALUES (${sqlLiteral(activity.id)}, ${sqlLiteral(activity.name)},
-                ${sqlLiteral(activity.category)}, ${sqlLiteral(activity.requiresScan)});`);
+                ${sqlLiteral(activity.category)}, ${sqlLiteral(activity.requiresScan)},
+                ${sqlLiteral(activity.startsAt)});`);
     }
     for (const state of snapshot.activityStates) {
       statements.push(`INSERT INTO scanner_activity_states
@@ -248,12 +257,14 @@ export async function listScannerActivities(): Promise<ScannerActivity[]> {
     name: string;
     category: string;
     requires_scan: number;
-  }>(`SELECT * FROM scanner_activities ORDER BY name, id`);
+    starts_at: string | null;
+  }>(`SELECT * FROM scanner_activities ORDER BY starts_at IS NULL, starts_at, name, id`);
   return rows.map((row) => ({
     id: row.id,
     name: row.name,
     category: row.category,
     requiresScan: row.requires_scan === 1,
+    startsAt: row.starts_at,
   }));
 }
 

@@ -61,7 +61,14 @@ export async function findPersonByBadge(
 }
 
 export async function listScannerActivities(): Promise<ScannerActivity[]> {
-  return snapshot.activities;
+  return [...snapshot.activities].sort((a, b) => {
+    if (a.startsAt !== b.startsAt) {
+      if (a.startsAt === null) return 1;
+      if (b.startsAt === null) return -1;
+      return a.startsAt.localeCompare(b.startsAt);
+    }
+    return a.name.localeCompare(b.name) || a.id - b.id;
+  });
 }
 
 export async function getActivityState(
