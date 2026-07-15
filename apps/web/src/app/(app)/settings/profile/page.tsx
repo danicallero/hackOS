@@ -49,25 +49,22 @@ type Values = z.infer<typeof schema>;
 
 const NONE = "__none__";
 
-export default function ProfileSettingsPage() {
-  const { me, refresh } = useSessionContext();
-  const { t } = useLocale();
-  const [intolerances, setIntolerances] = useState<Intolerance[]>([]);
-  const lang = (me?.language as Language) ?? "es";
+function valuesFromMe(me: Me): Values {
+  return {
+    name: me.name ?? "",
+    surname: me.surname ?? "",
+    phone: me.phone ?? "",
+    // Coerce to a known locale — stray/empty values would leave the select blank.
+    language: (LANGS.includes(me.language as Language) ? me.language : "es") as Language,
+    shirtSize: me.shirtSize ?? NONE,
+    foodIntolerances: (me.foodIntolerances ?? []).map(String),
+    foodIntoleranceNotes: me.foodIntoleranceNotes ?? "",
+  };
+}
 
-  const form = useForm<Values>({
-    resolver: zodResolver(schema),
-    defaultValues: {
-      name: "",
-      surname: "",
-      phone: "",
-      language: "es",
-      shirtSize: NONE,
-      foodIntolerances: [],
-      foodIntoleranceNotes: "",
-    },
-  });
-  const { reset } = form;
+export default function ProfileSettingsPage() {
+  const { me } = useSessionContext();
+  const [intolerances, setIntolerances] = useState<Intolerance[]>([]);
 
   // Dictionary options for the picker (H12/H25).
   useEffect(() => {
@@ -77,19 +74,25 @@ export default function ProfileSettingsPage() {
       .catch(() => setIntolerances([]));
   }, []);
 
-  useEffect(() => {
-    if (!me) return;
-    reset({
-      name: me.name ?? "",
-      surname: me.surname ?? "",
-      phone: me.phone ?? "",
-      // Coerce to a known locale — stray/empty values would leave the select blank.
-      language: (LANGS.includes(me.language as Language) ? me.language : "es") as Language,
-      shirtSize: me.shirtSize ?? NONE,
-      foodIntolerances: (me.foodIntolerances ?? []).map(String),
-      foodIntoleranceNotes: me.foodIntoleranceNotes ?? "",
-    });
-  }, [me, reset]);
+  if (!me) return null;
+
+  // Keyed by user id so the form (and its Radix Selects) mounts fresh with
+  // the right defaultValues instead of flipping value post-mount via reset()
+  // — a post-mount value change on a Select whose options were never
+  // rendered (dropdown never opened) gets silently clobbered back to "" by
+  // Radix's hidden native-select sync (H-web settings prefill fix).
+  return <ProfileForm key={me.id} me={me} intolerances={intolerances} />;
+}
+
+function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[] }) {
+  const { refresh } = useSessionContext();
+  const { t } = useLocale();
+  const lang = (me.language as Language) ?? "es";
+
+  const form = useForm<Values>({
+    resolver: zodResolver(schema),
+    defaultValues: valuesFromMe(me),
+  });
 
   async function onSubmit(values: Values) {
     try {
@@ -108,8 +111,6 @@ export default function ProfileSettingsPage() {
       toast.error(err instanceof ApiError ? err.message : t("couldNotSaveProfile"));
     }
   }
-
-  if (!me) return null;
 
   const intoleranceOptions = intolerances.map((i) => ({
     value: String(i.id),
