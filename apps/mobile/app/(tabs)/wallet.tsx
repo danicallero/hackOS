@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Alert, Linking, Platform, ScrollView, Text, useColorScheme, View } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 
-import { ActionButton, EmptyState, Section, Separator } from "@/components/native-ui";
+import { ActionButton, EmptyState, InfoRow, Section, Separator } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SegmentedControl } from "@/components/segmented-control";
 import { StaleDataBanner } from "@/components/stale-data-banner";
@@ -166,6 +166,27 @@ export default function WalletScreen() {
         />
       )}
 
+      {/*
+        Readable identity info alongside the QR — useful for anyone who isn't
+        adding this to Apple/Google Wallet and just wants to confirm it's
+        their own pass at a glance.
+      */}
+      {value && me ? (
+        <Section title={t("walletHolder")}>
+          <InfoRow
+            icon="person"
+            label={t("walletHolderName")}
+            value={[me.name, me.surname].filter(Boolean).join(" ") || me.email}
+          />
+          <Separator />
+          <InfoRow
+            icon="checkmark.seal"
+            label={t("walletHolderRole")}
+            value={roleLabel(me.role, t)}
+          />
+        </Section>
+      ) : null}
+
       {value ? (
         <Section title={t("walletAddPass")} footer={t("walletAddPassHint")}>
           {Platform.OS !== "android" ? (
@@ -187,4 +208,19 @@ export default function WalletScreen() {
       ) : null}
     </ScrollView>
   );
+}
+
+function roleLabel(
+  role: NonNullable<ReturnType<typeof useMeContext>["me"]>["role"],
+  t: ReturnType<typeof useLocale>["t"],
+) {
+  return (
+    {
+      admin: t("roleAdmin"),
+      judge: t("roleJudge"),
+      sponsor: t("roleSponsor"),
+      staff: t("roleStaff"),
+      participant: t("roleParticipant"),
+    } as const
+  )[role];
 }
