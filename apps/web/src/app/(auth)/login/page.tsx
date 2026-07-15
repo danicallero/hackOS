@@ -81,8 +81,8 @@ function LoginInner() {
       return;
     }
     await refresh();
-    // M1.1: honour ?next (e.g. an invited participant sent to /my-applications).
-    router.push(next);
+    // The authenticated-status effect above owns the post-login transition
+    // (including ?next). A second push here can race a pending sign-out route.
   }
 
   const emailValue = form.watch("email");

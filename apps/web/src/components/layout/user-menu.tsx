@@ -2,7 +2,6 @@
 
 import { LogOutIcon, UserIcon } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,15 +24,15 @@ function initials(name: string | null, surname: string | null, email: string) {
 
 /** Avatar dropdown: identity summary + sign out (H4). */
 export function UserMenu() {
-  const router = useRouter();
   const { me, refresh } = useSessionContext();
   const { t } = useLocale();
   if (!me) return null;
 
   async function handleSignOut() {
     await signOut();
+    // AuthGuard owns the route transition once the session becomes
+    // unauthenticated. Issuing another push here races that replacement.
     await refresh();
-    router.push("/login");
   }
 
   return (
