@@ -120,9 +120,9 @@ export function PublicPage() {
       </div>
 
       <div className="mx-auto max-w-6xl px-5 sm:px-8">
-        <header className="flex flex-wrap items-center justify-between gap-4 py-6">
+        <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 py-5 sm:py-6">
           <Brand />
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <LanguageSelect />
             <ThemeToggle />
             <Button variant="ghost" asChild>
@@ -137,8 +137,8 @@ export function PublicPage() {
           </div>
         </header>
 
-        <section className="py-16 sm:py-24">
-          <h1 className="text-balance text-4xl font-semibold tracking-tight sm:text-6xl">
+        <section className="py-12 sm:py-24">
+          <h1 className="text-balance break-words text-4xl font-semibold tracking-tight sm:text-6xl">
             {event.name ?? "hackOS"}
           </h1>
           {event.tagline && (
@@ -146,7 +146,7 @@ export function PublicPage() {
               {event.tagline}
             </p>
           )}
-          <div className="mt-8 flex flex-wrap items-center gap-3">
+          <div className="mt-8 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
             {openApplications.length > 0 && (
               <Button size="lg" asChild>
                 <Link href="/signup">
@@ -160,10 +160,10 @@ export function PublicPage() {
             </Button>
           </div>
           {eventPhase.kind !== "none" && (
-            <div className="border-primary/20 bg-card/60 mt-10 inline-flex flex-col rounded-xl border p-5 shadow-sm backdrop-blur">
+            <div className="border-primary/20 bg-card/60 mt-10 inline-flex max-w-full flex-col rounded-xl border p-4 shadow-sm backdrop-blur sm:p-5">
               <EventPhaseDisplay
                 phase={eventPhase}
-                className="mt-1 block font-mono text-4xl font-semibold tabular-nums sm:text-5xl"
+                className="mt-1 block font-mono text-3xl font-semibold tabular-nums sm:text-5xl"
               />
             </div>
           )}
@@ -210,7 +210,7 @@ export function PublicPage() {
                   className="hover:border-primary/30 rounded-xl border p-5 shadow-sm transition-colors hover:shadow-md"
                 >
                   <h3 className="font-medium">{item.title}</h3>
-                  <p className="text-muted-foreground text-pretty mt-2 whitespace-pre-wrap text-sm">
+                  <p className="text-muted-foreground text-pretty mt-2 wrap-anywhere whitespace-pre-wrap text-sm">
                     {item.body}
                   </p>
                 </article>
