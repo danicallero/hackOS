@@ -3,10 +3,12 @@ import { SymbolView } from "expo-symbols";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   type GestureResponderEvent,
+  type NativeSyntheticEvent,
   Pressable,
   RefreshControl,
   SectionList,
   Text,
+  type TextLayoutEventData,
   useColorScheme,
   View,
 } from "react-native";
@@ -39,10 +41,7 @@ export default function ScheduleScreen() {
   const scrolledOnLoad = useRef(false);
   const reminders = useActivityReminders();
 
-  const { data, loading, error, staleSince, load } = useCachedApi(
-    "schedule",
-    fetchPublicSchedule,
-  );
+  const { data, loading, error, staleSince, load } = useCachedApi("schedule", fetchPublicSchedule);
   const items = data ?? [];
 
   useEffect(() => {
@@ -294,10 +293,19 @@ function ScheduleCard({
     0.08,
     Math.min(0.92, duration > 0 ? (now - startsAt.getTime()) / duration : 0.5),
   );
+  const [truncated, setTruncated] = useState(false);
 
   function toggleReminder(event: GestureResponderEvent) {
     event.stopPropagation();
     onToggleReminder(!reminderOn);
+  }
+
+  // Cards stay compact with a fixed line count per field; this flags when any
+  // field actually got clipped so we can hint that the full text is one tap away.
+  function noteIfClipped(maxLines: number) {
+    return (event: NativeSyntheticEvent<TextLayoutEventData>) => {
+      if (event.nativeEvent.lines.length >= maxLines) setTruncated(true);
+    };
   }
 
   return (
@@ -321,9 +329,7 @@ function ScheduleCard({
       <Pressable
         accessibilityLabel={item.title}
         accessibilityRole="button"
-        onPress={() =>
-          router.push({ pathname: "/schedule/[id]", params: { id: String(item.id) } })
-        }
+        onPress={() => router.push({ pathname: "/schedule/[id]", params: { id: String(item.id) } })}
         style={{
           backgroundColor: colors.surface,
           borderCurve: "continuous",
@@ -338,6 +344,8 @@ function ScheduleCard({
         <View style={{ alignItems: "flex-start", flexDirection: "row", gap: 8 }}>
           <Text
             selectable
+            numberOfLines={1}
+            onTextLayout={noteIfClipped(1)}
             style={{ color: colors.label, flex: 1, fontSize: 17, fontWeight: "700" }}
           >
             {item.title}
@@ -371,28 +379,56 @@ function ScheduleCard({
           >
             {time}–{end}
           </Text>
+          {item.location ? (
+            <>
+              <Text style={{ color: colors.tertiaryLabel, fontSize: 14 }}>·</Text>
+              <SymbolView
+                name="mappin.and.ellipse"
+                tintColor={colors.secondaryLabel}
+                size={14}
+                accessible={false}
+              />
+              <Text
+                selectable
+                numberOfLines={1}
+                onTextLayout={noteIfClipped(1)}
+                style={{ color: colors.secondaryLabel, flex: 1, fontSize: 14 }}
+              >
+                {item.location}
+              </Text>
+            </>
+          ) : null}
         </View>
-        {item.location ? (
-          <View style={{ alignItems: "center", flexDirection: "row", gap: 6 }}>
-            <SymbolView
-              name="mappin.and.ellipse"
-              tintColor={colors.secondaryLabel}
-              size={14}
-              accessible={false}
-            />
-            <Text selectable style={{ color: colors.secondaryLabel, flex: 1, fontSize: 14 }}>
-              {item.location}
-            </Text>
-          </View>
-        ) : null}
         {item.description ? (
           <Text
             selectable
-            numberOfLines={3}
+            numberOfLines={2}
+            onTextLayout={noteIfClipped(2)}
             style={{ color: colors.secondaryLabel, fontSize: 15, lineHeight: 21 }}
           >
             {item.description}
           </Text>
+        ) : null}
+        {truncated ? (
+          <View
+            accessible={false}
+            style={{
+              alignItems: "center",
+              flexDirection: "row",
+              gap: 3,
+              justifyContent: "flex-end",
+            }}
+          >
+            <Text style={{ color: colors.accent, fontSize: 12, fontWeight: "600" }}>
+              {t("scheduleShowMore")}
+            </Text>
+            <SymbolView
+              name="chevron.right"
+              tintColor={colors.accent}
+              size={11}
+              accessible={false}
+            />
+          </View>
         ) : null}
       </Pressable>
       {showNow ? (

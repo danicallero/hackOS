@@ -1,3 +1,4 @@
+import { GlassView } from "expo-glass-effect";
 import { SymbolView, type SymbolViewProps } from "expo-symbols";
 import type { ReactNode } from "react";
 import {
@@ -9,6 +10,7 @@ import {
   type ViewStyle,
 } from "react-native";
 
+import { useLocale } from "@/lib/i18n";
 import { colors } from "@/theme/colors";
 
 export function Section({
@@ -196,6 +198,27 @@ export function ActionButton({
       ) : null}
       <Text style={{ color: foreground, fontSize: 16, fontWeight: "600" }}>{label}</Text>
     </Pressable>
+  );
+}
+
+/** Floating chrome-less back button for header-less detail screens (position it with `top: insets.top + 12`). */
+export function FloatingBackButton({ top, onPress }: { top: number; onPress: () => void }) {
+  const { t } = useLocale();
+  return (
+    <GlassView
+      glassEffectStyle="regular"
+      isInteractive
+      style={{ borderRadius: 22, height: 44, left: 16, position: "absolute", top, width: 44 }}
+    >
+      <Pressable
+        accessibilityLabel={t("back")}
+        accessibilityRole="button"
+        onPress={onPress}
+        style={{ alignItems: "center", flex: 1, justifyContent: "center" }}
+      >
+        <SymbolView name="chevron.left" tintColor={colors.label} size={19} weight="semibold" />
+      </Pressable>
+    </GlassView>
   );
 }
 
