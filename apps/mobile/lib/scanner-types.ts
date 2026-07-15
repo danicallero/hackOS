@@ -1,12 +1,21 @@
-export type ScanKind = "accreditation" | "badge_rotation" | "presence" | "activity";
+export type ScanKind =
+  | "accreditation"
+  | "accreditation_user"
+  | "badge_rotation"
+  | "badge_removal"
+  | "presence"
+  | "activity";
 
 export interface ScannerPerson {
   userId: number;
+  email: string;
+  role: "admin" | "judge" | "sponsor" | "staff" | "participant";
   ticketToken: string | null;
   badgeId: string | null;
   revokedBadgeIds: string[];
   name: string | null;
   surname: string | null;
+  accepted: boolean;
   confirmed: boolean;
   intolerances: Array<{ id: number; label: Record<string, string> }>;
   foodIntoleranceNotes: string | null;
@@ -39,12 +48,19 @@ export interface ScannerSnapshot {
 export type ScanPayload =
   | { kind: "accreditation"; ticketToken: string; badgeId: string; method: "qr" | "manual" }
   | {
+      kind: "accreditation_user";
+      userId: number;
+      badgeId: string;
+      method: "qr" | "manual";
+    }
+  | {
       kind: "badge_rotation";
       userId: number;
       currentBadgeId: string;
       newBadgeId: string;
       reason: string;
     }
+  | { kind: "badge_removal"; userId: number; currentBadgeId: string; reason: string }
   | { kind: "presence"; badgeId: string; direction: "in" | "out"; scannedAt: string }
   | {
       kind: "activity";

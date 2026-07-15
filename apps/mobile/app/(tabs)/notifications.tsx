@@ -6,10 +6,13 @@ import { Pressable, ScrollView, Switch, Text, useColorScheme, View } from "react
 import { ActionButton, EmptyState, Section, Separator } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SegmentedControl } from "@/components/segmented-control";
+import { StaleDataBanner } from "@/components/stale-data-banner";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
+import { useMeContext } from "@/lib/me-context";
 import { emitNotificationChange, subscribeToCategory } from "@/lib/notification-events";
 import { subscribeToServerEvent } from "@/lib/server-events";
+import { useCachedApi } from "@/lib/use-cached-api";
 import { colors } from "@/theme/colors";
 
 type Channel = "in_app" | "email" | "push" | "discord";
@@ -42,6 +45,11 @@ interface InboxResponse {
   total: number;
 }
 
+interface PreferencesPayload {
+  prefs: Preferences;
+  schedule: ScheduleItem[];
+}
+
 const LIMIT = 20;
 
 /** Full in-app inbox and notification preferences, matching the web participant view. */
@@ -69,25 +77,19 @@ export default function NotificationsScreen() {
 
 function MessagesView() {
   const { t, language } = useLocale();
-  const [data, setData] = useState<InboxResponse | null>(null);
+  const { me } = useMeContext();
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
+  const [actionError, setActionError] = useState<Error | null>(null);
 
-  const load = useCallback(async () => {
-    setError(null);
-    try {
-      const query = unreadOnly ? "&unread=true" : "";
-      setData(
-        await apiFetch<InboxResponse>(`/api/me/notifications?limit=${LIMIT}&offset=0${query}`),
-      );
-    } catch (cause) {
-      setError(cause instanceof Error ? cause : new Error("Failed to load notifications"));
-    } finally {
-      setLoading(false);
-    }
+  const fetchInbox = useCallback(async () => {
+    const query = unreadOnly ? "&unread=true" : "";
+    return apiFetch<InboxResponse>(`/api/me/notifications?limit=${LIMIT}&offset=0${query}`);
   }, [unreadOnly]);
+  const { data, loading, error, staleSince, load, setData } = useCachedApi(
+    `user:${me?.id ?? "unknown"}:notifications:${unreadOnly ? "unread" : "all"}`,
+    fetchInbox,
+  );
 
   useEffect(() => {
     void load();
@@ -98,6 +100,7 @@ function MessagesView() {
 
   async function markRead(item: InboxItem) {
     if (item.read_at) return;
+    setActionError(null);
     try {
       const result = await apiFetch<{ id: number; read_at: string }>(
         `/api/me/notifications/${item.id}/read`,
@@ -117,7 +120,9 @@ function MessagesView() {
       );
       emitNotificationChange();
     } catch (cause) {
-      setError(cause instanceof Error ? cause : new Error("Failed to mark notification read"));
+      setActionError(
+        cause instanceof Error ? cause : new Error("Failed to mark notification read"),
+      );
     }
   }
 
@@ -135,6 +140,7 @@ function MessagesView() {
 
   return (
     <View style={{ gap: 16 }}>
+      <StaleDataBanner updatedAt={staleSince} />
       <Section footer={t("notificationsUnreadHint")}>
         <View
           style={{
@@ -157,6 +163,7 @@ function MessagesView() {
       </Section>
 
       {error ? <RequestFeedback error={error} onRetry={() => void load()} /> : null}
+      {actionError ? <RequestFeedback error={actionError} /> : null}
       {loading && !data ? <RequestFeedback loading /> : null}
 
       {!loading && !error && items.length === 0 ? (
@@ -311,27 +318,23 @@ function NotificationRow({
 
 function PreferencesView() {
   const { t, language } = useLocale();
-  const [prefs, setPrefs] = useState<Preferences | null>(null);
-  const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
+  const { me } = useMeContext();
   const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<Error | null>(null);
 
-  const load = useCallback(async () => {
-    setError(null);
-    try {
-      const [preferences, activities] = await Promise.all([
-        apiFetch<Preferences>("/api/me/notification-preferences"),
-        apiFetch<{ items: ScheduleItem[] }>("/api/public/activities"),
-      ]);
-      setPrefs(preferences);
-      setSchedule(activities.items);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause : new Error("Failed to load preferences"));
-    } finally {
-      setLoading(false);
-    }
+  const fetchPreferences = useCallback(async (): Promise<PreferencesPayload> => {
+    const [prefs, activities] = await Promise.all([
+      apiFetch<Preferences>("/api/me/notification-preferences"),
+      apiFetch<{ items: ScheduleItem[] }>("/api/public/activities"),
+    ]);
+    return { prefs, schedule: activities.items };
   }, []);
+  const { data, loading, error, staleSince, load, setData } = useCachedApi(
+    `user:${me?.id ?? "unknown"}:notification-preferences`,
+    fetchPreferences,
+  );
+  const prefs = data?.prefs ?? null;
+  const schedule = data?.schedule ?? [];
 
   useEffect(() => {
     void load();
@@ -347,11 +350,12 @@ function PreferencesView() {
   async function toggle(category: string, channel: Channel, enabled: boolean) {
     const key = `${category}:${channel}`;
     setSavingKey(key);
-    setError(null);
+    setActionError(null);
     try {
-      setPrefs(await savePreferences([{ category, channel, enabled }]));
+      const next = await savePreferences([{ category, channel, enabled }]);
+      setData((current) => (current ? { ...current, prefs: next } : current));
     } catch (cause) {
-      setError(cause instanceof Error ? cause : new Error("Failed to save preference"));
+      setActionError(cause instanceof Error ? cause : new Error("Failed to save preference"));
     } finally {
       setSavingKey(null);
     }
@@ -370,13 +374,14 @@ function PreferencesView() {
     if (!prefs) return;
     const category = `schedule:${activityId}`;
     setSavingKey(category);
-    setError(null);
+    setActionError(null);
     try {
-      setPrefs(
-        await savePreferences(prefs.channels.map((channel) => ({ category, channel, enabled }))),
+      const next = await savePreferences(
+        prefs.channels.map((channel) => ({ category, channel, enabled })),
       );
+      setData((current) => (current ? { ...current, prefs: next } : current));
     } catch (cause) {
-      setError(cause instanceof Error ? cause : new Error("Failed to save reminder"));
+      setActionError(cause instanceof Error ? cause : new Error("Failed to save reminder"));
     } finally {
       setSavingKey(null);
     }
@@ -390,7 +395,8 @@ function PreferencesView() {
 
   return (
     <View style={{ gap: 18 }}>
-      {error ? <RequestFeedback error={error} onRetry={() => void load()} /> : null}
+      <StaleDataBanner updatedAt={staleSince} />
+      {actionError ? <RequestFeedback error={actionError} /> : null}
       <Section title={t("notificationsRequired")} footer={t("notificationsMandatoryHint")}>
         <View style={{ alignItems: "center", flexDirection: "row", gap: 12, padding: 16 }}>
           <SymbolView

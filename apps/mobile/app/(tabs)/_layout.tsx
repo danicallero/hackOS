@@ -12,32 +12,35 @@ import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { subscribeToNotificationChanges } from "@/lib/notification-events";
 import { subscribeToServerEvent } from "@/lib/server-events";
-import { overflowTabs, shouldUseOverflowMenu } from "@/lib/tabs";
 import { colors } from "@/theme/colors";
 
 interface UnreadInboxResponse {
   total: number;
 }
 
-interface OverflowMenuItem extends MenuAction {
-  id: "account" | "scan";
+interface OperationsMenuItem extends MenuAction {
+  id: "account" | "scanner" | "activities";
   label: string;
-  route: "/(tabs)/others/account" | "/(tabs)/others/scan";
+  route: "/(tabs)/others/account" | "/(tabs)/others/scan" | "/(tabs)/others/activities";
 }
 
 /**
- * A real platform tab bar. Users with five destinations get five regular tabs.
- * When a sixth destination is available, the final `search` role becomes the
- * native overflow selector (and uses iOS 26's separate Liquid Glass control).
+ * A real platform tab bar. Operational destinations are additive and live in
+ * the existing native overflow control alongside Account.
  */
 export default function TabLayout() {
   useColorScheme();
   const { t } = useLocale();
   const { data: session, isPending } = authClient.useSession();
-  const { me } = useMeContext();
+  const { me, loading: meLoading } = useMeContext();
   const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
   const capabilities = me?.capabilities ?? [];
-  const usesOverflowMenu = shouldUseOverflowMenu(capabilities);
+  const operatorExperience =
+    capabilities.includes("*") ||
+    capabilities.some((capability) =>
+      ["accredit:scan", "presence:scan", "activity:scan"].includes(capability),
+    );
+  const canScanActivities = capabilities.includes("*") || capabilities.includes("activity:scan");
 
   const refreshUnreadNotifications = useCallback(async () => {
     if (!session) return;
@@ -75,6 +78,7 @@ export default function TabLayout() {
 
   if (isPending) return null;
   if (!session) return <Redirect href="/(auth)/sign-in" />;
+  if (meLoading) return null;
 
   return (
     <View style={{ flex: 1 }}>
@@ -108,7 +112,7 @@ export default function TabLayout() {
           />
           <NativeTabs.Trigger.Label>{t("tabNotifications")}</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
-        {usesOverflowMenu ? (
+        {operatorExperience ? (
           <NativeTabs.Trigger name="others" role="search">
             <NativeTabs.Trigger.Icon sf="ellipsis" md="more_horiz" />
             <NativeTabs.Trigger.Label hidden>{t("tabOthers")}</NativeTabs.Trigger.Label>
@@ -123,50 +127,52 @@ export default function TabLayout() {
           </NativeTabs.Trigger>
         )}
       </NativeTabs>
-      {usesOverflowMenu ? <NativeOthersMenu capabilities={capabilities} /> : null}
+      {operatorExperience ? <NativeOperationsMenu canScanActivities={canScanActivities} /> : null}
     </View>
   );
 }
 
-function NativeOthersMenu({ capabilities }: { capabilities: string[] }) {
+function NativeOperationsMenu({ canScanActivities }: { canScanActivities: boolean }) {
   const { bottom } = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { t } = useLocale();
   const router = useRouter();
   const triggerHeight = bottom + 60;
   const triggerWidth = process.env.EXPO_OS === "ios" ? 76 : width / 5;
-  const items = overflowTabs(capabilities).flatMap<OverflowMenuItem>((tab) => {
-    if (tab === "account") {
-      return [
-        {
-          id: "account",
-          image: "person.crop.circle",
-          label: t("tabAccount"),
-          route: "/(tabs)/others/account" as const,
-          title: t("tabAccount"),
-        },
-      ];
-    }
-    if (tab === "scan") {
-      return [
-        {
-          id: "scan",
-          image: "qrcode.viewfinder",
-          label: t("tabScan"),
-          route: "/(tabs)/others/scan" as const,
-          title: t("tabScan"),
-        },
-      ];
-    }
-    return [];
-  });
+  const items: OperationsMenuItem[] = [
+    {
+      id: "account",
+      image: "person.crop.circle",
+      label: t("tabAccount"),
+      route: "/(tabs)/others/account",
+      title: t("tabAccount"),
+    },
+    {
+      id: "scanner",
+      image: "qrcode.viewfinder",
+      label: t("tabScan"),
+      route: "/(tabs)/others/scan",
+      title: t("tabScan"),
+    },
+    ...(canScanActivities
+      ? [
+          {
+            id: "activities" as const,
+            image: "figure.walk" as const,
+            label: t("tabActivities"),
+            route: "/(tabs)/others/activities" as const,
+            title: t("tabActivities"),
+          },
+        ]
+      : []),
+  ];
 
   return (
     <MenuView
       actions={items}
       onPressAction={({ nativeEvent }) => {
         const item = items.find(({ id }) => id === nativeEvent.event);
-        if (item) router.navigate(item.route);
+        if (item) router.replace(item.route);
       }}
       style={{
         bottom: 0,

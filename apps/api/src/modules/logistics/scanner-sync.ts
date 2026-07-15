@@ -14,8 +14,34 @@ import { pool } from "../../db/pool.js";
 export async function scannerSnapshot() {
   const [peopleResult, activitiesResult, statesResult] = await Promise.all([
     pool.query(
-      `SELECT u.id, u.name, u.surname, u.badge_id, u.badge_id_history,
+      `WITH RECURSIVE effective_groups (user_id, group_id) AS (
+         SELECT user_id, group_id FROM permission_group_members
+         UNION
+         SELECT eg.user_id, gi.child_group_id
+           FROM effective_groups eg
+           JOIN permission_group_includes gi ON gi.parent_group_id = eg.group_id
+       ), user_caps AS (
+         SELECT eg.user_id,
+                bool_or(gc.capability = '*') AS is_admin,
+                count(gc.capability) > 0 AS has_capability
+           FROM effective_groups eg
+           JOIN group_capabilities gc ON gc.group_id = eg.group_id
+          GROUP BY eg.user_id
+       )
+       SELECT u.id, u.email, u.name, u.surname, u.badge_id, u.badge_id_history,
               u.food_intolerance_notes, u.notes, t.token AS ticket_token,
+              CASE
+                WHEN COALESCE(uc.is_admin, false) THEN 'admin'
+                WHEN EXISTS (SELECT 1 FROM room_judges rj WHERE rj.user_id = u.id) THEN 'judge'
+                WHEN EXISTS (SELECT 1 FROM sponsors s WHERE s.user_id = u.id) THEN 'sponsor'
+                WHEN COALESCE(uc.has_capability, false) THEN 'staff'
+                ELSE 'participant'
+              END AS role,
+              EXISTS (
+                SELECT 1 FROM application_responses ar
+                 WHERE ar.user_id = u.id
+                   AND ar.status IN ('accepted_internal', 'accepted', 'confirmed')
+              ) AS accepted,
               EXISTS (
                 SELECT 1 FROM application_responses ar
                  WHERE ar.user_id = u.id AND ar.status = 'confirmed'
@@ -28,6 +54,7 @@ export async function scannerSnapshot() {
               last_presence.kind AS last_presence_kind,
               last_presence.scanned_at AS last_presence_at
          FROM users u
+         LEFT JOIN user_caps uc ON uc.user_id = u.id
          LEFT JOIN tickets t ON t.user_id = u.id
          LEFT JOIN LATERAL (
            SELECT tl.kind, tl.scanned_at
@@ -36,7 +63,6 @@ export async function scannerSnapshot() {
             ORDER BY tl.scanned_at DESC, tl.id DESC
             LIMIT 1
          ) last_presence ON true
-        WHERE t.user_id IS NOT NULL OR u.badge_id IS NOT NULL
         ORDER BY u.id`,
     ),
     pool.query(
@@ -66,11 +92,14 @@ export async function scannerSnapshot() {
     generatedAt: new Date().toISOString(),
     people: peopleResult.rows.map((row) => ({
       userId: row.id as number,
+      email: row.email as string,
+      role: row.role as "admin" | "judge" | "sponsor" | "staff" | "participant",
       ticketToken: (row.ticket_token as string | null) ?? null,
       badgeId: (row.badge_id as string | null) ?? null,
       revokedBadgeIds: (row.badge_id_history as string[]) ?? [],
       name: (row.name as string | null) ?? null,
       surname: (row.surname as string | null) ?? null,
+      accepted: Boolean(row.accepted),
       confirmed: Boolean(row.confirmed),
       intolerances: row.intolerances as Array<{ id: number; label: Record<string, string> }>,
       foodIntoleranceNotes: (row.food_intolerance_notes as string | null) ?? null,

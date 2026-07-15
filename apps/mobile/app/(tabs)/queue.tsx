@@ -6,10 +6,13 @@ import { FlatList, RefreshControl, Text, useColorScheme, View } from "react-nati
 
 import { EmptyState, StatusPill } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
+import { StaleDataBanner } from "@/components/stale-data-banner";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
+import { useMeContext } from "@/lib/me-context";
 import { subscribeToCategory } from "@/lib/notification-events";
 import { subscribeToServerEvent } from "@/lib/server-events";
+import { useCachedApi } from "@/lib/use-cached-api";
 import { colors } from "@/theme/colors";
 
 interface QueueRoom {
@@ -35,22 +38,16 @@ const POLL_MS = 15_000;
 export default function QueueScreen() {
   useColorScheme();
   const { t } = useLocale();
-  const [entries, setEntries] = useState<QueueEntry[]>([]);
+  const { me } = useMeContext();
   const [precalled, setPrecalled] = useState<Set<number>>(new Set());
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(async () => {
-    setError(null);
-    try {
-      setEntries(await apiFetch<QueueEntry[]>("/api/queue/me"));
-    } catch (cause) {
-      setError(cause instanceof Error ? cause : new Error("Failed to load queue"));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const fetchQueue = useCallback(() => apiFetch<QueueEntry[]>("/api/queue/me"), []);
+  const { data, loading, error, staleSince, load } = useCachedApi(
+    `user:${me?.id ?? "unknown"}:queue`,
+    fetchQueue,
+  );
+  const entries = data ?? [];
 
   useEffect(() => {
     void load();
@@ -115,6 +112,7 @@ export default function QueueScreen() {
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{ flexGrow: 1, gap: 12, padding: 16 }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      ListHeaderComponent={<StaleDataBanner updatedAt={staleSince} />}
       ListEmptyComponent={
         loading ? (
           <RequestFeedback loading />
