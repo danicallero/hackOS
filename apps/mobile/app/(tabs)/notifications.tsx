@@ -10,7 +10,11 @@ import { StaleDataBanner } from "@/components/stale-data-banner";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
-import { emitNotificationChange, subscribeToCategory } from "@/lib/notification-events";
+import {
+  emitNotificationChange,
+  subscribeToCategory,
+  subscribeToNotificationChanges,
+} from "@/lib/notification-events";
 import { subscribeToServerEvent } from "@/lib/server-events";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { colors } from "@/theme/colors";
@@ -327,6 +331,11 @@ function PreferencesView() {
     void load();
   }, [load]);
 
+  // Keeps this tab in sync with reminder toggles made elsewhere (e.g. the
+  // schedule card/detail bell), which mount their own independent cache
+  // instance for the same preferences (H51).
+  useEffect(() => subscribeToNotificationChanges(() => void load()), [load]);
+
   function enabledFor(category: string, channel: Channel): boolean {
     const override = prefs?.overrides.find(
       (row) => row.category === category && row.channel === channel,
@@ -341,6 +350,7 @@ function PreferencesView() {
     try {
       const next = await savePreferences([{ category, channel, enabled }]);
       setData(next);
+      emitNotificationChange();
     } catch (cause) {
       setActionError(cause instanceof Error ? cause : new Error("Failed to save preference"));
     } finally {

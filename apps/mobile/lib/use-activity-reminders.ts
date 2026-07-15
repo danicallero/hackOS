@@ -1,7 +1,8 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { apiFetch } from "./api";
 import { useMeContext } from "./me-context";
+import { emitNotificationChange, subscribeToNotificationChanges } from "./notification-events";
 import { useCachedApi } from "./use-cached-api";
 
 type Channel = "in_app" | "email" | "push" | "discord";
@@ -40,6 +41,11 @@ export function useActivityReminders() {
   } = useCachedApi(`user:${me?.id ?? "unknown"}:notification-preferences`, fetchPreferences);
   const [savingId, setSavingId] = useState<number | null>(null);
 
+  // useCachedApi's state is local to each call site (schedule list, activity
+  // detail, the notifications preferences tab each mount their own instance),
+  // so a toggle in one place is otherwise invisible to the others (H51).
+  useEffect(() => subscribeToNotificationChanges(() => void load()), [load]);
+
   const isEnabled = useCallback(
     (activityId: number): boolean => {
       const category = `schedule:${activityId}`;
@@ -62,6 +68,7 @@ export function useActivityReminders() {
           prefs.channels.map((channel) => ({ category, channel, enabled })),
         );
         setData(next);
+        emitNotificationChange();
       } finally {
         setSavingId(null);
       }

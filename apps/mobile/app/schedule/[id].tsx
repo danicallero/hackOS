@@ -50,7 +50,7 @@ export default function ScheduleDetailScreen() {
           gap: 16,
           padding: 20,
           paddingBottom: 40,
-          paddingTop: insets.top + 56,
+          paddingTop: insets.top + 52,
         }}
         style={{ backgroundColor: colors.background }}
       >
@@ -145,10 +145,10 @@ export default function ScheduleDetailScreen() {
           </View>
         )}
       </ScrollView>
-      <FloatingBackButton top={insets.top + 12} onPress={() => router.back()} />
+      <FloatingBackButton top={insets.top + 8} onPress={() => router.back()} />
       {item && reminderOn !== null ? (
         <FloatingGlassButton
-          top={insets.top + 12}
+          top={insets.top + 8}
           side="right"
           icon={reminderOn ? "bell.fill" : "bell"}
           tintColor={reminderOn ? colors.accent : colors.label}
