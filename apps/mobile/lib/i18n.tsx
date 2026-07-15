@@ -708,6 +708,16 @@ const dict = {
     es: "La acreditación {badge} quedará revocada.",
     gl: "A acreditación {badge} quedará revogada.",
   },
+  personBadgeIsTicketTitle: {
+    en: "That's a ticket, not a badge",
+    es: "Eso es un ticket, no una acreditación",
+    gl: "Iso é un ticket, non unha acreditación",
+  },
+  personBadgeIsTicketBody: {
+    en: "This QR belongs to someone's entrance ticket. Scan the physical badge instead.",
+    es: "Este QR pertenece al ticket de entrada de una persona. Escanea la acreditación física en su lugar.",
+    gl: "Este QR pertence ao ticket de entrada dunha persoa. Escanea a acreditación física no seu lugar.",
+  },
   delete: { en: "Delete", es: "Eliminar", gl: "Eliminar" },
   continueAnyway: {
     en: "Continue anyway",
