@@ -83,18 +83,13 @@ export default function TabLayout() {
   return (
     <View style={{ flex: 1 }}>
       {/*
-        Explicit blurEffect instead of leaving it "automatic": with no
-        default value the bar's translucent vs. opaque appearance is driven
-        by scroll-edge detection off a nested ScrollView, which the
-        full-bleed camera screens (scanner, activity scanner) don't have —
-        so it was inconsistently rendering opaque instead of the glass/blur
-        look used everywhere else.
+        No blurEffect/tabBarBackgroundColor override here: per
+        react-native-screens' own docs, both stop affecting the tab bar
+        starting from iOS 26 — the bar's translucent/opaque appearance on
+        26+ is entirely OS-controlled, with no supported override in the
+        version of react-native-screens this app currently depends on.
       */}
-      <NativeTabs
-        tintColor={colors.accent}
-        minimizeBehavior="onScrollDown"
-        blurEffect="systemChromeMaterial"
-      >
+      <NativeTabs tintColor={colors.accent} minimizeBehavior="onScrollDown">
         <NativeTabs.Trigger name="schedule">
           <NativeTabs.Trigger.Icon sf="calendar" md="calendar_month" />
           <NativeTabs.Trigger.Label>{t("tabSchedule")}</NativeTabs.Trigger.Label>
