@@ -318,7 +318,10 @@ A recommended `apps/mobile/eas.json` starting point is:
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "environment": "development"
+      "environment": "development",
+      "env": {
+        "APP_VARIANT": "development"
+      }
     },
     "development-simulator": {
       "extends": "development",
@@ -352,6 +355,10 @@ A recommended `apps/mobile/eas.json` starting point is:
   }
 }
 ```
+
+`APP_VARIANT=development` drives the `.debug` name/bundle-ID/package suffixing
+in `app.config.ts` (see the debug distribution policy in Section 7); set the
+same variable locally when compiling debug builds outside EAS.
 
 Replace the App Store ID before committing the file. The production Android
 profile produces an AAB by default; preview explicitly produces an installable
@@ -429,6 +436,31 @@ open -a "Android Studio" android
 
 ## 7. Compile and run locally
 
+### Debug app distribution policy
+
+**Always distribute debug/development builds via local compilation
+(`expo run:*` below), never an EAS cloud `development` build.** Local compiles
+are faster to iterate on, don't consume EAS build credits/queue time, and
+don't require uploading the workspace to Expo's build servers. Reserve cloud
+builds (Section 8) for `preview`/`production` distribution, or the rare case
+where local compilation is impossible (e.g. an iOS build requested from a
+non-Mac machine).
+
+Debug builds set `APP_VARIANT=development`, which `app.config.ts` uses to
+suffix the app name (`hackOS (Debug)`) and both native identifiers
+(`com.hackudc.os.debug` / bundle ID and Android package) so a locally compiled
+debug build installs side by side with a real TestFlight/Play/production
+install on the same device instead of overwriting it:
+
+```sh
+cd apps/mobile
+APP_VARIANT=development pnpm ios                       # iOS Simulator by default
+APP_VARIANT=development pnpm exec expo run:ios --device
+
+APP_VARIANT=development pnpm android                   # running Android emulator/device
+APP_VARIANT=development pnpm exec expo run:android --device
+```
+
 ### Debug build on an emulator/simulator or device
 
 ```sh
@@ -498,9 +530,13 @@ builds do not have all cloud features—particularly EAS Secret variables and
 build caching—so export required variables in the shell. See the official
 [local EAS limitations](https://docs.expo.dev/build-reference/local-builds/).
 
-## 8. EAS development, preview, and production builds
+## 8. EAS preview and production builds
 
-Create and install a development client:
+Per the debug distribution policy in Section 7, do not use the `development`
+profile's cloud build for day-to-day debug distribution — compile locally
+instead. The cloud `development` profile exists only for the exceptional case
+where local compilation isn't possible (e.g. an iOS build requested from a
+non-Mac machine):
 
 ```sh
 cd apps/mobile
