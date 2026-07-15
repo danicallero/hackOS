@@ -9,6 +9,7 @@
     "scheme": "hackos",
     "userInterfaceStyle": "automatic",
     "ios": {
+      "icon": "./assets/icon-ios.icon",
       "supportsTablet": true,
       "bundleIdentifier": "com.hackudc.os",
       "buildNumber": "1",
