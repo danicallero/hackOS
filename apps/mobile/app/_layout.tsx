@@ -1,14 +1,9 @@
 import { useFonts } from "expo-font";
-import {
-  DarkTheme,
-  DefaultTheme,
-  Stack,
-  ThemeProvider,
-  useRootNavigationState,
-  useRouter,
-} from "expo-router";
+import { useRootNavigationState, useRouter } from "expo-router";
+import { DarkTheme, DefaultTheme, ThemeProvider } from "expo-router/react-navigation";
+import { Stack } from "expo-router/stack";
 import * as SplashScreen from "expo-splash-screen";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import "react-native-reanimated";
 
 import { useColorScheme } from "@/components/useColorScheme";
@@ -54,7 +49,8 @@ export default function RootLayout() {
 }
 
 function RootLayoutSession() {
-  const { data: session } = authClient.useSession();
+  const { data: session, isPending } = authClient.useSession();
+  const pendingGraceElapsed = usePendingGrace(isPending);
 
   return (
     <MeProvider authenticated={Boolean(session)}>
@@ -62,9 +58,28 @@ function RootLayoutSession() {
       <PushRegistration authenticated={Boolean(session)} />
       <NotificationListeners />
       <PersonalEventStream authenticated={Boolean(session)} />
-      <RootLayoutNav />
+      <RootLayoutNav
+        authenticated={Boolean(session)}
+        pending={isPending && !pendingGraceElapsed}
+      />
     </MeProvider>
   );
+}
+
+/** Avoid flashing auth UI during restore without allowing storage to block forever. */
+function usePendingGrace(pending: boolean) {
+  const [elapsed, setElapsed] = useState(false);
+
+  useEffect(() => {
+    if (!pending) {
+      setElapsed(false);
+      return;
+    }
+    const timeout = setTimeout(() => setElapsed(true), 3_000);
+    return () => clearTimeout(timeout);
+  }, [pending]);
+
+  return elapsed;
 }
 
 /** Push-independent foreground updates for queue and wallet state (H28/H38). */
@@ -137,15 +152,26 @@ function NotificationListeners() {
   return null;
 }
 
-function RootLayoutNav() {
+function RootLayoutNav({ authenticated, pending }: { authenticated: boolean; pending: boolean }) {
   const colorScheme = useColorScheme();
+
+  // Keep one navigator in charge of session transitions. Protected screens
+  // are removed from navigation history when their guard changes, so signing
+  // out cannot leave a stale tabs route underneath (or add a second sign-in
+  // route while a nested redirect is already running).
+  if (pending) return null;
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
       <Stack>
-        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="schedule/[id]" options={{ headerShown: false }} />
+        <Stack.Protected guard={!authenticated}>
+          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+        </Stack.Protected>
+        <Stack.Protected guard={authenticated}>
+          <Stack.Screen name="index" options={{ headerShown: false }} />
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="schedule/[id]" options={{ headerShown: false }} />
+        </Stack.Protected>
       </Stack>
     </ThemeProvider>
   );

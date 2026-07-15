@@ -1,4 +1,3 @@
-import { router } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { Alert, ScrollView, Text, useColorScheme, View } from "react-native";
 
@@ -54,8 +53,8 @@ export default function AccountScreen() {
     setSigningOut(true);
     setSignOutError(null);
     try {
-      await signOut();
-      router.replace("/(auth)/sign-in");
+      const { error: authError } = await signOut();
+      if (authError) throw new Error(authError.message || "Sign out failed");
     } catch (cause) {
       setSignOutError(cause instanceof Error ? cause : new Error("Sign out failed"));
       setSigningOut(false);

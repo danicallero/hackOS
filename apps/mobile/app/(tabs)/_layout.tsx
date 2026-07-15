@@ -1,13 +1,12 @@
 import { type MenuAction, MenuView } from "@expo/ui/community/menu";
 import { EVENTS } from "@hackos/shared/events";
-import { Redirect, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { NativeTabs } from "expo-router/unstable-native-tabs";
 import { useCallback, useEffect, useState } from "react";
 import { AppState, useColorScheme, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { apiFetch } from "@/lib/api";
-import { authClient } from "@/lib/auth-client";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { subscribeToNotificationChanges } from "@/lib/notification-events";
@@ -31,7 +30,6 @@ interface OperationsMenuItem extends MenuAction {
 export default function TabLayout() {
   useColorScheme();
   const { t } = useLocale();
-  const { data: session, isPending } = authClient.useSession();
   const { me, loading: meLoading } = useMeContext();
   const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
   const capabilities = me?.capabilities ?? [];
@@ -43,7 +41,7 @@ export default function TabLayout() {
   const canScanActivities = capabilities.includes("*") || capabilities.includes("activity:scan");
 
   const refreshUnreadNotifications = useCallback(async () => {
-    if (!session) return;
+    if (!me) return;
     try {
       const inbox = await apiFetch<UnreadInboxResponse>(
         "/api/me/notifications?unread=true&limit=1&offset=0",
@@ -52,10 +50,10 @@ export default function TabLayout() {
     } catch {
       // Keep the last known state during a transient connectivity failure.
     }
-  }, [session]);
+  }, [me]);
 
   useEffect(() => {
-    if (!session) {
+    if (!me) {
       setHasUnreadNotifications(false);
       return;
     }
@@ -74,11 +72,10 @@ export default function TabLayout() {
       unsubscribeServer();
       appStateSubscription.remove();
     };
-  }, [refreshUnreadNotifications, session]);
+  }, [refreshUnreadNotifications, me]);
 
-  if (isPending) return null;
-  if (!session) return <Redirect href="/(auth)/sign-in" />;
   if (meLoading) return null;
+  if (!me) return null;
 
   return (
     <View style={{ flex: 1 }}>
