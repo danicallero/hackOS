@@ -34,6 +34,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useLocale } from "@/lib/i18n";
 import {
   type AccreditationLookup,
+  type AccreditationRoleCount,
   logisticsApi,
   type PersonSearchResult,
   personName,
@@ -44,6 +45,15 @@ export default function AccreditationPage() {
   const { t } = useLocale();
   const canAccredit = useCan(CAPABILITIES.ACCREDIT_SCAN);
   const [sessionCount, setSessionCount] = useState(0);
+  const [roleCounts, setRoleCounts] = useState<AccreditationRoleCount[]>([]);
+
+  const loadCounts = useCallback(() => {
+    void logisticsApi.accreditationStats().then((result) => setRoleCounts(result.byRole));
+  }, []);
+
+  useEffect(() => {
+    if (canAccredit) loadCounts();
+  }, [canAccredit, loadCounts]);
 
   if (!canAccredit) {
     return (
@@ -61,15 +71,29 @@ export default function AccreditationPage() {
   return (
     <div className="space-y-6" data-wide>
       <PageHeader title={t("accreditation")} description={t("accreditationDescription")} />
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
         <StatCard
           label={t("checkedInSession")}
           value={sessionCount}
           icon={BadgeCheckIcon}
           hint={t("onThisDevice")}
         />
+        {roleCounts.map((item) => (
+          <StatCard
+            key={item.role}
+            label={t(item.role)}
+            value={item.count}
+            icon={BadgeCheckIcon}
+            hint={t("accredited")}
+          />
+        ))}
       </div>
-      <AccreditationPanel onAccredited={() => setSessionCount((n) => n + 1)} />
+      <AccreditationPanel
+        onAccredited={() => {
+          setSessionCount((n) => n + 1);
+          loadCounts();
+        }}
+      />
     </div>
   );
 }

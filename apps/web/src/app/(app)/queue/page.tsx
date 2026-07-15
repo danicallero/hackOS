@@ -286,207 +286,229 @@ function RoomQueueCard({
 
       <Separator />
 
-      <div className="space-y-2 px-3.5 pb-3.5 pt-2.5">
-        <QueueEntryBlock
-          label={t("presenting")}
-          entry={room.active}
-          empty={t("noTeamPresenting")}
-          onSelect={setSelectedEntry}
-        />
+      <details className="group">
+        <summary className="hover:bg-muted/50 flex cursor-pointer list-none items-center justify-between gap-3 px-3.5 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <div className="flex min-w-0 items-center gap-4 text-sm">
+            <span className="min-w-0">
+              <span className="text-muted-foreground block text-xs">{t("presenting")}</span>
+              <span className="block truncate font-medium">
+                {room.active ? entryLabel(room.active, t) : t("noTeamPresenting")}
+              </span>
+            </span>
+            <span className="text-muted-foreground shrink-0 tabular-nums">
+              {t("calledTeams", { count: room.called.length })}
+            </span>
+          </div>
+          <span className="text-primary shrink-0 text-sm font-medium group-open:hidden">
+            {t("manageRoom")}
+          </span>
+          <span className="text-muted-foreground hidden shrink-0 text-sm group-open:inline">
+            {t("close")}
+          </span>
+        </summary>
 
-        <QueueGroup
-          label={t("calledTeams", { count: room.called.length })}
-          entries={room.called}
-          empty={t("noTeamsCalled")}
-          onSelect={setSelectedEntry}
-          actions={(entry) => (
-            <>
-              <Button
-                size="sm"
-                disabled={!canOperate || busy === `notify-${entry.id}`}
-                onClick={() =>
-                  void mutate(
-                    `notify-${entry.id}`,
-                    () => entryAction(entry.id, "notify-enter", undefined, crypto.randomUUID()),
-                    t("teamRenotified"),
-                  )
-                }
-              >
-                <BellRingIcon className="size-4" />
-                {t("renotify")}
-              </Button>
+        <div className="space-y-2 border-t px-3.5 pb-3.5 pt-2.5">
+          <QueueEntryBlock
+            label={t("presenting")}
+            entry={room.active}
+            empty={t("noTeamPresenting")}
+            onSelect={setSelectedEntry}
+          />
+
+          <QueueGroup
+            label={t("calledTeams", { count: room.called.length })}
+            entries={room.called}
+            empty={t("noTeamsCalled")}
+            onSelect={setSelectedEntry}
+            actions={(entry) => (
+              <>
+                <Button
+                  size="sm"
+                  disabled={!canOperate || busy === `notify-${entry.id}`}
+                  onClick={() =>
+                    void mutate(
+                      `notify-${entry.id}`,
+                      () => entryAction(entry.id, "notify-enter", undefined, crypto.randomUUID()),
+                      t("teamRenotified"),
+                    )
+                  }
+                >
+                  <BellRingIcon className="size-4" />
+                  {t("renotify")}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!canOperate || busy === `bring-${entry.id}`}
+                  onClick={() =>
+                    void mutate(
+                      `bring-${entry.id}`,
+                      () => entryAction(entry.id, "bring-in", undefined, crypto.randomUUID()),
+                      t("teamBroughtIn"),
+                    )
+                  }
+                >
+                  <DoorOpenIcon className="size-4" />
+                  {t("bringIn")}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!canOperate || busy === `requeue-${entry.id}`}
+                  onClick={() =>
+                    void mutate(
+                      `requeue-${entry.id}`,
+                      () =>
+                        entryAction(
+                          entry.id,
+                          "requeue",
+                          { position: "bottom", reason: "Queue operations: requeued" },
+                          crypto.randomUUID(),
+                        ),
+                      t("teamRequeued"),
+                    )
+                  }
+                >
+                  <RotateCcwIcon className="size-4" />
+                  {t("requeue")}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!canOperate || busy === `noshow-${entry.id}`}
+                  onClick={() =>
+                    void mutate(
+                      `noshow-${entry.id}`,
+                      () =>
+                        entryAction(
+                          entry.id,
+                          "no-show",
+                          { reason: "Queue operations: absent" },
+                          crypto.randomUUID(),
+                        ),
+                      t("teamMarkedAbsent"),
+                    )
+                  }
+                >
+                  <AlertTriangleIcon className="size-4" />
+                  {t("absent")}
+                </Button>
+              </>
+            )}
+          />
+
+          <QueueEntryBlock
+            label={t("nextAtTop")}
+            entry={nextEntry}
+            empty={t("noWaitingTeam")}
+            onSelect={setSelectedEntry}
+            actions={(entry) => (
               <Button
                 size="sm"
                 variant="outline"
-                disabled={!canOperate || busy === `bring-${entry.id}`}
+                disabled={!canOperate || busy === `call-${entry.id}`}
                 onClick={() =>
                   void mutate(
-                    `bring-${entry.id}`,
-                    () => entryAction(entry.id, "bring-in", undefined, crypto.randomUUID()),
-                    t("teamBroughtIn"),
+                    `call-${entry.id}`,
+                    () =>
+                      entryAction(
+                        entry.id,
+                        "manual-call",
+                        {
+                          targetStatus: "called",
+                          roomId: room.room.id,
+                          reason: "Queue operations: manually called next",
+                        },
+                        crypto.randomUUID(),
+                      ),
+                    t("teamAddedWaiting"),
                   )
                 }
               >
                 <DoorOpenIcon className="size-4" />
-                {t("bringIn")}
+                {t("addWaiting")}
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={!canOperate || busy === `requeue-${entry.id}`}
-                onClick={() =>
-                  void mutate(
-                    `requeue-${entry.id}`,
-                    () =>
-                      entryAction(
-                        entry.id,
-                        "requeue",
-                        { position: "bottom", reason: "Queue operations: requeued" },
-                        crypto.randomUUID(),
-                      ),
-                    t("teamRequeued"),
-                  )
-                }
-              >
-                <RotateCcwIcon className="size-4" />
-                {t("requeue")}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={!canOperate || busy === `noshow-${entry.id}`}
-                onClick={() =>
-                  void mutate(
-                    `noshow-${entry.id}`,
-                    () =>
-                      entryAction(
-                        entry.id,
-                        "no-show",
-                        { reason: "Queue operations: absent" },
-                        crypto.randomUUID(),
-                      ),
-                    t("teamMarkedAbsent"),
-                  )
-                }
-              >
-                <AlertTriangleIcon className="size-4" />
-                {t("absent")}
-              </Button>
-            </>
-          )}
-        />
+            )}
+          />
 
-        <QueueEntryBlock
-          label={t("nextAtTop")}
-          entry={nextEntry}
-          empty={t("noWaitingTeam")}
-          onSelect={setSelectedEntry}
-          actions={(entry) => (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={!canOperate || busy === `call-${entry.id}`}
-              onClick={() =>
-                void mutate(
-                  `call-${entry.id}`,
-                  () =>
-                    entryAction(
-                      entry.id,
-                      "manual-call",
-                      {
-                        targetStatus: "called",
-                        roomId: room.room.id,
-                        reason: "Queue operations: manually called next",
-                      },
-                      crypto.randomUUID(),
-                    ),
-                  t("teamAddedWaiting"),
-                )
-              }
-            >
-              <DoorOpenIcon className="size-4" />
-              {t("addWaiting")}
-            </Button>
-          )}
-        />
-
-        <div className="space-y-1.5 rounded-md border p-2.5">
-          <div className="relative">
-            <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />
-            <Input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              disabled={!canOperate || !challengeId}
-              placeholder={t("searchProjectPlaceholder")}
-              className="h-8 pl-8 text-sm"
-            />
-          </div>
-          {query.trim() && (
-            <div className="space-y-1.5">
-              {searching && results.length === 0 ? (
-                <Spinner className="size-4" />
-              ) : results.length === 0 ? (
-                <p className="text-muted-foreground text-xs">{t("noTeamsFound")}</p>
-              ) : (
-                results.slice(0, 5).map((entry) => (
-                  <div
-                    key={entry.id}
-                    className="flex items-center justify-between gap-2 rounded-md border px-2.5 py-1.5"
-                  >
-                    <TeamButton entry={entry} onSelect={setSelectedEntry} />
-                    <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={!canOperate || busy === `top-${entry.id}`}
-                        onClick={() =>
-                          void mutate(
-                            `top-${entry.id}`,
-                            () =>
-                              entryAction(
-                                entry.id,
-                                "move-top",
-                                { reason: "Queue operations: moved to top" },
-                                crypto.randomUUID(),
-                              ),
-                            t("teamMovedTop"),
-                          )
-                        }
-                      >
-                        {t("top")}
-                      </Button>
-                      <Button
-                        size="sm"
-                        disabled={!canOperate || busy === `waiting-${entry.id}`}
-                        onClick={() =>
-                          void mutate(
-                            `waiting-${entry.id}`,
-                            () =>
-                              entryAction(
-                                entry.id,
-                                "manual-call",
-                                {
-                                  targetStatus: "called",
-                                  roomId: room.room.id,
-                                  reason: "Queue operations: sent to waiting room",
-                                },
-                                crypto.randomUUID(),
-                              ),
-                            t("teamAddedWaiting"),
-                          )
-                        }
-                      >
-                        <DoorOpenIcon className="size-4" />
-                        {t("waiting")}
-                      </Button>
-                    </div>
-                  </div>
-                ))
-              )}
+          <div className="space-y-1.5 rounded-md border p-2.5">
+            <div className="relative">
+              <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />
+              <Input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                disabled={!canOperate || !challengeId}
+                placeholder={t("searchProjectPlaceholder")}
+                className="h-8 pl-8 text-sm"
+              />
             </div>
-          )}
+            {query.trim() && (
+              <div className="space-y-1.5">
+                {searching && results.length === 0 ? (
+                  <Spinner className="size-4" />
+                ) : results.length === 0 ? (
+                  <p className="text-muted-foreground text-xs">{t("noTeamsFound")}</p>
+                ) : (
+                  results.slice(0, 5).map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="flex items-center justify-between gap-2 rounded-md border px-2.5 py-1.5"
+                    >
+                      <TeamButton entry={entry} onSelect={setSelectedEntry} />
+                      <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={!canOperate || busy === `top-${entry.id}`}
+                          onClick={() =>
+                            void mutate(
+                              `top-${entry.id}`,
+                              () =>
+                                entryAction(
+                                  entry.id,
+                                  "move-top",
+                                  { reason: "Queue operations: moved to top" },
+                                  crypto.randomUUID(),
+                                ),
+                              t("teamMovedTop"),
+                            )
+                          }
+                        >
+                          {t("top")}
+                        </Button>
+                        <Button
+                          size="sm"
+                          disabled={!canOperate || busy === `waiting-${entry.id}`}
+                          onClick={() =>
+                            void mutate(
+                              `waiting-${entry.id}`,
+                              () =>
+                                entryAction(
+                                  entry.id,
+                                  "manual-call",
+                                  {
+                                    targetStatus: "called",
+                                    roomId: room.room.id,
+                                    reason: "Queue operations: sent to waiting room",
+                                  },
+                                  crypto.randomUUID(),
+                                ),
+                              t("teamAddedWaiting"),
+                            )
+                          }
+                        >
+                          <DoorOpenIcon className="size-4" />
+                          {t("waiting")}
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      </details>
 
       <TeamMembersModal
         entry={selectedEntry}

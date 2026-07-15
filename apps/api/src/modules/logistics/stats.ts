@@ -64,6 +64,37 @@ export async function scannableActivities(
   return aggregateActivities(where);
 }
 
+/** Accreditation totals by operational role; admins are included in staff. */
+export async function accreditationCountsByRole() {
+  const { rows } = await pool.query(
+    `WITH RECURSIVE effective_groups(user_id, group_id) AS (
+       SELECT user_id, group_id FROM permission_group_members
+       UNION
+       SELECT eg.user_id, pgi.child_group_id
+         FROM effective_groups eg
+         JOIN permission_group_includes pgi ON pgi.parent_group_id = eg.group_id
+     ), classified AS (
+       SELECT u.id,
+              CASE
+                WHEN EXISTS (
+                  SELECT 1 FROM effective_groups eg
+                  JOIN group_capabilities gc ON gc.group_id = eg.group_id
+                  WHERE eg.user_id = u.id AND gc.capability = '*'
+                ) THEN 'staff'
+                WHEN EXISTS (SELECT 1 FROM room_judges rj WHERE rj.user_id = u.id) THEN 'judge'
+                WHEN EXISTS (SELECT 1 FROM sponsors s WHERE s.user_id = u.id) THEN 'sponsor'
+                WHEN EXISTS (SELECT 1 FROM effective_groups eg WHERE eg.user_id = u.id) THEN 'staff'
+                ELSE 'participant'
+              END AS role
+         FROM users u
+        WHERE u.badge_id IS NOT NULL
+     )
+     SELECT role, count(*)::int AS count
+       FROM classified GROUP BY role ORDER BY role`,
+  );
+  return rows.map((row) => ({ role: String(row.role), count: Number(row.count) }));
+}
+
 /**
  * H27 operational logistics panel (LOGISTICS_STATS): accredited count,
  * currently-present estimate, per-meal served/repeats, per-activity
@@ -77,10 +108,12 @@ export async function logisticsStats() {
   const occ = await occupancyEstimate();
   const meals = await scannableActivities("meal");
   const activities = await scannableActivities("activity");
+  const accreditedByRole = await accreditationCountsByRole();
 
   return {
     accreditedCount: accredited.rows[0].n as number,
     currentlyPresent: occ.presentCount,
+    accreditedByRole,
     meals: meals.map((m) => ({
       activityId: m.activityId,
       name: m.name,

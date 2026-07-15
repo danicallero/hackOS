@@ -5,8 +5,12 @@ import {
   CalendarDaysIcon,
   ChevronRightIcon,
   ClipboardListIcon,
+  GavelIcon,
   MapPinIcon,
+  SettingsIcon,
   TicketIcon,
+  TrophyIcon,
+  WalletCardsIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -83,15 +87,26 @@ export default function DashboardPage() {
   }, [load]);
 
   const phase = useEventPhase(data.event);
-  const nextActivity = useMemo(
+  const nextActivity = useMemo(() => {
+    const now = Date.now();
+    return data.schedule
+      .filter((item) => new Date(item.endsAt).getTime() >= now)
+      .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())[0];
+  }, [data.schedule]);
+  const attentionQueues = useMemo(
     () =>
-      data.schedule
-        .filter((item) => new Date(item.startsAt).getTime() >= Date.now())
-        .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())[0],
-    [data.schedule],
-  );
-  const attentionQueue = useMemo(
-    () => data.queue.find((entry) => entry.status !== "completed") ?? data.queue[0],
+      data.queue
+        .filter(
+          (entry) =>
+            !["completed", "presenting", "no_show", "cancelled", "disqualified"].includes(
+              entry.status,
+            ),
+        )
+        .sort(
+          (a, b) =>
+            (a.position ?? Number.MAX_SAFE_INTEGER) - (b.position ?? Number.MAX_SAFE_INTEGER),
+        )
+        .slice(0, 3),
     [data.queue],
   );
   if (!me) return null;
@@ -101,14 +116,6 @@ export default function DashboardPage() {
       <PageHeader
         title={`${t("welcome")}${me.name ? `, ${me.name}` : ""}`}
         description={data.event?.tagline ?? t("dashboardDescription")}
-        actions={
-          <Button asChild variant="outline">
-            <Link href="/#schedule-title">
-              <CalendarDaysIcon className="size-4" />
-              {t("viewSchedule")}
-            </Link>
-          </Button>
-        }
       />
 
       {loading ? (
@@ -122,10 +129,19 @@ export default function DashboardPage() {
             <Card>
               <CardHeader className="flex flex-row items-start justify-between gap-4">
                 <div>
-                  <CardTitle className="text-balance text-lg">{data.event?.name ?? "hackOS"}</CardTitle>
-                  <p className="text-muted-foreground text-pretty mt-1 text-sm">{t("eventStatus")}</p>
+                  <CardTitle className="text-balance text-lg">
+                    {data.event?.name ?? "hackOS"}
+                  </CardTitle>
+                  <p className="text-muted-foreground text-pretty mt-1 text-sm">
+                    {t("eventStatus")}
+                  </p>
                 </div>
-                <CalendarDaysIcon className="text-muted-foreground size-5 shrink-0" aria-hidden="true" />
+                <Button asChild variant="ghost" size="sm">
+                  <Link href="/timetable">
+                    <CalendarDaysIcon className="size-4" aria-hidden="true" />
+                    {t("viewSchedule")}
+                  </Link>
+                </Button>
               </CardHeader>
               <CardContent>
                 {phase.kind !== "none" ? (
@@ -143,9 +159,14 @@ export default function DashboardPage() {
               <CardHeader className="flex flex-row items-start justify-between gap-4">
                 <div>
                   <CardTitle className="text-balance text-lg">{t("nextUp")}</CardTitle>
-                  <p className="text-muted-foreground text-pretty mt-1 text-sm">{t("nextUpDescription")}</p>
+                  <p className="text-muted-foreground text-pretty mt-1 text-sm">
+                    {t("nextUpDescription")}
+                  </p>
                 </div>
-                <CalendarDaysIcon className="text-muted-foreground size-5 shrink-0" aria-hidden="true" />
+                <CalendarDaysIcon
+                  className="text-muted-foreground size-5 shrink-0"
+                  aria-hidden="true"
+                />
               </CardHeader>
               <CardContent>
                 {nextActivity ? (
@@ -182,7 +203,10 @@ export default function DashboardPage() {
               <CardContent className="space-y-3">
                 {data.announcements.length ? (
                   data.announcements.slice(0, 3).map((announcement) => (
-                    <article key={announcement.id} className="border-b pb-3 last:border-0 last:pb-0">
+                    <article
+                      key={announcement.id}
+                      className="border-b pb-3 last:border-0 last:pb-0"
+                    >
                       <h2 className="text-balance font-medium">{announcement.title}</h2>
                       <p className="text-muted-foreground text-pretty mt-1 line-clamp-2 text-sm">
                         {announcement.body}
@@ -195,12 +219,17 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
 
-            {(data.applications.length > 0 || attentionQueue) && (
+            {(data.applications.length > 0 || attentionQueues.length > 0) && (
               <Card>
                 <CardHeader>
                   <div className="flex items-center gap-2.5">
-                    <ClipboardListIcon className="text-muted-foreground size-5" aria-hidden="true" />
-                    <CardTitle className="text-balance text-lg">{t("yourStatus")}</CardTitle>
+                    <ClipboardListIcon
+                      className="text-muted-foreground size-5"
+                      aria-hidden="true"
+                    />
+                    <CardTitle className="text-balance text-lg">
+                      {attentionQueues.length ? t("queuePositions") : t("yourStatus")}
+                    </CardTitle>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -210,34 +239,37 @@ export default function DashboardPage() {
                       href={`/my-applications/${application.application_id}`}
                       className="hover:bg-muted/50 flex items-center justify-between gap-3 rounded-lg border p-3"
                     >
-                      <span className="min-w-0 truncate text-sm font-medium">{application.application_name}</span>
+                      <span className="min-w-0 truncate text-sm font-medium">
+                        {application.application_name}
+                      </span>
                       <StatusBadge tone={statusTone(application.status)} dot={false}>
                         {statusLabel(application.status, t)}
                       </StatusBadge>
                     </Link>
                   ))}
-                  {attentionQueue && (
+                  {attentionQueues.map((entry) => (
                     <Link
+                      key={entry.entryId}
                       href="/my-queue"
                       className="hover:bg-muted/50 flex items-center justify-between gap-3 rounded-lg border p-3"
                     >
                       <span className="min-w-0">
                         <span className="flex items-center gap-2 text-sm font-medium">
                           <TicketIcon className="size-4 shrink-0" aria-hidden="true" />
-                          <span className="truncate">{attentionQueue.challengeTitle}</span>
+                          <span className="truncate">{entry.challengeTitle}</span>
                         </span>
-                        {attentionQueue.position != null && (
+                        {entry.position != null && (
                           <span className="text-muted-foreground mt-1 block text-xs tabular-nums">
-                            {t("position")} #{attentionQueue.position}
+                            {t("position")} #{entry.position}
                           </span>
                         )}
                       </span>
-                      <QueueStatusBadge status={attentionQueue.status} />
+                      <QueueStatusBadge status={entry.status} />
                     </Link>
-                  )}
+                  ))}
                   <Button asChild variant="ghost" className="w-full justify-between">
-                    <Link href={attentionQueue ? "/my-queue" : "/my-applications"}>
-                      {attentionQueue ? t("viewQueue") : t("viewApplications")}
+                    <Link href={attentionQueues.length ? "/my-queue" : "/my-applications"}>
+                      {attentionQueues.length ? t("viewQueue") : t("viewApplications")}
                       <ChevronRightIcon className="size-4" />
                     </Link>
                   </Button>
@@ -245,6 +277,68 @@ export default function DashboardPage() {
               </Card>
             )}
           </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-balance text-lg">{t("quickActions")}</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              {(me.role === "participant" || me.role === "staff") && (
+                <Button asChild variant="outline" className="justify-start">
+                  <Link href="/wallet">
+                    <WalletCardsIcon className="size-4" aria-hidden="true" />
+                    {t("viewTicket")}
+                  </Link>
+                </Button>
+              )}
+              {me.role === "sponsor" && (
+                <Button asChild variant="outline" className="justify-start">
+                  <Link href="/challenges">
+                    <TrophyIcon className="size-4" aria-hidden="true" />
+                    {t("challenges")}
+                  </Link>
+                </Button>
+              )}
+              {me.role === "judge" && (
+                <Button asChild variant="outline" className="justify-start">
+                  <Link href="/judging">
+                    <GavelIcon className="size-4" aria-hidden="true" />
+                    {t("judging")}
+                  </Link>
+                </Button>
+              )}
+              {(me.role === "staff" || me.role === "admin") && (
+                <Button asChild variant="outline" className="justify-start">
+                  <Link href="/logistics">
+                    <TicketIcon className="size-4" aria-hidden="true" />
+                    {t("logistics")}
+                  </Link>
+                </Button>
+              )}
+              {me.role === "admin" && (
+                <>
+                  <Button asChild variant="outline" className="justify-start">
+                    <Link href="/queue">
+                      <TicketIcon className="size-4" aria-hidden="true" />
+                      {t("queueOperations")}
+                    </Link>
+                  </Button>
+                  <Button asChild variant="outline" className="justify-start">
+                    <Link href="/settings/event">
+                      <SettingsIcon className="size-4" aria-hidden="true" />
+                      {t("eventSettings")}
+                    </Link>
+                  </Button>
+                </>
+              )}
+              <Button asChild variant="outline" className="justify-start">
+                <Link href="/timetable">
+                  <CalendarDaysIcon className="size-4" aria-hidden="true" />
+                  {t("viewSchedule")}
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
         </>
       )}
     </div>

@@ -61,6 +61,20 @@ export async function apiFetch<T = unknown>(
   const payload = text ? JSON.parse(text) : undefined;
 
   if (!res.ok) {
+    if (
+      res.status === 409 &&
+      payload &&
+      typeof payload === "object" &&
+      "registered" in payload &&
+      (payload as { registered?: unknown }).registered === false
+    ) {
+      throw new ApiError(
+        res.status,
+        "repeat_confirmation_required",
+        (payload as { message?: string }).message ?? "Confirmation required",
+        payload,
+      );
+    }
     const err = (payload as { error?: { code?: string; message?: string; details?: unknown } })
       ?.error;
     const retryAfter = Number(res.headers.get("retry-after")) || undefined;

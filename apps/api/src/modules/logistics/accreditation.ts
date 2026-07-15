@@ -124,6 +124,21 @@ export async function checkInUser(
       [input.userId, input.badgeId, input.method, actorId],
     );
 
+    // Optional event policy: accreditation is also the presence entry signal.
+    // Early check-ins are scheduled for the configured common entry instant;
+    // late check-ins use their real accreditation time.
+    const automaticPresence = await client.query(
+      `INSERT INTO time_logs (user_id, kind, scanned_at, scanned_by, notes)
+       SELECT $1, 'in', GREATEST($2::timestamptz, ec.presence_auto_entry_at), $3,
+              'Automatic entry from accreditation'
+         FROM event_config ec
+        WHERE ec.id = 1
+          AND ec.presence_auto_entry_at IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM time_logs WHERE user_id = $1)
+       RETURNING scanned_at`,
+      [input.userId, cin.rows[0].checked_in_at, actorId],
+    );
+
     await audit(client, {
       actorId,
       entityType: "accreditation",
@@ -138,6 +153,7 @@ export async function checkInUser(
       method: input.method,
       checkInLogId: cin.rows[0].id,
       checkedInAt: cin.rows[0].checked_in_at,
+      presenceEntryAt: automaticPresence.rows[0]?.scanned_at ?? null,
       name: user.name,
       surname: user.surname,
     };

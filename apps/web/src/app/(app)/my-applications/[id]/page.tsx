@@ -13,7 +13,13 @@
 //   POST /api/me/responses/:responseId/decline   → decline my place (H15)
 
 import { EVENTS } from "@hackos/shared/events";
-import { CheckCircle2Icon, ClipboardListIcon, ShieldAlertIcon, XCircleIcon } from "lucide-react";
+import {
+  CheckCircle2Icon,
+  ClipboardListIcon,
+  ShieldAlertIcon,
+  WalletCardsIcon,
+  XCircleIcon,
+} from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -347,7 +353,13 @@ export default function MyApplicationDetailPage() {
           description={t("placeConfirmedDesc")}
         >
           <p className="text-muted-foreground text-sm">{t("canReleaseAnytime")}</p>
-          <div>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild>
+              <Link href="/wallet">
+                <WalletCardsIcon aria-hidden="true" />
+                {t("viewTicket")}
+              </Link>
+            </Button>
             <Button variant="outline" onClick={() => setReleaseOpen(true)} disabled={acting}>
               <XCircleIcon />
               {t("cantAttendRelease")}
