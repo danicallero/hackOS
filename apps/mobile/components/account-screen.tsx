@@ -123,7 +123,7 @@ export default function AccountScreen() {
             {fullName}
           </Text>
           <Text selectable style={{ color: colors.secondaryLabel, fontSize: 15 }}>
-            {me.email}
+            {me.role}
           </Text>
           <StatusPill tone={me.badgeId ? "success" : "neutral"} style={{ alignSelf: "center" }}>
             {me.badgeId ? t("accountAccredited") : t("accountNotAccredited")}
@@ -146,8 +146,17 @@ export default function AccountScreen() {
           )}
           onPressAction={({ nativeEvent }) => void changeLanguage(nativeEvent.event as Lang)}
         >
-          <Pressable disabled={savingLanguage}>
-            <InfoRow label={t("accountLanguage")} value={languageName(me.language)} icon="globe" />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ disabled: savingLanguage, busy: savingLanguage }}
+            disabled={savingLanguage}
+          >
+            <InfoRow
+              label={t("accountLanguage")}
+              value={languageName(me.language)}
+              icon="globe"
+              accessoryIcon="chevron.down"
+            />
           </Pressable>
         </MenuView>
         <Separator inset={48} />
@@ -158,13 +167,24 @@ export default function AccountScreen() {
         />
       </Section>
 
-      <Section title={t("accountContact")} footer={t("accountEmailHint")}>
+      <Section title={t("accountContact")}>
         <InfoRow
           label={t("accountEmail")}
           value={me.emailVerified ? t("accountVerified") : t("accountNotVerified")}
           icon="envelope"
           valueStyle={{ color: me.emailVerified ? colors.success : colors.warning }}
         />
+            <Text
+              selectable
+              style={{
+                color: colors.secondaryLabel,
+                fontSize: 13,
+                paddingBottom: 12,
+                paddingHorizontal: 48,
+              }}
+            >
+              {me.email}
+            </Text>
         {me.secondaryEmail ? (
           <>
             <Separator inset={48} />

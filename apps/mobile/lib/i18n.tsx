@@ -198,11 +198,6 @@ const dict = {
     gl: "Acreditación pendente",
   },
   accountContact: { en: "Contact", es: "Contacto", gl: "Contacto" },
-  accountEmailHint: {
-    en: "Email addresses and verification status are managed by the same account as the web app.",
-    es: "Los correos y su verificación pertenecen a la misma cuenta que en la web.",
-    gl: "Os correos e a súa verificación pertencen á mesma conta que na web.",
-  },
   accountVerified: { en: "Verified", es: "Verificado", gl: "Verificado" },
   accountNotVerified: { en: "Not verified", es: "Sin verificar", gl: "Sen verificar" },
   accountSecondaryEmail: {

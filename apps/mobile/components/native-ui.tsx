@@ -81,11 +81,13 @@ export function InfoRow({
   label,
   value,
   icon,
+  accessoryIcon,
   valueStyle,
 }: {
   label: string;
   value: string;
   icon?: SymbolViewProps["name"];
+  accessoryIcon?: SymbolViewProps["name"];
   valueStyle?: TextStyle;
 }) {
   return (
@@ -114,6 +116,15 @@ export function InfoRow({
       >
         {value}
       </Text>
+      {accessoryIcon ? (
+        <SymbolView
+          name={accessoryIcon}
+          tintColor={colors.tertiaryLabel}
+          size={12}
+          weight="semibold"
+          accessible={false}
+        />
+      ) : null}
     </View>
   );
 }
