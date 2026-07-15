@@ -111,6 +111,7 @@ function RootLayoutNav() {
       <Stack>
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="schedule/[id]" options={{ headerBackButtonDisplayMode: "minimal" }} />
       </Stack>
     </ThemeProvider>
   );

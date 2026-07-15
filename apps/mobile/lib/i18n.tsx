@@ -246,6 +246,19 @@ const dict = {
     es: "Ahora, {time}",
     gl: "Agora, {time}",
   },
+  scheduleDetails: {
+    en: "Activity details",
+    es: "Detalles de la actividad",
+    gl: "Detalles da actividade",
+  },
+  scheduleItemUnavailable: {
+    en: "This activity is no longer available in the published schedule.",
+    es: "Esta actividad ya no está disponible en el programa publicado.",
+    gl: "Esta actividade xa non está dispoñible no programa publicado.",
+  },
+  scheduleTime: { en: "Time", es: "Horario", gl: "Horario" },
+  scheduleLocation: { en: "Location", es: "Ubicación", gl: "Localización" },
+  scheduleDescription: { en: "Description", es: "Descripción", gl: "Descrición" },
   queueEmpty: {
     en: "You're not in any queue right now.",
     es: "No estás en ninguna cola ahora mismo.",

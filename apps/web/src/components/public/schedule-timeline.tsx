@@ -1,13 +1,72 @@
 "use client";
 
 import { CalendarDaysIcon, Clock3Icon, MapPinIcon } from "lucide-react";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
+import { Modal } from "@/components/common/modal";
 import { LOCALE_CODES, useLocale } from "@/lib/i18n";
 import type { PublicScheduleItem } from "@/lib/logistics";
 import { cn } from "@/lib/utils";
 
 const HOUR_HEIGHT = 72;
+const MIN_ITEM_HEIGHT = 52;
+const LANE_GAP = 8;
+
+interface PositionedItem {
+  item: PublicScheduleItem;
+  top: number;
+  height: number;
+  lane: number;
+  laneCount: number;
+}
+
+/**
+ * Calendar entries are absolutely positioned, so their collision lanes must
+ * be based on rendered pixels (including the minimum readable card height),
+ * not only on their timestamps.
+ */
+function positionDayItems(items: PublicScheduleItem[], rangeStart: number): PositionedItem[] {
+  const positioned = items
+    .map((item) => {
+      const starts = Date.parse(item.startsAt);
+      const ends = Date.parse(item.endsAt);
+      return {
+        item,
+        top: ((starts - rangeStart) / 3_600_000) * HOUR_HEIGHT,
+        height: Math.max(MIN_ITEM_HEIGHT, ((ends - starts) / 3_600_000) * HOUR_HEIGHT - 4),
+      };
+    })
+    .sort((a, b) => a.top - b.top || b.height - a.height);
+
+  const result: PositionedItem[] = [];
+  let group: typeof positioned = [];
+  let groupBottom = Number.NEGATIVE_INFINITY;
+
+  const placeGroup = () => {
+    if (!group.length) return;
+    const laneEnds: number[] = [];
+    const placed = group.map((entry) => {
+      let lane = laneEnds.findIndex((end) => end <= entry.top);
+      if (lane === -1) lane = laneEnds.length;
+      laneEnds[lane] = entry.top + entry.height;
+      return { ...entry, lane };
+    });
+    const laneCount = laneEnds.length;
+    result.push(...placed.map((entry) => ({ ...entry, laneCount })));
+  };
+
+  for (const entry of positioned) {
+    if (group.length && entry.top >= groupBottom) {
+      placeGroup();
+      group = [];
+      groupBottom = Number.NEGATIVE_INFINITY;
+    }
+    group.push(entry);
+    groupBottom = Math.max(groupBottom, entry.top + entry.height);
+  }
+  placeGroup();
+  return result;
+}
 
 function startOfHour(value: number) {
   const date = new Date(value);
@@ -40,6 +99,7 @@ export function ScheduleTimeline({
   const { language, t } = useLocale();
   const now = Date.now();
   const focusRef = useRef<HTMLElement | null>(null);
+  const [selectedItem, setSelectedItem] = useState<PublicScheduleItem | null>(null);
   const ordered = useMemo(
     () => [...items].sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt)),
     [items],
@@ -95,6 +155,7 @@ export function ScheduleTimeline({
           { length: Math.ceil((rangeEnd - rangeStart) / 3_600_000) + 1 },
           (_, index) => rangeStart + index * 3_600_000,
         );
+        const positionedItems = positionDayItems(dayItems, rangeStart);
 
         return (
           <section key={key} aria-labelledby={`schedule-day-${key}`}>
@@ -125,14 +186,14 @@ export function ScheduleTimeline({
               ))}
 
               <ol className="absolute inset-0 left-16">
-                {dayItems.map((item) => {
+                {positionedItems.map(({ item, top, height: itemHeight, lane, laneCount }) => {
                   const starts = Date.parse(item.startsAt);
                   const ends = Date.parse(item.endsAt);
-                  const top = ((starts - rangeStart) / 3_600_000) * HOUR_HEIGHT;
-                  const itemHeight = Math.max(52, ((ends - starts) / 3_600_000) * HOUR_HEIGHT - 4);
                   const active = starts <= now && ends >= now;
                   const passed = ends < now;
                   const shouldFocus = active || (!showNow && item.id === firstFutureId);
+                  const width = `calc(${100 / laneCount}% - ${(LANE_GAP * (laneCount - 1)) / laneCount}px)`;
+                  const left = `calc(${(lane * 100) / laneCount}% + ${(lane * LANE_GAP) / laneCount}px)`;
                   return (
                     <li
                       key={item.id}
@@ -144,35 +205,41 @@ export function ScheduleTimeline({
                           : undefined
                       }
                       className={cn(
-                        "absolute inset-x-0 overflow-hidden rounded-lg border bg-card px-3 py-2 shadow-sm",
+                        "absolute overflow-hidden rounded-lg border bg-card shadow-sm",
                         active && "border-primary bg-primary/5",
                         passed && "opacity-60",
                       )}
-                      style={{ top, height: itemHeight }}
+                      style={{ top, height: itemHeight, left, width }}
                     >
-                      <div className="flex min-w-0 items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <h3 className="truncate text-sm font-medium">{item.title}</h3>
-                          <p className="text-muted-foreground mt-0.5 flex flex-wrap gap-x-3 text-xs tabular-nums">
-                            <span className="inline-flex items-center gap-1">
-                              <Clock3Icon className="size-3" aria-hidden="true" />
-                              {timeFormatter.format(new Date(starts))}–
-                              {timeFormatter.format(new Date(ends))}
-                            </span>
-                            {item.location && (
-                              <span className="inline-flex min-w-0 items-center gap-1 truncate">
-                                <MapPinIcon className="size-3 shrink-0" aria-hidden="true" />
-                                {item.location}
+                      <button
+                        type="button"
+                        className="size-full cursor-pointer px-3 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                        onClick={() => setSelectedItem(item)}
+                      >
+                        <div className="flex min-w-0 items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <h3 className="truncate text-sm font-medium">{item.title}</h3>
+                            <p className="text-muted-foreground mt-0.5 flex flex-wrap gap-x-3 text-xs tabular-nums">
+                              <span className="inline-flex items-center gap-1">
+                                <Clock3Icon className="size-3" aria-hidden="true" />
+                                {timeFormatter.format(new Date(starts))}–
+                                {timeFormatter.format(new Date(ends))}
                               </span>
-                            )}
-                          </p>
+                              {item.location && (
+                                <span className="inline-flex min-w-0 items-center gap-1 truncate">
+                                  <MapPinIcon className="size-3 shrink-0" aria-hidden="true" />
+                                  {item.location}
+                                </span>
+                              )}
+                            </p>
+                          </div>
+                          {active && (
+                            <span className="text-primary shrink-0 text-xs font-medium">
+                              {t("happeningNow")}
+                            </span>
+                          )}
                         </div>
-                        {active && (
-                          <span className="text-primary shrink-0 text-xs font-medium">
-                            {t("happeningNow")}
-                          </span>
-                        )}
-                      </div>
+                      </button>
                     </li>
                   );
                 })}
@@ -199,6 +266,36 @@ export function ScheduleTimeline({
           </section>
         );
       })}
+      <Modal
+        open={selectedItem !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedItem(null);
+        }}
+        title={selectedItem?.title ?? ""}
+        description={
+          selectedItem
+            ? `${dateFormatter.format(new Date(selectedItem.startsAt))} · ${timeFormatter.format(new Date(selectedItem.startsAt))}–${timeFormatter.format(new Date(selectedItem.endsAt))}`
+            : undefined
+        }
+        icon={CalendarDaysIcon}
+      >
+        {selectedItem && (
+          <div className="space-y-4 text-sm">
+            {selectedItem.location && (
+              <p className="text-muted-foreground flex items-start gap-2 text-pretty">
+                <MapPinIcon className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                {selectedItem.location}
+              </p>
+            )}
+            {selectedItem.type && (
+              <p className="text-muted-foreground capitalize">{selectedItem.type}</p>
+            )}
+            {selectedItem.description && (
+              <p className="whitespace-pre-wrap text-pretty">{selectedItem.description}</p>
+            )}
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

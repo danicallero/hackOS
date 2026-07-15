@@ -1,25 +1,24 @@
+import { useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, RefreshControl, SectionList, Text, useColorScheme, View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  type GestureResponderEvent,
+  Pressable,
+  RefreshControl,
+  SectionList,
+  Text,
+  useColorScheme,
+  View,
+} from "react-native";
 
 import { EmptyState, StatusPill } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
-import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
+import { fetchPublicSchedule, type ScheduleItem } from "@/lib/schedule";
 import { useActivityReminders } from "@/lib/use-activity-reminders";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { colors } from "@/theme/colors";
-
-interface ScheduleItem {
-  id: number;
-  title: string;
-  description: string | null;
-  location: string | null;
-  type: string | null;
-  startsAt: string;
-  endsAt: string;
-}
 
 type NowMarker = { kind: "now"; id: string };
 type SectionRow = (ScheduleItem & { kind: "item" }) | NowMarker;
@@ -29,11 +28,6 @@ interface ScheduleSection {
   title: string;
   data: SectionRow[];
 }
-
-const DESCRIPTION_PREVIEW_LINES = 3;
-// Rough heuristic for "long enough to be worth collapsing" — avoids the cost
-// of an onTextLayout round trip just to decide whether to show a toggle.
-const LONG_DESCRIPTION_THRESHOLD = 140;
 
 /** Participant schedule backed by the same public read model used on web. */
 export default function ScheduleScreen() {
@@ -45,11 +39,10 @@ export default function ScheduleScreen() {
   const scrolledOnLoad = useRef(false);
   const reminders = useActivityReminders();
 
-  const fetchSchedule = useCallback(async () => {
-    const response = await apiFetch<{ items: ScheduleItem[] }>("/api/public/activities");
-    return response.items;
-  }, []);
-  const { data, loading, error, staleSince, load } = useCachedApi("schedule", fetchSchedule);
+  const { data, loading, error, staleSince, load } = useCachedApi(
+    "schedule",
+    fetchPublicSchedule,
+  );
   const items = data ?? [];
 
   useEffect(() => {
@@ -76,9 +69,14 @@ export default function ScheduleScreen() {
     return [...grouped.entries()].map(([key, dayItems]) => {
       const rows: SectionRow[] = dayItems.map((item) => ({ ...item, kind: "item" as const }));
       if (key === todayKey) {
-        const markerIndex = dayItems.findIndex((item) => safeTimestamp(item.startsAt) > now);
-        const insertAt = markerIndex === -1 ? rows.length : markerIndex;
-        rows.splice(insertAt, 0, { kind: "now", id: "now-marker" });
+        const hasActiveItem = dayItems.some(
+          (item) => safeTimestamp(item.startsAt) <= now && safeTimestamp(item.endsAt) >= now,
+        );
+        if (!hasActiveItem) {
+          const markerIndex = dayItems.findIndex((item) => safeTimestamp(item.startsAt) > now);
+          const insertAt = markerIndex === -1 ? rows.length : markerIndex;
+          rows.splice(insertAt, 0, { kind: "now", id: "now-marker" });
+        }
       }
       return {
         key,
@@ -92,14 +90,22 @@ export default function ScheduleScreen() {
     });
   }, [items, language, now, todayKey]);
 
-  // Jumps straight to "what's coming up soon" on open instead of the
-  // beginning of the schedule — the now-marker row is exactly that spot.
+  // Jumps straight to "what's happening now" (or the marker between cards)
+  // instead of opening at the beginning of a multi-day schedule.
   useEffect(() => {
     if (scrolledOnLoad.current || sections.length === 0) return;
     scrolledOnLoad.current = true;
     const sectionIndex = sections.findIndex((section) => section.key === todayKey);
     if (sectionIndex === -1) return;
-    const itemIndex = sections[sectionIndex].data.findIndex((row) => row.kind === "now");
+    let itemIndex = sections[sectionIndex].data.findIndex((row) => row.kind === "now");
+    if (itemIndex === -1) {
+      itemIndex = sections[sectionIndex].data.findIndex(
+        (row) =>
+          row.kind === "item" &&
+          safeTimestamp(row.startsAt) <= now &&
+          safeTimestamp(row.endsAt) >= now,
+      );
+    }
     if (itemIndex === -1) return;
     requestAnimationFrame(() => {
       try {
@@ -113,7 +119,7 @@ export default function ScheduleScreen() {
         // Best-effort — a transient layout mismatch just means no auto-scroll this time.
       }
     });
-  }, [sections, todayKey]);
+  }, [now, sections, todayKey]);
 
   async function onRefresh() {
     setRefreshing(true);
@@ -167,12 +173,22 @@ export default function ScheduleScreen() {
       )}
       renderItem={({ item, index, section }) =>
         item.kind === "now" ? (
-          <NowMarkerRow />
+          <NowMarkerRow now={now} />
         ) : (
           <ScheduleCard
             item={item}
             language={language}
             last={index === section.data.length - 1}
+            now={now}
+            showNow={
+              section.key === todayKey &&
+              section.data.find(
+                (row) =>
+                  row.kind === "item" &&
+                  safeTimestamp(row.startsAt) <= now &&
+                  safeTimestamp(row.endsAt) >= now,
+              )?.id === item.id
+            }
             reminderOn={reminders.ready ? reminders.isEnabled(item.id) : null}
             reminderBusy={reminders.savingId === item.id}
             onToggleReminder={(enabled) => void reminders.toggle(item.id, enabled)}
@@ -188,13 +204,38 @@ function safeTimestamp(value: string) {
   return Number.isFinite(timestamp) ? timestamp : Number.MAX_SAFE_INTEGER;
 }
 
-function NowMarkerRow() {
+function NowMarkerRow({ now }: { now: number }) {
   const { t, language } = useLocale();
-  const label = new Date().toLocaleTimeString(language, { hour: "2-digit", minute: "2-digit" });
+  const label = new Date(now).toLocaleTimeString(language, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return (
+    <View style={{ paddingHorizontal: 16 }}>
+      <NowMarkerLine accessibilityLabel={t("scheduleNow", { time: label })} label={label} />
+    </View>
+  );
+}
+
+function NowMarkerLine({
+  accessibilityLabel,
+  label,
+  top,
+}: {
+  accessibilityLabel: string;
+  label: string;
+  top?: `${number}%`;
+}) {
   return (
     <View
-      accessibilityLabel={t("scheduleNow", { time: label })}
-      style={{ alignItems: "center", flexDirection: "row", paddingHorizontal: 16 }}
+      accessible
+      accessibilityLabel={accessibilityLabel}
+      pointerEvents="none"
+      style={{
+        alignItems: "center",
+        flexDirection: "row",
+        ...(top ? { left: 16, position: "absolute", right: 16, top, zIndex: 2 } : null),
+      }}
     >
       <View style={{ alignItems: "center", width: 62 }}>
         <Text
@@ -227,6 +268,8 @@ function ScheduleCard({
   item,
   language,
   last,
+  now,
+  showNow,
   reminderOn,
   reminderBusy,
   onToggleReminder,
@@ -234,17 +277,28 @@ function ScheduleCard({
   item: ScheduleItem;
   language: string;
   last: boolean;
+  now: number;
+  showNow: boolean;
   reminderOn: boolean | null;
   reminderBusy: boolean;
   onToggleReminder: (enabled: boolean) => void;
 }) {
   const { t } = useLocale();
-  const [expanded, setExpanded] = useState(false);
+  const router = useRouter();
   const startsAt = new Date(item.startsAt);
   const endsAt = new Date(item.endsAt);
   const time = startsAt.toLocaleTimeString(language, { hour: "2-digit", minute: "2-digit" });
   const end = endsAt.toLocaleTimeString(language, { hour: "2-digit", minute: "2-digit" });
-  const longDescription = (item.description?.length ?? 0) > LONG_DESCRIPTION_THRESHOLD;
+  const duration = endsAt.getTime() - startsAt.getTime();
+  const progress = Math.max(
+    0.08,
+    Math.min(0.92, duration > 0 ? (now - startsAt.getTime()) / duration : 0.5),
+  );
+
+  function toggleReminder(event: GestureResponderEvent) {
+    event.stopPropagation();
+    onToggleReminder(!reminderOn);
+  }
 
   return (
     <View style={{ flexDirection: "row", paddingHorizontal: 16 }}>
@@ -264,7 +318,12 @@ function ScheduleCard({
           <View style={{ backgroundColor: colors.separator, flex: 1, marginTop: 8, width: 1 }} />
         ) : null}
       </View>
-      <View
+      <Pressable
+        accessibilityLabel={item.title}
+        accessibilityRole="button"
+        onPress={() =>
+          router.push({ pathname: "/schedule/[id]", params: { id: String(item.id) } })
+        }
         style={{
           backgroundColor: colors.surface,
           borderCurve: "continuous",
@@ -293,7 +352,7 @@ function ScheduleCard({
               accessibilityState={{ selected: reminderOn, busy: reminderBusy }}
               disabled={reminderBusy}
               hitSlop={8}
-              onPress={() => onToggleReminder(!reminderOn)}
+              onPress={toggleReminder}
               style={{ opacity: reminderBusy ? 0.4 : 1 }}
             >
               <SymbolView
@@ -327,28 +386,30 @@ function ScheduleCard({
           </View>
         ) : null}
         {item.description ? (
-          <>
-            <Text
-              selectable
-              numberOfLines={expanded ? undefined : DESCRIPTION_PREVIEW_LINES}
-              style={{ color: colors.secondaryLabel, fontSize: 15, lineHeight: 21 }}
-            >
-              {item.description}
-            </Text>
-            {longDescription ? (
-              <Pressable
-                accessibilityRole="button"
-                hitSlop={6}
-                onPress={() => setExpanded((current) => !current)}
-              >
-                <Text style={{ color: colors.accent, fontSize: 14, fontWeight: "600" }}>
-                  {t(expanded ? "scheduleShowLess" : "scheduleShowMore")}
-                </Text>
-              </Pressable>
-            ) : null}
-          </>
+          <Text
+            selectable
+            numberOfLines={3}
+            style={{ color: colors.secondaryLabel, fontSize: 15, lineHeight: 21 }}
+          >
+            {item.description}
+          </Text>
         ) : null}
-      </View>
+      </Pressable>
+      {showNow ? (
+        <NowMarkerLine
+          accessibilityLabel={t("scheduleNow", {
+            time: new Date(now).toLocaleTimeString(language, {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          })}
+          label={new Date(now).toLocaleTimeString(language, {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+          top={`${progress * 100}%`}
+        />
+      ) : null}
     </View>
   );
 }
