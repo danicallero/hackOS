@@ -15,10 +15,10 @@ export function LanguageSelect() {
   const { language, setLanguage, t } = useLocale();
   return (
     <Select value={language} onValueChange={(value) => setLanguage(value as Language)}>
-      <SelectTrigger className="h-8 w-28" aria-label={t("languageLabel")}>
-        <SelectValue />
+      <SelectTrigger className="h-8 w-[4.5rem] px-2.5" aria-label={t("languageLabel")}>
+        <SelectValue>{language.toUpperCase()}</SelectValue>
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent align="end">
         {(["es", "gl", "en"] as const).map((item) => (
           <SelectItem key={item} value={item}>
             {languageName(item)}
