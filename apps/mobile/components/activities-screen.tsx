@@ -17,7 +17,7 @@ export function ActivitiesScreen() {
   const sync = useScannerSync();
   const [items, setItems] = useState<ScannerActivity[]>([]);
   const listRef = useRef<FlatList<ScannerActivity>>(null);
-  const scrollOffset = useRef(0);
+  const returningFromScanner = useRef(false);
   const load = useCallback(
     async () =>
       setItems(
@@ -34,13 +34,18 @@ export function ActivitiesScreen() {
     if (sync.lastSync) void load();
   }, [load, sync.lastSync]);
 
-  // Re-issuing scrollToOffset at the list's actual current position (rather
-  // than always 0) re-syncs the native large-title header's collapsed state
-  // with the real scroll offset on focus, without visually snapping the list
-  // back to the top when returning from a pushed screen (e.g. the scanner).
+  // Forces the FlatList back to the top on focus so the native large-title
+  // header re-syncs its collapsed/expanded state with the actual scroll
+  // offset — otherwise entering this tab fresh can leave the header (and
+  // therefore the list start) stuck lower than it should be. Skipped when
+  // coming back from the pushed scanner screen, so that back-navigation
+  // preserves wherever the list was scrolled to.
   useFocusEffect(
     useCallback(() => {
-      listRef.current?.scrollToOffset({ offset: scrollOffset.current, animated: false });
+      if (!returningFromScanner.current) {
+        listRef.current?.scrollToOffset({ offset: 0, animated: false });
+      }
+      returningFromScanner.current = false;
     }, []),
   );
 
@@ -51,10 +56,6 @@ export function ActivitiesScreen() {
       contentContainerStyle={{ flexGrow: 1, padding: 16, paddingBottom: 32 }}
       data={items}
       keyExtractor={(item) => String(item.id)}
-      onScroll={(e) => {
-        scrollOffset.current = e.nativeEvent.contentOffset.y;
-      }}
-      scrollEventThrottle={16}
       refreshControl={
         <RefreshControl refreshing={sync.syncing} onRefresh={() => void sync.sync().then(load)} />
       }
@@ -69,12 +70,13 @@ export function ActivitiesScreen() {
       renderItem={({ item }) => (
         <Pressable
           accessibilityRole="button"
-          onPress={() =>
+          onPress={() => {
+            returningFromScanner.current = true;
             router.push({
               pathname: "/(tabs)/others/activities/[id]",
               params: { id: String(item.id) },
-            })
-          }
+            });
+          }}
           style={({ pressed }) => ({
             alignItems: "center",
             backgroundColor: colors.elevatedSurface,
