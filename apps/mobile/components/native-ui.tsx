@@ -110,9 +110,19 @@ export function InfoRow({
 export function StatusPill({
   children,
   tone = "neutral",
+  style,
 }: {
   children: ReactNode;
   tone?: "neutral" | "accent" | "success" | "warning" | "destructive";
+  /**
+   * Defaults to `alignSelf: "flex-start"` so the pill doesn't stretch to
+   * fill a parent that defaults to `alignItems: "stretch"` (e.g. a bare
+   * flex-wrap row of chips). Pass `{ alignSelf: "center" }` when the pill
+   * sits inline as a direct sibling of other centered content (icons,
+   * chevrons) in a row that already sets `alignItems: "center"` — otherwise
+   * this default overrides that and the pill visibly drifts to the top.
+   */
+  style?: ViewStyle;
 }) {
   const palette = {
     neutral: { background: colors.elevatedSurface, foreground: colors.secondaryLabel },
@@ -123,14 +133,17 @@ export function StatusPill({
   }[tone];
   return (
     <View
-      style={{
-        alignSelf: "flex-start",
-        backgroundColor: palette.background,
-        borderCurve: "continuous",
-        borderRadius: 999,
-        paddingHorizontal: 10,
-        paddingVertical: 5,
-      }}
+      style={[
+        {
+          alignSelf: "flex-start",
+          backgroundColor: palette.background,
+          borderCurve: "continuous",
+          borderRadius: 999,
+          paddingHorizontal: 10,
+          paddingVertical: 5,
+        },
+        style,
+      ]}
     >
       <Text selectable style={{ color: palette.foreground, fontSize: 12, fontWeight: "700" }}>
         {children}

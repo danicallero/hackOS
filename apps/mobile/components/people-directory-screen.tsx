@@ -1,7 +1,16 @@
-import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { MenuView } from "@expo/ui/community/menu";
+import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, FlatList, Pressable, Text, View } from "react-native";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  Alert,
+  FlatList,
+  type NativeSyntheticEvent,
+  Pressable,
+  Text,
+  type TextInputFocusEventData,
+  View,
+} from "react-native";
 
 import { EmptyState, Separator, StatusPill } from "@/components/native-ui";
 import { useLocale } from "@/lib/i18n";
@@ -14,6 +23,7 @@ import { colors } from "@/theme/colors";
 export function PeopleDirectoryScreen() {
   const { activityId } = useLocalSearchParams<{ activityId?: string }>();
   const router = useRouter();
+  const navigation = useNavigation();
   const { t } = useLocale();
   const sync = useScannerSync();
   const [query, setQuery] = useState("");
@@ -37,6 +47,36 @@ export function PeopleDirectoryScreen() {
       listRef.current?.scrollToOffset({ offset: 0, animated: false });
     }, []),
   );
+
+  // Configuring the header imperatively here — instead of the declarative
+  // <Stack.Title>/<Stack.Toolbar>/<Stack.SearchBar> components previously
+  // used inline — is what avoids a real double header bar: those components
+  // ended up rendering their own header row on top of the layout's native
+  // one rather than reconfiguring it.
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      title: activityId ? t("scannerSearchPerson") : t("scannerPeople"),
+      headerSearchBarOptions: {
+        placeholder: t("scannerPeopleSearchPlaceholder"),
+        onChangeText: (event: NativeSyntheticEvent<TextInputFocusEventData>) =>
+          setQuery(event.nativeEvent.text),
+        onCancelButtonPress: () => setQuery(""),
+      },
+      headerRight: () => (
+        <MenuView
+          actions={ROLE_FILTERS.map((filter) => ({
+            id: filter.value,
+            title: t(filter.labelKey),
+            image: filter.icon,
+            state: roleFilter === filter.value ? "on" : "off",
+          }))}
+          onPressAction={({ nativeEvent }) => setRoleFilter(nativeEvent.event as typeof roleFilter)}
+        >
+          <SymbolView name="line.3.horizontal.decrease" tintColor={colors.accent} size={19} />
+        </MenuView>
+      ),
+    });
+  }, [navigation, activityId, roleFilter, t]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
@@ -78,48 +118,22 @@ export function PeopleDirectoryScreen() {
   }
 
   return (
-    <>
-      <FlatList
-        ref={listRef}
-        contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{ flexGrow: 1, paddingBottom: 32 }}
-        data={filtered}
-        keyExtractor={(person) => String(person.userId)}
-        ItemSeparatorComponent={() => <Separator inset={72} />}
-        ListEmptyComponent={
-          <EmptyState
-            icon="person.2"
-            title={query ? t("scannerNoResults") : t("scannerNoSyncedUsers")}
-            description={query ? t("scannerTryAnotherSearch") : t("scannerRefreshDirectory")}
-          />
-        }
-        renderItem={({ item }) => <PersonRow person={item} onPress={() => openPerson(item)} />}
-      />
-      <Stack.Title>{activityId ? t("scannerSearchPerson") : t("scannerPeople")}</Stack.Title>
-      {/*
-        No left Stack.Toolbar here on purpose — the native Stack already
-        renders one back button; adding a second one here just duplicated it.
-      */}
-      <Stack.Toolbar placement="right">
-        <Stack.Toolbar.Menu icon="line.3.horizontal.decrease">
-          {ROLE_FILTERS.map((filter) => (
-            <Stack.Toolbar.MenuAction
-              icon={filter.icon}
-              isOn={roleFilter === filter.value}
-              key={filter.value}
-              onPress={() => setRoleFilter(filter.value)}
-            >
-              {t(filter.labelKey)}
-            </Stack.Toolbar.MenuAction>
-          ))}
-        </Stack.Toolbar.Menu>
-      </Stack.Toolbar>
-      <Stack.SearchBar
-        placeholder={t("scannerPeopleSearchPlaceholder")}
-        onChangeText={(event) => setQuery(event.nativeEvent.text)}
-        onCancelButtonPress={() => setQuery("")}
-      />
-    </>
+    <FlatList
+      ref={listRef}
+      contentInsetAdjustmentBehavior="automatic"
+      contentContainerStyle={{ flexGrow: 1, paddingBottom: 32 }}
+      data={filtered}
+      keyExtractor={(person) => String(person.userId)}
+      ItemSeparatorComponent={() => <Separator inset={72} />}
+      ListEmptyComponent={
+        <EmptyState
+          icon="person.2"
+          title={query ? t("scannerNoResults") : t("scannerNoSyncedUsers")}
+          description={query ? t("scannerTryAnotherSearch") : t("scannerRefreshDirectory")}
+        />
+      }
+      renderItem={({ item }) => <PersonRow person={item} onPress={() => openPerson(item)} />}
+    />
   );
 }
 
