@@ -201,24 +201,68 @@ export function ActionButton({
   );
 }
 
-/** Floating chrome-less back button for header-less detail screens (position it with `top: insets.top + 12`). */
-export function FloatingBackButton({ top, onPress }: { top: number; onPress: () => void }) {
-  const { t } = useLocale();
+/** Floating chrome-less icon button for header-less detail screens (position it with `top: insets.top + 12`). */
+export function FloatingGlassButton({
+  top,
+  side = "left",
+  icon,
+  tintColor,
+  accessibilityLabel,
+  accessibilityState,
+  disabled = false,
+  onPress,
+}: {
+  top: number;
+  side?: "left" | "right";
+  icon: SymbolViewProps["name"];
+  tintColor?: SymbolViewProps["tintColor"];
+  accessibilityLabel: string;
+  accessibilityState?: { selected?: boolean; busy?: boolean };
+  disabled?: boolean;
+  onPress: () => void;
+}) {
   return (
     <GlassView
       glassEffectStyle="regular"
       isInteractive
-      style={{ borderRadius: 22, height: 44, left: 16, position: "absolute", top, width: 44 }}
+      style={{
+        borderRadius: 22,
+        height: 44,
+        position: "absolute",
+        top,
+        width: 44,
+        ...(side === "left" ? { left: 16 } : { right: 16 }),
+      }}
     >
       <Pressable
-        accessibilityLabel={t("back")}
+        accessibilityLabel={accessibilityLabel}
         accessibilityRole="button"
+        accessibilityState={accessibilityState}
+        disabled={disabled}
         onPress={onPress}
-        style={{ alignItems: "center", flex: 1, justifyContent: "center" }}
+        style={{
+          alignItems: "center",
+          flex: 1,
+          justifyContent: "center",
+          opacity: disabled ? 0.4 : 1,
+        }}
       >
-        <SymbolView name="chevron.left" tintColor={colors.label} size={19} weight="semibold" />
+        <SymbolView name={icon} tintColor={tintColor ?? colors.label} size={19} weight="semibold" />
       </Pressable>
     </GlassView>
+  );
+}
+
+/** Floating chrome-less back button for header-less detail screens (position it with `top: insets.top + 12`). */
+export function FloatingBackButton({ top, onPress }: { top: number; onPress: () => void }) {
+  const { t } = useLocale();
+  return (
+    <FloatingGlassButton
+      top={top}
+      icon="chevron.left"
+      accessibilityLabel={t("back")}
+      onPress={onPress}
+    />
   );
 }
 
