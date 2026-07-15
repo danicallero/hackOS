@@ -213,4 +213,32 @@ describe("push channel", () => {
     const { rows } = await pool.query(`SELECT count(*)::int AS n FROM push_tokens`);
     expect(rows[0].n).toBe(1);
   });
+
+  it("a partial batch failure counts as delivered, so it is not resent to the tokens that already got it", async () => {
+    const userId = await createUser();
+    await addPushToken(userId, "ExponentPushToken[ok]");
+    await addPushToken(userId, "ExponentPushToken[throttled]");
+    const id = await enqueueOutbox(userId, "push", { subject: "s", body: "b" });
+
+    const fetchMock = vi.fn(async (_url: unknown, init?: { body?: string }) => {
+      const messages = JSON.parse(init?.body ?? "[]") as { to: string }[];
+      const tickets = messages.map((m) =>
+        m.to === "ExponentPushToken[throttled]"
+          ? { status: "error", message: "rate limited", details: { error: "MessageRateExceeded" } }
+          : { status: "ok" },
+      );
+      return new Response(JSON.stringify({ data: tickets }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await drainOutboxOnce();
+
+    // Delivered to at least one device — row is done, not queued for a retry
+    // that would resend the same push to the token that already got it.
+    expect((await getOutboxRow(id)).status).toBe("sent");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });

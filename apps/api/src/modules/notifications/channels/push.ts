@@ -17,6 +17,13 @@ interface ExpoTicket {
  * transient failure worth retrying 8 times. `DeviceNotRegistered` tickets
  * mean the token is stale (uninstalled, etc.) and are cleaned up here so the
  * next attempt doesn't keep hitting a dead token.
+ *
+ * The outbox dispatcher retries a whole row by calling this again, which
+ * resends to ALL of the user's current tokens (there's no per-token retry
+ * state). So a batch only throws — and gets retried — when NOT A SINGLE
+ * token was delivered; a partial failure (e.g. one token rate-limited while
+ * others succeeded) is treated as delivered so already-notified devices
+ * don't get the same push resent on every backoff retry.
  */
 export async function dispatchPush(
   db: Queryable,
@@ -69,14 +76,22 @@ export async function dispatchPush(
   const tickets = json.data ?? [];
 
   let firstError: string | undefined;
+  let delivered = 0;
   for (let i = 0; i < tickets.length; i += 1) {
     const ticket = tickets[i];
-    if (!ticket || ticket.status === "ok") continue;
+    if (!ticket || ticket.status === "ok") {
+      delivered += 1;
+      continue;
+    }
     if (ticket.details?.error === "DeviceNotRegistered") {
       await db.query(`DELETE FROM push_tokens WHERE token = $1`, [tokens[i]]);
       continue;
     }
     firstError ??= ticket.message ?? ticket.details?.error ?? "unknown expo push error";
   }
-  if (firstError) throw new Error(`Expo push ticket error: ${firstError}`);
+  // The outbox retries a failed row by resending to every current token
+  // again (no per-token retry tracking), so a batch counts as delivered as
+  // soon as ANY device got it — otherwise a single flaky/rate-limited ticket
+  // re-triggers the whole batch and spams the devices that already got it.
+  if (firstError && delivered === 0) throw new Error(`Expo push ticket error: ${firstError}`);
 }
