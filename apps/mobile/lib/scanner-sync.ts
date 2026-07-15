@@ -11,6 +11,7 @@ import { requestForPendingScan } from "./scanner-model";
 import type { PendingScan, ScannerSnapshot } from "./scanner-types";
 
 let activeSync: Promise<void> | null = null;
+let rerunRequested = false;
 
 async function replay(scan: PendingScan): Promise<void> {
   const request = requestForPendingScan(scan);
@@ -52,11 +53,28 @@ async function doSync(): Promise<void> {
   await applyScannerSnapshot(snapshot);
 }
 
+/**
+ * A caller that enqueues a mutation and immediately awaits this must be sure
+ * that mutation gets replayed — not just see a snapshot that was already
+ * in flight before the enqueue, which would silently revert their optimistic
+ * local write until the next sync cycle. So a request that arrives while a
+ * sync is running doesn't just piggyback on it: it marks a rerun, and the
+ * shared promise only resolves once a run that started after the request has
+ * completed.
+ */
 export function synchronizeScanner(): Promise<void> {
-  if (!activeSync) {
-    activeSync = doSync().finally(() => {
-      activeSync = null;
-    });
+  if (activeSync) {
+    rerunRequested = true;
+    return activeSync;
   }
+  activeSync = runUntilSettled();
   return activeSync;
+}
+
+async function runUntilSettled(): Promise<void> {
+  do {
+    rerunRequested = false;
+    await doSync();
+  } while (rerunRequested);
+  activeSync = null;
 }

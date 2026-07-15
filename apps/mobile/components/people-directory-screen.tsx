@@ -1,12 +1,12 @@
 import { MenuView } from "@expo/ui/community/menu";
-import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import {
-  Alert,
   FlatList,
   type NativeSyntheticEvent,
   Pressable,
+  RefreshControl,
   Text,
   type TextInputFocusEventData,
   View,
@@ -29,6 +29,7 @@ export function PeopleDirectoryScreen() {
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<"all" | ScannerPerson["role"]>("all");
   const [people, setPeople] = useState<ScannerPerson[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => setPeople(await listScannerPeople()), []);
 
@@ -38,6 +39,22 @@ export function PeopleDirectoryScreen() {
   useEffect(() => {
     if (sync.lastSync) void load();
   }, [load, sync.lastSync]);
+  // Badge assignments/removals happen on the person detail screen, a
+  // separate mounted instance with its own sync state — reload from SQLite
+  // whenever this list regains focus so a just-applied change isn't stuck
+  // showing stale data until this screen's own 15s sync tick catches up.
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
+
+  async function onRefresh() {
+    setRefreshing(true);
+    await sync.sync();
+    await load();
+    setRefreshing(false);
+  }
 
   // Configuring the header imperatively here — instead of the declarative
   // <Stack.Title>/<Stack.Toolbar>/<Stack.SearchBar> components previously
@@ -70,7 +87,15 @@ export function PeopleDirectoryScreen() {
           }))}
           onPressAction={({ nativeEvent }) => setRoleFilter(nativeEvent.event as typeof roleFilter)}
         >
-          <SymbolView name="line.3.horizontal.decrease" tintColor={colors.accent} size={19} />
+          <SymbolView
+            name={
+              roleFilter === "all"
+                ? "line.3.horizontal.decrease"
+                : "line.3.horizontal.decrease.circle.fill"
+            }
+            tintColor={colors.accent}
+            size={19}
+          />
         </MenuView>
       ),
     });
@@ -79,6 +104,10 @@ export function PeopleDirectoryScreen() {
   const filtered = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
     return people.filter((person) => {
+      // An activity scan can only ever be logged against a badge, so this
+      // list (unlike the plain scan directory, which lists everyone) only
+      // shows people who already have one.
+      if (activityId && !person.badgeId) return false;
       if (roleFilter !== "all" && person.role !== roleFilter) return false;
       if (!needle) return true;
       return [person.name, person.surname, person.email, person.badgeId, roleLabel(person.role, t)]
@@ -87,25 +116,12 @@ export function PeopleDirectoryScreen() {
         .toLocaleLowerCase()
         .includes(needle);
     });
-  }, [people, query, roleFilter, t]);
+  }, [people, query, roleFilter, activityId, t]);
 
   function openPerson(person: ScannerPerson) {
     if (activityId) {
-      if (!person.badgeId) {
-        Alert.alert(t("scannerNoBadge"), t("scannerNoBadgeActivityBody"), [
-          { text: t("cancel"), style: "cancel" },
-          {
-            text: t("scannerViewPerson"),
-            onPress: () =>
-              router.push({
-                pathname: "/(tabs)/others/activities/person/[id]",
-                params: { id: String(person.userId) },
-              }),
-          },
-        ]);
-        return;
-      }
-      emitManualActivityScan(Number(activityId), person.badgeId);
+      // Guaranteed by the `filtered` list above.
+      emitManualActivityScan(Number(activityId), person.badgeId!);
       router.back();
       return;
     }
@@ -123,6 +139,7 @@ export function PeopleDirectoryScreen() {
       data={filtered}
       keyExtractor={(person) => String(person.userId)}
       ItemSeparatorComponent={() => <Separator inset={68} trailingInset={16} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
       ListEmptyComponent={
         <EmptyState
           icon="person.2"
@@ -161,7 +178,11 @@ const ROLE_FILTERS: Array<{
 
 function PersonRow({ person, onPress }: { person: ScannerPerson; onPress: () => void }) {
   const { t } = useLocale();
-  const name = [person.name, person.surname].filter(Boolean).join(" ") || person.email;
+  const fullName = [person.name, person.surname].filter(Boolean).join(" ");
+  const displayName = fullName || person.email;
+  // Only shown as its own line when it isn't already standing in for the
+  // name above (someone with no name on file at all).
+  const showEmailLine = Boolean(fullName) && Boolean(person.email);
   const participantWarning =
     person.role === "participant" && !person.accepted
       ? { label: t("scannerNoAcceptedPlace"), tone: "destructive" as const }
@@ -172,7 +193,12 @@ function PersonRow({ person, onPress }: { person: ScannerPerson; onPress: () => 
   return (
     <Pressable
       accessibilityHint={t("scannerViewPerson")}
-      accessibilityLabel={[name, roleLabel(person.role, t), person.badgeId ?? t("scannerNoBadge")]
+      accessibilityLabel={[
+        displayName,
+        showEmailLine ? person.email : null,
+        roleLabel(person.role, t),
+        person.badgeId ?? t("scannerNoBadge"),
+      ]
         .filter(Boolean)
         .join(", ")}
       accessibilityRole="button"
@@ -182,7 +208,7 @@ function PersonRow({ person, onPress }: { person: ScannerPerson; onPress: () => 
         backgroundColor: pressed ? colors.elevatedSurface : colors.background,
         flexDirection: "row",
         gap: 12,
-        minHeight: participantWarning ? 82 : 68,
+        minHeight: participantWarning ? 98 : 84,
         paddingHorizontal: 16,
         paddingVertical: 9,
       })}
@@ -199,14 +225,23 @@ function PersonRow({ person, onPress }: { person: ScannerPerson; onPress: () => 
       >
         <SymbolView name="person.fill" tintColor={colors.accent} size={18} accessible={false} />
       </View>
-      <View style={{ flex: 1, gap: 3 }}>
+      <View style={{ flex: 1, gap: 2 }}>
         <Text
           numberOfLines={1}
           selectable
           style={{ color: colors.label, fontSize: 17, fontWeight: "600" }}
         >
-          {name}
+          {displayName}
         </Text>
+        {showEmailLine ? (
+          <Text
+            numberOfLines={1}
+            selectable
+            style={{ color: colors.tertiaryLabel, fontSize: 13, fontWeight: "400" }}
+          >
+            {person.email}
+          </Text>
+        ) : null}
         <Text numberOfLines={1} selectable style={{ color: colors.secondaryLabel, fontSize: 14 }}>
           {roleLabel(person.role, t)} · {person.badgeId ?? t("scannerNoBadge")}
         </Text>

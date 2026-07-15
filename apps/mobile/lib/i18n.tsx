@@ -602,11 +602,6 @@ const dict = {
     gl: "Actualiza o escáner para descargar o directorio.",
   },
   scannerNoBadge: { en: "No badge", es: "Sin acreditación", gl: "Sen acreditación" },
-  scannerNoBadgeActivityBody: {
-    en: "This person does not have a badge that can be registered for the activity.",
-    es: "Esta persona no tiene una acreditación que pueda registrarse en la actividad.",
-    gl: "Esta persoa non ten unha acreditación que se poida rexistrar na actividade.",
-  },
   scannerViewPerson: { en: "View person", es: "Ver persona", gl: "Ver persoa" },
   roleAll: { en: "All", es: "Todos", gl: "Todos" },
   roleAdmin: { en: "Administration", es: "Administración", gl: "Administración" },
