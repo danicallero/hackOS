@@ -107,7 +107,10 @@ export function ActivitiesScreen() {
           >
             {item.name}
           </Text>
-          <StatusPill tone={item.category === "meal" ? "warning" : "accent"}>
+          <StatusPill
+            tone={item.category === "meal" ? "warning" : "accent"}
+            style={{ alignSelf: "center" }}
+          >
             {item.category === "meal" ? t("scannerMeal") : t("scannerActivity")}
           </StatusPill>
           <SymbolView name="chevron.right" tintColor={colors.tertiaryLabel} size={15} />
