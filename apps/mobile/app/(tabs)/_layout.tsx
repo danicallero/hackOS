@@ -82,7 +82,19 @@ export default function TabLayout() {
 
   return (
     <View style={{ flex: 1 }}>
-      <NativeTabs tintColor={colors.accent} minimizeBehavior="onScrollDown">
+      {/*
+        Explicit blurEffect instead of leaving it "automatic": with no
+        default value the bar's translucent vs. opaque appearance is driven
+        by scroll-edge detection off a nested ScrollView, which the
+        full-bleed camera screens (scanner, activity scanner) don't have —
+        so it was inconsistently rendering opaque instead of the glass/blur
+        look used everywhere else.
+      */}
+      <NativeTabs
+        tintColor={colors.accent}
+        minimizeBehavior="onScrollDown"
+        blurEffect="systemChromeMaterial"
+      >
         <NativeTabs.Trigger name="schedule">
           <NativeTabs.Trigger.Icon sf="calendar" md="calendar_month" />
           <NativeTabs.Trigger.Label>{t("tabSchedule")}</NativeTabs.Trigger.Label>
@@ -158,7 +170,7 @@ function NativeOperationsMenu({ canScanActivities }: { canScanActivities: boolea
       ? [
           {
             id: "activities" as const,
-            image: "figure.walk" as const,
+            image: "list.bullet.rectangle" as const,
             label: t("tabActivities"),
             route: "/(tabs)/others/activities" as const,
             title: t("tabActivities"),

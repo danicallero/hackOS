@@ -1,9 +1,9 @@
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, FlatList, Pressable, Text, View } from "react-native";
 
-import { EmptyState, StatusPill } from "@/components/native-ui";
+import { EmptyState, Separator, StatusPill } from "@/components/native-ui";
 import { useLocale } from "@/lib/i18n";
 import { emitManualActivityScan } from "@/lib/manual-activity-scan";
 import { listScannerPeople } from "@/lib/scanner-db";
@@ -19,6 +19,7 @@ export function PeopleDirectoryScreen() {
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<"all" | ScannerPerson["role"]>("all");
   const [people, setPeople] = useState<ScannerPerson[]>([]);
+  const listRef = useRef<FlatList<ScannerPerson>>(null);
 
   const load = useCallback(async () => setPeople(await listScannerPeople()), []);
 
@@ -28,6 +29,14 @@ export function PeopleDirectoryScreen() {
   useEffect(() => {
     if (sync.lastSync) void load();
   }, [load, sync.lastSync]);
+
+  // See activities-screen.tsx: keeps the native header's large-title state in
+  // sync with the list's actual scroll offset when this screen regains focus.
+  useFocusEffect(
+    useCallback(() => {
+      listRef.current?.scrollToOffset({ offset: 0, animated: false });
+    }, []),
+  );
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
@@ -71,11 +80,12 @@ export function PeopleDirectoryScreen() {
   return (
     <>
       <FlatList
+        ref={listRef}
         contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{ flexGrow: 1, padding: 16, paddingBottom: 32 }}
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: 32 }}
         data={filtered}
         keyExtractor={(person) => String(person.userId)}
-        ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+        ItemSeparatorComponent={() => <Separator inset={72} />}
         ListEmptyComponent={
           <EmptyState
             icon="person.2"
@@ -86,9 +96,10 @@ export function PeopleDirectoryScreen() {
         renderItem={({ item }) => <PersonRow person={item} onPress={() => openPerson(item)} />}
       />
       <Stack.Title>{activityId ? t("scannerSearchPerson") : t("scannerPeople")}</Stack.Title>
-      <Stack.Toolbar placement="left">
-        <Stack.Toolbar.Button icon="chevron.left" onPress={() => router.back()} />
-      </Stack.Toolbar>
+      {/*
+        No left Stack.Toolbar here on purpose — the native Stack already
+        renders one back button; adding a second one here just duplicated it.
+      */}
       <Stack.Toolbar placement="right">
         <Stack.Toolbar.Menu icon="line.3.horizontal.decrease">
           {ROLE_FILTERS.map((filter) => (
@@ -152,14 +163,12 @@ function PersonRow({ person, onPress }: { person: ScannerPerson; onPress: () => 
       onPress={onPress}
       style={({ pressed }) => ({
         alignItems: "center",
-        backgroundColor: colors.surface,
-        borderCurve: "continuous",
-        borderRadius: 16,
+        backgroundColor: pressed ? colors.elevatedSurface : colors.surface,
         flexDirection: "row",
         gap: 12,
-        minHeight: 76,
-        opacity: pressed ? 0.65 : 1,
-        padding: 14,
+        minHeight: 68,
+        paddingHorizontal: 16,
+        paddingVertical: 10,
       })}
     >
       <View

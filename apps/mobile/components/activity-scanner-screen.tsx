@@ -145,7 +145,7 @@ export function ActivityScannerScreen() {
       />
       <View
         pointerEvents="box-none"
-        style={{ left: 0, position: "absolute", right: 0, top: insets.top + 10 }}
+        style={{ left: 0, position: "absolute", right: 0, top: insets.top + 12 }}
       >
         <GlassView
           colorScheme="dark"
@@ -153,9 +153,10 @@ export function ActivityScannerScreen() {
           style={{
             alignSelf: "center",
             borderRadius: 999,
+            height: 44,
+            justifyContent: "center",
             maxWidth: "55%",
             paddingHorizontal: 16,
-            paddingVertical: 10,
           }}
         >
           <Text
