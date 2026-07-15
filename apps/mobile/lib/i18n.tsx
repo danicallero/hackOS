@@ -246,11 +246,6 @@ const dict = {
     es: "Todavía no hay horario",
     gl: "Aínda non hai horario",
   },
-  scheduleNow: {
-    en: "Now, {time}",
-    es: "Ahora, {time}",
-    gl: "Agora, {time}",
-  },
   scheduleDetails: {
     en: "Activity details",
     es: "Detalles de la actividad",
