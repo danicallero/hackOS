@@ -53,6 +53,27 @@ export const timeLogIdParam = z.object({ id: z.coerce.number().int().positive() 
 export const timeLogPatchBody = z.object({
   kind: z.enum(["in", "out"]).optional(),
   scannedAt: z.coerce.date().optional(),
+  notes: z.string().max(1000).nullable().optional(),
+});
+
+export const presenceSignalBody = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.enum(["in", "out"]),
+    occurredAt: z.coerce.date(),
+    notes: z.string().max(1000).nullable().optional(),
+  }),
+  z.object({
+    kind: z.literal("activity"),
+    activityId: z.number().int().positive(),
+    occurredAt: z.coerce.date(),
+    notes: z.string().max(1000).nullable().optional(),
+  }),
+]);
+
+export const presenceActivityPatchBody = z.object({
+  activityId: z.number().int().positive().optional(),
+  occurredAt: z.coerce.date().optional(),
+  notes: z.string().max(1000).nullable().optional(),
 });
 
 export const scannableActivitiesQuery = z.object({

@@ -5,6 +5,7 @@ import { ActivityIcon, RepeatIcon, ScanLineIcon, SoupIcon, UsersIcon } from "luc
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/common/empty-state";
+import { Modal } from "@/components/common/modal";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { StatCard } from "@/components/common/stat-card";
@@ -18,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useLiveQuery } from "@/hooks/use-event-source";
+import { ApiError } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { type ActivityScanResult, logisticsApi } from "@/lib/logistics";
 import {
@@ -50,7 +52,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
 
   const [activityId, setActivityId] = useState("");
   const [badgeId, setBadgeId] = useState("");
-  const [allowRepeat, setAllowRepeat] = useState(false);
+  const [repeatPrompt, setRepeatPrompt] = useState<ActivityScanResult | null>(null);
   const [result, setResult] = useState<ActivityScanResult | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -66,7 +68,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
     saveOfflineQueue(next);
   };
 
-  const scanNow = async () => {
+  const scanNow = async (allowRepeat = false) => {
     if (!selected) return;
     setBusy(true);
     setError("");
@@ -79,10 +81,19 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
       setResult(scan);
       toast.success(scan.firstTime ? t("scanRegistered") : t("repeatRegistered"));
       setBadgeId("");
-      setAllowRepeat(false);
+      setRepeatPrompt(null);
       activities.refetch();
     } catch (err) {
-      setError(errorMessage(err, t("scanFailed")));
+      if (
+        err instanceof ApiError &&
+        err.code === "repeat_confirmation_required" &&
+        err.details &&
+        typeof err.details === "object"
+      ) {
+        setRepeatPrompt(err.details as ActivityScanResult);
+      } else {
+        setError(errorMessage(err, t("scanFailed")));
+      }
     } finally {
       setBusy(false);
     }
@@ -97,13 +108,12 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
         activityId: selected.activityId,
         activityName: selected.name,
         badgeId: badgeId.trim(),
-        allowRepeat,
+        allowRepeat: false,
         scannedAt: new Date().toISOString(),
         status: "pending",
       },
     ]);
     setBadgeId("");
-    setAllowRepeat(false);
     toast.success(t("scanQueuedLocally"));
   };
 
@@ -187,7 +197,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
           />
         ) : (
           <>
-            <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_minmax(180px,0.8fr)_140px_140px]">
+            <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_minmax(180px,0.8fr)_140px]">
               <Field label={t("colActivity")}>
                 <Select value={activityId} onValueChange={setActivityId}>
                   <SelectTrigger>
@@ -214,17 +224,8 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
               </Field>
               <div className="flex items-end">
                 <Button
-                  variant={allowRepeat ? "default" : "outline"}
                   className="w-full"
-                  onClick={() => setAllowRepeat((v) => !v)}
-                >
-                  {allowRepeat ? t("repeatOn") : t("noRepeat")}
-                </Button>
-              </div>
-              <div className="flex items-end">
-                <Button
-                  className="w-full"
-                  onClick={scanNow}
+                  onClick={() => void scanNow()}
                   disabled={busy || !activityId || !badgeId.trim()}
                 >
                   <ScanLineIcon className="size-4" />
@@ -235,6 +236,31 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
 
             {error && <InlineError message={error} />}
             {result && <ScanResult result={result} />}
+            <Modal
+              open={repeatPrompt !== null}
+              onOpenChange={(open) => {
+                if (!open) setRepeatPrompt(null);
+              }}
+              icon={RepeatIcon}
+              title={t("repeatConfirmationTitle")}
+              description={
+                repeatPrompt
+                  ? t("repeatConfirmationDesc", { count: repeatPrompt.timesEaten })
+                  : undefined
+              }
+              footer={
+                <>
+                  <Button variant="outline" onClick={() => setRepeatPrompt(null)} disabled={busy}>
+                    {t("cancel")}
+                  </Button>
+                  <Button onClick={() => void scanNow(true)} disabled={busy}>
+                    {t("allowRepeat")}
+                  </Button>
+                </>
+              }
+            >
+              {repeatPrompt && <ScanResult result={repeatPrompt} />}
+            </Modal>
 
             {isMeal && (
               <>

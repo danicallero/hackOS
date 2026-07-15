@@ -91,6 +91,10 @@ export interface EventConfig {
   hackingStartsAt: string | null;
   hackingEndsAt: string | null;
   showStartCountdown: boolean;
+  /** Optional common entry instant used for people accredited earlier. */
+  presenceAutoEntryAt: string | null;
+  /** Maximum time without an exit or activity signal before provisional time is invalidated. */
+  presenceCertaintyWindowMinutes: number;
   judgingStartsAt: string | null;
   judgingEndsAt: string | null;
   venueName: string | null;

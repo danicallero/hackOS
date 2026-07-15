@@ -14,6 +14,7 @@ import {
   FolderGitIcon,
   IdCardIcon,
   KeyRoundIcon,
+  PlusIcon,
   QrCodeIcon,
   ShieldIcon,
   UserIcon,
@@ -26,6 +27,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { AlertModal } from "@/components/common/alert-modal";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
@@ -36,6 +38,7 @@ import { Spinner } from "@/components/common/spinner";
 import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
+import { PresenceTimeline } from "@/components/logistics/presence-timeline";
 import { errorMessage, InlineError } from "@/components/logistics/ui";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -63,7 +66,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { isLanguage, LANGS, languageName, pickText, type Translate, useLocale } from "@/lib/i18n";
-import { logisticsApi, type TicketQrPayload, type TimeLogEntry } from "@/lib/logistics";
+import {
+  logisticsApi,
+  type PresenceTimelineData,
+  type PresenceTimelineSignal,
+  type TicketQrPayload,
+  type TimeLogEntry,
+} from "@/lib/logistics";
 import { type RepoWithExtras, userProjects } from "@/lib/projects";
 import { useCan, useSessionContext } from "@/lib/session";
 import type { Tone } from "@/lib/tones";
@@ -1136,7 +1145,7 @@ interface PresenceInterval {
 interface PresenceData {
   hours: number;
   intervals: PresenceInterval[];
-  logs: TimeLogEntry[];
+  timeline: PresenceTimelineData;
 }
 
 const timeFmt = new Intl.DateTimeFormat("en-GB", {
@@ -1168,6 +1177,9 @@ function PresenceSection({ userId }: { userId: number }) {
   const [loadError, setLoadError] = useState("");
   const [editing, setEditing] = useState<TimeLogEntry | null>(null);
   const [deleting, setDeleting] = useState<TimeLogEntry | null>(null);
+  const [addingSignal, setAddingSignal] = useState(false);
+  const [editingActivity, setEditingActivity] = useState<PresenceTimelineSignal | null>(null);
+  const [deletingActivity, setDeletingActivity] = useState<PresenceTimelineSignal | null>(null);
 
   const load = useCallback(async () => {
     if (!canRead) {
@@ -1176,11 +1188,11 @@ function PresenceSection({ userId }: { userId: number }) {
     }
     setState((current) => (current === "ready" ? "ready" : "loading"));
     try {
-      const [hours, logs] = await Promise.all([
+      const [hours, timeline] = await Promise.all([
         api.get<{ hours: number; intervals: PresenceInterval[] }>(`/api/presence/hours/${userId}`),
-        logisticsApi.presenceLogs(userId),
+        logisticsApi.presenceTimeline(userId),
       ]);
-      setData({ hours: hours.hours, intervals: hours.intervals, logs: logs.items });
+      setData({ hours: hours.hours, intervals: hours.intervals, timeline });
       setState("ready");
     } catch (err) {
       setLoadError(errorMessage(err, t("attendanceDataUnavailable")));
@@ -1223,65 +1235,45 @@ function PresenceSection({ userId }: { userId: number }) {
     );
   }
 
-  const intervalColumns: Column<PresenceInterval>[] = [
-    {
-      id: "start",
-      header: t("columnEntered"),
-      cell: (i) => <span className="text-sm">{timeFmt.format(new Date(i.start))}</span>,
-    },
-    {
-      id: "end",
-      header: t("colLeft"),
-      cell: (i) => (
-        <div className="flex items-center gap-2">
-          <span className="text-sm">{timeFmt.format(new Date(i.end))}</span>
-          <StatusBadge tone={i.confirmed ? "success" : "neutral"} dot={false} className="text-xs">
-            {i.confirmed ? t("confirmed") : t("estimated")}
-          </StatusBadge>
-        </div>
-      ),
-    },
-    {
-      id: "duration",
-      header: t("colDuration"),
-      align: "right",
-      cell: (i) => {
-        const ms = new Date(i.end).getTime() - new Date(i.start).getTime();
-        const minutes = Math.max(0, Math.round(ms / 60000));
-        const hours = Math.floor(minutes / 60);
-        const rest = minutes % 60;
-        return (
-          <span className="text-sm tabular-nums">
-            {hours}h {rest}m
-          </span>
-        );
-      },
-    },
-  ];
-
-  const scanColumns: Column<TimeLogEntry>[] = [
+  const signalColumns: Column<PresenceTimelineSignal>[] = [
     {
       id: "when",
       header: t("colWhen"),
-      sortValue: (l) => l.scannedAt,
-      cell: (l) => <span className="text-sm">{timeFmt.format(new Date(l.scannedAt))}</span>,
+      sortValue: (signal) => signal.occurredAt,
+      cell: (signal) => (
+        <span className="text-sm tabular-nums">{timeFmt.format(new Date(signal.occurredAt))}</span>
+      ),
     },
     {
       id: "kind",
-      header: t("directionLabel"),
-      cell: (l) => (
-        <StatusBadge tone={l.kind === "in" ? "success" : "warning"} dot={false}>
-          {l.kind === "in" ? t("entryOption") : t("exitOption")}
+      header: t("signalType"),
+      cell: (signal) => (
+        <StatusBadge
+          tone={signal.kind === "in" ? "success" : signal.kind === "out" ? "warning" : "info"}
+          dot={false}
+        >
+          {signal.kind === "activity"
+            ? signal.activityName
+            : signal.kind === "in"
+              ? t("entryOption")
+              : t("exitOption")}
         </StatusBadge>
+      ),
+    },
+    {
+      id: "notes",
+      header: t("notes"),
+      cell: (signal) => (
+        <span className="text-muted-foreground line-clamp-2 text-sm">{signal.notes || "—"}</span>
       ),
     },
     {
       id: "scannedBy",
       header: t("colScannedBy"),
-      cell: (l) => (
+      cell: (signal) => (
         <span className="text-muted-foreground text-sm">
-          {[l.scannedBy.name, l.scannedBy.surname].filter(Boolean).join(" ") ||
-            `#${l.scannedBy.userId}`}
+          {[signal.recordedBy.name, signal.recordedBy.surname].filter(Boolean).join(" ") ||
+            `#${signal.recordedBy.userId}`}
         </span>
       ),
     },
@@ -1289,17 +1281,28 @@ function PresenceSection({ userId }: { userId: number }) {
       ? [
           {
             id: "actions",
-            header: "",
+            header: t("columnActions"),
             align: "right" as const,
-            cell: (l: TimeLogEntry) => (
+            cell: (signal: PresenceTimelineSignal) => (
               <div className="flex justify-end gap-2">
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
+                  aria-label={`${t("edit")} ${signal.activityName ?? t(`presenceSignal_${signal.kind}`)}`}
                   onClick={(e: React.MouseEvent) => {
                     e.stopPropagation();
-                    setEditing(l);
+                    if (signal.source === "door") {
+                      setEditing({
+                        id: signal.id,
+                        kind: signal.kind as "in" | "out",
+                        scannedAt: signal.occurredAt,
+                        notes: signal.notes,
+                        scannedBy: signal.recordedBy,
+                      });
+                    } else {
+                      setEditingActivity(signal);
+                    }
                   }}
                 >
                   {t("edit")}
@@ -1309,9 +1312,20 @@ function PresenceSection({ userId }: { userId: number }) {
                   size="sm"
                   variant="outline"
                   className="text-destructive"
+                  aria-label={`${t("deleteAction")} ${signal.activityName ?? t(`presenceSignal_${signal.kind}`)}`}
                   onClick={(e: React.MouseEvent) => {
                     e.stopPropagation();
-                    setDeleting(l);
+                    if (signal.source === "door") {
+                      setDeleting({
+                        id: signal.id,
+                        kind: signal.kind as "in" | "out",
+                        scannedAt: signal.occurredAt,
+                        notes: signal.notes,
+                        scannedBy: signal.recordedBy,
+                      });
+                    } else {
+                      setDeletingActivity(signal);
+                    }
                   }}
                 >
                   {t("deleteAction")}
@@ -1338,33 +1352,58 @@ function PresenceSection({ userId }: { userId: number }) {
           hint={t("estimatedVisitsVenue")}
         />
       </div>
+      <PresenceTimeline data={data.timeline} />
+
+      <Separator className="my-6" />
+
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h4 className="text-balance font-medium">{t("presenceSignals")}</h4>
+          <p className="text-muted-foreground text-pretty mt-1 text-sm">
+            {t("presenceSignalsDesc")}
+          </p>
+        </div>
+        {canEdit && (
+          <Button type="button" onClick={() => setAddingSignal(true)}>
+            <PlusIcon className="size-4" aria-hidden="true" />
+            {t("addPresenceSignal")}
+          </Button>
+        )}
+      </div>
       <DataTable
-        columns={intervalColumns}
-        data={data.intervals}
-        getRowId={(i) => i.start}
+        columns={signalColumns}
+        data={data.timeline.signals}
+        getRowId={(signal) => `${signal.source}-${signal.id}`}
         pageSize={10}
         empty={{
-          icon: ClockIcon,
+          icon: DoorOpenIcon,
           title: t("noPresenceRecorded"),
           description: t("noDoorActivityScans"),
         }}
       />
-
-      <Separator className="my-6" />
-
-      <h4 className="mb-3 text-sm font-medium">{t("rawDoorScans")}</h4>
-      <p className="text-muted-foreground mb-4 text-sm">{t("rawDoorScansDesc")}</p>
-      <DataTable
-        columns={scanColumns}
-        data={data.logs}
-        getRowId={(l) => String(l.id)}
-        pageSize={10}
-        empty={{
-          icon: DoorOpenIcon,
-          title: t("noDoorScansYet"),
-          description: t("doorScansAppearHere"),
-        }}
-      />
+      {addingSignal && (
+        <PresenceSignalModal
+          userId={userId}
+          activities={data.timeline.activities}
+          onClose={() => setAddingSignal(false)}
+          onSaved={() => {
+            setAddingSignal(false);
+            void load();
+          }}
+        />
+      )}
+      {editingActivity && (
+        <PresenceSignalModal
+          userId={userId}
+          activities={data.timeline.activities}
+          signal={editingActivity}
+          onClose={() => setEditingActivity(null)}
+          onSaved={() => {
+            setEditingActivity(null);
+            void load();
+          }}
+        />
+      )}
       {editing && (
         <EditTimeLogModal
           log={editing}
@@ -1385,6 +1424,16 @@ function PresenceSection({ userId }: { userId: number }) {
           }}
         />
       )}
+      {deletingActivity && (
+        <DeletePresenceActivityModal
+          signal={deletingActivity}
+          onClose={() => setDeletingActivity(null)}
+          onDeleted={() => {
+            setDeletingActivity(null);
+            void load();
+          }}
+        />
+      )}
     </SectionCard>
   );
 }
@@ -1401,6 +1450,7 @@ function EditTimeLogModal({
   const { t } = useLocale();
   const [kind, setKind] = useState<"in" | "out">(log.kind);
   const [scannedAt, setScannedAt] = useState(toDatetimeLocal(log.scannedAt));
+  const [notes, setNotes] = useState(log.notes ?? "");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
 
@@ -1411,6 +1461,7 @@ function EditTimeLogModal({
       await logisticsApi.updateTimeLog(log.id, {
         kind,
         scannedAt: new Date(scannedAt).toISOString(),
+        notes: notes.trim() || null,
       });
       toast.success(t("scanUpdated"));
       onSaved();
@@ -1440,9 +1491,9 @@ function EditTimeLogModal({
     >
       <div className="space-y-4">
         <div className="space-y-2">
-          <Label>{t("directionLabel")}</Label>
+          <Label htmlFor="edit-presence-kind">{t("directionLabel")}</Label>
           <Select value={kind} onValueChange={(v) => setKind(v as "in" | "out")}>
-            <SelectTrigger className="w-full">
+            <SelectTrigger id="edit-presence-kind" className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -1452,11 +1503,20 @@ function EditTimeLogModal({
           </Select>
         </div>
         <div className="space-y-2">
-          <Label>{t("timeLabel")}</Label>
+          <Label htmlFor="edit-presence-time">{t("timeLabel")}</Label>
           <Input
+            id="edit-presence-time"
             type="datetime-local"
             value={scannedAt}
             onChange={(e) => setScannedAt(e.target.value)}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="edit-presence-notes">{t("notes")}</Label>
+          <Textarea
+            id="edit-presence-notes"
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
           />
         </div>
         {error && <InlineError message={error} />}
@@ -1490,7 +1550,7 @@ function DeleteTimeLogModal({
   }
 
   return (
-    <Modal
+    <AlertModal
       open
       onOpenChange={(open) => !open && onClose()}
       title={t("deleteThisScan")}
@@ -1498,17 +1558,197 @@ function DeleteTimeLogModal({
         direction: log.kind === "in" ? t("entryLower") : t("exitLower"),
         time: timeFmt.format(new Date(log.scannedAt)),
       })}
+      cancelLabel={t("cancel")}
+      confirmLabel={t("deleteAction")}
+      pending={pending}
+      destructive
+      onConfirm={() => void remove()}
+    />
+  );
+}
+
+function PresenceSignalModal({
+  userId,
+  activities,
+  signal,
+  onClose,
+  onSaved,
+}: {
+  userId: number;
+  activities: PresenceTimelineData["activities"];
+  signal?: PresenceTimelineSignal;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { t } = useLocale();
+  const editingActivity = signal?.source === "activity";
+  const [kind, setKind] = useState<"in" | "out" | "activity">(editingActivity ? "activity" : "in");
+  const [activityId, setActivityId] = useState(
+    signal?.activityId ? String(signal.activityId) : activities[0] ? String(activities[0].id) : "",
+  );
+  const [occurredAt, setOccurredAt] = useState(
+    signal ? toDatetimeLocal(signal.occurredAt) : toDatetimeLocal(new Date().toISOString()),
+  );
+  const [notes, setNotes] = useState(signal?.notes ?? "");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+
+  async function save() {
+    if (!occurredAt || (kind === "activity" && !activityId)) return;
+    setPending(true);
+    setError("");
+    try {
+      if (editingActivity && signal) {
+        await logisticsApi.updatePresenceActivity(signal.id, {
+          activityId: Number(activityId),
+          occurredAt: new Date(occurredAt).toISOString(),
+          notes: notes.trim() || null,
+        });
+      } else if (kind === "activity") {
+        await logisticsApi.createPresenceSignal(userId, {
+          kind,
+          activityId: Number(activityId),
+          occurredAt: new Date(occurredAt).toISOString(),
+          notes: notes.trim() || null,
+        });
+      } else {
+        await logisticsApi.createPresenceSignal(userId, {
+          kind,
+          occurredAt: new Date(occurredAt).toISOString(),
+          notes: notes.trim() || null,
+        });
+      }
+      toast.success(editingActivity ? t("presenceSignalUpdated") : t("presenceSignalAdded"));
+      onSaved();
+    } catch (err) {
+      setError(errorMessage(err, t("couldNotSavePresenceSignal")));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <Modal
+      open
+      onOpenChange={(open) => !open && onClose()}
+      title={editingActivity ? t("editPresenceActivity") : t("addPresenceSignal")}
+      description={t("presenceSignalFormDesc")}
       footer={
         <>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={onClose} disabled={pending}>
             {t("cancel")}
           </Button>
-          <SubmitButton variant="destructive" pending={pending} onClick={remove}>
-            {t("deleteAction")}
+          <SubmitButton
+            pending={pending}
+            onClick={save}
+            disabled={!occurredAt || (kind === "activity" && !activityId)}
+          >
+            {t("saveChanges")}
           </SubmitButton>
         </>
       }
-    />
+    >
+      <div className="space-y-4">
+        {!editingActivity && (
+          <div className="space-y-2">
+            <Label htmlFor="presence-signal-kind">{t("signalType")}</Label>
+            <Select value={kind} onValueChange={(value) => setKind(value as typeof kind)}>
+              <SelectTrigger id="presence-signal-kind" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="in">{t("entryOption")}</SelectItem>
+                <SelectItem value="activity">{t("activitySignal")}</SelectItem>
+                <SelectItem value="out">{t("exitOption")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        {kind === "activity" && (
+          <div className="space-y-2">
+            <Label htmlFor="presence-activity">{t("colActivity")}</Label>
+            <Select value={activityId} onValueChange={setActivityId}>
+              <SelectTrigger id="presence-activity" className="w-full">
+                <SelectValue placeholder={t("chooseActivityOption")} />
+              </SelectTrigger>
+              <SelectContent>
+                {activities.map((activity) => (
+                  <SelectItem key={activity.id} value={String(activity.id)}>
+                    {activity.name} · {activity.category}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        <div className="space-y-2">
+          <Label htmlFor="presence-signal-time">{t("timeLabel")}</Label>
+          <Input
+            id="presence-signal-time"
+            type="datetime-local"
+            value={occurredAt}
+            max={toDatetimeLocal(new Date().toISOString())}
+            onChange={(event) => setOccurredAt(event.target.value)}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="presence-signal-notes">{t("notes")}</Label>
+          <Textarea
+            id="presence-signal-notes"
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            placeholder={t("presenceSignalNotesPlaceholder")}
+          />
+        </div>
+        {error && <InlineError message={error} />}
+      </div>
+    </Modal>
+  );
+}
+
+function DeletePresenceActivityModal({
+  signal,
+  onClose,
+  onDeleted,
+}: {
+  signal: PresenceTimelineSignal;
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const { t } = useLocale();
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+
+  async function remove() {
+    setPending(true);
+    setError("");
+    try {
+      await logisticsApi.deletePresenceActivity(signal.id);
+      toast.success(t("presenceSignalDeleted"));
+      onDeleted();
+    } catch (err) {
+      setError(errorMessage(err, t("couldNotDeletePresenceSignal")));
+      setPending(false);
+    }
+  }
+
+  return (
+    <AlertModal
+      open
+      onOpenChange={(open) => !open && onClose()}
+      title={t("deletePresenceSignal")}
+      description={t("deletePresenceActivityDesc", {
+        activity: signal.activityName ?? t("activitySignal"),
+        time: timeFmt.format(new Date(signal.occurredAt)),
+      })}
+      cancelLabel={t("cancel")}
+      confirmLabel={t("deleteAction")}
+      pending={pending}
+      destructive
+      onConfirm={() => void remove()}
+    >
+      {error && <InlineError message={error} />}
+    </AlertModal>
   );
 }
 

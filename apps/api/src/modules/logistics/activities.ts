@@ -26,10 +26,9 @@ interface ScanResult {
  *
  * - Everyone has the right to eat: no entitlement check gates meal scans.
  * - First scan auto-registers and reports firstTime.
- * - A meal already served does NOT re-register: returns a 409 "repeat" payload
- *   requiring explicit confirmation; re-scanning with allowRepeat=true
- *   registers the repetition, audited as a staff override.
- * - Non-meal activities simply log every scan (repeats flagged, no confirm).
+ * - Any repeated meal/activity does NOT re-register immediately: it returns a
+ *   409 payload requiring explicit confirmation. Re-scanning with
+ *   allowRepeat=true registers an audited staff override.
  *
  * Concurrency: a per (user, activity) advisory xact lock serializes parallel
  * scanners so two simultaneous first-time scans produce exactly one row.
@@ -97,7 +96,7 @@ export async function activityScan(
     const timesBefore = cnt.rows[0].n as number;
     const firstTime = timesBefore === 0;
 
-    if (!firstTime && isMeal && !input.allowRepeat) {
+    if (!firstTime && !input.allowRepeat) {
       // Repeat needs explicit confirmation — do NOT register.
       return {
         status: 409,
@@ -107,7 +106,9 @@ export async function activityScan(
           repeat: true,
           timesEaten: timesBefore,
           card,
-          message: "Already served; re-scan with allowRepeat to register a repetition",
+          message: isMeal
+            ? "Already served; confirm to register a repetition"
+            : "Already registered for this activity; confirm to register a repetition",
         },
       };
     }
@@ -129,11 +130,11 @@ export async function activityScan(
       ],
     );
 
-    if (!firstTime && isMeal) {
-      // Staff override for a meal repetition is audited (H25).
+    if (!firstTime) {
+      // Every repetition is an explicit staff override and remains auditable.
       await audit(client, {
         actorId,
-        entityType: "meal",
+        entityType: isMeal ? "meal" : "activity",
         entityId: userId,
         action: "repeat_override",
         after: { activityId, timesEaten: timesBefore + 1 },

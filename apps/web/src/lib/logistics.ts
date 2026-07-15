@@ -20,6 +20,11 @@ export interface AccreditationLookup extends PersonCard {
   currentBadge: string | null;
 }
 
+export interface AccreditationRoleCount {
+  role: "admin" | "judge" | "sponsor" | "staff" | "participant";
+  count: number;
+}
+
 /** Fields the person search can return; pass the ones your station needs. */
 export type PersonSearchField =
   | "email"
@@ -51,6 +56,7 @@ export interface CheckInResult {
   method: "qr" | "manual" | "nfc";
   checkInLogId: number;
   checkedInAt: string;
+  presenceEntryAt: string | null;
   name: string | null;
   surname: string | null;
 }
@@ -106,7 +112,36 @@ export interface TimeLogEntry {
   id: number;
   kind: "in" | "out";
   scannedAt: string;
+  notes: string | null;
   scannedBy: { userId: number; name: string | null; surname: string | null };
+}
+
+export interface PresenceTimelineSignal {
+  id: number;
+  source: "door" | "activity";
+  kind: "in" | "out" | "activity";
+  occurredAt: string;
+  activityId: number | null;
+  activityName: string | null;
+  category: string | null;
+  notes: string | null;
+  recordedBy: { userId: number; name: string | null; surname: string | null };
+}
+
+export interface PresenceCertaintyWindow {
+  start: string;
+  deadline: string;
+  securedUntil: string | null;
+  status: "secured" | "provisional" | "invalid";
+  openedBy: "in" | "activity";
+  closedBy: "in" | "out" | "activity" | null;
+}
+
+export interface PresenceTimelineData {
+  certaintyWindowMinutes: number;
+  activities: Array<{ id: number; name: string; category: string }>;
+  signals: PresenceTimelineSignal[];
+  windows: PresenceCertaintyWindow[];
 }
 
 export interface TimeLogUpdateResult {
@@ -114,6 +149,7 @@ export interface TimeLogUpdateResult {
   userId: number;
   kind: "in" | "out";
   scannedAt: string;
+  notes: string | null;
 }
 
 export interface OpenPresenceSession {
@@ -140,6 +176,10 @@ export interface ActivityScanResult {
 export interface LogisticsStats {
   accreditedCount: number;
   currentlyPresent: number;
+  accreditedByRole: Array<{
+    role: "admin" | "judge" | "sponsor" | "staff" | "participant";
+    count: number;
+  }>;
   meals: Array<{
     activityId: number;
     name: string;
@@ -221,6 +261,8 @@ export const logisticsApi = {
     api.post<AccreditationLookup>("/api/accreditation/lookup", { ticketToken }),
   lookupUser: (userId: number) =>
     api.post<AccreditationLookup>("/api/accreditation/lookup-user", { userId }),
+  accreditationStats: () =>
+    api.get<{ byRole: AccreditationRoleCount[] }>("/api/accreditation/stats"),
   checkIn: (body: { ticketToken: string; badgeId: string; method: "qr" | "manual" | "nfc" }) =>
     api.post<CheckInResult>("/api/accreditation/check-in", body, {
       headers: idempotencyHeaders("check-in"),
@@ -249,9 +291,26 @@ export const logisticsApi = {
   presenceOpenSessions: () => api.get<{ items: OpenPresenceSession[] }>("/api/presence/open"),
   presenceLogs: (userId: number) =>
     api.get<{ items: TimeLogEntry[] }>(`/api/presence/logs/${userId}`),
-  updateTimeLog: (id: number, body: { kind?: "in" | "out"; scannedAt?: string }) =>
-    api.patch<TimeLogUpdateResult>(`/api/presence/logs/${id}`, body),
+  presenceTimeline: (userId: number) =>
+    api.get<PresenceTimelineData>(`/api/presence/timeline/${userId}`),
+  createPresenceSignal: (
+    userId: number,
+    body:
+      | { kind: "in" | "out"; occurredAt: string; notes?: string | null }
+      | { kind: "activity"; activityId: number; occurredAt: string; notes?: string | null },
+  ) =>
+    api.post<{ source: "door" | "activity"; id: number }>(`/api/presence/signals/${userId}`, body),
+  updateTimeLog: (
+    id: number,
+    body: { kind?: "in" | "out"; scannedAt?: string; notes?: string | null },
+  ) => api.patch<TimeLogUpdateResult>(`/api/presence/logs/${id}`, body),
   deleteTimeLog: (id: number) => api.delete<{ deleted: true }>(`/api/presence/logs/${id}`),
+  updatePresenceActivity: (
+    id: number,
+    body: { activityId?: number; occurredAt?: string; notes?: string | null },
+  ) => api.patch<{ id: number; userId: number }>(`/api/presence/activity-logs/${id}`, body),
+  deletePresenceActivity: (id: number) =>
+    api.delete<{ deleted: true }>(`/api/presence/activity-logs/${id}`),
   stats: () => api.get<LogisticsStats>("/api/logistics/stats"),
   scannableActivities: (category?: "meal" | "activity") =>
     api.get<{ items: ScannableActivity[] }>("/api/activities/scannable", {

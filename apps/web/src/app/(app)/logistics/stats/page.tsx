@@ -137,6 +137,20 @@ export default function LogisticsStatsPage() {
         />
       </div>
 
+      <SectionCard title={t("accreditedByRole")} icon={BadgeCheckIcon}>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {(s?.accreditedByRole ?? []).map((item) => (
+            <div key={item.role} className="rounded-lg border p-3">
+              <p className="text-muted-foreground text-sm capitalize">{t(item.role)}</p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums">{item.count}</p>
+            </div>
+          ))}
+          {s && s.accreditedByRole.length === 0 && (
+            <p className="text-muted-foreground text-sm">{t("noAccreditationsYet")}</p>
+          )}
+        </div>
+      </SectionCard>
+
       <div className="grid gap-4 xl:grid-cols-2">
         <SectionCard title={t("meals")} icon={SoupIcon}>
           <DataTable

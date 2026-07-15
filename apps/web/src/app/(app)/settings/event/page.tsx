@@ -268,6 +268,8 @@ const schema = z.object({
   hackingStartsAt: z.string(),
   hackingEndsAt: z.string(),
   showStartCountdown: z.boolean(),
+  presenceAutoEntryAt: z.string(),
+  presenceCertaintyWindowMinutes: z.number().int().min(15).max(10080),
   venueName: z.string().max(200),
   // Held as strings so an empty input is representable; parsed to number | null on submit.
   venueLatitude: z.string(),
@@ -330,6 +332,8 @@ function EventConfigSection() {
       hackingStartsAt: "",
       hackingEndsAt: "",
       showStartCountdown: false,
+      presenceAutoEntryAt: "",
+      presenceCertaintyWindowMinutes: 720,
       venueName: "",
       venueLatitude: "",
       venueLongitude: "",
@@ -347,6 +351,8 @@ function EventConfigSection() {
       hackingStartsAt: toLocalInputValue(cfg.hackingStartsAt),
       hackingEndsAt: toLocalInputValue(cfg.hackingEndsAt),
       showStartCountdown: cfg.showStartCountdown,
+      presenceAutoEntryAt: toLocalInputValue(cfg.presenceAutoEntryAt),
+      presenceCertaintyWindowMinutes: cfg.presenceCertaintyWindowMinutes,
       venueName: cfg.venueName ?? "",
       venueLatitude: cfg.venueLatitude === null ? "" : String(cfg.venueLatitude),
       venueLongitude: cfg.venueLongitude === null ? "" : String(cfg.venueLongitude),
@@ -416,6 +422,8 @@ function EventConfigSection() {
         hackingStartsAt: fromLocalInputValue(values.hackingStartsAt),
         hackingEndsAt: fromLocalInputValue(values.hackingEndsAt),
         showStartCountdown: values.showStartCountdown,
+        presenceAutoEntryAt: fromLocalInputValue(values.presenceAutoEntryAt),
+        presenceCertaintyWindowMinutes: values.presenceCertaintyWindowMinutes,
         venueName: values.venueName.trim() || null,
         venueLatitude,
         venueLongitude,
@@ -561,6 +569,52 @@ function EventConfigSection() {
               </FormItem>
             )}
           />
+          <div className="border-t pt-5">
+            <h3 className="text-balance font-medium">{t("presencePolicyTitle")}</h3>
+            <p className="text-muted-foreground text-pretty mt-1 text-sm">
+              {t("presencePolicyDesc")}
+            </p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField
+              control={form.control}
+              name="presenceAutoEntryAt"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("automaticEntryTime")}</FormLabel>
+                  <FormControl>
+                    <DateTimeInput value={field.value} onChange={field.onChange} />
+                  </FormControl>
+                  <FormDescription>{t("automaticEntryTimeDesc")}</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="presenceCertaintyWindowMinutes"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("certaintyWindow")}</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      min={15}
+                      max={10080}
+                      step={15}
+                      value={field.value}
+                      onChange={(event) => field.onChange(event.target.valueAsNumber)}
+                      onBlur={field.onBlur}
+                      name={field.name}
+                      ref={field.ref}
+                    />
+                  </FormControl>
+                  <FormDescription>{t("certaintyWindowDesc")}</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
         </SectionCard>
 
         <SectionCard

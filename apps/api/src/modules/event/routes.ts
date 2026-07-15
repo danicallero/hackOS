@@ -50,6 +50,8 @@ const eventConfigBody = z
     hackingStartsAt: z.coerce.date().nullable().optional(),
     hackingEndsAt: z.coerce.date().nullable().optional(),
     showStartCountdown: z.boolean().optional(),
+    presenceAutoEntryAt: z.coerce.date().nullable().optional(),
+    presenceCertaintyWindowMinutes: z.number().int().min(15).max(10080).optional(),
     venueName: z.string().nullable().optional(),
     venueLatitude: z.number().min(-90).max(90).nullable().optional(),
     venueLongitude: z.number().min(-180).max(180).nullable().optional(),
@@ -68,6 +70,8 @@ const DEFAULTS = {
   hacking_starts_at: null,
   hacking_ends_at: null,
   show_start_countdown: false,
+  presence_auto_entry_at: null,
+  presence_certainty_window_minutes: 720,
   venue_name: null,
   venue_latitude: null,
   venue_longitude: null,
@@ -85,6 +89,8 @@ interface EventConfigRow {
   hacking_starts_at: string | null;
   hacking_ends_at: string | null;
   show_start_countdown: boolean;
+  presence_auto_entry_at: string | null;
+  presence_certainty_window_minutes: number;
   venue_name: string | null;
   venue_latitude: number | null;
   venue_longitude: number | null;
@@ -97,7 +103,8 @@ async function readConfig(): Promise<EventConfigRow> {
   const { rows } = await pool.query(
     `SELECT name, tagline, timezone, event_starts_at, event_ends_at,
             hacking_starts_at, hacking_ends_at,
-            show_start_countdown, venue_name, venue_latitude, venue_longitude,
+            show_start_countdown, presence_auto_entry_at, presence_certainty_window_minutes,
+            venue_name, venue_latitude, venue_longitude,
             pass_back_fields, pass_field_labels, pass_field_visibility
        FROM event_config WHERE id = 1`,
   );
@@ -136,6 +143,8 @@ function toPublic(
     hackingStartsAt: row.hacking_starts_at,
     hackingEndsAt: row.hacking_ends_at,
     showStartCountdown: row.show_start_countdown,
+    presenceAutoEntryAt: row.presence_auto_entry_at,
+    presenceCertaintyWindowMinutes: row.presence_certainty_window_minutes,
     judgingStartsAt: judging.judging_starts_at,
     judgingEndsAt: judging.judging_ends_at,
     venueName: row.venue_name,
@@ -196,6 +205,12 @@ export function registerEventRoutes(app: FastifyInstance): void {
         hacking_ends_at: b.hackingEndsAt === undefined ? current.hacking_ends_at : b.hackingEndsAt,
         show_start_countdown:
           b.showStartCountdown === undefined ? current.show_start_countdown : b.showStartCountdown,
+        presence_auto_entry_at:
+          b.presenceAutoEntryAt === undefined
+            ? current.presence_auto_entry_at
+            : b.presenceAutoEntryAt,
+        presence_certainty_window_minutes:
+          b.presenceCertaintyWindowMinutes ?? current.presence_certainty_window_minutes,
         venue_name: b.venueName === undefined ? current.venue_name : b.venueName,
         venue_latitude: b.venueLatitude === undefined ? current.venue_latitude : b.venueLatitude,
         venue_longitude:
@@ -232,9 +247,10 @@ export function registerEventRoutes(app: FastifyInstance): void {
         `INSERT INTO event_config
             (id, name, tagline, timezone, event_starts_at, event_ends_at,
              hacking_starts_at, hacking_ends_at,
-             show_start_countdown, venue_name, venue_latitude, venue_longitude,
+             show_start_countdown, presence_auto_entry_at, presence_certainty_window_minutes,
+             venue_name, venue_latitude, venue_longitude,
              pass_back_fields, pass_field_labels, pass_field_visibility)
-         VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14::jsonb)
+         VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15::jsonb, $16::jsonb)
          ON CONFLICT (id) DO UPDATE
             SET name = EXCLUDED.name, tagline = EXCLUDED.tagline, timezone = EXCLUDED.timezone,
                 event_starts_at = EXCLUDED.event_starts_at,
@@ -242,6 +258,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
                 hacking_starts_at = EXCLUDED.hacking_starts_at,
                 hacking_ends_at = EXCLUDED.hacking_ends_at,
                 show_start_countdown = EXCLUDED.show_start_countdown,
+                presence_auto_entry_at = EXCLUDED.presence_auto_entry_at,
+                presence_certainty_window_minutes = EXCLUDED.presence_certainty_window_minutes,
                 venue_name = EXCLUDED.venue_name,
                 venue_latitude = EXCLUDED.venue_latitude,
                 venue_longitude = EXCLUDED.venue_longitude,
@@ -250,7 +268,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
                 pass_field_visibility = EXCLUDED.pass_field_visibility
          RETURNING name, tagline, timezone, event_starts_at, event_ends_at,
                    hacking_starts_at, hacking_ends_at,
-                   show_start_countdown, venue_name, venue_latitude, venue_longitude,
+                   show_start_countdown, presence_auto_entry_at, presence_certainty_window_minutes,
+                   venue_name, venue_latitude, venue_longitude,
                    pass_back_fields, pass_field_labels, pass_field_visibility`,
         [
           next.name,
@@ -261,6 +280,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
           next.hacking_starts_at,
           next.hacking_ends_at,
           next.show_start_countdown,
+          next.presence_auto_entry_at,
+          next.presence_certainty_window_minutes,
           next.venue_name,
           next.venue_latitude,
           next.venue_longitude,

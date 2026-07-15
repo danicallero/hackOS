@@ -6,8 +6,8 @@ import { broadcast } from "../../lib/sse.js";
 import { resolveByBadge } from "./badge.js";
 import { loadPersonCard } from "./cards.js";
 import {
+  buildCertaintyWindows,
   buildPresenceIntervals,
-  DEFAULT_SUSPICIOUS_GAP_MS,
   isPresentAt,
   type PresenceEvent,
   totalPresenceMs,
@@ -17,6 +17,13 @@ const MS_PER_HOUR = 3_600_000;
 // Advisory-lock namespace for presence writes; -1 can't collide with a real
 // activityId (see activities.ts's per-(user, activity) lock).
 const PRESENCE_LOCK_NS = -1;
+
+async function certaintyWindowMs(): Promise<number> {
+  const { rows } = await pool.query(
+    `SELECT presence_certainty_window_minutes FROM event_config WHERE id = 1`,
+  );
+  return Number(rows[0]?.presence_certainty_window_minutes ?? 720) * 60_000;
+}
 
 // ── H24: raw session ground truth — never inferred, only closed by a real `out` ──
 
@@ -56,10 +63,11 @@ export async function presenceLookup(badgeId: string) {
   const card = await loadPersonCard(pool, userId);
   const events = (await loadEvents(userId)).get(userId) ?? [];
   const session = await openSessionAsOf(pool, userId, new Date());
+  const suspiciousGapMs = await certaintyWindowMs();
   return {
     ...card,
     badgeId,
-    present: isPresentAt(events, Date.now()),
+    present: isPresentAt(events, Date.now(), { suspiciousGapMs }),
     openSince: session.since?.toISOString() ?? null,
   };
 }
@@ -91,6 +99,17 @@ export async function presenceScan(
   const result = await withTransaction(async (client) => {
     // Serialize concurrent scans for the same person (H24 concurrency).
     await client.query(`SELECT pg_advisory_xact_lock($1, $2)`, [PRESENCE_LOCK_NS, userId]);
+
+    if (input.kind === "in") {
+      // A real earlier door scan supersedes an accreditation-created future
+      // entry, avoiding two consecutive `in` signals for the same person.
+      await client.query(
+        `DELETE FROM time_logs
+          WHERE user_id = $1 AND scanned_at > $2
+            AND notes = 'Automatic entry from accreditation'`,
+        [userId, scannedAt],
+      );
+    }
 
     const session = await openSessionAsOf(client, userId, scannedAt);
     if (input.kind === "in" && session.open) {
@@ -143,12 +162,14 @@ export async function presenceScan(
  * these itself.
  */
 export async function openSessions(now: number = Date.now()) {
+  const windowMs = await certaintyWindowMs();
   const { rows } = await pool.query(
     `SELECT tl.user_id, tl.scanned_at AS since, u.name, u.surname,
             GREATEST(tl.scanned_at, COALESCE(la.last_activity, tl.scanned_at)) AS last_signal
        FROM (
          SELECT DISTINCT ON (user_id) user_id, kind, scanned_at
            FROM time_logs
+          WHERE scanned_at <= now()
           ORDER BY user_id, scanned_at DESC, id DESC
        ) tl
        JOIN users u ON u.id = tl.user_id
@@ -175,7 +196,7 @@ export async function openSessions(now: number = Date.now()) {
       surname: r.surname,
       since: r.since.toISOString(),
       lastSignal: r.last_signal.toISOString(),
-      stale: staleMs > DEFAULT_SUSPICIOUS_GAP_MS,
+      stale: staleMs > windowMs,
     };
   });
 }
@@ -210,9 +231,10 @@ async function loadEvents(userId?: number): Promise<Map<number, PresenceEvent[]>
 /** H24/H27: how many people are estimated to be in the venue right now. */
 export async function occupancyEstimate(at: number = Date.now()) {
   const map = await loadEvents();
+  const suspiciousGapMs = await certaintyWindowMs();
   const present: number[] = [];
   for (const [userId, events] of map) {
-    if (isPresentAt(events, at)) present.push(userId);
+    if (isPresentAt(events, at, { suspiciousGapMs })) present.push(userId);
   }
   present.sort((a, b) => a - b);
   return { at: new Date(at).toISOString(), presentCount: present.length, present };
@@ -221,10 +243,11 @@ export async function occupancyEstimate(at: number = Date.now()) {
 /** H24: estimated attendance hours for one user (e.g. university-credit minimum). */
 export async function userHours(userId: number, now: number = Date.now()) {
   const events = (await loadEvents(userId)).get(userId) ?? [];
-  const intervals = buildPresenceIntervals(events, now);
+  const suspiciousGapMs = await certaintyWindowMs();
+  const intervals = buildPresenceIntervals(events, now, { suspiciousGapMs });
   return {
     userId,
-    hours: round2(totalPresenceMs(events, now) / MS_PER_HOUR),
+    hours: round2(totalPresenceMs(events, now, { suspiciousGapMs }) / MS_PER_HOUR),
     intervals: intervals.map((i) => ({
       start: new Date(i.start).toISOString(),
       end: new Date(i.end).toISOString(),
@@ -236,6 +259,7 @@ export async function userHours(userId: number, now: number = Date.now()) {
 /** H24: estimated hours for every user with presence signals (bulk, admin display). */
 export async function allHours(now: number = Date.now()) {
   const map = await loadEvents();
+  const suspiciousGapMs = await certaintyWindowMs();
   const userIds = [...map.keys()];
   if (userIds.length === 0) return [];
 
@@ -257,7 +281,7 @@ export async function allHours(now: number = Date.now()) {
         userId,
         name: nameById.get(userId)?.name ?? null,
         surname: nameById.get(userId)?.surname ?? null,
-        hours: round2(totalPresenceMs(events, now) / MS_PER_HOUR),
+        hours: round2(totalPresenceMs(events, now, { suspiciousGapMs }) / MS_PER_HOUR),
       };
     })
     .sort((a, b) => a.userId - b.userId);
@@ -272,7 +296,7 @@ function round2(n: number): number {
 /** List every raw door scan for a user, oldest first, for admin review/edit. */
 export async function listTimeLogs(userId: number) {
   const { rows } = await pool.query(
-    `SELECT tl.id, tl.kind, tl.scanned_at, tl.scanned_by,
+    `SELECT tl.id, tl.kind, tl.scanned_at, tl.scanned_by, tl.notes,
             u.name AS scanned_by_name, u.surname AS scanned_by_surname
        FROM time_logs tl
        JOIN users u ON u.id = tl.scanned_by
@@ -284,6 +308,7 @@ export async function listTimeLogs(userId: number) {
     id: r.id as number,
     kind: r.kind as "in" | "out",
     scannedAt: (r.scanned_at as Date).toISOString(),
+    notes: (r.notes as string | null) ?? null,
     scannedBy: {
       userId: r.scanned_by as number,
       name: (r.scanned_by_name as string | null) ?? null,
@@ -296,7 +321,7 @@ export async function listTimeLogs(userId: number) {
 export async function updateTimeLog(
   actorId: number,
   id: number,
-  input: { kind?: "in" | "out"; scannedAt?: Date },
+  input: { kind?: "in" | "out"; scannedAt?: Date; notes?: string | null },
 ) {
   if (input.scannedAt != null && input.scannedAt.getTime() > Date.now()) {
     throw new BadRequestError("Scan time must be in the past");
@@ -304,7 +329,7 @@ export async function updateTimeLog(
 
   const result = await withTransaction(async (client) => {
     const { rows } = await client.query(
-      `SELECT id, user_id, kind, scanned_at FROM time_logs WHERE id = $1 FOR UPDATE`,
+      `SELECT id, user_id, kind, scanned_at, notes FROM time_logs WHERE id = $1 FOR UPDATE`,
       [id],
     );
     const before = rows[0];
@@ -312,11 +337,12 @@ export async function updateTimeLog(
 
     const kind = input.kind ?? before.kind;
     const scannedAt = input.scannedAt ?? before.scanned_at;
+    const notes = input.notes === undefined ? before.notes : input.notes;
 
     const { rows: updated } = await client.query(
-      `UPDATE time_logs SET kind = $1, scanned_at = $2
-        WHERE id = $3 RETURNING id, user_id, kind, scanned_at`,
-      [kind, scannedAt, id],
+      `UPDATE time_logs SET kind = $1, scanned_at = $2, notes = $3
+        WHERE id = $4 RETURNING id, user_id, kind, scanned_at, notes`,
+      [kind, scannedAt, notes, id],
     );
 
     await audit(client, {
@@ -329,7 +355,7 @@ export async function updateTimeLog(
         kind: before.kind,
         scannedAt: before.scanned_at,
       },
-      after: { id, kind, scannedAt },
+      after: { id, kind, scannedAt, notes },
       source: "admin",
     });
 
@@ -346,6 +372,195 @@ export async function updateTimeLog(
     userId: result.user_id as number,
     kind: result.kind as "in" | "out",
     scannedAt: (result.scanned_at as Date).toISOString(),
+    notes: (result.notes as string | null) ?? null,
+  };
+}
+
+export async function createPresenceSignal(
+  actorId: number,
+  userId: number,
+  input:
+    | { kind: "in" | "out"; occurredAt: Date; notes?: string | null }
+    | { kind: "activity"; occurredAt: Date; activityId: number; notes?: string | null },
+) {
+  if (input.occurredAt.getTime() > Date.now()) {
+    throw new BadRequestError("Presence signals cannot be in the future");
+  }
+  const result = await withTransaction(async (client) => {
+    const user = await client.query(`SELECT 1 FROM users WHERE id = $1`, [userId]);
+    if (!user.rows[0]) throw new NotFoundError("User not found");
+    if (input.kind === "activity") {
+      const activity = await client.query(`SELECT id FROM activities WHERE id = $1`, [
+        input.activityId,
+      ]);
+      if (!activity.rows[0]) throw new NotFoundError("Activity not found");
+      const { rows } = await client.query(
+        `INSERT INTO activity_logs (user_id, activity_id, notes, logged_at, logged_by)
+         VALUES ($1, $2, $3, $4, $5) RETURNING id, logged_at`,
+        [userId, input.activityId, input.notes ?? null, input.occurredAt, actorId],
+      );
+      await audit(client, {
+        actorId,
+        entityType: "presence_activity",
+        entityId: rows[0].id,
+        action: "manual_create",
+        after: { userId, activityId: input.activityId, occurredAt: input.occurredAt },
+        source: "admin",
+      });
+      return { source: "activity" as const, id: rows[0].id as number };
+    }
+    const { rows } = await client.query(
+      `INSERT INTO time_logs (user_id, kind, scanned_at, scanned_by, notes)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [userId, input.kind, input.occurredAt, actorId, input.notes ?? null],
+    );
+    await audit(client, {
+      actorId,
+      entityType: "presence",
+      entityId: userId,
+      action: "manual_time_log",
+      after: { id: rows[0].id, kind: input.kind, occurredAt: input.occurredAt },
+      source: "admin",
+    });
+    return { source: "door" as const, id: rows[0].id as number };
+  });
+  await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_PRESENCE_SCAN, {
+    created: true,
+    userId,
+    ...result,
+  });
+  return result;
+}
+
+export async function updatePresenceActivity(
+  actorId: number,
+  id: number,
+  input: { activityId?: number; occurredAt?: Date; notes?: string | null },
+) {
+  if (input.occurredAt && input.occurredAt.getTime() > Date.now()) {
+    throw new BadRequestError("Presence signals cannot be in the future");
+  }
+  const result = await withTransaction(async (client) => {
+    const { rows } = await client.query(
+      `SELECT id, user_id, activity_id, logged_at, notes FROM activity_logs WHERE id = $1 FOR UPDATE`,
+      [id],
+    );
+    const before = rows[0];
+    if (!before) throw new NotFoundError("Activity log not found");
+    const activityId = input.activityId ?? before.activity_id;
+    const exists = await client.query(`SELECT 1 FROM activities WHERE id = $1`, [activityId]);
+    if (!exists.rows[0]) throw new NotFoundError("Activity not found");
+    const { rows: updated } = await client.query(
+      `UPDATE activity_logs
+          SET activity_id = $1, logged_at = $2, notes = $3
+        WHERE id = $4 RETURNING id, user_id`,
+      [
+        activityId,
+        input.occurredAt ?? before.logged_at,
+        input.notes === undefined ? before.notes : input.notes,
+        id,
+      ],
+    );
+    await audit(client, {
+      actorId,
+      entityType: "presence_activity",
+      entityId: id,
+      action: "manual_update",
+      before,
+      after: input,
+      source: "admin",
+    });
+    return updated[0] as { id: number; user_id: number };
+  });
+  await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_ACTIVITY_SCAN, {
+    edited: true,
+    activityLogId: result.id,
+    userId: result.user_id,
+  });
+  return { id: result.id, userId: result.user_id };
+}
+
+export async function deletePresenceActivity(actorId: number, id: number) {
+  const result = await withTransaction(async (client) => {
+    const { rows } = await client.query(
+      `SELECT id, user_id, activity_id, logged_at, notes FROM activity_logs WHERE id = $1 FOR UPDATE`,
+      [id],
+    );
+    const before = rows[0];
+    if (!before) throw new NotFoundError("Activity log not found");
+    await client.query(`DELETE FROM activity_logs WHERE id = $1`, [id]);
+    await audit(client, {
+      actorId,
+      entityType: "presence_activity",
+      entityId: id,
+      action: "manual_delete",
+      before,
+      source: "admin",
+    });
+    return { id, userId: before.user_id as number };
+  });
+  await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_ACTIVITY_SCAN, {
+    deleted: true,
+    activityLogId: id,
+    userId: result.userId,
+  });
+  return { deleted: true as const };
+}
+
+export async function presenceTimeline(userId: number, now = Date.now()) {
+  const suspiciousGapMs = await certaintyWindowMs();
+  const [{ rows }, { rows: activityRows }] = await Promise.all([
+    pool.query(
+      `SELECT tl.id, 'door' AS source, tl.kind, tl.scanned_at AS occurred_at,
+            NULL::integer AS activity_id, NULL::text AS activity_name,
+            NULL::text AS category, tl.notes, tl.scanned_by AS recorded_by,
+            u.name AS recorded_by_name, u.surname AS recorded_by_surname
+       FROM time_logs tl JOIN users u ON u.id = tl.scanned_by WHERE tl.user_id = $1
+     UNION ALL
+     SELECT al.id, 'activity', 'activity', al.logged_at, a.id, a.name, a.category,
+            al.notes, al.logged_by, u.name, u.surname
+       FROM activity_logs al
+       JOIN activities a ON a.id = al.activity_id
+       JOIN users u ON u.id = al.logged_by WHERE al.user_id = $1
+     ORDER BY occurred_at ASC, id ASC`,
+      [userId],
+    ),
+    pool.query(`SELECT id, name, category FROM activities ORDER BY name ASC, id ASC`),
+  ]);
+  const signals = rows.map((row) => ({
+    id: Number(row.id),
+    source: row.source as "door" | "activity",
+    kind: row.kind as PresenceEvent["kind"],
+    occurredAt: (row.occurred_at as Date).toISOString(),
+    activityId: row.activity_id == null ? null : Number(row.activity_id),
+    activityName: (row.activity_name as string | null) ?? null,
+    category: (row.category as string | null) ?? null,
+    notes: (row.notes as string | null) ?? null,
+    recordedBy: {
+      userId: Number(row.recorded_by),
+      name: (row.recorded_by_name as string | null) ?? null,
+      surname: (row.recorded_by_surname as string | null) ?? null,
+    },
+  }));
+  const events = signals.map((signal) => ({
+    t: Date.parse(signal.occurredAt),
+    kind: signal.kind,
+  }));
+  return {
+    certaintyWindowMinutes: suspiciousGapMs / 60_000,
+    activities: activityRows.map((row) => ({
+      id: Number(row.id),
+      name: String(row.name),
+      category: String(row.category),
+    })),
+    signals,
+    windows: buildCertaintyWindows(events, now, { suspiciousGapMs }).map((window) => ({
+      ...window,
+      start: new Date(window.start).toISOString(),
+      deadline: new Date(window.deadline).toISOString(),
+      securedUntil:
+        window.securedUntil == null ? null : new Date(window.securedUntil).toISOString(),
+    })),
   };
 }
 

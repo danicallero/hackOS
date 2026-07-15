@@ -252,28 +252,41 @@ function PublicPageContent({
         </SectionHeading>
         {schedule.length ? (
           <ol className="mt-6 divide-y overflow-hidden rounded-xl border">
-            {schedule.map((item) => (
-              <li
-                key={item.id}
-                className="hover:bg-accent/50 grid gap-1 p-4 transition-colors sm:grid-cols-[12rem_1fr_auto] sm:gap-4"
-              >
-                <time className="text-muted-foreground text-sm tabular-nums">
-                  {dateTime(item.startsAt, event.timezone, language)}
-                </time>
-                <div>
-                  <h3 className="font-medium">{item.title}</h3>
-                  {item.description && (
-                    <p className="text-muted-foreground text-pretty mt-1 text-sm">
-                      {item.description}
-                    </p>
+            {schedule
+              .filter((item) => Date.parse(item.endsAt) >= Date.now())
+              .slice(0, 4)
+              .map((item) => (
+                <li
+                  key={item.id}
+                  className="hover:bg-accent/50 grid gap-1 p-4 transition-colors sm:grid-cols-[12rem_1fr_auto] sm:gap-4"
+                >
+                  <time className="text-muted-foreground text-sm tabular-nums">
+                    {dateTime(item.startsAt, event.timezone, language)}
+                  </time>
+                  <div>
+                    <h3 className="font-medium">{item.title}</h3>
+                    {item.description && (
+                      <p className="text-muted-foreground text-pretty mt-1 text-sm">
+                        {item.description}
+                      </p>
+                    )}
+                  </div>
+                  {item.location && (
+                    <p className="text-muted-foreground text-sm">{item.location}</p>
                   )}
-                </div>
-                {item.location && <p className="text-muted-foreground text-sm">{item.location}</p>}
-              </li>
-            ))}
+                </li>
+              ))}
           </ol>
         ) : (
           <EmptyNotice>{t("schedulePending")}</EmptyNotice>
+        )}
+        {schedule.length > 0 && (
+          <Button asChild variant="outline" className="mt-4">
+            <Link href="/horario">
+              {t("viewSchedule")}
+              <ArrowRightIcon className="size-4" aria-hidden="true" />
+            </Link>
+          </Button>
         )}
       </section>
 

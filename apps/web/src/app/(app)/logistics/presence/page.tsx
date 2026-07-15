@@ -12,6 +12,7 @@ import {
   ScanLineIcon,
   UsersIcon,
 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -432,6 +433,16 @@ function getOpenSessionColumns(t: Translate): Column<OpenPresenceSession>[] {
         <StatusBadge tone={row.stale ? "warning" : "neutral"} dot={false}>
           {row.stale ? t("staleCheck") : t("fresh")}
         </StatusBadge>
+      ),
+    },
+    {
+      id: "review",
+      header: t("columnActions"),
+      align: "right",
+      cell: (row) => (
+        <Button asChild size="sm" variant="outline">
+          <Link href={`/users/${row.userId}?tab=presence`}>{t("reviewSession")}</Link>
+        </Button>
       ),
     },
   ];

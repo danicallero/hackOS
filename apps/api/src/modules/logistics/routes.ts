@@ -21,12 +21,16 @@ import { enqueueMealScanBatch } from "./offline-meals.js";
 import { searchPeople } from "./people.js";
 import {
   allHours,
+  createPresenceSignal,
+  deletePresenceActivity,
   deleteTimeLog,
   listTimeLogs,
   occupancyEstimate,
   openSessions,
   presenceLookup,
   presenceScan,
+  presenceTimeline,
+  updatePresenceActivity,
   updateTimeLog,
   userHours,
 } from "./presence.js";
@@ -52,8 +56,10 @@ import {
   lookupUserBody,
   mealScanBatchBody,
   personSearchBody,
+  presenceActivityPatchBody,
   presenceLookupBody,
   presenceScanBody,
+  presenceSignalBody,
   removeBadgeBody,
   rotateBody,
   scannableActivitiesQuery,
@@ -67,7 +73,7 @@ import {
   userIdParam,
   walletPurposeParam,
 } from "./schemas.js";
-import { logisticsStats, scannableActivities } from "./stats.js";
+import { accreditationCountsByRole, logisticsStats, scannableActivities } from "./stats.js";
 import {
   appleChangedSerials,
   appleLog,
@@ -165,6 +171,10 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   );
 
   // ── unified person lookup (any logistics station) ────────────────────────
+
+  typed.get("/api/accreditation/stats", { preHandler: accredit }, async () => ({
+    byRole: await accreditationCountsByRole(),
+  }));
 
   typed.post(
     "/api/logistics/people/search",
@@ -313,6 +323,21 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
     async (req) => ({ items: await listTimeLogs(req.params.userId) }),
   );
 
+  typed.get(
+    "/api/presence/timeline/:userId",
+    { preHandler: presenceRead, schema: { params: userIdParam } },
+    async (req) => presenceTimeline(req.params.userId),
+  );
+
+  typed.post(
+    "/api/presence/signals/:userId",
+    { preHandler: presence, schema: { params: userIdParam, body: presenceSignalBody } },
+    async (req, reply) =>
+      reply
+        .code(201)
+        .send(await createPresenceSignal(actor(req.userId), req.params.userId, req.body)),
+  );
+
   typed.patch(
     "/api/presence/logs/:id",
     { preHandler: presence, schema: { params: timeLogIdParam, body: timeLogPatchBody } },
@@ -320,7 +345,20 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       updateTimeLog(actor(req.userId), req.params.id, {
         kind: req.body.kind,
         scannedAt: req.body.scannedAt,
+        notes: req.body.notes,
       }),
+  );
+
+  typed.patch(
+    "/api/presence/activity-logs/:id",
+    { preHandler: presence, schema: { params: timeLogIdParam, body: presenceActivityPatchBody } },
+    async (req) => updatePresenceActivity(actor(req.userId), req.params.id, req.body),
+  );
+
+  typed.delete(
+    "/api/presence/activity-logs/:id",
+    { preHandler: presence, schema: { params: timeLogIdParam } },
+    async (req) => deletePresenceActivity(actor(req.userId), req.params.id),
   );
 
   typed.delete(

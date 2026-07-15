@@ -60,6 +60,7 @@ export const NAV: NavSection[] = [
   {
     items: [
       { title: "dashboard", href: "/dashboard", icon: LayoutDashboardIcon },
+      { title: "schedule", href: "/timetable", icon: CalendarDaysIcon },
       // Participant-facing: everyone can apply (H12-H15). No capability gate.
       { title: "myApplications", href: "/my-applications", icon: FileTextIcon },
       // Participant-facing queue status (H38). No capability gate — auth only.
@@ -148,7 +149,7 @@ export const NAV: NavSection[] = [
         anyCapability: [CAPABILITIES.APPLICATIONS_REVIEW, CAPABILITIES.APPLICATIONS_MANAGE],
       },
       {
-        title: "schedule",
+        title: "manageSchedule",
         href: "/schedule",
         icon: CalendarDaysIcon,
         capability: CAPABILITIES.SCHEDULE_MANAGE,
