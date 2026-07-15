@@ -35,6 +35,11 @@ export const rotateBody = z
     message: "Provide userId or currentBadgeId",
   });
 
+export const removeBadgeBody = z.object({
+  userId: z.coerce.number().int().positive(),
+  reason: z.string().min(1),
+});
+
 export const presenceLookupBody = z.object({ badgeId: z.string().min(1) });
 
 export const presenceScanBody = z.object({
@@ -56,11 +61,14 @@ export const scannableActivitiesQuery = z.object({
 
 const scannerPersonCard = z.object({
   userId: z.number().int().positive(),
+  email: z.string().email(),
+  role: z.enum(["admin", "judge", "sponsor", "staff", "participant"]),
   ticketToken: z.string().nullable(),
   badgeId: z.string().nullable(),
   revokedBadgeIds: z.array(z.string()),
   name: z.string().nullable(),
   surname: z.string().nullable(),
+  accepted: z.boolean(),
   confirmed: z.boolean(),
   intolerances: z.array(
     z.object({ id: z.number().int().positive(), label: z.record(z.string(), z.string()) }),

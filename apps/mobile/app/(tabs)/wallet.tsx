@@ -7,11 +7,14 @@ import QRCode from "react-native-qrcode-svg";
 import { ActionButton, EmptyState, Section, Separator } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SegmentedControl } from "@/components/segmented-control";
+import { StaleDataBanner } from "@/components/stale-data-banner";
 import { apiFetch } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
+import { useMeContext } from "@/lib/me-context";
 import { subscribeToServerEvent } from "@/lib/server-events";
+import { useCachedApi } from "@/lib/use-cached-api";
 import { colors } from "@/theme/colors";
 
 interface TicketPayload {
@@ -24,23 +27,19 @@ interface TicketPayload {
 export default function WalletScreen() {
   useColorScheme();
   const { t } = useLocale();
-  const [ticket, setTicket] = useState<TicketPayload | null>(null);
+  const { me } = useMeContext();
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState<Error | null>(null);
 
-  const load = useCallback(async () => {
-    setError(null);
-    try {
-      setTicket(await apiFetch<TicketPayload>("/api/me/ticket"));
-    } catch (cause) {
-      setError(cause instanceof Error ? cause : new Error("Failed to load wallet"));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const fetchTicket = useCallback(() => apiFetch<TicketPayload>("/api/me/ticket"), []);
+  const {
+    data: ticket,
+    loading,
+    error,
+    staleSince,
+    load,
+  } = useCachedApi(`user:${me?.id ?? "unknown"}:wallet`, fetchTicket);
 
   useEffect(() => {
     void load();
@@ -100,6 +99,7 @@ export default function WalletScreen() {
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{ gap: 20, padding: 16, paddingBottom: 32 }}
     >
+      <StaleDataBanner updatedAt={staleSince} />
       {error ? <RequestFeedback error={error} onRetry={() => void load()} /> : null}
       {actionError ? <RequestFeedback error={actionError} /> : null}
 

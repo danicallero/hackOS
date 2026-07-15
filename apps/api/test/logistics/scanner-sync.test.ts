@@ -88,6 +88,7 @@ describe("H22-H26 native scanner snapshot", () => {
         ticketToken,
         badgeId: "BADGE-NEW",
         revokedBadgeIds: ["BADGE-OLD"],
+        accepted: true,
         confirmed: true,
         foodIntoleranceNotes: "Severe",
       }),

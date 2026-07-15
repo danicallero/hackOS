@@ -244,3 +244,50 @@ export async function rotateBadge(
   await enqueueWalletSync(voidedPassIds);
   return result;
 }
+
+/** Remove an active accreditation while keeping the old badge permanently revoked and audited. */
+export async function removeBadge(actorId: number, input: { userId: number; reason: string }) {
+  let voidedPassIds: number[] = [];
+  const result = await withTransaction(async (client) => {
+    const found = await client.query(
+      `SELECT badge_id, badge_id_history FROM users WHERE id = $1 FOR UPDATE`,
+      [input.userId],
+    );
+    if (!found.rows[0]) throw new NotFoundError("User not found");
+    const oldBadge = (found.rows[0].badge_id ?? null) as string | null;
+    if (!oldBadge) throw new ConflictError("User has no active badge", { userId: input.userId });
+    const history = [...(found.rows[0].badge_id_history ?? []), oldBadge];
+    await client.query(`UPDATE users SET badge_id = NULL, badge_id_history = $1 WHERE id = $2`, [
+      history,
+      input.userId,
+    ]);
+    const voided = await client.query(
+      `UPDATE wallet_passes
+          SET status = 'voided', last_updated_at = now(), update_tag = extract(epoch from now())::text
+        WHERE user_id = $1 AND purpose = 'badge' AND status <> 'voided' RETURNING id`,
+      [input.userId],
+    );
+    voidedPassIds = voided.rows.map((row: { id: number }) => row.id);
+    await audit(client, {
+      actorId,
+      entityType: "badge",
+      entityId: input.userId,
+      action: "remove",
+      before: { badge_id: oldBadge },
+      after: { badge_id: null },
+      reason: input.reason,
+    });
+    return { userId: input.userId, oldBadge, voidedPasses: voidedPassIds.length };
+  });
+  await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_BADGE_ROTATED, result);
+  await broadcast(
+    `${SSE_TOPICS.USER_PREFIX}${result.userId}`,
+    EVENTS.LOGISTICS_WALLET_PASS_UPDATED,
+    {
+      purpose: "badge",
+      status: "voided",
+    },
+  );
+  await enqueueWalletSync(voidedPassIds);
+  return result;
+}

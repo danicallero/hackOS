@@ -19,10 +19,13 @@ async function db(): Promise<SQLite.SQLiteDatabase> {
         PRAGMA foreign_keys = ON;
         CREATE TABLE IF NOT EXISTS scanner_people (
           user_id INTEGER PRIMARY KEY,
+          email TEXT NOT NULL DEFAULT '',
+          role TEXT NOT NULL DEFAULT 'participant',
           ticket_token TEXT UNIQUE,
           badge_id TEXT UNIQUE,
           name TEXT,
           surname TEXT,
+          accepted INTEGER NOT NULL DEFAULT 0,
           confirmed INTEGER NOT NULL,
           intolerances_json TEXT NOT NULL,
           food_intolerance_notes TEXT,
@@ -56,13 +59,30 @@ async function db(): Promise<SQLite.SQLiteDatabase> {
         CREATE INDEX IF NOT EXISTS pending_scans_status ON pending_scans(status, created_at);
         CREATE TABLE IF NOT EXISTS scanner_metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
       `);
+      const personColumns = new Set(
+        (await opened.getAllAsync<{ name: string }>("PRAGMA table_info(scanner_people)")).map(
+          (column) => column.name,
+        ),
+      );
+      if (!personColumns.has("email"))
+        await opened.execAsync(
+          "ALTER TABLE scanner_people ADD COLUMN email TEXT NOT NULL DEFAULT ''",
+        );
+      if (!personColumns.has("role"))
+        await opened.execAsync(
+          "ALTER TABLE scanner_people ADD COLUMN role TEXT NOT NULL DEFAULT 'participant'",
+        );
+      if (!personColumns.has("accepted"))
+        await opened.execAsync(
+          "ALTER TABLE scanner_people ADD COLUMN accepted INTEGER NOT NULL DEFAULT 0",
+        );
       // Devices that synced before entitlements were removed still have the
       // old NOT NULL "entitled" column — drop it so inserts without that
       // value keep working.
-      const columns = await opened.getAllAsync<{ name: string }>(
+      const activityStateColumns = await opened.getAllAsync<{ name: string }>(
         `PRAGMA table_info(scanner_activity_states)`,
       );
-      if (columns.some((c) => c.name === "entitled")) {
+      if (activityStateColumns.some((c) => c.name === "entitled")) {
         await opened.execAsync(`
           ALTER TABLE scanner_activity_states RENAME TO scanner_activity_states_old;
           CREATE TABLE scanner_activity_states (
@@ -85,66 +105,68 @@ async function db(): Promise<SQLite.SQLiteDatabase> {
 export async function applyScannerSnapshot(snapshot: ScannerSnapshot): Promise<void> {
   const database = await db();
   await database.withTransactionAsync(async () => {
-    await database.execAsync(`
+    const statements = [
+      `
       DELETE FROM scanner_people;
       DELETE FROM revoked_badges;
       DELETE FROM scanner_activities;
       DELETE FROM scanner_activity_states;
-    `);
+    `,
+    ];
     for (const person of snapshot.people) {
-      await database.runAsync(
-        `INSERT INTO scanner_people
-          (user_id, ticket_token, badge_id, name, surname, confirmed, intolerances_json,
+      statements.push(`INSERT INTO scanner_people
+          (user_id, email, role, ticket_token, badge_id, name, surname, accepted, confirmed, intolerances_json,
            food_intolerance_notes, notes, last_presence_kind, last_presence_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        person.userId,
-        person.ticketToken,
-        person.badgeId,
-        person.name,
-        person.surname,
-        person.confirmed ? 1 : 0,
-        JSON.stringify(person.intolerances),
-        person.foodIntoleranceNotes,
-        person.notes,
-        person.lastPresenceKind,
-        person.lastPresenceAt,
-      );
+         VALUES (${sqlLiteral(person.userId)}, ${sqlLiteral(person.email ?? "")}, ${sqlLiteral(person.role ?? "participant")},
+                 ${sqlLiteral(person.ticketToken)},
+                 ${sqlLiteral(person.badgeId)}, ${sqlLiteral(person.name)},
+                 ${sqlLiteral(person.surname)}, ${sqlLiteral(person.accepted ?? person.confirmed)},
+                 ${sqlLiteral(person.confirmed)},
+                 ${sqlLiteral(JSON.stringify(person.intolerances))},
+                 ${sqlLiteral(person.foodIntoleranceNotes)}, ${sqlLiteral(person.notes)},
+                 ${sqlLiteral(person.lastPresenceKind)}, ${sqlLiteral(person.lastPresenceAt)});`);
     }
     for (const revoked of revokedBadgesFromSnapshot(snapshot)) {
-      await database.runAsync(`INSERT INTO revoked_badges (badge_id) VALUES (?)`, revoked);
+      statements.push(`INSERT INTO revoked_badges (badge_id) VALUES (${sqlLiteral(revoked)});`);
     }
     for (const activity of snapshot.activities) {
-      await database.runAsync(
-        `INSERT INTO scanner_activities (id, name, category, requires_scan) VALUES (?, ?, ?, ?)`,
-        activity.id,
-        activity.name,
-        activity.category,
-        activity.requiresScan ? 1 : 0,
-      );
+      statements.push(`INSERT INTO scanner_activities (id, name, category, requires_scan)
+        VALUES (${sqlLiteral(activity.id)}, ${sqlLiteral(activity.name)},
+                ${sqlLiteral(activity.category)}, ${sqlLiteral(activity.requiresScan)});`);
     }
     for (const state of snapshot.activityStates) {
-      await database.runAsync(
-        `INSERT INTO scanner_activity_states
-          (user_id, activity_id, scan_count) VALUES (?, ?, ?)`,
-        state.userId,
-        state.activityId,
-        state.count,
-      );
+      statements.push(`INSERT INTO scanner_activity_states
+        (user_id, activity_id, scan_count)
+        VALUES (${sqlLiteral(state.userId)}, ${sqlLiteral(state.activityId)},
+                ${sqlLiteral(state.count)});`);
     }
-    await database.runAsync(
-      `INSERT INTO scanner_metadata (key, value) VALUES ('last_sync', ?)
-       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-      snapshot.generatedAt,
-    );
+    statements.push(`INSERT INTO scanner_metadata (key, value)
+      VALUES ('last_sync', ${sqlLiteral(snapshot.generatedAt)})
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value;`);
+    await database.execAsync(statements.join("\n"));
   });
+}
+
+function sqlLiteral(value: string | number | boolean | Date | null): string {
+  if (value === null) return "NULL";
+  if (value instanceof Date) return sqlLiteral(value.toISOString());
+  if (typeof value === "boolean") return value ? "1" : "0";
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new TypeError("SQLite numbers must be finite");
+    return String(value);
+  }
+  return `'${value.replace(/'/g, "''")}'`;
 }
 
 type PersonRow = {
   user_id: number;
+  email: string;
+  role: ScannerPerson["role"];
   ticket_token: string | null;
   badge_id: string | null;
   name: string | null;
   surname: string | null;
+  accepted: number;
   confirmed: number;
   intolerances_json: string;
   food_intolerance_notes: string | null;
@@ -156,11 +178,14 @@ type PersonRow = {
 function personFromRow(row: PersonRow): ScannerPerson {
   return {
     userId: row.user_id,
+    email: row.email,
+    role: row.role,
     ticketToken: row.ticket_token,
     badgeId: row.badge_id,
     revokedBadgeIds: [],
     name: row.name,
     surname: row.surname,
+    accepted: row.accepted === 1,
     confirmed: row.confirmed === 1,
     intolerances: JSON.parse(row.intolerances_json),
     foodIntoleranceNotes: row.food_intolerance_notes,
@@ -178,20 +203,43 @@ export async function findPersonByTicket(ticketToken: string): Promise<ScannerPe
   return row ? personFromRow(row) : null;
 }
 
+export async function findPersonById(userId: number): Promise<ScannerPerson | null> {
+  const row = await (await db()).getFirstAsync<PersonRow>(
+    `SELECT * FROM scanner_people WHERE user_id = ?`,
+    userId,
+  );
+  return row ? personFromRow(row) : null;
+}
+
+export async function listScannerPeople(query = ""): Promise<ScannerPerson[]> {
+  const needle = query.trim().toLocaleLowerCase();
+  const rows = await (await db()).getAllAsync<PersonRow>(
+    needle
+      ? `SELECT * FROM scanner_people
+          WHERE lower(coalesce(name, '') || ' ' || coalesce(surname, '') || ' ' || email || ' ' || coalesce(badge_id, '')) LIKE ?
+          ORDER BY surname COLLATE NOCASE, name COLLATE NOCASE, user_id`
+      : `SELECT * FROM scanner_people
+          ORDER BY surname COLLATE NOCASE, name COLLATE NOCASE, user_id`,
+    ...(needle ? [`%${needle}%`] : []),
+  );
+  return rows.map(personFromRow);
+}
+
 export async function findPersonByBadge(
   badgeId: string,
 ): Promise<{ person: ScannerPerson | null; revoked: boolean }> {
   const database = await db();
+  const row = await database.getFirstAsync<PersonRow>(
+    `SELECT * FROM scanner_people WHERE badge_id = ?`,
+    badgeId,
+  );
+  if (row) return { person: personFromRow(row), revoked: false };
   const revoked = await database.getFirstAsync<{ badge_id: string }>(
     `SELECT badge_id FROM revoked_badges WHERE badge_id = ?`,
     badgeId,
   );
   if (revoked) return { person: null, revoked: true };
-  const row = await database.getFirstAsync<PersonRow>(
-    `SELECT * FROM scanner_people WHERE badge_id = ?`,
-    badgeId,
-  );
-  return { person: row ? personFromRow(row) : null, revoked: false };
+  return { person: null, revoked: false };
 }
 
 export async function listScannerActivities(): Promise<ScannerActivity[]> {
@@ -257,6 +305,15 @@ export async function enqueueLocalScan(payload: ScanPayload): Promise<string> {
       await database.runAsync(
         `UPDATE scanner_people SET badge_id = ? WHERE user_id = ?`,
         payload.newBadgeId,
+        payload.userId,
+      );
+    } else if (payload.kind === "badge_removal") {
+      await database.runAsync(
+        `INSERT OR IGNORE INTO revoked_badges (badge_id) VALUES (?)`,
+        payload.currentBadgeId,
+      );
+      await database.runAsync(
+        `UPDATE scanner_people SET badge_id = NULL WHERE user_id = ?`,
         payload.userId,
       );
     } else if (payload.kind === "presence") {
@@ -331,6 +388,12 @@ export async function acknowledgeScan(id: string, payload: ScanPayload): Promise
         `UPDATE scanner_people SET badge_id = ? WHERE ticket_token = ?`,
         payload.badgeId,
         payload.ticketToken,
+      );
+    } else if (payload.kind === "accreditation_user") {
+      await database.runAsync(
+        `UPDATE scanner_people SET badge_id = ? WHERE user_id = ?`,
+        payload.badgeId,
+        payload.userId,
       );
     }
   });

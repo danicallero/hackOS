@@ -2,9 +2,18 @@ import type { PendingScan, ScannerPerson } from "./scanner-types";
 
 /** Complete replace-all revocation set installed by each successful sync (H23). */
 export function revokedBadgesFromSnapshot(snapshot: {
-  people: Array<Pick<ScannerPerson, "revokedBadgeIds">>;
+  people: Array<Pick<ScannerPerson, "badgeId" | "revokedBadgeIds">>;
 }): string[] {
-  return [...new Set(snapshot.people.flatMap((person) => person.revokedBadgeIds))];
+  const active = new Set(
+    snapshot.people.flatMap((person) => (person.badgeId ? [person.badgeId] : [])),
+  );
+  const revoked = new Set<string>();
+  for (const person of snapshot.people) {
+    for (const badgeId of person.revokedBadgeIds) {
+      if (!active.has(badgeId)) revoked.add(badgeId);
+    }
+  }
+  return [...revoked];
 }
 
 export function requestForPendingScan(scan: PendingScan): {
@@ -21,6 +30,13 @@ export function requestForPendingScan(scan: PendingScan): {
       body: { ticketToken: payload.ticketToken, badgeId: payload.badgeId, method: payload.method },
     };
   }
+  if (payload.kind === "accreditation_user") {
+    return {
+      path: "/api/accreditation/check-in-user",
+      headers,
+      body: { userId: payload.userId, badgeId: payload.badgeId, method: payload.method },
+    };
+  }
   if (payload.kind === "badge_rotation") {
     return {
       path: "/api/accreditation/rotate",
@@ -31,6 +47,13 @@ export function requestForPendingScan(scan: PendingScan): {
         newBadgeId: payload.newBadgeId,
         reason: payload.reason,
       },
+    };
+  }
+  if (payload.kind === "badge_removal") {
+    return {
+      path: "/api/accreditation/remove",
+      headers,
+      body: { userId: payload.userId, reason: payload.reason },
     };
   }
   if (payload.kind === "presence") {
