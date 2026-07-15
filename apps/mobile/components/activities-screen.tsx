@@ -1,6 +1,6 @@
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { FlatList, Pressable, RefreshControl, Text, useColorScheme, View } from "react-native";
 
 import { EmptyState, StatusPill } from "@/components/native-ui";
@@ -16,6 +16,7 @@ export function ActivitiesScreen() {
   const { t } = useLocale();
   const sync = useScannerSync();
   const [items, setItems] = useState<ScannerActivity[]>([]);
+  const listRef = useRef<FlatList<ScannerActivity>>(null);
   const load = useCallback(
     async () =>
       setItems(
@@ -32,8 +33,19 @@ export function ActivitiesScreen() {
     if (sync.lastSync) void load();
   }, [load, sync.lastSync]);
 
+  // Forces the FlatList back to the top on focus so the native large-title
+  // header re-syncs its collapsed/expanded state with the actual scroll
+  // offset — otherwise returning from a pushed screen can leave the header
+  // (and therefore the list start) stuck lower than it should be.
+  useFocusEffect(
+    useCallback(() => {
+      listRef.current?.scrollToOffset({ offset: 0, animated: false });
+    }, []),
+  );
+
   return (
     <FlatList
+      ref={listRef}
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{ flexGrow: 1, padding: 16, paddingBottom: 32 }}
       data={items}
@@ -83,7 +95,7 @@ export function ActivitiesScreen() {
             }}
           >
             <SymbolView
-              name={item.category === "meal" ? "fork.knife" : "figure.walk"}
+              name={item.category === "meal" ? "fork.knife" : "list.bullet.rectangle"}
               tintColor={colors.accent}
               size={22}
             />
