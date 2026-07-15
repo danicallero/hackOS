@@ -4,11 +4,12 @@ import { useEffect } from "react";
 import { ScrollView, Text, useColorScheme, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { EmptyState, FloatingBackButton } from "@/components/native-ui";
+import { EmptyState, FloatingBackButton, FloatingGlassButton } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { useLocale } from "@/lib/i18n";
 import { fetchPublicSchedule } from "@/lib/schedule";
+import { useActivityReminders } from "@/lib/use-activity-reminders";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { colors } from "@/theme/colors";
 
@@ -19,12 +20,15 @@ export default function ScheduleDetailScreen() {
   const insets = useSafeAreaInsets();
   const { t, language } = useLocale();
   const { data, loading, error, staleSince, load } = useCachedApi("schedule", fetchPublicSchedule);
+  const reminders = useActivityReminders();
 
   useEffect(() => {
     void load();
-  }, [load]);
+    void reminders.load();
+  }, [load, reminders.load]);
 
   const item = data?.find((candidate) => String(candidate.id) === id) ?? null;
+  const reminderOn = item && reminders.ready ? reminders.isEnabled(item.id) : null;
   const startsAt = item ? new Date(item.startsAt) : null;
   const endsAt = item ? new Date(item.endsAt) : null;
   const date = startsAt?.toLocaleDateString(language, {
@@ -46,7 +50,7 @@ export default function ScheduleDetailScreen() {
           gap: 16,
           padding: 20,
           paddingBottom: 40,
-          paddingTop: insets.top + 68,
+          paddingTop: insets.top + 56,
         }}
         style={{ backgroundColor: colors.background }}
       >
@@ -121,14 +125,41 @@ export default function ScheduleDetailScreen() {
             </View>
 
             {item.description ? (
-              <Text selectable style={{ color: colors.label, fontSize: 16, lineHeight: 24 }}>
-                {item.description}
-              </Text>
+              <View style={{ gap: 6 }}>
+                <Text
+                  style={{
+                    color: colors.secondaryLabel,
+                    fontSize: 12,
+                    fontWeight: "700",
+                    letterSpacing: 0.4,
+                    textTransform: "uppercase",
+                  }}
+                >
+                  {t("scheduleDescription")}
+                </Text>
+                <Text selectable style={{ color: colors.label, fontSize: 16, lineHeight: 24 }}>
+                  {item.description}
+                </Text>
+              </View>
             ) : null}
           </View>
         )}
       </ScrollView>
       <FloatingBackButton top={insets.top + 12} onPress={() => router.back()} />
+      {item && reminderOn !== null ? (
+        <FloatingGlassButton
+          top={insets.top + 12}
+          side="right"
+          icon={reminderOn ? "bell.fill" : "bell"}
+          tintColor={reminderOn ? colors.accent : colors.label}
+          accessibilityLabel={t(reminderOn ? "scheduleReminderOn" : "scheduleReminderOff", {
+            name: item.title,
+          })}
+          accessibilityState={{ selected: reminderOn, busy: reminders.savingId === item.id }}
+          disabled={reminders.savingId === item.id}
+          onPress={() => void reminders.toggle(item.id, !reminderOn)}
+        />
+      ) : null}
     </>
   );
 }
