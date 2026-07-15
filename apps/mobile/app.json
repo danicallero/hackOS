@@ -59,7 +59,8 @@
         }
       ],
       "expo-sqlite",
-      "expo-sharing"
+      "expo-sharing",
+      "./plugins/withStripDsymPaths.js"
     ],
     "experiments": {
       "typedRoutes": true
