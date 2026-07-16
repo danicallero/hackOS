@@ -1,16 +1,18 @@
 "use client";
 
-import { IdCardIcon, TicketIcon, WalletCardsIcon } from "lucide-react";
+import { IdCardIcon, TicketIcon, UserIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { QrCode } from "@/components/common/qr-code";
 import { SectionCard } from "@/components/common/section-card";
-import { StatusBadge } from "@/components/common/status-badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { API_URL } from "@/lib/env";
-import { useLocale } from "@/lib/i18n";
+import { type Translate, useLocale } from "@/lib/i18n";
 import { logisticsApi, type TicketQrPayload } from "@/lib/logistics";
 import { useMe } from "@/lib/session";
+import type { Me } from "@/lib/types";
 
 /**
  * Apple only ships this badge for "es" and "en_US/en_GB" locales; "gl" falls
@@ -37,10 +39,13 @@ const GOOGLE_WALLET_BUTTON_BY_LOCALE: Record<string, string> = {
   en: "/wallet-badges/google-wallet-button-en.svg",
 };
 
+type Purpose = "ticket" | "badge";
+
 export default function WalletPage() {
   const me = useMe();
   const { t } = useLocale();
   const [payload, setPayload] = useState<TicketQrPayload | null>(null);
+  const [purpose, setPurpose] = useState<Purpose>("ticket");
 
   useEffect(() => {
     logisticsApi
@@ -53,50 +58,92 @@ export default function WalletPage() {
     <div className="space-y-6">
       <PageHeader title={t("wallet")} />
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <WalletPassCard
-          icon={TicketIcon}
-          title={t("entranceTicket")}
-          purpose="ticket"
-          status={t("availableAfterConfirmation")}
-        />
-        <WalletPassCard
-          icon={IdCardIcon}
-          title={t("badge")}
-          purpose="badge"
-          status={me?.badgeId ? `${t("badge")} ${me.badgeId}` : t("badgeNotAssigned")}
-          disabled={!me?.badgeId}
-        />
-      </div>
+      <Tabs value={purpose} onValueChange={(value) => setPurpose(value as Purpose)}>
+        <TabsList>
+          <TabsTrigger value="ticket">{t("entranceTicket")}</TabsTrigger>
+          <TabsTrigger value="badge">{t("badge")}</TabsTrigger>
+        </TabsList>
+        <TabsContent value="ticket" className="space-y-6 pt-4">
+          <WalletPurposePanel purpose="ticket" value={payload?.ticketToken} />
+        </TabsContent>
+        <TabsContent value="badge" className="space-y-6 pt-4">
+          <WalletPurposePanel purpose="badge" value={payload?.badgeId} />
+        </TabsContent>
+      </Tabs>
 
-      <SectionCard
-        title={t("qrCodes")}
-        icon={WalletCardsIcon}
-        bodyClassName="grid gap-4 md:grid-cols-2"
-      >
-        <QrCode value={payload?.ticketToken} label={t("entranceTicket")} />
-        <QrCode value={payload?.badgeId} label={t("currentBadge")} />
-      </SectionCard>
+      {me ? (
+        <SectionCard title={t("walletHolder")} icon={UserIcon}>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label={t("walletHolderName")}
+              value={[me.name, me.surname].filter(Boolean).join(" ") || me.email}
+            />
+            <Field label={t("walletHolderRole")} value={roleLabel(t)[me.role]} />
+          </div>
+        </SectionCard>
+      ) : null}
     </div>
   );
 }
 
-function WalletPassCard({
-  icon,
-  title,
-  description,
-  purpose,
-  status,
-  disabled,
-}: {
-  icon: typeof TicketIcon;
-  title: string;
-  description?: string;
-  purpose: "ticket" | "badge";
-  status: string;
-  disabled?: boolean;
-}) {
+function Field({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="space-y-1">
+      <p className="text-muted-foreground text-xs">{label}</p>
+      <p className="text-sm font-medium">{value}</p>
+    </div>
+  );
+}
+
+function roleLabel(t: Translate): Record<Me["role"], string> {
+  return {
+    admin: t("roleAdmin"),
+    judge: t("roleJudge"),
+    sponsor: t("roleSponsor"),
+    staff: t("roleStaff"),
+    participant: t("roleParticipant"),
+  };
+}
+
+function WalletPurposePanel({ purpose, value }: { purpose: Purpose; value?: string | null }) {
+  const { t } = useLocale();
+  const icon = purpose === "ticket" ? TicketIcon : IdCardIcon;
+  const label = purpose === "ticket" ? t("entranceTicket") : t("badge");
+
+  if (!value) {
+    return (
+      <EmptyState
+        icon={icon}
+        title={purpose === "ticket" ? t("ticketNotReadyTitle") : t("badgeNotReadyTitle")}
+        description={purpose === "ticket" ? t("noTicketYet") : t("noBadgeYet")}
+      />
+    );
+  }
+
   const Icon = icon;
+  return (
+    <>
+      <div className="flex flex-col items-center gap-4 rounded-xl border bg-card py-10 text-center">
+        <Icon className="text-muted-foreground size-7" />
+        <div className="space-y-1">
+          <p className="text-xl font-semibold">{label}</p>
+          <p className="text-muted-foreground text-sm">{t("walletScanHint")}</p>
+        </div>
+        <QrCode
+          value={value}
+          label={purpose === "ticket" ? t("entranceTicket") : t("currentBadge")}
+          className="border-none"
+        />
+      </div>
+
+      <SectionCard title={t("walletAddPass")} description={t("walletAddPassHint")}>
+        <WalletButtons purpose={purpose} />
+      </SectionCard>
+    </>
+  );
+}
+
+function WalletButtons({ purpose }: { purpose: Purpose }) {
   const { t, language } = useLocale();
   const appleBadgeSrc = APPLE_WALLET_BADGE_BY_LOCALE[language] ?? APPLE_WALLET_BADGE_BY_LOCALE.en;
   const googleButtonSrc =
@@ -116,49 +163,37 @@ function WalletPassCard({
   }
 
   return (
-    <SectionCard
-      title={title}
-      description={description}
-      icon={Icon}
-      action={
-        <StatusBadge tone={disabled ? "neutral" : "success"} dot={false}>
-          {status}
-        </StatusBadge>
-      }
-    >
-      <div className="flex flex-wrap items-center gap-3">
-        {/*
-          Apple's Add to Apple Wallet guidelines require the unmodified
-          official badge artwork (no custom button, no recoloring) shown on
-          a light background, kept secondary to the surrounding content.
-        */}
-        <button
-          type="button"
-          className="inline-flex w-fit rounded-md bg-white p-1.5 disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={disabled}
-          onClick={() => window.open(`${API_URL}/api/me/wallet/apple/${purpose}.pkpass`, "_blank")}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element -- official Apple badge, must not be re-processed by next/image */}
-          {/* biome-ignore lint/performance/noImgElement: official Apple badge, must not be re-processed by next/image */}
-          <img src={appleBadgeSrc} alt={t("addToAppleWallet")} className="h-12 w-auto" />
-        </button>
+    <div className="flex flex-wrap items-center gap-3">
+      {/*
+        Apple's Add to Apple Wallet guidelines require the unmodified
+        official badge artwork (no custom button, no recoloring) shown on a
+        light background, kept secondary to the surrounding content.
+      */}
+      <button
+        type="button"
+        className="inline-flex w-fit rounded-md bg-white p-1.5"
+        onClick={() => window.open(`${API_URL}/api/me/wallet/apple/${purpose}.pkpass`, "_blank")}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element -- official Apple badge, must not be re-processed by next/image */}
+        {/* biome-ignore lint/performance/noImgElement: official Apple badge, must not be re-processed by next/image */}
+        <img src={appleBadgeSrc} alt={t("addToAppleWallet")} className="h-12 w-auto" />
+      </button>
 
-        {/*
-          Google's Add to Google Wallet brand guidelines require the
-          unmodified official button asset (min 48dp tall, no recoloring, no
-          custom button) and that it call a real Google Wallet save flow.
-        */}
-        <button
-          type="button"
-          className="inline-flex w-fit rounded-md disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={disabled || googleLoading}
-          onClick={() => void openGoogleWallet()}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element -- official Google button, must not be re-processed by next/image */}
-          {/* biome-ignore lint/performance/noImgElement: official Google button, must not be re-processed by next/image */}
-          <img src={googleButtonSrc} alt={t("addToGoogleWallet")} className="h-12 w-auto" />
-        </button>
-      </div>
-    </SectionCard>
+      {/*
+        Google's Add to Google Wallet brand guidelines require the
+        unmodified official button asset (min 48dp tall, no recoloring, no
+        custom button) and that it call a real Google Wallet save flow.
+      */}
+      <button
+        type="button"
+        className="inline-flex w-fit rounded-md disabled:cursor-not-allowed disabled:opacity-50"
+        disabled={googleLoading}
+        onClick={() => void openGoogleWallet()}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element -- official Google button, must not be re-processed by next/image */}
+        {/* biome-ignore lint/performance/noImgElement: official Google button, must not be re-processed by next/image */}
+        <img src={googleButtonSrc} alt={t("addToGoogleWallet")} className="h-12 w-auto" />
+      </button>
+    </div>
   );
 }
