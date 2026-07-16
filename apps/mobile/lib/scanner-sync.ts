@@ -34,6 +34,14 @@ export async function replayPendingScans(): Promise<void> {
         await noteRetryableError(scan.id, error.message);
         break;
       }
+      // Auth hiccups (expired session) and throttling are NOT verdicts on the
+      // scan: failing them permanently silently loses every queued meal,
+      // activity and presence log until someone finds the retry button. Only
+      // genuine business rejections (400/404/409…) are final.
+      if (error instanceof ApiError && [401, 403, 408, 429].includes(error.status)) {
+        await noteRetryableError(scan.id, error.message);
+        break;
+      }
       if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
         await failScan(scan.id, error.message);
         continue;

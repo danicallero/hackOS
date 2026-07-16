@@ -3,7 +3,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import { useCallback, useEffect, useState } from "react";
-import { Alert, ScrollView, Text, useColorScheme, View } from "react-native";
+import { Alert, Pressable, ScrollView, Text, useColorScheme, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
@@ -16,11 +16,15 @@ import {
 } from "@/components/native-ui";
 import { PresenceManagement } from "@/components/presence-management";
 import { QrCamera } from "@/components/QrCamera";
-import { SegmentedControl } from "@/components/segmented-control";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
-import { enqueueLocalScan, findPersonById, findPersonByTicket } from "@/lib/scanner-db";
+import {
+  enqueueLocalScan,
+  findPersonById,
+  findPersonByTicket,
+  pendingScans,
+} from "@/lib/scanner-db";
 import type { ScannerPerson } from "@/lib/scanner-types";
 import { useScannerSync } from "@/lib/use-scanner";
 import { colors } from "@/theme/colors";
@@ -47,10 +51,15 @@ export function PersonOperationsScreen() {
   const canPresence = admin || capabilities.has(CAPABILITIES.PRESENCE_SCAN);
   const [person, setPerson] = useState<PersonDetails | null>(null);
   const [cameraAction, setCameraAction] = useState<"assign" | "replace" | null>(null);
-  const [direction, setDirection] = useState<"in" | "out">("in");
   const [scannedAt, setScannedAt] = useState(new Date());
   const [busy, setBusy] = useState(false);
-
+  // Server-side last door log, reported by the presence timeline below —
+  // the local snapshot alone can lag behind manual edits or other devices.
+  const [serverDoor, setServerDoor] = useState<{ kind: "in" | "out"; at: string } | null>(null);
+  const onDoorState = useCallback(
+    (state: { kind: "in" | "out"; at: string } | null) => setServerDoor(state),
+    [],
+  );
   const load = useCallback(async () => {
     const local = await findPersonById(userId);
     if (!local) return;
@@ -69,9 +78,13 @@ export function PersonOperationsScreen() {
     }
   }, [canAccredit, userId]);
 
+  // Reload on every scanner sync: the register derives its direction from
+  // the person's last door log, which door scans on other devices (or manual
+  // timeline edits) change under us.
   useEffect(() => {
+    void sync.lastSync;
     void load();
-  }, [load]);
+  }, [load, sync.lastSync]);
 
   async function saveBadge(nextBadge: string) {
     if (!person) return;
@@ -145,19 +158,37 @@ export function PersonOperationsScreen() {
     ]);
   }
 
-  async function registerPresence() {
+  async function registerPresence(direction: "in" | "out") {
     if (!person?.badgeId) return;
     setBusy(true);
-    await enqueueLocalScan({
-      kind: "presence",
-      badgeId: person.badgeId,
-      direction,
-      scannedAt: scannedAt.toISOString(),
-    });
-    setPerson({ ...person, lastPresenceKind: direction, lastPresenceAt: scannedAt.toISOString() });
-    await sync.sync();
-    await load();
-    setBusy(false);
+    try {
+      const scanId = await enqueueLocalScan({
+        kind: "presence",
+        badgeId: person.badgeId,
+        direction,
+        scannedAt: scannedAt.toISOString(),
+      });
+      await sync.sync();
+      // The offline queue fails 4xx replays permanently (e.g. an entry while
+      // a session is already open) — without this check the rejection is
+      // invisible and the log just never appears.
+      const stored = (await pendingScans()).find((scan) => scan.id === scanId);
+      if (stored?.status === "failed") {
+        Alert.alert(
+          t("presenceScanRejectedTitle"),
+          stored.lastError ?? t("presenceScanRejectedBody"),
+        );
+      } else {
+        setPerson({
+          ...person,
+          lastPresenceKind: direction,
+          lastPresenceAt: scannedAt.toISOString(),
+        });
+      }
+      await load();
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (cameraAction) {
@@ -189,6 +220,142 @@ export function PersonOperationsScreen() {
   const fullName =
     [person.name, person.surname].filter(Boolean).join(" ") ||
     t("personFallbackName", { id: String(userId) });
+
+  // Only one door movement is ever valid, so only that button is shown.
+  // Whichever door signal is newest wins: the server timeline (manual edits,
+  // other devices) vs the local snapshot/queue (this device, maybe offline).
+  const serverAt = serverDoor ? Date.parse(serverDoor.at) : Number.NEGATIVE_INFINITY;
+  const localAt = person.lastPresenceAt
+    ? Date.parse(person.lastPresenceAt)
+    : Number.NEGATIVE_INFINITY;
+  const lastDoorKind =
+    serverAt >= localAt ? (serverDoor?.kind ?? person.lastPresenceKind) : person.lastPresenceKind;
+  const direction: "in" | "out" = lastDoorKind === "in" ? "out" : "in";
+
+  const accreditationSection = canAccredit ? (
+    <Section title={t("scannerAccreditation")}>
+      <InfoRow
+        label={t("personCurrentBadge")}
+        value={person.badgeId ?? t("personUnassigned")}
+        icon="key.card"
+      />
+      <Separator />
+      {person.badgeId ? (
+        <View style={{ flexDirection: "row" }}>
+          <ActionButton
+            icon="qrcode.viewfinder"
+            label={t("personReplaceBadge")}
+            onPress={beginBadgeAction}
+            style={{ flex: 1 }}
+          />
+          <View style={{ backgroundColor: colors.separator, width: 0.5 }} />
+          <ActionButton
+            destructive
+            icon="trash"
+            label={t("personDeleteBadge")}
+            onPress={confirmRemoveBadge}
+            style={{ flex: 1 }}
+          />
+        </View>
+      ) : (
+        <ActionButton
+          icon="qrcode.viewfinder"
+          label={t("personLinkBadge")}
+          onPress={beginBadgeAction}
+        />
+      )}
+    </Section>
+  ) : null;
+
+  // Door logging needs a badge: without one the register is hidden entirely
+  // and assigning a badge becomes the profile's primary action instead.
+  const registerButton = (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={direction === "in" ? t("personRegisterEntry") : t("personRegisterExit")}
+      accessibilityState={{ busy, disabled: busy }}
+      disabled={busy}
+      onPress={() => void registerPresence(direction)}
+      style={({ pressed }) => ({
+        alignItems: "center",
+        backgroundColor: direction === "in" ? colors.accentSurface : colors.warningSurface,
+        borderCurve: "continuous",
+        borderRadius: 22,
+        flexDirection: "row",
+        gap: 7,
+        height: 44,
+        justifyContent: "center",
+        opacity: busy ? 0.45 : pressed ? 0.6 : 1,
+        paddingHorizontal: 16,
+      })}
+    >
+      <SymbolView
+        name={direction === "in" ? "arrow.right.to.line" : "arrow.left.to.line"}
+        tintColor={direction === "in" ? colors.accent : colors.warning}
+        size={17}
+        weight="semibold"
+      />
+      <Text
+        style={{
+          color: direction === "in" ? colors.accent : colors.warning,
+          fontSize: 16,
+          fontWeight: "600",
+        }}
+      >
+        {direction === "in" ? t("scannerIn") : t("scannerOut")}
+      </Text>
+    </Pressable>
+  );
+
+  const presenceRegisterSection =
+    canPresence && person.badgeId ? (
+      <Section title={t("personPresenceTitle")}>
+        <View
+          style={{
+            alignItems: "center",
+            flexDirection: "row",
+            gap: 12,
+            padding: 16,
+          }}
+        >
+          {process.env.EXPO_OS === "android" ? (
+            <View style={{ flex: 1, flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+              <DateTimePicker
+                value={scannedAt}
+                mode="date"
+                maximumDate={new Date()}
+                onValueChange={(_, date) => {
+                  if (!date) return;
+                  date.setHours(scannedAt.getHours(), scannedAt.getMinutes());
+                  setScannedAt(date);
+                }}
+              />
+              <DateTimePicker
+                value={scannedAt}
+                mode="time"
+                onValueChange={(_, date) => {
+                  if (!date) return;
+                  const next = new Date(scannedAt);
+                  next.setHours(date.getHours(), date.getMinutes());
+                  setScannedAt(next);
+                }}
+              />
+            </View>
+          ) : (
+            <View style={{ alignItems: "flex-start", flex: 1 }}>
+              <DateTimePicker
+                value={scannedAt}
+                mode="datetime"
+                maximumDate={new Date()}
+                onValueChange={(_, date) => date && setScannedAt(date)}
+              />
+            </View>
+          )}
+          {registerButton}
+        </View>
+      </Section>
+    ) : null;
+
   return (
     <>
       <ScrollView
@@ -253,56 +420,27 @@ export function PersonOperationsScreen() {
           <InfoRow label={t("personShirt")} value={person.shirtSize ?? "—"} icon="tshirt" />
         </Section>
 
-        {canAccredit ? (
-          <Section title={t("scannerAccreditation")}>
-            <InfoRow
-              label={t("personCurrentBadge")}
-              value={person.badgeId ?? t("personUnassigned")}
-              icon="key.card"
-            />
-            <Separator />
-            <ActionButton
-              icon="qrcode.viewfinder"
-              label={person.badgeId ? t("personReplaceBadge") : t("personLinkBadge")}
-              onPress={beginBadgeAction}
-            />
-            {person.badgeId ? (
-              <>
-                <Separator />
-                <ActionButton
-                  destructive
-                  icon="trash"
-                  label={t("personDeleteBadge")}
-                  onPress={confirmRemoveBadge}
-                />
-              </>
-            ) : null}
-          </Section>
-        ) : null}
+        {/* Personal details always lead; then the movement register (badge
+            holders) or badge assignment (everyone else), then the rest. */}
+        {person.badgeId ? presenceRegisterSection : null}
+        {accreditationSection}
 
         {person.intolerances.length > 0 || person.foodIntoleranceNotes || person.notes ? (
           <Section title={t("personImportantInfo")}>
-            {person.intolerances.map((item, index) => (
-              <View key={item.id}>
-                <InfoRow
-                  label={t("personFoodRestriction")}
-                  value={item.label[language] ?? item.label.en ?? String(item.id)}
-                  icon="exclamationmark.triangle.fill"
-                  valueStyle={{ color: colors.warning, fontWeight: "600" }}
-                />
-                {index < person.intolerances.length - 1 ||
-                person.foodIntoleranceNotes ||
-                person.notes ? (
-                  <Separator />
-                ) : null}
-              </View>
-            ))}
-            {person.foodIntoleranceNotes ? (
+            {person.intolerances.length > 0 || person.foodIntoleranceNotes ? (
               <>
                 <InfoRow
-                  label={t("personFoodNotes")}
-                  value={person.foodIntoleranceNotes}
-                  icon="fork.knife"
+                  label={t("personFoodRestrictions")}
+                  value={[
+                    ...person.intolerances.map(
+                      (item) => item.label[language] ?? item.label.en ?? String(item.id),
+                    ),
+                    person.foodIntoleranceNotes,
+                  ]
+                    .filter(Boolean)
+                    .join(", ")}
+                  icon="exclamationmark.triangle.fill"
+                  valueStyle={{ color: colors.warning, fontWeight: "600" }}
                 />
                 {person.notes ? <Separator /> : null}
               </>
@@ -314,59 +452,11 @@ export function PersonOperationsScreen() {
         ) : null}
 
         {canPresence ? (
-          <Section title={t("personPresenceTitle")} footer={t("personPresenceFooter")}>
-            <View style={{ gap: 14, padding: 16 }}>
-              <SegmentedControl
-                label={t("personMovement")}
-                values={[t("scannerIn"), t("scannerOut")]}
-                selectedIndex={direction === "in" ? 0 : 1}
-                onChange={(index) => setDirection(index === 0 ? "in" : "out")}
-              />
-              {process.env.EXPO_OS === "android" ? (
-                <>
-                  <DateTimePicker
-                    value={scannedAt}
-                    mode="date"
-                    maximumDate={new Date()}
-                    onChange={(_, date) => {
-                      if (!date) return;
-                      date.setHours(scannedAt.getHours(), scannedAt.getMinutes());
-                      setScannedAt(date);
-                    }}
-                  />
-                  <DateTimePicker
-                    value={scannedAt}
-                    mode="time"
-                    onChange={(_, date) => {
-                      if (!date) return;
-                      const next = new Date(scannedAt);
-                      next.setHours(date.getHours(), date.getMinutes());
-                      setScannedAt(next);
-                    }}
-                  />
-                </>
-              ) : (
-                <DateTimePicker
-                  value={scannedAt}
-                  mode="datetime"
-                  maximumDate={new Date()}
-                  onChange={(_, date) => date && setScannedAt(date)}
-                />
-              )}
-            </View>
-            <Separator />
-            <ActionButton
-              busy={busy}
-              disabled={!person.badgeId}
-              icon={direction === "in" ? "arrow.right.to.line" : "arrow.left.to.line"}
-              label={direction === "in" ? t("personRegisterEntry") : t("personRegisterExit")}
-              onPress={() => void registerPresence()}
-            />
-          </Section>
-        ) : null}
-
-        {canPresence ? (
-          <PresenceManagement refreshKey={sync.lastSync ?? undefined} userId={userId} />
+          <PresenceManagement
+            onDoorState={onDoorState}
+            refreshKey={sync.lastSync ?? undefined}
+            userId={userId}
+          />
         ) : null}
       </ScrollView>
       <FloatingBackButton top={insets.top + 12} onPress={() => router.back()} />
