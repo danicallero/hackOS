@@ -739,10 +739,10 @@ const dict = {
     es: "Información importante",
     gl: "Información importante",
   },
-  personFoodRestriction: {
-    en: "Dietary restriction",
-    es: "Restricción alimentaria",
-    gl: "Restrición alimentaria",
+  personFoodRestrictions: {
+    en: "Dietary restrictions",
+    es: "Restricciones alimentarias",
+    gl: "Restricións alimentarias",
   },
   personFoodNotes: { en: "Dietary notes", es: "Notas alimentarias", gl: "Notas alimentarias" },
   personNotes: { en: "Notes", es: "Notas", gl: "Notas" },
@@ -750,11 +750,6 @@ const dict = {
     en: "Entries and exits",
     es: "Entradas y salidas",
     gl: "Entradas e saídas",
-  },
-  personPresenceFooter: {
-    en: "Register the movement now or choose an earlier date and time.",
-    es: "Puedes registrar el movimiento ahora o elegir una fecha y hora anterior.",
-    gl: "Podes rexistrar o movemento agora ou escoller unha data e hora anterior.",
   },
   personMovement: { en: "Movement", es: "Movimiento", gl: "Movemento" },
   personRegisterEntry: {
@@ -765,22 +760,30 @@ const dict = {
   personRegisterExit: { en: "Register exit", es: "Registrar salida", gl: "Rexistrar saída" },
   edit: { en: "Edit", es: "Editar", gl: "Editar" },
   presenceSummary: { en: "Presence summary", es: "Resumen de presencia", gl: "Resumo de presenza" },
-  presenceComputedHours: {
-    en: "Computed presence",
-    es: "Presencia computada",
-    gl: "Presenza computada",
+  presenceGuaranteedHours: {
+    en: "Guaranteed presence",
+    es: "Presencia garantizada",
+    gl: "Presenza garantida",
   },
-  presenceHoursValue: { en: "{hours} h", es: "{hours} h", gl: "{hours} h" },
+  presenceProvisionalHours: {
+    en: "Provisional presence",
+    es: "Presencia provisional",
+    gl: "Presenza provisional",
+  },
   presenceCertaintyWindow: {
     en: "Certainty window",
     es: "Ventana de certeza",
     gl: "Xanela de certeza",
   },
-  presenceWindows: { en: "Certainty windows", es: "Ventanas de certeza", gl: "Xanelas de certeza" },
-  presenceWindowsFooter: {
-    en: "Each entry or activity opens a new window. A later activity or exit secures the elapsed time.",
-    es: "Cada entrada o actividad abre una ventana. Una actividad o salida posterior asegura el tiempo transcurrido.",
-    gl: "Cada entrada ou actividade abre unha xanela. Unha actividade ou saída posterior asegura o tempo transcorrido.",
+  presenceTimeline: {
+    en: "Presence timeline",
+    es: "Cronología de presencia",
+    gl: "Cronoloxía de presenza",
+  },
+  presenceTimelineFooter: {
+    en: "Each entry or activity opens a certainty window; a later activity or exit secures the elapsed time. Points can be corrected manually.",
+    es: "Cada entrada o actividad abre una ventana de certeza; una actividad o salida posterior asegura el tiempo transcurrido. Los puntos se pueden corregir manualmente.",
+    gl: "Cada entrada ou actividade abre unha xanela de certeza; unha actividade ou saída posterior asegura o tempo transcorrido. Os puntos pódense corrixir manualmente.",
   },
   presenceCouldNotLoad: {
     en: "The presence timeline couldn't be loaded.",
@@ -805,12 +808,6 @@ const dict = {
     en: "{duration} secured",
     es: "{duration} aseguradas",
     gl: "{duration} aseguradas",
-  },
-  presenceSignals: { en: "Presence points", es: "Puntos de presencia", gl: "Puntos de presenza" },
-  presenceSignalsFooter: {
-    en: "Entries, exits, activities and meals can be corrected manually.",
-    es: "Las entradas, salidas, actividades y comidas se pueden corregir manualmente.",
-    gl: "As entradas, saídas, actividades e comidas pódense corrixir manualmente.",
   },
   presenceAddSignal: {
     en: "Add presence point",
@@ -856,6 +853,21 @@ const dict = {
     gl: "Rexistrado automaticamente",
   },
   presenceConflict: { en: "Conflict", es: "Conflicto", gl: "Conflito" },
+  presenceChooseActivity: {
+    en: "Choose an activity",
+    es: "Elige una actividad",
+    gl: "Escolle unha actividade",
+  },
+  presenceScanRejectedTitle: {
+    en: "Log rejected",
+    es: "Registro rechazado",
+    gl: "Rexistro rexeitado",
+  },
+  presenceScanRejectedBody: {
+    en: "The server rejected this presence log.",
+    es: "El servidor rechazó este registro de presencia.",
+    gl: "O servidor rexeitou este rexistro de presenza.",
+  },
   presenceConflictTitle: {
     en: "Timeline conflict",
     es: "Conflicto en la cronología",

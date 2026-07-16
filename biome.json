@@ -13,6 +13,7 @@
       "!apps/mobile/ios",
       "!apps/mobile/android",
       "!apps/mobile/assets",
+      "!apps/mobile/expo-env.d.ts",
       "!apps/web/public/wallet-badges",
       "!plan"
     ]

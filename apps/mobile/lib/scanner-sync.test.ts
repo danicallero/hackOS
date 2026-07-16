@@ -21,14 +21,23 @@ jest.mock("./scanner-db", () => ({
   pendingScans: jest.fn(),
 }));
 
-import { apiFetch } from "./api";
-import { applyScannerSnapshot, pendingScans } from "./scanner-db";
+import { ApiError, apiFetch } from "./api";
+import { applyScannerSnapshot, failScan, noteRetryableError, pendingScans } from "./scanner-db";
 import { synchronizeScanner } from "./scanner-sync";
 import type { PendingScan } from "./scanner-types";
 
 const mockApiFetch = apiFetch as jest.Mock;
 const mockPendingScans = pendingScans as jest.Mock;
 const mockApplySnapshot = applyScannerSnapshot as jest.Mock;
+const mockFailScan = failScan as jest.Mock;
+const mockNoteRetryable = noteRetryableError as jest.Mock;
+// The mocked ApiError constructor is (status, code, message).
+const apiError = (status: number, message: string) =>
+  new (ApiError as unknown as new (status: number, code: string, message: string) => Error)(
+    status,
+    "error",
+    message,
+  );
 
 function badgeRemoval(id: string): PendingScan {
   return {
@@ -48,6 +57,8 @@ describe("synchronizeScanner", () => {
     mockApiFetch.mockReset();
     mockPendingScans.mockReset();
     mockApplySnapshot.mockReset();
+    mockFailScan.mockReset();
+    mockNoteRetryable.mockReset();
   });
 
   it("reruns for a caller who enqueues while a sync is already in flight", async () => {
@@ -90,5 +101,38 @@ describe("synchronizeScanner", () => {
       expect.objectContaining({ method: "POST" }),
     );
     expect(mockApplySnapshot).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps scans queued through auth errors instead of failing them permanently", async () => {
+    // An expired scanner session must never be a verdict on the scan itself:
+    // failing it permanently silently loses the log (H24/H25/H26).
+    mockPendingScans.mockResolvedValue([badgeRemoval("scan-1"), badgeRemoval("scan-2")]);
+    mockApiFetch
+      .mockRejectedValueOnce(apiError(401, "Unauthorized"))
+      // snapshot fetch after the replay loop breaks
+      .mockResolvedValueOnce({ generatedAt: "t0", people: [], activities: [], activityStates: [] });
+
+    await synchronizeScanner();
+
+    expect(mockFailScan).not.toHaveBeenCalled();
+    expect(mockNoteRetryable).toHaveBeenCalledWith("scan-1", "Unauthorized");
+    // The loop breaks: scan-2 is never attempted against a broken session.
+    expect(mockApiFetch).not.toHaveBeenCalledWith(
+      "/api/accreditation/remove",
+      expect.objectContaining({ body: expect.stringContaining("scan-2") }),
+    );
+  });
+
+  it("fails a scan permanently on a business rejection and continues the queue", async () => {
+    mockPendingScans.mockResolvedValue([badgeRemoval("scan-1"), badgeRemoval("scan-2")]);
+    mockApiFetch
+      .mockRejectedValueOnce(apiError(409, "No badge to remove"))
+      .mockResolvedValueOnce({}) // scan-2 replay succeeds
+      .mockResolvedValueOnce({ generatedAt: "t0", people: [], activities: [], activityStates: [] });
+
+    await synchronizeScanner();
+
+    expect(mockFailScan).toHaveBeenCalledWith("scan-1", "No badge to remove");
+    expect(mockApiFetch).toHaveBeenCalledTimes(3);
   });
 });

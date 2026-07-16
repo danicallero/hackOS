@@ -57,9 +57,12 @@ export async function scannerSnapshot() {
          LEFT JOIN user_caps uc ON uc.user_id = u.id
          LEFT JOIN tickets t ON t.user_id = u.id
          LEFT JOIN LATERAL (
+           -- As-of-now, like presenceScan's session guard: a future scheduled
+           -- entry (accreditation's presence_auto_entry_at) must not make
+           -- scanners believe the session is already open.
            SELECT tl.kind, tl.scanned_at
              FROM time_logs tl
-            WHERE tl.user_id = u.id
+            WHERE tl.user_id = u.id AND tl.scanned_at <= now()
             ORDER BY tl.scanned_at DESC, tl.id DESC
             LIMIT 1
          ) last_presence ON true

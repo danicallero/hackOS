@@ -2700,6 +2700,7 @@ const dict: Record<string, I18nText> = {
   colWhen: { es: "Cuándo", gl: "Cando", en: "When" },
   colScannedBy: { es: "Escaneado por", gl: "Escaneado por", en: "Scanned by" },
   presenceSystemActor: { es: "Sistema", gl: "Sistema", en: "System" },
+  columnActions: { es: "Acciones", gl: "Accións", en: "Actions" },
   presenceDesc: {
     es: "Señales de puerta, comidas y actividades, estimadas en sesiones.",
     gl: "Sinais de porta, comidas e actividades, estimadas en sesións.",
@@ -2711,10 +2712,10 @@ const dict: Record<string, I18nText> = {
     gl: "A partir da actividade de entrada e saída",
     en: "From entry and exit activity",
   },
-  presenceIntervals: {
-    es: "Intervalos de presencia",
-    gl: "Intervalos de presenza",
-    en: "Presence intervals",
+  presenceCheckpoints: {
+    es: "Puntos de presencia",
+    gl: "Puntos de presenza",
+    en: "Presence checkpoints",
   },
   presenceWindows: {
     es: "Ventanas de certeza",
@@ -2837,10 +2838,10 @@ const dict: Record<string, I18nText> = {
     gl: "Non se puido eliminar o punto de presenza.",
     en: "Could not delete the presence signal.",
   },
-  estimatedVisitsVenue: {
-    es: "Visitas estimadas al recinto",
-    gl: "Visitas estimadas ao recinto",
-    en: "Estimated visits to the venue",
+  presenceCheckpointsHint: {
+    es: "Tramos garantizados por puntos de control; varios seguidos son una misma visita",
+    gl: "Tramos garantidos por puntos de control; varios seguidos son unha mesma visita",
+    en: "Stretches guaranteed by checkpoints; several in a row are a single visit",
   },
   noPresenceRecorded: {
     es: "Sin presencia registrada",

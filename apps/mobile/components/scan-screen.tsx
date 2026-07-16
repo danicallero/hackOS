@@ -334,13 +334,24 @@ function PresenceForm({ setCameraSetter, afterSubmit }: FormProps) {
   const submit = async () => {
     const parsed = backdated.trim() ? new Date(backdated.trim()) : new Date();
     if (!person || Number.isNaN(parsed.getTime())) return;
-    await enqueueLocalScan({
+    const id = await enqueueLocalScan({
       kind: "presence",
       badgeId: badge.trim(),
       direction,
       scannedAt: parsed.toISOString(),
     });
     await afterSubmit(t("scannerPendingAck"));
+    // A 4xx replay (entry with a session already open, exit with none) fails
+    // the queued scan permanently — surface the server's reason instead of
+    // leaving the rejection buried in the queue panel.
+    const stored = (await pendingScans()).find((scan) => scan.id === id);
+    await afterSubmit(
+      stored?.status === "failed"
+        ? (stored.lastError ?? t("presenceScanRejectedBody"))
+        : stored?.status === "acknowledged"
+          ? t("scannerAcknowledged")
+          : t("scannerPendingAck"),
+    );
   };
   return (
     <View style={styles.section}>
