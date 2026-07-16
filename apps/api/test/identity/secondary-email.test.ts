@@ -53,7 +53,9 @@ describe("H6 secondary email", () => {
     const a = await getApp();
     const userId = await createUser();
     const { pool } = await import("../../src/db/pool.js");
-    const repo = await pool.query(`INSERT INTO repos (name) VALUES ('Secondary reconciliation') RETURNING id`);
+    const repo = await pool.query(
+      `INSERT INTO repos (name) VALUES ('Secondary reconciliation') RETURNING id`,
+    );
     const repoId = repo.rows[0].id;
     await pool.query(
       `INSERT INTO devpost_participants (repo_id, email, import_batch, merge_status)
@@ -133,9 +135,15 @@ describe("H6 secondary email", () => {
         WHERE id = $1`,
       [userId],
     );
-    const oldRepo = await pool.query(`INSERT INTO repos (name) VALUES ('Old secondary') RETURNING id`);
-    const newRepo = await pool.query(`INSERT INTO repos (name) VALUES ('New secondary') RETURNING id`);
-    const manualRepo = await pool.query(`INSERT INTO repos (name) VALUES ('Manual link') RETURNING id`);
+    const oldRepo = await pool.query(
+      `INSERT INTO repos (name) VALUES ('Old secondary') RETURNING id`,
+    );
+    const newRepo = await pool.query(
+      `INSERT INTO repos (name) VALUES ('New secondary') RETURNING id`,
+    );
+    const manualRepo = await pool.query(
+      `INSERT INTO repos (name) VALUES ('Manual link') RETURNING id`,
+    );
     await pool.query(
       `INSERT INTO devpost_participants (repo_id, email, user_id, import_batch, merge_status)
        VALUES ($1, 'old-devpost@example.com', $2, 'test-import', 'auto_matched'),

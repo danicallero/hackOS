@@ -1,6 +1,6 @@
+import type { OutgoingHttpHeaders } from "node:http";
 import { EVENTS, SSE_TOPICS, type SseEnvelope } from "@hackos/shared/events";
 import type { FastifyReply } from "fastify";
-import type { OutgoingHttpHeaders } from "node:http";
 import { invalidateReadCache } from "./read-cache.js";
 import { valkey, valkeySub } from "./valkey.js";
 

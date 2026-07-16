@@ -18,9 +18,7 @@ export default function appConfig({ config }: ConfigContext): ExpoConfig {
     },
     android: {
       ...config.android,
-      package: isDevelopmentBuild
-        ? `${config.android?.package}.debug`
-        : config.android?.package,
+      package: isDevelopmentBuild ? `${config.android?.package}.debug` : config.android?.package,
     },
   } as ExpoConfig;
 }

@@ -12,6 +12,8 @@
       "!apps/mobile/.expo",
       "!apps/mobile/ios",
       "!apps/mobile/android",
+      "!apps/mobile/assets",
+      "!apps/web/public/wallet-badges",
       "!plan"
     ]
   },

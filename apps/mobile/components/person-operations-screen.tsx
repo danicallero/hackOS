@@ -83,18 +83,18 @@ export function PersonOperationsScreen() {
     await enqueueLocalScan(
       currentBadge
         ? {
-          kind: "badge_rotation",
-          userId,
-          currentBadgeId: currentBadge,
-          newBadgeId: nextBadge,
-          reason: t("badgeReplacementReason"),
-        }
+            kind: "badge_rotation",
+            userId,
+            currentBadgeId: currentBadge,
+            newBadgeId: nextBadge,
+            reason: t("badgeReplacementReason"),
+          }
         : {
-          kind: "accreditation_user",
-          userId,
-          badgeId: nextBadge,
-          method: "manual",
-        },
+            kind: "accreditation_user",
+            userId,
+            badgeId: nextBadge,
+            method: "manual",
+          },
     );
     setPerson({ ...person, badgeId: nextBadge });
     setCameraAction(null);
@@ -220,7 +220,7 @@ export function PersonOperationsScreen() {
           >
             {fullName}
           </Text>
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
             <StatusPill tone={person.confirmed ? "success" : "warning"}>
               {person.confirmed
                 ? t("scannerConfirmed")
@@ -291,8 +291,8 @@ export function PersonOperationsScreen() {
                   valueStyle={{ color: colors.warning, fontWeight: "600" }}
                 />
                 {index < person.intolerances.length - 1 ||
-                  person.foodIntoleranceNotes ||
-                  person.notes ? (
+                person.foodIntoleranceNotes ||
+                person.notes ? (
                   <Separator />
                 ) : null}
               </View>

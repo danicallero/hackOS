@@ -63,7 +63,10 @@ async function transitionAndTopUp(
 }
 
 /** A top-of-challenge move should immediately fill any open waiting-room slot. */
-async function moveToTopAndTopUp(entryId: number, run: () => Promise<QueueEntryRow>): Promise<QueueEntryRow> {
+async function moveToTopAndTopUp(
+  _entryId: number,
+  run: () => Promise<QueueEntryRow>,
+): Promise<QueueEntryRow> {
   const entry = await run();
   const { rows } = await pool.query(
     `SELECT room_id FROM room_challenges WHERE challenge_id = $1 ORDER BY room_id ASC`,

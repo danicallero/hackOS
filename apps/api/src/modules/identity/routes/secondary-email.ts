@@ -8,8 +8,8 @@ import { pool, withTransaction } from "../../../db/pool.js";
 import { audit } from "../../../lib/audit.js";
 import { requireAuth, requireCapability } from "../../../lib/capabilities.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../../lib/errors.js";
-import { enqueueAuthEmail } from "../outbox.js";
 import { reconcileDevpostParticipantsForUser } from "../../projects/reconciliation.js";
+import { enqueueAuthEmail } from "../outbox.js";
 
 /**
  * Secondary email (H6): lets a participant register the address they used on

@@ -286,7 +286,10 @@ describe("H22/H23 unified person search", () => {
       "Hamilton Margaret", // surname + name
     ]) {
       const { results } = (await search(q)).json();
-      expect(results.map((r: { userId: number }) => r.userId), q).toContain(uid);
+      expect(
+        results.map((r: { userId: number }) => r.userId),
+        q,
+      ).toContain(uid);
       expect(results[0].matchedBy).toBe("profile");
     }
   });
@@ -298,7 +301,10 @@ describe("H22/H23 unified person search", () => {
 
     for (const q of ["perez", "PEREZ MUNOZ", "ana pérez", "ana per", "munoz"]) {
       const { results } = (await search(q)).json();
-      expect(results.map((r: { userId: number }) => r.userId), q).toContain(uid);
+      expect(
+        results.map((r: { userId: number }) => r.userId),
+        q,
+      ).toContain(uid);
     }
 
     const { rows } = await pool.query(`SELECT surname FROM users WHERE id = $1`, [uid]);
