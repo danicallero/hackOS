@@ -64,7 +64,13 @@ export function Section({
   );
 }
 
-export function Separator({ inset = 16, trailingInset = 0 }: { inset?: number; trailingInset?: number }) {
+export function Separator({
+  inset = 16,
+  trailingInset = 0,
+}: {
+  inset?: number;
+  trailingInset?: number;
+}) {
   return (
     <View
       style={{

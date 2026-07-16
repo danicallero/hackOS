@@ -40,7 +40,8 @@ interface PresenceSignal {
   activityName: string | null;
   category: string | null;
   notes: string | null;
-  recordedBy: { userId: number; name: string | null; surname: string | null };
+  // null = system-generated (event-end automatic exit)
+  recordedBy: { userId: number; name: string | null; surname: string | null } | null;
 }
 
 interface CertaintyWindow {
@@ -50,12 +51,22 @@ interface CertaintyWindow {
   status: "secured" | "provisional" | "invalid";
   openedBy: "in" | "activity";
   closedBy: SignalKind | null;
+  conflict: boolean;
+}
+
+// Illegal in→in pair (H24): the fix must land strictly inside (from, to).
+interface PresenceConflict {
+  firstLogId: number;
+  secondLogId: number;
+  from: string;
+  to: string;
 }
 
 interface PresenceTimeline {
   certaintyWindowMinutes: number;
   activities: Array<{ id: number; name: string; category: string }>;
   signals: PresenceSignal[];
+  conflicts: PresenceConflict[];
   windows: CertaintyWindow[];
 }
 
@@ -65,6 +76,8 @@ interface SignalDraft {
   occurredAt: Date;
   activityId: number | null;
   notes: string;
+  /** When resolving a conflict, the picker is clamped to the gap between the two entries. */
+  bounds?: { min: Date; max: Date };
 }
 
 export function PresenceManagement({
@@ -114,6 +127,19 @@ export function PresenceManagement({
     });
   }
 
+  function resolveConflict(conflict: PresenceConflict) {
+    const from = Date.parse(conflict.from);
+    const to = Date.parse(conflict.to);
+    setDraft({
+      signal: null,
+      kind: "out", // an entry can't fix in→in; default to the missing exit
+      occurredAt: new Date(from + (to - from) / 2),
+      activityId: timeline?.activities[0]?.id ?? null,
+      notes: "",
+      bounds: { min: new Date(from), max: new Date(to) },
+    });
+  }
+
   function editSignal(signal: PresenceSignal) {
     setDraft({
       signal,
@@ -149,6 +175,15 @@ export function PresenceManagement({
 
   return (
     <View style={{ gap: 22 }}>
+      {(timeline?.conflicts ?? []).map((conflict) => (
+        <ConflictBanner
+          key={`${conflict.firstLogId}-${conflict.secondLogId}`}
+          conflict={conflict}
+          language={language}
+          onResolve={() => resolveConflict(conflict)}
+        />
+      ))}
+
       <Section title={t("presenceSummary")}>
         <InfoRow
           icon="clock.fill"
@@ -236,6 +271,59 @@ export function PresenceManagement({
   );
 }
 
+function ConflictBanner({
+  conflict,
+  language,
+  onResolve,
+}: {
+  conflict: PresenceConflict;
+  language: string;
+  onResolve: () => void;
+}) {
+  const { t } = useLocale();
+  const timeOptions = {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  } as const;
+  return (
+    <View
+      accessibilityRole="alert"
+      style={{
+        backgroundColor: colors.destructiveSurface,
+        borderColor: colors.destructive,
+        borderCurve: "continuous",
+        borderRadius: 14,
+        borderWidth: 0.5,
+        overflow: "hidden",
+      }}
+    >
+      <View style={{ flexDirection: "row", gap: 12, padding: 16 }}>
+        <SymbolView name="exclamationmark.triangle.fill" tintColor={colors.destructive} size={22} />
+        <View style={{ flex: 1, gap: 4 }}>
+          <Text selectable style={{ color: colors.destructive, fontSize: 16, fontWeight: "700" }}>
+            {t("presenceConflictTitle")}
+          </Text>
+          <Text selectable style={{ color: colors.label, fontSize: 14, lineHeight: 19 }}>
+            {t("presenceConflictBody", {
+              from: new Date(conflict.from).toLocaleString(language, timeOptions),
+              to: new Date(conflict.to).toLocaleString(language, timeOptions),
+            })}
+          </Text>
+        </View>
+      </View>
+      <View style={{ backgroundColor: colors.destructive, height: 0.5, opacity: 0.3 }} />
+      <ActionButton
+        destructive
+        icon="wrench.and.screwdriver.fill"
+        label={t("presenceResolveConflict")}
+        onPress={onResolve}
+      />
+    </View>
+  );
+}
+
 function WindowRow({ window, language }: { window: CertaintyWindow; language: string }) {
   const { t } = useLocale();
   const securedFraction = securedWindowFraction(window);
@@ -250,11 +338,13 @@ function WindowRow({ window, language }: { window: CertaintyWindow; language: st
           ),
         )
       : 0;
-  const status = {
-    secured: { label: t("presenceSecured"), tone: "success" as const },
-    provisional: { label: t("presenceProvisional"), tone: "warning" as const },
-    invalid: { label: t("presenceInvalid"), tone: "destructive" as const },
-  }[window.status];
+  const status = window.conflict
+    ? { label: t("presenceConflict"), tone: "destructive" as const }
+    : {
+        secured: { label: t("presenceSecured"), tone: "success" as const },
+        provisional: { label: t("presenceProvisional"), tone: "warning" as const },
+        invalid: { label: t("presenceInvalid"), tone: "destructive" as const },
+      }[window.status];
   const securedMinutes = window.securedUntil
     ? durationMinutes(window.start, window.securedUntil)
     : 0;
@@ -365,7 +455,9 @@ function SignalRow({
       : signal.kind === "in"
         ? t("presenceSignalEntry")
         : t("presenceSignalExit");
-  const recordedBy = [signal.recordedBy.name, signal.recordedBy.surname].filter(Boolean).join(" ");
+  const recordedBy = signal.recordedBy
+    ? [signal.recordedBy.name, signal.recordedBy.surname].filter(Boolean).join(" ")
+    : null;
   return (
     <Pressable
       accessibilityRole="button"
@@ -404,6 +496,10 @@ function SignalRow({
         {recordedBy ? (
           <Text selectable style={{ color: colors.tertiaryLabel, fontSize: 12 }}>
             {t("presenceRecordedBy", { name: recordedBy })}
+          </Text>
+        ) : signal.recordedBy == null ? (
+          <Text selectable style={{ color: colors.tertiaryLabel, fontSize: 12 }}>
+            {t("presenceRecordedBySystem")}
           </Text>
         ) : null}
       </View>
@@ -487,6 +583,22 @@ function SignalEditor({
   }
 
   const canChangeKind = !draft.signal || draft.signal.source === "door";
+  // Resolving an in→in conflict: only an exit or activity can close the gap,
+  // and the timestamp must land strictly between the two conflicting entries.
+  const kinds: SignalKind[] = draft.bounds ? ["activity", "out"] : ["in", "activity", "out"];
+  const kindLabels: Record<SignalKind, string> = {
+    in: t("presenceSignalEntry"),
+    activity: t("presenceSignalActivity"),
+    out: t("presenceSignalExit"),
+  };
+  const clampToBounds = (date: Date): Date => {
+    if (!draft.bounds) return date;
+    const time = Math.min(
+      Math.max(date.getTime(), draft.bounds.min.getTime()),
+      draft.bounds.max.getTime(),
+    );
+    return new Date(time);
+  };
 
   return (
     <Modal animationType="slide" onRequestClose={onClose} presentationStyle="pageSheet">
@@ -550,18 +662,11 @@ function SignalEditor({
           <View style={{ gap: 14, padding: 16 }}>
             <SegmentedControl
               label={t("personMovement")}
-              values={[
-                t("presenceSignalEntry"),
-                t("presenceSignalActivity"),
-                t("presenceSignalExit"),
-              ]}
-              selectedIndex={["in", "activity", "out"].indexOf(draft.kind)}
+              values={kinds.map((kind) => kindLabels[kind])}
+              selectedIndex={Math.max(0, kinds.indexOf(draft.kind))}
               onChange={(index) => {
                 if (!canChangeKind) return;
-                onChange({
-                  ...draft,
-                  kind: (["in", "activity", "out"] as SignalKind[])[index] ?? "in",
-                });
+                onChange({ ...draft, kind: kinds[index] ?? kinds[0] ?? "in" });
               }}
             />
             {!canChangeKind ? (
@@ -598,18 +703,22 @@ function SignalEditor({
           </Section>
         ) : null}
 
-        <Section title={t("presenceDateAndTime")}>
+        <Section
+          title={t("presenceDateAndTime")}
+          footer={draft.bounds ? t("presenceConflictBounds") : undefined}
+        >
           <View style={{ gap: 12, padding: 16 }}>
             {process.env.EXPO_OS === "android" ? (
               <>
                 <DateTimePicker
-                  maximumDate={new Date()}
+                  minimumDate={draft.bounds?.min}
+                  maximumDate={draft.bounds?.max ?? new Date()}
                   mode="date"
                   value={draft.occurredAt}
                   onChange={(_, date) => {
                     if (!date) return;
                     date.setHours(draft.occurredAt.getHours(), draft.occurredAt.getMinutes());
-                    onChange({ ...draft, occurredAt: date });
+                    onChange({ ...draft, occurredAt: clampToBounds(date) });
                   }}
                 />
                 <DateTimePicker
@@ -619,16 +728,19 @@ function SignalEditor({
                     if (!date) return;
                     const next = new Date(draft.occurredAt);
                     next.setHours(date.getHours(), date.getMinutes());
-                    onChange({ ...draft, occurredAt: next });
+                    onChange({ ...draft, occurredAt: clampToBounds(next) });
                   }}
                 />
               </>
             ) : (
               <DateTimePicker
-                maximumDate={new Date()}
+                minimumDate={draft.bounds?.min}
+                maximumDate={draft.bounds?.max ?? new Date()}
                 mode="datetime"
                 value={draft.occurredAt}
-                onChange={(_, date) => date && onChange({ ...draft, occurredAt: date })}
+                onChange={(_, date) =>
+                  date && onChange({ ...draft, occurredAt: clampToBounds(date) })
+                }
               />
             )}
           </View>

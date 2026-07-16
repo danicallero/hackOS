@@ -1,8 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import { registerIntoleranceRoutes } from "./intolerances.js";
 import { registerLogisticsRoutes } from "./routes.js";
-// Side-effecting import: registers the BullMQ processor at import time
+// Side-effecting imports: register the BullMQ processors at import time
 // (src/lib/queues.ts convention — "never instantiate BullMQ directly").
+import "./presence-closer.js";
+import { schedulePresenceEventEndCloser } from "./presence-closer.js";
 import "./schedule-publisher.js";
 import { scheduleSchedulePublisher } from "./schedule-publisher.js";
 import { registerUniversityRoutes } from "./universities.js";
@@ -20,4 +22,5 @@ export async function registerLogisticsModule(app: FastifyInstance): Promise<voi
   registerUniversityRoutes(app);
 
   await scheduleSchedulePublisher();
+  await schedulePresenceEventEndCloser();
 }

@@ -1,8 +1,8 @@
+import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { config } from "../../config.js";
 import { withTransaction } from "../../db/pool.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { broadcast } from "../../lib/sse.js";
-import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import type { Announcement } from "./announcements-service.js";
 import { fanOutAnnouncement } from "./announcements-service.js";
 

@@ -1,6 +1,6 @@
 const { withDangerousMod } = require("expo/config-plugins");
-const fs = require("fs");
-const path = require("path");
+const fs = require("node:fs");
+const path = require("node:path");
 
 // Vendored xcframeworks (React.framework, ReactNativeDependencies.framework,
 // hermes/hermesvm.framework, ExpoCameraBarcodeScanning.framework, ...) ship an

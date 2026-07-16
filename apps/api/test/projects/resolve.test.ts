@@ -9,8 +9,8 @@ import {
   truncateAll,
 } from "../helpers.js";
 import {
-  EMAILS,
   createChallenge,
+  EMAILS,
   participantsCsv,
   projectsCsv,
   seedMatchableUsers,
@@ -232,14 +232,16 @@ describe("POST /api/devpost/imports/link-secondary (H16/H17)", () => {
     );
     const roomId = room.rows[0].id;
     await pool.query(`INSERT INTO room_queue_state (room_id) VALUES ($1)`, [roomId]);
-    await pool.query(`UPDATE queue_entries SET assigned_room_id = $1, status = 'presenting' WHERE repo_id = $2`, [
-      roomId,
-      repoId,
-    ]);
+    await pool.query(
+      `UPDATE queue_entries SET assigned_room_id = $1, status = 'presenting' WHERE repo_id = $2`,
+      [roomId, repoId],
+    );
     const { roomView } = await import("../../src/modules/queue/reads.js");
     const view = await roomView(roomId);
     expect(view.active.repo_members).toEqual(
-      expect.arrayContaining([expect.objectContaining({ userId: account, email: "dave-real@primary.test" })]),
+      expect.arrayContaining([
+        expect.objectContaining({ userId: account, email: "dave-real@primary.test" }),
+      ]),
     );
   });
 

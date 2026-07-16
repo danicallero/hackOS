@@ -2,6 +2,7 @@
 
 import {
   ActivityIcon,
+  AlertTriangleIcon,
   CheckCircle2Icon,
   Clock3Icon,
   DoorOpenIcon,
@@ -44,6 +45,28 @@ export function PresenceTimeline({ data }: { data: PresenceTimelineData }) {
 
   return (
     <div className="space-y-4">
+      {data.conflicts.map((conflict) => (
+        <div
+          key={`${conflict.firstLogId}-${conflict.secondLogId}`}
+          role="alert"
+          className="border-destructive/40 bg-destructive/10 flex gap-3 rounded-lg border p-4"
+        >
+          <AlertTriangleIcon
+            className="text-destructive mt-0.5 size-4 shrink-0"
+            aria-hidden="true"
+          />
+          <div className="min-w-0">
+            <p className="text-destructive font-medium">{t("presenceConflictTitle")}</p>
+            <p className="text-pretty mt-1 text-sm">
+              {t("presenceConflictBody", {
+                from: dateTime.format(new Date(conflict.from)),
+                to: dateTime.format(new Date(conflict.to)),
+              })}
+            </p>
+          </div>
+        </div>
+      ))}
+
       <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs">
         <span className="inline-flex items-center gap-1.5">
           <span className="bg-success size-2.5 rounded-full" aria-hidden="true" />
@@ -73,14 +96,16 @@ export function PresenceTimeline({ data }: { data: PresenceTimelineData }) {
             : 0;
           const securedPercent =
             total > 0 ? Math.min(100, Math.max(0, (secured / total) * 100)) : 0;
-          const statusTone =
-            window.status === "secured"
+          const statusTone = window.conflict
+            ? "danger"
+            : window.status === "secured"
               ? "success"
               : window.status === "provisional"
                 ? "info"
                 : "neutral";
-          const StatusIcon =
-            window.status === "secured"
+          const StatusIcon = window.conflict
+            ? AlertTriangleIcon
+            : window.status === "secured"
               ? CheckCircle2Icon
               : window.status === "provisional"
                 ? Clock3Icon
@@ -110,7 +135,9 @@ export function PresenceTimeline({ data }: { data: PresenceTimelineData }) {
                 </div>
                 <StatusBadge tone={statusTone} dot={false}>
                   <StatusIcon className="size-3" aria-hidden="true" />
-                  {t(`presenceWindow_${window.status}`)}
+                  {window.conflict
+                    ? t("presenceWindow_conflict")
+                    : t(`presenceWindow_${window.status}`)}
                 </StatusBadge>
               </div>
 

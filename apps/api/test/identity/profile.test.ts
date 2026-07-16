@@ -372,8 +372,12 @@ describe("staff user routes (H7)", () => {
     const target = await createUser({ email: "old@example.test" });
     const other = await createUser({ email: "taken@example.test" });
     const { pool } = await import("../../src/db/pool.js");
-    const oldRepo = await pool.query(`INSERT INTO repos (name) VALUES ('Old primary') RETURNING id`);
-    const repo = await pool.query(`INSERT INTO repos (name) VALUES ('Primary reconciliation') RETURNING id`);
+    const oldRepo = await pool.query(
+      `INSERT INTO repos (name) VALUES ('Old primary') RETURNING id`,
+    );
+    const repo = await pool.query(
+      `INSERT INTO repos (name) VALUES ('Primary reconciliation') RETURNING id`,
+    );
     const repoId = repo.rows[0].id;
     await pool.query(
       `INSERT INTO devpost_participants (repo_id, email, import_batch, merge_status)
@@ -381,10 +385,10 @@ describe("staff user routes (H7)", () => {
               ($2, 'new@example.test', 'test-import', 'unmatched')`,
       [oldRepo.rows[0].id, repoId],
     );
-    await pool.query(
-      `UPDATE devpost_participants SET user_id = $2 WHERE repo_id = $1`,
-      [oldRepo.rows[0].id, target],
-    );
+    await pool.query(`UPDATE devpost_participants SET user_id = $2 WHERE repo_id = $1`, [
+      oldRepo.rows[0].id,
+      target,
+    ]);
     await pool.query(
       `INSERT INTO submissions (repo_id, user_id, imported_from) VALUES ($1, $2, 'devpost')`,
       [oldRepo.rows[0].id, target],

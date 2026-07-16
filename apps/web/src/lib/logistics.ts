@@ -113,7 +113,8 @@ export interface TimeLogEntry {
   kind: "in" | "out";
   scannedAt: string;
   notes: string | null;
-  scannedBy: { userId: number; name: string | null; surname: string | null };
+  // null = system-generated log (event-end automatic exit, H24)
+  scannedBy: { userId: number; name: string | null; surname: string | null } | null;
 }
 
 export interface PresenceTimelineSignal {
@@ -125,7 +126,8 @@ export interface PresenceTimelineSignal {
   activityName: string | null;
   category: string | null;
   notes: string | null;
-  recordedBy: { userId: number; name: string | null; surname: string | null };
+  // null = system-generated log (event-end automatic exit, H24)
+  recordedBy: { userId: number; name: string | null; surname: string | null } | null;
 }
 
 export interface PresenceCertaintyWindow {
@@ -135,12 +137,23 @@ export interface PresenceCertaintyWindow {
   status: "secured" | "provisional" | "invalid";
   openedBy: "in" | "activity";
   closedBy: "in" | "out" | "activity" | null;
+  /** Invalidated by an illegal in→in sequence (H24). */
+  conflict: boolean;
+}
+
+/** Illegal in→in pair (H24): insert the missing exit/activity inside (from, to). */
+export interface PresenceConflict {
+  firstLogId: number;
+  secondLogId: number;
+  from: string;
+  to: string;
 }
 
 export interface PresenceTimelineData {
   certaintyWindowMinutes: number;
   activities: Array<{ id: number; name: string; category: string }>;
   signals: PresenceTimelineSignal[];
+  conflicts: PresenceConflict[];
   windows: PresenceCertaintyWindow[];
 }
 

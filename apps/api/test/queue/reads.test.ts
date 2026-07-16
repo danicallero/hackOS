@@ -141,7 +141,9 @@ describe("participant view (H38)", () => {
     const roomId = await createRoom();
     await assignChallengeToRoom(roomId, challengeId);
     const { pool } = await import("../../src/db/pool.js");
-    const repo = await pool.query(`INSERT INTO repos (name) VALUES ('Devpost fallback') RETURNING id`);
+    const repo = await pool.query(
+      `INSERT INTO repos (name) VALUES ('Devpost fallback') RETURNING id`,
+    );
     const repoId = repo.rows[0].id;
     await pool.query(
       `INSERT INTO devpost_participants

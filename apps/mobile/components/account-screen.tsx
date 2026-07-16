@@ -174,17 +174,17 @@ export default function AccountScreen() {
           icon="envelope"
           valueStyle={{ color: me.emailVerified ? colors.success : colors.warning }}
         />
-            <Text
-              selectable
-              style={{
-                color: colors.secondaryLabel,
-                fontSize: 13,
-                paddingBottom: 12,
-                paddingHorizontal: 48,
-              }}
-            >
-              {me.email}
-            </Text>
+        <Text
+          selectable
+          style={{
+            color: colors.secondaryLabel,
+            fontSize: 13,
+            paddingBottom: 12,
+            paddingHorizontal: 48,
+          }}
+        >
+          {me.email}
+        </Text>
         {me.secondaryEmail ? (
           <>
             <Separator inset={48} />

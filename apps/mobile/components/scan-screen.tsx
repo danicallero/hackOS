@@ -414,11 +414,17 @@ function ActivityForm({ setCameraSetter, afterSubmit }: FormProps) {
     await afterSubmit(t("scannerPendingAck"));
   };
   const submit = async () => {
-    if (selected?.category === "meal" && count > 0) {
-      Alert.alert(t("scannerRepeatTitle"), t("scannerRepeatBody", { count: String(count) }), [
-        { text: t("cancel"), style: "cancel" },
-        { text: t("confirm"), onPress: () => void submitWithRepeat(true) },
-      ]);
+    // Any repeat — meal or registrable activity — needs explicit confirmation
+    // (H25/H26): the API 409s repeats sent without allowRepeat.
+    if (count > 0) {
+      Alert.alert(
+        selected?.category === "meal" ? t("scannerRepeatTitle") : t("scannerRepeatFound"),
+        t("scannerRepeatBody", { count: String(count) }),
+        [
+          { text: t("cancel"), style: "cancel" },
+          { text: t("confirm"), onPress: () => void submitWithRepeat(true) },
+        ],
+      );
       return;
     }
     await submitWithRepeat(false);

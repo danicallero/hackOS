@@ -99,7 +99,7 @@ export function PeopleDirectoryScreen() {
         </MenuView>
       ),
     });
-  }, [navigation, activityId, roleFilter, t]);
+  }, [navigation, roleFilter, t]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();

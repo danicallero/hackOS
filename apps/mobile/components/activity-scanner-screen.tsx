@@ -116,7 +116,10 @@ export function ActivityScannerScreen() {
       }
       const state = await getActivityState(found.person.userId, activityId);
       setError(null);
-      if (state.count > 0 && activity?.category === "meal") {
+      // Any repeat — meal or registrable activity — needs explicit staff
+      // confirmation (H25/H26): the API 409s repeats sent without allowRepeat,
+      // which would strand the queued scan as failed.
+      if (state.count > 0) {
         setResult({
           badgeId,
           count: state.count,
@@ -128,7 +131,7 @@ export function ActivityScannerScreen() {
       }
       await store(found.person, badgeId, false, state.count);
     },
-    [activity?.category, activityId, store, t],
+    [activityId, store, t],
   );
 
   useEffect(() => {

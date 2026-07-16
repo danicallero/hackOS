@@ -1272,8 +1272,10 @@ function PresenceSection({ userId }: { userId: number }) {
       header: t("colScannedBy"),
       cell: (signal) => (
         <span className="text-muted-foreground text-sm">
-          {[signal.recordedBy.name, signal.recordedBy.surname].filter(Boolean).join(" ") ||
-            `#${signal.recordedBy.userId}`}
+          {signal.recordedBy
+            ? [signal.recordedBy.name, signal.recordedBy.surname].filter(Boolean).join(" ") ||
+              `#${signal.recordedBy.userId}`
+            : t("presenceSystemActor")}
         </span>
       ),
     },

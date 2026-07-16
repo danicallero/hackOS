@@ -850,6 +850,32 @@ const dict = {
     es: "Registrado por {name}",
     gl: "Rexistrado por {name}",
   },
+  presenceRecordedBySystem: {
+    en: "Recorded automatically",
+    es: "Registrado automáticamente",
+    gl: "Rexistrado automaticamente",
+  },
+  presenceConflict: { en: "Conflict", es: "Conflicto", gl: "Conflito" },
+  presenceConflictTitle: {
+    en: "Timeline conflict",
+    es: "Conflicto en la cronología",
+    gl: "Conflito na cronoloxía",
+  },
+  presenceConflictBody: {
+    en: "Two entries with no exit or activity between them ({from} → {to}). No hours are counted for the first entry until the missing point is added.",
+    es: "Dos entradas sin salida ni actividad entre ellas ({from} → {to}). No se computan horas de la primera entrada hasta añadir el punto que falta.",
+    gl: "Dúas entradas sen saída nin actividade entre elas ({from} → {to}). Non se computan horas da primeira entrada ata engadir o punto que falta.",
+  },
+  presenceResolveConflict: {
+    en: "Resolve timeline gap",
+    es: "Resolver el hueco",
+    gl: "Resolver o oco",
+  },
+  presenceConflictBounds: {
+    en: "The date is limited to the gap between the two conflicting entries.",
+    es: "La fecha está limitada al intervalo entre las dos entradas en conflicto.",
+    gl: "A data está limitada ao intervalo entre as dúas entradas en conflito.",
+  },
   presenceActivity: {
     en: "Activity or meal",
     es: "Actividad o comida",

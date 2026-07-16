@@ -428,3 +428,159 @@ describe("H24 raw scan admin (view/edit/delete)", () => {
     expect(del.statusCode).toBe(403);
   });
 });
+
+describe("H24 illegal in→in conflicts in the timeline", () => {
+  it("exposes conflicts[] with bounds and zero-credits the first window", async () => {
+    const uid = await createUser();
+    const { pool } = await import("../../src/db/pool.js");
+    const t0 = new Date(Date.now() - 4 * 3_600_000).toISOString();
+    const t1 = new Date(Date.now() - 2 * 3_600_000).toISOString();
+    // The scan endpoint rejects in→in live; manual signal creation is the
+    // only way this state appears (e.g. staff deleted the out in between).
+    for (const occurredAt of [t0, t1]) {
+      const res = await app.inject({
+        method: "POST",
+        url: `/api/presence/signals/${uid}`,
+        headers: asUser(doorStaff),
+        payload: { kind: "in", occurredAt },
+      });
+      expect(res.statusCode).toBe(201);
+    }
+
+    const timeline = await app.inject({
+      method: "GET",
+      url: `/api/presence/timeline/${uid}`,
+      headers: asUser(statsStaff),
+    });
+    expect(timeline.statusCode).toBe(200);
+    const body = timeline.json();
+    expect(body.conflicts).toHaveLength(1);
+    const logs = await pool.query(
+      `SELECT id FROM time_logs WHERE user_id = $1 ORDER BY scanned_at ASC`,
+      [uid],
+    );
+    expect(body.conflicts[0]).toMatchObject({
+      firstLogId: logs.rows[0].id,
+      secondLogId: logs.rows[1].id,
+      from: new Date(t0).toISOString(),
+      to: new Date(t1).toISOString(),
+    });
+    // The conflicted first window credits nothing; only the second counts.
+    expect(body.windows[0]).toMatchObject({ status: "invalid", conflict: true });
+    expect(body.windows[1]).toMatchObject({ status: "provisional", conflict: false });
+    const hours = await app.inject({
+      method: "GET",
+      url: `/api/presence/hours/${uid}`,
+      headers: asUser(statsStaff),
+    });
+    expect(hours.json().hours).toBeCloseTo(2, 1);
+  });
+
+  it("does not flag in→activity→in — the activity closes the pair", async () => {
+    const uid = await createUser();
+    const meal = await createMeal();
+    const times = [6, 4, 2].map((h) => new Date(Date.now() - h * 3_600_000).toISOString());
+    const payloads = [
+      { kind: "in", occurredAt: times[0] },
+      { kind: "activity", activityId: meal, occurredAt: times[1] },
+      { kind: "in", occurredAt: times[2] },
+    ];
+    for (const payload of payloads) {
+      const res = await app.inject({
+        method: "POST",
+        url: `/api/presence/signals/${uid}`,
+        headers: asUser(doorStaff),
+        payload,
+      });
+      expect(res.statusCode).toBe(201);
+    }
+    const timeline = await app.inject({
+      method: "GET",
+      url: `/api/presence/timeline/${uid}`,
+      headers: asUser(statsStaff),
+    });
+    expect(timeline.json().conflicts).toHaveLength(0);
+  });
+});
+
+describe("H24 event-end automatic exit (product override: the one system-closed out)", () => {
+  it("closes open sessions at event_ends_at, audits them, and is idempotent", async () => {
+    const uid = await createUser();
+    const { pool } = await import("../../src/db/pool.js");
+    const endedAt = new Date(Date.now() - 3_600_000); // event ended an hour ago
+    const enteredAt = new Date(endedAt.getTime() - 5 * 3_600_000).toISOString();
+    await app.inject({
+      method: "POST",
+      url: `/api/presence/signals/${uid}`,
+      headers: asUser(doorStaff),
+      payload: { kind: "in", occurredAt: enteredAt },
+    });
+    await pool.query(
+      `INSERT INTO event_config (id, event_ends_at) VALUES (1, $1)
+       ON CONFLICT (id) DO UPDATE SET event_ends_at = EXCLUDED.event_ends_at`,
+      [endedAt],
+    );
+
+    const { runPresenceEventEndCloserOnce } = await import(
+      "../../src/modules/logistics/presence-closer.js"
+    );
+    const first = await runPresenceEventEndCloserOnce();
+    expect(first.closed).toEqual([uid]);
+
+    const outs = await pool.query(
+      `SELECT kind, scanned_at, scanned_by, notes FROM time_logs
+        WHERE user_id = $1 AND kind = 'out'`,
+      [uid],
+    );
+    expect(outs.rows).toHaveLength(1);
+    expect(outs.rows[0].scanned_at.toISOString()).toBe(endedAt.toISOString());
+    expect(outs.rows[0].scanned_by).toBeNull();
+    expect(outs.rows[0].notes).toBe("Automatic exit at event end");
+
+    const audits = await pool.query(
+      `SELECT * FROM audit_log
+        WHERE entity_type = 'presence' AND action = 'event_end_auto_exit' AND entity_id = $1`,
+      [String(uid)],
+    );
+    expect(audits.rows).toHaveLength(1);
+
+    const again = await runPresenceEventEndCloserOnce();
+    expect(again.closed).toEqual([]);
+  });
+
+  it("leaves sessions opened after event end and already-closed ones alone", async () => {
+    const stillThere = await createUser();
+    const wentHome = await createUser();
+    const { pool } = await import("../../src/db/pool.js");
+    const endedAt = new Date(Date.now() - 2 * 3_600_000);
+    // teardown helper entered after the event officially ended
+    await app.inject({
+      method: "POST",
+      url: `/api/presence/signals/${stillThere}`,
+      headers: asUser(doorStaff),
+      payload: { kind: "in", occurredAt: new Date(Date.now() - 3_600_000).toISOString() },
+    });
+    // this one entered and left properly before the end
+    for (const payload of [
+      { kind: "in", occurredAt: new Date(endedAt.getTime() - 4 * 3_600_000).toISOString() },
+      { kind: "out", occurredAt: new Date(endedAt.getTime() - 3_600_000).toISOString() },
+    ]) {
+      await app.inject({
+        method: "POST",
+        url: `/api/presence/signals/${wentHome}`,
+        headers: asUser(doorStaff),
+        payload,
+      });
+    }
+    await pool.query(
+      `INSERT INTO event_config (id, event_ends_at) VALUES (1, $1)
+       ON CONFLICT (id) DO UPDATE SET event_ends_at = EXCLUDED.event_ends_at`,
+      [endedAt],
+    );
+    const { runPresenceEventEndCloserOnce } = await import(
+      "../../src/modules/logistics/presence-closer.js"
+    );
+    const run = await runPresenceEventEndCloserOnce();
+    expect(run.closed).toEqual([]);
+  });
+});

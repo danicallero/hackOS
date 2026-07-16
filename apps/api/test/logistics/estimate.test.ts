@@ -130,6 +130,7 @@ describe("rolling certainty windows", () => {
         status: "secured",
         openedBy: "in",
         closedBy: "activity",
+        conflict: false,
       },
       {
         start: at(5),
@@ -138,6 +139,7 @@ describe("rolling certainty windows", () => {
         status: "provisional",
         openedBy: "activity",
         closedBy: null,
+        conflict: false,
       },
     ]);
   });
@@ -163,5 +165,47 @@ describe("rolling certainty windows", () => {
     const [window] = buildCertaintyWindows([{ t: at(0), kind: "in" }], at(13));
     expect(window?.status).toBe("invalid");
     expect(window?.securedUntil).toBeNull();
+  });
+
+  it("illegal in→in never secures: the first window is a zero-credit conflict", () => {
+    // Only reachable via manual log edits — the scan endpoint rejects it.
+    const events: PresenceEvent[] = [
+      { t: at(0), kind: "in" },
+      { t: at(2), kind: "in" },
+      { t: at(4), kind: "out" },
+    ];
+    const windows = buildCertaintyWindows(events, at(6));
+    expect(windows[0]).toMatchObject({
+      start: at(0),
+      status: "invalid",
+      conflict: true,
+      securedUntil: null,
+    });
+    expect(windows[1]).toMatchObject({ start: at(2), status: "secured", conflict: false });
+    expect(hours(events, at(6))).toBe(2); // only the second entry's 2h count
+  });
+
+  it("flags in→in as a conflict even when the first window already expired", () => {
+    const windows = buildCertaintyWindows(
+      [
+        { t: at(0), kind: "in" },
+        { t: at(14), kind: "in" }, // past the 12h deadline
+      ],
+      at(15),
+    );
+    expect(windows[0]).toMatchObject({ status: "invalid", conflict: true });
+    expect(windows[1]).toMatchObject({ status: "provisional", conflict: false });
+  });
+
+  it("an activity between two entries legitimizes the sequence (no conflict)", () => {
+    const events: PresenceEvent[] = [
+      { t: at(0), kind: "in" },
+      { t: at(3), kind: "activity" },
+      { t: at(5), kind: "in" },
+    ];
+    const windows = buildCertaintyWindows(events, at(6));
+    expect(windows.every((window) => !window.conflict)).toBe(true);
+    expect(windows[0]?.status).toBe("secured"); // in → activity
+    expect(windows[1]?.status).toBe("secured"); // activity → in
   });
 });
