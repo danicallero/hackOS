@@ -863,6 +863,11 @@ const dict = {
     gl: "Rexistrado automaticamente",
   },
   presenceConflict: { en: "Conflict", es: "Conflicto", gl: "Conflito" },
+  presenceChooseActivity: {
+    en: "Choose an activity",
+    es: "Elige una actividad",
+    gl: "Escolle unha actividade",
+  },
   presenceScanRejectedTitle: {
     en: "Log rejected",
     es: "Registro rechazado",

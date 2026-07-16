@@ -1,4 +1,4 @@
-import { Picker } from "@expo/ui";
+import { MenuView } from "@expo/ui/community/menu";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { SymbolView } from "expo-symbols";
 import { useCallback, useEffect, useState } from "react";
@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   ActionButton,
   EmptyState,
+  FloatingGlassButton,
   InfoRow,
   Section,
   Separator,
@@ -610,175 +611,186 @@ function SignalEditor({
 
   return (
     <Modal animationType="slide" onRequestClose={onClose} presentationStyle="pageSheet">
-      <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{
-          gap: 22,
-          padding: 16,
-          paddingBottom: Math.max(32, insets.bottom + 16),
-          paddingTop: Math.max(18, insets.top + 8),
-        }}
-        style={{ backgroundColor: colors.background }}
-      >
-        <View style={{ alignItems: "center", flexDirection: "row", gap: 12 }}>
-          <Pressable
-            accessibilityRole="button"
-            onPress={onClose}
-            style={({ pressed }) => ({
-              minHeight: 44,
-              justifyContent: "center",
-              opacity: pressed ? 0.6 : 1,
-            })}
-          >
-            <Text style={{ color: colors.accent, fontSize: 17 }}>{t("cancel")}</Text>
-          </Pressable>
-          <Text
-            selectable
-            style={{
-              color: colors.label,
-              flex: 1,
-              fontSize: 20,
-              fontWeight: "700",
-              textAlign: "center",
-            }}
-          >
-            {draft.signal ? t("presenceEditSignal") : t("presenceAddSignal")}
-          </Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ busy: saving, disabled: saving }}
-            disabled={saving}
-            onPress={() => void save()}
-            style={({ pressed }) => ({
-              minHeight: 44,
-              justifyContent: "center",
-              opacity: saving ? 0.45 : pressed ? 0.6 : 1,
-            })}
-          >
-            {saving ? (
-              <ActivityIndicator color={colors.accent} />
-            ) : (
-              <Text style={{ color: colors.accent, fontSize: 17, fontWeight: "700" }}>
-                {t("save")}
-              </Text>
-            )}
-          </Pressable>
-        </View>
-
-        <Section title={t("personMovement")}>
-          <View style={{ gap: 14, padding: 16 }}>
-            <SegmentedControl
-              label={t("personMovement")}
-              values={kinds.map((kind) => kindLabels[kind])}
-              selectedIndex={Math.max(0, kinds.indexOf(draft.kind))}
-              onChange={(index) => {
-                if (!canChangeKind) return;
-                onChange({ ...draft, kind: kinds[index] ?? kinds[0] ?? "in" });
-              }}
-            />
-            {!canChangeKind ? (
-              <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13 }}>
-                {t("presenceActivityKindLocked")}
-              </Text>
-            ) : null}
+      <View style={{ backgroundColor: colors.background, flex: 1 }}>
+        <ScrollView
+          contentInsetAdjustmentBehavior="automatic"
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{
+            gap: 22,
+            padding: 16,
+            paddingBottom: Math.max(32, insets.bottom + 16),
+            paddingTop: 16,
+          }}
+        >
+          <View style={{ justifyContent: "center", minHeight: 44, paddingHorizontal: 52 }}>
+            <Text
+              selectable
+              style={{ color: colors.label, fontSize: 20, fontWeight: "700", textAlign: "center" }}
+            >
+              {draft.signal ? t("presenceEditSignal") : t("presenceAddSignal")}
+            </Text>
           </View>
-        </Section>
 
-        {draft.kind === "activity" ? (
-          <Section title={t("presenceActivity")}>
-            <View style={{ padding: 16 }}>
-              {activities.length > 0 && draft.activityId != null ? (
-                <Picker
-                  appearance="menu"
-                  selectedValue={draft.activityId}
-                  onValueChange={(activityId) => onChange({ ...draft, activityId })}
+          <Section title={t("personMovement")}>
+            <View style={{ gap: 14, padding: 16 }}>
+              <SegmentedControl
+                label={t("personMovement")}
+                values={kinds.map((kind) => kindLabels[kind])}
+                selectedIndex={Math.max(0, kinds.indexOf(draft.kind))}
+                onChange={(index) => {
+                  if (!canChangeKind) return;
+                  onChange({ ...draft, kind: kinds[index] ?? kinds[0] ?? "in" });
+                }}
+              />
+              {!canChangeKind ? (
+                <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13 }}>
+                  {t("presenceActivityKindLocked")}
+                </Text>
+              ) : null}
+            </View>
+          </Section>
+
+          {draft.kind === "activity" ? (
+            <Section title={t("presenceActivity")}>
+              {activities.length > 0 ? (
+                <MenuView
+                  actions={activities.map((activity) => ({
+                    id: String(activity.id),
+                    title: `${activity.name} · ${activity.category}`,
+                    state: draft.activityId === activity.id ? ("on" as const) : ("off" as const),
+                  }))}
+                  onPressAction={({ nativeEvent }) =>
+                    onChange({ ...draft, activityId: Number(nativeEvent.event) })
+                  }
                 >
-                  {activities.map((activity) => (
-                    <Picker.Item
-                      key={activity.id}
-                      label={`${activity.name} · ${activity.category}`}
-                      value={activity.id}
+                  <View
+                    style={{
+                      alignItems: "center",
+                      flexDirection: "row",
+                      gap: 12,
+                      minHeight: 50,
+                      padding: 16,
+                    }}
+                  >
+                    <Text
+                      selectable
+                      numberOfLines={1}
+                      style={{ color: colors.label, flex: 1, fontSize: 16 }}
+                    >
+                      {(() => {
+                        const selected = activities.find(
+                          (activity) => activity.id === draft.activityId,
+                        );
+                        return selected
+                          ? `${selected.name} · ${selected.category}`
+                          : t("presenceChooseActivity");
+                      })()}
+                    </Text>
+                    <SymbolView
+                      name="chevron.up.chevron.down"
+                      tintColor={colors.secondaryLabel}
+                      size={15}
                     />
-                  ))}
-                </Picker>
+                  </View>
+                </MenuView>
               ) : (
-                <Text selectable style={{ color: colors.secondaryLabel }}>
+                <Text selectable style={{ color: colors.secondaryLabel, padding: 16 }}>
                   {t("presenceNoActivities")}
                 </Text>
               )}
-            </View>
-          </Section>
-        ) : null}
+            </Section>
+          ) : null}
 
-        <Section
-          title={t("presenceDateAndTime")}
-          footer={draft.bounds ? t("presenceConflictBounds") : undefined}
-        >
-          <View style={{ gap: 12, padding: 16 }}>
-            {process.env.EXPO_OS === "android" ? (
-              <>
+          <Section
+            title={t("presenceDateAndTime")}
+            footer={draft.bounds ? t("presenceConflictBounds") : undefined}
+          >
+            <View style={{ gap: 12, padding: 16 }}>
+              {process.env.EXPO_OS === "android" ? (
+                <>
+                  <DateTimePicker
+                    minimumDate={draft.bounds?.min}
+                    maximumDate={draft.bounds?.max ?? new Date()}
+                    mode="date"
+                    value={draft.occurredAt}
+                    onChange={(_, date) => {
+                      if (!date) return;
+                      date.setHours(draft.occurredAt.getHours(), draft.occurredAt.getMinutes());
+                      onChange({ ...draft, occurredAt: clampToBounds(date) });
+                    }}
+                  />
+                  <DateTimePicker
+                    mode="time"
+                    value={draft.occurredAt}
+                    onChange={(_, date) => {
+                      if (!date) return;
+                      const next = new Date(draft.occurredAt);
+                      next.setHours(date.getHours(), date.getMinutes());
+                      onChange({ ...draft, occurredAt: clampToBounds(next) });
+                    }}
+                  />
+                </>
+              ) : (
                 <DateTimePicker
                   minimumDate={draft.bounds?.min}
                   maximumDate={draft.bounds?.max ?? new Date()}
-                  mode="date"
+                  mode="datetime"
                   value={draft.occurredAt}
-                  onChange={(_, date) => {
-                    if (!date) return;
-                    date.setHours(draft.occurredAt.getHours(), draft.occurredAt.getMinutes());
-                    onChange({ ...draft, occurredAt: clampToBounds(date) });
-                  }}
+                  onChange={(_, date) =>
+                    date && onChange({ ...draft, occurredAt: clampToBounds(date) })
+                  }
                 />
-                <DateTimePicker
-                  mode="time"
-                  value={draft.occurredAt}
-                  onChange={(_, date) => {
-                    if (!date) return;
-                    const next = new Date(draft.occurredAt);
-                    next.setHours(date.getHours(), date.getMinutes());
-                    onChange({ ...draft, occurredAt: clampToBounds(next) });
-                  }}
-                />
-              </>
-            ) : (
-              <DateTimePicker
-                minimumDate={draft.bounds?.min}
-                maximumDate={draft.bounds?.max ?? new Date()}
-                mode="datetime"
-                value={draft.occurredAt}
-                onChange={(_, date) =>
-                  date && onChange({ ...draft, occurredAt: clampToBounds(date) })
-                }
-              />
-            )}
-          </View>
-        </Section>
+              )}
+            </View>
+          </Section>
 
-        <Section title={t("presenceNotes")}>
-          <TextInput
-            accessibilityLabel={t("presenceNotes")}
-            multiline
-            onChangeText={(notes) => onChange({ ...draft, notes })}
-            placeholder={t("presenceNotesPlaceholder")}
-            placeholderTextColor={colors.tertiaryLabel}
-            style={{
-              color: colors.label,
-              fontSize: 16,
-              lineHeight: 22,
-              minHeight: 110,
-              padding: 16,
-              textAlignVertical: "top",
-            }}
-            value={draft.notes}
-          />
-        </Section>
+          <Section title={t("presenceNotes")}>
+            <TextInput
+              accessibilityLabel={t("presenceNotes")}
+              multiline
+              onChangeText={(notes) => onChange({ ...draft, notes })}
+              placeholder={t("presenceNotesPlaceholder")}
+              placeholderTextColor={colors.tertiaryLabel}
+              style={{
+                color: colors.label,
+                fontSize: 16,
+                lineHeight: 22,
+                minHeight: 110,
+                padding: 16,
+                textAlignVertical: "top",
+              }}
+              value={draft.notes}
+            />
+          </Section>
 
-        {error ? (
-          <Text selectable style={{ color: colors.destructive, fontSize: 14, textAlign: "center" }}>
-            {error}
-          </Text>
-        ) : null}
-      </ScrollView>
+          {error ? (
+            <Text
+              selectable
+              style={{ color: colors.destructive, fontSize: 14, textAlign: "center" }}
+            >
+              {error}
+            </Text>
+          ) : null}
+        </ScrollView>
+
+        <FloatingGlassButton
+          top={16}
+          side="left"
+          icon="xmark"
+          accessibilityLabel={t("cancel")}
+          onPress={onClose}
+        />
+        <FloatingGlassButton
+          top={16}
+          side="right"
+          icon="checkmark"
+          tintColor={colors.accent}
+          accessibilityLabel={t("save")}
+          accessibilityState={{ busy: saving }}
+          disabled={saving}
+          onPress={() => void save()}
+        />
+      </View>
     </Modal>
   );
 }
