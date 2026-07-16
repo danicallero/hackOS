@@ -398,8 +398,6 @@ export function PersonOperationsScreen() {
           </View>
         </View>
 
-        {person.badgeId ? presenceRegisterSection : accreditationSection}
-
         <Section title={t("personPersonalData")}>
           {person.email ? (
             <>
@@ -422,7 +420,10 @@ export function PersonOperationsScreen() {
           <InfoRow label={t("personShirt")} value={person.shirtSize ?? "—"} icon="tshirt" />
         </Section>
 
-        {person.badgeId ? accreditationSection : null}
+        {/* Personal details always lead; then the movement register (badge
+            holders) or badge assignment (everyone else), then the rest. */}
+        {person.badgeId ? presenceRegisterSection : null}
+        {accreditationSection}
 
         {person.intolerances.length > 0 || person.foodIntoleranceNotes || person.notes ? (
           <Section title={t("personImportantInfo")}>
