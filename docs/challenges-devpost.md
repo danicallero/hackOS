@@ -115,12 +115,30 @@ public/general fields (`title`, `description`, `criteria`, `prizes`,
 | `POST /api/devpost/prizes/:prizeName/map` | `projects:import` | H16 | append prize to a challenge's `devpost_tags` |
 | `GET /api/repos` | `projects:read` | H20/queue | repos + members + prizes + mapped challenges |
 | `GET /api/repos/:id` | `projects:read` | H20/queue | one repo, same shape |
-| `GET /api/me/projects` | authenticated | H20 | participant self-view (no member roster) |
+| `POST /api/repos` | `projects:edit` + idempotency | H18 | native creation: metadata + members + challenge lineup in one transaction |
+| `PATCH /api/repos/:id` | `projects:edit` | H18 | metadata edit (name, description, links), audited before/after |
+| `POST /api/repos/:id/members` / `DELETE …/members/:userId` | `projects:edit` | H21 | hot-edit team membership |
+| `POST /api/repos/:id/challenges` / `DELETE …/challenges/:challengeId` | `projects:edit` | H21 | enqueue at queue bottom / remove + compact positions |
+| `GET /api/me/projects` | authenticated | H20 | participant self-view: team roster, challenges, live queue status, plus `canCreate` (H19 policy ∧ no project yet) |
+| `POST /api/me/projects` | authenticated + idempotency | H19 | participant self-creation, only while the event policy allows it |
 
-**H20 is read-only for participants by design.** A participant can *see* their
-project, team and challenges but cannot mutate any of it — corrections go through
-queue-management/admin (H21). There is therefore **no participant
-challenge-selection form and no "max challenges per project" API rule**; see §5.
+**Native lifecycle (H18-H19).** `repos.source` distinguishes `'devpost'` from
+`'native'` rows (migration `0301`), and the import's name-dedupe skips native
+repos so a re-import can never clobber a hand-made project. Challenge lineups
+chosen at creation reuse the same enqueue core as the H21 hot edit
+(`enqueueRepoOnChallenge`): append at the bottom of the challenge's queue, one
+`queue_history` row + one audit row + one `QUEUE_ENTRY_CHANGED` broadcast per
+mutation. Participant self-creation is gated by
+`event_config.participants_can_create_projects` (H19, exposed on
+`GET /api/public/event` and toggled from the event settings page), limited to
+one project per participant (advisory-locked, exactly one winner under
+concurrency), and only accepts publicly visible challenges.
+
+**H20 stays read-only for participants.** A participant can *see* their
+project, team and challenges (web: `/my-project`) but cannot mutate an existing
+project — corrections go through queue-management/admin (H21). The only
+participant-side write is the H19 creation itself, and only while the event
+policy is on.
 
 ---
 
@@ -232,13 +250,13 @@ Three items in the originating brief conflict with `plan/historias-hackos.md`,
 which per `CLAUDE.md` overrides any conflicting instruction. They were **not**
 implemented:
 
-1. **Participant challenge-selection form + "max challenges per project" +
-   "freeze participant edits at a deadline."** H20 states participants cannot
-   modify their project, team, or challenges at all ("*No puedo modificar nada de
-   esto yo mismo*"); corrections flow through operators (H21). In-hackOS project
-   creation and participant self-service (H18/H19) are explicitly marked
-   *post-MVP*. Building a participant-facing selection/limit/lock flow would
-   contradict the story, so the participant surface stays read-only.
+1. **Participant "max challenges per project" + "freeze participant edits at a
+   deadline."** H20 states participants cannot modify their project, team, or
+   challenges ("*No puedo modificar nada de esto yo mismo*"); corrections flow
+   through operators (H21). The post-MVP extension is now built: native
+   creation (H18) and policy-gated participant self-creation (H19) — see §1.3 —
+   but the participant surface for *existing* projects stays read-only, and no
+   limit/lock flow exists because the stories don't name one.
 2. **Generic challenge Delete CRUD.** Challenges are created and owned through
    the sponsor lifecycle (H43/H44), and publication is an admin-controlled
    status/visibility transition. There is still no delete endpoint; the "prevent

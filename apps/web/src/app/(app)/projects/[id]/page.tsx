@@ -52,6 +52,7 @@ import {
 } from "@/lib/projects";
 import { useSessionContext } from "@/lib/session";
 import type { UserList } from "@/lib/types";
+import { ProjectFormDialog } from "../project-form-dialog";
 import {
   challengeTitleText,
   memberName,
@@ -214,14 +215,28 @@ export default function ProjectDetailPage() {
         title={repo.name}
         description={t("projectMembersDesc")}
         actions={
-          <Button variant="outline" asChild>
-            <Link href="/projects">
-              <ArrowLeftIcon className="size-4" />
-              {t("projects")}
-            </Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {/* H18: metadata edit (name, description, links). */}
+            {canEdit && (
+              <ProjectFormDialog
+                key={`${repo.id}-${repo.name}`}
+                mode={{ kind: "edit", repo }}
+                onSaved={load}
+              />
+            )}
+            <Button variant="outline" asChild>
+              <Link href="/projects">
+                <ArrowLeftIcon className="size-4" />
+                {t("projects")}
+              </Link>
+            </Button>
+          </div>
         }
       />
+
+      {repo.description && (
+        <p className="text-muted-foreground max-w-prose text-pretty text-sm">{repo.description}</p>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label={t("teamMembers")} value={repo.members.length} />

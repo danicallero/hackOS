@@ -53,6 +53,36 @@ export const repoPrizeParamsSchema = z.object({
   prizeName: z.string().min(1),
 });
 
+const repoUrl = z.string().url().max(2000);
+
+/** POST /api/repos (H18) — native creation with team + challenge lineup. */
+export const createRepoBodySchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  description: z.string().max(10000).default(""),
+  githubUrl: repoUrl.nullable().default(null),
+  demoUrl: repoUrl.nullable().default(null),
+  memberUserIds: z.array(z.number().int().positive()).max(50).default([]),
+  challengeIds: z.array(z.number().int().positive()).max(50).default([]),
+});
+export type CreateRepoBody = z.infer<typeof createRepoBodySchema>;
+
+/** PATCH /api/repos/:id (H18) — metadata only; team/challenges have their own H21 routes. */
+export const updateRepoBodySchema = z
+  .object({
+    name: z.string().trim().min(1).max(200).optional(),
+    description: z.string().max(10000).optional(),
+    githubUrl: repoUrl.nullable().optional(),
+    demoUrl: repoUrl.nullable().optional(),
+  })
+  .refine((body) => Object.values(body).some((value) => value !== undefined), {
+    message: "At least one field is required",
+  });
+export type UpdateRepoBody = z.infer<typeof updateRepoBodySchema>;
+
+/** POST /api/me/projects (H19) — no memberUserIds: the creator is the sole initial member. */
+export const createMyProjectBodySchema = createRepoBodySchema.omit({ memberUserIds: true });
+export type CreateMyProjectBody = z.infer<typeof createMyProjectBodySchema>;
+
 export const repoMemberBodySchema = z.object({
   userId: z.coerce.number().int().positive(),
 });

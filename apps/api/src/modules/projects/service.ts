@@ -4,7 +4,7 @@ import { config } from "../../config.js";
 import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
-import { ConflictError, NotFoundError } from "../../lib/errors.js";
+import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
 import { enqueueAuthEmail } from "../identity/outbox.js";
 import { assertSecondaryEmailAvailable } from "../identity/routes/secondary-email.js";
@@ -47,9 +47,11 @@ async function upsertRepo(
   // No Project Url in this row — best-effort dedupe by name among repos
   // that also have no devpost_url (see 0300 migration DELTA note: this
   // case can't use the unique-index upsert, so a second re-import of a
-  // URL-less project will only match if the title is identical).
+  // URL-less project will only match if the title is identical). Native
+  // repos (H18) are excluded: an import must never overwrite a hand-made
+  // project that happens to share a title.
   const existing = await client.query(
-    `SELECT id FROM repos WHERE devpost_url IS NULL AND name = $1 LIMIT 1`,
+    `SELECT id FROM repos WHERE devpost_url IS NULL AND source = 'devpost' AND name = $1 LIMIT 1`,
     [repo.title],
   );
   if (existing.rows[0]) {
@@ -521,6 +523,7 @@ interface RepoRow {
   github_url: string | null;
   devpost_url: string | null;
   demo_url: string | null;
+  source: "devpost" | "native";
 }
 
 interface RepoMember {
@@ -740,7 +743,7 @@ async function attachMembersAndPrizes(repoRows: RepoRow[]): Promise<RepoWithExtr
   });
 }
 
-const REPO_SELECT = `SELECT id, name, description, github_url, devpost_url, demo_url FROM repos`;
+const REPO_SELECT = `SELECT id, name, description, github_url, devpost_url, demo_url, source FROM repos`;
 
 /** PROJECTS_READ: repos with members, prizes, and mapped challenges. */
 export async function listRepos(): Promise<RepoWithExtras[]> {
@@ -849,7 +852,10 @@ export async function getRepoForUser(
 }
 
 /**
- * Participant self-view (H20 scope, minimal): repos this user is a member of.
+ * Participant self-view (H20): repos this user is a member of, WITH the team
+ * roster and challenge lineup — the story is "ver mi proyecto, su equipo y a
+ * qué retos se presenta". Read-only: any correction goes through queue
+ * management (H21) or, when the event enables it, self-creation (H19).
  *
  * Membership must match what every other project/queue roster surfaces via
  * attachMembersAndPrizes — a user counts as a member if they have a submission
@@ -858,9 +864,9 @@ export async function getRepoForUser(
  * submission, so all membership surfaces stop agreeing that the user belongs to
  * the project at the same time.
  */
-export async function myProjects(userId: number): Promise<Array<Omit<RepoWithExtras, "members">>> {
+export async function myProjects(userId: number): Promise<RepoWithExtras[]> {
   const { rows } = await pool.query(
-    `SELECT r.id, r.name, r.description, r.github_url, r.devpost_url, r.demo_url
+    `SELECT r.id, r.name, r.description, r.github_url, r.devpost_url, r.demo_url, r.source
      FROM repos r
      WHERE r.id IN (
        SELECT repo_id FROM submissions WHERE user_id = $1
@@ -870,8 +876,7 @@ export async function myProjects(userId: number): Promise<Array<Omit<RepoWithExt
      ORDER BY r.name`,
     [userId],
   );
-  const withExtras = await attachMembersAndPrizes(rows);
-  return withExtras.map(({ members: _members, ...rest }) => rest);
+  return attachMembersAndPrizes(rows);
 }
 
 export async function addRepoMember(actorId: number, repoId: number, userId: number) {
@@ -1008,6 +1013,91 @@ export async function removeRepoPrize(actorId: number, repoId: number, prizeName
   });
 }
 
+interface EnqueueOutcome {
+  entry: Record<string, unknown> & { id: number; challenge_id: number };
+  inserted: boolean;
+  revived: boolean;
+}
+
+/**
+ * Core of H21's "apuntar un equipo a un reto": appends the repo at the
+ * BOTTOM of the challenge's queue, reviving a terminal (cancelled /
+ * disqualified / completed) entry instead of duplicating it. Writes exactly
+ * one queue_history row + one audit row per mutation (plan/07 invariant 5).
+ * Returns null when the repo is already actively queued (no-op). The caller
+ * owns the transaction and must broadcast QUEUE_ENTRY_CHANGED + notify the
+ * challenge AFTER commit for every non-null outcome.
+ */
+async function enqueueRepoOnChallenge(
+  client: Queryable,
+  actorId: number,
+  repoId: number,
+  challengeId: number,
+  auditSource: string,
+): Promise<EnqueueOutcome | null> {
+  const existing = await client.query(
+    `SELECT * FROM queue_entries WHERE repo_id = $1 AND challenge_id = $2 FOR UPDATE`,
+    [repoId, challengeId],
+  );
+  if (existing.rows[0]) {
+    const entry = existing.rows[0] as { id: number; status: string };
+    if (!["cancelled", "disqualified", "completed"].includes(entry.status)) return null;
+    const position = await nextBottomPosition(client, challengeId);
+    const revived = await client.query(
+      `UPDATE queue_entries
+          SET status = 'waiting', position = $1, assigned_room_id = NULL,
+              called_at = NULL, presentation_started_at = NULL, completed_at = NULL
+        WHERE id = $2
+        RETURNING *`,
+      [position, entry.id],
+    );
+    await writeQueueHistory(client, {
+      entryId: entry.id,
+      actorId,
+      previousStatus: entry.status,
+      newStatus: "waiting",
+      action: "re_enter",
+      reason: "Added back to challenge",
+      metadata: { position: "bottom" },
+    });
+    await audit(client, {
+      actorId,
+      entityType: "queue_entry",
+      entityId: entry.id,
+      action: "re_enter",
+      before: { status: entry.status },
+      after: { status: "waiting", position: "bottom" },
+      reason: "Added back to challenge",
+      source: auditSource,
+    });
+    return { entry: revived.rows[0], inserted: false, revived: true };
+  }
+
+  const position = await nextBottomPosition(client, challengeId);
+  const inserted = await client.query(
+    `INSERT INTO queue_entries (challenge_id, repo_id, status, position)
+     VALUES ($1, $2, 'waiting', $3)
+     RETURNING *`,
+    [challengeId, repoId, position],
+  );
+  const entry = inserted.rows[0];
+  await client.query(
+    `INSERT INTO queue_history
+       (queue_entry_id, actor_id, previous_status, new_status, action, metadata)
+     VALUES ($1, $2, 'none', 'waiting', 'enqueue', $3)`,
+    [entry.id, actorId, JSON.stringify({ source: "project_edit" })],
+  );
+  await audit(client, {
+    actorId,
+    entityType: "queue_entry",
+    entityId: entry.id,
+    action: "add_challenge",
+    after: { repoId, challengeId, status: "waiting", position },
+    source: auditSource,
+  });
+  return { entry, inserted: true, revived: false };
+}
+
 export async function addRepoChallenge(actorId: number, repoId: number, challengeId: number) {
   const result = await withTransaction(async (client) => {
     const repo = await client.query(`SELECT id FROM repos WHERE id = $1 FOR UPDATE`, [repoId]);
@@ -1015,69 +1105,9 @@ export async function addRepoChallenge(actorId: number, repoId: number, challeng
     const challenge = await client.query(`SELECT id FROM challenges WHERE id = $1`, [challengeId]);
     if (!challenge.rows[0]) throw new NotFoundError(`Challenge ${challengeId} not found`);
 
-    const existing = await client.query(
-      `SELECT * FROM queue_entries WHERE repo_id = $1 AND challenge_id = $2 FOR UPDATE`,
-      [repoId, challengeId],
-    );
-    if (existing.rows[0]) {
-      const entry = existing.rows[0] as { id: number; status: string };
-      if (["cancelled", "disqualified", "completed"].includes(entry.status)) {
-        const position = await nextBottomPosition(client, challengeId);
-        const revived = await client.query(
-          `UPDATE queue_entries
-              SET status = 'waiting', position = $1, assigned_room_id = NULL,
-                  called_at = NULL, presentation_started_at = NULL, completed_at = NULL
-            WHERE id = $2
-            RETURNING *`,
-          [position, entry.id],
-        );
-        await writeQueueHistory(client, {
-          entryId: entry.id,
-          actorId,
-          previousStatus: entry.status,
-          newStatus: "waiting",
-          action: "re_enter",
-          reason: "Added back to challenge",
-          metadata: { position: "bottom" },
-        });
-        await audit(client, {
-          actorId,
-          entityType: "queue_entry",
-          entityId: entry.id,
-          action: "re_enter",
-          before: { status: entry.status },
-          after: { status: "waiting", position: "bottom" },
-          reason: "Added back to challenge",
-          source: "admin",
-        });
-        return { repoId, challengeId, entry: revived.rows[0], inserted: false, revived: true };
-      }
-      return { repoId, challengeId, entry: null, inserted: false, revived: false };
-    }
-
-    const position = await nextBottomPosition(client, challengeId);
-    const inserted = await client.query(
-      `INSERT INTO queue_entries (challenge_id, repo_id, status, position)
-       VALUES ($1, $2, 'waiting', $3)
-       RETURNING *`,
-      [challengeId, repoId, position],
-    );
-    const entry = inserted.rows[0];
-    await client.query(
-      `INSERT INTO queue_history
-         (queue_entry_id, actor_id, previous_status, new_status, action, metadata)
-       VALUES ($1, $2, 'none', 'waiting', 'enqueue', $3)`,
-      [entry.id, actorId, JSON.stringify({ source: "project_edit" })],
-    );
-    await audit(client, {
-      actorId,
-      entityType: "queue_entry",
-      entityId: entry.id,
-      action: "add_challenge",
-      after: { repoId, challengeId, status: "waiting", position },
-      source: "admin",
-    });
-    return { repoId, challengeId, entry, inserted: true, revived: false };
+    const outcome = await enqueueRepoOnChallenge(client, actorId, repoId, challengeId, "admin");
+    if (!outcome) return { repoId, challengeId, entry: null, inserted: false, revived: false };
+    return { repoId, challengeId, ...outcome };
   });
   if (result.entry) {
     await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ENTRY_CHANGED, result.entry);
@@ -1129,6 +1159,253 @@ export async function removeRepoChallenge(actorId: number, repoId: number, chall
   await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ENTRY_CHANGED, result.entry);
   await notifyChallengeQueueChanged(pool, result.entry.challenge_id);
   return result;
+}
+
+// ── native project lifecycle (H18-H19) ─────────────────────────────────────
+
+export interface NativeRepoInput {
+  name: string;
+  description: string;
+  githubUrl: string | null;
+  demoUrl: string | null;
+  challengeIds: number[];
+}
+
+interface EnqueuedChallenge {
+  challengeId: number;
+  entryId: number;
+  position: number | null;
+}
+
+/** Enqueued entries a caller must announce (SSE + notify) after commit. */
+async function announceQueueOutcomes(outcomes: EnqueueOutcome[]): Promise<void> {
+  for (const outcome of outcomes) {
+    await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ENTRY_CHANGED, outcome.entry);
+    await notifyChallengeQueueChanged(pool, outcome.entry.challenge_id);
+  }
+}
+
+/**
+ * `visibleOnly` is the participant path (H19): they can only pick challenges
+ * the public site shows, and an unpublished id reads as "not found" so its
+ * existence never leaks.
+ */
+async function assertChallengesExist(
+  client: Queryable,
+  challengeIds: number[],
+  visibleOnly = false,
+): Promise<void> {
+  if (challengeIds.length === 0) return;
+  const { rows } = await client.query(
+    `SELECT id FROM challenges WHERE id = ANY($1::int[])
+      ${visibleOnly ? `AND visibility = 'visible'` : ""}`,
+    [challengeIds],
+  );
+  const found = new Set(rows.map((r: { id: number }) => r.id));
+  const missing = challengeIds.filter((id) => !found.has(id));
+  if (missing.length > 0) throw new NotFoundError(`Challenge ${missing.join(", ")} not found`);
+}
+
+async function insertNativeRepo(
+  client: Queryable,
+  input: NativeRepoInput,
+  createdBy: number,
+): Promise<RepoRow> {
+  const { rows } = await client.query(
+    `INSERT INTO repos (name, description, github_url, demo_url, source, created_by)
+     VALUES ($1, $2, $3, $4, 'native', $5)
+     RETURNING id, name, description, github_url, devpost_url, demo_url, source`,
+    [input.name, input.description, input.githubUrl, input.demoUrl, createdBy],
+  );
+  return rows[0];
+}
+
+/**
+ * H18: organization creates a project natively (no Devpost involved), with
+ * team members and challenge lineup in ONE transaction — challenges are
+ * appended at the bottom of any already-generated queues exactly like a hot
+ * edit (H21), so an event can run entirely without imports.
+ */
+export async function createRepoNative(
+  actorId: number,
+  input: NativeRepoInput & { memberUserIds: number[] },
+): Promise<{ repo: RepoRow; memberUserIds: number[]; challenges: EnqueuedChallenge[] }> {
+  const memberUserIds = [...new Set(input.memberUserIds)];
+  const challengeIds = [...new Set(input.challengeIds)];
+  const { repo, outcomes } = await withTransaction(async (client) => {
+    if (memberUserIds.length > 0) {
+      const { rows } = await client.query(`SELECT id FROM users WHERE id = ANY($1::int[])`, [
+        memberUserIds,
+      ]);
+      const found = new Set(rows.map((r: { id: number }) => r.id));
+      const missing = memberUserIds.filter((id) => !found.has(id));
+      if (missing.length > 0) throw new NotFoundError(`User ${missing.join(", ")} not found`);
+    }
+    await assertChallengesExist(client, challengeIds);
+
+    const created = await insertNativeRepo(client, input, actorId);
+    for (const userId of memberUserIds) {
+      await client.query(
+        `INSERT INTO submissions (repo_id, user_id, imported_from, external_id)
+         VALUES ($1, $2, 'manual', NULL)`,
+        [created.id, userId],
+      );
+    }
+    const enqueued: EnqueueOutcome[] = [];
+    for (const challengeId of challengeIds) {
+      const outcome = await enqueueRepoOnChallenge(
+        client,
+        actorId,
+        created.id,
+        challengeId,
+        "admin",
+      );
+      if (outcome) enqueued.push(outcome);
+    }
+    await audit(client, {
+      actorId,
+      entityType: "repo",
+      entityId: created.id,
+      action: "create",
+      after: { name: created.name, source: "native", memberUserIds, challengeIds },
+      source: "admin",
+    });
+    return { repo: created, outcomes: enqueued };
+  });
+  await announceQueueOutcomes(outcomes);
+  return {
+    repo,
+    memberUserIds,
+    challenges: outcomes.map((o) => ({
+      challengeId: o.entry.challenge_id,
+      entryId: o.entry.id,
+      position: (o.entry.position as number | null) ?? null,
+    })),
+  };
+}
+
+export interface UpdateRepoPatch {
+  name?: string;
+  description?: string;
+  githubUrl?: string | null;
+  demoUrl?: string | null;
+}
+
+/** H18: edit a project's own metadata (title, description, links). Audited. */
+export async function updateRepo(actorId: number, repoId: number, patch: UpdateRepoPatch) {
+  return withTransaction(async (client) => {
+    const existing = await client.query(`${REPO_SELECT} WHERE id = $1 FOR UPDATE`, [repoId]);
+    const before = existing.rows[0] as RepoRow | undefined;
+    if (!before) throw new NotFoundError(`Repo ${repoId} not found`);
+
+    const next = {
+      name: patch.name ?? before.name,
+      description: patch.description ?? before.description,
+      github_url: patch.githubUrl === undefined ? before.github_url : patch.githubUrl,
+      demo_url: patch.demoUrl === undefined ? before.demo_url : patch.demoUrl,
+    };
+    const { rows } = await client.query(
+      `UPDATE repos SET name = $2, description = $3, github_url = $4, demo_url = $5
+        WHERE id = $1
+        RETURNING id, name, description, github_url, devpost_url, demo_url, source`,
+      [repoId, next.name, next.description, next.github_url, next.demo_url],
+    );
+    await audit(client, {
+      actorId,
+      entityType: "repo",
+      entityId: repoId,
+      action: "update",
+      before: {
+        name: before.name,
+        description: before.description,
+        githubUrl: before.github_url,
+        demoUrl: before.demo_url,
+      },
+      after: {
+        name: next.name,
+        description: next.description,
+        githubUrl: next.github_url,
+        demoUrl: next.demo_url,
+      },
+      source: "admin",
+    });
+    return rows[0] as RepoRow;
+  });
+}
+
+/** True when the event's H19 policy switch allows participant self-creation. */
+export async function participantsCanCreateProjects(): Promise<boolean> {
+  const { rows } = await pool.query(
+    `SELECT participants_can_create_projects FROM event_config WHERE id = 1`,
+  );
+  return rows[0]?.participants_can_create_projects === true;
+}
+
+/**
+ * H19: a participant creates THEIR OWN project — only while the event policy
+ * (event_config.participants_can_create_projects) is enabled, and only if they
+ * don't already belong to one (H20 speaks of "mi proyecto", singular; team
+ * corrections stay with queue management per H21). The creator becomes the
+ * project's first member; chosen challenges enqueue exactly like a hot edit.
+ */
+export async function createMyProject(
+  userId: number,
+  input: NativeRepoInput,
+): Promise<{ repo: RepoRow; challenges: EnqueuedChallenge[] }> {
+  const challengeIds = [...new Set(input.challengeIds)];
+  const { repo, outcomes } = await withTransaction(async (client) => {
+    // Serialize per-user: two concurrent creates must yield exactly one project.
+    await client.query(`SELECT pg_advisory_xact_lock(hashtext('my_project_create'), $1)`, [userId]);
+
+    const policy = await client.query(
+      `SELECT participants_can_create_projects FROM event_config WHERE id = 1`,
+    );
+    if (policy.rows[0]?.participants_can_create_projects !== true) {
+      throw new ForbiddenError("Participant project creation is disabled for this event");
+    }
+
+    const membership = await client.query(
+      `SELECT repo_id FROM submissions WHERE user_id = $1
+       UNION
+       SELECT repo_id FROM devpost_participants WHERE user_id = $1
+       LIMIT 1`,
+      [userId],
+    );
+    if (membership.rows[0]) {
+      throw new ConflictError("You already belong to a project; ask queue management for changes");
+    }
+    await assertChallengesExist(client, challengeIds, true);
+
+    const created = await insertNativeRepo(client, input, userId);
+    await client.query(
+      `INSERT INTO submissions (repo_id, user_id, imported_from, external_id)
+       VALUES ($1, $2, 'manual', NULL)`,
+      [created.id, userId],
+    );
+    const enqueued: EnqueueOutcome[] = [];
+    for (const challengeId of challengeIds) {
+      const outcome = await enqueueRepoOnChallenge(client, userId, created.id, challengeId, "web");
+      if (outcome) enqueued.push(outcome);
+    }
+    await audit(client, {
+      actorId: userId,
+      entityType: "repo",
+      entityId: created.id,
+      action: "create",
+      after: { name: created.name, source: "native", createdBy: userId, challengeIds },
+      source: "web",
+    });
+    return { repo: created, outcomes: enqueued };
+  });
+  await announceQueueOutcomes(outcomes);
+  return {
+    repo,
+    challenges: outcomes.map((o) => ({
+      challengeId: o.entry.challenge_id,
+      entryId: o.entry.id,
+      position: (o.entry.position as number | null) ?? null,
+    })),
+  };
 }
 
 export interface PublicChallenge {

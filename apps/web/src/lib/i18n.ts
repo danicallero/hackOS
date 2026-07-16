@@ -3321,6 +3321,84 @@ const dict: Record<string, I18nText> = {
     gl: "Os proxectos aparecerán aquí en canto un organizador importe a exportación de Devpost.",
     en: "Projects appear here once an organizer imports the Devpost export.",
   },
+  // ── native project lifecycle (H18-H20) ────────────────────────────────────
+  createAction: { es: "Crear", gl: "Crear", en: "Create" },
+  newProject: { es: "Nuevo proyecto", gl: "Novo proxecto", en: "New project" },
+  newProjectDesc: {
+    es: "Crea un proyecto directamente en hackOS, sin depender de Devpost.",
+    gl: "Crea un proxecto directamente en hackOS, sen depender de Devpost.",
+    en: "Create a project directly in hackOS, no Devpost involved.",
+  },
+  editProject: { es: "Editar proyecto", gl: "Editar proxecto", en: "Edit project" },
+  editProjectDesc: {
+    es: "Título, descripción y enlaces. El equipo y los retos se editan en la ficha.",
+    gl: "Título, descrición e ligazóns. O equipo e os retos edítanse na ficha.",
+    en: "Title, description and links. Team and challenges are edited on the detail page.",
+  },
+  projectNameLabel: { es: "Nombre", gl: "Nome", en: "Name" },
+  projectDescriptionLabel: { es: "Descripción", gl: "Descrición", en: "Description" },
+  projectRepoUrlLabel: {
+    es: "Repositorio (URL)",
+    gl: "Repositorio (URL)",
+    en: "Repository URL",
+  },
+  projectDemoUrlLabel: { es: "Demo (URL)", gl: "Demo (URL)", en: "Demo URL" },
+  projectChallengesHint: {
+    es: "Cada reto elegido añade el equipo al final de su cola (H21).",
+    gl: "Cada reto elixido engade o equipo ao final da súa cola (H21).",
+    en: "Each chosen challenge appends the team to the bottom of its queue (H21).",
+  },
+  projectCreated: {
+    es: "Proyecto creado.",
+    gl: "Proxecto creado.",
+    en: "Project created.",
+  },
+  projectSaved: {
+    es: "Proyecto guardado.",
+    gl: "Proxecto gardado.",
+    en: "Project saved.",
+  },
+  couldNotSaveProject: {
+    es: "No se ha podido guardar el proyecto.",
+    gl: "Non se puido gardar o proxecto.",
+    en: "Could not save the project.",
+  },
+  myProject: { es: "Mi proyecto", gl: "O meu proxecto", en: "My project" },
+  myProjectDesc: {
+    es: "Tu proyecto, su equipo y a qué retos se presenta. Solo lectura: cualquier corrección la hace la gestión de colas.",
+    gl: "O teu proxecto, o seu equipo e a que retos se presenta. Só lectura: calquera corrección faina a xestión de colas.",
+    en: "Your project, its team and the challenges it enters. Read-only: corrections go through queue management.",
+  },
+  createMyProjectCta: {
+    es: "Crear mi proyecto",
+    gl: "Crear o meu proxecto",
+    en: "Create my project",
+  },
+  myProjectEmptyTitle: {
+    es: "Aún no tienes proyecto",
+    gl: "Aínda non tes proxecto",
+    en: "No project yet",
+  },
+  myProjectEmptyDesc: {
+    es: "Aparecerá aquí cuando se importe de Devpost o te añada la organización.",
+    gl: "Aparecerá aquí cando se importe de Devpost ou te engada a organización.",
+    en: "It will appear here once imported from Devpost or added by the organization.",
+  },
+  myProjectCanCreateDesc: {
+    es: "Este evento permite crear tu propio proyecto directamente en hackOS.",
+    gl: "Este evento permite crear o teu propio proxecto directamente en hackOS.",
+    en: "This event lets you create your own project directly in hackOS.",
+  },
+  participantsCanCreateProjectsLabel: {
+    es: "Los participantes pueden crear proyectos",
+    gl: "Os participantes poden crear proxectos",
+    en: "Participants can create projects",
+  },
+  participantsCanCreateProjectsDesc: {
+    es: "H19: permite que cada participante cree su propio proyecto sin depender de Devpost.",
+    gl: "H19: permite que cada participante cree o seu propio proxecto sen depender de Devpost.",
+    en: "H19: lets each participant create their own project without relying on Devpost.",
+  },
   couldNotLoadProject: {
     es: "No se ha podido cargar el proyecto.",
     gl: "Non se puido cargar o proxecto.",
