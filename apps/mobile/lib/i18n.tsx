@@ -751,11 +751,6 @@ const dict = {
     es: "Entradas y salidas",
     gl: "Entradas e saídas",
   },
-  personPresenceFooter: {
-    en: "Register the movement now or choose an earlier date and time.",
-    es: "Puedes registrar el movimiento ahora o elegir una fecha y hora anterior.",
-    gl: "Podes rexistrar o movemento agora ou escoller unha data e hora anterior.",
-  },
   personMovement: { en: "Movement", es: "Movimiento", gl: "Movemento" },
   personRegisterEntry: {
     en: "Register entry",
@@ -765,11 +760,6 @@ const dict = {
   personRegisterExit: { en: "Register exit", es: "Registrar salida", gl: "Rexistrar saída" },
   edit: { en: "Edit", es: "Editar", gl: "Editar" },
   presenceSummary: { en: "Presence summary", es: "Resumen de presencia", gl: "Resumo de presenza" },
-  presenceSummaryFooter: {
-    en: "Provisional time counts from the last checkpoint; the next exit or activity secures it, and it drops to zero if the window expires.",
-    es: "El tiempo provisional cuenta desde el último punto de control; la siguiente salida o actividad lo asegura, y se pierde si la ventana caduca.",
-    gl: "O tempo provisional conta desde o último punto de control; a seguinte saída ou actividade asegúrao, e pérdese se a xanela caduca.",
-  },
   presenceGuaranteedHours: {
     en: "Guaranteed presence",
     es: "Presencia garantizada",

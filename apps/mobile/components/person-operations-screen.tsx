@@ -309,7 +309,7 @@ export function PersonOperationsScreen() {
 
   const presenceRegisterSection =
     canPresence && person.badgeId ? (
-      <Section title={t("personPresenceTitle")} footer={t("personPresenceFooter")}>
+      <Section title={t("personPresenceTitle")}>
         <View
           style={{
             alignItems: "center",

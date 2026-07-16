@@ -212,7 +212,7 @@ export function PresenceManagement({
         />
       ))}
 
-      <Section title={t("presenceSummary")} footer={t("presenceSummaryFooter")}>
+      <Section title={t("presenceSummary")}>
         <InfoRow
           icon="checkmark.seal.fill"
           label={t("presenceGuaranteedHours")}
