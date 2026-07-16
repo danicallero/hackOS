@@ -75,9 +75,13 @@ export function PersonOperationsScreen() {
     }
   }, [canAccredit, userId]);
 
+  // Reload on every scanner sync: the register derives its direction from
+  // the person's last door log, which door scans on other devices (or manual
+  // timeline edits) change under us.
   useEffect(() => {
+    void sync.lastSync;
     void load();
-  }, [load]);
+  }, [load, sync.lastSync]);
 
   async function saveBadge(nextBadge: string) {
     if (!person) return;
@@ -372,13 +376,13 @@ export function PersonOperationsScreen() {
                 <InfoRow
                   label={t("personFoodRestrictions")}
                   value={[
-                    person.intolerances
-                      .map((item) => item.label[language] ?? item.label.en ?? String(item.id))
-                      .join(", "),
+                    ...person.intolerances.map(
+                      (item) => item.label[language] ?? item.label.en ?? String(item.id),
+                    ),
                     person.foodIntoleranceNotes,
                   ]
                     .filter(Boolean)
-                    .join("\n")}
+                    .join(", ")}
                   icon="exclamationmark.triangle.fill"
                   valueStyle={{ color: colors.warning, fontWeight: "600" }}
                 />
