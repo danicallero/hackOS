@@ -90,7 +90,6 @@ export function PresenceManagement({
   useColorScheme();
   const { language, t } = useLocale();
   const [timeline, setTimeline] = useState<PresenceTimeline | null>(null);
-  const [hours, setHours] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<SignalDraft | null>(null);
@@ -99,12 +98,7 @@ export function PresenceManagement({
     setLoading(true);
     setError(null);
     try {
-      const [nextTimeline, nextHours] = await Promise.all([
-        apiFetch<PresenceTimeline>(`/api/presence/timeline/${userId}`),
-        apiFetch<{ hours: number }>(`/api/presence/hours/${userId}`),
-      ]);
-      setTimeline(nextTimeline);
-      setHours(nextHours.hours);
+      setTimeline(await apiFetch<PresenceTimeline>(`/api/presence/timeline/${userId}`));
     } catch {
       setError(t("presenceCouldNotLoad"));
     } finally {
@@ -170,8 +164,33 @@ export function PresenceManagement({
     ]);
   }
 
-  const windows = [...(timeline?.windows ?? [])].reverse();
-  const signals = [...(timeline?.signals ?? [])].reverse();
+  // Guaranteed = time already secured by a later checkpoint; provisional =
+  // the still-open window's elapsed time since the last checkpoint (secured
+  // by the next exit/activity, worth zero if the window expires).
+  const guaranteedMinutes = (timeline?.windows ?? []).reduce(
+    (sum, window) =>
+      sum + (window.securedUntil ? durationMinutes(window.start, window.securedUntil) : 0),
+    0,
+  );
+  const provisionalMinutes = (timeline?.windows ?? []).reduce((sum, window) => {
+    if (window.securedUntil || window.status !== "provisional") return sum;
+    const end = Math.min(Date.now(), Date.parse(window.deadline));
+    return sum + Math.max(0, Math.round((end - Date.parse(window.start)) / 60_000));
+  }, 0);
+
+  // One unified timeline: every entry/activity signal opens exactly one
+  // certainty window (in order), so zip them and render each point with the
+  // window it opened. Exits close windows but never open one.
+  const rows = (() => {
+    const wins = timeline?.windows ?? [];
+    let windowIndex = 0;
+    return (timeline?.signals ?? [])
+      .map((signal) => ({
+        signal,
+        window: signal.kind === "out" ? null : (wins[windowIndex++] ?? null),
+      }))
+      .reverse(); // newest first
+  })();
 
   return (
     <View style={{ gap: 22 }}>
@@ -184,74 +203,77 @@ export function PresenceManagement({
         />
       ))}
 
-      <Section title={t("presenceSummary")}>
+      <Section title={t("presenceSummary")} footer={t("presenceSummaryFooter")}>
         <InfoRow
-          icon="clock.fill"
-          label={t("presenceComputedHours")}
-          value={hours == null ? "—" : t("presenceHoursValue", { hours: hours.toFixed(2) })}
-          valueStyle={{ fontVariant: ["tabular-nums"], fontWeight: "700" }}
+          icon="checkmark.seal.fill"
+          label={t("presenceGuaranteedHours")}
+          value={timeline ? formatMinutes(guaranteedMinutes, t) : "—"}
+          valueStyle={{ color: colors.success, fontVariant: ["tabular-nums"], fontWeight: "700" }}
         />
         <Separator />
         <InfoRow
-          icon="timer"
-          label={t("presenceCertaintyWindow")}
-          value={formatMinutes(timeline?.certaintyWindowMinutes ?? 0, t)}
+          icon="hourglass"
+          label={t("presenceProvisionalHours")}
+          value={timeline ? formatMinutes(provisionalMinutes, t) : "—"}
+          valueStyle={{ color: colors.warning, fontVariant: ["tabular-nums"], fontWeight: "600" }}
         />
       </Section>
 
-      <Section title={t("presenceWindows")} footer={t("presenceWindowsFooter")}>
+      <Section title={t("presenceTimeline")} footer={t("presenceTimelineFooter")}>
+        <ActionButton icon="plus.circle.fill" label={t("presenceAddSignal")} onPress={addSignal} />
         {loading && !timeline ? (
-          <View style={{ alignItems: "center", minHeight: 110, justifyContent: "center" }}>
-            <ActivityIndicator color={colors.accent} />
-          </View>
+          <>
+            <Separator />
+            <View style={{ alignItems: "center", minHeight: 110, justifyContent: "center" }}>
+              <ActivityIndicator color={colors.accent} />
+            </View>
+          </>
         ) : error && !timeline ? (
-          <View style={{ gap: 4 }}>
+          <>
+            <Separator />
             <InfoRow icon="exclamationmark.triangle" label={error} value="" />
             <Separator />
             <ActionButton icon="arrow.clockwise" label={t("retry")} onPress={() => void load()} />
-          </View>
-        ) : windows.length === 0 ? (
-          <EmptyState
-            icon="clock.badge.questionmark"
-            title={t("presenceNoWindows")}
-            description={t("presenceNoWindowsDescription")}
-          />
+          </>
+        ) : rows.length === 0 ? (
+          <>
+            <Separator />
+            <EmptyState
+              icon="clock.badge.questionmark"
+              title={t("presenceNoWindows")}
+              description={t("presenceNoWindowsDescription")}
+            />
+          </>
         ) : (
-          windows.map((window, index) => (
-            <View
-              key={`${window.start}-${window.deadline}-${window.openedBy}-${window.closedBy ?? "open"}`}
-            >
-              {index > 0 ? <Separator /> : null}
-              <WindowRow window={window} language={language} />
+          rows.map(({ signal, window }) => (
+            <View key={`${signal.source}-${signal.id}`}>
+              <Separator />
+              <SignalRow
+                signal={signal}
+                window={window}
+                language={language}
+                onEdit={() => editSignal(signal)}
+              />
+              {window ? <WindowMeter window={window} language={language} /> : null}
+              <View style={{ flexDirection: "row" }}>
+                <ActionButton
+                  icon="pencil"
+                  label={t("edit")}
+                  onPress={() => editSignal(signal)}
+                  style={{ flex: 1 }}
+                />
+                <View style={{ backgroundColor: colors.separator, width: 0.5 }} />
+                <ActionButton
+                  destructive
+                  icon="trash"
+                  label={t("delete")}
+                  onPress={() => confirmDelete(signal)}
+                  style={{ flex: 1 }}
+                />
+              </View>
             </View>
           ))
         )}
-      </Section>
-
-      <Section title={t("presenceSignals")} footer={t("presenceSignalsFooter")}>
-        <ActionButton icon="plus.circle.fill" label={t("presenceAddSignal")} onPress={addSignal} />
-        {signals.map((signal) => (
-          <View key={`${signal.source}-${signal.id}`}>
-            <Separator />
-            <SignalRow signal={signal} language={language} onEdit={() => editSignal(signal)} />
-            <View style={{ flexDirection: "row" }}>
-              <ActionButton
-                icon="pencil"
-                label={t("edit")}
-                onPress={() => editSignal(signal)}
-                style={{ flex: 1 }}
-              />
-              <View style={{ backgroundColor: colors.separator, width: 0.5 }} />
-              <ActionButton
-                destructive
-                icon="trash"
-                label={t("delete")}
-                onPress={() => confirmDelete(signal)}
-                style={{ flex: 1 }}
-              />
-            </View>
-          </View>
-        ))}
       </Section>
 
       {draft && timeline ? (
@@ -324,7 +346,8 @@ function ConflictBanner({
   );
 }
 
-function WindowRow({ window, language }: { window: CertaintyWindow; language: string }) {
+/** Certainty-window meter shown under the signal that opened the window. */
+function WindowMeter({ window, language }: { window: CertaintyWindow; language: string }) {
   const { t } = useLocale();
   const securedFraction = securedWindowFraction(window);
   const provisionalFraction =
@@ -338,50 +361,14 @@ function WindowRow({ window, language }: { window: CertaintyWindow; language: st
           ),
         )
       : 0;
-  const status = window.conflict
-    ? { label: t("presenceConflict"), tone: "destructive" as const }
-    : {
-        secured: { label: t("presenceSecured"), tone: "success" as const },
-        provisional: { label: t("presenceProvisional"), tone: "warning" as const },
-        invalid: { label: t("presenceInvalid"), tone: "destructive" as const },
-      }[window.status];
   const securedMinutes = window.securedUntil
     ? durationMinutes(window.start, window.securedUntil)
     : 0;
 
   return (
-    <View style={{ gap: 12, padding: 16 }}>
-      <View style={{ alignItems: "center", flexDirection: "row", gap: 10 }}>
-        <View
-          style={{
-            alignItems: "center",
-            backgroundColor: colors.accentSurface,
-            borderCurve: "continuous",
-            borderRadius: 10,
-            height: 34,
-            justifyContent: "center",
-            width: 34,
-          }}
-        >
-          <SymbolView
-            name={window.openedBy === "in" ? "arrow.right.to.line" : "figure.run"}
-            tintColor={colors.accent}
-            size={17}
-          />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text selectable style={{ color: colors.label, fontSize: 16, fontWeight: "600" }}>
-            {window.openedBy === "in" ? t("presenceSignalEntry") : t("presenceSignalActivity")}
-          </Text>
-          <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13, marginTop: 2 }}>
-            {new Date(window.start).toLocaleString(language)}
-          </Text>
-        </View>
-        <StatusPill tone={status.tone}>{status.label}</StatusPill>
-      </View>
-
+    <View style={{ gap: 10, paddingBottom: 14, paddingHorizontal: 16 }}>
       <View
-        accessibilityLabel={status.label}
+        accessibilityLabel={t("presenceCertaintyWindow")}
         style={{
           backgroundColor: colors.elevatedSurface,
           borderCurve: "continuous",
@@ -441,10 +428,12 @@ function WindowRow({ window, language }: { window: CertaintyWindow; language: st
 
 function SignalRow({
   signal,
+  window,
   language,
   onEdit,
 }: {
   signal: PresenceSignal;
+  window?: CertaintyWindow | null;
   language: string;
   onEdit: () => void;
 }) {
@@ -455,6 +444,15 @@ function SignalRow({
       : signal.kind === "in"
         ? t("presenceSignalEntry")
         : t("presenceSignalExit");
+  const status = !window
+    ? null
+    : window.conflict
+      ? { label: t("presenceConflict"), tone: "destructive" as const }
+      : {
+          secured: { label: t("presenceSecured"), tone: "success" as const },
+          provisional: { label: t("presenceProvisional"), tone: "warning" as const },
+          invalid: { label: t("presenceInvalid"), tone: "destructive" as const },
+        }[window.status];
   const recordedBy = signal.recordedBy
     ? [signal.recordedBy.name, signal.recordedBy.surname].filter(Boolean).join(" ")
     : null;
@@ -503,7 +501,17 @@ function SignalRow({
           </Text>
         ) : null}
       </View>
-      <SymbolView name="chevron.right" tintColor={colors.tertiaryLabel} size={14} />
+      {status ? (
+        <StatusPill tone={status.tone} style={{ alignSelf: "center" }}>
+          {status.label}
+        </StatusPill>
+      ) : null}
+      <SymbolView
+        name="chevron.right"
+        tintColor={colors.tertiaryLabel}
+        size={14}
+        style={{ alignSelf: "center" }}
+      />
     </Pressable>
   );
 }

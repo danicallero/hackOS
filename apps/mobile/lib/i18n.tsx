@@ -765,22 +765,35 @@ const dict = {
   personRegisterExit: { en: "Register exit", es: "Registrar salida", gl: "Rexistrar saída" },
   edit: { en: "Edit", es: "Editar", gl: "Editar" },
   presenceSummary: { en: "Presence summary", es: "Resumen de presencia", gl: "Resumo de presenza" },
-  presenceComputedHours: {
-    en: "Computed presence",
-    es: "Presencia computada",
-    gl: "Presenza computada",
+  presenceSummaryFooter: {
+    en: "Provisional time counts from the last checkpoint; the next exit or activity secures it, and it drops to zero if the window expires.",
+    es: "El tiempo provisional cuenta desde el último punto de control; la siguiente salida o actividad lo asegura, y se pierde si la ventana caduca.",
+    gl: "O tempo provisional conta desde o último punto de control; a seguinte saída ou actividade asegúrao, e pérdese se a xanela caduca.",
   },
-  presenceHoursValue: { en: "{hours} h", es: "{hours} h", gl: "{hours} h" },
+  presenceGuaranteedHours: {
+    en: "Guaranteed presence",
+    es: "Presencia garantizada",
+    gl: "Presenza garantida",
+  },
+  presenceProvisionalHours: {
+    en: "Provisional presence",
+    es: "Presencia provisional",
+    gl: "Presenza provisional",
+  },
   presenceCertaintyWindow: {
     en: "Certainty window",
     es: "Ventana de certeza",
     gl: "Xanela de certeza",
   },
-  presenceWindows: { en: "Certainty windows", es: "Ventanas de certeza", gl: "Xanelas de certeza" },
-  presenceWindowsFooter: {
-    en: "Each entry or activity opens a new window. A later activity or exit secures the elapsed time.",
-    es: "Cada entrada o actividad abre una ventana. Una actividad o salida posterior asegura el tiempo transcurrido.",
-    gl: "Cada entrada ou actividade abre unha xanela. Unha actividade ou saída posterior asegura o tempo transcorrido.",
+  presenceTimeline: {
+    en: "Presence timeline",
+    es: "Cronología de presencia",
+    gl: "Cronoloxía de presenza",
+  },
+  presenceTimelineFooter: {
+    en: "Each entry or activity opens a certainty window; a later activity or exit secures the elapsed time. Points can be corrected manually.",
+    es: "Cada entrada o actividad abre una ventana de certeza; una actividad o salida posterior asegura el tiempo transcurrido. Los puntos se pueden corregir manualmente.",
+    gl: "Cada entrada ou actividade abre unha xanela de certeza; unha actividade ou saída posterior asegura o tempo transcorrido. Os puntos pódense corrixir manualmente.",
   },
   presenceCouldNotLoad: {
     en: "The presence timeline couldn't be loaded.",
@@ -805,12 +818,6 @@ const dict = {
     en: "{duration} secured",
     es: "{duration} aseguradas",
     gl: "{duration} aseguradas",
-  },
-  presenceSignals: { en: "Presence points", es: "Puntos de presencia", gl: "Puntos de presenza" },
-  presenceSignalsFooter: {
-    en: "Entries, exits, activities and meals can be corrected manually.",
-    es: "Las entradas, salidas, actividades y comidas se pueden corregir manualmente.",
-    gl: "As entradas, saídas, actividades e comidas pódense corrixir manualmente.",
   },
   presenceAddSignal: {
     en: "Add presence point",
