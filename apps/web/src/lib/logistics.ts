@@ -351,6 +351,8 @@ export const logisticsApi = {
       headers: idempotencyHeaders("meal-batch"),
     }),
   myTicket: () => api.get<TicketQrPayload>("/api/me/ticket"),
+  googleWalletSaveUrl: (purpose: "ticket" | "badge") =>
+    api.get<{ saveUrl: string }>(`/api/me/wallet/google/${purpose}`),
   userTicket: (userId: number) => api.get<TicketQrPayload>(`/api/users/${userId}/ticket`),
 };
 

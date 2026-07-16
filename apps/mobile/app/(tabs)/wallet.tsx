@@ -1,4 +1,5 @@
 import { EVENTS } from "@hackos/shared/events";
+import { ButtonStyle, ButtonType, RNWalletView } from "@premieroctet/react-native-wallet";
 import { SymbolView } from "expo-symbols";
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Linking, Platform, ScrollView, Text, useColorScheme, View } from "react-native";
@@ -236,21 +237,40 @@ export default function WalletScreen() {
 
       {value ? (
         <Section title={t("walletAddPass")} footer={t("walletAddPassHint")}>
-          {Platform.OS !== "android" ? (
-            <ActionButton
-              label={t("addToAppleWallet")}
-              icon="wallet.pass.fill"
-              busy={actionBusy}
-              onPress={() => void runAction(() => addToAppleWallet(purpose))}
-            />
+          {Platform.OS === "ios" ? (
+            <View style={{ padding: 16 }}>
+              {/*
+                Apple's Add to Apple Wallet guidelines require apps to use
+                the system PKAddPassButton control rather than custom badge
+                artwork or a styled button; the system picks one- or
+                two-line text layout based on the width available.
+              */}
+              <RNWalletView
+                buttonStyle={ButtonStyle.BLACK}
+                onPress={() => {
+                  if (!actionBusy) void runAction(() => addToAppleWallet(purpose));
+                }}
+                style={{ height: 44, opacity: actionBusy ? 0.5 : 1, width: "100%" }}
+              />
+            </View>
           ) : null}
-          {Platform.OS !== "android" ? <Separator /> : null}
-          <ActionButton
-            label={t("addToGoogleWallet")}
-            icon="wallet.pass"
-            busy={actionBusy}
-            onPress={() => void runAction(() => addToGoogleWallet(purpose))}
-          />
+          {Platform.OS === "ios" ? <Separator /> : null}
+          {Platform.OS === "android" ? (
+            <View style={{ alignItems: "center", padding: 16 }}>
+              {/*
+                Google's Add to Google Wallet brand guidelines require the
+                official button asset (bundled natively by this library) —
+                no custom button, recoloring, or free-scaling.
+              */}
+              <RNWalletView
+                buttonType={ButtonType.PRIMARY}
+                onPress={() => {
+                  if (!actionBusy) void runAction(() => addToGoogleWallet(purpose));
+                }}
+                style={{ opacity: actionBusy ? 0.5 : 1 }}
+              />
+            </View>
+          ) : null}
         </Section>
       ) : null}
     </ScrollView>
