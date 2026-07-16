@@ -2699,6 +2699,7 @@ const dict: Record<string, I18nText> = {
   colDuration: { es: "Duración", gl: "Duración", en: "Duration" },
   colWhen: { es: "Cuándo", gl: "Cando", en: "When" },
   colScannedBy: { es: "Escaneado por", gl: "Escaneado por", en: "Scanned by" },
+  presenceSystemActor: { es: "Sistema", gl: "Sistema", en: "System" },
   presenceDesc: {
     es: "Señales de puerta, comidas y actividades, estimadas en sesiones.",
     gl: "Sinais de porta, comidas e actividades, estimadas en sesións.",
@@ -2734,6 +2735,17 @@ const dict: Record<string, I18nText> = {
   presenceWindow_secured: { es: "Asegurada", gl: "Asegurada", en: "Secured" },
   presenceWindow_provisional: { es: "En curso", gl: "En curso", en: "In progress" },
   presenceWindow_invalid: { es: "Invalidada", gl: "Invalidada", en: "Invalidated" },
+  presenceWindow_conflict: { es: "Conflicto", gl: "Conflito", en: "Conflict" },
+  presenceConflictTitle: {
+    es: "Conflicto en la cronología",
+    gl: "Conflito na cronoloxía",
+    en: "Timeline conflict",
+  },
+  presenceConflictBody: {
+    es: "Dos entradas sin salida ni actividad entre ellas ({from} → {to}). No se computan horas de la primera entrada hasta añadir el punto que falta en ese intervalo.",
+    gl: "Dúas entradas sen saída nin actividade entre elas ({from} → {to}). Non se computan horas da primeira entrada ata engadir o punto que falta nese intervalo.",
+    en: "Two entries with no exit or activity between them ({from} → {to}). No hours are counted for the first entry until the missing point is added inside that gap.",
+  },
   activitySignal: { es: "Actividad o comida", gl: "Actividade ou comida", en: "Activity or meal" },
   windowOf: {
     es: "Abre una ventana de {duration}",
