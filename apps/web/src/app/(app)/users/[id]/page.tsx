@@ -1349,9 +1349,9 @@ function PresenceSection({ userId }: { userId: number }) {
           icon={ClockIcon}
         />
         <StatCard
-          label={t("presenceIntervals")}
+          label={t("presenceCheckpoints")}
           value={String(data.intervals.length)}
-          hint={t("estimatedVisitsVenue")}
+          hint={t("presenceCheckpointsHint")}
         />
       </div>
       <PresenceTimeline data={data.timeline} />
