@@ -739,10 +739,10 @@ const dict = {
     es: "Información importante",
     gl: "Información importante",
   },
-  personFoodRestriction: {
-    en: "Dietary restriction",
-    es: "Restricción alimentaria",
-    gl: "Restrición alimentaria",
+  personFoodRestrictions: {
+    en: "Dietary restrictions",
+    es: "Restricciones alimentarias",
+    gl: "Restricións alimentarias",
   },
   personFoodNotes: { en: "Dietary notes", es: "Notas alimentarias", gl: "Notas alimentarias" },
   personNotes: { en: "Notes", es: "Notas", gl: "Notas" },

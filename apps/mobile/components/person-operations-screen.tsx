@@ -16,7 +16,6 @@ import {
 } from "@/components/native-ui";
 import { PresenceManagement } from "@/components/presence-management";
 import { QrCamera } from "@/components/QrCamera";
-import { SegmentedControl } from "@/components/segmented-control";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
@@ -52,9 +51,11 @@ export function PersonOperationsScreen() {
   const canPresence = admin || capabilities.has(CAPABILITIES.PRESENCE_SCAN);
   const [person, setPerson] = useState<PersonDetails | null>(null);
   const [cameraAction, setCameraAction] = useState<"assign" | "replace" | null>(null);
-  const [direction, setDirection] = useState<"in" | "out">("in");
   const [scannedAt, setScannedAt] = useState(new Date());
   const [busy, setBusy] = useState(false);
+  // Only one door movement is ever valid: an exit while the session is open,
+  // an entry otherwise — so there's no direction to pick, just one button.
+  const direction: "in" | "out" = person?.lastPresenceKind === "in" ? "out" : "in";
 
   const load = useCallback(async () => {
     const local = await findPersonById(userId);
@@ -212,6 +213,90 @@ export function PersonOperationsScreen() {
   const fullName =
     [person.name, person.surname].filter(Boolean).join(" ") ||
     t("personFallbackName", { id: String(userId) });
+
+  const accreditationSection = canAccredit ? (
+    <Section title={t("scannerAccreditation")}>
+      <InfoRow
+        label={t("personCurrentBadge")}
+        value={person.badgeId ?? t("personUnassigned")}
+        icon="key.card"
+      />
+      <Separator />
+      {person.badgeId ? (
+        <View style={{ flexDirection: "row" }}>
+          <ActionButton
+            icon="qrcode.viewfinder"
+            label={t("personReplaceBadge")}
+            onPress={beginBadgeAction}
+            style={{ flex: 1 }}
+          />
+          <View style={{ backgroundColor: colors.separator, width: 0.5 }} />
+          <ActionButton
+            destructive
+            icon="trash"
+            label={t("personDeleteBadge")}
+            onPress={confirmRemoveBadge}
+            style={{ flex: 1 }}
+          />
+        </View>
+      ) : (
+        <ActionButton
+          icon="qrcode.viewfinder"
+          label={t("personLinkBadge")}
+          onPress={beginBadgeAction}
+        />
+      )}
+    </Section>
+  ) : null;
+
+  // Door logging needs a badge: without one the register is hidden entirely
+  // and assigning a badge becomes the profile's primary action instead.
+  const presenceRegisterSection =
+    canPresence && person.badgeId ? (
+      <Section title={t("personPresenceTitle")} footer={t("personPresenceFooter")}>
+        <View style={{ gap: 14, padding: 16 }}>
+          {process.env.EXPO_OS === "android" ? (
+            <>
+              <DateTimePicker
+                value={scannedAt}
+                mode="date"
+                maximumDate={new Date()}
+                onChange={(_, date) => {
+                  if (!date) return;
+                  date.setHours(scannedAt.getHours(), scannedAt.getMinutes());
+                  setScannedAt(date);
+                }}
+              />
+              <DateTimePicker
+                value={scannedAt}
+                mode="time"
+                onChange={(_, date) => {
+                  if (!date) return;
+                  const next = new Date(scannedAt);
+                  next.setHours(date.getHours(), date.getMinutes());
+                  setScannedAt(next);
+                }}
+              />
+            </>
+          ) : (
+            <DateTimePicker
+              value={scannedAt}
+              mode="datetime"
+              maximumDate={new Date()}
+              onChange={(_, date) => date && setScannedAt(date)}
+            />
+          )}
+        </View>
+        <Separator />
+        <ActionButton
+          busy={busy}
+          icon={direction === "in" ? "arrow.right.to.line" : "arrow.left.to.line"}
+          label={direction === "in" ? t("personRegisterEntry") : t("personRegisterExit")}
+          onPress={() => void registerPresence()}
+        />
+      </Section>
+    ) : null;
+
   return (
     <>
       <ScrollView
@@ -254,6 +339,8 @@ export function PersonOperationsScreen() {
           </View>
         </View>
 
+        {person.badgeId ? presenceRegisterSection : accreditationSection}
+
         <Section title={t("personPersonalData")}>
           {person.email ? (
             <>
@@ -276,56 +363,24 @@ export function PersonOperationsScreen() {
           <InfoRow label={t("personShirt")} value={person.shirtSize ?? "—"} icon="tshirt" />
         </Section>
 
-        {canAccredit ? (
-          <Section title={t("scannerAccreditation")}>
-            <InfoRow
-              label={t("personCurrentBadge")}
-              value={person.badgeId ?? t("personUnassigned")}
-              icon="key.card"
-            />
-            <Separator />
-            <ActionButton
-              icon="qrcode.viewfinder"
-              label={person.badgeId ? t("personReplaceBadge") : t("personLinkBadge")}
-              onPress={beginBadgeAction}
-            />
-            {person.badgeId ? (
-              <>
-                <Separator />
-                <ActionButton
-                  destructive
-                  icon="trash"
-                  label={t("personDeleteBadge")}
-                  onPress={confirmRemoveBadge}
-                />
-              </>
-            ) : null}
-          </Section>
-        ) : null}
+        {person.badgeId ? accreditationSection : null}
 
         {person.intolerances.length > 0 || person.foodIntoleranceNotes || person.notes ? (
           <Section title={t("personImportantInfo")}>
-            {person.intolerances.map((item, index) => (
-              <View key={item.id}>
-                <InfoRow
-                  label={t("personFoodRestriction")}
-                  value={item.label[language] ?? item.label.en ?? String(item.id)}
-                  icon="exclamationmark.triangle.fill"
-                  valueStyle={{ color: colors.warning, fontWeight: "600" }}
-                />
-                {index < person.intolerances.length - 1 ||
-                person.foodIntoleranceNotes ||
-                person.notes ? (
-                  <Separator />
-                ) : null}
-              </View>
-            ))}
-            {person.foodIntoleranceNotes ? (
+            {person.intolerances.length > 0 || person.foodIntoleranceNotes ? (
               <>
                 <InfoRow
-                  label={t("personFoodNotes")}
-                  value={person.foodIntoleranceNotes}
-                  icon="fork.knife"
+                  label={t("personFoodRestrictions")}
+                  value={[
+                    person.intolerances
+                      .map((item) => item.label[language] ?? item.label.en ?? String(item.id))
+                      .join(", "),
+                    person.foodIntoleranceNotes,
+                  ]
+                    .filter(Boolean)
+                    .join("\n")}
+                  icon="exclamationmark.triangle.fill"
+                  valueStyle={{ color: colors.warning, fontWeight: "600" }}
                 />
                 {person.notes ? <Separator /> : null}
               </>
@@ -333,58 +388,6 @@ export function PersonOperationsScreen() {
             {person.notes ? (
               <InfoRow label={t("personNotes")} value={person.notes} icon="note.text" />
             ) : null}
-          </Section>
-        ) : null}
-
-        {canPresence ? (
-          <Section title={t("personPresenceTitle")} footer={t("personPresenceFooter")}>
-            <View style={{ gap: 14, padding: 16 }}>
-              <SegmentedControl
-                label={t("personMovement")}
-                values={[t("scannerIn"), t("scannerOut")]}
-                selectedIndex={direction === "in" ? 0 : 1}
-                onChange={(index) => setDirection(index === 0 ? "in" : "out")}
-              />
-              {process.env.EXPO_OS === "android" ? (
-                <>
-                  <DateTimePicker
-                    value={scannedAt}
-                    mode="date"
-                    maximumDate={new Date()}
-                    onChange={(_, date) => {
-                      if (!date) return;
-                      date.setHours(scannedAt.getHours(), scannedAt.getMinutes());
-                      setScannedAt(date);
-                    }}
-                  />
-                  <DateTimePicker
-                    value={scannedAt}
-                    mode="time"
-                    onChange={(_, date) => {
-                      if (!date) return;
-                      const next = new Date(scannedAt);
-                      next.setHours(date.getHours(), date.getMinutes());
-                      setScannedAt(next);
-                    }}
-                  />
-                </>
-              ) : (
-                <DateTimePicker
-                  value={scannedAt}
-                  mode="datetime"
-                  maximumDate={new Date()}
-                  onChange={(_, date) => date && setScannedAt(date)}
-                />
-              )}
-            </View>
-            <Separator />
-            <ActionButton
-              busy={busy}
-              disabled={!person.badgeId}
-              icon={direction === "in" ? "arrow.right.to.line" : "arrow.left.to.line"}
-              label={direction === "in" ? t("personRegisterEntry") : t("personRegisterExit")}
-              onPress={() => void registerPresence()}
-            />
           </Section>
         ) : null}
 
