@@ -53,6 +53,13 @@ export function PersonOperationsScreen() {
   const [cameraAction, setCameraAction] = useState<"assign" | "replace" | null>(null);
   const [scannedAt, setScannedAt] = useState(new Date());
   const [busy, setBusy] = useState(false);
+  // Server-side last door log, reported by the presence timeline below —
+  // the local snapshot alone can lag behind manual edits or other devices.
+  const [serverDoor, setServerDoor] = useState<{ kind: "in" | "out"; at: string } | null>(null);
+  const onDoorState = useCallback(
+    (state: { kind: "in" | "out"; at: string } | null) => setServerDoor(state),
+    [],
+  );
   const load = useCallback(async () => {
     const local = await findPersonById(userId);
     if (!local) return;
@@ -214,6 +221,17 @@ export function PersonOperationsScreen() {
     [person.name, person.surname].filter(Boolean).join(" ") ||
     t("personFallbackName", { id: String(userId) });
 
+  // Only one door movement is ever valid, so only that button is shown.
+  // Whichever door signal is newest wins: the server timeline (manual edits,
+  // other devices) vs the local snapshot/queue (this device, maybe offline).
+  const serverAt = serverDoor ? Date.parse(serverDoor.at) : Number.NEGATIVE_INFINITY;
+  const localAt = person.lastPresenceAt
+    ? Date.parse(person.lastPresenceAt)
+    : Number.NEGATIVE_INFINITY;
+  const lastDoorKind =
+    serverAt >= localAt ? (serverDoor?.kind ?? person.lastPresenceKind) : person.lastPresenceKind;
+  const direction: "in" | "out" = lastDoorKind === "in" ? "out" : "in";
+
   const accreditationSection = canAccredit ? (
     <Section title={t("scannerAccreditation")}>
       <InfoRow
@@ -251,30 +269,41 @@ export function PersonOperationsScreen() {
 
   // Door logging needs a badge: without one the register is hidden entirely
   // and assigning a badge becomes the profile's primary action instead.
-  const directionButton = (target: "in" | "out") => (
+  const registerButton = (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={target === "in" ? t("personRegisterEntry") : t("personRegisterExit")}
+      accessibilityLabel={direction === "in" ? t("personRegisterEntry") : t("personRegisterExit")}
       accessibilityState={{ busy, disabled: busy }}
       disabled={busy}
-      onPress={() => void registerPresence(target)}
+      onPress={() => void registerPresence(direction)}
       style={({ pressed }) => ({
         alignItems: "center",
-        backgroundColor: target === "in" ? colors.accentSurface : colors.warningSurface,
+        backgroundColor: direction === "in" ? colors.accentSurface : colors.warningSurface,
         borderCurve: "continuous",
         borderRadius: 22,
+        flexDirection: "row",
+        gap: 7,
         height: 44,
         justifyContent: "center",
         opacity: busy ? 0.45 : pressed ? 0.6 : 1,
-        width: 44,
+        paddingHorizontal: 16,
       })}
     >
       <SymbolView
-        name={target === "in" ? "arrow.right.to.line" : "arrow.left.to.line"}
-        tintColor={target === "in" ? colors.accent : colors.warning}
-        size={19}
+        name={direction === "in" ? "arrow.right.to.line" : "arrow.left.to.line"}
+        tintColor={direction === "in" ? colors.accent : colors.warning}
+        size={17}
         weight="semibold"
       />
+      <Text
+        style={{
+          color: direction === "in" ? colors.accent : colors.warning,
+          fontSize: 16,
+          fontWeight: "600",
+        }}
+      >
+        {direction === "in" ? t("scannerIn") : t("scannerOut")}
+      </Text>
     </Pressable>
   );
 
@@ -295,7 +324,7 @@ export function PersonOperationsScreen() {
                 value={scannedAt}
                 mode="date"
                 maximumDate={new Date()}
-                onChange={(_, date) => {
+                onValueChange={(_, date) => {
                   if (!date) return;
                   date.setHours(scannedAt.getHours(), scannedAt.getMinutes());
                   setScannedAt(date);
@@ -304,7 +333,7 @@ export function PersonOperationsScreen() {
               <DateTimePicker
                 value={scannedAt}
                 mode="time"
-                onChange={(_, date) => {
+                onValueChange={(_, date) => {
                   if (!date) return;
                   const next = new Date(scannedAt);
                   next.setHours(date.getHours(), date.getMinutes());
@@ -318,12 +347,11 @@ export function PersonOperationsScreen() {
                 value={scannedAt}
                 mode="datetime"
                 maximumDate={new Date()}
-                onChange={(_, date) => date && setScannedAt(date)}
+                onValueChange={(_, date) => date && setScannedAt(date)}
               />
             </View>
           )}
-          {directionButton("in")}
-          {directionButton("out")}
+          {registerButton}
         </View>
       </Section>
     ) : null;
@@ -423,7 +451,11 @@ export function PersonOperationsScreen() {
         ) : null}
 
         {canPresence ? (
-          <PresenceManagement refreshKey={sync.lastSync ?? undefined} userId={userId} />
+          <PresenceManagement
+            onDoorState={onDoorState}
+            refreshKey={sync.lastSync ?? undefined}
+            userId={userId}
+          />
         ) : null}
       </ScrollView>
       <FloatingBackButton top={insets.top + 12} onPress={() => router.back()} />

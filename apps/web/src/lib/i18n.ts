@@ -2700,6 +2700,7 @@ const dict: Record<string, I18nText> = {
   colWhen: { es: "Cuándo", gl: "Cando", en: "When" },
   colScannedBy: { es: "Escaneado por", gl: "Escaneado por", en: "Scanned by" },
   presenceSystemActor: { es: "Sistema", gl: "Sistema", en: "System" },
+  columnActions: { es: "Acciones", gl: "Accións", en: "Actions" },
   presenceDesc: {
     es: "Señales de puerta, comidas y actividades, estimadas en sesiones.",
     gl: "Sinais de porta, comidas e actividades, estimadas en sesións.",

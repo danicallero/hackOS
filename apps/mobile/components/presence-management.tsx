@@ -84,9 +84,12 @@ interface SignalDraft {
 export function PresenceManagement({
   userId,
   refreshKey,
+  onDoorState,
 }: {
   userId: number;
   refreshKey?: string;
+  /** Reports the server's last door log so the register can derive its direction from ground truth. */
+  onDoorState?: (state: { kind: "in" | "out"; at: string } | null) => void;
 }) {
   useColorScheme();
   const { language, t } = useLocale();
@@ -99,13 +102,18 @@ export function PresenceManagement({
     setLoading(true);
     setError(null);
     try {
-      setTimeline(await apiFetch<PresenceTimeline>(`/api/presence/timeline/${userId}`));
+      const next = await apiFetch<PresenceTimeline>(`/api/presence/timeline/${userId}`);
+      setTimeline(next);
+      const lastDoor = [...next.signals].reverse().find((signal) => signal.source === "door");
+      onDoorState?.(
+        lastDoor ? { kind: lastDoor.kind as "in" | "out", at: lastDoor.occurredAt } : null,
+      );
     } catch {
       setError(t("presenceCouldNotLoad"));
     } finally {
       setLoading(false);
     }
-  }, [t, userId]);
+  }, [onDoorState, t, userId]);
 
   useEffect(() => {
     void refreshKey;
@@ -713,7 +721,7 @@ function SignalEditor({
                     maximumDate={draft.bounds?.max ?? new Date()}
                     mode="date"
                     value={draft.occurredAt}
-                    onChange={(_, date) => {
+                    onValueChange={(_, date) => {
                       if (!date) return;
                       date.setHours(draft.occurredAt.getHours(), draft.occurredAt.getMinutes());
                       onChange({ ...draft, occurredAt: clampToBounds(date) });
@@ -722,7 +730,7 @@ function SignalEditor({
                   <DateTimePicker
                     mode="time"
                     value={draft.occurredAt}
-                    onChange={(_, date) => {
+                    onValueChange={(_, date) => {
                       if (!date) return;
                       const next = new Date(draft.occurredAt);
                       next.setHours(date.getHours(), date.getMinutes());
@@ -736,7 +744,7 @@ function SignalEditor({
                   maximumDate={draft.bounds?.max ?? new Date()}
                   mode="datetime"
                   value={draft.occurredAt}
-                  onChange={(_, date) =>
+                  onValueChange={(_, date) =>
                     date && onChange({ ...draft, occurredAt: clampToBounds(date) })
                   }
                 />
