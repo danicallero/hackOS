@@ -88,9 +88,15 @@ route below. No migration needed.
   loading, retryable error, and empty states without leaking rejected promises.
   The account screen displays the shared `/api/me` profile, refreshes it, and
   provides a confirmed sign-out action for the device session. `wallet.tsx`
-  renders ticket/badge QR codes and
-  opens the existing Apple `.pkpass` download / Google `saveUrl` endpoints via
-  `Linking.openURL`. `queue.tsx` refetches immediately on a "queue" push
+  renders ticket/badge QR codes. The Apple Wallet action is the system
+  `PKAddPassButton` control (`@premieroctet/react-native-wallet`'s
+  `RNWalletView`, iOS only) — per Apple's Add to Apple Wallet guidelines, the
+  button must be the system control, not custom artwork — wired to
+  `react-native-wallet-manager`'s `addPassFromUrl` (authenticated fetch of the
+  `.pkpass` endpoint with the session cookie, then native
+  `PKAddPassesViewController` presentation). Google Wallet still goes through
+  the existing `saveUrl` endpoint via `Linking.openURL`.
+  `queue.tsx` refetches immediately on a "queue" push
   (below) and also polls `GET /api/queue/me` every 15s while focused as a
   fallback.
 - `app/(tabs)/scan.tsx` — camera/manual scanners selected by capability:

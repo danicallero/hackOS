@@ -559,6 +559,16 @@ const dict: Record<string, I18nText> = {
     gl: "Engadir a Apple Wallet",
     en: "Add to Apple Wallet",
   },
+  addToGoogleWallet: {
+    es: "Añadir a Google Wallet",
+    gl: "Engadir a Google Wallet",
+    en: "Add to Google Wallet",
+  },
+  walletGoogleSaveFailed: {
+    es: "No se pudo generar el enlace de Google Wallet",
+    gl: "Non se puido xerar a ligazón de Google Wallet",
+    en: "Couldn't generate the Google Wallet link",
+  },
   currentBadge: { es: "Acreditación actual", gl: "Acreditación actual", en: "Current badge" },
 
   // ---- Date/time picker controls ----
