@@ -268,6 +268,7 @@ const schema = z.object({
   hackingStartsAt: z.string(),
   hackingEndsAt: z.string(),
   showStartCountdown: z.boolean(),
+  participantsCanCreateProjects: z.boolean(),
   presenceAutoEntryAt: z.string(),
   presenceCertaintyWindowMinutes: z.number().int().min(15).max(10080),
   venueName: z.string().max(200),
@@ -332,6 +333,7 @@ function EventConfigSection() {
       hackingStartsAt: "",
       hackingEndsAt: "",
       showStartCountdown: false,
+      participantsCanCreateProjects: false,
       presenceAutoEntryAt: "",
       presenceCertaintyWindowMinutes: 720,
       venueName: "",
@@ -351,6 +353,7 @@ function EventConfigSection() {
       hackingStartsAt: toLocalInputValue(cfg.hackingStartsAt),
       hackingEndsAt: toLocalInputValue(cfg.hackingEndsAt),
       showStartCountdown: cfg.showStartCountdown,
+      participantsCanCreateProjects: cfg.participantsCanCreateProjects,
       presenceAutoEntryAt: toLocalInputValue(cfg.presenceAutoEntryAt),
       presenceCertaintyWindowMinutes: cfg.presenceCertaintyWindowMinutes,
       venueName: cfg.venueName ?? "",
@@ -422,6 +425,7 @@ function EventConfigSection() {
         hackingStartsAt: fromLocalInputValue(values.hackingStartsAt),
         hackingEndsAt: fromLocalInputValue(values.hackingEndsAt),
         showStartCountdown: values.showStartCountdown,
+        participantsCanCreateProjects: values.participantsCanCreateProjects,
         presenceAutoEntryAt: fromLocalInputValue(values.presenceAutoEntryAt),
         presenceCertaintyWindowMinutes: values.presenceCertaintyWindowMinutes,
         venueName: values.venueName.trim() || null,
@@ -560,6 +564,24 @@ function EventConfigSection() {
                   <div>
                     <FormLabel>{t("countdownToStartLabel")}</FormLabel>
                     <FormDescription>{t("countdownDesc")}</FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch checked={field.value} onCheckedChange={field.onChange} />
+                  </FormControl>
+                </div>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="participantsCanCreateProjects"
+            render={({ field }) => (
+              <FormItem>
+                <div className="flex items-center justify-between gap-4 rounded-md border p-3">
+                  <div>
+                    <FormLabel>{t("participantsCanCreateProjectsLabel")}</FormLabel>
+                    <FormDescription>{t("participantsCanCreateProjectsDesc")}</FormDescription>
                   </div>
                   <FormControl>
                     <Switch checked={field.value} onCheckedChange={field.onChange} />

@@ -50,6 +50,7 @@ const eventConfigBody = z
     hackingStartsAt: z.coerce.date().nullable().optional(),
     hackingEndsAt: z.coerce.date().nullable().optional(),
     showStartCountdown: z.boolean().optional(),
+    participantsCanCreateProjects: z.boolean().optional(),
     presenceAutoEntryAt: z.coerce.date().nullable().optional(),
     presenceCertaintyWindowMinutes: z.number().int().min(15).max(10080).optional(),
     venueName: z.string().nullable().optional(),
@@ -70,6 +71,7 @@ const DEFAULTS = {
   hacking_starts_at: null,
   hacking_ends_at: null,
   show_start_countdown: false,
+  participants_can_create_projects: false,
   presence_auto_entry_at: null,
   presence_certainty_window_minutes: 720,
   venue_name: null,
@@ -89,6 +91,7 @@ interface EventConfigRow {
   hacking_starts_at: string | null;
   hacking_ends_at: string | null;
   show_start_countdown: boolean;
+  participants_can_create_projects: boolean;
   presence_auto_entry_at: string | null;
   presence_certainty_window_minutes: number;
   venue_name: string | null;
@@ -103,7 +106,8 @@ async function readConfig(): Promise<EventConfigRow> {
   const { rows } = await pool.query(
     `SELECT name, tagline, timezone, event_starts_at, event_ends_at,
             hacking_starts_at, hacking_ends_at,
-            show_start_countdown, presence_auto_entry_at, presence_certainty_window_minutes,
+            show_start_countdown, participants_can_create_projects,
+            presence_auto_entry_at, presence_certainty_window_minutes,
             venue_name, venue_latitude, venue_longitude,
             pass_back_fields, pass_field_labels, pass_field_visibility
        FROM event_config WHERE id = 1`,
@@ -143,6 +147,8 @@ function toPublic(
     hackingStartsAt: row.hacking_starts_at,
     hackingEndsAt: row.hacking_ends_at,
     showStartCountdown: row.show_start_countdown,
+    // H19: public so participant clients know whether to offer self-creation.
+    participantsCanCreateProjects: row.participants_can_create_projects,
     presenceAutoEntryAt: row.presence_auto_entry_at,
     presenceCertaintyWindowMinutes: row.presence_certainty_window_minutes,
     judgingStartsAt: judging.judging_starts_at,
@@ -187,7 +193,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
       preHandler: requireCapability(CAPABILITIES.SCHEDULE_MANAGE),
       schema: {
         summary:
-          "Update event config: name/tagline/timezone, event start (doors open — the time shown on the Wallet pass), hacking window, venue (name + GPS), the Wallet pass back-field list, field-label overrides, and per-field show/hide toggles. Fields omitted from the body are left unchanged.",
+          "Update event config: name/tagline/timezone, event start (doors open — the time shown on the Wallet pass), hacking window, venue (name + GPS), the Wallet pass back-field list, field-label overrides, per-field show/hide toggles, and whether participants may create their own project (H19). Fields omitted from the body are left unchanged.",
         body: eventConfigBody,
       },
     },
@@ -205,6 +211,10 @@ export function registerEventRoutes(app: FastifyInstance): void {
         hacking_ends_at: b.hackingEndsAt === undefined ? current.hacking_ends_at : b.hackingEndsAt,
         show_start_countdown:
           b.showStartCountdown === undefined ? current.show_start_countdown : b.showStartCountdown,
+        participants_can_create_projects:
+          b.participantsCanCreateProjects === undefined
+            ? current.participants_can_create_projects
+            : b.participantsCanCreateProjects,
         presence_auto_entry_at:
           b.presenceAutoEntryAt === undefined
             ? current.presence_auto_entry_at
@@ -247,10 +257,11 @@ export function registerEventRoutes(app: FastifyInstance): void {
         `INSERT INTO event_config
             (id, name, tagline, timezone, event_starts_at, event_ends_at,
              hacking_starts_at, hacking_ends_at,
-             show_start_countdown, presence_auto_entry_at, presence_certainty_window_minutes,
+             show_start_countdown, participants_can_create_projects,
+             presence_auto_entry_at, presence_certainty_window_minutes,
              venue_name, venue_latitude, venue_longitude,
              pass_back_fields, pass_field_labels, pass_field_visibility)
-         VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15::jsonb, $16::jsonb)
+         VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, $16::jsonb, $17::jsonb)
          ON CONFLICT (id) DO UPDATE
             SET name = EXCLUDED.name, tagline = EXCLUDED.tagline, timezone = EXCLUDED.timezone,
                 event_starts_at = EXCLUDED.event_starts_at,
@@ -258,6 +269,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
                 hacking_starts_at = EXCLUDED.hacking_starts_at,
                 hacking_ends_at = EXCLUDED.hacking_ends_at,
                 show_start_countdown = EXCLUDED.show_start_countdown,
+                participants_can_create_projects = EXCLUDED.participants_can_create_projects,
                 presence_auto_entry_at = EXCLUDED.presence_auto_entry_at,
                 presence_certainty_window_minutes = EXCLUDED.presence_certainty_window_minutes,
                 venue_name = EXCLUDED.venue_name,
@@ -268,7 +280,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
                 pass_field_visibility = EXCLUDED.pass_field_visibility
          RETURNING name, tagline, timezone, event_starts_at, event_ends_at,
                    hacking_starts_at, hacking_ends_at,
-                   show_start_countdown, presence_auto_entry_at, presence_certainty_window_minutes,
+                   show_start_countdown, participants_can_create_projects,
+                   presence_auto_entry_at, presence_certainty_window_minutes,
                    venue_name, venue_latitude, venue_longitude,
                    pass_back_fields, pass_field_labels, pass_field_visibility`,
         [
@@ -280,6 +293,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
           next.hacking_starts_at,
           next.hacking_ends_at,
           next.show_start_countdown,
+          next.participants_can_create_projects,
           next.presence_auto_entry_at,
           next.presence_certainty_window_minutes,
           next.venue_name,

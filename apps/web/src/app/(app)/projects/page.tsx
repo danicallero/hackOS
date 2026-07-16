@@ -19,6 +19,7 @@ import { ApiError } from "@/lib/api";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { listRepos } from "@/lib/projects";
 import { useSessionContext } from "@/lib/session";
+import { ProjectFormDialog } from "./project-form-dialog";
 import { type ProjectRepo, toProjectRepo } from "./shared";
 
 function manualCount(repo: ProjectRepo): number {
@@ -101,6 +102,7 @@ export default function ProjectsPage() {
   const { t } = useLocale();
   const { can, canAny, me } = useSessionContext();
   const canImport = can(CAPABILITIES.PROJECTS_IMPORT);
+  const canEdit = can(CAPABILITIES.PROJECTS_EDIT);
   const columns = useMemo(() => buildColumns(t), [t]);
   // H8/H55: judges + sponsor reps get a scoped list from the backend; full
   // access via projects:read / projects:import.
@@ -155,11 +157,25 @@ export default function ProjectsPage() {
         title={t("projects")}
         description={t("projectsDesc")}
         actions={
-          canImport ? (
-            <Button onClick={() => router.push("/projects/import")}>
-              <UploadIcon className="size-4" />
-              {t("importFromDevpost")}
-            </Button>
+          canImport || canEdit ? (
+            <div className="flex flex-wrap gap-2">
+              {/* H18: native creation, so an event can run without Devpost. */}
+              {canEdit && (
+                <ProjectFormDialog
+                  mode={{ kind: "create" }}
+                  onSaved={(repoId) => router.push(`/projects/${repoId}`)}
+                />
+              )}
+              {canImport && (
+                <Button
+                  variant={canEdit ? "outline" : "default"}
+                  onClick={() => router.push("/projects/import")}
+                >
+                  <UploadIcon className="size-4" />
+                  {t("importFromDevpost")}
+                </Button>
+              )}
+            </div>
           ) : undefined
         }
       />

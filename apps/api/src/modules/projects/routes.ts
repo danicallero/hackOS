@@ -9,6 +9,8 @@ import { idempotencyGuard } from "../../lib/idempotency.js";
 import { listDevpostPrizes } from "../challenges/service.js";
 import {
   claimEmailBodySchema,
+  createMyProjectBodySchema,
+  createRepoBodySchema,
   importCsvBodySchema,
   linkParticipantBodySchema,
   mapPrizeBodySchema,
@@ -20,11 +22,14 @@ import {
   repoMemberBodySchema,
   repoMemberParamsSchema,
   repoPrizeParamsSchema,
+  updateRepoBodySchema,
 } from "./schemas.js";
 import {
   addRepoChallenge,
   addRepoMember,
   confirmImport,
+  createMyProject,
+  createRepoNative,
   getRepoForUser,
   linkParticipant,
   linkParticipantSecondary,
@@ -33,6 +38,7 @@ import {
   listUnmatchedParticipants,
   mapPrizeToChallenge,
   myProjects,
+  participantsCanCreateProjects,
   previewImport,
   type RepoScope,
   removeDevpostParticipant,
@@ -40,12 +46,14 @@ import {
   removeRepoMember,
   removeRepoPrize,
   sendClaimEmail,
+  updateRepo,
 } from "./service.js";
 
 /**
- * Projects / Devpost intake routes (H16-H17 + the PROJECTS_READ views the
- * queue workstream consumes). H21 edit surfaces live here too; H18-H19 remain
- * post-MVP and intentionally absent.
+ * Projects routes: Devpost intake (H16-H17), the PROJECTS_READ views the
+ * queue workstream consumes, hot edits (H21), and the native lifecycle —
+ * org-side creation/metadata edits (H18) plus policy-gated participant
+ * self-creation (H19) and the participant self-view (H20).
  */
 /**
  * Who may open Projects (H8, H20, H44/H46): full-access (`projects:read`/`*`),
@@ -210,6 +218,37 @@ export function registerProjectRoutes(app: FastifyInstance): void {
     },
   );
 
+  // ── H18: native creation + metadata edits ────────────────────────────────
+
+  r.post(
+    "/api/repos",
+    {
+      preHandler: [requireCapability(CAPABILITIES.PROJECTS_EDIT), idempotencyGuard],
+      schema: {
+        summary: "Create a project natively (H18), no Devpost involved.",
+        description:
+          "Creates a repo with title/description/links, initial team members and challenge lineup in one transaction. Each challenge enqueues the team at the bottom of that challenge's queue, exactly like a hot edit (H21). Audited; idempotent via Idempotency-Key.",
+        body: createRepoBodySchema,
+      },
+    },
+    async (req) => createRepoNative(req.userId as number, req.body),
+  );
+
+  r.patch(
+    "/api/repos/:id",
+    {
+      preHandler: requireCapability(CAPABILITIES.PROJECTS_EDIT),
+      schema: {
+        summary: "Edit a project's metadata (H18): name, description, links.",
+        description:
+          "Updates only the fields present in the body. Team membership and challenge lineup have their own H21 routes. Audited with before/after.",
+        params: repoIdParamsSchema,
+        body: updateRepoBodySchema,
+      },
+    },
+    async (req) => updateRepo(req.userId as number, req.params.id, req.body),
+  );
+
   // H21: hot-edit team membership and queue membership for a repo.
   r.post(
     "/api/repos/:repoId/members",
@@ -274,8 +313,36 @@ export function registerProjectRoutes(app: FastifyInstance): void {
     async (req) => removeRepoPrize(req.userId as number, req.params.repoId, req.params.prizeName),
   );
 
-  // Participant self-view (minimal H20 read for queue's participant panel).
-  r.get("/api/me/projects", { preHandler: requireAuth }, async (req) => ({
-    projects: await myProjects(req.userId as number),
-  }));
+  // ── H19-H20: participant self-view + policy-gated self-creation ──────────
+
+  r.get(
+    "/api/me/projects",
+    {
+      preHandler: requireAuth,
+      schema: {
+        summary: "My projects (H20): team roster, challenges and queue status. Read-only.",
+        description:
+          "Projects the caller belongs to, with team members, challenge lineup and live queue positions. `canCreate` reflects the event's H19 policy AND whether the caller may still create one (they don't belong to a project yet).",
+      },
+    },
+    async (req) => {
+      const projects = await myProjects(req.userId as number);
+      const policyEnabled = await participantsCanCreateProjects();
+      return { projects, canCreate: policyEnabled && projects.length === 0 };
+    },
+  );
+
+  r.post(
+    "/api/me/projects",
+    {
+      preHandler: [requireAuth, idempotencyGuard],
+      schema: {
+        summary: "Create my own project (H19) — only while the event policy allows it.",
+        description:
+          "403 unless event settings enable participant project creation; 409 if the caller already belongs to a project. The caller becomes the first team member; chosen (publicly visible) challenges enqueue the team at the bottom of their queues. Audited; idempotent via Idempotency-Key.",
+        body: createMyProjectBodySchema,
+      },
+    },
+    async (req) => createMyProject(req.userId as number, req.body),
+  );
 }

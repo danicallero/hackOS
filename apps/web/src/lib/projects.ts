@@ -124,12 +124,44 @@ export const mapPrize = (prizeName: string, challengeId: number) =>
 // ── read views ──────────────────────────────────────────────────────────────
 export const listRepos = () => api.get<{ repos: RepoWithExtras[] }>("/api/repos");
 export const getRepoById = (id: number) => api.get<RepoWithExtras>(`/api/repos/${id}`);
-export const myProjects = () => api.get<RepoWithExtras[]>("/api/me/projects");
+/** H20 participant self-view; canCreate reflects the H19 event policy. */
+export const myProjects = () =>
+  api.get<{ projects: RepoWithExtras[]; canCreate: boolean }>("/api/me/projects");
 export const userProjects = (userId: number) =>
   api.get<{ projects: RepoWithExtras[] }>(`/api/users/${userId}/projects`);
 
+// ── native lifecycle (H18-H19) ─────────────────────────────────────────────
+export interface NativeProjectInput {
+  name: string;
+  description?: string;
+  githubUrl?: string | null;
+  demoUrl?: string | null;
+  challengeIds?: number[];
+}
+
+export interface CreatedProject {
+  repo: RepoWithExtras;
+  challenges: Array<{ challengeId: number; entryId: number; position: number | null }>;
+}
+
 // ── hot edit (H21) ─────────────────────────────────────────────────────────
 const idem = (key?: string) => (key ? { headers: { "Idempotency-Key": key } } : undefined);
+
+/** POST /api/repos (H18, PROJECTS_EDIT): native creation, no Devpost. */
+export const createRepo = (
+  input: NativeProjectInput & { memberUserIds?: number[] },
+  idempotencyKey?: string,
+) => api.post<CreatedProject>("/api/repos", { ...input }, idem(idempotencyKey));
+
+/** PATCH /api/repos/:id (H18): metadata only. */
+export const updateRepo = (
+  repoId: number,
+  patch: Partial<Pick<NativeProjectInput, "name" | "description" | "githubUrl" | "demoUrl">>,
+) => api.patch<RepoWithExtras>(`/api/repos/${repoId}`, patch);
+
+/** POST /api/me/projects (H19): participant self-creation, policy-gated. */
+export const createMyProject = (input: NativeProjectInput, idempotencyKey?: string) =>
+  api.post<CreatedProject>("/api/me/projects", { ...input }, idem(idempotencyKey));
 
 export const addRepoMember = (repoId: number, userId: number, idempotencyKey?: string) =>
   api.post(`/api/repos/${repoId}/members`, { userId }, idem(idempotencyKey));

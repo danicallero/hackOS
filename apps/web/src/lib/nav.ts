@@ -65,6 +65,8 @@ export const NAV: NavSection[] = [
       { title: "myApplications", href: "/my-applications", icon: FileTextIcon },
       // Participant-facing queue status (H38). No capability gate — auth only.
       { title: "myQueue", href: "/my-queue", icon: TicketIcon },
+      // Participant project self-view (H20) + policy-gated creation (H19).
+      { title: "myProject", href: "/my-project", icon: FolderGitIcon },
     ],
   },
   {

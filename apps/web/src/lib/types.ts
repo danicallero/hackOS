@@ -91,6 +91,8 @@ export interface EventConfig {
   hackingStartsAt: string | null;
   hackingEndsAt: string | null;
   showStartCountdown: boolean;
+  /** H19: participants may create their own project while enabled. */
+  participantsCanCreateProjects: boolean;
   /** Optional common entry instant used for people accredited earlier. */
   presenceAutoEntryAt: string | null;
   /** Maximum time without an exit or activity signal before provisional time is invalidated. */
