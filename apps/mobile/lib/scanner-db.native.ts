@@ -17,6 +17,9 @@ async function db(): Promise<SQLite.SQLiteDatabase> {
       await opened.execAsync(`
         PRAGMA journal_mode = WAL;
         PRAGMA foreign_keys = ON;
+        -- Wait for a competing connection (e.g. the pre-reload one during dev
+        -- fast refresh) instead of failing with "database is locked" (code 5).
+        PRAGMA busy_timeout = 5000;
         CREATE TABLE IF NOT EXISTS scanner_people (
           user_id INTEGER PRIMARY KEY,
           email TEXT NOT NULL DEFAULT '',
@@ -110,9 +113,32 @@ async function db(): Promise<SQLite.SQLiteDatabase> {
   return database;
 }
 
+// SQLite allows one transaction per connection: two concurrent
+// withTransactionAsync calls (the 15s snapshot sync racing a scan enqueue)
+// interleave BEGINs and fail. Every transaction runs through this queue.
+let transactionChain: Promise<unknown> = Promise.resolve();
+
+function withSerializedTransaction<T>(
+  database: SQLite.SQLiteDatabase,
+  work: () => Promise<T>,
+): Promise<T> {
+  const run = transactionChain.then(async () => {
+    let result: T | undefined;
+    await database.withTransactionAsync(async () => {
+      result = await work();
+    });
+    return result as T;
+  });
+  transactionChain = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
 export async function applyScannerSnapshot(snapshot: ScannerSnapshot): Promise<void> {
   const database = await db();
-  await database.withTransactionAsync(async () => {
+  await withSerializedTransaction(database, async () => {
     const statements = [
       `
       DELETE FROM scanner_people;
@@ -297,7 +323,7 @@ export async function enqueueLocalScan(payload: ScanPayload): Promise<string> {
   const database = await db();
   const id = makeId();
   const now = new Date().toISOString();
-  await database.withTransactionAsync(async () => {
+  await withSerializedTransaction(database, async () => {
     await database.runAsync(
       `INSERT INTO pending_scans (id, kind, payload_json, created_at) VALUES (?, ?, ?, ?)`,
       id,
@@ -387,7 +413,7 @@ export async function markScanAttempt(id: string): Promise<void> {
 
 export async function acknowledgeScan(id: string, payload: ScanPayload): Promise<void> {
   const database = await db();
-  await database.withTransactionAsync(async () => {
+  await withSerializedTransaction(database, async () => {
     await database.runAsync(
       `UPDATE pending_scans SET status = 'acknowledged', acknowledged_at = ?, last_error = NULL
         WHERE id = ?`,
