@@ -27,7 +27,7 @@
   jobs never degrade request latency. Importing `modules/index.js` has the side
   effect of registering every processor; then `startWorkers()`.
 
-## The four workers (queues)
+## The repeatable workers (queues)
 
 Every worker is a repeatable job scheduled with
 `{ repeat: { every: N }, jobId: <queue>, removeOnComplete: true, removeOnFail: true }`.
@@ -40,6 +40,11 @@ queue no matter how many times scheduling runs (idempotent scheduling).
 | `announcements-publisher` | `notifications/announcements-publisher.ts` | **15 s** | announcements whose `publish_at` has passed → reveals them |
 | `spot-confirmation expirer` | `applications/expirer.ts` | **60 s** | accepted responses whose confirmation window elapsed → `expired` (`expireDueConfirmations`) |
 | `queue-pump` | `queue/pump.ts` | repeatable | for each active room, tops up the live judging queue (`callNextForRoom`) |
+| `presence-event-end-closer` | `logistics/presence-closer.ts` | **60 s** | once `event_config.event_ends_at` passes, force-closes every still-open door session with an audited `out` at that instant (`scanned_by NULL` = system actor, migration 0708). H24 product override of the original "the system never closes a session itself" rule; an `out` outside the certainty window credits no hours, so it only restores the in/out invariant. |
+
+(The table lists the workers relevant to the flows documented here; other
+modules register more tick workers the same way — grep `registerWorker(` for
+the full set.)
 
 Each tick function is **exported** (e.g. `dispatchOutboxOnce`, `pumpTick`,
 `expireDueConfirmations`) so tests invoke it directly instead of waiting on

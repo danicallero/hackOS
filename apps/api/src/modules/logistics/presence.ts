@@ -30,9 +30,9 @@ async function certaintyWindowMs(): Promise<number> {
 /**
  * Whether `userId`'s door session is open as of `asOf` (default: now) — i.e.
  * their most recent door scan at or before `asOf` is an `in` with no `out`
- * after it. This is ground truth, not an estimate: the system never closes a
- * session itself, so this stays true until a real `out` (live or
- * backdated/manual) is recorded.
+ * after it. This is ground truth, not an estimate: it stays true until an
+ * `out` is recorded — live, backdated/manual, or the single automatic one the
+ * event-end closer inserts at event_ends_at (presence-closer.ts).
  */
 async function openSessionAsOf(
   client: Queryable,
@@ -81,9 +81,11 @@ export async function presenceLookup(badgeId: string) {
  *
  * Enforces the session invariant at write time: an `in` is rejected while a
  * session is already open, and an `out` is rejected when there's nothing
- * open to close. The system never closes a session on its own — if a scan
- * is rejected, staff must first record the missing `out` (backdated if
- * needed) via this same endpoint.
+ * open to close. During the event the system never closes a session on its
+ * own — if a scan is rejected, staff must first record the missing `out`
+ * (backdated if needed) via this same endpoint. The one exception is the
+ * event-end closer (presence-closer.ts), which force-closes whatever is
+ * still open once event_ends_at passes.
  */
 export async function presenceScan(
   actorId: number,
@@ -158,8 +160,8 @@ export async function presenceScan(
  * flags sessions with no supporting signal (door or activity) for longer
  * than the suspicious-gap window — i.e. the system's estimate no longer
  * finds it plausible the person is still on site — but the session stays
- * genuinely open until staff record a real `out`. The system never closes
- * these itself.
+ * genuinely open until staff record a real `out`, or until the event-end
+ * closer force-closes it at event_ends_at (presence-closer.ts).
  */
 export async function openSessions(now: number = Date.now()) {
   const windowMs = await certaintyWindowMs();
@@ -299,7 +301,7 @@ export async function listTimeLogs(userId: number) {
     `SELECT tl.id, tl.kind, tl.scanned_at, tl.scanned_by, tl.notes,
             u.name AS scanned_by_name, u.surname AS scanned_by_surname
        FROM time_logs tl
-       JOIN users u ON u.id = tl.scanned_by
+       LEFT JOIN users u ON u.id = tl.scanned_by
       WHERE tl.user_id = $1
       ORDER BY tl.scanned_at ASC, tl.id ASC`,
     [userId],
@@ -309,11 +311,15 @@ export async function listTimeLogs(userId: number) {
     kind: r.kind as "in" | "out",
     scannedAt: (r.scanned_at as Date).toISOString(),
     notes: (r.notes as string | null) ?? null,
-    scannedBy: {
-      userId: r.scanned_by as number,
-      name: (r.scanned_by_name as string | null) ?? null,
-      surname: (r.scanned_by_surname as string | null) ?? null,
-    },
+    // scanned_by NULL = system-generated log (event-end auto exit, 0708)
+    scannedBy:
+      r.scanned_by == null
+        ? null
+        : {
+            userId: r.scanned_by as number,
+            name: (r.scanned_by_name as string | null) ?? null,
+            surname: (r.scanned_by_surname as string | null) ?? null,
+          },
   }));
 }
 
@@ -515,7 +521,7 @@ export async function presenceTimeline(userId: number, now = Date.now()) {
             NULL::integer AS activity_id, NULL::text AS activity_name,
             NULL::text AS category, tl.notes, tl.scanned_by AS recorded_by,
             u.name AS recorded_by_name, u.surname AS recorded_by_surname
-       FROM time_logs tl JOIN users u ON u.id = tl.scanned_by WHERE tl.user_id = $1
+       FROM time_logs tl LEFT JOIN users u ON u.id = tl.scanned_by WHERE tl.user_id = $1
      UNION ALL
      SELECT al.id, 'activity', 'activity', al.logged_at, a.id, a.name, a.category,
             al.notes, al.logged_by, u.name, u.surname
@@ -536,11 +542,15 @@ export async function presenceTimeline(userId: number, now = Date.now()) {
     activityName: (row.activity_name as string | null) ?? null,
     category: (row.category as string | null) ?? null,
     notes: (row.notes as string | null) ?? null,
-    recordedBy: {
-      userId: Number(row.recorded_by),
-      name: (row.recorded_by_name as string | null) ?? null,
-      surname: (row.recorded_by_surname as string | null) ?? null,
-    },
+    // recorded_by NULL = system-generated log (event-end auto exit, 0708)
+    recordedBy:
+      row.recorded_by == null
+        ? null
+        : {
+            userId: Number(row.recorded_by),
+            name: (row.recorded_by_name as string | null) ?? null,
+            surname: (row.recorded_by_surname as string | null) ?? null,
+          },
   }));
   const events = signals.map((signal) => ({
     t: Date.parse(signal.occurredAt),
