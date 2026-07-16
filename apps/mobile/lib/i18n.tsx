@@ -856,6 +856,16 @@ const dict = {
     gl: "Rexistrado automaticamente",
   },
   presenceConflict: { en: "Conflict", es: "Conflicto", gl: "Conflito" },
+  presenceScanRejectedTitle: {
+    en: "Log rejected",
+    es: "Registro rechazado",
+    gl: "Rexistro rexeitado",
+  },
+  presenceScanRejectedBody: {
+    en: "The server rejected this presence log.",
+    es: "El servidor rechazó este registro de presencia.",
+    gl: "O servidor rexeitou este rexistro de presenza.",
+  },
   presenceConflictTitle: {
     en: "Timeline conflict",
     es: "Conflicto en la cronología",

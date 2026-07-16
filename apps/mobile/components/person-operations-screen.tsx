@@ -20,7 +20,12 @@ import { SegmentedControl } from "@/components/segmented-control";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
-import { enqueueLocalScan, findPersonById, findPersonByTicket } from "@/lib/scanner-db";
+import {
+  enqueueLocalScan,
+  findPersonById,
+  findPersonByTicket,
+  pendingScans,
+} from "@/lib/scanner-db";
 import type { ScannerPerson } from "@/lib/scanner-types";
 import { useScannerSync } from "@/lib/use-scanner";
 import { colors } from "@/theme/colors";
@@ -148,16 +153,34 @@ export function PersonOperationsScreen() {
   async function registerPresence() {
     if (!person?.badgeId) return;
     setBusy(true);
-    await enqueueLocalScan({
-      kind: "presence",
-      badgeId: person.badgeId,
-      direction,
-      scannedAt: scannedAt.toISOString(),
-    });
-    setPerson({ ...person, lastPresenceKind: direction, lastPresenceAt: scannedAt.toISOString() });
-    await sync.sync();
-    await load();
-    setBusy(false);
+    try {
+      const scanId = await enqueueLocalScan({
+        kind: "presence",
+        badgeId: person.badgeId,
+        direction,
+        scannedAt: scannedAt.toISOString(),
+      });
+      await sync.sync();
+      // The offline queue fails 4xx replays permanently (e.g. an entry while
+      // a session is already open) — without this check the rejection is
+      // invisible and the log just never appears.
+      const stored = (await pendingScans()).find((scan) => scan.id === scanId);
+      if (stored?.status === "failed") {
+        Alert.alert(
+          t("presenceScanRejectedTitle"),
+          stored.lastError ?? t("presenceScanRejectedBody"),
+        );
+      } else {
+        setPerson({
+          ...person,
+          lastPresenceKind: direction,
+          lastPresenceAt: scannedAt.toISOString(),
+        });
+      }
+      await load();
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (cameraAction) {

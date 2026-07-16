@@ -22,6 +22,7 @@ import {
   findPersonByBadge,
   getActivityState,
   listScannerActivities,
+  pendingScans,
 } from "@/lib/scanner-db";
 import type { ScannerActivity, ScannerPerson } from "@/lib/scanner-types";
 import { useScannerSync } from "@/lib/use-scanner";
@@ -82,7 +83,7 @@ export function ActivityScannerScreen() {
       setRegistering(true);
       setError(null);
       try {
-        await enqueueLocalScan({
+        const scanId = await enqueueLocalScan({
           kind: "activity",
           activityId,
           badgeId,
@@ -97,12 +98,19 @@ export function ActivityScannerScreen() {
           wasRepeat: allowRepeat,
         });
         await runSync();
+        // A business rejection fails the queued scan permanently — surface it
+        // here instead of leaving the operator believing it was registered.
+        const stored = (await pendingScans()).find((scan) => scan.id === scanId);
+        if (stored?.status === "failed") {
+          setResult(null);
+          setError(stored.lastError ?? t("presenceScanRejectedBody"));
+        }
         await loadStats();
       } finally {
         setRegistering(false);
       }
     },
-    [activityId, loadStats, runSync],
+    [activityId, loadStats, runSync, t],
   );
 
   const scanned = useCallback(
