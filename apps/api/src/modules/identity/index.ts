@@ -63,7 +63,10 @@ export async function registerIdentityModule(app: FastifyInstance): Promise<void
   registerInviteRoutes(app);
 }
 
-async function betterAuthPassthrough(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+async function betterAuthPassthrough(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<FastifyReply> {
   const host = request.headers.host ?? "localhost";
   const url = new URL(request.url, `http://${host}`);
 
@@ -89,5 +92,9 @@ async function betterAuthPassthrough(request: FastifyRequest, reply: FastifyRepl
   });
 
   const buf = Buffer.from(await response.arrayBuffer());
-  reply.send(buf.length > 0 ? buf : null);
+  // Return the reply (a thenable that resolves at end-of-stream): with async
+  // onSend hooks in the app, `reply.sent` stays false until the raw response
+  // ends, and a handler that resolves `undefined` before that makes Fastify
+  // fire a second send (ERR_HTTP_HEADERS_SENT as an unhandled rejection).
+  return reply.send(buf.length > 0 ? buf : null);
 }
