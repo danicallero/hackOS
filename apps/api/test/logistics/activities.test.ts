@@ -151,7 +151,7 @@ describe("H25 meals", () => {
 });
 
 describe("H26 registrable (non-meal) activities", () => {
-  it("logs every scan, flagging repeats", async () => {
+  it("gates repeats behind explicit confirmation, like meals", async () => {
     const workshop = await createActivity({ requiresScan: true, name: "Workshop" });
     const uid = await createUser();
     await assignBadge(uid, "WB-1");
@@ -164,19 +164,37 @@ describe("H26 registrable (non-meal) activities", () => {
     });
     expect(first.json().firstTime).toBe(true);
 
+    // A repeated scan does not re-register: it asks for confirmation.
     const second = await app.inject({
       method: "POST",
       url: `/api/activities/${workshop}/scan`,
       headers: asUser(scanner),
       payload: { badgeId: "WB-1" },
     });
-    expect(second.statusCode).toBe(200);
-    expect(second.json().registered).toBe(true);
+    expect(second.statusCode).toBe(409);
+    expect(second.json().registered).toBe(false);
     expect(second.json().repeat).toBe(true);
+
+    // Confirming with allowRepeat registers the audited override.
+    const confirmed = await app.inject({
+      method: "POST",
+      url: `/api/activities/${workshop}/scan`,
+      headers: asUser(scanner),
+      payload: { badgeId: "WB-1", allowRepeat: true },
+    });
+    expect(confirmed.statusCode).toBe(200);
+    expect(confirmed.json().registered).toBe(true);
+    expect(confirmed.json().repeat).toBe(true);
 
     const { pool } = await import("../../src/db/pool.js");
     const logs = await pool.query(`SELECT * FROM activity_logs WHERE user_id = $1`, [uid]);
     expect(logs.rows).toHaveLength(2);
+    const audits = await pool.query(
+      `SELECT * FROM audit_log
+        WHERE entity_type = 'activity' AND action = 'repeat_override' AND entity_id = $1`,
+      [String(uid)],
+    );
+    expect(audits.rows).toHaveLength(1);
   });
 
   it("rejects scanning an activity that is neither a meal nor requires_scan", async () => {
