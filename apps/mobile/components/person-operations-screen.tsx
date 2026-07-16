@@ -3,7 +3,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import { useCallback, useEffect, useState } from "react";
-import { Alert, ScrollView, Text, useColorScheme, View } from "react-native";
+import { Alert, Pressable, ScrollView, Text, useColorScheme, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
@@ -53,10 +53,6 @@ export function PersonOperationsScreen() {
   const [cameraAction, setCameraAction] = useState<"assign" | "replace" | null>(null);
   const [scannedAt, setScannedAt] = useState(new Date());
   const [busy, setBusy] = useState(false);
-  // Only one door movement is ever valid: an exit while the session is open,
-  // an entry otherwise — so there's no direction to pick, just one button.
-  const direction: "in" | "out" = person?.lastPresenceKind === "in" ? "out" : "in";
-
   const load = useCallback(async () => {
     const local = await findPersonById(userId);
     if (!local) return;
@@ -155,7 +151,7 @@ export function PersonOperationsScreen() {
     ]);
   }
 
-  async function registerPresence() {
+  async function registerPresence(direction: "in" | "out") {
     if (!person?.badgeId) return;
     setBusy(true);
     try {
@@ -255,12 +251,46 @@ export function PersonOperationsScreen() {
 
   // Door logging needs a badge: without one the register is hidden entirely
   // and assigning a badge becomes the profile's primary action instead.
+  const directionButton = (target: "in" | "out") => (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={target === "in" ? t("personRegisterEntry") : t("personRegisterExit")}
+      accessibilityState={{ busy, disabled: busy }}
+      disabled={busy}
+      onPress={() => void registerPresence(target)}
+      style={({ pressed }) => ({
+        alignItems: "center",
+        backgroundColor: target === "in" ? colors.accentSurface : colors.warningSurface,
+        borderCurve: "continuous",
+        borderRadius: 22,
+        height: 44,
+        justifyContent: "center",
+        opacity: busy ? 0.45 : pressed ? 0.6 : 1,
+        width: 44,
+      })}
+    >
+      <SymbolView
+        name={target === "in" ? "arrow.right.to.line" : "arrow.left.to.line"}
+        tintColor={target === "in" ? colors.accent : colors.warning}
+        size={19}
+        weight="semibold"
+      />
+    </Pressable>
+  );
+
   const presenceRegisterSection =
     canPresence && person.badgeId ? (
       <Section title={t("personPresenceTitle")} footer={t("personPresenceFooter")}>
-        <View style={{ gap: 14, padding: 16 }}>
+        <View
+          style={{
+            alignItems: "center",
+            flexDirection: "row",
+            gap: 12,
+            padding: 16,
+          }}
+        >
           {process.env.EXPO_OS === "android" ? (
-            <>
+            <View style={{ flex: 1, flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
               <DateTimePicker
                 value={scannedAt}
                 mode="date"
@@ -281,23 +311,20 @@ export function PersonOperationsScreen() {
                   setScannedAt(next);
                 }}
               />
-            </>
+            </View>
           ) : (
-            <DateTimePicker
-              value={scannedAt}
-              mode="datetime"
-              maximumDate={new Date()}
-              onChange={(_, date) => date && setScannedAt(date)}
-            />
+            <View style={{ alignItems: "flex-start", flex: 1 }}>
+              <DateTimePicker
+                value={scannedAt}
+                mode="datetime"
+                maximumDate={new Date()}
+                onChange={(_, date) => date && setScannedAt(date)}
+              />
+            </View>
           )}
+          {directionButton("in")}
+          {directionButton("out")}
         </View>
-        <Separator />
-        <ActionButton
-          busy={busy}
-          icon={direction === "in" ? "arrow.right.to.line" : "arrow.left.to.line"}
-          label={direction === "in" ? t("personRegisterEntry") : t("personRegisterExit")}
-          onPress={() => void registerPresence()}
-        />
       </Section>
     ) : null;
 
