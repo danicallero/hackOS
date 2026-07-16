@@ -570,6 +570,40 @@ const dict: Record<string, I18nText> = {
     en: "Couldn't generate the Google Wallet link",
   },
   currentBadge: { es: "Acreditación actual", gl: "Acreditación actual", en: "Current badge" },
+  walletScanHint: {
+    es: "Muestra este código al personal cuando te lo pidan.",
+    gl: "Amosa este código ao persoal cando cho pidan.",
+    en: "Show this code to event staff when asked.",
+  },
+  walletHolder: { es: "Titular", gl: "Titular", en: "Holder" },
+  walletHolderName: { es: "Nombre", gl: "Nome", en: "Name" },
+  walletHolderRole: { es: "Rol", gl: "Rol", en: "Role" },
+  walletAddPass: { es: "Añadir pase", gl: "Engadir pase", en: "Add pass" },
+  walletAddPassHint: {
+    es: "Los pases se actualizan automáticamente si cambian tus credenciales.",
+    gl: "Os pases actualízanse automaticamente se cambian as túas credenciais.",
+    en: "Wallet passes update automatically when your event credentials change.",
+  },
+  ticketNotReadyTitle: {
+    es: "Entrada no disponible",
+    gl: "Entrada non dispoñible",
+    en: "Ticket not ready",
+  },
+  noTicketYet: {
+    es: "Confirma tu plaza aceptada para recibir tu entrada.",
+    gl: "Confirma a túa praza aceptada para recibir a entrada.",
+    en: "Confirm your accepted spot to receive your ticket.",
+  },
+  badgeNotReadyTitle: {
+    es: "Badge no disponible",
+    gl: "Badge non dispoñible",
+    en: "Badge not ready",
+  },
+  noBadgeYet: {
+    es: "Todavía no tienes badge — acredítate en el check-in.",
+    gl: "Aínda non tes badge — acredítate no check-in.",
+    en: "You don't have a badge yet — get accredited at check-in.",
+  },
 
   // ---- Date/time picker controls ----
   noDateTime: { es: "Sin fecha ni hora", gl: "Sen data nin hora", en: "No date/time set" },
