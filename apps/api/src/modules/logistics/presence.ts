@@ -546,6 +546,27 @@ export async function presenceTimeline(userId: number, now = Date.now()) {
     t: Date.parse(signal.occurredAt),
     kind: signal.kind,
   }));
+  // Illegal in→in (H24): two door entries with no exit/activity between them.
+  // Only reachable through manual log edits — presenceScan rejects it live.
+  // The bounds let the client constrain the fix strictly between both scans.
+  const conflicts: Array<{
+    firstLogId: number;
+    secondLogId: number;
+    from: string;
+    to: string;
+  }> = [];
+  for (let i = 1; i < signals.length; i++) {
+    const prev = signals[i - 1];
+    const curr = signals[i];
+    if (prev && curr && prev.kind === "in" && curr.kind === "in") {
+      conflicts.push({
+        firstLogId: prev.id,
+        secondLogId: curr.id,
+        from: prev.occurredAt,
+        to: curr.occurredAt,
+      });
+    }
+  }
   return {
     certaintyWindowMinutes: suspiciousGapMs / 60_000,
     activities: activityRows.map((row) => ({
@@ -554,6 +575,7 @@ export async function presenceTimeline(userId: number, now = Date.now()) {
       category: String(row.category),
     })),
     signals,
+    conflicts,
     windows: buildCertaintyWindows(events, now, { suspiciousGapMs }).map((window) => ({
       ...window,
       start: new Date(window.start).toISOString(),

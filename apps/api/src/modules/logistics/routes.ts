@@ -325,7 +325,19 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
 
   typed.get(
     "/api/presence/timeline/:userId",
-    { preHandler: presenceRead, schema: { params: userIdParam } },
+    {
+      preHandler: presenceRead,
+      schema: {
+        params: userIdParam,
+        summary: "Presence timeline for one person",
+        description:
+          "Unified presence view (H24): every door/activity signal in order, the derived " +
+          "certainty windows (secured/provisional/invalid, plus a `conflict` flag on windows " +
+          "invalidated by an illegal in→in sequence), the effective certainty-window duration, " +
+          "and `conflicts[]` — pairs of consecutive door entries with no exit/activity between " +
+          "them, with the log ids and time bounds needed to insert the missing signal.",
+      },
+    },
     async (req) => presenceTimeline(req.params.userId),
   );
 

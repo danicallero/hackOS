@@ -4,6 +4,13 @@
  * interval; an activity inside it confirms time up to that signal and renews
  * the window. If the window expires without either signal, the provisional
  * part is worth zero hours. Raw logs remain untouched for manual review.
+ *
+ * Illegal state (H24): two consecutive door `in` signals with no exit or
+ * activity between them. The second `in` proves the person was *outside* just
+ * before it, so it cannot secure the previous entry's window — that window is
+ * marked `conflict` and credits zero hours until staff insert the missing
+ * exit/activity. The scan endpoint rejects this sequence at write time; it can
+ * only appear through manual log edits.
  */
 
 export type PresenceEventKind = "in" | "out" | "activity";
@@ -34,6 +41,8 @@ export interface CertaintyWindow {
   status: "secured" | "provisional" | "invalid";
   openedBy: "in" | "activity";
   closedBy: PresenceEventKind | null;
+  /** True when a second door `in` arrived before any exit/activity closed this window. */
+  conflict: boolean;
 }
 
 // Default policy; event_config can override it.
@@ -53,6 +62,7 @@ export function buildCertaintyWindows(
     .sort((a, b) => a.t - b.t || KIND_ORDER[a.kind] - KIND_ORDER[b.kind]);
   const windows: CertaintyWindow[] = [];
   let active: CertaintyWindow | null = null;
+  let prevKind: PresenceEventKind | null = null;
 
   for (const event of sorted) {
     if (active && event.t > active.deadline) {
@@ -67,10 +77,21 @@ export function buildCertaintyWindows(
         active.status = "secured";
       }
       active = null;
+      prevKind = "out";
       continue;
     }
 
-    if (active && event.t <= active.deadline) {
+    if (event.kind === "in" && prevKind === "in") {
+      // Illegal in→in: the previous entry's window can't be trusted — the
+      // person was outside just before this scan. Zero credit until staff
+      // insert the missing exit/activity between the two entries.
+      const previous = windows[windows.length - 1];
+      if (previous) {
+        previous.status = "invalid";
+        previous.conflict = true;
+      }
+      active = null;
+    } else if (active && event.t <= active.deadline) {
       active.securedUntil = event.t;
       active.closedBy = event.kind;
       active.status = "secured";
@@ -83,9 +104,11 @@ export function buildCertaintyWindows(
       status: event.t + gap < cutoff ? "invalid" : "provisional",
       openedBy: event.kind,
       closedBy: null,
+      conflict: false,
     };
     windows.push(next);
     active = next;
+    prevKind = event.kind;
   }
 
   if (active && active.securedUntil == null) {

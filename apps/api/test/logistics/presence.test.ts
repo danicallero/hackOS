@@ -428,3 +428,77 @@ describe("H24 raw scan admin (view/edit/delete)", () => {
     expect(del.statusCode).toBe(403);
   });
 });
+
+describe("H24 illegal in→in conflicts in the timeline", () => {
+  it("exposes conflicts[] with bounds and zero-credits the first window", async () => {
+    const uid = await createUser();
+    const { pool } = await import("../../src/db/pool.js");
+    const t0 = new Date(Date.now() - 4 * 3_600_000).toISOString();
+    const t1 = new Date(Date.now() - 2 * 3_600_000).toISOString();
+    // The scan endpoint rejects in→in live; manual signal creation is the
+    // only way this state appears (e.g. staff deleted the out in between).
+    for (const occurredAt of [t0, t1]) {
+      const res = await app.inject({
+        method: "POST",
+        url: `/api/presence/signals/${uid}`,
+        headers: asUser(doorStaff),
+        payload: { kind: "in", occurredAt },
+      });
+      expect(res.statusCode).toBe(201);
+    }
+
+    const timeline = await app.inject({
+      method: "GET",
+      url: `/api/presence/timeline/${uid}`,
+      headers: asUser(statsStaff),
+    });
+    expect(timeline.statusCode).toBe(200);
+    const body = timeline.json();
+    expect(body.conflicts).toHaveLength(1);
+    const logs = await pool.query(
+      `SELECT id FROM time_logs WHERE user_id = $1 ORDER BY scanned_at ASC`,
+      [uid],
+    );
+    expect(body.conflicts[0]).toMatchObject({
+      firstLogId: logs.rows[0].id,
+      secondLogId: logs.rows[1].id,
+      from: new Date(t0).toISOString(),
+      to: new Date(t1).toISOString(),
+    });
+    // The conflicted first window credits nothing; only the second counts.
+    expect(body.windows[0]).toMatchObject({ status: "invalid", conflict: true });
+    expect(body.windows[1]).toMatchObject({ status: "provisional", conflict: false });
+    const hours = await app.inject({
+      method: "GET",
+      url: `/api/presence/hours/${uid}`,
+      headers: asUser(statsStaff),
+    });
+    expect(hours.json().hours).toBeCloseTo(2, 1);
+  });
+
+  it("does not flag in→activity→in — the activity closes the pair", async () => {
+    const uid = await createUser();
+    const meal = await createMeal();
+    const times = [6, 4, 2].map((h) => new Date(Date.now() - h * 3_600_000).toISOString());
+    const payloads = [
+      { kind: "in", occurredAt: times[0] },
+      { kind: "activity", activityId: meal, occurredAt: times[1] },
+      { kind: "in", occurredAt: times[2] },
+    ];
+    for (const payload of payloads) {
+      const res = await app.inject({
+        method: "POST",
+        url: `/api/presence/signals/${uid}`,
+        headers: asUser(doorStaff),
+        payload,
+      });
+      expect(res.statusCode).toBe(201);
+    }
+    const timeline = await app.inject({
+      method: "GET",
+      url: `/api/presence/timeline/${uid}`,
+      headers: asUser(statsStaff),
+    });
+    expect(timeline.json().conflicts).toHaveLength(0);
+  });
+});
