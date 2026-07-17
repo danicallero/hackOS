@@ -81,6 +81,18 @@ export interface RoomView {
   active: QueueEntry | null;
   called: QueueEntry[];
   next: QueueEntry[];
+  /** Waiting teams temporarily blocked by a member active at another room. */
+  crossRoomSkips: CrossRoomSkip[];
+}
+
+export interface CrossRoomSkip {
+  entryId: number;
+  position: number | null;
+  blockingRoomId: number;
+  blockingRoomName: string;
+  blockingTeamName: string;
+  blockingStatus: string;
+  positionPreserved: true;
 }
 
 /** GET /api/queue/challenges/:id/progress (H40). */
@@ -313,6 +325,10 @@ export interface JudgingSession {
 export interface QueueSearchResult extends QueueEntry {
   has_review: boolean;
   review_status: string | null;
+  blocked_by_room_id: number | null;
+  blocked_by_room_name: string | null;
+  blocked_by_team_name: string | null;
+  blocked_by_status: string | null;
 }
 
 export const getReview = (entryId: number) =>

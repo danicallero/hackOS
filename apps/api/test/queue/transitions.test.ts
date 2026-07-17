@@ -368,6 +368,47 @@ describe("notify_enter (H31)", () => {
     expect(inbox.rows[0].payload.roomId).toBe(roomId);
   });
 
+  it("pushes the room-entry alert only to staff who explicitly opted in", async () => {
+    const { challengeId, roomId } = await setup();
+    const subscribedStaff = await createUserWithCapabilities([CAPABILITIES.QUEUE_OPERATE]);
+    const unsubscribedStaff = await createUserWithCapabilities([CAPABILITIES.QUEUE_OPERATE]);
+    const member = await createUser();
+    const { repoId } = await createRepoWithTeam([member], "Equipo Colaborador");
+    const entryId = await enqueueRepo(challengeId, repoId, 1);
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `INSERT INTO notification_preferences (user_id, category, channel, enabled)
+       VALUES ($1, 'queue.staff', 'push', true)`,
+      [subscribedStaff],
+    );
+
+    await app.inject({
+      method: "POST",
+      url: `/api/queue/rooms/${roomId}/call-next`,
+      headers: asUser(operatorId),
+      payload: {},
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/queue/entries/${entryId}/notify-enter`,
+      headers: asUser(judgeId),
+      payload: {},
+    });
+    expect(response.statusCode).toBe(200);
+
+    const alerts = await pool.query(
+      `SELECT user_id, payload FROM notification_outbox
+        WHERE category = 'queue.staff' AND channel = 'push' ORDER BY user_id`,
+    );
+    expect(alerts.rows).toHaveLength(1);
+    expect(alerts.rows[0].user_id).toBe(subscribedStaff);
+    expect(alerts.rows[0].payload.template).toBe("queue.staff.enter");
+    expect(alerts.rows[0].payload.vars.teamName).toBe("Equipo Colaborador");
+    expect(alerts.rows.some((row: { user_id: number }) => row.user_id === unsubscribedStaff)).toBe(
+      false,
+    );
+  });
+
   it("409 from waiting", async () => {
     const { challengeId } = await setup();
     const { repoId } = await createRepoWithTeam();

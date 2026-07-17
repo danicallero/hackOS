@@ -96,10 +96,13 @@ export function useLiveQuery<T>(
     enabled = true,
     debounceMs = 150,
     queryKey = [],
+    onEvent: onMatchingEvent,
   }: {
     enabled?: boolean;
     debounceMs?: number;
     queryKey?: readonly unknown[];
+    /** Optional side effect for a matching event (for example an operational alert). */
+    onEvent?: (event: SseEnvelope) => void;
   } = {},
 ): { data: T | null; error: unknown; loading: boolean; connected: boolean; refetch: () => void } {
   const [data, setData] = useState<T | null>(null);
@@ -137,10 +140,16 @@ export function useLiveQuery<T>(
   }, [enabled, refetch, queryKeyValue]);
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const onEvent = useCallback(() => {
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(refetch, debounceMs);
-  }, [refetch, debounceMs]);
+  const onMatchingEventRef = useRef(onMatchingEvent);
+  onMatchingEventRef.current = onMatchingEvent;
+  const onEvent = useCallback(
+    (event: SseEnvelope) => {
+      onMatchingEventRef.current?.(event);
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = setTimeout(refetch, debounceMs);
+    },
+    [refetch, debounceMs],
+  );
 
   const { connected } = useEventSource(streamPath, { events: eventNames, onEvent, enabled });
 

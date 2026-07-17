@@ -52,7 +52,7 @@ export function setupNotificationListeners(navigateToQueue: () => void): () => v
   const handleResponse = (data: Record<string, unknown> | undefined) => {
     const category = categoryOf(data);
     emitCategory(category);
-    if (category === "queue") navigateToQueue();
+    if (category?.startsWith("queue")) navigateToQueue();
   };
 
   const responded = Notifications.addNotificationResponseReceivedListener((response) => {

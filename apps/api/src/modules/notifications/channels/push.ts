@@ -45,7 +45,7 @@ export async function dispatchPush(
   // foreground refetch without having to guess from the vars shape alone.
   const data = { ...(payload.vars ?? {}), category, template: payload.template };
   const timeSensitive =
-    category === "queue"
+    category === "queue" || category === "queue.staff"
       ? {
           priority: "high" as const,
           interruptionLevel: "time-sensitive" as const,

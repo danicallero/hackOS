@@ -377,6 +377,38 @@ describe("manual search (H37)", () => {
     expect(byId.json().some((h: { repo_id: number }) => h.repo_id === r2)).toBe(true);
   });
 
+  it("projects the other room blocking a team before a judge attempts the call", async () => {
+    const operatorId = await createUserWithCapabilities([CAPABILITIES.QUEUE_OPERATE]);
+    const firstChallenge = await createChallenge({ judgingPanelCriteria: CRITERIA });
+    const secondChallenge = await createChallenge({ judgingPanelCriteria: CRITERIA });
+    const roomId = await createRoom({ name: "Sala Norte" });
+    await assignChallengeToRoom(roomId, firstChallenge);
+    const sharedMember = await createUser();
+    const { repoId: activeRepo } = await createRepoWithTeam([sharedMember], "Equipo Activo");
+    const { repoId: waitingRepo } = await createRepoWithTeam([sharedMember], "Equipo Pendiente");
+    await enqueueRepo(firstChallenge, activeRepo, 1);
+    await enqueueRepo(secondChallenge, waitingRepo, 1);
+    await app.inject({
+      method: "POST",
+      url: `/api/queue/rooms/${roomId}/call-next`,
+      headers: asUser(operatorId),
+      payload: {},
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/queue/challenges/${secondChallenge}/search?q=pendiente`,
+      headers: asUser(judgeA),
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()[0]).toMatchObject({
+      blocked_by_room_id: roomId,
+      blocked_by_room_name: "Sala Norte",
+      blocked_by_team_name: "Equipo Activo",
+      blocked_by_status: "called",
+    });
+  });
+
   it("lets a sponsor rep search their own challenge without room_judges/capabilities, but not others' (H46)", async () => {
     const { pool } = await import("../../src/db/pool.js");
     const owner = await createUser();

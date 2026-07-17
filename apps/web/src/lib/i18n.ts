@@ -1900,6 +1900,11 @@ const dict: Record<string, I18nText> = {
     gl: "Se un membro está ocupado noutra sala, o sistema pasa ao seguinte sen cambiar a súa posición.",
     en: "If a member is busy in another room, the system moves on without changing this team's position.",
   },
+  teamBusyInOtherRoom: {
+    es: "No se puede llamar ahora: el equipo tiene un miembro ocupado en {room}.",
+    gl: "Non se pode chamar agora: o equipo ten un membro ocupado en {room}.",
+    en: "Cannot be called now: the team has a member busy in {room}.",
+  },
   searchTeamsAria: { es: "Buscar equipos", gl: "Buscar equipos", en: "Search teams" },
   noTeamsChallengeQueue: {
     es: "No hay equipos en la cola del reto.",
@@ -1930,6 +1935,11 @@ const dict: Record<string, I18nText> = {
   reenterTop: { es: "Recuperar arriba", gl: "Recuperar arriba", en: "Recover at top" },
   reenterBottom: { es: "Recuperar al final", gl: "Recuperar ao final", en: "Recover at end" },
   teamReentered: { es: "Equipo recuperado.", gl: "Equipo recuperado.", en: "Team recovered." },
+  teamAskedToEnter: {
+    es: "El panel de jueces ha indicado que el equipo entre ya.",
+    gl: "O panel de xuíces indicou que o equipo entre xa.",
+    en: "The judging panel asked the team to enter now.",
+  },
   closeExistingEvaluation: {
     es: "Volver a la sala",
     gl: "Volver á sala",

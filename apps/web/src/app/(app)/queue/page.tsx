@@ -26,7 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import { useLiveQuery } from "@/hooks/use-event-source";
+import { type SseEnvelope, useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError } from "@/lib/api";
 import { type Translate, useLocale } from "@/lib/i18n";
 import {
@@ -57,11 +57,26 @@ export default function QueueOperationsPage() {
   const [roomAssignments, setRoomAssignments] = useState<Record<number, RoomAssignments | null>>(
     {},
   );
+  const announceTeamEnter = useCallback(
+    (event: SseEnvelope) => {
+      if (event.type !== EVENTS.QUEUE_NOTIFY_ENTER || !event.data || typeof event.data !== "object")
+        return;
+      const data = event.data as Record<string, unknown>;
+      const team = typeof data.team_name === "string" ? data.team_name : t("challengeFallback");
+      const room = typeof data.room_name === "string" ? data.room_name : null;
+      toast.info(room ? `${team} · ${room}` : team, {
+        description: t("teamAskedToEnter"),
+        duration: 10_000,
+      });
+    },
+    [t],
+  );
+
   const roomViews = useLiveQuery<RoomView[]>(
     () => getAllRoomViews(),
-    "/api/tv/stream",
+    "/api/queue/stream",
     [EVENTS.QUEUE_ENTRY_CHANGED, EVENTS.QUEUE_ROOM_CHANGED, EVENTS.QUEUE_NOTIFY_ENTER],
-    { enabled: canUse },
+    { enabled: canUse, onEvent: announceTeamEnter },
   );
 
   const rooms = roomViews.data ?? [];
