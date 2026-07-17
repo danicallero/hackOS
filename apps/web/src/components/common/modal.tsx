@@ -52,15 +52,15 @@ export function Modal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
       <DialogContent className={cn(SIZES[size], className)}>
-        <DialogHeader>
+        <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
             {Icon && <Icon className="text-muted-foreground size-5" />}
             {title}
           </DialogTitle>
           {description && <DialogDescription>{description}</DialogDescription>}
         </DialogHeader>
-        {children}
-        {footer && <DialogFooter>{footer}</DialogFooter>}
+        <div className="-mx-6 min-h-0 flex-1 overflow-y-auto px-6">{children}</div>
+        {footer && <DialogFooter className="shrink-0">{footer}</DialogFooter>}
       </DialogContent>
     </Dialog>
   );
