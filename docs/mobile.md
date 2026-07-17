@@ -76,6 +76,26 @@ route below. No migration needed.
   screen stays reachable. The fetch refetches on app foreground, so a
   capability change made elsewhere (web admin) shows up without a reinstall
   (H55's explicit acceptance bar).
+
+  The overflow actions inside the native "Others" control are intentionally
+  pseudo-tabs:
+
+  - Account is the profile root.
+  - Scanner and Activities are section roots that live on top of Account.
+  - Tapping the active pseudo-tab is a no-op.
+  - Changing pseudo-tabs always uses `replace()`, never `push()`, so repeated
+    taps do not stack duplicate scanner/activity screens.
+  - Account stays directly reachable from every section.
+  - Any non-`/others/...` tab must still be able to jump to Account; do not
+    classify schedule/queue/wallet/notifications as Account for the purpose of
+    suppressing the switch.
+  - Route matching must normalize Expo Router route groups first, because
+    `usePathname()` may return `/others/...` while tests and typed hrefs still
+    use `/(tabs)/others/...`.
+
+  Do not re-implement these as plain `push()` calls or stack-style route
+  launches. That regresses the back stack, duplicates scanner pages, and
+  makes the profile route stop behaving like the base of the workspace.
 - `app/(auth)/sign-in.tsx` — email/password only; no in-app registration. The
   anonymous event feed supplies the configured name and tagline, and the screen
   explains that only accepted participants can sign in and directs them to the

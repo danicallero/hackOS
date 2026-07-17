@@ -4,11 +4,10 @@ import { SymbolView } from "expo-symbols";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import {
   FlatList,
-  type NativeSyntheticEvent,
   Pressable,
   RefreshControl,
   Text,
-  type TextInputFocusEventData,
+  TextInput,
   View,
 } from "react-native";
 
@@ -56,27 +55,11 @@ export function PeopleDirectoryScreen() {
     setRefreshing(false);
   }
 
-  // Configuring the header imperatively here — instead of the declarative
-  // <Stack.Title>/<Stack.Toolbar>/<Stack.SearchBar> components previously
-  // used inline — is what avoids a real double header bar: those components
-  // ended up rendering their own header row on top of the layout's native
-  // one rather than reconfiguring it.
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: t("scannerPeople"),
-      headerLargeTitle: true,
-      headerLargeTitleShadowVisible: false,
-      headerLargeTitleStyle: { backgroundColor: colors.transparent, color: colors.label },
+      title: activityId ? t("scannerSearchPerson") : t("scannerPeople"),
       headerShadowVisible: false,
-      headerBackButtonDisplayMode: "minimal",
       headerTransparent: true,
-      headerSearchBarOptions: {
-        hideWhenScrolling: true,
-        placeholder: t("scannerPeopleSearchPlaceholder"),
-        onChangeText: (event: NativeSyntheticEvent<TextInputFocusEventData>) =>
-          setQuery(event.nativeEvent.text),
-        onCancelButtonPress: () => setQuery(""),
-      },
       headerRight: () => (
         <MenuView
           actions={ROLE_FILTERS.map((filter) => ({
@@ -99,7 +82,7 @@ export function PeopleDirectoryScreen() {
         </MenuView>
       ),
     });
-  }, [navigation, roleFilter, t]);
+  }, [activityId, navigation, roleFilter, t]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
@@ -135,11 +118,60 @@ export function PeopleDirectoryScreen() {
     <FlatList
       contentInsetAdjustmentBehavior="automatic"
       style={{ backgroundColor: colors.background }}
-      contentContainerStyle={{ flexGrow: 1, paddingBottom: 32 }}
+      contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 16, paddingBottom: 32 }}
       data={filtered}
       keyExtractor={(person) => String(person.userId)}
-      ItemSeparatorComponent={() => <Separator inset={68} trailingInset={16} />}
+      ItemSeparatorComponent={() => <Separator inset={72} />}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
+      ListHeaderComponent={
+        <View style={{ gap: 12, paddingTop: 8, paddingBottom: 16 }}>
+          <View
+            style={{
+              alignItems: "center",
+              backgroundColor: colors.surface,
+              borderCurve: "continuous",
+              borderRadius: 14,
+              flexDirection: "row",
+              gap: 10,
+              minHeight: 52,
+              paddingHorizontal: 14,
+            }}
+          >
+            <SymbolView name="magnifyingglass" tintColor={colors.tertiaryLabel} size={16} />
+            <TextInput
+              accessibilityLabel={t("scannerPeopleSearchPlaceholder")}
+              autoCapitalize="none"
+              autoCorrect={false}
+              clearButtonMode="while-editing"
+              placeholder={t("scannerPeopleSearchPlaceholder")}
+              placeholderTextColor={colors.tertiaryLabel}
+              returnKeyType="search"
+              selectionColor={colors.accent}
+              style={{
+                color: colors.label,
+                flex: 1,
+                fontSize: 17,
+                minHeight: 52,
+              }}
+              value={query}
+              onChangeText={setQuery}
+            />
+            {query ? (
+              <Pressable
+                accessibilityLabel={t("clear")}
+                accessibilityRole="button"
+                hitSlop={8}
+                onPress={() => setQuery("")}
+                style={({ pressed }) => ({
+                  opacity: pressed ? 0.6 : 1,
+                })}
+              >
+                <SymbolView name="xmark.circle.fill" tintColor={colors.tertiaryLabel} size={18} />
+              </Pressable>
+            ) : null}
+          </View>
+        </View>
+      }
       ListEmptyComponent={
         <EmptyState
           icon="person.2"

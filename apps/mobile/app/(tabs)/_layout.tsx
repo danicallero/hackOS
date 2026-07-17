@@ -1,6 +1,6 @@
 import { type MenuAction, MenuView } from "@expo/ui/community/menu";
 import { EVENTS } from "@hackos/shared/events";
-import { useRouter } from "expo-router";
+import { usePathname, useRouter } from "expo-router";
 import { NativeTabs } from "expo-router/unstable-native-tabs";
 import { useCallback, useEffect, useState } from "react";
 import { AppState, useColorScheme, useWindowDimensions, View } from "react-native";
@@ -9,6 +9,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
+import {
+  resolveOperationsNavigationAction,
+  type OperationsRoute,
+} from "@/lib/operations-navigation";
 import { subscribeToNotificationChanges } from "@/lib/notification-events";
 import { subscribeToServerEvent } from "@/lib/server-events";
 import { colors } from "@/theme/colors";
@@ -26,6 +30,19 @@ interface OperationsMenuItem extends MenuAction {
 /**
  * A real platform tab bar. Operational destinations are additive and live in
  * the existing native overflow control alongside Account.
+ *
+ * Important navigation contract:
+ * - The overflow entries are pseudo-tabs, not ordinary stack links.
+ * - Tapping the current pseudo-tab must be a no-op.
+ * - Tapping a different pseudo-tab should behave like a tab switch, not
+ *   accumulate duplicate screens.
+ * - The first entry from Account may push a section stack on top of profile;
+ *   once inside a pseudo-tab, subsequent taps should navigate within that
+ *   section instead of re-pushing it.
+ *
+ * Keep this behavior documented and tested. Earlier versions regressed by
+ * treating the overflow menu as a plain stack launcher, which duplicated
+ * scanner/activity pages and broke back behavior.
  */
 export default function TabLayout() {
   useColorScheme();
@@ -140,6 +157,7 @@ function NativeOperationsMenu({ canScanActivities }: { canScanActivities: boolea
   const { bottom } = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { t } = useLocale();
+  const pathname = usePathname();
   const router = useRouter();
   const triggerHeight = bottom + 60;
   const triggerWidth = process.env.EXPO_OS === "ios" ? 76 : width / 5;
@@ -176,7 +194,10 @@ function NativeOperationsMenu({ canScanActivities }: { canScanActivities: boolea
       actions={items}
       onPressAction={({ nativeEvent }) => {
         const item = items.find(({ id }) => id === nativeEvent.event);
-        if (item) router.replace(item.route);
+        if (!item) return;
+        const action = resolveOperationsNavigationAction(pathname, item.route as OperationsRoute);
+        if (action === "noop") return;
+        router.replace(item.route);
       }}
       style={{
         bottom: 0,

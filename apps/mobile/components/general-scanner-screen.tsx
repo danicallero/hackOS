@@ -1,5 +1,5 @@
 import { GlassView } from "expo-glass-effect";
-import { usePathname, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import { useCallback, useState } from "react";
 import { Pressable, Text, View } from "react-native";
@@ -12,7 +12,6 @@ import { colors } from "@/theme/colors";
 
 export function GeneralScannerScreen() {
   const router = useRouter();
-  const pathname = usePathname();
   const { t } = useLocale();
   const insets = useSafeAreaInsets();
   const [error, setError] = useState<string | null>(null);
@@ -38,10 +37,7 @@ export function GeneralScannerScreen() {
 
   return (
     <View style={{ backgroundColor: "black", flex: 1 }}>
-      <QrCamera
-        onClose={pathname === "/others/scan" ? undefined : () => router.back()}
-        onValue={(value) => void resolve(value)}
-      />
+      <QrCamera onValue={(value) => void resolve(value)} />
       <GlassView
         colorScheme="dark"
         glassEffectStyle="regular"
