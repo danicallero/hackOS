@@ -2,14 +2,7 @@ import { MenuView } from "@expo/ui/community/menu";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
-import {
-  FlatList,
-  Pressable,
-  RefreshControl,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
 
 import { EmptyState, Separator } from "@/components/native-ui";
 import { useLocale } from "@/lib/i18n";
@@ -58,8 +51,13 @@ export function PeopleDirectoryScreen() {
   useLayoutEffect(() => {
     navigation.setOptions({
       title: activityId ? t("scannerSearchPerson") : t("scannerPeople"),
-      headerShadowVisible: false,
-      headerTransparent: true,
+      headerLargeTitle: true,
+      headerSearchBarOptions: {
+        placeholder: t("scannerPeopleSearchPlaceholder"),
+        autoCapitalize: "none",
+        onChangeText: (event: { nativeEvent: { text: string } }) =>
+          setQuery(event.nativeEvent.text),
+      },
       headerRight: () => (
         <MenuView
           actions={ROLE_FILTERS.map((filter) => ({
@@ -123,55 +121,6 @@ export function PeopleDirectoryScreen() {
       keyExtractor={(person) => String(person.userId)}
       ItemSeparatorComponent={() => <Separator inset={72} />}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
-      ListHeaderComponent={
-        <View style={{ gap: 12, paddingTop: 8, paddingBottom: 16 }}>
-          <View
-            style={{
-              alignItems: "center",
-              backgroundColor: colors.surface,
-              borderCurve: "continuous",
-              borderRadius: 14,
-              flexDirection: "row",
-              gap: 10,
-              minHeight: 52,
-              paddingHorizontal: 14,
-            }}
-          >
-            <SymbolView name="magnifyingglass" tintColor={colors.tertiaryLabel} size={16} />
-            <TextInput
-              accessibilityLabel={t("scannerPeopleSearchPlaceholder")}
-              autoCapitalize="none"
-              autoCorrect={false}
-              clearButtonMode="while-editing"
-              placeholder={t("scannerPeopleSearchPlaceholder")}
-              placeholderTextColor={colors.tertiaryLabel}
-              returnKeyType="search"
-              selectionColor={colors.accent}
-              style={{
-                color: colors.label,
-                flex: 1,
-                fontSize: 17,
-                minHeight: 52,
-              }}
-              value={query}
-              onChangeText={setQuery}
-            />
-            {query ? (
-              <Pressable
-                accessibilityLabel={t("clear")}
-                accessibilityRole="button"
-                hitSlop={8}
-                onPress={() => setQuery("")}
-                style={({ pressed }) => ({
-                  opacity: pressed ? 0.6 : 1,
-                })}
-              >
-                <SymbolView name="xmark.circle.fill" tintColor={colors.tertiaryLabel} size={18} />
-              </Pressable>
-            ) : null}
-          </View>
-        </View>
-      }
       ListEmptyComponent={
         <EmptyState
           icon="person.2"
