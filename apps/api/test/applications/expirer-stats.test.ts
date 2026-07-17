@@ -53,6 +53,11 @@ describe("confirmation expirer (plan/07 §5.2)", () => {
     const responseId = await createResponse(userId, appId, {
       status: "accepted",
       decision_sent_at: new Date(Date.now() - 100 * 3600_000).toISOString(),
+      responses: {
+        motivation: "legacy applicant",
+        food_intolerances: [7],
+        food_intolerance_notes: "legacy expiry secret",
+      },
     });
 
     const first = await expireDueConfirmations();
@@ -61,6 +66,11 @@ describe("confirmation expirer (plan/07 §5.2)", () => {
     const sensitive = await getUserSensitive(userId);
     expect(sensitive.food_intolerances).toEqual([]);
     expect(sensitive.dietary_data_state).toBe("removed_after_decline");
+    const { rows: scrubbed } = await pool.query(
+      `SELECT responses FROM application_responses WHERE id = $1`,
+      [responseId],
+    );
+    expect(scrubbed[0].responses).toEqual({ motivation: "legacy applicant" });
 
     // second pass finds nothing (idempotent)
     const second = await expireDueConfirmations();
