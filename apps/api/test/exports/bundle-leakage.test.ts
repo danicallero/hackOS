@@ -80,4 +80,27 @@ describe("buildExportBundle (H54)", () => {
     const bundle = await buildExportBundle(a);
     expect(JSON.stringify(bundle)).not.toContain("SECRET_EXPO_TOKEN");
   });
+
+  it("includes dietary provenance without reconstructing removed values", async () => {
+    const a = await createUser();
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `UPDATE users
+          SET dietary_data_state = 'removed_after_decline',
+              food_intolerances = '{}', food_intolerance_notes = NULL
+        WHERE id = $1`,
+      [a],
+    );
+
+    const bundle = (await buildExportBundle(a)) as {
+      subject: {
+        dietaryDataState: string;
+        foodIntolerances: number[];
+        foodIntoleranceNotes: string | null;
+      };
+    };
+    expect(bundle.subject.dietaryDataState).toBe("removed_after_decline");
+    expect(bundle.subject.foodIntolerances).toEqual([]);
+    expect(bundle.subject.foodIntoleranceNotes).toBeNull();
+  });
 });

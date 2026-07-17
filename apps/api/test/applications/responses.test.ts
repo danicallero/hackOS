@@ -131,7 +131,32 @@ describe("application responses (H12)", () => {
     const sensitive = await getUserSensitive(user);
     expect(sensitive.food_intolerances).toEqual([1, 2]);
     expect(sensitive.food_intolerance_notes).toBe("no nuts");
+    expect(sensitive.dietary_data_state).toBe("present");
     expect(sensitive.shirt_size).toBe("L");
+  });
+
+  it("keeps a genuinely unanswered dietary field distinct from lifecycle removal", async () => {
+    const a = await getApp();
+    const appId = await createApplication({ type: "participant" });
+    const user = await createUser({ emailVerified: true });
+    await saveDraft(a, appId, user, { motivation: "x" });
+
+    const submitted = await a.inject({
+      method: "POST",
+      url: `/api/applications/${appId}/response/submit`,
+      headers: asUser(user),
+      payload: { food_intolerances: [], food_intolerance_notes: null, shirt_size: "M" },
+    });
+    expect(submitted.statusCode).toBe(200);
+    expect((await getUserSensitive(user)).dietary_data_state).toBe("not_provided");
+
+    const response = await a.inject({
+      method: "GET",
+      url: `/api/applications/${appId}/response`,
+      headers: asUser(user),
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().dietary_data_state).toBe("not_provided");
   });
 
   it("M1: mirrors a DNI form answer onto users.dni (case-insensitive key)", async () => {

@@ -248,7 +248,17 @@ export async function wipeSensitiveDataIfOrphan(
   );
   if (rows.length > 0) return false;
   await client.query(
-    `UPDATE users SET food_intolerances = '{}', food_intolerance_notes = NULL WHERE id = $1`,
+    `UPDATE users
+        SET dietary_data_state = CASE
+              WHEN cardinality(food_intolerances) > 0
+                OR NULLIF(BTRIM(food_intolerance_notes), '') IS NOT NULL
+                OR dietary_data_state = 'present'
+              THEN 'removed_after_decline'
+              ELSE dietary_data_state
+            END,
+            food_intolerances = '{}',
+            food_intolerance_notes = NULL
+      WHERE id = $1`,
     [userId],
   );
   return true;
@@ -485,6 +495,11 @@ export async function submitResponse(
       `UPDATE users
        SET food_intolerances = $2,
            food_intolerance_notes = $3,
+           dietary_data_state = CASE
+             WHEN cardinality($2::integer[]) > 0 OR NULLIF(BTRIM($3::text), '') IS NOT NULL
+             THEN 'present'
+             ELSE 'not_provided'
+           END,
            shirt_size = COALESCE($4, shirt_size),
            dni = COALESCE($5, dni)
        WHERE id = $1`,
@@ -1265,6 +1280,7 @@ export interface ResponseDetail {
     shirt_size: string | null;
     food_intolerances: number[];
     food_intolerance_notes: string | null;
+    dietary_data_state: "not_provided" | "present" | "removed_after_decline";
   };
   application: { id: number; name: string; type: ApplicationType; template: TemplateField[] };
   reviews: Array<{ author_id: number; score: number | null; notes: string | null }>;
@@ -1303,7 +1319,7 @@ function computeAvailableActions(status: string): string[] {
 export async function getResponseDetail(responseId: number): Promise<ResponseDetail> {
   const { rows } = await pool.query(
     `SELECT r.*, u.name, u.email, u.shirt_size,
-            u.food_intolerances, u.food_intolerance_notes,
+            u.food_intolerances, u.food_intolerance_notes, u.dietary_data_state,
             a.id AS app_id, a.name AS app_name, a.type AS app_type, a.template
      FROM application_responses r
      JOIN users u ON u.id = r.user_id
@@ -1318,6 +1334,7 @@ export async function getResponseDetail(responseId: number): Promise<ResponseDet
     shirt_size,
     food_intolerances,
     food_intolerance_notes,
+    dietary_data_state,
     app_id,
     app_name,
     app_type,
@@ -1333,7 +1350,14 @@ export async function getResponseDetail(responseId: number): Promise<ResponseDet
   const enriched = await enrichTemplate(app_type, template);
   return {
     response,
-    user: { name, email, shirt_size, food_intolerances, food_intolerance_notes },
+    user: {
+      name,
+      email,
+      shirt_size,
+      food_intolerances,
+      food_intolerance_notes,
+      dietary_data_state,
+    },
     application: {
       id: app_id,
       name: app_name,

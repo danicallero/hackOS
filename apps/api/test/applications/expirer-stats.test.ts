@@ -58,7 +58,9 @@ describe("confirmation expirer (plan/07 §5.2)", () => {
     const first = await expireDueConfirmations();
     expect(first.expired).toBe(1);
     expect((await getResponse(responseId)).status).toBe("expired");
-    expect((await getUserSensitive(userId)).food_intolerances).toEqual([]);
+    const sensitive = await getUserSensitive(userId);
+    expect(sensitive.food_intolerances).toEqual([]);
+    expect(sensitive.dietary_data_state).toBe("removed_after_decline");
 
     // second pass finds nothing (idempotent)
     const second = await expireDueConfirmations();

@@ -432,7 +432,24 @@ describe("confirm / decline (H15)", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().sensitive_wiped).toBe(true);
     expect((await getResponse(responseId)).status).toBe("declined");
-    expect((await getUserSensitive(userId)).food_intolerances).toEqual([]);
+    const sensitive = await getUserSensitive(userId);
+    expect(sensitive.food_intolerances).toEqual([]);
+    expect(sensitive.food_intolerance_notes).toBeNull();
+    expect(sensitive.dietary_data_state).toBe("removed_after_decline");
+
+    const applicant = await a.inject({
+      method: "GET",
+      url: `/api/applications/${appId}/response`,
+      headers: asUser(userId),
+    });
+    expect(applicant.json().dietary_data_state).toBe("removed_after_decline");
+
+    const staff = await a.inject({
+      method: "GET",
+      url: `/api/applications/${appId}/responses`,
+      headers: asUser(reviewer),
+    });
+    expect(staff.json().responses[0].dietary_data_state).toBe("removed_after_decline");
 
     const again = await a.inject({
       method: "POST",
@@ -807,6 +824,7 @@ describe("re-accept (admin)", () => {
     const r = await getResponse(responseId);
     expect(r.status).toBe("accepted");
     expect(r.declined_at).toBeNull();
+    expect((await getUserSensitive(userId)).dietary_data_state).toBe("removed_after_decline");
 
     // a fresh decision email was enqueued
     const { rows: outbox } = await pool.query(

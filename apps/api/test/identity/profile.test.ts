@@ -240,6 +240,16 @@ describe("PATCH /api/me (H7)", () => {
     expect(res.json().shirtSize).toBe("L");
     expect(res.json().foodIntolerances).toEqual([1, 2]);
     expect(res.json().foodIntoleranceNotes).toBe("no nuts");
+    expect(res.json().dietaryDataState).toBe("present");
+
+    const cleared = await a.inject({
+      method: "PATCH",
+      url: "/api/me",
+      headers: asUser(userId),
+      payload: { foodIntolerances: [], foodIntoleranceNotes: null },
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json().dietaryDataState).toBe("not_provided");
   });
 
   it("rejects restricted/system fields on self-edit (email, badge, dni, notes)", async () => {
