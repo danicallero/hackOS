@@ -69,6 +69,44 @@ describe("challenge progress (H40)", () => {
     expect(body.evaluated).toBe(1);
     expect(body.disqualified).toBe(1);
   });
+
+  it("lets a sponsor rep view progress for their own challenge without room_judges/capabilities, but not others' (H46)", async () => {
+    const { pool } = await import("../../src/db/pool.js");
+    const owner = await createUser();
+    const enterprise = await pool.query(`INSERT INTO enterprises (name) VALUES ($1) RETURNING id`, [
+      `Ent ${crypto.randomUUID()}`,
+    ]);
+    const ownerSponsor = await pool.query(
+      `INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2) RETURNING id`,
+      [enterprise.rows[0].id, owner],
+    );
+    const challenge = await pool.query(
+      `INSERT INTO challenges (author, title) VALUES ($1, $2) RETURNING id`,
+      [ownerSponsor.rows[0].id, "Sponsor Challenge"],
+    );
+    const challengeId = challenge.rows[0].id;
+
+    const rep = await createUser();
+    await pool.query(`INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2)`, [
+      enterprise.rows[0].id,
+      rep,
+    ]);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/queue/challenges/${challengeId}/progress`,
+      headers: asUser(rep),
+    });
+    expect(res.statusCode).toBe(200);
+
+    const otherChallengeId = await createChallenge();
+    const forbidden = await app.inject({
+      method: "GET",
+      url: `/api/queue/challenges/${otherChallengeId}/progress`,
+      headers: asUser(rep),
+    });
+    expect(forbidden.statusCode).toBe(403);
+  });
 });
 
 describe("room view (H41)", () => {
