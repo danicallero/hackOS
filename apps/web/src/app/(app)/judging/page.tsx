@@ -25,7 +25,9 @@ import {
   SendIcon,
   SkipForwardIcon,
   UsersIcon,
+  WifiOffIcon,
 } from "lucide-react";
+import { AlertDialog as AlertDialogPrimitive } from "radix-ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { toast } from "sonner";
@@ -56,11 +58,19 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
-import { useLiveQuery } from "@/hooks/use-event-source";
+import { useEventSource, useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError, api } from "@/lib/api";
 import { API_URL } from "@/lib/env";
 import { type Translate, useLocale } from "@/lib/i18n";
 import {
+  collaborationState,
+  hasWaitedTooLong,
+  PHYSICAL_STATES,
+  physicalStateIndex,
+  workspaceAccess,
+} from "@/lib/judging-workspace";
+import {
+  type AttemptReviewVersion,
   type ChallengeProgress,
   callNext,
   closeSession,
@@ -69,6 +79,7 @@ import {
   getChallengeProgress,
   getRepoChallenges,
   getReview,
+  getReviewVersions,
   getRoomPace,
   getRoomView,
   getSessions,
@@ -93,6 +104,7 @@ import { type Challenge, textForDisplay } from "../challenges/shared";
 type Scores = Record<string, AnswerValue>;
 
 const SCORE_SCALE = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
+const EMPTY_PANEL: Question[] = [];
 
 function challengeName(t: Translate, challenge?: Challenge | null, fallback?: number): string {
   return challenge
@@ -164,14 +176,14 @@ function normalizeScores(panel: Question[], raw: Record<string, unknown> | undef
 }
 
 export default function QueuePage() {
-  const { can, canAny, me } = useSessionContext();
+  const { can } = useSessionContext();
   const { t } = useLocale();
-  const canOperate = can(CAPABILITIES.QUEUE_OPERATE);
-  const canJudge = can(CAPABILITIES.JUDGE_PANEL) || me?.role === "judge";
-  const canExport = can(CAPABILITIES.JUDGING_EXPORT);
-  const canUse =
-    me?.role === "judge" ||
-    canAny(CAPABILITIES.QUEUE_OPERATE, CAPABILITIES.QUEUE_ADMIN, CAPABILITIES.JUDGE_PANEL);
+  const { canOperate, canJudge, canAdmin, canExport, canUse } = workspaceAccess({
+    operate: can(CAPABILITIES.QUEUE_OPERATE),
+    judge: can(CAPABILITIES.JUDGE_PANEL),
+    admin: can(CAPABILITIES.QUEUE_ADMIN),
+    exportData: can(CAPABILITIES.JUDGING_EXPORT),
+  });
 
   const [rooms, setRooms] = useState<Room[]>([]);
   const [roomsLoading, setRoomsLoading] = useState(true);
@@ -181,6 +193,8 @@ export default function QueuePage() {
   const [search, setSearch] = useState("");
   const [searchResults, setSearchResults] = useState<QueueSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
+  const [selectedReviewEntry, setSelectedReviewEntry] = useState<QueueEntry | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const activeRoomId = roomId ?? rooms[0]?.id ?? null;
 
@@ -238,7 +252,9 @@ export default function QueuePage() {
       setChallenges(challengeRows.challenges);
       setRoomId((current) => current ?? roomRows[0]?.id ?? null);
     } catch (err) {
-      toast.error(errorMessage(err, t("couldNotLoadQueueSetup")));
+      const message = errorMessage(err, t("couldNotLoadQueueSetup"));
+      setActionError(message);
+      toast.error(message);
     } finally {
       setRoomsLoading(false);
     }
@@ -255,12 +271,15 @@ export default function QueuePage() {
   const mutate = useCallback(
     async (key: string, action: () => Promise<unknown>, success: string) => {
       setBusy(key);
+      setActionError(null);
       try {
         await action();
         toast.success(success);
         await refreshLive();
       } catch (err) {
-        toast.error(errorMessage(err, t("queueActionFailed")));
+        const message = errorMessage(err, t("queueActionFailed"));
+        setActionError(message);
+        toast.error(message);
       } finally {
         setBusy(null);
       }
@@ -284,7 +303,11 @@ export default function QueuePage() {
         const hits = await searchTeams(effectiveChallengeId, term);
         if (!cancelled) setSearchResults(hits);
       } catch (err) {
-        if (!cancelled) toast.error(errorMessage(err, t("searchFailed")));
+        if (!cancelled) {
+          const message = errorMessage(err, t("searchFailed"));
+          setActionError(message);
+          toast.error(message);
+        }
       } finally {
         if (!cancelled) setSearching(false);
       }
@@ -331,7 +354,10 @@ export default function QueuePage() {
             <Label htmlFor="queue-room">{t("roomLabel")}</Label>
             <Select
               value={activeRoomId ? String(activeRoomId) : ""}
-              onValueChange={(value) => setRoomId(Number(value))}
+              onValueChange={(value) => {
+                setRoomId(Number(value));
+                setSelectedReviewEntry(null);
+              }}
               disabled={roomsLoading || rooms.length === 0}
             >
               <SelectTrigger id="queue-room" className="w-full">
@@ -358,24 +384,45 @@ export default function QueuePage() {
           </div>
 
           <div className="flex flex-1 flex-wrap items-end gap-2 sm:justify-end">
-            <Button
-              variant={isPaused ? "default" : "outline"}
-              disabled={!activeRoomId || busy === "pause" || (!canOperate && !canJudge)}
-              onClick={() =>
-                activeRoomId &&
-                mutate(
-                  "pause",
-                  () =>
-                    isPaused
-                      ? resumeRoom(activeRoomId, crypto.randomUUID())
-                      : pauseRoom(activeRoomId, crypto.randomUUID()),
-                  isPaused ? t("roomResumed") : t("roomPaused"),
-                )
-              }
-            >
-              {isPaused ? <PlayIcon className="size-4" /> : <PauseIcon className="size-4" />}
-              {isPaused ? t("resume") : t("pause")}
-            </Button>
+            {isPaused ? (
+              <Button
+                disabled={!activeRoomId || busy === "pause" || (!canOperate && !canJudge)}
+                onClick={() =>
+                  activeRoomId &&
+                  mutate(
+                    "pause",
+                    () => resumeRoom(activeRoomId, crypto.randomUUID()),
+                    t("roomResumed"),
+                  )
+                }
+              >
+                <PlayIcon className="size-4" />
+                {t("resume")}
+              </Button>
+            ) : (
+              <ConfirmAction
+                title={t("pauseRoomTitle")}
+                description={t("pauseRoomDescription")}
+                confirmLabel={t("pause")}
+                onConfirm={() =>
+                  activeRoomId &&
+                  mutate(
+                    "pause",
+                    () => pauseRoom(activeRoomId, crypto.randomUUID()),
+                    t("roomPaused"),
+                  )
+                }
+                trigger={
+                  <Button
+                    variant="outline"
+                    disabled={!activeRoomId || busy === "pause" || (!canOperate && !canJudge)}
+                  >
+                    <PauseIcon className="size-4" />
+                    {t("pause")}
+                  </Button>
+                }
+              />
+            )}
 
             {canExport && (
               <DropdownMenu>
@@ -408,6 +455,15 @@ export default function QueuePage() {
         </div>
       </Card>
 
+      {actionError && (
+        <div
+          role="alert"
+          className="border-destructive/40 bg-destructive/5 text-destructive rounded-md border px-4 py-3 text-sm"
+        >
+          {actionError}
+        </div>
+      )}
+
       {roomsLoading || roomView.loading ? (
         <div className="flex min-h-[360px] flex-1 items-center justify-center">
           <Spinner />
@@ -416,14 +472,19 @@ export default function QueuePage() {
         <div className="flex flex-1 items-center justify-center">
           <EmptyState
             icon={DoorOpenIcon}
-            title={t("noRoomSelected")}
-            description={t("noRoomSelectedDesc")}
+            title={roomView.error ? t("couldNotLoadQueueSetup") : t("noRoomSelected")}
+            description={
+              roomView.error
+                ? errorMessage(roomView.error, t("couldNotLoadQueueSetup"))
+                : t("noRoomSelectedDesc")
+            }
           />
         </div>
       ) : (
         // Two-column region fills the remaining height. Left column is pinned and
         // scrolls internally if the queue is long; right column is the scroll area.
         <div className="grid gap-5 xl:min-h-0 xl:flex-1 xl:grid-cols-[360px_minmax(0,1fr)]">
+          <PhysicalStateRail view={view} progress={progress.data} />
           <div className="xl:min-h-0 xl:overflow-y-auto">
             <QueuePanel
               view={view}
@@ -431,12 +492,21 @@ export default function QueuePage() {
               pace={pace.data}
               canOperate={canOperate}
               canJudge={canJudge}
+              canAdmin={canAdmin}
               busy={busy}
               query={search}
               results={searchResults}
               searching={searching}
               searchDisabled={!effectiveChallengeId}
               onQuery={setSearch}
+              onCallNext={(force) =>
+                activeRoomId &&
+                mutate(
+                  force ? "call-next-force" : "call-next",
+                  () => callNext(activeRoomId, crypto.randomUUID(), force),
+                  t("nextTeamCalled"),
+                )
+              }
               onManualCall={(entry, targetStatus) =>
                 activeRoomId &&
                 mutate(
@@ -489,6 +559,20 @@ export default function QueuePage() {
                   t("teamAddedWaiting"),
                 )
               }
+              onReEnter={(entry, position) =>
+                mutate(
+                  `re-enter-${entry.id}-${position}`,
+                  () =>
+                    entryAction(
+                      entry.id,
+                      "re-enter",
+                      { position, reason: "Recovered from manual search" },
+                      crypto.randomUUID(),
+                    ),
+                  t("teamReentered"),
+                )
+              }
+              onOpenReview={setSelectedReviewEntry}
             />
           </div>
 
@@ -530,15 +614,64 @@ export default function QueuePage() {
             />
 
             <ReviewForm
-              entry={active}
+              entry={selectedReviewEntry ?? active}
               challenge={activeChallenge}
               roomId={activeRoomId}
-              canJudge={canJudge && active?.status === "presenting"}
+              canJudge={
+                canJudge && (active?.status === "presenting" || selectedReviewEntry != null)
+              }
+              onCloseExisting={selectedReviewEntry ? () => setSelectedReviewEntry(null) : undefined}
             />
           </div>
         </div>
       )}
     </div>
+  );
+}
+
+function PhysicalStateRail({
+  view,
+  progress,
+}: {
+  view: RoomView;
+  progress: ChallengeProgress | null;
+}) {
+  const { t } = useLocale();
+  const activeIndex = physicalStateIndex(
+    view.active?.status ?? (view.called.length ? "called" : null),
+  );
+  const counts = [
+    view.called.length,
+    view.active?.status === "in_room" ? 1 : 0,
+    view.active?.status === "presenting" ? 1 : 0,
+    progress?.evaluated ?? 0,
+  ];
+  const labels = [
+    t("physicalCalled"),
+    t("physicalInRoom"),
+    t("physicalPresenting"),
+    t("physicalScored"),
+  ];
+
+  return (
+    <ol
+      aria-label={t("physicalFlow")}
+      className="grid grid-cols-2 gap-2 xl:col-span-2 xl:grid-cols-4"
+    >
+      {PHYSICAL_STATES.map((state, index) => (
+        <li
+          key={state}
+          aria-current={activeIndex === index ? "step" : undefined}
+          className={cn(
+            "flex min-w-0 items-center justify-between gap-3 rounded-md border px-3 py-2",
+            activeIndex === index && "border-primary bg-primary/5",
+          )}
+        >
+          <span className="truncate text-sm font-medium">{labels[index]}</span>
+          <span className="text-muted-foreground tabular-nums text-sm">{counts[index]}</span>
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -614,43 +747,95 @@ function QueueStatsCard({
   );
 }
 
+function ConfirmAction({
+  trigger,
+  title,
+  description,
+  confirmLabel,
+  destructive = false,
+  onConfirm,
+}: {
+  trigger: React.ReactNode;
+  title: string;
+  description: string;
+  confirmLabel: string;
+  destructive?: boolean;
+  onConfirm: () => void;
+}) {
+  const { t } = useLocale();
+  return (
+    <AlertDialogPrimitive.Root>
+      <AlertDialogPrimitive.Trigger asChild>{trigger}</AlertDialogPrimitive.Trigger>
+      <AlertDialogPrimitive.Portal>
+        <AlertDialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50" />
+        <AlertDialogPrimitive.Content className="bg-background fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-md border p-6 shadow-lg sm:max-w-lg">
+          <AlertDialogPrimitive.Title className="type-section-title text-balance">
+            {title}
+          </AlertDialogPrimitive.Title>
+          <AlertDialogPrimitive.Description className="text-muted-foreground text-pretty text-sm">
+            {description}
+          </AlertDialogPrimitive.Description>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <AlertDialogPrimitive.Cancel asChild>
+              <Button variant="outline">{t("cancel")}</Button>
+            </AlertDialogPrimitive.Cancel>
+            <AlertDialogPrimitive.Action asChild>
+              <Button variant={destructive ? "destructive" : "default"} onClick={onConfirm}>
+                {confirmLabel}
+              </Button>
+            </AlertDialogPrimitive.Action>
+          </div>
+        </AlertDialogPrimitive.Content>
+      </AlertDialogPrimitive.Portal>
+    </AlertDialogPrimitive.Root>
+  );
+}
+
 function QueuePanel({
   view,
   progress,
   pace,
   canOperate,
   canJudge,
+  canAdmin,
   busy,
   query,
   results,
   searching,
   searchDisabled,
   onQuery,
+  onCallNext,
   onManualCall,
   onEntryAction,
   onAddTop,
   onAddWaiting,
+  onReEnter,
+  onOpenReview,
 }: {
   view: RoomView;
   progress: ChallengeProgress | null;
   pace: RoomPace | null;
   canOperate: boolean;
   canJudge: boolean;
+  canAdmin: boolean;
   busy: string | null;
   query: string;
   results: QueueSearchResult[];
   searching: boolean;
   searchDisabled: boolean;
   onQuery: (value: string) => void;
+  onCallNext: (force: boolean) => void;
   onManualCall: (entry: QueueEntry, targetStatus: "called" | "in_room") => void;
   onEntryAction: (
     entry: QueueEntry,
-    action: "notify-enter" | "bring-in" | "requeue" | "no-show" | "skip",
+    action: "notify-enter" | "bring-in" | "requeue" | "no-show" | "skip" | "disqualify",
     body: Record<string, unknown> | undefined,
     label: string,
   ) => void;
   onAddTop: (entry: QueueSearchResult) => void;
   onAddWaiting: (entry: QueueSearchResult) => void;
+  onReEnter: (entry: QueueSearchResult, position: "top" | "bottom") => void;
+  onOpenReview: (entry: QueueSearchResult) => void;
 }) {
   const { t } = useLocale();
   const [searchOpen, setSearchOpen] = useState(false);
@@ -663,13 +848,46 @@ function QueuePanel({
       <QueueStatsCard progress={progress} pace={pace} />
       <Separator />
       <div className="space-y-5 p-5">
+        <div className="flex flex-wrap gap-2">
+          <Button
+            className="flex-1"
+            disabled={!canOperate || busy != null || view.state?.is_paused}
+            onClick={() => onCallNext(false)}
+          >
+            <BellRingIcon className="size-4" />
+            {t("callNext")}
+          </Button>
+          <ConfirmAction
+            title={t("forceCallTitle")}
+            description={t("forceCallDescription")}
+            confirmLabel={t("forceCall")}
+            onConfirm={() => onCallNext(true)}
+            trigger={
+              <Button
+                variant="outline"
+                disabled={!canOperate || busy != null || view.state?.is_paused}
+              >
+                {t("forceCall")}
+              </Button>
+            }
+          />
+        </div>
+        {view.state?.is_paused && (
+          <div
+            role="status"
+            className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100"
+          >
+            {t("roomPausedQueueBehavior")}
+          </div>
+        )}
         <QueueList
           title={t("waitingRoomCount", { count: calledEntries.length })}
           entries={calledEntries}
           empty={t("noTeamsWaitingDoor")}
           compact
+          desiredMinutesPerTeam={pace?.desiredMinutesPerTeam ?? null}
           renderActions={(entry) => (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 size="sm"
                 className="flex-1"
@@ -709,25 +927,69 @@ function QueuePanel({
                       onEntryAction(
                         entry,
                         "requeue",
+                        { position: "top", reason: "Returned to top of queue" },
+                        t("teamReturnedQueue"),
+                      )
+                    }
+                  >
+                    <ArrowUpToLineIcon className="size-4" />
+                    {t("requeueTop")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() =>
+                      onEntryAction(
+                        entry,
+                        "requeue",
                         { position: "bottom", reason: "Returned from waiting room" },
                         t("teamReturnedQueue"),
                       )
                     }
                   >
                     <RotateCcwIcon className="size-4" />
-                    {t("requeue")}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    variant="destructive"
-                    onClick={() =>
-                      onEntryAction(entry, "no-show", { reason: "No show" }, t("noShowRecorded"))
-                    }
-                  >
-                    <AlertTriangleIcon className="size-4" />
-                    {t("noShow")}
+                    {t("requeueBottom")}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+              <ConfirmAction
+                title={t("confirmNoShowTitle")}
+                description={t("confirmNoShowDescription")}
+                confirmLabel={t("noShow")}
+                destructive
+                onConfirm={() =>
+                  onEntryAction(entry, "no-show", { reason: "No show" }, t("noShowRecorded"))
+                }
+                trigger={
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy != null || (!canJudge && !canOperate)}
+                  >
+                    <AlertTriangleIcon className="size-4" />
+                    {t("noShow")}
+                  </Button>
+                }
+              />
+              {canAdmin && (
+                <ConfirmAction
+                  title={t("confirmDisqualifyTitle")}
+                  description={t("confirmDisqualifyDescription")}
+                  confirmLabel={t("disqualify")}
+                  destructive
+                  onConfirm={() =>
+                    onEntryAction(
+                      entry,
+                      "disqualify",
+                      { reason: "Repeated no-show" },
+                      t("teamDisqualified"),
+                    )
+                  }
+                  trigger={
+                    <Button size="sm" variant="destructive" disabled={busy != null}>
+                      {t("disqualify")}
+                    </Button>
+                  }
+                />
+              )}
             </div>
           )}
         />
@@ -741,12 +1003,16 @@ function QueuePanel({
                 {t("challengeQueueCount", { count: waitingEntries.length })}
               </h3>
               <p className="text-muted-foreground text-xs">{t("upcomingTeamsRoom")}</p>
+              <p className="text-muted-foreground text-pretty text-xs">
+                {t("crossRoomSkipPositionPreserved")}
+              </p>
             </div>
             <Button
               size="icon"
               variant={searchOpen ? "secondary" : "ghost"}
               aria-label={t("searchTeamsAria")}
-              aria-pressed={searchOpen}
+              aria-expanded={searchOpen}
+              aria-controls="judging-team-search-panel"
               disabled={searchDisabled}
               onClick={() => setSearchOpen((open) => !open)}
             >
@@ -755,17 +1021,23 @@ function QueuePanel({
           </div>
 
           {searchOpen && (
-            <TeamSearch
-              query={query}
-              results={results}
-              searching={searching}
-              trimmed={trimmed}
-              busy={busy}
-              canOperate={canOperate}
-              onQuery={onQuery}
-              onAddTop={onAddTop}
-              onAddWaiting={onAddWaiting}
-            />
+            <div id="judging-team-search-panel">
+              <TeamSearch
+                query={query}
+                results={results}
+                searching={searching}
+                trimmed={trimmed}
+                busy={busy}
+                canOperate={canOperate}
+                canJudge={canJudge}
+                onOpenReview={onOpenReview}
+                onQuery={onQuery}
+                onAddTop={onAddTop}
+                onAddWaiting={onAddWaiting}
+                onReEnter={onReEnter}
+                onBringIn={(entry) => onManualCall(entry, "in_room")}
+              />
+            </div>
           )}
 
           <QueueList
@@ -773,6 +1045,7 @@ function QueuePanel({
             entries={waitingEntries}
             empty={t("noTeamsChallengeQueue")}
             scroll
+            desiredMinutesPerTeam={pace?.desiredMinutesPerTeam ?? null}
             renderActions={(entry) => (
               <div className="flex gap-2">
                 <Button
@@ -821,9 +1094,13 @@ function TeamSearch({
   trimmed,
   busy,
   canOperate,
+  canJudge,
   onQuery,
   onAddTop,
   onAddWaiting,
+  onReEnter,
+  onBringIn,
+  onOpenReview,
 }: {
   query: string;
   results: QueueSearchResult[];
@@ -831,16 +1108,24 @@ function TeamSearch({
   trimmed: string;
   busy: string | null;
   canOperate: boolean;
+  canJudge: boolean;
   onQuery: (value: string) => void;
   onAddTop: (entry: QueueSearchResult) => void;
   onAddWaiting: (entry: QueueSearchResult) => void;
+  onReEnter: (entry: QueueSearchResult, position: "top" | "bottom") => void;
+  onBringIn: (entry: QueueSearchResult) => void;
+  onOpenReview: (entry: QueueSearchResult) => void;
 }) {
   const { t } = useLocale();
   return (
     <div className="bg-muted/30 space-y-3 rounded-md border p-3">
       <div className="relative">
+        <Label htmlFor="judging-team-search" className="sr-only">
+          {t("searchTeamsAria")}
+        </Label>
         <SearchIcon className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
         <Input
+          id="judging-team-search"
           value={query}
           onChange={(event) => onQuery(event.target.value)}
           placeholder={t("searchProjectPlaceholder")}
@@ -868,25 +1153,64 @@ function TeamSearch({
                   </StatusBadge>
                 )}
               </div>
-              <div className="mt-2 grid grid-cols-2 gap-2">
+              {entry.has_review ? (
                 <Button
                   size="sm"
-                  variant="outline"
-                  disabled={busy != null || !canOperate}
-                  onClick={() => onAddTop(entry)}
+                  className="mt-2 w-full"
+                  disabled={busy != null || !canJudge}
+                  onClick={() => onOpenReview(entry)}
                 >
-                  <ArrowUpToLineIcon className="size-4" />
-                  {t("topOfQueue")}
+                  {t("openExistingEvaluation")}
                 </Button>
-                <Button
-                  size="sm"
-                  disabled={busy != null || !canOperate}
-                  onClick={() => onAddWaiting(entry)}
-                >
-                  <DoorOpenIcon className="size-4" />
-                  {t("waitingRoomButton")}
-                </Button>
-              </div>
+              ) : ["completed", "cancelled", "disqualified"].includes(entry.status) ? (
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy != null || !canOperate}
+                    onClick={() => onReEnter(entry, "top")}
+                  >
+                    {t("reenterTop")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy != null || !canOperate}
+                    onClick={() => onReEnter(entry, "bottom")}
+                  >
+                    {t("reenterBottom")}
+                  </Button>
+                </div>
+              ) : (
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy != null || !canOperate}
+                    onClick={() => onAddTop(entry)}
+                  >
+                    <ArrowUpToLineIcon className="size-4" />
+                    {t("topOfQueue")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={busy != null || !canOperate}
+                    onClick={() => onAddWaiting(entry)}
+                  >
+                    <DoorOpenIcon className="size-4" />
+                    {t("waitingRoomButton")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="col-span-2"
+                    disabled={busy != null || !canJudge}
+                    onClick={() => onBringIn(entry)}
+                  >
+                    <DoorOpenIcon className="size-4" />
+                    {t("bringInDirectly")}
+                  </Button>
+                </div>
+              )}
             </li>
           ))}
         </ul>
@@ -901,6 +1225,7 @@ function QueueList({
   empty,
   compact,
   scroll,
+  desiredMinutesPerTeam,
   renderActions,
 }: {
   title: string;
@@ -908,6 +1233,7 @@ function QueueList({
   empty: string;
   compact?: boolean;
   scroll?: boolean;
+  desiredMinutesPerTeam?: number | null;
   renderActions: (entry: QueueEntry) => React.ReactNode;
 }) {
   const { t } = useLocale();
@@ -931,21 +1257,30 @@ function QueueList({
                   <div className="mt-1 flex flex-wrap items-center gap-2">
                     {entry.call_count > 0 && (
                       <span className="text-muted-foreground text-xs tabular-nums">
-                        Past calls: {entry.call_count}
+                        {t("pastCalls")} {entry.call_count}
                       </span>
                     )}
                     {entry.position != null && (
                       <span className="text-muted-foreground text-xs tabular-nums">
-                        Position #{entry.position}
+                        {t("positionHash", { position: entry.position })}
                       </span>
                     )}
                     {entry.called_at && (
-                      <span className="text-muted-foreground text-xs tabular-nums">
-                        Called{" "}
-                        {new Date(entry.called_at).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
+                      <span
+                        className={cn(
+                          "text-muted-foreground text-xs tabular-nums",
+                          hasWaitedTooLong(entry.called_at, desiredMinutesPerTeam ?? null) &&
+                            "text-amber-700 dark:text-amber-400",
+                        )}
+                      >
+                        {t("calledAt", {
+                          time: new Date(entry.called_at).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          }),
                         })}
+                        {hasWaitedTooLong(entry.called_at, desiredMinutesPerTeam ?? null) &&
+                          ` · ${t("calledTooLong")}`}
                       </span>
                     )}
                   </div>
@@ -1053,10 +1388,11 @@ function PresentationPanel({
                 {t("start")}
               </Button>
               {canSendBack && (
-                <Button
-                  variant="outline"
-                  disabled={!canJudge || busy != null}
-                  onClick={() =>
+                <ConfirmAction
+                  title={t("confirmSendBackTitle")}
+                  description={t("confirmSendBackDescription")}
+                  confirmLabel={t("requeueWaitingRoom")}
+                  onConfirm={() =>
                     onEntryAction(
                       entry,
                       "send-back",
@@ -1064,10 +1400,13 @@ function PresentationPanel({
                       t("teamSentBackWaiting"),
                     )
                   }
-                >
-                  <RotateCcwIcon className="size-4" />
-                  {t("requeueWaitingRoom")}
-                </Button>
+                  trigger={
+                    <Button variant="outline" disabled={!canJudge || busy != null}>
+                      <RotateCcwIcon className="size-4" />
+                      {t("requeueWaitingRoom")}
+                    </Button>
+                  }
+                />
               )}
             </div>
           </>
@@ -1328,43 +1667,101 @@ function ReviewForm({
   challenge,
   roomId,
   canJudge,
+  onCloseExisting,
 }: {
   entry: QueueEntry | null;
   challenge: Challenge | null;
   roomId: number | null;
   canJudge: boolean;
+  onCloseExisting?: () => void;
 }) {
   const { t } = useLocale();
-  const panel = challenge?.judging_panel_criteria ?? [];
+  const panel = challenge?.judging_panel_criteria ?? EMPTY_PANEL;
   const [scores, setScores] = useState<Scores>({});
   const [notes, setNotes] = useState("");
   const [status, setStatus] = useState<string>("draft");
   const [sessions, setSessions] = useState<JudgingSession[]>([]);
+  const [versions, setVersions] = useState<AttemptReviewVersion[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const dirtyRef = useRef(false);
+  const savingRef = useRef(false);
+  const reviewStampRef = useRef<string | null>(null);
+  const [conflict, setConflict] = useState(false);
+  const [online, setOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [externalUpdate, setExternalUpdate] = useState<string | null>(null);
   const requiredUnanswered = panel.filter(
     (question) => question.required && !answerHasValue(scores[question.key]),
   ).length;
+  const changedFieldLabel = useCallback(
+    (field: string) => {
+      if (field === "notes") return t("notesLabel");
+      if (field === "status") return t("evaluationStateLabel");
+      const key = field.startsWith("scores.") ? field.slice("scores.".length) : field;
+      const criterion = panel.find((question) => question.key === key);
+      return criterion ? textForDisplay(criterion.label) : t("scoring");
+    },
+    [panel, t],
+  );
+
+  useEffect(() => {
+    const markOnline = () => setOnline(true);
+    const markOffline = () => setOnline(false);
+    window.addEventListener("online", markOnline);
+    window.addEventListener("offline", markOffline);
+    return () => {
+      window.removeEventListener("online", markOnline);
+      window.removeEventListener("offline", markOffline);
+    };
+  }, []);
+
+  const loadRemote = useCallback(
+    async (external = false) => {
+      if (!entry) return;
+      const [review, activeSessions, reviewVersions] = await Promise.all([
+        getReview(entry.id),
+        getSessions(entry.id),
+        getReviewVersions(entry.id),
+      ]);
+      setSessions(activeSessions);
+      setVersions(reviewVersions);
+      const remoteStamp = review.updated_at ?? review.created_at ?? JSON.stringify(review);
+      if (external && (savingRef.current || remoteStamp === reviewStampRef.current)) return;
+      if (external && dirtyRef.current) {
+        setConflict(true);
+        return;
+      }
+      setScores(normalizeScores(panel, review.scores));
+      setNotes(review.notes ?? "");
+      setStatus(review.status);
+      reviewStampRef.current = remoteStamp;
+      dirtyRef.current = false;
+      setDirty(false);
+      setConflict(false);
+      if (external) {
+        const last = reviewVersions.at(-1);
+        setExternalUpdate(
+          last?.changed_fields.map(changedFieldLabel).join(", ") ?? t("evaluationUpdatedElsewhere"),
+        );
+      }
+    },
+    [changedFieldLabel, entry, panel, t],
+  );
 
   useEffect(() => {
     if (!entry) return;
     let cancelled = false;
     setLoading(true);
+    setSaveError(null);
     void Promise.all([
-      getReview(entry.id),
-      getSessions(entry.id),
+      loadRemote(),
       canJudge
         ? openSession(entry.id, roomId ?? undefined).catch(() => null)
         : Promise.resolve(null),
     ])
-      .then(([review, activeSessions]) => {
-        if (cancelled) return;
-        setScores(normalizeScores(panel, review.scores));
-        setNotes(review.notes ?? "");
-        setStatus(review.status);
-        setSessions(activeSessions);
-      })
-      .catch((err) => toast.error(errorMessage(err, t("couldNotLoadReview"))))
+      .catch((err) => setSaveError(errorMessage(err, t("couldNotLoadReview"))))
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
@@ -1372,24 +1769,55 @@ function ReviewForm({
       cancelled = true;
       if (canJudge) void closeSession(entry.id).catch(() => undefined);
     };
-  }, [entry, canJudge, panel, roomId, t]);
+  }, [entry, canJudge, loadRemote, roomId, t]);
+
+  useEventSource("/api/events/stream", {
+    events: [EVENTS.DATA_CHANGED],
+    enabled: entry != null,
+    onEvent: () => void loadRemote(true),
+  });
 
   const save = useCallback(
-    async (submit = false) => {
-      if (!entry) return;
+    async (submit = false, announce = true) => {
+      if (!entry || !online) return;
+      savingRef.current = true;
       setSaving(true);
+      setSaveError(null);
       try {
         const review = await saveReview(entry.id, { scores, notes, submit });
         setStatus(review.status);
-        toast.success(submit ? t("reviewSubmitted") : t("draftSaved"));
+        reviewStampRef.current = review.updated_at ?? review.created_at ?? JSON.stringify(review);
+        dirtyRef.current = false;
+        setDirty(false);
+        setConflict(false);
+        setVersions(await getReviewVersions(entry.id));
+        if (announce) toast.success(submit ? t("reviewSubmitted") : t("draftSaved"));
       } catch (err) {
-        toast.error(errorMessage(err, t("couldNotSaveReview")));
+        const message = errorMessage(err, t("couldNotSaveReview"));
+        setSaveError(message);
+        if (announce) toast.error(message);
       } finally {
+        savingRef.current = false;
         setSaving(false);
       }
     },
-    [entry, scores, notes, t],
+    [entry, scores, notes, online, t],
   );
+
+  useEffect(() => {
+    if (!dirty || !online || !canJudge || conflict) return;
+    const timer = window.setTimeout(() => void save(false, false), 800);
+    return () => window.clearTimeout(timer);
+  }, [canJudge, conflict, dirty, online, save]);
+
+  const syncState = collaborationState({ online, saving, conflict, dirty });
+  const syncLabel = {
+    saving: t("collaborationSaving"),
+    saved: t("collaborationSaved"),
+    offline: t("collaborationOffline"),
+    conflict: t("collaborationConflict"),
+    unsaved: t("collaborationUnsaved"),
+  }[syncState];
 
   if (!entry) {
     return (
@@ -1405,7 +1833,20 @@ function ReviewForm({
       description={t("scoringSaveDesc")}
       icon={CheckCircle2Icon}
       action={
-        <StatusBadge tone={status === "submitted" ? "success" : "warning"}>{status}</StatusBadge>
+        <div className="flex flex-wrap items-center gap-2">
+          <span role="status" aria-live="polite" className="text-muted-foreground text-sm">
+            {syncState === "offline" && <WifiOffIcon className="mr-1 inline size-4" />}
+            {syncLabel}
+          </span>
+          <StatusBadge tone={status === "submitted" ? "success" : "warning"}>
+            {status === "submitted" ? t("evaluationSubmitted") : t("evaluationDraft")}
+          </StatusBadge>
+          {onCloseExisting && (
+            <Button size="sm" variant="outline" onClick={onCloseExisting}>
+              {t("closeExistingEvaluation")}
+            </Button>
+          )}
+        </div>
       }
       footer={
         <div className="flex flex-wrap justify-end gap-2">
@@ -1414,15 +1855,17 @@ function ReviewForm({
             disabled={!canJudge || saving || loading}
             onClick={() => save(false)}
           >
-            {t("saveDraft")}
+            {status === "submitted" ? t("saveCorrection") : t("saveDraft")}
           </Button>
-          <Button
-            disabled={!canJudge || saving || loading || requiredUnanswered > 0}
-            onClick={() => save(true)}
-          >
-            <CheckCircle2Icon className="size-4" />
-            {t("submitReview")}
-          </Button>
+          {status !== "submitted" && (
+            <Button
+              disabled={!canJudge || saving || loading || requiredUnanswered > 0}
+              onClick={() => save(true)}
+            >
+              <CheckCircle2Icon className="size-4" />
+              {t("submitReview")}
+            </Button>
+          )}
         </div>
       }
     >
@@ -1432,6 +1875,43 @@ function ReviewForm({
         <p className="text-muted-foreground text-sm">{t("noJudgingCriteria")}</p>
       ) : (
         <div className="space-y-5">
+          {saveError && (
+            <div
+              role="alert"
+              className="border-destructive/40 bg-destructive/5 text-destructive rounded-md border p-3 text-sm"
+            >
+              {saveError}
+            </div>
+          )}
+          {syncState === "offline" && (
+            <div
+              role="status"
+              className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100"
+            >
+              {t("offlineEvaluationPending")}
+            </div>
+          )}
+          {syncState === "conflict" && (
+            <div
+              role="alert"
+              className="border-destructive/40 bg-destructive/5 rounded-md border p-3 text-sm"
+            >
+              <p>{t("evaluationConflictDescription")}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" onClick={() => void loadRemote(false)}>
+                  {t("loadLatestEvaluation")}
+                </Button>
+                <Button size="sm" onClick={() => void save(false)}>
+                  {t("keepMyEvaluation")}
+                </Button>
+              </div>
+            </div>
+          )}
+          {externalUpdate && !conflict && (
+            <p role="status" className="text-muted-foreground text-sm">
+              {t("criterionUpdatedElsewhere", { fields: externalUpdate })}
+            </p>
+          )}
           {requiredUnanswered > 0 && (
             <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
               <AlertTriangleIcon className="size-4 shrink-0" />
@@ -1457,8 +1937,13 @@ function ReviewForm({
               key={question.key}
               question={question}
               value={scores[question.key]}
-              disabled={!canJudge || status === "submitted"}
-              onChange={(value) => setScores((current) => ({ ...current, [question.key]: value }))}
+              disabled={!canJudge}
+              onChange={(value) => {
+                setScores((current) => ({ ...current, [question.key]: value }));
+                dirtyRef.current = true;
+                setDirty(true);
+                setExternalUpdate(null);
+              }}
             />
           ))}
           <div className="space-y-2">
@@ -1466,11 +1951,33 @@ function ReviewForm({
             <Textarea
               id="review-notes"
               value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-              disabled={!canJudge || status === "submitted"}
+              onChange={(event) => {
+                setNotes(event.target.value);
+                dirtyRef.current = true;
+                setDirty(true);
+              }}
+              disabled={!canJudge}
               placeholder={t("privateJudgingNotes")}
             />
           </div>
+          {versions.length > 0 && (
+            <details className="rounded-md border p-3">
+              <summary className="cursor-pointer text-sm font-medium">
+                {t("evaluationVersionHistory")}
+              </summary>
+              <ol className="mt-3 space-y-2">
+                {[...versions].reverse().map((version) => (
+                  <li key={version.id} className="text-muted-foreground text-sm">
+                    <span className="text-foreground font-medium">
+                      {`${version.name ?? t("judgeFallback")} ${version.surname ?? ""}`.trim()}
+                    </span>{" "}
+                    · {new Date(version.created_at).toLocaleString()} ·{" "}
+                    {version.changed_fields.map(changedFieldLabel).join(", ")}
+                  </li>
+                ))}
+              </ol>
+            </details>
+          )}
         </div>
       )}
     </SectionCard>
@@ -1610,9 +2117,6 @@ function QuestionField({
           onChange={(event) => onChange(event.target.value)}
         />
       )}
-      <p className={cn("text-muted-foreground text-xs", disabled && "opacity-70")}>
-        {t("keyLabel")} <span className="font-mono">{question.key}</span>
-      </p>
     </div>
   );
 }
