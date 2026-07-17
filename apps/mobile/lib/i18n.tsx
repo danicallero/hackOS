@@ -400,6 +400,16 @@ const dict = {
   queueCalls: { en: "Queue calls", es: "Avisos de turno", gl: "Avisos de quenda" },
   notificationsAlwaysOn: { en: "Always on", es: "Siempre activo", gl: "Sempre activo" },
   notificationsAnnouncements: { en: "Announcements", es: "Anuncios", gl: "Anuncios" },
+  notificationsQueueStaff: {
+    en: "Teams entering rooms",
+    es: "Equipos entrando en salas",
+    gl: "Equipos entrando en salas",
+  },
+  notificationsQueueStaffHint: {
+    en: "Receive a push when judges ask a team to enter a room.",
+    es: "Recibe una notificación cuando los jueces indiquen que un equipo entre en una sala.",
+    gl: "Recibe unha notificación cando os xuíces indiquen que un equipo entre nunha sala.",
+  },
   notificationsApplications: {
     en: "Application updates",
     es: "Cambios de candidatura",
@@ -585,7 +595,11 @@ const dict = {
     es: "Todavía no hay pases guardados en este dispositivo.",
     gl: "Aínda non hai pases gardados neste dispositivo.",
   },
-  scannerSeeHistory: { en: "See full history", es: "Ver historial completo", gl: "Ver historial completo" },
+  scannerSeeHistory: {
+    en: "See full history",
+    es: "Ver historial completo",
+    gl: "Ver historial completo",
+  },
   scanLogTitle: { en: "Scan history", es: "Historial de pases", gl: "Historial de pases" },
   scanLogEmpty: {
     en: "No scans recorded yet.",

@@ -90,6 +90,45 @@ describe("notification preferences (H51)", () => {
     expect(res.json().error.code).toBe("bad_request");
   });
 
+  it("lets queue staff opt into room-entry pushes while rejecting ordinary users", async () => {
+    const participantId = await createUser();
+    const forbidden = await app.inject({
+      method: "PUT",
+      url: "/api/me/notification-preferences",
+      headers: asUser(participantId),
+      payload: {
+        preferences: [{ category: "queue.staff", channel: "push", enabled: true }],
+      },
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    const operatorId = await createUserWithCapabilities([CAPABILITIES.QUEUE_OPERATE]);
+    const enabled = await app.inject({
+      method: "PUT",
+      url: "/api/me/notification-preferences",
+      headers: asUser(operatorId),
+      payload: {
+        preferences: [{ category: "queue.staff", channel: "push", enabled: true }],
+      },
+    });
+    expect(enabled.statusCode).toBe(200);
+    expect(enabled.json().overrides).toContainEqual({
+      category: "queue.staff",
+      channel: "push",
+      enabled: true,
+    });
+
+    const wrongChannel = await app.inject({
+      method: "PUT",
+      url: "/api/me/notification-preferences",
+      headers: asUser(operatorId),
+      payload: {
+        preferences: [{ category: "queue.staff", channel: "email", enabled: true }],
+      },
+    });
+    expect(wrongChannel.statusCode).toBe(400);
+  });
+
   it("activity reminder opt-in is a schedule:<id> preference row (contract for the schedule WS)", async () => {
     const userId = await createUser();
     const res = await app.inject({

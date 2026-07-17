@@ -270,10 +270,26 @@ export async function searchChallengeQueue(challengeId: number, q: string) {
   const like = `%${q}%`;
   const { rows } = await pool.query(
     `SELECT qe.*, r.name AS repo_name,
-            (ar.attempt_id IS NOT NULL) AS has_review, ar.status AS review_status
+            (ar.attempt_id IS NOT NULL) AS has_review, ar.status AS review_status,
+            busy.room_id AS blocked_by_room_id,
+            busy.room_name AS blocked_by_room_name,
+            busy.team_name AS blocked_by_team_name,
+            busy.status AS blocked_by_status
        FROM queue_entries qe
        JOIN repos r ON r.id = qe.repo_id
        LEFT JOIN attempt_review ar ON ar.attempt_id = qe.id
+       LEFT JOIN LATERAL (
+         SELECT br.id AS room_id, br.name AS room_name, brepo.name AS team_name, bqe.status
+           FROM submissions s1
+           JOIN submissions s2 ON s2.user_id = s1.user_id
+           JOIN queue_entries bqe ON bqe.repo_id = s2.repo_id
+                                  AND bqe.status IN ('called', 'in_room', 'presenting')
+           JOIN rooms br ON br.id = bqe.assigned_room_id
+           JOIN repos brepo ON brepo.id = bqe.repo_id
+          WHERE s1.repo_id = qe.repo_id
+          ORDER BY bqe.id
+          LIMIT 1
+       ) busy ON true
       WHERE qe.challenge_id = $1
         AND (r.name ILIKE $2 OR CAST(r.id AS text) = $3 OR CAST(qe.id AS text) = $3)
       ORDER BY qe.position ASC NULLS LAST, qe.id ASC

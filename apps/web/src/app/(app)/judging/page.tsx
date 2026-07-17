@@ -304,6 +304,7 @@ export default function QueuePage() {
 
   // H37 search-as-you-type: debounce the query and refresh results as the
   // operator types. An empty query clears the list.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: roomView.data changes after each SSE-backed room refresh and intentionally refreshes open search eligibility.
   useEffect(() => {
     const term = search.trim();
     if (!effectiveChallengeId || !term) {
@@ -331,7 +332,7 @@ export default function QueuePage() {
       cancelled = true;
       window.clearTimeout(handle);
     };
-  }, [effectiveChallengeId, search, t]);
+  }, [effectiveChallengeId, roomView.data, search, t]);
 
   if (!canUse) {
     return (
@@ -785,6 +786,7 @@ function QueuePanel({
   const [searchOpen, setSearchOpen] = useState(false);
   const waitingEntries = view.next;
   const calledEntries = view.called;
+  const blockedByEntry = new Map((view.crossRoomSkips ?? []).map((skip) => [skip.entryId, skip]));
   const trimmed = query.trim();
 
   return (
@@ -870,35 +872,48 @@ function QueuePanel({
             empty={t("noTeamsChallengeQueue")}
             scroll
             desiredMinutesPerTeam={pace?.desiredMinutesPerTeam ?? null}
-            renderActions={(entry) => (
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={busy != null || !canOperate}
-                  onClick={() => onManualCall(entry, "called")}
-                  className="flex-1"
-                >
-                  {t("call")}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={busy != null || !canOperate}
-                  onClick={() =>
-                    onEntryAction(
-                      entry,
-                      "skip",
-                      { reason: "Skipped by operator" },
-                      t("teamSkipped"),
-                    )
-                  }
-                >
-                  <SkipForwardIcon className="size-4" />
-                  {t("skip")}
-                </Button>
-              </div>
-            )}
+            renderActions={(entry) => {
+              const blocked = blockedByEntry.get(entry.id);
+              return (
+                <div className="flex w-full flex-col gap-2">
+                  {blocked ? (
+                    <p
+                      className="text-pretty text-xs text-amber-700 dark:text-amber-300"
+                      role="status"
+                    >
+                      {t("teamBusyInOtherRoom", { room: blocked.blockingRoomName })}
+                    </p>
+                  ) : null}
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={busy != null || !canOperate || Boolean(blocked)}
+                      onClick={() => onManualCall(entry, "called")}
+                      className="flex-1"
+                    >
+                      {t("call")}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={busy != null || !canOperate}
+                      onClick={() =>
+                        onEntryAction(
+                          entry,
+                          "skip",
+                          { reason: "Skipped by operator" },
+                          t("teamSkipped"),
+                        )
+                      }
+                    >
+                      <SkipForwardIcon className="size-4" />
+                      {t("skip")}
+                    </Button>
+                  </div>
+                </div>
+              );
+            }}
           />
         </div>
       </div>
@@ -977,6 +992,14 @@ function TeamSearch({
                   </StatusBadge>
                 )}
               </div>
+              {entry.blocked_by_room_name ? (
+                <p
+                  className="mt-2 text-pretty text-xs text-amber-700 dark:text-amber-300"
+                  role="status"
+                >
+                  {t("teamBusyInOtherRoom", { room: entry.blocked_by_room_name })}
+                </p>
+              ) : null}
               {entry.has_review ? (
                 <Button
                   size="sm"
@@ -991,7 +1014,7 @@ function TeamSearch({
                   <Button
                     size="sm"
                     variant="outline"
-                    disabled={busy != null || !canOperate}
+                    disabled={busy != null || !canOperate || Boolean(entry.blocked_by_room_name)}
                     onClick={() => onReEnter(entry, "top")}
                   >
                     {t("reenterTop")}
@@ -999,7 +1022,7 @@ function TeamSearch({
                   <Button
                     size="sm"
                     variant="outline"
-                    disabled={busy != null || !canOperate}
+                    disabled={busy != null || !canOperate || Boolean(entry.blocked_by_room_name)}
                     onClick={() => onReEnter(entry, "bottom")}
                   >
                     {t("reenterBottom")}
@@ -1010,7 +1033,7 @@ function TeamSearch({
                   <Button
                     size="sm"
                     variant="outline"
-                    disabled={busy != null || !canOperate}
+                    disabled={busy != null || !canOperate || Boolean(entry.blocked_by_room_name)}
                     onClick={() => onAddTop(entry)}
                   >
                     <ArrowUpToLineIcon className="size-4" />
@@ -1018,7 +1041,7 @@ function TeamSearch({
                   </Button>
                   <Button
                     size="sm"
-                    disabled={busy != null || !canOperate}
+                    disabled={busy != null || !canOperate || Boolean(entry.blocked_by_room_name)}
                     onClick={() => onAddWaiting(entry)}
                   >
                     <DoorOpenIcon className="size-4" />
@@ -1027,7 +1050,7 @@ function TeamSearch({
                   <Button
                     size="sm"
                     className="col-span-2"
-                    disabled={busy != null || !canJudge}
+                    disabled={busy != null || !canJudge || Boolean(entry.blocked_by_room_name)}
                     onClick={() => onBringIn(entry)}
                   >
                     <DoorOpenIcon className="size-4" />

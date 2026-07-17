@@ -25,6 +25,7 @@ export const ALL_CHANNELS: NotificationChannel[] = ["in_app", "email", "push", "
 const DEFAULT_CHANNELS: NotificationChannel[] = ["in_app", "email", "push"];
 
 const MANDATORY_CATEGORY = "queue";
+export const QUEUE_STAFF_CATEGORY = "queue.staff";
 
 export interface NotifyOptions {
   userId: number;
@@ -134,6 +135,9 @@ export async function setPreferences(
       throw new BadRequestError(
         `Category "${MANDATORY_CATEGORY}" is mandatory (H51) and cannot be overridden`,
       );
+    }
+    if (item.category === QUEUE_STAFF_CATEGORY && item.channel !== "push") {
+      throw new BadRequestError(`Category "${QUEUE_STAFF_CATEGORY}" only supports push`);
     }
     await db.query(
       `INSERT INTO notification_preferences (user_id, category, channel, enabled)

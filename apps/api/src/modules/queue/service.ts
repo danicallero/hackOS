@@ -4,7 +4,7 @@ import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
-import { notify } from "../notifications/service.js";
+import { notify, QUEUE_STAFF_CATEGORY } from "../notifications/service.js";
 import { isRepoBlockedByBusyMember } from "./guard.js";
 import { writeQueueHistory } from "./history.js";
 import {
@@ -146,7 +146,7 @@ export async function callNextForRoom(
 // ── H31: notify_enter (no status transition) ────────────────────────────────
 
 export async function notifyEnter(entryId: number, actorId: number): Promise<QueueEntryRow> {
-  const { entry, memberIds } = await withTransaction(async (client) => {
+  const { entry, memberIds, eventPayload } = await withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
     assertFrom(entry, ["called"], "notify_enter");
     await writeQueueHistory(client, {
@@ -167,6 +167,10 @@ export async function notifyEnter(entryId: number, actorId: number): Promise<Que
     const challengeName: string = ctxRows[0]?.challenge_name ?? "";
     const roomName: string = ctxRows[0]?.room_name ?? "";
     const roomLocation: string | null = ctxRows[0]?.room_location ?? null;
+    const { rows: repoRows } = await client.query(`SELECT name FROM repos WHERE id = $1`, [
+      entry.repo_id,
+    ]);
+    const teamName: string = repoRows[0]?.name ?? `#${entry.repo_id}`;
 
     const { rows: userRows } = await client.query(`SELECT id, name FROM users WHERE id = ANY($1)`, [
       memberIds,
@@ -192,10 +196,39 @@ export async function notifyEnter(entryId: number, actorId: number): Promise<Que
         },
       });
     }
-    return { entry, memberIds };
+    const { rows: staffRows } = await client.query(
+      `SELECT DISTINCT user_id
+         FROM notification_preferences
+        WHERE category = $1 AND channel = 'push' AND enabled = true`,
+      [QUEUE_STAFF_CATEGORY],
+    );
+    for (const row of staffRows as { user_id: number }[]) {
+      await notify(client, {
+        userId: row.user_id,
+        category: QUEUE_STAFF_CATEGORY,
+        channels: ["push"],
+        payload: {
+          entryId,
+          roomId: entry.assigned_room_id,
+          template: "queue.staff.enter",
+          vars: { teamName, challengeName, roomName },
+        },
+      });
+    }
+    return {
+      entry,
+      memberIds,
+      eventPayload: {
+        ...entry,
+        team_name: teamName,
+        challenge_name: challengeName,
+        room_name: roomName,
+        room_location: roomLocation,
+      },
+    };
   });
 
-  await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_NOTIFY_ENTER, entry);
+  await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_NOTIFY_ENTER, eventPayload);
   for (const userId of memberIds) {
     await broadcast(`${SSE_TOPICS.USER_PREFIX}${userId}`, EVENTS.USER_NOTIFICATION, {
       entryId: entry.id,

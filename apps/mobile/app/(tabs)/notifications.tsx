@@ -1,3 +1,4 @@
+import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
 import { SymbolView } from "expo-symbols";
 import { useCallback, useEffect, useState } from "react";
@@ -340,7 +341,7 @@ function PreferencesView() {
     const override = prefs?.overrides.find(
       (row) => row.category === category && row.channel === channel,
     );
-    return override ? override.enabled : true;
+    return override ? override.enabled : category !== "queue.staff";
   }
 
   async function toggle(category: string, channel: Channel, enabled: boolean) {
@@ -364,6 +365,12 @@ function PreferencesView() {
   // Application decisions are email-only and intentionally have no mobile
   // preference: accepted/rejected applicants must always receive them.
   const editableCategories = ["announcements"];
+  const capabilities = me?.capabilities ?? [];
+  const canReceiveQueueStaffAlerts =
+    capabilities.includes(CAPABILITIES.ADMIN_ALL) ||
+    capabilities.includes(CAPABILITIES.QUEUE_OPERATE) ||
+    capabilities.includes(CAPABILITIES.QUEUE_ADMIN) ||
+    capabilities.includes(CAPABILITIES.JUDGE_PANEL);
 
   return (
     <View style={{ gap: 18 }}>
@@ -396,6 +403,30 @@ function PreferencesView() {
           </View>
         </View>
       </Section>
+
+      {canReceiveQueueStaffAlerts ? (
+        <Section title={t("notificationsQueueStaff")} footer={t("notificationsQueueStaffHint")}>
+          <View
+            style={{
+              alignItems: "center",
+              flexDirection: "row",
+              minHeight: 50,
+              paddingHorizontal: 16,
+            }}
+          >
+            <Text selectable style={{ color: colors.label, flex: 1, fontSize: 16 }}>
+              {t("notificationsPush")}
+            </Text>
+            <Switch
+              accessibilityLabel={`${t("notificationsQueueStaff")}, ${t("notificationsPush")}`}
+              disabled={savingKey !== null}
+              style={{ alignSelf: "center" }}
+              value={enabledFor("queue.staff", "push")}
+              onValueChange={(enabled) => void toggle("queue.staff", "push", enabled)}
+            />
+          </View>
+        </Section>
+      ) : null}
 
       {editableCategories.map((category) => (
         <Section key={category} title={categoryLabel(category, t)}>

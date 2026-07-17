@@ -174,6 +174,20 @@ const TEMPLATES: Record<string, TemplateDefinition> = {
       body: "Ola {{name}},\n\nÉ a quenda do teu equipo para {{challengeName}}. Entra xa á sala {{roomName}}.",
     },
   },
+  "queue.staff.enter": {
+    en: {
+      subject: "Team entering {{roomName}}",
+      body: "{{teamName}} was asked to enter room {{roomName}} for {{challengeName}}.",
+    },
+    es: {
+      subject: "Equipo entrando en {{roomName}}",
+      body: "Se ha indicado a {{teamName}} que entre en la sala {{roomName}} para {{challengeName}}.",
+    },
+    gl: {
+      subject: "Equipo entrando en {{roomName}}",
+      body: "Indicóuselle a {{teamName}} que entre na sala {{roomName}} para {{challengeName}}.",
+    },
+  },
   "application.decision": {
     en: {
       subject: "A decision on your application",
@@ -210,6 +224,11 @@ const TEMPLATES: Record<string, TemplateDefinition> = {
  * what the participant needs to do at a glance.
  */
 const PUSH_TEMPLATES: Record<string, PushTemplateDefinition> = {
+  "queue.staff.enter": {
+    en: { title: "{{teamName}} enters {{roomName}}", body: "Called in for {{challengeName}}." },
+    es: { title: "{{teamName}} entra en {{roomName}}", body: "Llamado para {{challengeName}}." },
+    gl: { title: "{{teamName}} entra en {{roomName}}", body: "Chamado para {{challengeName}}." },
+  },
   "queue.called": {
     en: {
       title: "Go wait at room {{roomName}}",
