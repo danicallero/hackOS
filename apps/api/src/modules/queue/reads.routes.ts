@@ -154,6 +154,6 @@ export function registerReadsRoutes(app: FastifyInstance): void {
   typed.patch(
     "/api/tv/mode",
     { preHandler: requireCapability(CAPABILITIES.TV_CONTROL), schema: { body: tvModeBody } },
-    async (req) => setTvMode(req.body.mode, req.body.payload),
+    async (req) => setTvMode(req.body.mode, req.body.payload, req.body.expiresAt ?? null),
   );
 }

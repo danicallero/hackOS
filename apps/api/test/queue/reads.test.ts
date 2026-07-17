@@ -261,7 +261,7 @@ describe("TV mode (H42)", () => {
   it("defaults to rooms, PATCH requires TV_CONTROL, changes persist in Valkey and broadcast on tv", async () => {
     const initial = await app.inject({ method: "GET", url: "/api/tv/mode" }); // public
     expect(initial.statusCode).toBe(200);
-    expect(initial.json()).toEqual({ mode: "rooms", payload: null });
+    expect(initial.json()).toMatchObject({ mode: "rooms", payload: null, expiresAt: null });
 
     const forbidden = await app.inject({
       method: "PATCH",
@@ -283,9 +283,10 @@ describe("TV mode (H42)", () => {
     expect(await broadcastCount("tv")).toBe(before + 1); // TV_MODE_CHANGED
 
     const read = await app.inject({ method: "GET", url: "/api/tv/mode" });
-    expect(read.json()).toEqual({
+    expect(read.json()).toMatchObject({
       mode: "announcement",
       payload: { title: "Apertura", body: "¡Empezamos!" },
+      expiresAt: null,
     });
 
     const { valkey } = await import("../../src/lib/valkey.js");

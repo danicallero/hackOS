@@ -8,9 +8,14 @@ import {
   EyeIcon,
   EyeOffIcon,
   LockIcon,
+  MicIcon,
+  PartyPopperIcon,
   PencilIcon,
   PlusIcon,
+  ScanLineIcon,
+  SparklesIcon,
   Trash2Icon,
+  UtensilsIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -35,10 +40,11 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError } from "@/lib/api";
-import { formatScheduledDateTime } from "@/lib/datetime";
+import { formatScheduledDateTime, getTimeZoneLabel } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem, type ScheduleInput } from "@/lib/logistics";
 import { useCan } from "@/lib/session";
+import type { Tone } from "@/lib/tones";
 
 const EMPTY_FORM: ScheduleInput = {
   title: "",
@@ -92,10 +98,6 @@ function cleanForm(form: ScheduleInput): ScheduleInput {
   };
 }
 
-function visibilityTone(visibility: string | undefined) {
-  return visibility === "shown" ? "success" : "neutral";
-}
-
 function typeLabel(type: string | null | undefined, t: Translate): string {
   const map: Record<string, string> = {
     activity: t("typeActivity"),
@@ -106,6 +108,57 @@ function typeLabel(type: string | null | undefined, t: Translate): string {
     other: t("typeOther"),
   };
   return (type && map[type]) || t("typeActivity");
+}
+
+const TYPE_ICONS: Record<string, typeof CalendarDaysIcon> = {
+  activity: SparklesIcon,
+  meal: UtensilsIcon,
+  workshop: MicIcon,
+  talk: MicIcon,
+  ceremony: PartyPopperIcon,
+  other: CalendarDaysIcon,
+};
+
+function typeIcon(type: string | null | undefined) {
+  return (type && TYPE_ICONS[type]) || CalendarDaysIcon;
+}
+
+/**
+ * Programme items expose one of five states so staff and public readers can
+ * tell what is public now, upcoming, or over without inspecting raw
+ * visibility/publishAt fields (H47, H48).
+ */
+type ScheduleStatus = "draft" | "scheduled" | "public" | "active" | "ended";
+
+function scheduleStatus(item: PublicScheduleItem): ScheduleStatus {
+  const now = Date.now();
+  const publishAtMs = item.publishAt ? new Date(item.publishAt).getTime() : null;
+  const isVisible = item.visibility === "shown" || (publishAtMs !== null && publishAtMs <= now);
+  if (!isVisible) return publishAtMs !== null ? "scheduled" : "draft";
+  const startsMs = new Date(item.startsAt).getTime();
+  const endsMs = new Date(item.endsAt).getTime();
+  if (!Number.isNaN(endsMs) && endsMs <= now) return "ended";
+  if (!Number.isNaN(startsMs) && startsMs <= now) return "active";
+  return "public";
+}
+
+const STATUS_TONE: Record<ScheduleStatus, Tone> = {
+  draft: "neutral",
+  scheduled: "warning",
+  public: "info",
+  active: "success",
+  ended: "neutral",
+};
+
+function scheduleStatusLabel(status: ScheduleStatus, t: Translate): string {
+  const map: Record<ScheduleStatus, string> = {
+    draft: t("statusDraft"),
+    scheduled: t("statusScheduled"),
+    public: t("statusPublic"),
+    active: t("statusLive"),
+    ended: t("statusEnded"),
+  };
+  return map[status];
 }
 
 export default function SchedulePage() {
@@ -217,7 +270,25 @@ export default function SchedulePage() {
       id: "type",
       header: t("colType"),
       sortValue: (item) => item.type ?? "",
-      cell: (item) => <StatusBadge tone="neutral">{typeLabel(item.type, t)}</StatusBadge>,
+      cell: (item) => {
+        const Icon = typeIcon(item.type);
+        return (
+          <div className="flex items-center gap-2">
+            <StatusBadge tone="neutral" dot={false}>
+              <Icon className="size-3.5" aria-hidden="true" />
+              {typeLabel(item.type, t)}
+            </StatusBadge>
+            {item.requiresScan && (
+              <span
+                className="text-muted-foreground inline-flex items-center gap-1 text-xs"
+                title={t("registrableByScanner")}
+              >
+                <ScanLineIcon className="size-3.5" aria-hidden="true" />
+              </span>
+            )}
+          </div>
+        );
+      },
     },
     {
       id: "starts",
@@ -230,18 +301,15 @@ export default function SchedulePage() {
       ),
     },
     {
-      id: "visibility",
-      header: t("colVisibility"),
-      sortValue: (item) => item.visibility ?? "",
-      cell: (item) => (
-        <StatusBadge tone={visibilityTone(item.visibility)} dot={false}>
-          {item.visibility === "shown"
-            ? t("shownOption")
-            : item.visibility === "hidden"
-              ? t("hiddenOption")
-              : t("visibilityPublicDefault")}
-        </StatusBadge>
-      ),
+      id: "status",
+      header: t("colStatus"),
+      sortValue: (item) => scheduleStatus(item),
+      cell: (item) => {
+        const status = scheduleStatus(item);
+        return (
+          <StatusBadge tone={STATUS_TONE[status]}>{scheduleStatusLabel(status, t)}</StatusBadge>
+        );
+      },
     },
     {
       id: "location",
@@ -511,6 +579,7 @@ function ScheduleFormModal({
             onChange={(publishAt) => setValues((v) => ({ ...v, publishAt: publishAt || null }))}
             emptyLabel={t("immediate")}
             addLabel={t("schedulePublication")}
+            description={t("publishDestinationsHint", { timezone: getTimeZoneLabel() })}
           />
         </Field>
         <Field label={t("locationLabel")}>
