@@ -4,7 +4,6 @@ import {
   canTransition,
   collaborationState,
   LEGAL_ACTIONS,
-  physicalStateIndex,
   workspaceAccess,
 } from "./judging-workspace";
 
@@ -29,12 +28,6 @@ describe("judging workspace H29-H40", () => {
     expect(canTransition("completed", "re-enter")).toBe(true);
     expect(canTransition("called", "no-show")).toBe(true);
     expect(canTransition("presenting", "disqualify")).toBe(true);
-  });
-
-  it("H29-H36 renders the four physical states in order", () => {
-    expect(["called", "in_room", "presenting", "completed"].map(physicalStateIndex)).toEqual([
-      0, 1, 2, 3,
-    ]);
   });
 
   it("H34 warns using the approved temporary called-too-long rule", () => {
@@ -74,6 +67,33 @@ describe("judging workspace H29-H40", () => {
       canJudge: true,
       canAdmin: true,
       canExport: true,
+    });
+  });
+
+  it("H40 grants judge access to an association-only room judge with zero capabilities", () => {
+    expect(
+      workspaceAccess({
+        operate: false,
+        judge: false,
+        admin: false,
+        exportData: false,
+        isRoomJudge: true,
+      }),
+    ).toEqual({
+      canUse: true,
+      canOperate: false,
+      canJudge: true,
+      canAdmin: false,
+      canExport: false,
+    });
+    expect(
+      workspaceAccess({ operate: false, judge: false, admin: false, exportData: false }),
+    ).toEqual({
+      canUse: false,
+      canOperate: false,
+      canJudge: false,
+      canAdmin: false,
+      canExport: false,
     });
   });
 });

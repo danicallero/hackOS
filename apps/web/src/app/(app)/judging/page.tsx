@@ -10,7 +10,6 @@ import type { AnswerValue, Question } from "@hackos/shared/questions";
 import {
   AlertTriangleIcon,
   ArrowUpToLineIcon,
-  BellRingIcon,
   CheckCircle2Icon,
   ChevronDownIcon,
   ChevronUpIcon,
@@ -18,6 +17,7 @@ import {
   DownloadIcon,
   ExternalLinkIcon,
   LockIcon,
+  MoreHorizontalIcon,
   PauseIcon,
   PlayIcon,
   RotateCcwIcon,
@@ -44,6 +44,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -62,17 +63,10 @@ import { useEventSource, useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError, api } from "@/lib/api";
 import { API_URL } from "@/lib/env";
 import { type Translate, useLocale } from "@/lib/i18n";
-import {
-  collaborationState,
-  hasWaitedTooLong,
-  PHYSICAL_STATES,
-  physicalStateIndex,
-  workspaceAccess,
-} from "@/lib/judging-workspace";
+import { collaborationState, hasWaitedTooLong, workspaceAccess } from "@/lib/judging-workspace";
 import {
   type AttemptReviewVersion,
   type ChallengeProgress,
-  callNext,
   closeSession,
   entryAction,
   exportUrls,
@@ -176,13 +170,14 @@ function normalizeScores(panel: Question[], raw: Record<string, unknown> | undef
 }
 
 export default function QueuePage() {
-  const { can } = useSessionContext();
+  const { can, me } = useSessionContext();
   const { t } = useLocale();
   const { canOperate, canJudge, canAdmin, canExport, canUse } = workspaceAccess({
     operate: can(CAPABILITIES.QUEUE_OPERATE),
     judge: can(CAPABILITIES.JUDGE_PANEL),
     admin: can(CAPABILITIES.QUEUE_ADMIN),
     exportData: can(CAPABILITIES.JUDGING_EXPORT),
+    isRoomJudge: me?.isRoomJudge ?? false,
   });
 
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -484,7 +479,6 @@ export default function QueuePage() {
         // Two-column region fills the remaining height. Left column is pinned and
         // scrolls internally if the queue is long; right column is the scroll area.
         <div className="grid gap-5 xl:min-h-0 xl:flex-1 xl:grid-cols-[360px_minmax(0,1fr)]">
-          <PhysicalStateRail view={view} progress={progress.data} />
           <div className="xl:min-h-0 xl:overflow-y-auto">
             <QueuePanel
               view={view}
@@ -499,14 +493,6 @@ export default function QueuePage() {
               searching={searching}
               searchDisabled={!effectiveChallengeId}
               onQuery={setSearch}
-              onCallNext={(force) =>
-                activeRoomId &&
-                mutate(
-                  force ? "call-next-force" : "call-next",
-                  () => callNext(activeRoomId, crypto.randomUUID(), force),
-                  t("nextTeamCalled"),
-                )
-              }
               onManualCall={(entry, targetStatus) =>
                 activeRoomId &&
                 mutate(
@@ -586,24 +572,6 @@ export default function QueuePage() {
               waitingRoomCount={view.called.length}
               canJudge={canJudge}
               busy={busy}
-              onEmptyAction={() => {
-                const firstCalled = view.called[0];
-                if (firstCalled) {
-                  mutate(
-                    `bring-in-${firstCalled.id}`,
-                    () => entryAction(firstCalled.id, "bring-in", undefined, crypto.randomUUID()),
-                    t("teamBroughtInShort"),
-                  );
-                  return;
-                }
-                if (activeRoomId) {
-                  mutate(
-                    "call-next",
-                    () => callNext(activeRoomId, crypto.randomUUID()),
-                    t("nextTeamCalled"),
-                  );
-                }
-              }}
               onEntryAction={(entry, action, body, label) =>
                 mutate(
                   `${action}-${entry.id}`,
@@ -626,52 +594,6 @@ export default function QueuePage() {
         </div>
       )}
     </div>
-  );
-}
-
-function PhysicalStateRail({
-  view,
-  progress,
-}: {
-  view: RoomView;
-  progress: ChallengeProgress | null;
-}) {
-  const { t } = useLocale();
-  const activeIndex = physicalStateIndex(
-    view.active?.status ?? (view.called.length ? "called" : null),
-  );
-  const counts = [
-    view.called.length,
-    view.active?.status === "in_room" ? 1 : 0,
-    view.active?.status === "presenting" ? 1 : 0,
-    progress?.evaluated ?? 0,
-  ];
-  const labels = [
-    t("physicalCalled"),
-    t("physicalInRoom"),
-    t("physicalPresenting"),
-    t("physicalScored"),
-  ];
-
-  return (
-    <ol
-      aria-label={t("physicalFlow")}
-      className="grid grid-cols-2 gap-2 xl:col-span-2 xl:grid-cols-4"
-    >
-      {PHYSICAL_STATES.map((state, index) => (
-        <li
-          key={state}
-          aria-current={activeIndex === index ? "step" : undefined}
-          className={cn(
-            "flex min-w-0 items-center justify-between gap-3 rounded-md border px-3 py-2",
-            activeIndex === index && "border-primary bg-primary/5",
-          )}
-        >
-          <span className="truncate text-sm font-medium">{labels[index]}</span>
-          <span className="text-muted-foreground tabular-nums text-sm">{counts[index]}</span>
-        </li>
-      ))}
-    </ol>
   );
 }
 
@@ -749,13 +671,18 @@ function QueueStatsCard({
 
 function ConfirmAction({
   trigger,
+  open,
+  onOpenChange,
   title,
   description,
   confirmLabel,
   destructive = false,
   onConfirm,
 }: {
-  trigger: React.ReactNode;
+  /** Omit when driving the dialog externally via `open`/`onOpenChange` (e.g. from a dropdown item). */
+  trigger?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   title: string;
   description: string;
   confirmLabel: string;
@@ -764,8 +691,8 @@ function ConfirmAction({
 }) {
   const { t } = useLocale();
   return (
-    <AlertDialogPrimitive.Root>
-      <AlertDialogPrimitive.Trigger asChild>{trigger}</AlertDialogPrimitive.Trigger>
+    <AlertDialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
+      {trigger && <AlertDialogPrimitive.Trigger asChild>{trigger}</AlertDialogPrimitive.Trigger>}
       <AlertDialogPrimitive.Portal>
         <AlertDialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50" />
         <AlertDialogPrimitive.Content className="bg-background fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-md border p-6 shadow-lg sm:max-w-lg">
@@ -804,7 +731,6 @@ function QueuePanel({
   searching,
   searchDisabled,
   onQuery,
-  onCallNext,
   onManualCall,
   onEntryAction,
   onAddTop,
@@ -824,7 +750,6 @@ function QueuePanel({
   searching: boolean;
   searchDisabled: boolean;
   onQuery: (value: string) => void;
-  onCallNext: (force: boolean) => void;
   onManualCall: (entry: QueueEntry, targetStatus: "called" | "in_room") => void;
   onEntryAction: (
     entry: QueueEntry,
@@ -848,30 +773,6 @@ function QueuePanel({
       <QueueStatsCard progress={progress} pace={pace} />
       <Separator />
       <div className="space-y-5 p-5">
-        <div className="flex flex-wrap gap-2">
-          <Button
-            className="flex-1"
-            disabled={!canOperate || busy != null || view.state?.is_paused}
-            onClick={() => onCallNext(false)}
-          >
-            <BellRingIcon className="size-4" />
-            {t("callNext")}
-          </Button>
-          <ConfirmAction
-            title={t("forceCallTitle")}
-            description={t("forceCallDescription")}
-            confirmLabel={t("forceCall")}
-            onConfirm={() => onCallNext(true)}
-            trigger={
-              <Button
-                variant="outline"
-                disabled={!canOperate || busy != null || view.state?.is_paused}
-              >
-                {t("forceCall")}
-              </Button>
-            }
-          />
-        </div>
         {view.state?.is_paused && (
           <div
             role="status"
@@ -887,110 +788,14 @@ function QueuePanel({
           compact
           desiredMinutesPerTeam={pace?.desiredMinutesPerTeam ?? null}
           renderActions={(entry) => (
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                size="sm"
-                className="flex-1"
-                disabled={busy != null || !canJudge}
-                onClick={() => onEntryAction(entry, "bring-in", undefined, t("teamBroughtInShort"))}
-              >
-                <DoorOpenIcon className="size-4" />
-                {t("bringIn")}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="flex-1"
-                disabled={busy != null || (!canJudge && !canOperate)}
-                onClick={() =>
-                  onEntryAction(entry, "notify-enter", undefined, t("entranceNoticeSent"))
-                }
-              >
-                <SendIcon className="size-4" />
-                {t("callIn")}
-              </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={busy != null || (!canJudge && !canOperate)}
-                    aria-label={t("moreActions")}
-                  >
-                    {t("requeue")}
-                    <ChevronDownIcon className="size-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                    onClick={() =>
-                      onEntryAction(
-                        entry,
-                        "requeue",
-                        { position: "top", reason: "Returned to top of queue" },
-                        t("teamReturnedQueue"),
-                      )
-                    }
-                  >
-                    <ArrowUpToLineIcon className="size-4" />
-                    {t("requeueTop")}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() =>
-                      onEntryAction(
-                        entry,
-                        "requeue",
-                        { position: "bottom", reason: "Returned from waiting room" },
-                        t("teamReturnedQueue"),
-                      )
-                    }
-                  >
-                    <RotateCcwIcon className="size-4" />
-                    {t("requeueBottom")}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <ConfirmAction
-                title={t("confirmNoShowTitle")}
-                description={t("confirmNoShowDescription")}
-                confirmLabel={t("noShow")}
-                destructive
-                onConfirm={() =>
-                  onEntryAction(entry, "no-show", { reason: "No show" }, t("noShowRecorded"))
-                }
-                trigger={
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={busy != null || (!canJudge && !canOperate)}
-                  >
-                    <AlertTriangleIcon className="size-4" />
-                    {t("noShow")}
-                  </Button>
-                }
-              />
-              {canAdmin && (
-                <ConfirmAction
-                  title={t("confirmDisqualifyTitle")}
-                  description={t("confirmDisqualifyDescription")}
-                  confirmLabel={t("disqualify")}
-                  destructive
-                  onConfirm={() =>
-                    onEntryAction(
-                      entry,
-                      "disqualify",
-                      { reason: "Repeated no-show" },
-                      t("teamDisqualified"),
-                    )
-                  }
-                  trigger={
-                    <Button size="sm" variant="destructive" disabled={busy != null}>
-                      {t("disqualify")}
-                    </Button>
-                  }
-                />
-              )}
-            </div>
+            <CalledEntryActions
+              entry={entry}
+              busy={busy}
+              canJudge={canJudge}
+              canOperate={canOperate}
+              canAdmin={canAdmin}
+              onEntryAction={onEntryAction}
+            />
           )}
         />
 
@@ -1219,6 +1024,139 @@ function TeamSearch({
   );
 }
 
+/**
+ * Actions for a team at the door, compacted to two button rows: a primary
+ * row (Bring in / Call in) and a "More" menu for the rarer moves (requeue,
+ * no-show, disqualify) instead of five separate buttons wrapping across
+ * three rows in the 360px sidebar.
+ */
+function CalledEntryActions({
+  entry,
+  busy,
+  canJudge,
+  canOperate,
+  canAdmin,
+  onEntryAction,
+}: {
+  entry: QueueEntry;
+  busy: string | null;
+  canJudge: boolean;
+  canOperate: boolean;
+  canAdmin: boolean;
+  onEntryAction: (
+    entry: QueueEntry,
+    action: "notify-enter" | "bring-in" | "requeue" | "no-show" | "skip" | "disqualify",
+    body: Record<string, unknown> | undefined,
+    label: string,
+  ) => void;
+}) {
+  const { t } = useLocale();
+  const [confirming, setConfirming] = useState<"no-show" | "disqualify" | null>(null);
+  const canModerate = !canJudge && !canOperate;
+
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      <Button
+        size="sm"
+        disabled={busy != null || !canJudge}
+        onClick={() => onEntryAction(entry, "bring-in", undefined, t("teamBroughtInShort"))}
+      >
+        <DoorOpenIcon className="size-4" />
+        {t("bringIn")}
+      </Button>
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={busy != null || canModerate}
+        onClick={() => onEntryAction(entry, "notify-enter", undefined, t("entranceNoticeSent"))}
+      >
+        <SendIcon className="size-4" />
+        {t("callIn")}
+      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            size="sm"
+            variant="outline"
+            className="col-span-2"
+            disabled={busy != null || canModerate}
+          >
+            <MoreHorizontalIcon className="size-4" />
+            {t("moreActions")}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem
+            onClick={() =>
+              onEntryAction(
+                entry,
+                "requeue",
+                { position: "top", reason: "Returned to top of queue" },
+                t("teamReturnedQueue"),
+              )
+            }
+          >
+            <ArrowUpToLineIcon className="size-4" />
+            {t("requeueTop")}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() =>
+              onEntryAction(
+                entry,
+                "requeue",
+                { position: "bottom", reason: "Returned from waiting room" },
+                t("teamReturnedQueue"),
+              )
+            }
+          >
+            <RotateCcwIcon className="size-4" />
+            {t("requeueBottom")}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem variant="destructive" onClick={() => setConfirming("no-show")}>
+            <AlertTriangleIcon className="size-4" />
+            {t("noShow")}
+          </DropdownMenuItem>
+          {canAdmin && (
+            <DropdownMenuItem variant="destructive" onClick={() => setConfirming("disqualify")}>
+              {t("disqualify")}
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <ConfirmAction
+        open={confirming === "no-show"}
+        onOpenChange={(open) => !open && setConfirming(null)}
+        title={t("confirmNoShowTitle")}
+        description={t("confirmNoShowDescription")}
+        confirmLabel={t("noShow")}
+        destructive
+        onConfirm={() =>
+          onEntryAction(entry, "no-show", { reason: "No show" }, t("noShowRecorded"))
+        }
+      />
+      {canAdmin && (
+        <ConfirmAction
+          open={confirming === "disqualify"}
+          onOpenChange={(open) => !open && setConfirming(null)}
+          title={t("confirmDisqualifyTitle")}
+          description={t("confirmDisqualifyDescription")}
+          confirmLabel={t("disqualify")}
+          destructive
+          onConfirm={() =>
+            onEntryAction(
+              entry,
+              "disqualify",
+              { reason: "Repeated no-show" },
+              t("teamDisqualified"),
+            )
+          }
+        />
+      )}
+    </div>
+  );
+}
+
 function QueueList({
   title,
   entries,
@@ -1302,7 +1240,6 @@ function PresentationPanel({
   waitingRoomCount,
   canJudge,
   busy,
-  onEmptyAction,
   onEntryAction,
 }: {
   entry: QueueEntry | null;
@@ -1311,7 +1248,6 @@ function PresentationPanel({
   waitingRoomCount: number;
   canJudge: boolean;
   busy: string | null;
-  onEmptyAction: () => void;
   onEntryAction: (
     entry: QueueEntry,
     action: "start" | "complete" | "send-back",
@@ -1359,14 +1295,6 @@ function PresentationPanel({
             <p className="text-muted-foreground mt-1 text-sm">
               {waitingRoomCount > 0 ? t("teamsWaitingDoor") : t("callNextTeamPrompt")}
             </p>
-            <Button className="mt-4" disabled={busy != null} onClick={onEmptyAction}>
-              {waitingRoomCount > 0 ? (
-                <DoorOpenIcon className="size-4" />
-              ) : (
-                <BellRingIcon className="size-4" />
-              )}
-              {waitingRoomCount > 0 ? t("bringIn") : t("callNext")}
-            </Button>
           </div>
         ) : (
           <>

@@ -83,7 +83,6 @@ Account in the primary bar and has no overflow menu at all.
 
 Several domain pages still gate *content* on the single-priority `role`
 instead of the new `isRoomJudge`/`isSponsorRep` facts (e.g.
-`apps/web/src/app/(app)/judging/page.tsx`,
 `apps/web/src/app/(app)/projects/page.tsx`,
 `apps/web/src/app/(app)/dashboard/page.tsx`). This means a sponsor+judge
 account can now reach every relevant workspace from the sidebar, but a couple
@@ -92,6 +91,16 @@ specific content for whichever `role` value won priority. Fixing that is
 domain page content, out of this issue's Agent boundary (owned by #190
 Queue/judging); `isRoomJudge`/`isSponsorRep` are now available on `Me` for
 that issue to adopt.
+
+`apps/web/src/app/(app)/judging/page.tsx` was fixed to `isRoomJudge` by
+issue #225 (H40): the page previously gated `canUse`/`canJudge` purely on
+`judge:panel`/`queue:operate`/`queue:admin` capabilities
+(`apps/web/src/lib/judging-workspace.ts#workspaceAccess`), so a room judge
+added by a sponsor rep with zero capability grants could see the nav link
+(`judgeVisible: true`) but landed on a client-side "no access" empty state —
+even though the backend already allowed them in via the `room_judges`
+fallback. `workspaceAccess` now takes `isRoomJudge` and folds it into
+`canJudge`/`canUse` alongside the capability checks.
 
 `apps/web/src/app/(app)/challenges/page.tsx`, `apps/web/src/app/(app)/enterprises/page.tsx`,
 and `apps/web/src/app/(app)/queue/rooms/page.tsx` were fixed to `isSponsorRep`
