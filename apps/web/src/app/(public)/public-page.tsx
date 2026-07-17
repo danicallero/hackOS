@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { LOCALE_CODES, type Translate, useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem } from "@/lib/logistics";
+import { withReturnPath } from "@/lib/return-path";
 
 type Content = {
   event: PublicEvent;
@@ -176,7 +177,7 @@ function PublicPageContent({
         <div className="mt-8 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
           {openApplications.length > 0 && (
             <Button size="lg" asChild>
-              <Link href="/signup">
+              <Link href={withReturnPath("/signup", "/my-applications")}>
                 {t("applyNow")}
                 <ArrowRightIcon className="size-4" />
               </Link>
@@ -217,7 +218,11 @@ function PublicPageContent({
                   </p>
                 </div>
                 <Button asChild size="sm">
-                  <Link href="/signup">{t("apply")}</Link>
+                  {/* Selecting a specific form survives account creation and
+                      verification (H188): land directly back on this form. */}
+                  <Link href={withReturnPath("/signup", `/my-applications/${form.id}`)}>
+                    {t("apply")}
+                  </Link>
                 </Button>
               </div>
             ))}

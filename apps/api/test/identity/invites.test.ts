@@ -500,6 +500,65 @@ describe("H9/H10 invite acceptance", () => {
   });
 });
 
+describe("H10 late participant reaches a closed application form", () => {
+  it("an invited participant can still save a draft and submit once the window has closed", async () => {
+    const a = await getApp();
+    const actor = await inviter();
+
+    // The public form closed BEFORE the invite is even accepted — this is
+    // exactly H10's "entra fuera de plazo con la inscripción ya cerrada".
+    const { createApplication } = await import("../applications/fixtures.js");
+    const past = new Date(Date.now() - 3600_000).toISOString();
+    const appId = await createApplication({ type: "participant", open_at: past, close_at: past });
+
+    const invite = await createInvite(a, actor, {
+      email: "late@example.com",
+      kind: "participant",
+    });
+    const accept = await a.inject({
+      method: "POST",
+      url: "/api/invites/accept",
+      payload: {
+        ...ACCEPT_BASE,
+        token: invite.token,
+        foodIntolerances: [],
+        shirtSize: "M",
+      },
+    });
+    expect(accept.statusCode).toBe(201);
+    const { userId } = accept.json();
+
+    // A regular (non-invited) applicant is blocked from a brand-new draft on
+    // a closed form (H12) — the late participant is the deliberate exception.
+    const draft = await a.inject({
+      method: "PUT",
+      url: `/api/applications/${appId}/response`,
+      headers: asUser(userId),
+      payload: { responses: { motivation: "arrived late but ready" } },
+    });
+    expect(draft.statusCode).toBe(200);
+    expect(draft.json().status).toBe("draft");
+
+    // shirt_size is a top-level submit field (not part of `responses`) that
+    // the real form always resends from the user's profile (set at invite
+    // accept above) — the invited-participant bypass only waives the
+    // separate up-front "shirt size is required" pre-check, not this.
+    const submit = await a.inject({
+      method: "POST",
+      url: `/api/applications/${appId}/response/submit`,
+      headers: asUser(userId),
+      payload: {
+        responses: { motivation: "arrived late but ready" },
+        shirt_size: "M",
+      },
+    });
+    expect(submit.statusCode).toBe(200);
+    // Late-invited participants skip review and land straight on a confirmed
+    // spot (service.ts submitResponse) — their ticket is auto-issued.
+    expect(submit.json().response.status).toBe("confirmed");
+  });
+});
+
 describe("H9 invite regeneration", () => {
   it("issues a new token, kills the old one, keeps enterprise linkage", async () => {
     const a = await getApp();

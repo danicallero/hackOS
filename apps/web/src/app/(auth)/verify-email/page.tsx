@@ -23,18 +23,30 @@ import {
 import { Input } from "@/components/ui/input";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
+import { safeReturnPath, withReturnPath } from "@/lib/return-path";
 import { useSessionContext } from "@/lib/session";
 
 const schema = z.object({ email: z.string().email("Enter a valid email") });
 type Values = z.infer<typeof schema>;
 
-/** Maps Better Auth's verify-email error codes to friendly copy (H2). */
+/**
+ * Maps Better Auth's verify-email error codes to distinct, actionable copy
+ * (H2): an expired link and an outright invalid one are different situations
+ * for the person reading the page, even though both fall back to the same
+ * resend form below. An already-used link is NOT an error state here —
+ * Better Auth's verify endpoint treats re-verifying an already-verified
+ * account as success (H2 "si ya lo usé, se me dice que ya estoy verificado"),
+ * so it never reaches this function at all.
+ */
 function messageForError(
   error: string | null,
   t: (key: string) => string,
 ): { title: string; body: string } | null {
   if (!error) return null;
-  return { title: t("verifyEmail"), body: t("verificationInstructions") };
+  if (error === "TOKEN_EXPIRED") {
+    return { title: t("verifyLinkExpiredTitle"), body: t("verifyLinkExpiredDesc") };
+  }
+  return { title: t("verifyLinkInvalidTitle"), body: t("verifyLinkInvalidDesc") };
 }
 
 function VerifyEmailInner() {
@@ -47,6 +59,11 @@ function VerifyEmailInner() {
   const errorInfo = messageForError(params.get("error"), t);
   const verified =
     !errorInfo && (params.get("verified") !== null || params.get("status") === "verified");
+  // Where to send the person after a successful verification or a resend
+  // (H188): the application or other same-origin destination they were
+  // originally interrupted from, falling back to the dashboard.
+  const rawNext = params.get("next");
+  const next = safeReturnPath(rawNext, "/dashboard");
   const [cooldown, setCooldown] = useState(0);
 
   const form = useForm<Values>({
@@ -68,7 +85,13 @@ function VerifyEmailInner() {
 
   async function onSubmit(values: Values) {
     try {
-      await api.post("/api/auth/resend-verification", { email: values.email });
+      await api.post("/api/auth/resend-verification", {
+        email: values.email,
+        // Keep the interrupted destination alive across a resend too (H188).
+        ...(rawNext
+          ? { callbackURL: `/verify-email?verified=1&next=${encodeURIComponent(next)}` }
+          : {}),
+      });
       toast.success(t("verificationEmailSent"));
       setCooldown(60); // H3: 60s between attempts
     } catch (err) {
@@ -94,9 +117,11 @@ function VerifyEmailInner() {
           <CardDescription>{t("emailVerifiedDescription")}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-2 text-center">
-          <Button onClick={() => router.push("/dashboard")}>{t("continueToDashboard")}</Button>
+          <Button onClick={() => router.push(next)}>
+            {next === "/dashboard" ? t("continueToDashboard") : t("continueToDestination")}
+          </Button>
           <Link
-            href="/login"
+            href={withReturnPath("/login", rawNext)}
             className="text-muted-foreground text-sm underline underline-offset-4"
           >
             {t("differentAccount")}
@@ -151,7 +176,10 @@ function VerifyEmailInner() {
         </Form>
       </CardContent>
       <div className="text-muted-foreground px-6 pb-6 text-center text-sm">
-        <Link href="/login" className="text-foreground underline underline-offset-4">
+        <Link
+          href={withReturnPath("/login", rawNext)}
+          className="text-foreground underline underline-offset-4"
+        >
           {t("backToSignIn")}
         </Link>
       </div>

@@ -45,6 +45,32 @@ function withFrontendCallback(token: string, path: string): string {
 }
 
 /**
+ * Same-origin guard (H188) for the `next` destination a client asked to be
+ * returned to after verification. Only a relative path is accepted — never
+ * an absolute URL or a protocol-relative `//host`, which browsers resolve as
+ * absolute and would let a crafted sign-up/resend request redirect a user
+ * off-site after they click the emailed link.
+ */
+function isSafeReturnPath(path: string): boolean {
+  return path.startsWith("/") && !path.startsWith("//");
+}
+
+/**
+ * Better Auth bakes the caller's requested `callbackURL` (sign-up/resend's
+ * `body.callbackURL` — the web app's own `/verify-email?verified=1&next=...`
+ * path) into the `url` it hands `sendVerificationEmail`, itself pointed at
+ * the API's own verify endpoint, e.g.
+ * `${baseURL}/verify-email?token=...&callbackURL=<encoded>`. We ignore that
+ * `url` and build our own via `withFrontendCallback`, so to carry the
+ * caller's intended frontend destination through we pull it back out here.
+ */
+function frontendPathFromBetterAuthUrl(url: string): string | undefined {
+  const callbackURL = new URL(url).searchParams.get("callbackURL");
+  if (!callbackURL || callbackURL === "/" || !isSafeReturnPath(callbackURL)) return undefined;
+  return callbackURL;
+}
+
+/**
  * Better Auth instance (H1-H5), mounted inside the Fastify API under
  * /api/auth/* (src/modules/identity/index.ts). Design decisions:
  *
@@ -183,12 +209,15 @@ export const auth = betterAuth({
     // Clicking the verification link establishes a session and lands the user
     // logged in — they don't have to sign in again after verifying.
     autoSignInAfterVerification: true,
-    sendVerificationEmail: async ({ user, token }) => {
+    sendVerificationEmail: async ({ user, token, url }) => {
       // Point the browser at the web app's /verify-email page after the API
-      // verifies the token (shows a real success page, logged in).
+      // verifies the token (shows a real success page, logged in). If the
+      // caller (sign-up or resend-verification) asked to be returned to a
+      // specific same-origin destination, honor it (H188).
+      const frontendPath = frontendPathFromBetterAuthUrl(url) ?? "/verify-email?verified=1";
       await enqueueAuthEmail(pool, Number(user.id), "auth.verify", {
         name: user.name,
-        verifyUrl: withFrontendCallback(token, "/verify-email?verified=1"),
+        verifyUrl: withFrontendCallback(token, frontendPath),
       });
     },
   },

@@ -20,12 +20,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { authClient } from "@/lib/auth-client";
 import { useLocale } from "@/lib/i18n";
+import { withReturnPath } from "@/lib/return-path";
 
 const schema = z.object({ email: z.string().email("Enter a valid email") });
 type Values = z.infer<typeof schema>;
 
 function ForgotPasswordForm() {
   const params = useSearchParams();
+  const rawNext = params.get("next");
   const { t } = useLocale();
   const [sent, setSent] = useState(false);
   const form = useForm<Values>({
@@ -37,9 +39,11 @@ function ForgotPasswordForm() {
   async function onSubmit(values: Values) {
     // H5: the response is identical whether or not the email exists — never
     // reveal registration status. We always show the confirmation.
+    // Carries the interrupted destination through to /reset-password so it
+    // can hand it to /login after the new password is set (H188).
     await authClient.requestPasswordReset({
       email: values.email,
-      redirectTo: `${window.location.origin}/reset-password`,
+      redirectTo: withReturnPath(`${window.location.origin}/reset-password`, rawNext),
     });
     setSent(true);
   }
@@ -55,7 +59,10 @@ function ForgotPasswordForm() {
           <CardDescription>{t("resetEmailSent")}</CardDescription>
         </CardHeader>
         <CardContent className="text-center">
-          <Link href="/login" className="text-sm underline underline-offset-4">
+          <Link
+            href={withReturnPath("/login", rawNext)}
+            className="text-sm underline underline-offset-4"
+          >
             {t("backToSignIn")}
           </Link>
         </CardContent>

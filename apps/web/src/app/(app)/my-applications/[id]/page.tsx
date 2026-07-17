@@ -40,6 +40,7 @@ import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
+import { withReturnPath } from "@/lib/return-path";
 import { useMe } from "@/lib/session";
 import type { Language } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -441,7 +442,7 @@ export default function MyApplicationDetailPage() {
                 type="button"
                 onClick={handleSubmit}
                 pending={submitting}
-                disabled={saving}
+                disabled={saving || (me != null && !me.emailVerified)}
               >
                 {t("submitApplication")}
               </SubmitButton>
@@ -453,7 +454,19 @@ export default function MyApplicationDetailPage() {
           <Alert variant="destructive">
             <ShieldAlertIcon />
             <AlertTitle>{t("verifyEmailToSubmitTitle")}</AlertTitle>
-            <AlertDescription>{t("verifyEmailToSubmitDesc")}</AlertDescription>
+            <AlertDescription className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              {t("verifyEmailToSubmitDesc")}
+              <Button asChild size="sm" variant="outline">
+                <Link
+                  href={withReturnPath(
+                    `/verify-email?email=${encodeURIComponent(me.email)}`,
+                    `/my-applications/${id}`,
+                  )}
+                >
+                  {t("verifyNow")}
+                </Link>
+              </Button>
+            </AlertDescription>
           </Alert>
         )}
 
