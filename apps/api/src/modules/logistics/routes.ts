@@ -3,8 +3,13 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { pool } from "../../db/pool.js";
-import { requireAnyCapability, requireAuth, requireCapability } from "../../lib/capabilities.js";
-import { NotFoundError, UnauthorizedError } from "../../lib/errors.js";
+import {
+  requireAnyCapability,
+  requireAuth,
+  requireCapability,
+  userHasCapability,
+} from "../../lib/capabilities.js";
+import { ForbiddenError, NotFoundError, UnauthorizedError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { subscribe } from "../../lib/sse.js";
 import {
@@ -34,6 +39,7 @@ import {
   updateTimeLog,
   userHours,
 } from "./presence.js";
+import { queryScanLog, staffScanCounts, staffScanRanking } from "./scan-log.js";
 import { scannerSnapshot } from "./scanner-sync.js";
 import {
   createScheduleItem,
@@ -62,12 +68,16 @@ import {
   presenceSignalBody,
   removeBadgeBody,
   rotateBody,
+  scanLogQuery,
+  scanLogResponse,
   scannableActivitiesQuery,
   scannerSnapshotResponse,
   scheduleBody,
   scheduleIdParam,
   schedulePatchBody,
   scheduleVisibilityBody,
+  staffScanRankingResponse,
+  staffScanStatsResponse,
   timeLogIdParam,
   timeLogPatchBody,
   userIdParam,
@@ -426,6 +436,58 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   typed.get("/api/logistics/stream", { preHandler: logisticsRead }, async (_req, reply) => {
     await subscribe("logistics", reply);
   });
+
+  // ── staff scan history/stats (extends H22-H27) ──────────────────────────
+
+  typed.get(
+    "/api/me/logistics/stats",
+    {
+      preHandler: logisticsRead,
+      schema: {
+        summary: "My scan counts",
+        description:
+          "Counts of scans the calling operator personally performed, by domain: accreditation check-ins, presence door-scans, activity/meal scans. Any scan-capable operator can read their own counts.",
+        response: { 200: staffScanStatsResponse },
+      },
+    },
+    async (req) => staffScanCounts(actor(req.userId)),
+  );
+
+  typed.get(
+    "/api/logistics/stats/by-staff",
+    {
+      preHandler: stats,
+      schema: {
+        summary: "Scan ranking across all staff",
+        description:
+          "Every staff member who performed at least one scan, with their accreditation/presence/activity counts and a total, busiest first. Admin-facing (LOGISTICS_STATS) — this is the cross-staff view, unlike /api/me/logistics/stats.",
+        response: { 200: staffScanRankingResponse },
+      },
+    },
+    async () => ({ items: await staffScanRanking() }),
+  );
+
+  typed.get(
+    "/api/logistics/scan-log",
+    {
+      preHandler: logisticsRead,
+      schema: {
+        summary: "Team-wide scan-log feed",
+        description:
+          "Paginated history of scans, most recent first, unioning accreditation check-ins, presence door-scans, and activity/meal scans. Defaults to the caller's own scans; a scan-capable operator without LOGISTICS_STATS may only request their own staffId.",
+        querystring: scanLogQuery,
+        response: { 200: scanLogResponse },
+      },
+    },
+    async (req) => {
+      const callerId = actor(req.userId);
+      const staffId = req.query.staffId ?? callerId;
+      if (staffId !== callerId && !(await userHasCapability(callerId, CAPABILITIES.LOGISTICS_STATS))) {
+        throw new ForbiddenError("Cannot view another staff member's scan log");
+      }
+      return queryScanLog(staffId, req.query.limit, req.query.offset);
+    },
+  );
 
   // ── Schedule CRUD ───────────────────────────────────────────────────────
 

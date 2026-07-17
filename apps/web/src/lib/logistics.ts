@@ -186,6 +186,16 @@ export interface ActivityScanResult {
   message?: string;
 }
 
+export interface StaffScanRankingRow {
+  staffId: number;
+  name: string;
+  surname: string;
+  accreditationCount: number;
+  presenceCount: number;
+  activityCount: number;
+  total: number;
+}
+
 export interface LogisticsStats {
   accreditedCount: number;
   currentlyPresent: number;
@@ -325,6 +335,8 @@ export const logisticsApi = {
   deletePresenceActivity: (id: number) =>
     api.delete<{ deleted: true }>(`/api/presence/activity-logs/${id}`),
   stats: () => api.get<LogisticsStats>("/api/logistics/stats"),
+  staffScanRanking: () =>
+    api.get<{ items: StaffScanRankingRow[] }>("/api/logistics/stats/by-staff"),
   scannableActivities: (category?: "meal" | "activity") =>
     api.get<{ items: ScannableActivity[] }>("/api/activities/scannable", {
       query: category ? { category } : undefined,

@@ -15,7 +15,7 @@ function has(capabilities: string[], capability: string): boolean {
   return capabilities.includes(capability) || capabilities.includes(CAPABILITIES.ADMIN_ALL);
 }
 
-function isOperator(capabilities: string[]): boolean {
+export function isOperator(capabilities: string[]): boolean {
   return STAFF_SCAN_CAPABILITIES.some((cap) => has(capabilities, cap));
 }
 
@@ -33,20 +33,22 @@ export function visibleTabs(capabilities: string[]): TabKey[] {
 }
 
 /**
- * Tabs shown directly in the platform tab bar. Scanning is the primary shift
- * task for an operator, so it takes the fifth bar slot and Account moves to
- * the overflow selector instead — scanning must never be a tap behind an
- * undifferentiated ellipsis (audit §3.3, issue #187).
+ * Tabs shown directly in the platform tab bar. Only ever the four
+ * participant tabs plus, at most, one more slot — a native
+ * `UITabBarController` silently collapses everything past its fifth item
+ * into its own system "More" screen, which bypasses our overflow menu
+ * entirely. Operators keep `account` and `scan` behind the overflow
+ * selector precisely to stay under that limit.
  */
 export function primaryTabs(capabilities: string[]): TabKey[] {
   const tabs: TabKey[] = [...BASE_PRIMARY_TAB_KEYS];
-  tabs.push(isOperator(capabilities) ? "scan" : "account");
+  if (!isOperator(capabilities)) tabs.push("account");
   return tabs;
 }
 
 /** Tabs represented inside the native Others selector rather than the main bar. */
 export function overflowTabs(capabilities: string[]): TabKey[] {
-  return isOperator(capabilities) ? ["account"] : [];
+  return isOperator(capabilities) ? ["account", "scan"] : [];
 }
 
 /** True whenever any tab lives outside the primary bar and needs the overflow selector. */

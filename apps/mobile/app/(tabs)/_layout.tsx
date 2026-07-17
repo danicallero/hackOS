@@ -23,15 +23,17 @@ interface UnreadInboxResponse {
 }
 
 interface OperationsMenuItem extends MenuAction {
-  id: "account" | "activities";
+  id: "account" | "scan" | "activities";
   label: string;
-  route: "/(tabs)/others/account" | "/(tabs)/others/activities";
+  route: "/(tabs)/others/account" | "/(tabs)/others/scan" | "/(tabs)/others/activities";
 }
 
 /**
- * A real platform tab bar. Scanning is promoted to a primary tab for any
- * scan-capability holder (H55, issue #187); Account and the other operational
- * destinations remain in the native overflow control.
+ * A real platform tab bar. A native `UITabBarController` silently collapses
+ * anything past its fifth item into iOS's own "More" screen — which bypasses
+ * our custom overflow menu entirely — so the primary bar never grows past 4
+ * participant tabs + 1 overflow trigger. Account and Scanner (and Activities,
+ * for scan-capability holders) live behind that overflow control instead.
  *
  * Important navigation contract:
  * - The overflow entries are pseudo-tabs, not ordinary stack links.
@@ -132,12 +134,6 @@ export default function TabLayout() {
           <NativeTabs.Trigger.Label>{t("tabNotifications")}</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
         {operatorExperience ? (
-          <NativeTabs.Trigger name="scan">
-            <NativeTabs.Trigger.Icon sf="qrcode.viewfinder" md="qr_code_scanner" />
-            <NativeTabs.Trigger.Label>{t("tabScan")}</NativeTabs.Trigger.Label>
-          </NativeTabs.Trigger>
-        ) : null}
-        {operatorExperience ? (
           <NativeTabs.Trigger name="others" role="search">
             <NativeTabs.Trigger.Icon sf="ellipsis" md="more_horiz" />
             <NativeTabs.Trigger.Label hidden>{t("tabOthers")}</NativeTabs.Trigger.Label>
@@ -172,6 +168,13 @@ function NativeOperationsMenu({ canScanActivities }: { canScanActivities: boolea
       label: t("tabAccount"),
       route: "/(tabs)/others/account",
       title: t("tabAccount"),
+    },
+    {
+      id: "scan",
+      image: "qrcode.viewfinder",
+      label: t("tabScan"),
+      route: "/(tabs)/others/scan",
+      title: t("tabScan"),
     },
     ...(canScanActivities
       ? [

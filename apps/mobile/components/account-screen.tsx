@@ -1,4 +1,5 @@
 import { type MenuAction, MenuView } from "@expo/ui/community/menu";
+import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, useColorScheme, View } from "react-native";
 
@@ -8,6 +9,8 @@ import { apiFetch } from "@/lib/api";
 import { signOut } from "@/lib/auth-client";
 import { type Lang, useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
+import { fetchMyScanStats, type MyScanStats } from "@/lib/scan-log";
+import { isOperator } from "@/lib/tabs";
 import { colors } from "@/theme/colors";
 
 interface Intolerance {
@@ -20,12 +23,14 @@ const LANGUAGES: Lang[] = ["en", "es", "gl"];
 /** Account overview with the same participant-owned profile fields exposed on web. */
 export default function AccountScreen() {
   useColorScheme();
+  const router = useRouter();
   const { t, language } = useLocale();
   const { me, loading, error, refetch } = useMeContext();
   const [intolerances, setIntolerances] = useState<Intolerance[]>([]);
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState<Error | null>(null);
   const [savingLanguage, setSavingLanguage] = useState(false);
+  const [myStats, setMyStats] = useState<MyScanStats | null>(null);
 
   const loadSupportingData = useCallback(async () => {
     if (!me) return;
@@ -42,6 +47,17 @@ export default function AccountScreen() {
   useEffect(() => {
     void loadSupportingData();
   }, [loadSupportingData]);
+
+  const operator = isOperator(me?.capabilities ?? []);
+
+  useEffect(() => {
+    if (!operator) return;
+    fetchMyScanStats()
+      .then(setMyStats)
+      .catch(() => {
+        /* Stats are a nice-to-have on this screen; keep the rest usable without them. */
+      });
+  }, [operator]);
 
   async function changeLanguage(nextLanguage: Lang) {
     if (nextLanguage === me?.language || savingLanguage) return;
@@ -235,6 +251,34 @@ export default function AccountScreen() {
           </>
         ) : null}
       </Section>
+
+      {operator ? (
+        <Section title={t("myStatsTitle")}>
+          <InfoRow
+            label={t("myStatsAccreditation")}
+            value={myStats ? String(myStats.accreditationCount) : "—"}
+            icon="person.badge.key.fill"
+          />
+          <Separator inset={48} />
+          <InfoRow
+            label={t("myStatsPresence")}
+            value={myStats ? String(myStats.presenceCount) : "—"}
+            icon="door.left.hand.open"
+          />
+          <Separator inset={48} />
+          <InfoRow
+            label={t("myStatsActivity")}
+            value={myStats ? String(myStats.activityCount) : "—"}
+            icon="list.bullet.rectangle"
+          />
+          <Separator inset={48} />
+          <ActionButton
+            label={t("scannerSeeHistory")}
+            icon="clock.arrow.circlepath"
+            onPress={() => router.push("/(tabs)/others/scan-log")}
+          />
+        </Section>
+      ) : null}
 
       <Section title={t("sessionTitle")} footer={t("sessionActive", { email: me.email })}>
         <ActionButton

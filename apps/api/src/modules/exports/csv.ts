@@ -1,5 +1,6 @@
 import { pool } from "../../db/pool.js";
 import { toCsv } from "../../lib/csv.js";
+import { staffScanRanking } from "../logistics/scan-log.js";
 
 /** H54: operational CSV exports, staff-wide (not scoped to one subject). */
 
@@ -54,6 +55,31 @@ export async function exportMealsCsv(): Promise<string> {
   return toCsv(
     header,
     rows.map((r: Record<string, unknown>) => header.map((h) => r[h])),
+  );
+}
+
+export async function exportStaffScanStatsCsv(): Promise<string> {
+  const rows = await staffScanRanking();
+  const header = [
+    "staff_id",
+    "name",
+    "surname",
+    "accreditation_count",
+    "presence_count",
+    "activity_count",
+    "total",
+  ];
+  return toCsv(
+    header,
+    rows.map((r) => [
+      r.staffId,
+      r.name,
+      r.surname,
+      r.accreditationCount,
+      r.presenceCount,
+      r.activityCount,
+      r.total,
+    ]),
   );
 }
 

@@ -575,10 +575,41 @@ const dict = {
     es: "Reintentar pases rechazados",
     gl: "Reintentar pases rexeitados",
   },
+  scannerAttemptsCount: {
+    en: "{count} attempts",
+    es: "{count} intentos",
+    gl: "{count} intentos",
+  },
   scannerNoQueue: {
     en: "No scans stored on this device yet.",
     es: "Todavía no hay pases guardados en este dispositivo.",
     gl: "Aínda non hai pases gardados neste dispositivo.",
+  },
+  scannerSeeHistory: { en: "See full history", es: "Ver historial completo", gl: "Ver historial completo" },
+  scanLogTitle: { en: "Scan history", es: "Historial de pases", gl: "Historial de pases" },
+  scanLogEmpty: {
+    en: "No scans recorded yet.",
+    es: "Todavía no hay pases registrados.",
+    gl: "Aínda non hai pases rexistrados.",
+  },
+  scanLogLoadMore: { en: "Load more", es: "Cargar más", gl: "Cargar máis" },
+  scanLogToday: { en: "Today", es: "Hoy", gl: "Hoxe" },
+  scanLogYesterday: { en: "Yesterday", es: "Ayer", gl: "Onte" },
+  myStatsTitle: { en: "My stats", es: "Mis estadísticas", gl: "As miñas estatísticas" },
+  myStatsAccreditation: {
+    en: "People accredited",
+    es: "Personas acreditadas",
+    gl: "Persoas acreditadas",
+  },
+  myStatsPresence: {
+    en: "Door scans logged",
+    es: "Pases de puerta registrados",
+    gl: "Pases de porta rexistrados",
+  },
+  myStatsActivity: {
+    en: "Activity / meal scans logged",
+    es: "Pases de actividad / comida registrados",
+    gl: "Pases de actividade / comida rexistrados",
   },
   scannerConfirmed: { en: "Confirmed place", es: "Plaza confirmada", gl: "Praza confirmada" },
   scannerUnconfirmed: {
