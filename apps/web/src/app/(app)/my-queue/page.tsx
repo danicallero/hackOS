@@ -190,17 +190,29 @@ function ProjectQueueCard({ repoName, entries }: { repoName: string; entries: My
   );
 }
 
+/** Ticket-stub frame: punched notches on both long edges plus a perforated tear
+ * line ahead of the status stub, echoing an admission ticket. Notch fill must
+ * match the row's actual backdrop (the enclosing Card's `bg-card`) so the cutout
+ * reads as a hole rather than a dot. */
 function QueueRow({ entry }: { entry: MyQueueEntry }) {
   const { t } = useLocale();
   const eta = formatEta(entry.etaMinutes, t("anyMoment"));
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3">
-      <div className="min-w-0 space-y-0.5">
+    <div className="relative flex flex-wrap items-stretch justify-between gap-3 rounded-xl border">
+      <span
+        aria-hidden
+        className="bg-card absolute top-1/2 -left-2 size-4 -translate-y-1/2 rounded-full border"
+      />
+      <span
+        aria-hidden
+        className="bg-card absolute top-1/2 -right-2 size-4 -translate-y-1/2 rounded-full border"
+      />
+      <div className="min-w-0 flex-1 space-y-0.5 px-4 py-3">
         <div className="truncate font-medium">
           {textForDisplay(entry.challengeTitle as TranslatedText)}
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-l border-dashed px-4 py-3 text-sm">
         {entry.status === "waiting" && entry.position != null && (
           <span className="text-muted-foreground">
             {t("position")} <span className="text-foreground font-semibold">#{entry.position}</span>
