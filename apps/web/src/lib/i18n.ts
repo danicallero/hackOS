@@ -5482,6 +5482,11 @@ const dict: Record<string, I18nText> = {
   fieldLabelLabel: { es: "Etiqueta", gl: "Etiqueta", en: "Label" },
   fieldKeyLabel: { es: "Clave", gl: "Clave", en: "Key" },
   fileUploadPlaceholder: { es: "Subida de archivo", gl: "Subida de ficheiro", en: "File upload" },
+  fileRestrictions: {
+    es: "Restricciones del archivo",
+    gl: "Restricións do ficheiro",
+    en: "File restrictions",
+  },
   formCouldNotBeLoaded: {
     es: "No se ha podido cargar este formulario de solicitud.",
     gl: "Non se puido cargar este formulario de solicitude.",
@@ -5578,6 +5583,11 @@ const dict: Record<string, I18nText> = {
     en: "Nothing left to send.",
   },
   optionsLabel: { es: "Opciones", gl: "Opcións", en: "Options" },
+  optionApplicantLabel: {
+    es: "Opción para participantes",
+    gl: "Opción para participantes",
+    en: "Applicant option",
+  },
   optionWithNoValue: {
     es: '"{key}" tiene una opción sin valor.',
     gl: '"{key}" ten unha opción sen valor.',
@@ -5646,6 +5656,11 @@ const dict: Record<string, I18nText> = {
     en: "Write-only: the API has no per-reviewer read, so this starts blank and overwrites your previous score on save.",
   },
   revokeSpot: { es: "Revocar plaza", gl: "Revogar praza", en: "Revoke spot" },
+  revokeSpotWarning: {
+    es: "La persona perderá la plaza y recibirá la comunicación. Si ya había confirmado, sus datos dietéticos se eliminarán.",
+    gl: "A persoa perderá a praza e recibirá a comunicación. Se xa confirmara, os seus datos dietéticos eliminaranse.",
+    en: "The applicant will lose the place and be notified. If they had confirmed, their dietary data will be deleted.",
+  },
   saveAnswers: { es: "Guardar respuestas", gl: "Gardar respostas", en: "Save answers" },
   saveMyReview: {
     es: "Guardar mi evaluación",
@@ -5745,6 +5760,134 @@ const dict: Record<string, I18nText> = {
   },
   yesNoText: { es: "Sí / No", gl: "Si / Non", en: "Yes / No" },
   yourReview: { es: "Tu evaluación", gl: "A túa avaliación", en: "Your review" },
+  workspaceReview: { es: "Revisión", gl: "Revisión", en: "Review" },
+  workspaceDecisions: { es: "Decisiones", gl: "Decisións", en: "Decisions" },
+  workspaceCommunication: {
+    es: "Comunicación",
+    gl: "Comunicación",
+    en: "Communication",
+  },
+  workspaceConfirmation: {
+    es: "Confirmación",
+    gl: "Confirmación",
+    en: "Confirmation",
+  },
+  decisionDeliveryColumn: {
+    es: "Comunicación",
+    gl: "Comunicación",
+    en: "Communication",
+  },
+  confirmationDeadlineColumn: {
+    es: "Plazo de confirmación",
+    gl: "Prazo de confirmación",
+    en: "Confirmation deadline",
+  },
+  notSentYet: { es: "Sin enviar", gl: "Sen enviar", en: "Not sent" },
+  builderBasics: { es: "Datos básicos", gl: "Datos básicos", en: "Basics" },
+  builderAvailability: { es: "Disponibilidad", gl: "Dispoñibilidade", en: "Availability" },
+  builderReview: {
+    es: "Revisión y publicación",
+    gl: "Revisión e publicación",
+    en: "Review and publish",
+  },
+  primaryApplicantLabel: {
+    es: "Pregunta para participantes",
+    gl: "Pregunta para participantes",
+    en: "Applicant question",
+  },
+  generatedAutomatically: {
+    es: "Se genera desde la pregunta. Solo necesitas cambiarla para integraciones técnicas.",
+    gl: "Xérase desde a pregunta. Só precisas cambiala para integracións técnicas.",
+    en: "Generated from the question. Change it only for technical integrations.",
+  },
+  translationsAndSettings: {
+    es: "Traducciones y ajustes técnicos",
+    gl: "Traducións e axustes técnicos",
+    en: "Translations and technical settings",
+  },
+  previewLocale: {
+    es: "Idioma de vista previa",
+    gl: "Idioma da vista previa",
+    en: "Preview language",
+  },
+  internalDecisionNotice: {
+    es: "Solo interno — la persona solicitante todavía no ha recibido esta decisión.",
+    gl: "Só interno — a persoa solicitante aínda non recibiu esta decisión.",
+    en: "Internal only — the applicant has not received this decision.",
+  },
+  acceptedInternalOnly: {
+    es: "Aceptada internamente · sin enviar",
+    gl: "Aceptada internamente · sen enviar",
+    en: "Accepted internally · not sent",
+  },
+  rejectedInternalOnly: {
+    es: "Rechazada internamente · sin enviar",
+    gl: "Rexeitada internamente · sen enviar",
+    en: "Rejected internally · not sent",
+  },
+  acceptanceSent: { es: "Aceptación enviada", gl: "Aceptación enviada", en: "Acceptance sent" },
+  rejectionSent: { es: "Rechazo enviado", gl: "Rexeitamento enviado", en: "Rejection sent" },
+  unknownStatus: { es: "Estado desconocido", gl: "Estado descoñecido", en: "Unknown status" },
+  saveStateSaved: { es: "Guardado", gl: "Gardado", en: "Saved" },
+  saveStateSaving: { es: "Guardando…", gl: "Gardando…", en: "Saving…" },
+  saveStateUnsaved: { es: "Cambios sin guardar", gl: "Cambios sen gardar", en: "Unsaved changes" },
+  saveStateError: { es: "Error al guardar", gl: "Erro ao gardar", en: "Save error" },
+  batchResultTitle: {
+    es: "Resultado de la acción",
+    gl: "Resultado da acción",
+    en: "Action result",
+  },
+  batchProcessed: {
+    es: "{count} solicitudes procesadas.",
+    gl: "{count} solicitudes procesadas.",
+    en: "{count} applications processed.",
+  },
+  batchSkippedTitle: {
+    es: "No se procesaron {count}",
+    gl: "Non se procesaron {count}",
+    en: "{count} were not processed",
+  },
+  dismissResult: { es: "Descartar resultado", gl: "Descartar resultado", en: "Dismiss result" },
+  reviewAutosaveHint: {
+    es: "Tu puntuación y notas se guardan automáticamente.",
+    gl: "A túa puntuación e notas gárdanse automaticamente.",
+    en: "Your score and notes save automatically.",
+  },
+  applicantTimeline: {
+    es: "Progreso de la solicitud",
+    gl: "Progreso da solicitude",
+    en: "Application progress",
+  },
+  timelineApplication: { es: "Solicitud", gl: "Solicitude", en: "Application" },
+  timelineSubmitted: { es: "Enviada", gl: "Enviada", en: "Submitted" },
+  timelineReview: { es: "Revisión", gl: "Revisión", en: "Review" },
+  timelineDecision: { es: "Decisión", gl: "Decisión", en: "Decision" },
+  timelinePlace: { es: "Plaza", gl: "Praza", en: "Place" },
+  deadlineLabel: {
+    es: "Confirma antes del {date}",
+    gl: "Confirma antes do {date}",
+    en: "Confirm by {date}",
+  },
+  sensitiveDataLifecycleTitle: {
+    es: "Datos dietéticos",
+    gl: "Datos dietéticos",
+    en: "Dietary data",
+  },
+  sensitiveDataLifecycleSubmitted: {
+    es: "Se conservan mientras se decide tu solicitud. Solo cuentan en estadísticas si confirmas la plaza.",
+    gl: "Consérvanse mentres se decide a túa solicitude. Só contan nas estatísticas se confirmas a praza.",
+    en: "Kept while your application is decided. Included in statistics only after you confirm your place.",
+  },
+  sensitiveDataLifecycleDeleted: {
+    es: "Se eliminaron al rechazar, caducar o revocar la plaza y ya no cuentan en estadísticas.",
+    gl: "Elimináronse ao rexeitar, caducar ou revogar a praza e xa non contan nas estatísticas.",
+    en: "Deleted after the place was declined, expired, or revoked and no longer included in statistics.",
+  },
+  sensitiveDataLifecycleConfirmed: {
+    es: "Se conservan para la logística del evento y cuentan en las estadísticas de asistentes confirmados.",
+    gl: "Consérvanse para a loxística do evento e contan nas estatísticas de asistentes confirmados.",
+    en: "Kept for event logistics and included in confirmed-attendee statistics.",
+  },
 
   // ---- Judging panel: room queue widgets ----
   readyStatus: { es: "Listo", gl: "Preparado", en: "Ready" },

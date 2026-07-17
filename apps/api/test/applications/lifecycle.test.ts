@@ -89,6 +89,33 @@ async function toAcceptedSent(appId: number): Promise<{ userId: number; response
 }
 
 describe("review + decide (H13, H14)", () => {
+  it("lets reviewers review and decision-makers read the pool, but only decision-makers publish", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { responseId } = await submittedApplicant(appId);
+
+    const reviewerList = await a.inject({
+      method: "GET",
+      url: `/api/applications/${appId}/responses`,
+      headers: asUser(reviewer),
+    });
+    const deciderList = await a.inject({
+      method: "GET",
+      url: `/api/applications/${appId}/responses`,
+      headers: asUser(decider),
+    });
+    expect(reviewerList.statusCode).toBe(200);
+    expect(deciderList.statusCode).toBe(200);
+
+    const forbidden = await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/decide`,
+      headers: asUser(reviewer),
+      payload: { decision: "accepted" },
+    });
+    expect(forbidden.statusCode).toBe(403);
+  });
+
   it("submit auto-transitions to review; decide works directly", async () => {
     const a = await getApp();
     const appId = await createApplication();
@@ -498,6 +525,28 @@ describe("confirm / decline (H15)", () => {
     });
     expect(ok.statusCode).toBe(200);
     expect(ok.json().status).toBe("confirmed");
+  });
+
+  it("exposes the confirmation deadline to the applicant and confirmation workspace", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { userId } = await toAcceptedSent(appId);
+
+    const applicant = await a.inject({
+      method: "GET",
+      url: `/api/applications/${appId}/response`,
+      headers: asUser(userId),
+    });
+    expect(applicant.statusCode).toBe(200);
+    expect(applicant.json().confirmation_expires_at).toBeTruthy();
+
+    const staff = await a.inject({
+      method: "GET",
+      url: `/api/applications/${appId}/responses`,
+      headers: asUser(reviewer),
+    });
+    expect(staff.statusCode).toBe(200);
+    expect(staff.json().responses[0].confirmation_expires_at).toBeTruthy();
   });
 
   it("confirm-link returns the token URL for sent decisions", async () => {

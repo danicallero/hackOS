@@ -91,6 +91,9 @@ export interface ResponseRow {
   staff_notes: string | null;
   submitted_at: string | null;
   decision_sent_at: string | null;
+  confirmation_expires_at: string | null;
+  confirmed_at: string | null;
+  declined_at: string | null;
   /** pg avg() arrives as a numeric string or null. */
   avg_score: number | string | null;
   review_count: number;
@@ -128,9 +131,9 @@ const STATUS_TONE: Record<string, Tone> = {
   draft: "neutral",
   submitted: "info",
   review: "warning",
-  accepted_internal: "brand",
-  rejected_internal: "danger",
-  accepted: "brand",
+  accepted_internal: "warning",
+  rejected_internal: "warning",
+  accepted: "success",
   rejected: "danger",
   confirmed: "success",
   declined: "neutral",

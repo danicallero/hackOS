@@ -31,8 +31,10 @@ export function registerMeRoutes(app: FastifyInstance): void {
     { preHandler: requireAuth, schema: { params: idParamSchema } },
     async (req) => {
       const { rows } = await pool.query(
-        `SELECT a.template, a.type, r.* FROM application_responses r
+        `SELECT a.template, a.type, r.*, t.expires_at AS confirmation_expires_at
+         FROM application_responses r
          JOIN applications a ON a.id = r.application_id
+         LEFT JOIN email_verification_tokens t ON t.id = r.confirmation_token_id
          WHERE r.user_id = $1 AND r.application_id = $2`,
         [req.userId, req.params.id],
       );
