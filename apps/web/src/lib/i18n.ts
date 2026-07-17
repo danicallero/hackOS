@@ -212,6 +212,11 @@ const dict: Record<string, I18nText> = {
     gl: "Indica calquera necesidade adicional para o equipo de catering.",
     en: "Anything else catering should know…",
   },
+  dietaryDataHandlingNote: {
+    es: "Solo se usa para pedir la comida del evento.",
+    gl: "Só se usa para pedir a comida do evento.",
+    en: "Only used to order food for the event.",
+  },
 
   // ---- Public marketing pages ----
   logIn: { es: "Iniciar sesión", gl: "Iniciar sesión", en: "Log in" },
@@ -342,6 +347,7 @@ const dict: Record<string, I18nText> = {
     en: "Your address is confirmed and you're signed in.",
   },
   continueToDashboard: { es: "Ir al inicio", gl: "Ir ao inicio", en: "Continue to dashboard" },
+  continueToDestination: { es: "Continuar", gl: "Continuar", en: "Continue" },
   differentAccount: {
     es: "Iniciar sesión con otra cuenta",
     gl: "Iniciar sesión con outra conta",
@@ -352,6 +358,26 @@ const dict: Record<string, I18nText> = {
     es: "Sigue el enlace que te enviamos por correo. Si no lo encuentras, puedes reenviarlo.",
     gl: "Segue a ligazón que che enviamos por correo. Se non a atopas, podes reenviala.",
     en: "Follow the link we emailed you. Didn't get it? Resend below.",
+  },
+  verifyLinkExpiredTitle: {
+    es: "El enlace ha caducado",
+    gl: "A ligazón caducou",
+    en: "That link expired",
+  },
+  verifyLinkExpiredDesc: {
+    es: "Pide un enlace nuevo con el formulario de abajo.",
+    gl: "Pide unha ligazón nova co formulario de abaixo.",
+    en: "Request a new one with the form below.",
+  },
+  verifyLinkInvalidTitle: {
+    es: "Ese enlace no es válido",
+    gl: "Esa ligazón non é válida",
+    en: "That link isn't valid",
+  },
+  verifyLinkInvalidDesc: {
+    es: "Comprueba que copiaste el enlace completo, o pide uno nuevo abajo.",
+    gl: "Comproba que copiaches a ligazón completa, ou pide unha nova abaixo.",
+    en: "Check you copied the full link, or request a new one below.",
   },
   resendVerificationEmail: {
     es: "Reenviar correo de verificación",

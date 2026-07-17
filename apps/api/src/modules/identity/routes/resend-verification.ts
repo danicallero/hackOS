@@ -24,12 +24,20 @@ export function registerResendVerificationRoutes(app: FastifyInstance): void {
     "/api/auth/resend-verification",
     {
       schema: {
-        body: z.object({ email: z.string().email() }),
+        summary:
+          "Resend the sign-up verification email (H3: 3/hour, 60s cooldown), optionally carrying the same-origin destination to return to after verifying (H188).",
+        body: z.object({
+          email: z.string().email(),
+          // The web app's own path to redirect back to after verification
+          // (H188 return-path continuity); forwarded to Better Auth as-is,
+          // which stamps it into the emailed verify link's callbackURL.
+          callbackURL: z.string().optional(),
+        }),
         response: { 200: z.object({ status: z.literal(true) }) },
       },
     },
     async (req) => {
-      const { email } = req.body;
+      const { email, callbackURL } = req.body;
       const limit = await checkResendVerificationRateLimit(email);
       if (!limit.allowed) {
         throw new TooManyRequestsError(
@@ -37,7 +45,7 @@ export function registerResendVerificationRoutes(app: FastifyInstance): void {
           limit.retryAfterSeconds,
         );
       }
-      await auth.api.sendVerificationEmail({ body: { email } });
+      await auth.api.sendVerificationEmail({ body: { email, callbackURL } });
       return { status: true as const };
     },
   );

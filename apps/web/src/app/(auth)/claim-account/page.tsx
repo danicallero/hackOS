@@ -32,6 +32,8 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
 import { languageName, pickText, useLocale } from "@/lib/i18n";
+import { destinationForKind } from "@/lib/invite-destination";
+import { withReturnPath } from "@/lib/return-path";
 import type { Intolerance, InviteKind, Language } from "@/lib/types";
 
 const SHIRT_SIZES = ["XS", "S", "M", "L", "XL", "XXL"] as const;
@@ -145,8 +147,6 @@ function ClaimInner() {
     );
   }
 
-  const invitedAsParticipant = lookup.kind === "participant";
-
   if (done) {
     return (
       <Card>
@@ -159,13 +159,9 @@ function ClaimInner() {
         <CardContent className="text-center">
           <SubmitButton
             onClick={() =>
-              // M1.1: an invited participant lands directly on the application
-              // form after signing in (login honours the `next` param).
-              router.push(
-                invitedAsParticipant
-                  ? `/login?next=${encodeURIComponent("/my-applications")}`
-                  : "/login",
-              )
+              // H9/H10/H188: every invitation kind lands somewhere specific
+              // after signing in — login honours the `next` param.
+              router.push(withReturnPath("/login", destinationForKind(lookup.kind)))
             }
           >
             {t("signIn")}
@@ -301,6 +297,7 @@ function ClaimInner() {
                       emptyText={t("noIntolerances")}
                     />
                   </FormControl>
+                  <p className="text-muted-foreground text-xs">{t("dietaryDataHandlingNote")}</p>
                   <FormMessage />
                 </FormItem>
               )}

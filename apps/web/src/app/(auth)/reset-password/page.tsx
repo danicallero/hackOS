@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/form";
 import { authClient } from "@/lib/auth-client";
 import { useLocale } from "@/lib/i18n";
+import { withReturnPath } from "@/lib/return-path";
 
 const schema = z
   .object({
@@ -37,6 +38,7 @@ function ResetPasswordForm() {
   const router = useRouter();
   const params = useSearchParams();
   const token = params.get("token");
+  const rawNext = params.get("next");
   const { t } = useLocale();
   const form = useForm<Values>({
     resolver: zodResolver(schema),
@@ -55,9 +57,10 @@ function ResetPasswordForm() {
       });
       return;
     }
-    // H5: resetting closes all old sessions server-side; send them to sign in.
+    // H5: resetting closes all old sessions server-side; send them to sign in,
+    // carrying whatever they were trying to reach before recovery (H188).
     toast.success(t("passwordUpdated"));
-    router.push("/login");
+    router.push(withReturnPath("/login", rawNext));
   }
 
   return (
@@ -69,7 +72,10 @@ function ResetPasswordForm() {
         {!token ? (
           <p className="text-destructive text-sm">
             {t("resetTokenMissing")}{" "}
-            <Link href="/forgot-password" className="underline underline-offset-4">
+            <Link
+              href={withReturnPath("/forgot-password", rawNext)}
+              className="underline underline-offset-4"
+            >
               {t("resetPassword").toLowerCase()}
             </Link>
             .

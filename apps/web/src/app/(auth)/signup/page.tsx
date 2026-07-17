@@ -3,8 +3,8 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { MailCheckIcon } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { PasswordInput } from "@/components/common/password-input";
@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/select";
 import { signUp } from "@/lib/auth-client";
 import { LANGS, languageName, useLocale } from "@/lib/i18n";
+import { safeReturnPath, withReturnPath } from "@/lib/return-path";
 import { useSessionContext } from "@/lib/session";
 
 const schema = z.object({
@@ -41,10 +42,15 @@ const schema = z.object({
 
 type Values = z.infer<typeof schema>;
 
-export default function SignUpPage() {
+function SignUpInner() {
   const router = useRouter();
   const { status } = useSessionContext();
   const { t, language } = useLocale();
+  // The application (or other same-origin destination) the visitor was
+  // trying to reach — carried through verification so they land back there
+  // instead of the dashboard (H188: applicant return-path continuity).
+  const rawNext = useSearchParams().get("next");
+  const next = safeReturnPath(rawNext, "");
   const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
   const form = useForm<Values>({
     resolver: zodResolver(schema),
@@ -53,8 +59,8 @@ export default function SignUpPage() {
 
   // Already signed in: no reason to show the sign-up form again.
   useEffect(() => {
-    if (status === "authenticated") router.replace("/dashboard");
-  }, [status, router]);
+    if (status === "authenticated") router.replace(next || "/dashboard");
+  }, [status, router, next]);
 
   if (status === "loading" || status === "authenticated") {
     return (
@@ -73,6 +79,9 @@ export default function SignUpPage() {
       name: values.name,
       surname: values.surname,
       language: values.language,
+      // Carried through to the verification email's redirect (H188): the API
+      // decodes this back into `next` on /verify-email.
+      ...(next ? { callbackURL: `/verify-email?verified=1&next=${encodeURIComponent(next)}` } : {}),
     });
     if (error && error.status !== 200) {
       form.setError("root", { message: error.message ?? t("couldNotCreateAccount") });
@@ -93,7 +102,13 @@ export default function SignUpPage() {
         </CardHeader>
         <CardContent className="text-muted-foreground text-center text-sm">
           {t("didntGetIt")}{" "}
-          <Link href="/verify-email" className="text-foreground underline underline-offset-4">
+          <Link
+            href={withReturnPath(
+              `/verify-email?email=${encodeURIComponent(submittedEmail)}`,
+              next || null,
+            )}
+            className="text-foreground underline underline-offset-4"
+          >
             {t("resendVerification")}
           </Link>
         </CardContent>
@@ -210,10 +225,21 @@ export default function SignUpPage() {
       </CardContent>
       <div className="text-muted-foreground px-6 pb-6 text-center text-sm">
         {t("alreadyHaveAccount")}{" "}
-        <Link href="/login" className="text-foreground underline underline-offset-4">
+        <Link
+          href={withReturnPath("/login", next || null)}
+          className="text-foreground underline underline-offset-4"
+        >
           {t("signIn")}
         </Link>
       </div>
     </Card>
+  );
+}
+
+export default function SignUpPage() {
+  return (
+    <Suspense>
+      <SignUpInner />
+    </Suspense>
   );
 }
