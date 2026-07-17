@@ -68,16 +68,31 @@ every workspace and every item (`apps/web/src/lib/session.tsx`).
 - No routes moved: every href in `nav.ts` matches the previously published
   URL, so existing deep links and bookmarks keep working without a redirect.
 
-## Mobile: one obvious scan entry (H55)
+## Mobile: overflow selector for operators (H55)
 
 `apps/mobile/lib/tabs.ts` computes `primaryTabs()`/`overflowTabs()` from
-effective capabilities. Any of the three scan capabilities (`accredit:scan`,
-`presence:scan`, `activity:scan`) or the admin wildcard promotes **Scan**
-into the primary tab bar (`apps/mobile/app/(tabs)/scan.tsx`, a thin wrapper
-around the existing `GeneralScannerScreen`) — never behind the "Others"
-ellipsis. Account moves into the overflow selector only in that case, since
-the bar only fits five primary destinations; a non-operator account keeps
-Account in the primary bar and has no overflow menu at all.
+effective capabilities. The primary bar never grows past 4 participant tabs
+(schedule, queue, wallet, notifications) plus one more slot: a native
+`UITabBarController` silently collapses anything past its fifth item into
+iOS's own "More" screen, which bypasses the app's custom overflow menu
+entirely (`apps/mobile/app/(tabs)/others/scan` was getting swallowed by that
+system screen before this was fixed). So for a non-operator account, that
+fifth slot is Account, directly in the primary bar, no overflow menu at all.
+For any of the three scan capabilities (`accredit:scan`, `presence:scan`,
+`activity:scan`) or the admin wildcard, that fifth slot is instead the native
+"Others" overflow trigger, and Account, Scanner
+(`apps/mobile/app/(tabs)/others/scan`), and — for `activity:scan` holders —
+Activities all live behind it as pseudo-tabs (see
+`apps/mobile/lib/operations-navigation.ts`).
+
+This deliberately walks back the original #187 finding that scanning must
+never sit behind an ellipsis: promoting Scan to its own primary slot only
+works as long as nothing else also needs a slot, and Account already needed
+one. A 6-tab bar (4 base + Scan + Others) is not an option — it isn't a
+styling choice, it's iOS's own tab-bar collapse taking over. If scan-as-
+always-primary is reinstated later, Account/Activities need a non-tab-slot
+home (e.g. a button inside the Scan screen itself) instead of a dedicated
+"Others" trigger.
 
 ## Known gap (backend follow-up needed)
 
