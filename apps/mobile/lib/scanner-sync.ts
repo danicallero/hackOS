@@ -80,9 +80,12 @@ export function synchronizeScanner(): Promise<void> {
 }
 
 async function runUntilSettled(): Promise<void> {
-  do {
-    rerunRequested = false;
-    await doSync();
-  } while (rerunRequested);
-  activeSync = null;
+  try {
+    do {
+      rerunRequested = false;
+      await doSync();
+    } while (rerunRequested);
+  } finally {
+    activeSync = null;
+  }
 }

@@ -135,4 +135,25 @@ describe("synchronizeScanner", () => {
     expect(mockFailScan).toHaveBeenCalledWith("scan-1", "No badge to remove");
     expect(mockApiFetch).toHaveBeenCalledTimes(3);
   });
+
+  it("clears the in-flight lock after a failed sync so the next call retries the network", async () => {
+    // A snapshot fetch failure (e.g. offline) must not wedge the shared
+    // activeSync promise: pressing the sync button again has to attempt the
+    // network again, not silently resolve a stale rejected promise.
+    mockPendingScans.mockResolvedValue([]);
+    mockApiFetch.mockRejectedValueOnce(new Error("Network error"));
+
+    await expect(synchronizeScanner()).rejects.toThrow("Network error");
+
+    mockApiFetch.mockResolvedValueOnce({
+      generatedAt: "t0",
+      people: [],
+      activities: [],
+      activityStates: [],
+    });
+
+    await synchronizeScanner();
+
+    expect(mockApiFetch).toHaveBeenCalledTimes(2);
+  });
 });
