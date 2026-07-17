@@ -37,40 +37,135 @@ export interface NavItem {
   capability?: Capability;
   /** Visible to any of these capabilities. */
   anyCapability?: Capability[];
-  /** Visible to linked sponsor representatives (association-based portal). */
+  /** Visible to linked sponsor representatives (association-based portal, H55). */
   sponsorVisible?: boolean;
-  /** Visible to users assigned as judges to at least one room. */
+  /** Visible to users assigned as judges to at least one room (association-based, H55). */
   judgeVisible?: boolean;
   /** Not built yet — shown disabled with a "Soon" badge. */
   soon?: boolean;
 }
 
-export interface NavSection {
-  label?: import("./i18n").MessageKey;
+/**
+ * A work destination grouped by domain (audit §3.2: "coherent additive
+ * workspaces" instead of a flat, globally-weighted destination list). Each
+ * workspace is additive — a participant who also judges keeps their personal
+ * queue and gains the Live judging workspace; nothing is removed to make
+ * room for it (H55).
+ */
+export interface Workspace {
+  id: string;
+  label: import("./i18n").MessageKey;
+  icon: LucideIcon;
   items: NavItem[];
 }
 
+const LAST_WORKSPACE_KEY = "hackos-last-workspace";
+
+/** Per-device last-open workspace (audit §3.3: "keep the last workspace ... per device"). */
+export function readLastWorkspace(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(LAST_WORKSPACE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function writeLastWorkspace(id: string) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(LAST_WORKSPACE_KEY, id);
+  } catch {
+    // Private browsing or storage disabled — expansion just won't persist.
+  }
+}
+
+export interface NavVisibilityContext {
+  can: (capability: Capability) => boolean;
+  canAny: (...capabilities: Capability[]) => boolean;
+  /** Linked sponsor representative (association-based portal, H55). */
+  isSponsorRep: boolean;
+  /** Assigned as a judge to at least one room (association-based, H55). */
+  isRoomJudge: boolean;
+}
+
 /**
- * Single source of truth for the sidebar. Each future story module adds its
- * entry here with the capability that guards it; the sidebar hides items the
- * user can't use (H55: "al cambiar los permisos, sus pestañas cambian").
- * Items marked `soon` are placeholders for modules still to be implemented.
+ * Pure capability/association predicate (H8/H55), extracted so multi-
+ * capability combinations (participant+judge, sponsor+judge, admin
+ * wildcard) can be unit tested without rendering the sidebar.
  */
-export const NAV: NavSection[] = [
+export function isNavItemVisible(item: NavItem, ctx: NavVisibilityContext): boolean {
+  if (item.sponsorVisible && ctx.isSponsorRep) return true;
+  if (item.judgeVisible && ctx.isRoomJudge) return true;
+  if (item.capability) return ctx.can(item.capability);
+  if (item.anyCapability) return ctx.canAny(...item.anyCapability);
+  return true;
+}
+
+/**
+ * Stable personal area (audit §3.1): always available to authenticated
+ * accounts, independent of any work capability. Order is time-critical work
+ * first, configuration-ish personal items last.
+ */
+export const PERSONAL_NAV: NavItem[] = [
+  { title: "dashboard", href: "/dashboard", icon: LayoutDashboardIcon },
+  { title: "schedule", href: "/timetable", icon: CalendarDaysIcon },
+  // Participant-facing: everyone can apply (H12-H15). No capability gate.
+  { title: "myApplications", href: "/my-applications", icon: FileTextIcon },
+  // Participant project self-view (H20) + policy-gated creation (H19).
+  { title: "myProject", href: "/my-project", icon: FolderGitIcon },
+  // Participant-facing queue status (H38). No capability gate — auth only.
+  { title: "myQueue", href: "/my-queue", icon: TicketIcon },
+  { title: "wallet", href: "/wallet", icon: WalletCardsIcon },
+  // Everyone has an inbox — auth only, no capability (H50/H51).
+  { title: "inbox", href: "/inbox", icon: InboxIcon },
+  { title: "myProfile", href: "/settings/profile", icon: UserIcon },
+];
+
+/**
+ * Additive work area (audit §3.2). Each workspace groups pages that belong
+ * to one domain instead of listing them as globally weighted sidebar items;
+ * a workspace is visible whenever at least one of its items is.
+ */
+export const WORKSPACES: Workspace[] = [
   {
+    id: "applications",
+    label: "workspaceApplications",
+    icon: ClipboardListIcon,
     items: [
-      { title: "dashboard", href: "/dashboard", icon: LayoutDashboardIcon },
-      { title: "schedule", href: "/timetable", icon: CalendarDaysIcon },
-      // Participant-facing: everyone can apply (H12-H15). No capability gate.
-      { title: "myApplications", href: "/my-applications", icon: FileTextIcon },
-      // Participant-facing queue status (H38). No capability gate — auth only.
-      { title: "myQueue", href: "/my-queue", icon: TicketIcon },
-      // Participant project self-view (H20) + policy-gated creation (H19).
-      { title: "myProject", href: "/my-project", icon: FolderGitIcon },
+      {
+        title: "applications",
+        href: "/applications",
+        icon: ClipboardListIcon,
+        anyCapability: [CAPABILITIES.APPLICATIONS_REVIEW, CAPABILITIES.APPLICATIONS_MANAGE],
+      },
     ],
   },
   {
-    label: "operations",
+    id: "projects",
+    label: "workspaceProjects",
+    icon: FolderGitIcon,
+    items: [
+      {
+        // H8/H55: judges + sponsor reps get a scoped projects view (backend
+        // scopes GET /api/repos by their challenges); full access via projects:*.
+        title: "projects",
+        href: "/projects",
+        icon: FolderGitIcon,
+        anyCapability: [
+          CAPABILITIES.PROJECTS_READ,
+          CAPABILITIES.PROJECTS_IMPORT,
+          CAPABILITIES.JUDGE_PANEL,
+        ],
+        sponsorVisible: true,
+        judgeVisible: true,
+      },
+    ],
+  },
+  {
+    id: "liveJudging",
+    label: "workspaceLiveJudging",
+    icon: GavelIcon,
     items: [
       {
         title: "queueOperations",
@@ -82,6 +177,31 @@ export const NAV: NavSection[] = [
           CAPABILITIES.JUDGE_PANEL,
         ],
       },
+      {
+        title: "judging",
+        href: "/judging",
+        icon: GavelIcon,
+        anyCapability: [
+          CAPABILITIES.QUEUE_OPERATE,
+          CAPABILITIES.QUEUE_ADMIN,
+          CAPABILITIES.JUDGE_PANEL,
+        ],
+        judgeVisible: true,
+      },
+      {
+        title: "rooms",
+        href: "/queue/rooms",
+        icon: Building2Icon,
+        anyCapability: [CAPABILITIES.QUEUE_ADMIN],
+        sponsorVisible: true,
+      },
+    ],
+  },
+  {
+    id: "logistics",
+    label: "workspaceLogistics",
+    icon: SoupIcon,
+    items: [
       // Logistics is split per physical station (H22-H27); each entry shows
       // only for operators who hold that station's capability (H55).
       {
@@ -117,43 +237,10 @@ export const NAV: NavSection[] = [
     ],
   },
   {
-    label: "administration",
+    id: "programme",
+    label: "workspaceProgramme",
+    icon: CalendarDaysIcon,
     items: [
-      {
-        title: "judging",
-        href: "/judging",
-        icon: GavelIcon,
-        anyCapability: [
-          CAPABILITIES.QUEUE_OPERATE,
-          CAPABILITIES.QUEUE_ADMIN,
-          CAPABILITIES.JUDGE_PANEL,
-        ],
-        judgeVisible: true,
-      },
-      {
-        // H8/H55: judges + sponsor reps get a scoped projects view (backend
-        // scopes GET /api/repos by their challenges); full access via projects:*.
-        title: "projects",
-        href: "/projects",
-        icon: FolderGitIcon,
-        anyCapability: [
-          CAPABILITIES.PROJECTS_READ,
-          CAPABILITIES.PROJECTS_IMPORT,
-          CAPABILITIES.JUDGE_PANEL,
-        ],
-        sponsorVisible: true,
-        judgeVisible: true,
-      },
-      {
-        title: "applications",
-        href: "/applications",
-        icon: ClipboardListIcon,
-        anyCapability: [
-          CAPABILITIES.APPLICATIONS_REVIEW,
-          CAPABILITIES.APPLICATIONS_DECIDE,
-          CAPABILITIES.APPLICATIONS_MANAGE,
-        ],
-      },
       {
         title: "manageSchedule",
         href: "/schedule",
@@ -162,11 +249,18 @@ export const NAV: NavSection[] = [
         judgeVisible: true,
       },
       {
-        title: "announcements",
-        href: "/announcements",
-        icon: MegaphoneIcon,
-        capability: CAPABILITIES.ANNOUNCEMENTS_MANAGE,
+        title: "tvControl",
+        href: "/tv/control",
+        icon: TvIcon,
+        capability: CAPABILITIES.TV_CONTROL,
       },
+    ],
+  },
+  {
+    id: "sponsors",
+    label: "workspaceSponsors",
+    icon: HandshakeIcon,
+    items: [
       {
         title: "enterprises",
         href: "/enterprises",
@@ -181,6 +275,45 @@ export const NAV: NavSection[] = [
         anyCapability: [CAPABILITIES.SPONSORS_MANAGE, CAPABILITIES.QUEUE_ADMIN],
         sponsorVisible: true,
       },
+    ],
+  },
+  {
+    id: "communications",
+    label: "workspaceCommunications",
+    icon: MegaphoneIcon,
+    items: [
+      {
+        title: "announcements",
+        href: "/announcements",
+        icon: MegaphoneIcon,
+        capability: CAPABILITIES.ANNOUNCEMENTS_MANAGE,
+      },
+    ],
+  },
+  {
+    id: "eventSetup",
+    label: "workspaceEventSetup",
+    icon: SettingsIcon,
+    items: [
+      {
+        title: "eventSettings",
+        href: "/settings/event",
+        icon: SettingsIcon,
+        capability: CAPABILITIES.SCHEDULE_MANAGE,
+      },
+      {
+        title: "libraries",
+        href: "/settings/libraries",
+        icon: LibraryBigIcon,
+        capability: CAPABILITIES.INTOLERANCES_MANAGE,
+      },
+    ],
+  },
+  {
+    id: "accessAudit",
+    label: "workspaceAccessAudit",
+    icon: ShieldCheckIcon,
+    items: [
       {
         title: "users",
         href: "/users",
@@ -194,45 +327,11 @@ export const NAV: NavSection[] = [
         capability: CAPABILITIES.PERMISSIONS_MANAGE,
       },
       {
-        title: "eventSettings",
-        href: "/settings/event",
-        icon: SettingsIcon,
-        capability: CAPABILITIES.SCHEDULE_MANAGE,
-      },
-      {
-        title: "tvControl",
-        href: "/tv/control",
-        icon: TvIcon,
-        capability: CAPABILITIES.TV_CONTROL,
-      },
-      {
-        title: "rooms",
-        href: "/queue/rooms",
-        icon: Building2Icon,
-        anyCapability: [CAPABILITIES.QUEUE_ADMIN],
-        sponsorVisible: true,
-      },
-      {
-        title: "libraries",
-        href: "/settings/libraries",
-        icon: LibraryBigIcon,
-        capability: CAPABILITIES.INTOLERANCES_MANAGE,
-      },
-      {
         title: "auditLog",
         href: "/audit",
         icon: ScrollTextIcon,
         capability: CAPABILITIES.AUDIT_READ,
       },
-    ],
-  },
-  {
-    label: "account",
-    items: [
-      // Everyone has an inbox — auth only, no capability (H50/H51).
-      { title: "inbox", href: "/inbox", icon: InboxIcon },
-      { title: "wallet", href: "/wallet", icon: WalletCardsIcon },
-      { title: "myProfile", href: "/settings/profile", icon: UserIcon },
     ],
   },
 ];

@@ -39,7 +39,9 @@ export function GeneralScannerScreen() {
   return (
     <View style={{ backgroundColor: "black", flex: 1 }}>
       <QrCamera
-        onClose={pathname === "/others/scan" ? undefined : () => router.back()}
+        onClose={
+          pathname === "/scan" || pathname === "/others/scan" ? undefined : () => router.back()
+        }
         onValue={(value) => void resolve(value)}
       />
       <GlassView
