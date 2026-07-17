@@ -13,6 +13,32 @@
 :root {
   --radius: 0.5rem;
 
+  /*
+   * Shared visual contract (docs/design-system-migration.md).
+   * Keep spacing on the 4px grid and reserve elevation for floating UI.
+   */
+  --space-related: 0.5rem;
+  --space-within-section: 1rem;
+  --space-between-sections: 1.5rem;
+  --control-height-compact: 2rem;
+  --control-height-default: 2.25rem;
+  --control-height-prominent: 2.5rem;
+  --hackos-radius-control: 0.375rem;
+  --hackos-radius-surface: 0.5rem;
+  --hackos-radius-overlay: 0.5rem;
+  --hackos-shadow-floating: 0 4px 12px oklch(0.141 0.005 285.823 / 12%);
+  --hackos-shadow-overlay: 0 18px 48px oklch(0.141 0.005 285.823 / 24%);
+  --font-size-page-title: 1.5rem;
+  --line-height-page-title: 2rem;
+  --font-size-section-title: 1.125rem;
+  --line-height-section-title: 1.5rem;
+  --font-size-body: 0.875rem;
+  --line-height-body: 1.25rem;
+  --font-size-label: 0.8125rem;
+  --line-height-label: 1.125rem;
+  --font-size-meta: 0.75rem;
+  --line-height-meta: 1rem;
+
   --background: oklch(1 0 0);
   --foreground: oklch(0.141 0.005 285.823);
   --card: oklch(1 0 0);
@@ -102,6 +128,13 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
 
+  --radius-control: var(--hackos-radius-control);
+  --radius-surface: var(--hackos-radius-surface);
+  --radius-overlay: var(--hackos-radius-overlay);
+
+  --shadow-floating: var(--hackos-shadow-floating);
+  --shadow-overlay: var(--hackos-shadow-overlay);
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -152,5 +185,33 @@
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+    font-size: var(--font-size-body);
+    line-height: var(--line-height-body);
+  }
+}
+
+@layer components {
+  .type-page-title {
+    font-size: var(--font-size-page-title);
+    font-weight: 600;
+    line-height: var(--line-height-page-title);
+  }
+
+  .type-section-title {
+    font-size: var(--font-size-section-title);
+    font-weight: 600;
+    line-height: var(--line-height-section-title);
+  }
+
+  .type-label {
+    font-size: var(--font-size-label);
+    font-weight: 500;
+    line-height: var(--line-height-label);
+  }
+
+  .type-meta {
+    color: var(--muted-foreground);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-meta);
   }
 }

@@ -142,31 +142,25 @@ export default function QueueOperationsPage() {
     <div className="space-y-6" data-wide>
       <PageHeader
         title={t("queueOperations")}
-        description={t("roomQueuesDescription")}
-        actions={
-          <>
-            {canAdmin && (
-              <Button onClick={() => void onGenerate()} disabled={busy}>
-                <RefreshCwIcon className={cn("size-4", busy && "animate-spin")} />
-                {t("generateQueues")}
-              </Button>
-            )}
-            <Button variant="outline" asChild>
-              <Link href="/judging">
-                <ArrowRightIcon className="size-4" />
-                {t("openJudging")}
-              </Link>
+        primaryAction={
+          canAdmin ? (
+            <Button onClick={() => void onGenerate()} disabled={busy}>
+              <RefreshCwIcon className={cn("size-4", busy && "animate-spin")} />
+              {t("generateQueues")}
             </Button>
-          </>
+          ) : undefined
+        }
+        secondaryActions={
+          <Button variant="outline" asChild>
+            <Link href="/judging">
+              <ArrowRightIcon className="size-4" />
+              {t("openJudging")}
+            </Link>
+          </Button>
         }
       />
 
-      <SectionCard
-        title={t("roomQueues")}
-        description={t("roomQueuesDescription")}
-        icon={Building2Icon}
-        bodyClassName="space-y-4"
-      >
+      <SectionCard title={t("roomQueues")} icon={Building2Icon} bodyClassName="space-y-4">
         {rooms.length === 0 ? (
           <EmptyState
             icon={Building2Icon}
