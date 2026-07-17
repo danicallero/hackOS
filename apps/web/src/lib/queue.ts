@@ -282,6 +282,18 @@ export interface AttemptReview {
   updated_at?: string;
 }
 
+export interface AttemptReviewVersion {
+  id: number;
+  attempt_id: number;
+  author_id: number;
+  changed_fields: string[];
+  previous: Record<string, unknown>;
+  new: Record<string, unknown>;
+  created_at: string;
+  name: string | null;
+  surname: string | null;
+}
+
 export interface JudgingSession {
   id: number;
   judge_id: number;
@@ -303,7 +315,7 @@ export const getReview = (entryId: number) =>
 export const saveReview = (entryId: number, body: Record<string, unknown>) =>
   api.patch<AttemptReview>(`/api/queue/entries/${entryId}/review`, body);
 export const getReviewVersions = (entryId: number) =>
-  api.get(`/api/queue/entries/${entryId}/review/versions`);
+  api.get<AttemptReviewVersion[]>(`/api/queue/entries/${entryId}/review/versions`);
 export const openSession = (entryId: number, roomId?: number) =>
   api.post<JudgingSession>(`/api/queue/entries/${entryId}/session`, { roomId });
 export const closeSession = (entryId: number) =>
