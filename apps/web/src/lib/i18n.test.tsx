@@ -14,6 +14,7 @@ import type { Language } from "./types";
 vi.mock("./session", () => ({ useMe: () => null }));
 
 const bootstrapScript = readFileSync(resolve(process.cwd(), "public/locale-bootstrap.js"), "utf8");
+const globalStyles = readFileSync(resolve(process.cwd(), "src/app/globals.css"), "utf8");
 const welcome: Record<Language, string> = {
   es: "Te damos la bienvenida",
   gl: "Benvida de novo",
@@ -113,6 +114,23 @@ describe("locale bootstrap", () => {
   });
 });
 
+describe("locale visibility fail-safe", () => {
+  it("reveals the static shell after a finite deadline when scripts or hydration stall", () => {
+    expect(globalStyles).toMatch(
+      /html\[data-locale-ready="false"\] body \{[\s\S]*visibility: hidden;[\s\S]*animation: locale-visibility-failsafe 0s 3s forwards;/,
+    );
+    expect(globalStyles).toMatch(
+      /@keyframes locale-visibility-failsafe \{[\s\S]*to \{[\s\S]*visibility: visible;/,
+    );
+  });
+
+  it("keeps the server-rendered page immediately visible when scripting is disabled", () => {
+    expect(globalStyles).toMatch(
+      /@media \(scripting: none\) \{[\s\S]*html\[data-locale-ready="false"\] body \{[\s\S]*visibility: visible;/,
+    );
+  });
+});
+
 describe("LocaleProvider hydration", () => {
   let root: Root | undefined;
   const stored = new Map<string, string>();
@@ -141,7 +159,7 @@ describe("LocaleProvider hydration", () => {
     "es",
     "gl",
     "en",
-  ] as const)("hydrates the static Spanish shell before transitioning to %s", async (language) => {
+  ] as const)("hydrates the static Spanish shell, clears the visibility gate, then transitions to %s", async (language) => {
     const browserWindow = globalThis.window;
     Object.defineProperty(globalThis, "window", { configurable: true, value: undefined });
     const serverHtml = renderToString(
@@ -171,6 +189,7 @@ describe("LocaleProvider hydration", () => {
     expect(container.textContent).toBe(welcome[language]);
     expect(document.documentElement.lang).toBe(language);
     expect(document.documentElement.dataset.localeReady).toBe("true");
+    expect(document.documentElement.matches('html[data-locale-ready="false"]')).toBe(false);
     expect(consoleError.mock.calls.flat().join("\n")).not.toContain("Hydration failed");
   });
 });

@@ -218,6 +218,18 @@
 
 html[data-locale-ready="false"] body {
   visibility: hidden;
+  /*
+   * Normal hydration removes this gate before paint. Three seconds leaves
+   * room for a slow bundle while bounding inaccessible content if scripts
+   * are blocked or hydration fails before LocaleProvider mounts.
+   */
+  animation: locale-visibility-failsafe 0s 3s forwards;
+}
+
+@keyframes locale-visibility-failsafe {
+  to {
+    visibility: visible;
+  }
 }
 
 @media (scripting: none) {
