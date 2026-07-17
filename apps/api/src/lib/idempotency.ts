@@ -15,6 +15,18 @@ import { ConflictError } from "./errors.js";
  * Keys are scoped per (key, method+url, user).
  */
 
+/**
+ * A "first execution" that never reaches `idempotencyOnSend` (dropped
+ * connection, backgrounded app mid-request, server restart) would otherwise
+ * leave `response_status` NULL forever — every retry with that key (mobile
+ * scanners reuse the persisted scan id as the key, so this is exactly the
+ * offline scan-queue replay path) then 409s as "still in flight" permanently,
+ * jamming that scan and everything queued behind it (H22, H25, H26). Past
+ * this age, a still-NULL row is treated as abandoned and reclaimed instead
+ * of blocking forever.
+ */
+const STALE_IN_FLIGHT_MS = 30_000;
+
 function requestHash(req: FastifyRequest): string {
   return createHash("sha256")
     .update(JSON.stringify(req.body ?? null))
@@ -48,7 +60,7 @@ export async function idempotencyGuard(req: FastifyRequest, reply: FastifyReply)
   }
 
   const existing = await pool.query(
-    `SELECT request_hash, response_status, response_body FROM idempotency_keys
+    `SELECT request_hash, response_status, response_body, created_at FROM idempotency_keys
      WHERE key = $1 AND scope = $2`,
     [key, scope],
   );
@@ -58,6 +70,21 @@ export async function idempotencyGuard(req: FastifyRequest, reply: FastifyReply)
     throw new ConflictError("Idempotency-Key reused with a different request body");
   }
   if (row.response_status === null) {
+    const ageMs = Date.now() - new Date(row.created_at).getTime();
+    if (ageMs > STALE_IN_FLIGHT_MS) {
+      // Reclaim an abandoned first attempt. The UPDATE only affects a row
+      // still NULL, so concurrent reclaim attempts have exactly one winner.
+      const reclaimed = await pool.query(
+        `UPDATE idempotency_keys SET created_at = now()
+         WHERE key = $1 AND scope = $2 AND response_status IS NULL
+         RETURNING key`,
+        [key, scope],
+      );
+      if (reclaimed.rowCount === 1) {
+        req.idempotency = { key, scope, hash, replayed: false };
+        return;
+      }
+    }
     reply.header("retry-after", "1");
     throw new ConflictError("Duplicate request still in flight; retry shortly");
   }
