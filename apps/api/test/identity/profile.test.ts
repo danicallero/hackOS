@@ -347,11 +347,41 @@ describe("staff user routes (H7)", () => {
       (await a.inject({ method: "DELETE", url: `/api/users/${victim}`, headers: asUser(staff) }))
         .statusCode,
     ).toBe(403);
+    expect(
+      (
+        await a.inject({
+          method: "GET",
+          url: `/api/users/${victim}/removal-eligibility`,
+          headers: asUser(staff),
+        })
+      ).statusCode,
+    ).toBe(403);
     // Can't delete yourself.
     expect(
       (await a.inject({ method: "DELETE", url: `/api/users/${admin}`, headers: asUser(admin) }))
         .statusCode,
     ).toBe(400);
+    expect(
+      (
+        await a.inject({
+          method: "GET",
+          url: `/api/users/${admin}/removal-eligibility`,
+          headers: asUser(admin),
+        })
+      ).statusCode,
+    ).toBe(400);
+    const eligibility = await a.inject({
+      method: "GET",
+      url: `/api/users/${victim}/removal-eligibility`,
+      headers: asUser(admin),
+    });
+    expect(eligibility.statusCode).toBe(200);
+    expect(eligibility.json()).toEqual({
+      action: "delete",
+      reasonCode: "fresh_account",
+      accessRevoked: true,
+      operationalHistoryRetained: false,
+    });
     // Admin removes a fresh account.
     const ok = await a.inject({
       method: "DELETE",
@@ -364,6 +394,55 @@ describe("staff user routes (H7)", () => {
       (await a.inject({ method: "GET", url: `/api/users/${victim}`, headers: asUser(admin) }))
         .statusCode,
     ).toBe(404);
+  });
+
+  it("keeps eligibility and mutation aligned for historically referenced accounts (H54)", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const admin = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
+    const target = await createUser({ name: "Historically Referenced" });
+    const { rows: applications } = await pool.query(
+      `INSERT INTO applications (name, type, template)
+       VALUES ('Participants', 'participant', '[]'::jsonb) RETURNING id`,
+    );
+    await pool.query(
+      `INSERT INTO application_responses (user_id, application_id, status, responses)
+       VALUES ($1, $2, 'submitted', '{}'::jsonb)`,
+      [target, applications[0].id],
+    );
+
+    const eligibility = await a.inject({
+      method: "GET",
+      url: `/api/users/${target}/removal-eligibility`,
+      headers: asUser(admin),
+    });
+    expect(eligibility.statusCode).toBe(200);
+    expect(eligibility.json()).toEqual({
+      action: "anonymize",
+      reasonCode: "operational_history",
+      accessRevoked: true,
+      operationalHistoryRetained: true,
+    });
+
+    const rejectedDelete = await a.inject({
+      method: "DELETE",
+      url: `/api/users/${target}`,
+      headers: asUser(admin),
+    });
+    expect(rejectedDelete.statusCode).toBe(409);
+    expect(rejectedDelete.json().error.details.reasonCode).toBe("operational_history");
+
+    const anonymized = await a.inject({
+      method: "POST",
+      url: `/api/users/${target}/anonymize`,
+      headers: asUser(admin),
+    });
+    expect(anonymized.statusCode).toBe(200);
+    expect(anonymized.json().anonymized).toBe(true);
+    expect(
+      (await pool.query(`SELECT 1 FROM application_responses WHERE user_id = $1`, [target]))
+        .rowCount,
+    ).toBe(1);
   });
 
   it("PATCH /api/users/:id requires USERS_WRITE, can fix dni/notes, and is audited (H53)", async () => {
