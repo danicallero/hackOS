@@ -277,7 +277,7 @@ const dict = {
   queueStatusCalled: { en: "Called", es: "Llamado", gl: "Chamado" },
   queueStatusInRoom: { en: "In room", es: "En sala", gl: "Na sala" },
   queueStatusPresenting: { en: "Presenting", es: "Presentando", gl: "Presentando" },
-  queueStatusCompleted: { en: "Completed", es: "Completado", gl: "Completado" },
+  queueStatusCompleted: { en: "Scored", es: "Evaluado", gl: "Avaliado" },
   queueStatusDisqualified: { en: "Disqualified", es: "Descalificado", gl: "Descualificado" },
   queueCalled: { en: "Go to room {room}", es: "Ve a la sala {room}", gl: "Vai á sala {room}" },
   queuePrecalled: {
@@ -453,9 +453,9 @@ const dict = {
     gl: "Agardando a confirmación do servidor.",
   },
   scannerOfflineWaiting: {
-    en: "Still saved; connection retry pending",
-    es: "Sigue guardado; pendiente de reintento de conexión",
-    gl: "Segue gardado; pendente de reintento da conexión",
+    en: "Still saved; it will retry when the connection returns.",
+    es: "Sigue guardado; se reintentará cuando vuelva la conexión.",
+    gl: "Segue gardado; reintentarase cando volva a conexión.",
   },
   scannerBusinessRejected: {
     en: "Server rejected this operation",

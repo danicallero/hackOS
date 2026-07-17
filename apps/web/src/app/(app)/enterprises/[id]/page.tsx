@@ -411,11 +411,7 @@ function MembersCard({ enterpriseId }: { enterpriseId: number }) {
   }
 
   return (
-    <SectionCard
-      icon={Building2Icon}
-      title={t("affiliatedUsersTitle")}
-      description={t("affiliatedUsersDesc")}
-    >
+    <SectionCard icon={Building2Icon} title={t("affiliatedUsersTitle")}>
       <div className="space-y-4">
         <div className="flex flex-wrap gap-2">
           <Input

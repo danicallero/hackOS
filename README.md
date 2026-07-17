@@ -52,7 +52,8 @@ Useful scripts:
 
 ```sh
 pnpm --filter @hackos/api test   # vitest, wipes + remigrates hackos_test, runs serially
-pnpm lint                        # biome, whole repo
+pnpm lint                        # biome + copy/localization check, whole repo
+pnpm check:copy                  # just the copy/localization check (scripts/check-copy.mjs)
 pnpm --filter @hackos/api superadmin:create   # bootstrap the first admin
 ```
 

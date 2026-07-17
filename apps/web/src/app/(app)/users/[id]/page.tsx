@@ -1391,7 +1391,7 @@ function PresenceSection({ userId }: { userId: number }) {
   ];
 
   return (
-    <SectionCard icon={ClockIcon} title={t("presence")} description={t("presenceDesc")}>
+    <SectionCard icon={ClockIcon} title={t("presence")}>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard
           label={t("estimatedHours")}
@@ -2181,12 +2181,7 @@ function AuditLogSection({ userId }: { userId: number }) {
   ];
 
   return (
-    <SectionCard
-      icon={FileTextIcon}
-      title={t("auditLog")}
-      description={t("auditLogDesc")}
-      bodyClassName="p-0"
-    >
+    <SectionCard icon={FileTextIcon} title={t("auditLog")} bodyClassName="p-0">
       <DataTable
         columns={columns}
         data={items}

@@ -134,9 +134,30 @@ function loadStoredColumns(): Set<UserColumnId> {
 
 function applicationLabel(status: string | null, t: Translate): string {
   if (!status) return t("noApplication");
-  if (status === "accepted_internal") return t("acceptedUnsent");
-  if (status === "rejected_internal") return t("rejectedUnsent");
-  return status.replace(/_/g, " ");
+  switch (status) {
+    case "draft":
+      return t("dataStatusDraft");
+    case "submitted":
+      return t("dataStatusSubmitted");
+    case "review":
+      return t("dataStatusReview");
+    case "accepted_internal":
+      return t("acceptedUnsent");
+    case "rejected_internal":
+      return t("rejectedUnsent");
+    case "accepted":
+      return t("dataStatusAccepted");
+    case "rejected":
+      return t("dataStatusRejected");
+    case "confirmed":
+      return t("confirmed");
+    case "declined":
+      return t("declined");
+    case "expired":
+      return t("dataStatusExpired");
+    default:
+      return t("dataStatusOther");
+  }
 }
 
 function applicationTone(status: string | null): "success" | "warning" | "danger" | "neutral" {

@@ -12,8 +12,9 @@
     "dev:web": "pnpm --filter @hackos/web dev",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
-    "lint": "biome check .",
+    "lint": "biome check . && pnpm check:copy",
     "lint:fix": "biome check --write .",
+    "check:copy": "node scripts/check-copy.mjs",
     "migrate": "pnpm --filter @hackos/api migrate",
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down"

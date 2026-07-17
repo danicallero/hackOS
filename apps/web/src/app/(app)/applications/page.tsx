@@ -222,7 +222,6 @@ export default function ApplicationsPage() {
     <div className="space-y-6">
       <PageHeader
         title={t("applications")}
-        description={t("applicationsDesc")}
         actions={
           canManage ? (
             <Button onClick={() => setCreating(true)}>

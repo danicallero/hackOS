@@ -154,7 +154,6 @@ export default function UnmatchedProjectsPage() {
     <div className="space-y-6">
       <PageHeader
         title={t("resolveUnmatched")}
-        description={t("resolveUnmatchedDesc")}
         actions={
           <Button variant="outline" asChild>
             <Link href="/projects">
@@ -213,11 +212,7 @@ export default function UnmatchedProjectsPage() {
         </div>
       </SectionCard>
 
-      <SectionCard
-        title={t("unmatchedParticipantsTitle")}
-        description={t("unmatchedParticipantsDesc")}
-        icon={UserPlusIcon}
-      >
+      <SectionCard title={t("unmatchedParticipantsTitle")} icon={UserPlusIcon}>
         <div className="mb-4 space-y-2">
           <Label htmlFor="user-search">{t("userSearchLabel")}</Label>
           <Input

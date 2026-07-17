@@ -236,7 +236,6 @@ export default function ChallengesPage() {
     <div className="space-y-6">
       <PageHeader
         title={canAdmin ? t("challenges") : t("myChallenges")}
-        description={t("challengesDesc")}
         actions={
           canAdmin ? (
             <Button onClick={() => setCreateOpen(true)}>
