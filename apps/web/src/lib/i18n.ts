@@ -1,6 +1,15 @@
 "use client";
 
-import { createContext, createElement, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  createElement,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { isLanguage, LANGUAGE_COOKIE_MAX_AGE, LANGUAGE_PREFERENCE_KEY } from "./locale";
 import { useMe } from "./session";
 import type { Language } from "./types";
@@ -5875,15 +5884,30 @@ interface LocaleContextValue {
 }
 const LocaleContext = createContext<LocaleContextValue | null>(null);
 
-export function LocaleProvider({
-  children,
-  initialLanguage,
-}: {
-  children: React.ReactNode;
-  initialLanguage: Language;
-}) {
+declare global {
+  interface Window {
+    __hackosInitialLanguage?: Language;
+  }
+}
+
+export function LocaleProvider({ children }: { children: React.ReactNode }) {
   const me = useMe();
-  const [language, setLanguage] = useState<Language>(initialLanguage);
+  const [language, setLanguage] = useState<Language>("es");
+  const bootLanguage = useRef<Language | null>(null);
+
+  useLayoutEffect(() => {
+    const initialLanguage = isLanguage(window.__hackosInitialLanguage)
+      ? window.__hackosInitialLanguage
+      : "es";
+    bootLanguage.current = initialLanguage;
+    setLanguage(initialLanguage);
+  }, []);
+
+  useLayoutEffect(() => {
+    document.documentElement.lang = language;
+    if (bootLanguage.current === language) document.documentElement.dataset.localeReady = "true";
+  }, [language]);
+
   useEffect(() => {
     if (isLanguage(me?.language)) setLanguage(me.language);
   }, [me?.language]);
@@ -5895,7 +5919,6 @@ export function LocaleProvider({
     }
     // biome-ignore lint/suspicious/noDocumentCookie: the server needs this preference for matching SSR.
     document.cookie = `${LANGUAGE_PREFERENCE_KEY}=${language}; Path=/; Max-Age=${LANGUAGE_COOKIE_MAX_AGE}; SameSite=Lax`;
-    document.documentElement.lang = language;
   }, [language]);
   const value = useMemo<LocaleContextValue>(
     () => ({

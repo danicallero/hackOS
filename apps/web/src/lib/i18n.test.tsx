@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import vm from "node:vm";
 import { act } from "react";
 import { hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
@@ -10,16 +13,105 @@ import type { Language } from "./types";
 
 vi.mock("./session", () => ({ useMe: () => null }));
 
+const bootstrapScript = readFileSync(resolve(process.cwd(), "public/locale-bootstrap.js"), "utf8");
 const welcome: Record<Language, string> = {
   es: "Te damos la bienvenida",
   gl: "Benvida de novo",
   en: "Welcome back",
 };
 
+interface BootstrapOptions {
+  cookie?: string;
+  stored?: string;
+  languages?: string[];
+}
+
+function runBootstrap({ cookie = "", stored, languages = [] }: BootstrapOptions = {}) {
+  const storage = new Map<string, string>();
+  if (stored !== undefined) storage.set("hackos-language", stored);
+  let cookieJar = cookie;
+  const document = {
+    get cookie() {
+      return cookieJar;
+    },
+    set cookie(value: string) {
+      const preference = value.split(";", 1)[0];
+      const otherCookies = cookieJar
+        .split("; ")
+        .filter(Boolean)
+        .filter((item) => !item.startsWith("hackos-language="));
+      cookieJar = [...otherCookies, preference].join("; ");
+    },
+  };
+  const window: { __hackosInitialLanguage?: Language } = {};
+
+  vm.runInNewContext(bootstrapScript, {
+    document,
+    localStorage: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+    },
+    navigator: { language: languages[0], languages },
+    window,
+  });
+
+  return {
+    cookie: cookieJar,
+    language: window.__hackosInitialLanguage,
+    stored: storage.get("hackos-language"),
+  };
+}
+
 function LocalizedCopy() {
   const { t } = useLocale();
   return <p>{t("welcomeBack")}</p>;
 }
+
+describe("locale bootstrap", () => {
+  it.each([
+    ["es-MX", "es"],
+    ["gl-ES", "gl"],
+    ["en-GB", "en"],
+    ["fr-FR", "es"],
+  ] as const)("detects first-visit %s as %s", (browserLanguage, expected) => {
+    const result = runBootstrap({ languages: [browserLanguage] });
+
+    expect(result.language).toBe(expected);
+    expect(result.stored).toBe(expected);
+    expect(result.cookie).toContain(`hackos-language=${expected}`);
+  });
+
+  it.each(["es", "gl", "en"] as const)("keeps persisted %s across reloads", (language) => {
+    const firstVisit = runBootstrap({ languages: [`${language}-ES`] });
+    const reload = runBootstrap({
+      cookie: firstVisit.cookie,
+      stored: firstVisit.stored,
+      languages: [language === "en" ? "gl-ES" : "en-GB"],
+    });
+
+    expect(reload.language).toBe(language);
+    expect(reload.stored).toBe(language);
+  });
+
+  it.each(["gl", "en"] as const)("migrates a legacy local-storage-only %s choice", (language) => {
+    const result = runBootstrap({ stored: language, languages: ["es-ES"] });
+
+    expect(result.language).toBe(language);
+    expect(result.cookie).toContain(`hackos-language=${language}`);
+  });
+
+  it("ignores invalid persisted and browser values with a deterministic Spanish fallback", () => {
+    const result = runBootstrap({
+      cookie: "hackos-language=invalid",
+      stored: "pt",
+      languages: ["fr-FR", "de-DE"],
+    });
+
+    expect(result.language).toBe("es");
+    expect(result.stored).toBe("es");
+    expect(result.cookie).toContain("hackos-language=es");
+  });
+});
 
 describe("LocaleProvider hydration", () => {
   let root: Root | undefined;
@@ -38,6 +130,9 @@ describe("LocaleProvider hydration", () => {
     if (root) act(() => root?.unmount());
     root = undefined;
     document.body.replaceChildren();
+    document.documentElement.lang = "es";
+    document.documentElement.dataset.localeReady = "false";
+    delete window.__hackosInitialLanguage;
     window.localStorage.clear();
     vi.restoreAllMocks();
   });
@@ -46,19 +141,19 @@ describe("LocaleProvider hydration", () => {
     "es",
     "gl",
     "en",
-  ] as const)("hydrates %s from the server locale even when legacy storage differs", async (language) => {
-    window.localStorage.setItem("hackos-language", language === "en" ? "gl" : "en");
-
+  ] as const)("hydrates the static Spanish shell before transitioning to %s", async (language) => {
     const browserWindow = globalThis.window;
     Object.defineProperty(globalThis, "window", { configurable: true, value: undefined });
     const serverHtml = renderToString(
-      <LocaleProvider initialLanguage={language}>
+      <LocaleProvider>
         <LocalizedCopy />
       </LocaleProvider>,
     );
     Object.defineProperty(globalThis, "window", { configurable: true, value: browserWindow });
 
-    expect(serverHtml).toContain(welcome[language]);
+    expect(serverHtml).toContain(welcome.es);
+    window.__hackosInitialLanguage = language;
+    document.documentElement.dataset.localeReady = "false";
     const container = document.createElement("div");
     container.innerHTML = serverHtml;
     document.body.append(container);
@@ -67,13 +162,15 @@ describe("LocaleProvider hydration", () => {
     await act(async () => {
       root = hydrateRoot(
         container,
-        <LocaleProvider initialLanguage={language}>
+        <LocaleProvider>
           <LocalizedCopy />
         </LocaleProvider>,
       );
     });
 
     expect(container.textContent).toBe(welcome[language]);
+    expect(document.documentElement.lang).toBe(language);
+    expect(document.documentElement.dataset.localeReady).toBe("true");
     expect(consoleError.mock.calls.flat().join("\n")).not.toContain("Hydration failed");
   });
 });

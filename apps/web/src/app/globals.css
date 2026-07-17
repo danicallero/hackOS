@@ -215,3 +215,13 @@
     line-height: var(--line-height-meta);
   }
 }
+
+html[data-locale-ready="false"] body {
+  visibility: hidden;
+}
+
+@media (scripting: none) {
+  html[data-locale-ready="false"] body {
+    visibility: visible;
+  }
+}
