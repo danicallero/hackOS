@@ -82,4 +82,6 @@ export const searchQuery = z.object({ q: z.string().min(1) });
 export const tvModeBody = z.object({
   mode: z.enum(["rooms", "schedule", "sponsors", "announcement", "wifi", "timer"]),
   payload: z.unknown().optional(),
+  // H42 automatic expiry: past this point tv-expiry.ts reverts the fleet to "rooms".
+  expiresAt: z.iso.datetime({ offset: true }).nullable().optional(),
 });

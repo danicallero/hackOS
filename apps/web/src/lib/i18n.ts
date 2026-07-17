@@ -2380,6 +2380,16 @@ const dict: Record<string, I18nText> = {
     gl: "{channel} para {label}",
     en: "{channel} for {label}",
   },
+  mandatoryChannelTitle: {
+    es: "Obligatorio: sin este aviso, las llamadas de cola no funcionan.",
+    gl: "Obrigatorio: sen este aviso, as chamadas de cola non funcionan.",
+    en: "Required: without this, queue calls stop working.",
+  },
+  mandatoryChannelAria: {
+    es: "{channel} para {label}, obligatorio y siempre activo",
+    gl: "{channel} para {label}, obrigatorio e sempre activo",
+    en: "{channel} for {label}, required and always on",
+  },
   noUpcomingActivities: {
     es: "No hay actividades próximas disponibles para activar ahora mismo.",
     gl: "Non hai actividades próximas dispoñibles para activar agora mesmo.",
@@ -2429,6 +2439,14 @@ const dict: Record<string, I18nText> = {
   colStarts: { es: "Empieza", gl: "Comeza", en: "Starts" },
   colVisibility: { es: "Visibilidad", gl: "Visibilidade", en: "Visibility" },
   visibilityPublicDefault: { es: "Público", gl: "Público", en: "Public" },
+  colStatus: { es: "Estado", gl: "Estado", en: "Status" },
+  statusPublic: { es: "Público", gl: "Público", en: "Public" },
+  statusEnded: { es: "Terminado", gl: "Rematado", en: "Ended" },
+  publishDestinationsHint: {
+    es: "Hora local ({timezone}). Al publicarse aparece en la web, el móvil y las pantallas.",
+    gl: "Hora local ({timezone}). Ao publicarse aparece na web, no móbil e nas pantallas.",
+    en: "Local time ({timezone}). Once published, it appears on the web, mobile, and screens.",
+  },
   newItem: { es: "Nuevo elemento", gl: "Novo elemento", en: "New item" },
   searchSchedulePlaceholder: {
     es: "Buscar en el programa…",
@@ -2556,6 +2574,11 @@ const dict: Record<string, I18nText> = {
   statusLive: { es: "En directo", gl: "En directo", en: "Live" },
   statusExpired: { es: "Caducado", gl: "Caducado", en: "Expired" },
   noEnd: { es: "Sin fin", gl: "Sen fin", en: "No end" },
+  colChannels: { es: "Canales", gl: "Canles", en: "Channels" },
+  colDelivery: { es: "Entrega", gl: "Entrega", en: "Delivery" },
+  deliveryDelivered: { es: "Entregado", gl: "Entregado", en: "Delivered" },
+  deliverySending: { es: "Enviando…", gl: "Enviando…", en: "Sending…" },
+  deliveryNotSent: { es: "Aún no enviado", gl: "Aínda non enviado", en: "Not sent yet" },
   announcementsDesc: {
     es: "Publica mensajes temporales en pantallas, móviles y la bandeja de entrada.",
     gl: "Publica mensaxes temporais en pantallas, móbiles e a caixa de entrada.",
@@ -2750,6 +2773,84 @@ const dict: Record<string, I18nText> = {
     gl: "Déixao en branco para usar a hora de fin do evento.",
     en: "Leave blank to use the event end time.",
   },
+  currentBroadcast: { es: "Emisión actual", gl: "Emisión actual", en: "Current broadcast" },
+  liveTvPreview: {
+    es: "Vista previa en directo de la TV",
+    gl: "Vista previa en directo da TV",
+    en: "Live TV preview",
+  },
+  tvFeedConnected: {
+    es: "Actualizaciones en directo conectadas",
+    gl: "Actualizacións en directo conectadas",
+    en: "Live updates connected",
+  },
+  tvFeedReconnecting: {
+    es: "Reconectando con las pantallas…",
+    gl: "Reconectando coas pantallas…",
+    en: "Reconnecting to the screens…",
+  },
+  lastBroadcastAt: {
+    es: "Última emisión: {time}",
+    gl: "Última emisión: {time}",
+    en: "Last broadcast: {time}",
+  },
+  autoRevertsAt: {
+    es: "Vuelve a salas automáticamente a las {time}",
+    gl: "Volve a salas automaticamente ás {time}",
+    en: "Automatically reverts to rooms at {time}",
+  },
+  noAutoRevert: {
+    es: "Sin caducidad automática",
+    gl: "Sen caducidade automática",
+    en: "No automatic expiry",
+  },
+  draftNotYetBroadcastDesc: {
+    es: "Este modo aún no se ha emitido a las pantallas.",
+    gl: "Este modo aínda non se emitiu ás pantallas.",
+    en: "This mode hasn't been broadcast to the screens yet.",
+  },
+  draftMatchesLiveDesc: {
+    es: "Esto es lo que se está mostrando ahora mismo.",
+    gl: "Isto é o que se está a amosar agora mesmo.",
+    en: "This matches what's showing right now.",
+  },
+  autoRevertLabel: {
+    es: "Volver a salas automáticamente",
+    gl: "Volver a salas automaticamente",
+    en: "Auto-revert to rooms",
+  },
+  autoRevertNone: { es: "Nunca (manual)", gl: "Nunca (manual)", en: "Never (manual)" },
+  autoRevertMinutes: {
+    es: "En {count} minutos",
+    gl: "En {count} minutos",
+    en: "In {count} minutes",
+  },
+  autoRevertHint: {
+    es: "Pasado este tiempo, las pantallas vuelven solas a la vista de salas.",
+    gl: "Pasado este tempo, as pantallas volven soas á vista de salas.",
+    en: "After this time, screens automatically switch back to the rooms view.",
+  },
+  confirmWifiBroadcastTitle: {
+    es: "¿Mostrar la contraseña wifi en las pantallas?",
+    gl: "¿Amosar o contrasinal wifi nas pantallas?",
+    en: "Show the Wi-Fi password on screens?",
+  },
+  confirmUrgentBroadcastTitle: {
+    es: "¿Emitir este aviso a pantalla completa?",
+    gl: "¿Emitir este aviso a pantalla completa?",
+    en: "Broadcast this full-screen announcement?",
+  },
+  confirmWifiBroadcastDesc: {
+    es: "La red y la contraseña quedarán visibles de inmediato en todas las TV abiertas. Revisa los datos antes de confirmar.",
+    gl: "A rede e o contrasinal quedarán visibles de inmediato en todas as TV abertas. Revisa os datos antes de confirmar.",
+    en: "The network and password become visible immediately on every open TV. Review the details before confirming.",
+  },
+  confirmUrgentBroadcastDesc: {
+    es: "Esto sustituye de inmediato lo que se muestra en todas las pantallas del recinto.",
+    gl: "Isto substitúe de inmediato o que se amosa en todas as pantallas do recinto.",
+    en: "This immediately replaces what every screen in the venue is showing.",
+  },
+  broadcastNow: { es: "Emitir ahora", gl: "Emitir agora", en: "Broadcast now" },
 
   // ---- Admin: user profile detail ----
   couldNotLoadUserProfile: {

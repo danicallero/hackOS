@@ -6,7 +6,17 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { LockIcon, MegaphoneIcon, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
+import {
+  CheckCircle2Icon,
+  ClockIcon,
+  InboxIcon,
+  LockIcon,
+  MegaphoneIcon,
+  PencilIcon,
+  PlusIcon,
+  SmartphoneIcon,
+  Trash2Icon,
+} from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -30,7 +40,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError } from "@/lib/api";
-import { formatScheduledDateTime, fromDatetimeLocal } from "@/lib/datetime";
+import { formatScheduledDateTime, fromDatetimeLocal, getTimeZoneLabel } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { type Announcement, type AnnouncementInput, notificationsApi } from "@/lib/notifications";
 import { useCan } from "@/lib/session";
@@ -82,6 +92,37 @@ function statusLabel(status: AnnouncementStatus, t: Translate): string {
 
 function audienceLabel(targetRole: string | null, t: Translate): string {
   return targetRole === "participant" ? t("participantsAudience") : t("everyoneAudience");
+}
+
+/** Every announcement fans out over the same two channels today (H50). */
+function AnnouncementChannels() {
+  return (
+    <span className="text-muted-foreground inline-flex items-center gap-2 text-xs">
+      <span className="inline-flex items-center gap-1">
+        <InboxIcon className="size-3.5" aria-hidden="true" />
+        {"·"}
+      </span>
+      <span className="inline-flex items-center gap-1">
+        <SmartphoneIcon className="size-3.5" aria-hidden="true" />
+      </span>
+    </span>
+  );
+}
+
+type DeliveryState = "delivered" | "sending" | "notSent";
+
+function deliveryState(a: Announcement): DeliveryState {
+  if (a.fanned_out_at) return "delivered";
+  return announcementStatus(a) === "scheduled" ? "notSent" : "sending";
+}
+
+function deliveryLabel(state: DeliveryState, t: Translate): string {
+  const map: Record<DeliveryState, string> = {
+    delivered: t("deliveryDelivered"),
+    sending: t("deliverySending"),
+    notSent: t("deliveryNotSent"),
+  };
+  return map[state];
 }
 
 export default function AnnouncementsPage() {
@@ -189,6 +230,29 @@ export default function AnnouncementsPage() {
           {a.expires_at ? formatScheduledDateTime(a.expires_at) : t("noEnd")}
         </span>
       ),
+    },
+    {
+      id: "channels",
+      header: t("colChannels"),
+      cell: () => <AnnouncementChannels />,
+    },
+    {
+      id: "delivery",
+      header: t("colDelivery"),
+      sortValue: (a) => deliveryState(a),
+      cell: (a) => {
+        const state = deliveryState(a);
+        return (
+          <span className="inline-flex items-center gap-1.5 text-xs">
+            {state === "delivered" ? (
+              <CheckCircle2Icon className="text-success size-3.5" aria-hidden="true" />
+            ) : (
+              <ClockIcon className="text-muted-foreground size-3.5" aria-hidden="true" />
+            )}
+            {deliveryLabel(state, t)}
+          </span>
+        );
+      },
     },
     {
       id: "created",
@@ -404,6 +468,7 @@ function AnnouncementFormModal({
               onChange={(publishAt) => setValues((v) => ({ ...v, publishAt: publishAt || null }))}
               emptyLabel={t("immediatelyLabel")}
               addLabel={t("scheduleStart")}
+              description={t("publishDestinationsHint", { timezone: getTimeZoneLabel() })}
             />
           </Field>
           <Field label={t("visibleUntil")}>

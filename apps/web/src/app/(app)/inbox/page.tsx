@@ -16,6 +16,7 @@ import {
   CheckIcon,
   ChevronDownIcon,
   InboxIcon,
+  LockIcon,
   PlusIcon,
   SlidersHorizontalIcon,
 } from "lucide-react";
@@ -475,18 +476,36 @@ function PreferencesTab() {
                 <td className="px-4 py-3">
                   {row.label}
                   {row.mandatory && (
-                    <span className="text-muted-foreground ml-2 text-xs">({t("alwaysOn")})</span>
+                    <span className="text-muted-foreground ml-2 inline-flex items-center gap-1 text-xs">
+                      <LockIcon className="size-3" aria-hidden="true" />
+                      {t("alwaysOn")}
+                    </span>
                   )}
                 </td>
                 {prefs.channels.map((channel) => {
-                  const enabled = row.mandatory
-                    ? true
-                    : (overrideFor(row.category, channel)?.enabled ?? true);
+                  if (row.mandatory) {
+                    return (
+                      <td key={channel} className="px-4 py-3 text-center">
+                        <span
+                          className="text-muted-foreground inline-flex items-center justify-center"
+                          title={t("mandatoryChannelTitle")}
+                          role="img"
+                          aria-label={t("mandatoryChannelAria", {
+                            channel: channelLabels[channel],
+                            label: row.label,
+                          })}
+                        >
+                          <LockIcon className="size-4" aria-hidden="true" />
+                        </span>
+                      </td>
+                    );
+                  }
+                  const enabled = overrideFor(row.category, channel)?.enabled ?? true;
                   return (
                     <td key={channel} className="px-4 py-3 text-center">
                       <Checkbox
                         checked={enabled}
-                        disabled={row.mandatory || busy}
+                        disabled={busy}
                         onCheckedChange={(checked) =>
                           toggle(row.category, channel, checked === true)
                         }
