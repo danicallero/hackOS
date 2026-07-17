@@ -24,9 +24,12 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import type { SaveState } from "@/app/(app)/applications/workflow";
+import { applicantTimelineState } from "@/app/(app)/applications/workflow";
+import { AlertModal } from "@/components/common/alert-modal";
 import { EmptyState } from "@/components/common/empty-state";
-import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
+import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -39,6 +42,7 @@ import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useMe } from "@/lib/session";
 import type { Language } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import {
   enrichTemplate,
   type FieldValue,
@@ -78,6 +82,7 @@ export default function MyApplicationDetailPage() {
   const [acting, setActing] = useState(false);
   const [releaseOpen, setReleaseOpen] = useState(false);
   const [privacyNotice, setPrivacyNotice] = useState<string | null>(null);
+  const [saveState, setSaveState] = useState<SaveState>("saved");
 
   // A background live-refresh shouldn't flash the whole page away — only
   // the very first load (before there's anything to show) should.
@@ -112,6 +117,7 @@ export default function MyApplicationDetailPage() {
       }
     }
     setValues(seeded);
+    setSaveState("saved");
     setFieldErrors({});
     // Surface an unexpected error (not a plain 404 "no response / closed form").
     if (
@@ -161,6 +167,7 @@ export default function MyApplicationDetailPage() {
   const canConfirm = status === "accepted";
 
   function setValue(key: string, value: FieldValue) {
+    setSaveState("unsaved");
     setValues((prev) => ({ ...prev, [key]: value }));
   }
 
@@ -183,6 +190,7 @@ export default function MyApplicationDetailPage() {
 
   async function handleSaveDraft() {
     setSaving(true);
+    setSaveState("saving");
     try {
       const saved = await api.put<MyResponseDetail>(`/api/applications/${id}/response`, {
         responses: values,
@@ -190,8 +198,10 @@ export default function MyApplicationDetailPage() {
       setResponse(saved);
       setValues(saved.responses ?? {});
       setFieldErrors({});
+      setSaveState("saved");
       toast.success(t("draftSaved"));
     } catch (err) {
+      setSaveState("error");
       toast.error(err instanceof ApiError ? err.message : t("couldNotSaveDraft"));
     } finally {
       setSaving(false);
@@ -204,6 +214,7 @@ export default function MyApplicationDetailPage() {
       return;
     }
     setSubmitting(true);
+    setSaveState("saving");
     try {
       // Persist the latest values first so a brand-new response exists to submit.
       await api.put<MyResponseDetail>(`/api/applications/${id}/response`, { responses: values });
@@ -232,8 +243,10 @@ export default function MyApplicationDetailPage() {
       setValues(res.response.responses ?? {});
       setPrivacyNotice(res.privacy_notice);
       setFieldErrors({});
+      setSaveState("saved");
       toast.success(t("applicationSubmitted"));
     } catch (err) {
+      setSaveState("error");
       if (err instanceof ApiError) {
         setFieldErrors(fieldErrorsFromApi(err));
         toast.error(err.message);
@@ -322,6 +335,8 @@ export default function MyApplicationDetailPage() {
         }
       />
 
+      <ApplicationTimeline response={response} />
+
       {/* Confirm / decline place once accepted (H15). */}
       {canConfirm && (
         <SectionCard
@@ -334,12 +349,17 @@ export default function MyApplicationDetailPage() {
             <AlertTitle>{t("headsUp")}</AlertTitle>
             <AlertDescription>{t("dietaryDataDeletedWarn")}</AlertDescription>
           </Alert>
+          {response?.confirmation_expires_at && (
+            <p className="text-sm font-medium tabular-nums">
+              {t("deadlineLabel", { date: fmtDateTime(response.confirmation_expires_at) })}
+            </p>
+          )}
           <div className="flex flex-wrap gap-2">
             <Button onClick={handleConfirm} disabled={acting}>
               {acting && <Spinner />}
               {t("confirmPlace")}
             </Button>
-            <Button variant="outline" onClick={handleDecline} disabled={acting}>
+            <Button variant="outline" onClick={() => setReleaseOpen(true)} disabled={acting}>
               {t("decline")}
             </Button>
           </div>
@@ -365,26 +385,6 @@ export default function MyApplicationDetailPage() {
               {t("cantAttendRelease")}
             </Button>
           </div>
-          <Modal
-            open={releaseOpen}
-            onOpenChange={setReleaseOpen}
-            icon={ShieldAlertIcon}
-            title={t("releaseYourPlace")}
-            description={t("releaseYourPlaceDesc")}
-            footer={
-              <>
-                <Button variant="outline" onClick={() => setReleaseOpen(false)} disabled={acting}>
-                  {t("keepMyPlace")}
-                </Button>
-                <Button variant="destructive" onClick={handleDecline} disabled={acting}>
-                  {acting && <Spinner />}
-                  {t("yesReleaseMyPlace")}
-                </Button>
-              </>
-            }
-          >
-            <p className="text-muted-foreground text-sm">{t("releaseCantBeUndone")}</p>
-          </Modal>
         </SectionCard>
       )}
       {status === "declined" && (
@@ -411,6 +411,20 @@ export default function MyApplicationDetailPage() {
         </Alert>
       )}
 
+      {response?.submitted_at && (
+        <Alert>
+          <ShieldAlertIcon aria-hidden="true" />
+          <AlertTitle>{t("sensitiveDataLifecycleTitle")}</AlertTitle>
+          <AlertDescription>
+            {status === "confirmed"
+              ? t("sensitiveDataLifecycleConfirmed")
+              : status === "declined" || status === "expired" || status === "rejected"
+                ? t("sensitiveDataLifecycleDeleted")
+                : t("sensitiveDataLifecycleSubmitted")}
+          </AlertDescription>
+        </Alert>
+      )}
+
       <SectionCard
         icon={ClipboardListIcon}
         title={editable ? t("yourAnswers") : t("yourSubmittedAnswers")}
@@ -418,6 +432,7 @@ export default function MyApplicationDetailPage() {
         footer={
           editable ? (
             <>
+              <SaveStatus state={saving || submitting ? "saving" : saveState} className="mr-auto" />
               <Button variant="outline" onClick={handleSaveDraft} disabled={saving || submitting}>
                 {saving && <Spinner />}
                 {t("saveDraft")}
@@ -469,7 +484,61 @@ export default function MyApplicationDetailPage() {
           {t("submittedOnPrefix", { date: fmtDateTime(response.submitted_at) })}
         </p>
       )}
+
+      <AlertModal
+        open={releaseOpen}
+        onOpenChange={setReleaseOpen}
+        title={t("releaseYourPlace")}
+        description={t("releaseYourPlaceDesc")}
+        cancelLabel={t("keepMyPlace")}
+        confirmLabel={t("yesReleaseMyPlace")}
+        destructive
+        pending={acting}
+        onConfirm={handleDecline}
+      >
+        <p className="text-muted-foreground text-pretty text-sm">{t("releaseCantBeUndone")}</p>
+      </AlertModal>
     </div>
+  );
+}
+
+function ApplicationTimeline({ response }: { response: MyResponseDetail | null }) {
+  const { t } = useLocale();
+  const status = response?.status ?? "draft";
+  const timeline = applicantTimelineState(status, response?.submitted_at ?? null);
+  const steps = [
+    { label: t("timelineApplication"), reached: timeline.application },
+    { label: t("timelineSubmitted"), reached: timeline.submitted },
+    { label: t("timelineReview"), reached: timeline.review },
+    { label: t("timelineDecision"), reached: timeline.decision },
+    { label: t("timelinePlace"), reached: timeline.place },
+  ];
+  return (
+    <section aria-labelledby="application-timeline-title" className="rounded-lg border p-4">
+      <h2 id="application-timeline-title" className="text-balance text-sm font-semibold">
+        {t("applicantTimeline")}
+      </h2>
+      <ol className="mt-3 grid gap-2 sm:grid-cols-5">
+        {steps.map((step, index) => (
+          <li key={step.label} className="flex items-center gap-2 text-sm sm:block">
+            <span
+              aria-hidden="true"
+              className={cn(
+                "inline-flex size-6 items-center justify-center rounded-full border text-xs font-medium tabular-nums",
+                step.reached
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "text-muted-foreground",
+              )}
+            >
+              {index + 1}
+            </span>
+            <span className={step.reached ? "font-medium" : "text-muted-foreground"}>
+              {step.label}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }
 

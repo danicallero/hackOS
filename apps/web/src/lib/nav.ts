@@ -148,7 +148,11 @@ export const NAV: NavSection[] = [
         title: "applications",
         href: "/applications",
         icon: ClipboardListIcon,
-        anyCapability: [CAPABILITIES.APPLICATIONS_REVIEW, CAPABILITIES.APPLICATIONS_MANAGE],
+        anyCapability: [
+          CAPABILITIES.APPLICATIONS_REVIEW,
+          CAPABILITIES.APPLICATIONS_DECIDE,
+          CAPABILITIES.APPLICATIONS_MANAGE,
+        ],
       },
       {
         title: "manageSchedule",

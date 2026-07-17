@@ -74,6 +74,7 @@ export interface MyResponseDetail {
   status: string;
   responses: Record<string, unknown>;
   decision_sent_at: string | null;
+  confirmation_expires_at: string | null;
   confirmed_at: string | null;
   declined_at: string | null;
   submitted_at: string | null;
