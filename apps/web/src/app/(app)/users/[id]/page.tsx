@@ -378,6 +378,7 @@ function ProjectsTab({ userId }: { userId: number }) {
       onRowClick={(project) => {
         router.push(`/projects/${project.id}`);
       }}
+      getRowLabel={(project) => project.name}
       searchable={(project) =>
         `${project.name} ${(project.challenges ?? []).map((challenge) => challenge.title).join(" ")} ${
           Array.isArray(project.prizes) ? project.prizes.join(" ") : ""

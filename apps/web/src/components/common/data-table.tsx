@@ -1,7 +1,15 @@
 "use client";
 
-import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, type LucideIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import {
+  ArrowDownIcon,
+  ArrowUpDownIcon,
+  ArrowUpIcon,
+  type LucideIcon,
+  SearchIcon,
+  XIcon,
+} from "lucide-react";
+import { useId, useMemo, useState } from "react";
+import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -31,6 +39,8 @@ export interface Column<T> {
   headerClassName?: string;
   /** e.g. "w-40" or "min-w-48". */
   width?: string;
+  /** Accessible column name when the visual header is not plain text. */
+  sortLabel?: string;
 }
 
 interface DataTableProps<T> {
@@ -40,15 +50,21 @@ interface DataTableProps<T> {
   /** Trailing actions cell (e.g. a "…" dropdown). */
   rowActions?: (row: T) => React.ReactNode;
   onRowClick?: (row: T) => void;
+  /** Accessible name for an interactive row. Required in practice with onRowClick. */
+  getRowLabel?: (row: T) => string;
+  /** Use button semantics when activating the row opens an in-page detail view. */
+  rowRole?: "link" | "button";
   /** Provide searchable text per row to show a filter box. */
   searchable?: (row: T) => string;
   searchPlaceholder?: string;
+  searchLabel?: string;
   /** Extra toolbar content, right-aligned (e.g. a Columns toggle, a button). */
   toolbar?: React.ReactNode;
   /** Enable client-side pagination at this page size. */
   pageSize?: number;
   loading?: boolean;
-  empty?: { icon?: LucideIcon; title: string; description?: string };
+  empty?: { icon?: LucideIcon; title: string; description?: string; action?: React.ReactNode };
+  error?: { message: string; onRetry?: () => void };
   className?: string;
   /** Enable row selection via checkboxes. */
   selectable?: boolean;
@@ -72,12 +88,16 @@ export function DataTable<T>({
   getRowId,
   rowActions,
   onRowClick,
+  getRowLabel,
+  rowRole = "link",
   searchable,
   searchPlaceholder,
+  searchLabel,
   toolbar,
   pageSize,
   loading,
   empty,
+  error,
   className,
   selectable,
   selectedIds,
@@ -87,6 +107,7 @@ export function DataTable<T>({
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<{ id: string; dir: "asc" | "desc" } | null>(null);
   const [page, setPage] = useState(0);
+  const searchId = useId();
 
   const filtered = useMemo(() => {
     if (!searchable || !query.trim()) return data;
@@ -139,20 +160,59 @@ export function DataTable<T>({
     onSelectionChange(next);
   };
 
+  const clearSearch = () => {
+    setQuery("");
+    setPage(0);
+  };
+
+  const selectedCount = selectedIds?.size ?? 0;
+
   return (
     <Card className={cn("gap-0 overflow-hidden py-0", className)}>
       {showToolbar && (
-        <div className="flex items-center gap-2 p-4">
+        <div className="flex flex-wrap items-center gap-2 p-4">
           {searchable && (
-            <Input
-              value={query}
-              onChange={(e) => {
-                setQuery(e.target.value);
-                setPage(0);
-              }}
-              placeholder={searchPlaceholder ?? t("filterPlaceholder")}
-              className="h-9 max-w-xs"
-            />
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+              <div className="relative w-full max-w-xs">
+                <label htmlFor={searchId} className="sr-only">
+                  {searchLabel ?? t("searchTable")}
+                </label>
+                <SearchIcon
+                  className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+                  aria-hidden="true"
+                />
+                <Input
+                  id={searchId}
+                  type="search"
+                  value={query}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    setPage(0);
+                  }}
+                  placeholder={searchPlaceholder ?? t("filterPlaceholder")}
+                  className="h-9 pr-9 pl-9"
+                />
+                {query && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute top-1/2 right-0.5 size-8 -translate-y-1/2"
+                    onClick={clearSearch}
+                    aria-label={t("clearSearch")}
+                  >
+                    <XIcon className="size-4" aria-hidden="true" />
+                  </Button>
+                )}
+              </div>
+              <span
+                role="status"
+                aria-live="polite"
+                className="text-muted-foreground text-xs tabular-nums"
+              >
+                {t("tableResultCount", { count: filtered.length })}
+              </span>
+            </div>
           )}
           {toolbar && <div className="ml-auto flex items-center gap-2">{toolbar}</div>}
         </div>
@@ -173,6 +233,15 @@ export function DataTable<T>({
               {columns.map((col) => (
                 <TableHead
                   key={col.id}
+                  aria-sort={
+                    sort?.id === col.id
+                      ? sort.dir === "asc"
+                        ? "ascending"
+                        : "descending"
+                      : col.sortValue
+                        ? "none"
+                        : undefined
+                  }
                   className={cn(alignClass[col.align ?? "left"], col.width, col.headerClassName)}
                 >
                   {col.sortValue ? (
@@ -180,6 +249,10 @@ export function DataTable<T>({
                       type="button"
                       onClick={() => toggleSort(col.id)}
                       className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 font-medium transition-colors"
+                      aria-label={t("sortBy", {
+                        column:
+                          col.sortLabel ?? (typeof col.header === "string" ? col.header : col.id),
+                      })}
                     >
                       {col.header}
                       {sort?.id === col.id ? (
@@ -201,7 +274,13 @@ export function DataTable<T>({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {loading ? (
+            {error ? (
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={colCount} className="p-4">
+                  <ContextualError message={error.message} onRetry={error.onRetry} />
+                </TableCell>
+              </TableRow>
+            ) : loading ? (
               Array.from({ length: pageSize ?? 5 }, (_, i) => `skeleton-row-${i}`).map((rowKey) => (
                 <TableRow key={rowKey} className="hover:bg-transparent">
                   {Array.from({ length: colCount }, (_, j) => `${rowKey}-cell-${j}`).map(
@@ -216,11 +295,24 @@ export function DataTable<T>({
             ) : rows.length === 0 ? (
               <TableRow className="hover:bg-transparent">
                 <TableCell colSpan={colCount} className="p-0">
-                  <EmptyState
-                    icon={empty?.icon}
-                    title={empty?.title ?? t("nothingToShow")}
-                    description={empty?.description}
-                  />
+                  {query.trim() ? (
+                    <EmptyState
+                      title={t("noFilteredResults")}
+                      description={t("tryDifferentSearch")}
+                      action={
+                        <Button type="button" variant="outline" size="sm" onClick={clearSearch}>
+                          {t("clearFilters")}
+                        </Button>
+                      }
+                    />
+                  ) : (
+                    <EmptyState
+                      icon={empty?.icon}
+                      title={empty?.title ?? t("nothingToShow")}
+                      description={empty?.description}
+                      action={empty?.action}
+                    />
+                  )}
                 </TableCell>
               </TableRow>
             ) : (
@@ -231,7 +323,27 @@ export function DataTable<T>({
                   <TableRow
                     key={rowId}
                     onClick={onRowClick ? () => onRowClick(row) : undefined}
-                    className={cn(onRowClick && "cursor-pointer")}
+                    onKeyDown={
+                      onRowClick
+                        ? (event) => {
+                            if (event.target !== event.currentTarget) return;
+                            if (
+                              event.key === "Enter" ||
+                              (rowRole === "button" && event.key === " ")
+                            ) {
+                              event.preventDefault();
+                              onRowClick(row);
+                            }
+                          }
+                        : undefined
+                    }
+                    tabIndex={onRowClick ? 0 : undefined}
+                    role={onRowClick ? rowRole : undefined}
+                    aria-label={onRowClick ? (getRowLabel?.(row) ?? rowId) : undefined}
+                    className={cn(
+                      onRowClick &&
+                        "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                    )}
                   >
                     {selectable && (
                       <TableCell className="w-10" onClick={(e) => e.stopPropagation()}>
@@ -263,10 +375,22 @@ export function DataTable<T>({
         </Table>
       </div>
       {pageSize && sorted.length > pageSize && (
-        <div className="flex items-center justify-between gap-2 border-t p-3">
-          <span className="text-muted-foreground text-xs">
-            {current * pageSize + 1}–{Math.min((current + 1) * pageSize, sorted.length)} of{" "}
-            {sorted.length}
+        <nav
+          className="flex items-center justify-between gap-2 border-t p-3"
+          aria-label={t("tablePagination")}
+        >
+          <span
+            role="status"
+            aria-live="polite"
+            className="text-muted-foreground text-xs tabular-nums"
+          >
+            {t("paginationSummary", {
+              start: current * pageSize + 1,
+              end: Math.min((current + 1) * pageSize, sorted.length),
+              total: sorted.length,
+              page: current + 1,
+              pages: pageCount,
+            })}
           </span>
           <div className="flex gap-2">
             <Button
@@ -275,7 +399,7 @@ export function DataTable<T>({
               disabled={current === 0}
               onClick={() => setPage((p) => Math.max(0, p - 1))}
             >
-              Previous
+              {t("previous")}
             </Button>
             <Button
               variant="outline"
@@ -283,10 +407,15 @@ export function DataTable<T>({
               disabled={current >= pageCount - 1}
               onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
             >
-              Next
+              {t("next")}
             </Button>
           </div>
-        </div>
+        </nav>
+      )}
+      {selectable && (
+        <p role="status" aria-live="polite" className="sr-only">
+          {t("selectionCount", { count: selectedCount })}
+        </p>
       )}
     </Card>
   );

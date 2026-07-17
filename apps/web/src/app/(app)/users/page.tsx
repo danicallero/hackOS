@@ -2,7 +2,7 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { SlidersHorizontalIcon, UsersIcon } from "lucide-react";
+import { SearchIcon, SlidersHorizontalIcon, UsersIcon, XIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -276,6 +276,8 @@ export default function UsersPage() {
   const [users, setUsers] = useState<UserListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [retryNonce, setRetryNonce] = useState(0);
   const [emailFilter, setEmailFilter] = useState("all");
   const [roleFilter, setRoleFilter] = useState("all");
   const [spotFilter, setSpotFilter] = useState("all");
@@ -332,6 +334,7 @@ export default function UsersPage() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setLoadError(null);
     const handle = setTimeout(() => {
       api
         .get<UserList>("/api/users", { query: { q: q.trim() || undefined, limit: 200 } })
@@ -344,7 +347,9 @@ export default function UsersPage() {
           if (cancelled) return;
           setUsers([]);
           setTotal(0);
-          toast.error(err instanceof ApiError ? err.message : t("couldNotLoadUsers"));
+          const message = err instanceof ApiError ? err.message : t("couldNotLoadUsers");
+          setLoadError(message);
+          toast.error(message);
         })
         .finally(() => {
           if (!cancelled) setLoading(false);
@@ -354,7 +359,7 @@ export default function UsersPage() {
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [q, liveRefresh, t]);
+  }, [q, liveRefresh, retryNonce, t]);
 
   const filteredUsers = useMemo(
     () =>
@@ -426,12 +431,42 @@ export default function UsersPage() {
       />
 
       <div className="flex flex-wrap items-center gap-2">
-        <Input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder={t("searchUsersPlaceholder")}
-          className="h-9 max-w-sm"
-        />
+        <div className="relative w-full max-w-sm">
+          <label htmlFor="user-search" className="sr-only">
+            {t("searchUsers")}
+          </label>
+          <SearchIcon
+            className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+            aria-hidden="true"
+          />
+          <Input
+            id="user-search"
+            type="search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={t("searchUsersPlaceholder")}
+            className="h-9 pr-9 pl-9"
+          />
+          {q && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="absolute top-1/2 right-0.5 size-8 -translate-y-1/2"
+              onClick={() => setQ("")}
+              aria-label={t("clearSearch")}
+            >
+              <XIcon className="size-4" aria-hidden="true" />
+            </Button>
+          )}
+        </div>
+        <span
+          role="status"
+          aria-live="polite"
+          className="text-muted-foreground text-xs tabular-nums"
+        >
+          {t("tableResultCount", { count: filteredUsers.length })}
+        </span>
         <Select value={emailFilter} onValueChange={setEmailFilter}>
           <SelectTrigger className="h-9 w-40">
             <SelectValue />
@@ -496,8 +531,14 @@ export default function UsersPage() {
         data={filteredUsers}
         getRowId={(u) => String(u.id)}
         onRowClick={(u) => router.push(`/users/${u.id}`)}
+        getRowLabel={(u) => `${u.name ?? ""} ${u.surname ?? ""}`.trim() || u.email}
         pageSize={15}
         loading={loading}
+        error={
+          loadError
+            ? { message: loadError, onRetry: () => setRetryNonce((value) => value + 1) }
+            : undefined
+        }
         empty={{
           icon: UsersIcon,
           title: q.trim() ? t("noMatchingUsers") : t("noUsersYet"),

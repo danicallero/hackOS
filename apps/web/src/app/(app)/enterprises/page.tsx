@@ -285,6 +285,7 @@ export default function EnterprisesPage() {
         data={enterprises}
         getRowId={(e) => String(e.id)}
         onRowClick={(e) => router.push(`/enterprises/${e.id}`)}
+        getRowLabel={(e) => e.name}
         searchable={(e) => `${e.name} ${e.website ?? ""}`}
         searchPlaceholder={t("searchEnterprisesPlaceholder")}
         pageSize={15}

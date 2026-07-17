@@ -246,6 +246,7 @@ export default function ChallengesPage() {
         data={challenges}
         getRowId={(c) => String(c.id)}
         onRowClick={(c) => router.push(`/challenges/${c.id}`)}
+        getRowLabel={(c) => textForDisplay(c.title)}
         searchable={(c) =>
           `${textForSearch(c.title)} ${textForSearch(c.description)} ${textForSearch(c.criteria)}`
         }

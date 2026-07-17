@@ -357,6 +357,9 @@ function PresencePanel({
           data={hours}
           getRowId={(row) => String(row.userId)}
           onRowClick={(row) => router.push(`/users/${row.userId}?tab=presence`)}
+          getRowLabel={(row) =>
+            `${row.name ?? ""} ${row.surname ?? ""}`.trim() || String(row.userId)
+          }
           loading={loading}
           searchable={(row) => `${row.userId} ${row.name ?? ""} ${row.surname ?? ""} ${row.hours}`}
           searchPlaceholder={t("filterUsers")}
@@ -380,6 +383,9 @@ function PresencePanel({
           data={openSessions}
           getRowId={(row) => String(row.userId)}
           onRowClick={(row) => router.push(`/users/${row.userId}?tab=presence`)}
+          getRowLabel={(row) =>
+            `${row.name ?? ""} ${row.surname ?? ""}`.trim() || String(row.userId)
+          }
           loading={openSessionsLoading}
           searchable={(row) => `${row.userId} ${row.name ?? ""} ${row.surname ?? ""}`}
           searchPlaceholder={t("filterUsers")}

@@ -259,6 +259,8 @@ export default function AuditPage() {
         getRowId={(r) => String(r.id)}
         loading={loading}
         onRowClick={setSelected}
+        getRowLabel={(r) => `${r.action} ${r.entity_type} ${r.entity_id}`}
+        rowRole="button"
         empty={{
           icon: ScrollTextIcon,
           title: t("noAuditEntriesTitle"),

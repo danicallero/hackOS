@@ -1346,6 +1346,8 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
         getRowId={(r) => String(r.id)}
         loading={loading}
         onRowClick={(r) => setSelectedId(r.id)}
+        getRowLabel={(r) => r.name ?? r.email}
+        rowRole="button"
         selectable={canDecide}
         selectedIds={selectedIds}
         onSelectionChange={setSelectedIds}
