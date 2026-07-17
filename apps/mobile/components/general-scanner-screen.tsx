@@ -32,7 +32,7 @@ export function GeneralScannerScreen() {
       }
       setError(null);
       router.push({
-        pathname: "/(tabs)/others/scan/person/[id]",
+        pathname: "/(tabs)/scan/person/[id]",
         params: { id: String(person.userId) },
       });
     },
@@ -42,9 +42,7 @@ export function GeneralScannerScreen() {
   return (
     <View style={{ backgroundColor: "black", flex: 1 }}>
       <QrCamera
-        onClose={
-          pathname === "/scan" || pathname === "/others/scan" ? undefined : () => router.back()
-        }
+        onClose={pathname === "/scan" ? undefined : () => router.back()}
         onValue={(value) => void resolve(value)}
       />
       <GlassView
@@ -63,7 +61,7 @@ export function GeneralScannerScreen() {
         <Pressable
           accessibilityLabel={t("scannerViewPeople")}
           accessibilityRole="button"
-          onPress={() => router.push("/(tabs)/others/scan/people")}
+          onPress={() => router.push("/(tabs)/scan/people")}
           style={{ alignItems: "center", flex: 1, justifyContent: "center" }}
         >
           <SymbolView name="list.bullet" tintColor="white" size={19} weight="semibold" />

@@ -1,9 +1,15 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 
-export type TabKey = "schedule" | "queue" | "wallet" | "notifications" | "account" | "scan";
+export type TabKey =
+  | "schedule"
+  | "queue"
+  | "wallet"
+  | "notifications"
+  | "account"
+  | "scan"
+  | "activities";
 
-/** Always in the primary bar, regardless of capabilities (H55 stable personal area). */
-const BASE_PRIMARY_TAB_KEYS = ["schedule", "queue", "wallet", "notifications"] as const;
+const PARTICIPANT_PRIMARY_TAB_KEYS = ["schedule", "queue", "wallet", "notifications"] as const;
 
 const STAFF_SCAN_CAPABILITIES = [
   CAPABILITIES.ACCREDIT_SCAN,
@@ -19,6 +25,10 @@ export function isOperator(capabilities: string[]): boolean {
   return STAFF_SCAN_CAPABILITIES.some((cap) => has(capabilities, cap));
 }
 
+export function canScanActivities(capabilities: string[]): boolean {
+  return has(capabilities, CAPABILITIES.ACTIVITY_SCAN);
+}
+
 /**
  * H55: which tabs a signed-in user sees, driven entirely by their effective
  * capabilities (never by `role`) — mirrors the server-side `hasCapability`
@@ -26,29 +36,31 @@ export function isOperator(capabilities: string[]): boolean {
  * every check).
  */
 export function visibleTabs(capabilities: string[]): TabKey[] {
-  const tabs: TabKey[] = [...BASE_PRIMARY_TAB_KEYS];
-  if (isOperator(capabilities)) tabs.push("scan");
-  tabs.push("account");
-  return tabs;
+  return [...primaryTabs(capabilities), ...overflowTabs(capabilities)];
 }
 
 /**
- * Tabs shown directly in the platform tab bar. Only ever the four
- * participant tabs plus, at most, one more slot — a native
+ * Tabs shown directly in the platform tab bar. Only ever four destinations
+ * plus, at most, one overflow slot — a native
  * `UITabBarController` silently collapses everything past its fifth item
  * into its own system "More" screen, which bypasses our overflow menu
- * entirely. Operators keep `account` and `scan` behind the overflow
- * selector precisely to stay under that limit.
+ * entirely. Operators prioritize their daily tools here and keep the less
+ * frequently used personal destinations in the overflow selector.
  */
 export function primaryTabs(capabilities: string[]): TabKey[] {
-  const tabs: TabKey[] = [...BASE_PRIMARY_TAB_KEYS];
-  if (!isOperator(capabilities)) tabs.push("account");
-  return tabs;
+  if (!isOperator(capabilities)) return [...PARTICIPANT_PRIMARY_TAB_KEYS, "account"];
+
+  return [
+    "schedule",
+    "scan",
+    ...(canScanActivities(capabilities) ? (["activities"] as const) : []),
+    "notifications",
+  ];
 }
 
 /** Tabs represented inside the native Others selector rather than the main bar. */
 export function overflowTabs(capabilities: string[]): TabKey[] {
-  return isOperator(capabilities) ? ["account", "scan"] : [];
+  return isOperator(capabilities) ? ["queue", "wallet", "account"] : [];
 }
 
 /** True whenever any tab lives outside the primary bar and needs the overflow selector. */

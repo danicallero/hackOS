@@ -4,13 +4,11 @@ import {
 } from "./operations-navigation";
 
 describe("operations navigation", () => {
-  it("treats scanner and activities as their own pseudo-tabs", () => {
-    expect(operationsSectionFromPathname("/(tabs)/others/scan")).toBe("scanner");
-    expect(operationsSectionFromPathname("/others/scan")).toBe("scanner");
-    expect(operationsSectionFromPathname("/(tabs)/others/scan/people")).toBe("scanner");
-    expect(operationsSectionFromPathname("/others/scan/people")).toBe("scanner");
-    expect(operationsSectionFromPathname("/(tabs)/others/activities")).toBe("activities");
-    expect(operationsSectionFromPathname("/others/activities")).toBe("activities");
+  it("treats queue, wallet, and account as their own pseudo-tabs", () => {
+    expect(operationsSectionFromPathname("/(tabs)/others/queue")).toBe("queue");
+    expect(operationsSectionFromPathname("/others/queue")).toBe("queue");
+    expect(operationsSectionFromPathname("/(tabs)/others/wallet")).toBe("wallet");
+    expect(operationsSectionFromPathname("/others/wallet")).toBe("wallet");
     expect(operationsSectionFromPathname("/(tabs)/others/account")).toBe("account");
     expect(operationsSectionFromPathname("/others/account")).toBe("account");
     expect(operationsSectionFromPathname("/schedule")).toBe("external");
@@ -18,26 +16,26 @@ describe("operations navigation", () => {
   });
 
   it("avoids stacking the same pseudo-tab twice", () => {
-    expect(resolveOperationsNavigationAction("/(tabs)/others/scan", "/(tabs)/others/scan")).toBe(
+    expect(resolveOperationsNavigationAction("/(tabs)/others/queue", "/(tabs)/others/queue")).toBe(
       "noop",
     );
     expect(
-      resolveOperationsNavigationAction("/(tabs)/others/activities", "/(tabs)/others/activities"),
+      resolveOperationsNavigationAction("/(tabs)/others/wallet", "/(tabs)/others/wallet"),
     ).toBe("noop");
   });
 
   it("replaces across pseudo-tabs and returns to account without stacking", () => {
     expect(
-      resolveOperationsNavigationAction("/(tabs)/others/account", "/(tabs)/others/scan"),
+      resolveOperationsNavigationAction("/(tabs)/others/account", "/(tabs)/others/queue"),
     ).toBe("replace");
     expect(resolveOperationsNavigationAction("/schedule", "/(tabs)/others/account")).toBe(
       "replace",
     );
+    expect(resolveOperationsNavigationAction("/(tabs)/others/queue", "/(tabs)/others/wallet")).toBe(
+      "replace",
+    );
     expect(
-      resolveOperationsNavigationAction("/(tabs)/others/scan", "/(tabs)/others/activities"),
-    ).toBe("replace");
-    expect(
-      resolveOperationsNavigationAction("/(tabs)/others/scan", "/(tabs)/others/account"),
+      resolveOperationsNavigationAction("/(tabs)/others/queue", "/(tabs)/others/account"),
     ).toBe("replace");
   });
 });

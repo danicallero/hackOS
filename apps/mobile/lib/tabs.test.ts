@@ -6,7 +6,7 @@ describe("visibleTabs (H55)", () => {
     expect(visibleTabs([])).toEqual(["schedule", "queue", "wallet", "notifications", "account"]);
   });
 
-  it("adds the scan tab for any of the three scan capabilities", () => {
+  it("adds the scan destination for any of the three scan capabilities", () => {
     expect(visibleTabs([CAPABILITIES.ACCREDIT_SCAN])).toContain("scan");
     expect(visibleTabs([CAPABILITIES.PRESENCE_SCAN])).toContain("scan");
     expect(visibleTabs([CAPABILITIES.ACTIVITY_SCAN])).toContain("scan");
@@ -19,37 +19,43 @@ describe("visibleTabs (H55)", () => {
   it("the admin wildcard unlocks scan like every other capability", () => {
     expect(visibleTabs([CAPABILITIES.ADMIN_ALL])).toContain("scan");
   });
+
+  it("only exposes activities to activity scanners and admins", () => {
+    expect(visibleTabs([CAPABILITIES.ACCREDIT_SCAN])).not.toContain("activities");
+    expect(visibleTabs([CAPABILITIES.ACTIVITY_SCAN])).toContain("activities");
+    expect(visibleTabs([CAPABILITIES.ADMIN_ALL])).toContain("activities");
+  });
 });
 
-describe("primaryTabs (H55; a native tab bar collapses past 5 items into iOS's own 'More', so operators must stay at 4 base + 1 overflow slot)", () => {
+describe("primaryTabs (H55; a native tab bar collapses past 5 items into iOS's own 'More')", () => {
   it("shows account as the fifth bar slot with no scan capability", () => {
     expect(primaryTabs([])).toEqual(["schedule", "queue", "wallet", "notifications", "account"]);
   });
 
-  it("keeps scan out of the primary bar for any scan-capability holder", () => {
+  it("replaces queue and wallet with operational tools for staff", () => {
     expect(primaryTabs([CAPABILITIES.ACCREDIT_SCAN])).toEqual([
       "schedule",
-      "queue",
-      "wallet",
+      "scan",
       "notifications",
     ]);
-    expect(primaryTabs([CAPABILITIES.PRESENCE_SCAN])).not.toContain("scan");
-    expect(primaryTabs([CAPABILITIES.ACTIVITY_SCAN])).not.toContain("scan");
+    expect(primaryTabs([CAPABILITIES.PRESENCE_SCAN])).toContain("scan");
+    expect(primaryTabs([CAPABILITIES.ACTIVITY_SCAN])).toEqual([
+      "schedule",
+      "scan",
+      "activities",
+      "notifications",
+    ]);
   });
 
-  it("keeps scan out of the primary bar for the admin wildcard too", () => {
-    expect(primaryTabs([CAPABILITIES.ADMIN_ALL])).not.toContain("scan");
-  });
-
-  it("always puts scan in the overflow selector for operators, never the primary bar", () => {
+  it("always puts scan in the primary bar for operators", () => {
     for (const caps of [
       [CAPABILITIES.ACCREDIT_SCAN],
       [CAPABILITIES.PRESENCE_SCAN],
       [CAPABILITIES.ACTIVITY_SCAN],
       [CAPABILITIES.ADMIN_ALL],
     ]) {
-      expect(overflowTabs(caps)).toContain("scan");
-      expect(primaryTabs(caps)).not.toContain("scan");
+      expect(primaryTabs(caps)).toContain("scan");
+      expect(overflowTabs(caps)).not.toContain("scan");
     }
   });
 });
@@ -60,8 +66,8 @@ describe("overflowTabs / shouldUseOverflowMenu", () => {
     expect(shouldUseOverflowMenu([])).toBe(false);
   });
 
-  it("moves both account and scan to overflow for operators, keeping the bar at 5 items total", () => {
-    expect(overflowTabs([CAPABILITIES.ACCREDIT_SCAN])).toEqual(["account", "scan"]);
+  it("moves queue, wallet, and account to overflow for operators", () => {
+    expect(overflowTabs([CAPABILITIES.ACCREDIT_SCAN])).toEqual(["queue", "wallet", "account"]);
     expect(shouldUseOverflowMenu([CAPABILITIES.ACCREDIT_SCAN])).toBe(true);
   });
 

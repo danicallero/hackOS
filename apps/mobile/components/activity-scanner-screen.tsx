@@ -209,7 +209,7 @@ export function ActivityScannerScreen() {
             accessibilityRole="button"
             onPress={() =>
               router.push({
-                pathname: "/(tabs)/others/activities/people",
+                pathname: "/(tabs)/activities/people",
                 params: { activityId: String(activityId) },
               })
             }
