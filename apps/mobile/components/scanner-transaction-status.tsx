@@ -1,12 +1,61 @@
+import { useRouter } from "expo-router";
 import { SymbolView, type SymbolViewProps } from "expo-symbols";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { ActionButton, FloatingGlassButton, Section } from "@/components/native-ui";
 import { useLocale } from "@/lib/i18n";
+import { listScannerActivities, listScannerPeople } from "@/lib/scanner-db";
 import { scannerQueueHealth, scannerTransactionState } from "@/lib/scanner-state";
-import type { PendingScan } from "@/lib/scanner-types";
+import type { PendingScan, ScannerActivity, ScannerPerson } from "@/lib/scanner-types";
 import { colors } from "@/theme/colors";
+
+function findSubject(scan: PendingScan, people: ScannerPerson[]): ScannerPerson | undefined {
+  const p = scan.payload;
+  switch (p.kind) {
+    case "accreditation":
+      return people.find((person) => person.ticketToken === p.ticketToken);
+    case "accreditation_user":
+    case "badge_rotation":
+    case "badge_removal":
+      return people.find((person) => person.userId === p.userId);
+    case "presence":
+    case "activity":
+      return people.find(
+        (person) => person.badgeId === p.badgeId || person.revokedBadgeIds.includes(p.badgeId),
+      );
+  }
+}
+
+function subjectLabel(scan: PendingScan, people: ScannerPerson[]): string | null {
+  const person = findSubject(scan, people);
+  if (!person) return null;
+  return [person.name, person.surname].filter(Boolean).join(" ") || person.email;
+}
+
+function detailLabel(
+  scan: PendingScan,
+  activities: ScannerActivity[],
+  t: ReturnType<typeof useLocale>["t"],
+): string {
+  const p = scan.payload;
+  switch (p.kind) {
+    case "accreditation":
+    case "accreditation_user":
+      return `${p.badgeId} · ${p.method}`;
+    case "badge_rotation":
+      return `${p.currentBadgeId} → ${p.newBadgeId}`;
+    case "badge_removal":
+      return p.reason;
+    case "presence":
+      return `${p.badgeId} · ${p.direction === "in" ? t("presenceSignalEntry") : t("presenceSignalExit")}`;
+    case "activity": {
+      const activity = activities.find((a) => a.id === p.activityId);
+      return `${p.badgeId} · ${activity?.name ?? `#${p.activityId}`}`;
+    }
+  }
+}
 
 export function ScannerTransactionStatus({ scan }: { scan?: PendingScan | null }) {
   const { t } = useLocale();
@@ -82,9 +131,18 @@ export function ScannerQueueStatus({
   onRetry: () => void;
 }) {
   const { t } = useLocale();
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
+  const [people, setPeople] = useState<ScannerPerson[]>([]);
+  const [activities, setActivities] = useState<ScannerActivity[]>([]);
   const health = scannerQueueHealth(queue);
+
+  useEffect(() => {
+    if (!open) return;
+    void listScannerPeople().then(setPeople);
+    void listScannerActivities().then(setActivities);
+  }, [open]);
   const hasAttention = health.attention > 0;
   const label = hasAttention
     ? t("scannerQueueAttentionCount", { count: String(health.attention) })
@@ -134,80 +192,110 @@ export function ScannerQueueStatus({
         presentationStyle="pageSheet"
         visible={open}
       >
-        <View
-          accessibilityViewIsModal
-          style={{
-            backgroundColor: colors.background,
-            flex: 1,
-            paddingBottom: insets.bottom + 16,
-            paddingHorizontal: 16,
-            paddingTop: insets.top + 16,
-          }}
-        >
-          <View style={{ alignItems: "center", flexDirection: "row", gap: 12, minHeight: 50 }}>
-            <Text style={{ color: colors.label, flex: 1, fontSize: 22, fontWeight: "700" }}>
-              {t("scannerQueue")}
-            </Text>
-            <Pressable
-              accessibilityLabel={t("close")}
-              accessibilityRole="button"
-              onPress={() => setOpen(false)}
-              style={{
-                alignItems: "center",
-                justifyContent: "center",
-                minHeight: 44,
-                minWidth: 44,
-              }}
-            >
-              <SymbolView name="xmark.circle.fill" size={24} tintColor={colors.secondaryLabel} />
-            </Pressable>
-          </View>
-          <Text style={{ color: colors.secondaryLabel, fontSize: 14, marginBottom: 12 }}>
-            {health.offline > 0
-              ? t("scannerOfflineCount", { count: String(health.offline) })
-              : label}
-          </Text>
-          <ScrollView contentContainerStyle={{ gap: 10, paddingBottom: 16 }}>
-            {queue.length === 0 ? (
-              <ScannerTransactionStatus />
-            ) : (
-              queue
-                .slice(-20)
-                .reverse()
-                .map((scan) => (
-                  <View key={scan.id} style={{ gap: 5 }}>
-                    <Text style={{ color: colors.secondaryLabel, fontSize: 13, fontWeight: "600" }}>
-                      {operationLabel(scan)} · {new Date(scan.createdAt).toLocaleTimeString()}
-                    </Text>
-                    <ScannerTransactionStatus scan={scan} />
-                  </View>
-                ))
-            )}
+        <View style={{ backgroundColor: colors.background, flex: 1 }}>
+          <ScrollView
+            contentInsetAdjustmentBehavior="automatic"
+            contentContainerStyle={{
+              gap: 22,
+              padding: 16,
+              paddingBottom: Math.max(32, insets.bottom + 16),
+              paddingTop: 16,
+            }}
+          >
+            <View style={{ justifyContent: "center", minHeight: 44, paddingHorizontal: 52 }}>
+              <Text
+                selectable
+                style={{ color: colors.label, fontSize: 20, fontWeight: "700", textAlign: "center" }}
+              >
+                {t("scannerQueue")}
+              </Text>
+              <Text
+                style={{
+                  color: colors.secondaryLabel,
+                  fontSize: 14,
+                  paddingTop: 4,
+                  textAlign: "center",
+                }}
+              >
+                {health.offline > 0
+                  ? t("scannerOfflineCount", { count: String(health.offline) })
+                  : label}
+              </Text>
+            </View>
+
+            <Section title={t("scannerQueue")}>
+              {queue.length === 0 ? (
+                <ScannerTransactionStatus />
+              ) : (
+                <View style={{ gap: 10, padding: 16 }}>
+                  {queue
+                    .slice(-20)
+                    .reverse()
+                    .map((scan) => {
+                      const subject = subjectLabel(scan, people);
+                      return (
+                        <View key={scan.id} style={{ gap: 3 }}>
+                          <View
+                            style={{ alignItems: "baseline", flexDirection: "row", gap: 8 }}
+                          >
+                            <Text
+                              numberOfLines={1}
+                              style={{
+                                color: colors.label,
+                                flex: 1,
+                                fontSize: 14,
+                                fontWeight: "700",
+                              }}
+                            >
+                              {subject ?? operationLabel(scan)}
+                            </Text>
+                            <Text style={{ color: colors.secondaryLabel, fontSize: 12 }}>
+                              {new Date(scan.createdAt).toLocaleTimeString()}
+                            </Text>
+                          </View>
+                          <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>
+                            {operationLabel(scan)} · {detailLabel(scan, activities, t)}
+                            {scan.attempts > 1
+                              ? ` · ${t("scannerAttemptsCount", { count: String(scan.attempts) })}`
+                              : ""}
+                          </Text>
+                          <ScannerTransactionStatus scan={scan} />
+                        </View>
+                      );
+                    })}
+                </View>
+              )}
+            </Section>
+
+            <Section>
+              <ActionButton
+                label={t("scannerSeeHistory")}
+                icon="clock.arrow.circlepath"
+                onPress={() => {
+                  setOpen(false);
+                  router.push("/(tabs)/others/scan-log");
+                }}
+              />
+            </Section>
           </ScrollView>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ busy: syncing, disabled: syncing }}
+
+          <FloatingGlassButton
+            top={16}
+            side="left"
+            icon="xmark"
+            accessibilityLabel={t("close")}
+            onPress={() => setOpen(false)}
+          />
+          <FloatingGlassButton
+            top={16}
+            side="right"
+            icon={hasAttention ? "exclamationmark.arrow.circlepath" : "arrow.triangle.2.circlepath"}
+            tintColor={hasAttention ? colors.destructive : colors.accent}
+            accessibilityLabel={hasAttention ? t("scannerRetryFailed") : t("scannerSync")}
+            accessibilityState={{ busy: syncing }}
             disabled={syncing}
             onPress={hasAttention ? onRetry : onSync}
-            style={({ pressed }) => ({
-              alignItems: "center",
-              backgroundColor: colors.accent,
-              borderCurve: "continuous",
-              borderRadius: 14,
-              justifyContent: "center",
-              minHeight: 50,
-              opacity: syncing ? 0.45 : pressed ? 0.65 : 1,
-              paddingHorizontal: 16,
-            })}
-          >
-            <Text style={{ color: colors.accentText, fontSize: 16, fontWeight: "700" }}>
-              {syncing
-                ? t("scannerSyncing")
-                : hasAttention
-                  ? t("scannerRetryFailed")
-                  : t("scannerSync")}
-            </Text>
-          </Pressable>
+          />
         </View>
       </Modal>
     </>

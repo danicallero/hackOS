@@ -14,7 +14,7 @@ store assets, submission, and the release checklist, see
 | Story | Scope | Status | Notes |
 | --- | --- | --- | --- |
 | H4 | Login/logout, session persists via Better Auth Expo + `expo-secure-store` | ✅ Done | `lib/auth-client.ts`, `app/(auth)/sign-in.tsx`. Server-side logout (session revocation) reuses the existing Better Auth endpoint — no mobile-specific work needed. |
-| H55 | One app, capability-driven tabs, permission changes apply without reinstall | ✅ Done | `lib/tabs.ts` + `app/(tabs)/_layout.tsx`. Scan promotes to a primary tab for scan-capability holders (issue #187); Account and the built scanners otherwise share the native overflow selector. |
+| H55 | One app, capability-driven tabs, permission changes apply without reinstall | ✅ Done | `lib/tabs.ts` + `app/(tabs)/_layout.tsx`. The primary bar is always the 4 participant tabs plus, for scan-capability holders, one native overflow trigger — a `UITabBarController` collapses anything past its fifth item into iOS's own "More" screen, bypassing the app's overflow menu, so Account, Scanner, and Activities all share the native overflow selector instead of any of them getting a dedicated primary slot. |
 | H38 | Participant sees queue status/position/ETA, pre-alert, call notice | 🟡 Device QA | Push receipt/tap and the authenticated `GET /api/queue/me/stream` native fetch stream both refetch queue state immediately; 15s focused polling is the recovery path. Code/tests are complete, but APNs/FCM delivery still needs real-device verification. |
 | H51 | Notification channel preferences per category; queue calls non-optional | ✅ Done | Static category preferences, mandatory queue notices, and `schedule:<id>` activity-reminder opt-ins are available on mobile. |
 | H28 | Ticket/badge in Apple & Google Wallet; old pass auto-invalidates on badge rotation | 🟡 Device QA | QR wallet, authenticated Apple `.pkpass` download/share, Google save URL, server-side pass invalidation/push, and foreground wallet refetch on `LOGISTICS_WALLET_PASS_UPDATED` are wired. Real Wallet apps/credentials still need device QA. |
@@ -59,6 +59,28 @@ route below. No migration needed.
   scan counts, and last door state needed by H22-H26. A full snapshot
   is deliberate: badge-history values have no individual timestamp, and a
   complete replacement guarantees convergence after any missed refresh.
+- `GET /api/logistics/scan-log` (`apps/api/src/modules/logistics/scan-log.ts`)
+  — paginated, most-recent-first feed unioning accreditation check-ins,
+  presence door-scans, and activity/meal scans by the *actor* who performed
+  them (extends H22-H27; not a new story). Defaults to the caller's own
+  scans; a scan-capable operator without `LOGISTICS_STATS` may only request
+  their own `staffId`. Backs the mobile "scan history" screen
+  (`app/(tabs)/others/scan-log/`), reachable from Account and from the
+  device-queue popup.
+- `GET /api/me/logistics/stats` — the caller's own accreditation/presence/
+  activity scan counts, shown on Account for operators. `GET
+  /api/logistics/stats/by-staff` is the `LOGISTICS_STATS`-gated cross-staff
+  ranking (web `/logistics/stats`, "Staff ranking" section), and `GET
+  /api/exports/staff-scan-stats.csv` (`exports:run`) exports the same data.
+- `idempotencyGuard` (`apps/api/src/lib/idempotency.ts`) now reclaims a
+  first-execution record whose `response_status` has been NULL for more
+  than 30s, instead of 409ing "still in flight" forever. Mobile scanners
+  reuse the persisted local scan id as the `Idempotency-Key` on every retry
+  (`lib/scanner-model.ts`), so an interrupted first attempt (dropped
+  connection, backgrounded app, server restart) used to permanently jam
+  that scan — and everything queued behind it, since
+  `replayPendingScans()` replays in order and stops at the first
+  unresolved error — with no way to recover short of a fresh scan.
 
 **UI (`apps/mobile`).**
 - `lib/auth-client.ts` — Better Auth client using `expo-secure-store` for
@@ -66,13 +88,16 @@ route below. No migration needed.
 - `lib/api.ts` — thin wrapper around the auth client's underlying fetch so
   every API call (not just `/api/auth/*`) carries the restored session.
 - `lib/tabs.ts` (`primaryTabs`/`overflowTabs`) — pure functions mapping
-  `me.capabilities` to the tab bar (issue #187: scanning is a one-action
-  entry, never behind the ellipsis, per `docs/navigation.md`). Participant
-  tabs (schedule, queue, wallet, notifications) are unconditional; `scan`
-  promotes into the primary bar for `ACCREDIT_SCAN`/`PRESENCE_SCAN`/
-  `ACTIVITY_SCAN` (or the admin `*` wildcard), and Account moves into the
-  native overflow selector only then — with no scan capability, Account
-  stays in the primary bar and there is no overflow at all.
+  `me.capabilities` to the tab bar; see `docs/navigation.md` for the full
+  rationale, including why this deliberately walks back issue #187's
+  "scanning is never behind an ellipsis" finding. Participant tabs
+  (schedule, queue, wallet, notifications) are unconditional; a native tab
+  bar collapses anything past its fifth item into iOS's own "More" screen,
+  so `ACCREDIT_SCAN`/`PRESENCE_SCAN`/`ACTIVITY_SCAN` (or the admin `*`
+  wildcard) capability holders get exactly one more slot: the native
+  overflow trigger, behind which Account and Scanner (and Activities, for
+  `ACTIVITY_SCAN` holders) live as pseudo-tabs. With no scan capability,
+  Account stays directly in the primary bar and there is no overflow at all.
 - `app/(tabs)/_layout.tsx` — reads capabilities from a shared `/api/me` fetch
   (`lib/me-context.tsx`, `lib/use-me.ts`) and hides tabs via Expo Router's
   `href: null` mechanism rather than omitting the route, so the underlying
@@ -110,7 +135,11 @@ route below. No migration needed.
   `account.tsx` — the five participant screens. API-backed screens expose
   loading, retryable error, and empty states without leaking rejected promises.
   The account screen displays the shared `/api/me` profile, refreshes it, and
-  provides a confirmed sign-out action for the device session. `wallet.tsx`
+  provides a confirmed sign-out action for the device session. For operators
+  (any scan capability, `lib/tabs.ts`'s `isOperator`) it also shows a "My
+  stats" section (`/api/me/logistics/stats`) and a link to the scan-history
+  screen (`app/(tabs)/others/scan-log/`, `/api/logistics/scan-log`, grouped by
+  day into `Section`s with a native list look). `wallet.tsx`
   renders ticket/badge QR codes. The Apple Wallet action is the system
   `PKAddPassButton` control (`@premieroctet/react-native-wallet`'s
   `RNWalletView`, iOS only) — per Apple's Add to Apple Wallet guidelines, the
@@ -122,12 +151,12 @@ route below. No migration needed.
   `queue.tsx` refetches immediately on a "queue" push
   (below) and also polls `GET /api/queue/me` every 15s while focused as a
   fallback.
-- `app/(tabs)/scan.tsx` — thin wrapper around the shared
+- `app/(tabs)/others/scan/index.tsx` — thin wrapper around the shared
   `GeneralScannerScreen` (camera/manual scanners selected by capability:
   accreditation, badge replacement, door presence, meals, and activities),
-  promoted to the primary tab bar for scan-capability holders (issue #187).
-  Its person/people drill-down routes still live under
-  `app/(tabs)/others/scan/*`, reachable from either entry point.
+  reached as a pseudo-tab behind the native overflow selector (see
+  `docs/navigation.md`) rather than a dedicated primary tab. Its person/people
+  drill-down routes live under `app/(tabs)/others/scan/*`.
   `lib/scanner-db.ts` owns the WAL-mode SQLite schema and durable device queue;
   `lib/scanner-sync.ts` replays in creation order with the persisted scan id as
   `Idempotency-Key`, then installs the latest server snapshot/revocation set.

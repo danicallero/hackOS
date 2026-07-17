@@ -38,7 +38,7 @@ afterAll(async () => {
   await pool.end();
 });
 
-for (const path of ["attendance.csv", "meals.csv", "applications.csv"]) {
+for (const path of ["attendance.csv", "meals.csv", "applications.csv", "staff-scan-stats.csv"]) {
   it(`GET /api/exports/${path} 403s without exports:run`, async () => {
     const noCaps = await createUser();
     const res = await app.inject({
@@ -87,6 +87,38 @@ describe("meals.csv", () => {
     expect(res.body).toContain("meal_name,logged_at,logged_by,notes");
     expect(res.body).toContain("Meal Eater");
     expect(res.body).toContain("Dinner");
+  });
+});
+
+describe("staff-scan-stats.csv", () => {
+  it("ranks staff by scan counts, busiest first", async () => {
+    const { pool } = await import("../../src/db/pool.js");
+    const staff = await createUserWithCapabilities([CAPABILITIES.EXPORTS_RUN]);
+    const busyOperator = await createUserWithCapabilities([CAPABILITIES.ACCREDIT_SCAN]);
+    await pool.query(`UPDATE users SET name = 'Busy Operator' WHERE id = $1`, [busyOperator]);
+    const quietOperator = await createUserWithCapabilities([CAPABILITIES.ACCREDIT_SCAN]);
+    await pool.query(`UPDATE users SET name = 'Quiet Operator' WHERE id = $1`, [quietOperator]);
+    const userA = await createUser();
+    const userB = await createUser();
+    await checkIn(userA, busyOperator);
+    await checkIn(userB, busyOperator);
+    await timeLog(userA, quietOperator, "in");
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/exports/staff-scan-stats.csv",
+      headers: asUser(staff),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-type"]).toContain("text/csv");
+    expect(res.body).toContain(
+      "staff_id,name,surname,accreditation_count,presence_count,activity_count,total",
+    );
+    const lines = res.body.trim().split("\r\n");
+    expect(lines[1]).toContain("Busy Operator");
+    expect(lines[1]).toContain(",2,0,0,2");
+    expect(lines[2]).toContain("Quiet Operator");
+    expect(lines[2]).toContain(",0,1,0,1");
   });
 });
 

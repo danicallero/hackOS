@@ -80,6 +80,46 @@ export const scannableActivitiesQuery = z.object({
   category: z.enum(["meal", "activity"]).optional(),
 });
 
+export const scanLogQuery = z.object({
+  staffId: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
+const staffScanCountsSchema = z.object({
+  accreditationCount: z.number().int(),
+  presenceCount: z.number().int(),
+  activityCount: z.number().int(),
+});
+
+export const scanLogResponse = z.object({
+  items: z.array(
+    z.object({
+      id: z.number().int(),
+      source: z.enum(["accreditation", "door", "activity"]),
+      occurredAt: z.string(),
+      detail: z.string().nullable(),
+      subjectUserId: z.number().int(),
+      subjectName: z.string(),
+      subjectSurname: z.string(),
+    }),
+  ),
+  total: z.number().int(),
+});
+
+export const staffScanStatsResponse = staffScanCountsSchema;
+
+export const staffScanRankingResponse = z.object({
+  items: z.array(
+    staffScanCountsSchema.extend({
+      staffId: z.number().int(),
+      name: z.string(),
+      surname: z.string(),
+      total: z.number().int(),
+    }),
+  ),
+});
+
 const scannerPersonCard = z.object({
   userId: z.number().int().positive(),
   email: z.string().email(),

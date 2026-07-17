@@ -6524,6 +6524,37 @@ const dict: Record<string, I18nText> = {
   },
   columnPerson: { es: "Persona", gl: "Persoa", en: "Person" },
   unknownPerson: { es: "Persona desconocida", gl: "Persoa descoñecida", en: "Unknown person" },
+  refresh: { es: "Actualizar", gl: "Actualizar", en: "Refresh" },
+  staffScanRanking: { es: "Ranking de staff", gl: "Ranking de persoal", en: "Staff ranking" },
+  staffScanRankingDesc: {
+    es: "Acreditaciones, pases de puerta y de actividad/comida registrados por cada miembro del staff.",
+    gl: "Acreditacións, pases de porta e de actividade/comida rexistrados por cada membro do persoal.",
+    en: "Accreditations, door scans, and activity/meal scans logged by each staff member.",
+  },
+  columnStaffMember: { es: "Miembro del staff", gl: "Membro do persoal", en: "Staff member" },
+  columnAccreditations: { es: "Acreditaciones", gl: "Acreditacións", en: "Accreditations" },
+  columnDoorScans: { es: "Pases de puerta", gl: "Pases de porta", en: "Door scans" },
+  columnActivityScans: {
+    es: "Pases de actividad",
+    gl: "Pases de actividade",
+    en: "Activity scans",
+  },
+  columnTotal: { es: "Total", gl: "Total", en: "Total" },
+  exportStaffScanStats: {
+    es: "Exportar ranking de staff",
+    gl: "Exportar ranking de persoal",
+    en: "Export staff ranking",
+  },
+  searchStaffMember: {
+    es: "Buscar miembro del staff",
+    gl: "Buscar membro do persoal",
+    en: "Search staff member",
+  },
+  noStaffScansYet: {
+    es: "Todavía no hay pases registrados por el staff",
+    gl: "Aínda non hai pases rexistrados polo persoal",
+    en: "No staff scans recorded yet",
+  },
   attendanceHoursEstimated: {
     es: "Las horas combinan señales reales y ventanas estimadas.",
     gl: "As horas combinan sinais reais e xanelas estimadas.",

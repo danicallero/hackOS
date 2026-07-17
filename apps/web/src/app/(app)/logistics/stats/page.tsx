@@ -8,8 +8,10 @@ import {
   ClipboardListIcon,
   DownloadIcon,
   LockIcon,
+  RefreshCwIcon,
   ShieldCheckIcon,
   SoupIcon,
+  TrophyIcon,
   UsersIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -34,7 +36,12 @@ import { useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError, api } from "@/lib/api";
 import { API_URL } from "@/lib/env";
 import { pickText, useLocale } from "@/lib/i18n";
-import { type LogisticsStats, logisticsApi, type PresenceHours } from "@/lib/logistics";
+import {
+  type LogisticsStats,
+  logisticsApi,
+  type PresenceHours,
+  type StaffScanRankingRow,
+} from "@/lib/logistics";
 import { useCan } from "@/lib/session";
 import {
   type ApplicationStats,
@@ -474,7 +481,104 @@ function DuringPanel({ stats }: { stats: LiveStatsState }) {
           />
         </SectionCard>
       </div>
+      <StaffRankingSection />
     </div>
+  );
+}
+
+function StaffRankingSection() {
+  const { t } = useLocale();
+  const [rows, setRows] = useState<StaffScanRankingRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { items } = await logisticsApi.staffScanRanking();
+      setRows(items);
+    } catch (err) {
+      setError(errorMessage(err, t("couldNotLoadStatistics")));
+    } finally {
+      setLoading(false);
+    }
+  }, [t]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const columns: Column<StaffScanRankingRow>[] = [
+    {
+      id: "name",
+      header: t("columnStaffMember"),
+      cell: (row) => [row.name, row.surname].filter(Boolean).join(" ") || t("unknownPerson"),
+      sortValue: (row) => [row.name, row.surname].filter(Boolean).join(" "),
+    },
+    {
+      id: "accreditation",
+      header: t("columnAccreditations"),
+      align: "right",
+      cell: (row) => row.accreditationCount,
+      sortValue: (row) => row.accreditationCount,
+    },
+    {
+      id: "presence",
+      header: t("columnDoorScans"),
+      align: "right",
+      cell: (row) => row.presenceCount,
+      sortValue: (row) => row.presenceCount,
+    },
+    {
+      id: "activity",
+      header: t("columnActivityScans"),
+      align: "right",
+      cell: (row) => row.activityCount,
+      sortValue: (row) => row.activityCount,
+    },
+    {
+      id: "total",
+      header: t("columnTotal"),
+      align: "right",
+      cell: (row) => row.total,
+      sortValue: (row) => row.total,
+    },
+  ];
+
+  return (
+    <SectionCard
+      title={t("staffScanRanking")}
+      description={t("staffScanRankingDesc")}
+      icon={TrophyIcon}
+      action={
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => void load()} disabled={loading}>
+            <RefreshCwIcon className="size-4" aria-hidden="true" />
+            {t("refresh")}
+          </Button>
+          <Button asChild variant="outline">
+            <a href={`${API_URL}/api/exports/staff-scan-stats.csv`}>
+              <DownloadIcon className="size-4" aria-hidden="true" />
+              {t("exportStaffScanStats")}
+            </a>
+          </Button>
+        </div>
+      }
+    >
+      <DataTable
+        columns={columns}
+        data={rows}
+        getRowId={(row) => String(row.staffId)}
+        loading={loading}
+        error={error ? { message: error, onRetry: load } : undefined}
+        searchable={(row) => `${row.name} ${row.surname}`}
+        searchPlaceholder={t("searchStaffMember")}
+        searchLabel={t("searchStaffMember")}
+        pageSize={10}
+        empty={{ icon: TrophyIcon, title: t("noStaffScansYet") }}
+      />
+    </SectionCard>
   );
 }
 
