@@ -1,8 +1,20 @@
 "use client";
 
-import { createContext, createElement, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  createElement,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { isLanguage, LANGUAGE_COOKIE_MAX_AGE, LANGUAGE_PREFERENCE_KEY } from "./locale";
 import { useMe } from "./session";
 import type { Language } from "./types";
+
+export { isLanguage } from "./locale";
 
 /** i18n label as stored by the API (plan/07 §2): all three locales. */
 export interface I18nText {
@@ -18,12 +30,6 @@ export const LOCALE_CODES: Record<Language, string> = {
   gl: "gl-ES",
   en: "en-GB",
 };
-
-const STORAGE_KEY = "hackos-language";
-
-export function isLanguage(value: string | null | undefined): value is Language {
-  return !!value && LANGS.includes(value as Language);
-}
 
 export function languageName(language: Language): string {
   return { es: "Castellano", gl: "Galego", en: "English" }[language];
@@ -5878,26 +5884,41 @@ interface LocaleContextValue {
 }
 const LocaleContext = createContext<LocaleContextValue | null>(null);
 
-function initialLanguage(): Language {
-  if (typeof window === "undefined") return "es";
-  const stored = window.localStorage.getItem(STORAGE_KEY);
-  if (isLanguage(stored)) return stored;
-  return navigator.language.toLowerCase().startsWith("gl")
-    ? "gl"
-    : navigator.language.toLowerCase().startsWith("en")
-      ? "en"
-      : "es";
+declare global {
+  interface Window {
+    __hackosInitialLanguage?: Language;
+  }
 }
 
 export function LocaleProvider({ children }: { children: React.ReactNode }) {
   const me = useMe();
-  const [language, setLanguage] = useState<Language>(initialLanguage);
+  const [language, setLanguage] = useState<Language>("es");
+  const bootLanguage = useRef<Language | null>(null);
+
+  useLayoutEffect(() => {
+    const initialLanguage = isLanguage(window.__hackosInitialLanguage)
+      ? window.__hackosInitialLanguage
+      : "es";
+    bootLanguage.current = initialLanguage;
+    setLanguage(initialLanguage);
+  }, []);
+
+  useLayoutEffect(() => {
+    document.documentElement.lang = language;
+    if (bootLanguage.current === language) document.documentElement.dataset.localeReady = "true";
+  }, [language]);
+
   useEffect(() => {
     if (isLanguage(me?.language)) setLanguage(me.language);
   }, [me?.language]);
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, language);
-    document.documentElement.lang = language;
+    try {
+      window.localStorage.setItem(LANGUAGE_PREFERENCE_KEY, language);
+    } catch {
+      // Storage can be unavailable in private mode; the cookie still persists the choice.
+    }
+    // biome-ignore lint/suspicious/noDocumentCookie: the server needs this preference for matching SSR.
+    document.cookie = `${LANGUAGE_PREFERENCE_KEY}=${language}; Path=/; Max-Age=${LANGUAGE_COOKIE_MAX_AGE}; SameSite=Lax`;
   }, [language]);
   const value = useMemo<LocaleContextValue>(
     () => ({
