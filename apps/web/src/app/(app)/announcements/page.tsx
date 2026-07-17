@@ -9,6 +9,7 @@ import { EVENTS } from "@hackos/shared/events";
 import { LockIcon, MegaphoneIcon, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { ContextualError } from "@/components/common/contextual-error";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
@@ -88,18 +89,23 @@ export default function AnnouncementsPage() {
   const canManage = useCan(CAPABILITIES.ANNOUNCEMENTS_MANAGE);
   const [items, setItems] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Announcement | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState<Announcement | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const result = await notificationsApi.listAnnouncements();
       setItems(result.items);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadAnnouncements"));
+      const message = err instanceof ApiError ? err.message : t("couldNotLoadAnnouncements");
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -117,13 +123,16 @@ export default function AnnouncementsPage() {
 
   async function remove(item: Announcement) {
     setBusy(true);
+    setDeleteError(null);
     try {
       await notificationsApi.deleteAnnouncement(item.id);
       toast.success(t("announcementDeleted"));
       setDeleting(null);
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotDeleteAnnouncement"));
+      const message = err instanceof ApiError ? err.message : t("couldNotDeleteAnnouncement");
+      setDeleteError(message);
+      toast.error(message);
     } finally {
       setBusy(false);
     }
@@ -211,6 +220,7 @@ export default function AnnouncementsPage() {
         data={items}
         getRowId={(a) => String(a.id)}
         loading={loading}
+        error={loadError ? { message: loadError, onRetry: load } : undefined}
         searchable={(a) => `${a.title} ${a.body}`}
         searchPlaceholder={t("searchAnnouncementsPlaceholder")}
         pageSize={15}
@@ -229,7 +239,10 @@ export default function AnnouncementsPage() {
               size="icon"
               aria-label={t("deleteAnnouncementAria")}
               className="text-destructive"
-              onClick={() => setDeleting(a)}
+              onClick={() => {
+                setDeleteError(null);
+                setDeleting(a);
+              }}
             >
               <Trash2Icon className="size-4" />
             </Button>
@@ -276,7 +289,10 @@ export default function AnnouncementsPage() {
         <Modal
           open={Boolean(deleting)}
           onOpenChange={(open) => {
-            if (!open) setDeleting(null);
+            if (!open) {
+              setDeleteError(null);
+              setDeleting(null);
+            }
           }}
           title={t("deleteThisAnnouncement")}
           description={t("willStopAppearing", { title: deleting.title })}
@@ -291,7 +307,10 @@ export default function AnnouncementsPage() {
             </>
           }
         >
-          <p className="text-muted-foreground text-sm">{t("cantBeUndone")}</p>
+          <div className="space-y-4">
+            {deleteError && <ContextualError message={deleteError} />}
+            <p className="text-muted-foreground text-sm">{t("cantBeUndone")}</p>
+          </div>
         </Modal>
       )}
     </div>

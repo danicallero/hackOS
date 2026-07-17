@@ -113,20 +113,28 @@ export default function SchedulePage() {
   const canManage = useCan(CAPABILITIES.SCHEDULE_MANAGE);
   const [items, setItems] = useState<PublicScheduleItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<PublicScheduleItem | null>(null);
   const [duplicating, setDuplicating] = useState<PublicScheduleItem | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [mutationError, setMutationError] = useState<{
+    message: string;
+    onRetry?: () => void;
+  } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const result = await logisticsApi.schedule();
       setItems(result.items);
       setSelectedIds(new Set());
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadSchedule"));
+      const message = err instanceof ApiError ? err.message : t("couldNotLoadSchedule");
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -142,16 +150,21 @@ export default function SchedulePage() {
     else setLoading(false);
   }, [canManage, load, liveRefresh]);
 
-  async function setVisibility(visibility: "shown" | "hidden") {
-    const ids = [...selectedIds].map(Number);
+  async function setVisibility(visibility: "shown" | "hidden", ids = [...selectedIds].map(Number)) {
     if (ids.length === 0) return;
     setBusy(true);
+    setMutationError(null);
     try {
       await logisticsApi.setScheduleVisibility(ids, visibility);
       toast.success(visibility === "shown" ? t("itemsShown") : t("itemsHidden"));
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotUpdateVisibility"));
+      const message = err instanceof ApiError ? err.message : t("couldNotUpdateVisibility");
+      setMutationError({
+        message,
+        onRetry: () => void setVisibility(visibility, ids),
+      });
+      toast.error(message);
     } finally {
       setBusy(false);
     }
@@ -159,12 +172,15 @@ export default function SchedulePage() {
 
   async function remove(item: PublicScheduleItem) {
     setBusy(true);
+    setMutationError(null);
     try {
       await logisticsApi.deleteSchedule(item.id);
       toast.success(t("scheduleItemDeleted"));
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotDeleteScheduleItem"));
+      const message = err instanceof ApiError ? err.message : t("couldNotDeleteScheduleItem");
+      setMutationError({ message });
+      toast.error(message);
     } finally {
       setBusy(false);
     }
@@ -255,6 +271,8 @@ export default function SchedulePage() {
         data={items}
         getRowId={(item) => String(item.id)}
         loading={loading}
+        error={loadError ? { message: loadError, onRetry: load } : undefined}
+        mutationError={mutationError ?? undefined}
         selectable
         selectedIds={selectedIds}
         onSelectionChange={setSelectedIds}

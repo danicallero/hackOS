@@ -630,6 +630,52 @@ const dict: Record<string, I18nText> = {
   // ---- Data table selection ----
   selectAll: { es: "Seleccionar todo", gl: "Seleccionar todo", en: "Select all" },
   selectRow: { es: "Seleccionar fila", gl: "Seleccionar fila", en: "Select row" },
+  openRow: { es: "Abrir fila", gl: "Abrir fila", en: "Open row" },
+  searchTable: { es: "Buscar en la tabla", gl: "Buscar na táboa", en: "Search table" },
+  searchUsers: { es: "Buscar usuarios", gl: "Buscar usuarios", en: "Search users" },
+  searchUniversities: {
+    es: "Buscar universidades",
+    gl: "Buscar universidades",
+    en: "Search universities",
+  },
+  searchResponses: {
+    es: "Buscar respuestas",
+    gl: "Buscar respostas",
+    en: "Search responses",
+  },
+  clearSearch: { es: "Borrar búsqueda", gl: "Borrar busca", en: "Clear search" },
+  tableResultCount: {
+    es: "{count} resultados",
+    gl: "{count} resultados",
+    en: "{count} results",
+  },
+  noFilteredResults: {
+    es: "No hay resultados",
+    gl: "Non hai resultados",
+    en: "No results",
+  },
+  tryDifferentSearch: {
+    es: "Prueba con otra búsqueda o borra los filtros.",
+    gl: "Proba con outra busca ou borra os filtros.",
+    en: "Try another search or clear the filters.",
+  },
+  sortBy: { es: "Ordenar por {column}", gl: "Ordenar por {column}", en: "Sort by {column}" },
+  tablePagination: {
+    es: "Paginación de la tabla",
+    gl: "Paxinación da táboa",
+    en: "Table pagination",
+  },
+  paginationSummary: {
+    es: "{start}–{end} de {total}. Página {page} de {pages}.",
+    gl: "{start}–{end} de {total}. Páxina {page} de {pages}.",
+    en: "{start}–{end} of {total}. Page {page} of {pages}.",
+  },
+  selectionCount: {
+    es: "{count} filas seleccionadas",
+    gl: "{count} filas seleccionadas",
+    en: "{count} rows selected",
+  },
+  retry: { es: "Reintentar", gl: "Tentar de novo", en: "Retry" },
   nothingToShow: {
     es: "No hay nada que mostrar",
     gl: "Non hai nada que mostrar",

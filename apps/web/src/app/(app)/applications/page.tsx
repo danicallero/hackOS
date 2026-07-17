@@ -80,6 +80,7 @@ export default function ApplicationsPage() {
   const canManage = useCan(CAPABILITIES.APPLICATIONS_MANAGE);
   const [forms, setForms] = useState<ApplicationForm[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
   const localizedCreateSchema = useMemo(
@@ -102,13 +103,16 @@ export default function ApplicationsPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const { applications } = await api.get<{ applications: ApplicationForm[] }>(
         "/api/applications",
       );
       setForms(applications);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadApplicationForms"));
+      const message = err instanceof ApiError ? err.message : t("couldNotLoadApplicationForms");
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -234,13 +238,21 @@ export default function ApplicationsPage() {
         data={forms}
         getRowId={(f) => String(f.id)}
         loading={loading}
-        onRowClick={(f) => router.push(`/applications/${f.id}`)}
+        error={loadError ? { message: loadError, onRetry: load } : undefined}
+        getRowHref={(f) => `/applications/${f.id}`}
+        getRowLabel={(f) => f.name}
         searchable={(f) => `${f.name} ${f.type}`}
         searchPlaceholder={t("searchFormsPlaceholder")}
         empty={{
           icon: ClipboardListIcon,
           title: t("noApplicationFormsYet"),
           description: canManage ? t("createFirstFormDesc") : t("formsWillAppear"),
+          action: canManage ? (
+            <Button type="button" onClick={() => setCreating(true)}>
+              <PlusIcon aria-hidden="true" />
+              {t("newForm")}
+            </Button>
+          ) : undefined,
         }}
       />
 

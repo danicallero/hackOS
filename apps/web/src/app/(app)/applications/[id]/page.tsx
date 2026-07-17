@@ -1035,6 +1035,7 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
   const canDecide = useCan(CAPABILITIES.APPLICATIONS_DECIDE);
   const [rows, setRows] = useState<ResponseRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>(ALL);
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -1044,6 +1045,7 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const { responses } = await api.get<{ responses: ResponseRow[] }>(
         `/api/applications/${id}/responses`,
@@ -1057,7 +1059,9 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
       setRows(responses);
       setSelectedIds(new Set());
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadResponses"));
+      const message = err instanceof ApiError ? err.message : t("couldNotLoadResponses");
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -1172,12 +1176,41 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder={t("searchByNameOrEmailPlaceholder")}
-          className="h-9 max-w-xs"
-        />
+        <div className="relative w-full max-w-xs">
+          <label htmlFor="response-search" className="sr-only">
+            {t("searchResponses")}
+          </label>
+          <Input
+            id="response-search"
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t("searchByNameOrEmailPlaceholder")}
+            className="h-9 pr-9"
+          />
+          {search && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="absolute top-1/2 right-0.5 size-8 -translate-y-1/2"
+              onClick={() => {
+                setSearch("");
+                document.getElementById("response-search")?.focus();
+              }}
+              aria-label={t("clearSearch")}
+            >
+              <XIcon aria-hidden="true" />
+            </Button>
+          )}
+        </div>
+        <span
+          role="status"
+          aria-live="polite"
+          className="text-muted-foreground text-xs tabular-nums"
+        >
+          {t("tableResultCount", { count: rows.length })}
+        </span>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="h-9 w-40 capitalize">
             <SelectValue placeholder={t("allStatuses")} />
@@ -1345,7 +1378,9 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
         data={rows}
         getRowId={(r) => String(r.id)}
         loading={loading}
+        error={loadError ? { message: loadError, onRetry: load } : undefined}
         onRowClick={(r) => setSelectedId(r.id)}
+        getRowLabel={(r) => r.name ?? r.email}
         selectable={canDecide}
         selectedIds={selectedIds}
         onSelectionChange={setSelectedIds}
@@ -1357,6 +1392,14 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
             statusFilter === ALL && !search.trim()
               ? t("submissionsAppearHereDesc")
               : t("noResponsesMatchFilterDesc"),
+        }}
+        filteredEmpty={{
+          active: statusFilter !== ALL || search.trim().length > 0,
+          onClear: () => {
+            setStatusFilter(ALL);
+            setSearch("");
+            document.getElementById("response-search")?.focus();
+          },
         }}
       />
 

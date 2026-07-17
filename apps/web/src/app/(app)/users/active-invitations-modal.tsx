@@ -43,15 +43,19 @@ export function ActiveInvitationsModal() {
   const [open, setOpen] = useState(false);
   const [invites, setInvites] = useState<InviteListItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await api.get<InviteListItem[]>("/api/invites");
       setInvites(data);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadInvitations"));
+      const message = err instanceof ApiError ? err.message : t("couldNotLoadInvitations");
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -147,6 +151,8 @@ export function ActiveInvitationsModal() {
         columns={columns}
         data={invites}
         getRowId={(i) => String(i.id)}
+        loading={loading}
+        error={loadError ? { message: loadError, onRetry: load } : undefined}
         searchable={(i) => `${i.email} ${i.kind}`}
         searchPlaceholder={t("searchByEmailType")}
         rowActions={(i) => {
@@ -154,7 +160,12 @@ export function ActiveInvitationsModal() {
           return (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="size-8">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8"
+                  aria-label={t("openMenuAria")}
+                >
                   <MoreHorizontalIcon className="size-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -195,7 +206,6 @@ export function ActiveInvitationsModal() {
           );
         }}
         pageSize={10}
-        loading={loading}
         empty={{
           icon: MailIcon,
           title: t("noActiveInvitations"),

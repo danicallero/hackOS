@@ -49,6 +49,7 @@ export default function PermissionsPage() {
   const router = useRouter();
   const [groups, setGroups] = useState<PermissionGroupSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
 
   const form = useForm<CreateValues>({
@@ -58,11 +59,14 @@ export default function PermissionsPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const rows = await api.get<PermissionGroupSummary[]>("/api/permission-groups");
       setGroups(rows);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadPermissionGroups"));
+      const message = err instanceof ApiError ? err.message : t("couldNotLoadPermissionGroups");
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -131,14 +135,22 @@ export default function PermissionsPage() {
           data={groups}
           getRowId={(g) => String(g.id)}
           loading={loading}
+          error={loadError ? { message: loadError, onRetry: load } : undefined}
           searchable={(g) => `${g.name} ${g.description ?? ""}`}
           searchPlaceholder={t("filterGroupsPlaceholder")}
           pageSize={10}
-          onRowClick={(g) => router.push(`/permissions/${g.id}`)}
+          getRowHref={(g) => `/permissions/${g.id}`}
+          getRowLabel={(g) => g.name}
           empty={{
             icon: ShieldCheckIcon,
             title: t("noPermissionGroupsYetTitle"),
             description: t("createGroupToStart"),
+            action: (
+              <Button type="button" onClick={() => setCreateOpen(true)}>
+                <PlusIcon aria-hidden="true" />
+                {t("createGroup")}
+              </Button>
+            ),
           }}
         />
       </SectionCard>
