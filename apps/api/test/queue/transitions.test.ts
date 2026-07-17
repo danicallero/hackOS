@@ -247,6 +247,64 @@ describe("call_next (H29, H30)", () => {
     expect(third.json().entry.id).toBe(entryB);
   });
 
+  it("H203: room view explains a cross-room skip, preserves position, and clears once the blocker leaves", async () => {
+    const { challengeId: ch1, roomId: room1 } = await setup();
+    const ch2 = await createChallenge();
+    const room2 = await createRoom({ name: "Room 2" });
+    await assignChallengeToRoom(room2, ch2);
+
+    const sharedMember = await createUser();
+    const { repoId: repoA } = await createRepoWithTeam([sharedMember]);
+    const { repoId: repoB } = await createRepoWithTeam([sharedMember, await createUser()]);
+
+    const entryA = await enqueueRepo(ch1, repoA, 1);
+    const entryB = await enqueueRepo(ch2, repoB, 1);
+
+    // repoA gets called in room1 -> sharedMember is busy there
+    const first = await app.inject({
+      method: "POST",
+      url: `/api/queue/rooms/${room1}/call-next`,
+      headers: asUser(operatorId),
+      payload: {},
+    });
+    expect(first.json().entry.id).toBe(entryA);
+
+    const view = await app.inject({
+      method: "GET",
+      url: `/api/queue/rooms/${room2}/view`,
+      headers: asUser(operatorId),
+    });
+    expect(view.statusCode).toBe(200);
+    const skip = view.json().crossRoomSkips.find((s: { entryId: number }) => s.entryId === entryB);
+    expect(skip).toMatchObject({
+      entryId: entryB,
+      position: 1,
+      blockingRoomId: room1,
+      positionPreserved: true,
+    });
+    expect(skip.blockingRoomName).toBeTruthy();
+    expect(skip.blockingTeamName).toBeTruthy();
+    expect((await getEntry(entryB)).position).toBe(1); // unchanged
+
+    // The public TV feed must never leak this projection.
+    const tv = await app.inject({ method: "GET", url: "/api/tv/rooms" });
+    expect(tv.statusCode).toBe(200);
+    for (const room of tv.json()) expect(room.crossRoomSkips).toEqual([]);
+
+    // Once the blocking entry leaves called/in_room/presenting, the skip clears.
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`UPDATE queue_entries SET status = 'completed' WHERE id = $1`, [entryA]);
+    const { invalidateReadCache } = await import("../../src/lib/read-cache.js");
+    await invalidateReadCache(); // direct SQL bypasses the broadcast() that normally does this
+
+    const cleared = await app.inject({
+      method: "GET",
+      url: `/api/queue/rooms/${room2}/view`,
+      headers: asUser(operatorId),
+    });
+    expect(cleared.json().crossRoomSkips).toEqual([]);
+  });
+
   it("409 when the room is paused, 403 without QUEUE_OPERATE", async () => {
     const { roomId } = await setup();
     const { pool } = await import("../../src/db/pool.js");

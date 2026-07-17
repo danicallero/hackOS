@@ -452,7 +452,8 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
       const { rows } = await pool.query(
         `UPDATE queue_settings
             SET handoff_buffer_minutes = $1, schedule_start_at = $2, schedule_end_at = $3,
-                pre_call_notification_eta_minutes = $4, requeue_prompt_default = $5
+                pre_call_notification_eta_minutes = $4, requeue_prompt_default = $5,
+                called_too_long_threshold_minutes = $6
           WHERE id = 1
           RETURNING *`,
         [
@@ -463,6 +464,7 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
           req.body.scheduleEndAt === undefined ? existing.schedule_end_at : req.body.scheduleEndAt,
           req.body.preCallNotificationEtaMinutes ?? existing.pre_call_notification_eta_minutes,
           req.body.requeuePromptDefault ?? existing.requeue_prompt_default,
+          req.body.calledTooLongThresholdMinutes ?? existing.called_too_long_threshold_minutes,
         ],
       );
       return rows[0];

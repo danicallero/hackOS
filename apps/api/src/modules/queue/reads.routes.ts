@@ -86,7 +86,7 @@ export function registerReadsRoutes(app: FastifyInstance): void {
       ),
       schema: { params: roomIdParam },
     },
-    async (req) => roomView(req.params.roomId),
+    async (req) => roomView(req.params.roomId, { includeCrossRoomSkips: true }),
   );
 
   // H46: authoritative room assignment surface for the admin panel.

@@ -257,6 +257,46 @@ describe("pace (H39)", () => {
   });
 });
 
+describe("called-too-long threshold (H34, H203)", () => {
+  it("exposes a configurable threshold via queue settings and room pace, not a hardcoded fallback", async () => {
+    const challengeId = await createChallenge();
+    const roomId = await createRoom({ desiredMinutesPerTeam: 10 });
+    await assignChallengeToRoom(roomId, challengeId);
+
+    const defaultPace = await app.inject({
+      method: "GET",
+      url: `/api/queue/rooms/${roomId}/pace`,
+      headers: asUser(operatorId),
+    });
+    expect(defaultPace.json().calledTooLongThresholdMinutes).toBe(10); // migration default
+
+    const adminId = await createUserWithCapabilities([CAPABILITIES.QUEUE_ADMIN]);
+    const patch = await app.inject({
+      method: "PATCH",
+      url: "/api/queue/settings",
+      headers: asUser(adminId),
+      payload: { calledTooLongThresholdMinutes: 25 },
+    });
+    expect(patch.statusCode).toBe(200);
+    expect(patch.json().called_too_long_threshold_minutes).toBe(25);
+
+    const settings = await app.inject({
+      method: "GET",
+      url: "/api/queue/settings",
+      headers: asUser(operatorId),
+    });
+    expect(settings.json().called_too_long_threshold_minutes).toBe(25);
+
+    const pace = await app.inject({
+      method: "GET",
+      url: `/api/queue/rooms/${roomId}/pace`,
+      headers: asUser(operatorId),
+    });
+    // Reflects the operator-configured value, not the old max(10, 2x desired) formula.
+    expect(pace.json().calledTooLongThresholdMinutes).toBe(25);
+  });
+});
+
 describe("TV mode (H42)", () => {
   it("defaults to rooms, PATCH requires TV_CONTROL, changes persist in Valkey and broadcast on tv", async () => {
     const initial = await app.inject({ method: "GET", url: "/api/tv/mode" }); // public
