@@ -7,11 +7,11 @@ import { EVENTS } from "@hackos/shared/events";
 import { Building2Icon, LockIcon, PlusIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { type Column, DataTable } from "@/components/common/data-table";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
-import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -67,6 +67,7 @@ export default function QueueRoomsPage() {
   const [createDraft, setCreateDraft] = useState<RoomEditor>(emptyRoomEditor());
   const [roomDraft, setRoomDraft] = useState<RoomEditor>(emptyRoomEditor());
   const [saving, setSaving] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string>("all");
 
   const selectedRoom = useMemo(
     () => rooms.find((room) => room.id === selectedRoomId) ?? null,
@@ -175,6 +176,57 @@ export default function QueueRoomsPage() {
     });
   }, [selectedRoom]);
 
+  const roomStatusLabel = (status: string) =>
+    status === "active"
+      ? t("roomStatusActive")
+      : status === "paused"
+        ? t("roomStatusPaused")
+        : status;
+
+  const filteredRooms = useMemo(
+    () => (statusFilter === "all" ? rooms : rooms.filter((room) => room.status === statusFilter)),
+    [rooms, statusFilter],
+  );
+  const activeCount = useMemo(
+    () => rooms.filter((room) => room.status === "active").length,
+    [rooms],
+  );
+
+  const roomColumns: Column<Room>[] = [
+    {
+      id: "room",
+      header: t("columnRoom"),
+      sortValue: (room) => room.name.toLowerCase(),
+      cell: (room) => (
+        <div>
+          <p className="font-medium">{room.name}</p>
+          <p className="text-muted-foreground text-sm">{room.slug}</p>
+        </div>
+      ),
+    },
+    {
+      id: "location",
+      header: t("columnLocation"),
+      sortValue: (room) => (room.location ?? "").toLowerCase(),
+      cell: (room) =>
+        room.location ? (
+          <span>{room.location}</span>
+        ) : (
+          <span className="text-muted-foreground">{t("noLocationSet")}</span>
+        ),
+    },
+    {
+      id: "status",
+      header: t("columnRoomStatus"),
+      sortValue: (room) => room.status,
+      cell: (room) => (
+        <StatusBadge tone={room.status === "active" ? "success" : "warning"}>
+          {roomStatusLabel(room.status)}
+        </StatusBadge>
+      ),
+    },
+  ];
+
   if (!canManageRooms) {
     return (
       <div className="space-y-6">
@@ -246,43 +298,59 @@ export default function QueueRoomsPage() {
         }
       />
 
-      <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
-        <SectionCard title={t("rooms")} icon={Building2Icon} bodyClassName="space-y-4">
-          {loading ? (
-            <Spinner />
-          ) : rooms.length === 0 ? (
-            <EmptyState
-              icon={Building2Icon}
-              title={t("noRoomsConfigured")}
-              description={t("noRoomsConfiguredDesc")}
-            />
-          ) : (
-            <div className="grid gap-3 md:grid-cols-2">
-              {rooms.map((room) => (
-                <div key={room.id} className="rounded-md border p-4">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="font-medium">{room.name}</p>
-                      <p className="text-muted-foreground text-sm">
-                        {room.slug}
-                        {room.location ? ` · ${room.location}` : ""}
-                      </p>
-                    </div>
-                    <StatusBadge tone={room.status === "active" ? "success" : "warning"}>
-                      {room.status}
-                    </StatusBadge>
-                  </div>
-                  <div className="mt-4 flex justify-end">
-                    <Button variant="outline" size="sm" onClick={() => openManageModal(room.id)}>
-                      {t("manage")}
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </SectionCard>
-      </div>
+      <SectionCard
+        title={t("rooms")}
+        description={
+          !loading && rooms.length > 0
+            ? t("roomsSummary", { active: activeCount, total: rooms.length })
+            : undefined
+        }
+        icon={Building2Icon}
+        bodyClassName="space-y-4"
+      >
+        {!loading && rooms.length === 0 ? (
+          <EmptyState
+            icon={Building2Icon}
+            title={t("noRoomsConfigured")}
+            description={t("noRoomsConfiguredDesc")}
+          />
+        ) : (
+          <DataTable
+            columns={roomColumns}
+            data={filteredRooms}
+            getRowId={(room) => String(room.id)}
+            onRowClick={(room) => openManageModal(room.id)}
+            getRowLabel={(room) => room.name}
+            loading={loading}
+            searchable={(room) => `${room.name} ${room.slug} ${room.location ?? ""}`}
+            searchPlaceholder={t("filterRoomsPlaceholder")}
+            searchLabel={t("filterRooms")}
+            pageSize={10}
+            toolbar={
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="h-9 w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t("allRoomStatuses")}</SelectItem>
+                  <SelectItem value="active">{t("roomStatusActive")}</SelectItem>
+                  <SelectItem value="paused">{t("roomStatusPaused")}</SelectItem>
+                </SelectContent>
+              </Select>
+            }
+            filteredEmpty={{
+              active: statusFilter !== "all",
+              onClear: () => setStatusFilter("all"),
+              title: t("noMatchingRooms"),
+            }}
+            empty={{
+              icon: Building2Icon,
+              title: t("noRoomsConfigured"),
+              description: t("noRoomsConfiguredDesc"),
+            }}
+          />
+        )}
+      </SectionCard>
 
       <Modal
         open={modalMode !== null}
