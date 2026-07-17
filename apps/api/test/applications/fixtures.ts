@@ -124,6 +124,15 @@ export async function latestConfirmationToken(userId: number): Promise<string> {
   return rows[0].token;
 }
 
+/** Mark a user as invited-participant (used account_claim, kind=participant) — H10 bypass. */
+export async function markInvitedParticipant(userId: number, email: string): Promise<void> {
+  await pool.query(
+    `INSERT INTO email_verification_tokens (token, type, email, user_id, kind, expires_at, used_at)
+     VALUES ($1, 'account_claim', $2, $3, 'participant', now() + interval '1 hour', now())`,
+    [`test-claim-${userId}-${Date.now()}`, email, userId],
+  );
+}
+
 /** Force the confirmation window to have elapsed by back-dating the token + decision. */
 export async function expireConfirmationWindow(responseId: number): Promise<void> {
   await pool.query(

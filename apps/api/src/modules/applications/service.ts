@@ -335,12 +335,10 @@ async function loadUserComms(client: pg.PoolClient, userId: number): Promise<Use
 /**
  * Check whether a user was created via a participant invitation
  * (kind=participant account_claim). Invited participants bypass the
- * application window and auto-confirm on submit.
+ * application window (both to write — H10 — and to read/discover a closed
+ * form, H10 gap) and auto-confirm on submit.
  */
-async function isInvitedParticipant(
-  client: import("pg").PoolClient,
-  userId: number,
-): Promise<boolean> {
+export async function isInvitedParticipant(client: Queryable, userId: number): Promise<boolean> {
   const { rows } = await client.query(
     `SELECT 1 FROM email_verification_tokens
      WHERE user_id = $1 AND type = 'account_claim' AND kind = 'participant' AND used_at IS NOT NULL
