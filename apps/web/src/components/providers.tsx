@@ -7,6 +7,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { LocaleProvider } from "@/lib/i18n";
 import { SessionProvider } from "@/lib/session";
+import type { Language } from "@/lib/types";
 
 /**
  * Global client providers, mounted once in the root layout:
@@ -21,7 +22,13 @@ import { SessionProvider } from "@/lib/session";
  * unrelated write never blows away this tab's scroll position, open modal,
  * or in-progress form.
  */
-export function Providers({ children }: { children: React.ReactNode }) {
+export function Providers({
+  children,
+  initialLanguage,
+}: {
+  children: React.ReactNode;
+  initialLanguage: Language;
+}) {
   const pathname = usePathname();
   // The kiosk TV (H41) is never touched by anyone, so a banner that only
   // dismisses on click would sit there forever, permanently covering rooms.
@@ -29,7 +36,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
       <SessionProvider>
-        <LocaleProvider>
+        <LocaleProvider initialLanguage={initialLanguage}>
           <TooltipProvider delayDuration={200}>{children}</TooltipProvider>
           {!isKiosk && <CookieNotice />}
           <Toaster position="bottom-right" />
