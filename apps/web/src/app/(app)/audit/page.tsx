@@ -201,7 +201,7 @@ export default function AuditPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={t("auditLog")} description={t("auditLogPageDesc")} />
+      <PageHeader title={t("auditLog")} />
 
       <div className="flex flex-wrap items-end gap-3">
         <FilterField label={t("colAction")}>

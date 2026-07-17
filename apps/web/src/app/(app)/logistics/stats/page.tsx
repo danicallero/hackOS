@@ -205,7 +205,7 @@ export default function LogisticsStatsPage() {
 
   return (
     <div className="space-y-6" data-wide>
-      <PageHeader title={t("logisticsStats")} description={t("phaseStatsDescription")} />
+      <PageHeader title={t("logisticsStats")} />
       <Tabs value={phase} onValueChange={selectPhase}>
         <TabsList aria-label={t("eventPhaseLabel")} className="w-full sm:w-fit">
           <TabsTrigger value="before">{t("phaseBefore")}</TabsTrigger>

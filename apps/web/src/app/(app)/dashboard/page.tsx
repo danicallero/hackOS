@@ -115,7 +115,7 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <PageHeader
         title={`${t("welcome")}${me.name ? `, ${me.name}` : ""}`}
-        description={data.event?.tagline ?? t("dashboardDescription")}
+        description={data.event?.tagline ?? undefined}
       />
 
       {loading ? (

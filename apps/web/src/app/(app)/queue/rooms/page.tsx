@@ -236,7 +236,6 @@ export default function QueueRoomsPage() {
     <div className="space-y-6">
       <PageHeader
         title={t("queueRooms")}
-        description={t("roomsAdminDescription")}
         actions={
           canAdmin && (
             <Button onClick={openCreateModal}>
@@ -248,12 +247,7 @@ export default function QueueRoomsPage() {
       />
 
       <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
-        <SectionCard
-          title={t("rooms")}
-          description={t("roomsManageDesc")}
-          icon={Building2Icon}
-          bodyClassName="space-y-4"
-        >
+        <SectionCard title={t("rooms")} icon={Building2Icon} bodyClassName="space-y-4">
           {loading ? (
             <Spinner />
           ) : rooms.length === 0 ? (
@@ -414,7 +408,7 @@ export default function QueueRoomsPage() {
                 />
               </div>
             </div>
-            <SectionCard title={t("assignments")} description={t("assignmentsDesc")}>
+            <SectionCard title={t("assignments")}>
               <AssignmentsEditor
                 roomId={selectedRoom.id}
                 assignments={selectedRoomAssignments}

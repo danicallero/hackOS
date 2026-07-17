@@ -535,11 +535,6 @@ const dict: Record<string, I18nText> = {
   unverified: { es: "Sin verificar", gl: "Sen verificar", en: "Unverified" },
   yourCapabilities: { es: "Tus permisos", gl: "Os teus permisos", en: "Your capabilities" },
   welcome: { es: "Bienvenido", gl: "Benvida", en: "Welcome" },
-  dashboardDescription: {
-    es: "Consulta lo importante del evento de un vistazo.",
-    gl: "Consulta o importante do evento dunha ollada.",
-    en: "See what matters for the event at a glance.",
-  },
   loadingDashboard: { es: "Cargando inicio", gl: "Cargando inicio", en: "Loading dashboard" },
   eventStatus: { es: "Estado del evento", gl: "Estado do evento", en: "Event status" },
   eventTimingPending: {
@@ -971,14 +966,9 @@ const dict: Record<string, I18nText> = {
     en: "You can't accredit",
   },
   accreditationDeniedDesc: {
-    es: "Se requiere el permiso de escaneo de acreditación.",
-    gl: "Requírese o permiso de escaneo de acreditación.",
-    en: "The accreditation scan capability is required.",
-  },
-  accreditationDescription: {
-    es: "Busca a la persona (entrada, acreditación, nombre o correo) y asigna o cambia su acreditación desde su ficha.",
-    gl: "Busca a persoa (entrada, acreditación, nome ou correo) e asigna ou cambia a súa acreditación desde a súa ficha.",
-    en: "Find the person (ticket, badge, name or email) and assign or replace their badge from their card.",
+    es: "Pide a un administrador acceso al escaneo de acreditación.",
+    gl: "Pide a un administrador acceso ao escaneo de acreditación.",
+    en: "Ask an administrator for accreditation access.",
   },
   personSearchTitle: { es: "Buscar persona", gl: "Buscar persoa", en: "Find person" },
   personSearchDesc: {
@@ -1102,9 +1092,9 @@ const dict: Record<string, I18nText> = {
     en: "You can't scan presence",
   },
   presenceDeniedDesc: {
-    es: "Se requiere el permiso de escaneo de presencia.",
-    gl: "Requírese o permiso de escaneo de presenza.",
-    en: "The presence scan capability is required.",
+    es: "Pide a un administrador acceso al escaneo de presencia.",
+    gl: "Pide a un administrador acceso ao escaneo de presenza.",
+    en: "Ask an administrator for presence-scan access.",
   },
   presenceDescription: {
     es: "Escanea una acreditación en la puerta para registrar una entrada o salida; las horas de asistencia se estiman a partir de todas las señales.",
@@ -1272,9 +1262,9 @@ const dict: Record<string, I18nText> = {
     en: "You can't scan meals",
   },
   mealsDeniedDesc: {
-    es: "Se requiere el permiso de escaneo de actividad.",
-    gl: "Requírese o permiso de escaneo de actividade.",
-    en: "The activity scan capability is required.",
+    es: "Pide a un administrador acceso al escaneo de comidas.",
+    gl: "Pide a un administrador acceso ao escaneo de comidas.",
+    en: "Ask an administrator for meal-scan access.",
   },
   mealsDescription: {
     es: "Sirve comidas escaneando acreditaciones; las repeticiones se marcan y las confirma el equipo.",
@@ -1296,14 +1286,9 @@ const dict: Record<string, I18nText> = {
     en: "You can't scan activities",
   },
   activitiesDeniedDesc: {
-    es: "Se requiere el permiso de escaneo de actividad.",
-    gl: "Requírese o permiso de escaneo de actividade.",
-    en: "The activity scan capability is required.",
-  },
-  activitiesDescription: {
-    es: "Registra la asistencia a charlas, talleres y otras actividades escaneables.",
-    gl: "Rexistra a asistencia a charlas, obradoiros e outras actividades escaneables.",
-    en: "Register attendance at talks, workshops and other scannable activities.",
+    es: "Pide a un administrador acceso al escaneo de actividades.",
+    gl: "Pide a un administrador acceso ao escaneo de actividades.",
+    en: "Ask an administrator for activity-scan access.",
   },
   logistics: { es: "Logística", gl: "Loxística", en: "Logistics" },
   logisticsDeniedTitle: {
@@ -1312,9 +1297,9 @@ const dict: Record<string, I18nText> = {
     en: "You can't access logistics",
   },
   logisticsDeniedDesc: {
-    es: "Se requiere el permiso de acreditación, escaneo de comidas/actividades, presencia o estadísticas de logística.",
-    gl: "Requírese o permiso de acreditación, escaneo de comidas/actividades, presenza ou estatísticas de loxística.",
-    en: "Accreditation, meal/activity scan, presence or logistics stats capability is required.",
+    es: "Pide a un administrador acceso a acreditación, escaneo de comidas o actividades, presencia o estadísticas de logística.",
+    gl: "Pide a un administrador acceso a acreditación, escaneo de comidas ou actividades, presenza ou estatísticas de loxística.",
+    en: "Ask an administrator for accreditation, meal/activity-scan, presence, or logistics-stats access.",
   },
   logisticsStatsDeniedTitle: {
     es: "No puedes ver las estadísticas de logística",
@@ -1322,9 +1307,9 @@ const dict: Record<string, I18nText> = {
     en: "You can't view logistics stats",
   },
   logisticsStatsDeniedDesc: {
-    es: "Se requiere el permiso de estadísticas de logística.",
-    gl: "Requírese o permiso de estatísticas de loxística.",
-    en: "The logistics stats capability is required.",
+    es: "Pide a un administrador acceso a las estadísticas de logística.",
+    gl: "Pide a un administrador acceso ás estatísticas de loxística.",
+    en: "Ask an administrator for logistics-stats access.",
   },
   logisticsStatsDescription: {
     es: "Paneles operativos en directo de acreditación, presencia, comidas y actividades.",
@@ -1395,9 +1380,9 @@ const dict: Record<string, I18nText> = {
     en: "You can't access room admin",
   },
   roomAdminDeniedDesc: {
-    es: "La administración de salas requiere el permiso queue:admin.",
-    gl: "A administración de salas require o permiso queue:admin.",
-    en: "Room admin requires the queue:admin capability.",
+    es: "Pide a un administrador acceso a la administración de salas.",
+    gl: "Pide a un administrador acceso á administración de salas.",
+    en: "Ask an administrator for room-admin access.",
   },
   couldNotLoadRoomAdminData: {
     es: "No se han podido cargar los datos de administración de salas.",
@@ -1426,17 +1411,7 @@ const dict: Record<string, I18nText> = {
     gl: "Non se puido actualizar a sala.",
     en: "Could not update room.",
   },
-  roomsAdminDescription: {
-    es: "Salas y controles de asignación para el flujo de evaluación.",
-    gl: "Salas e controis de asignación para o fluxo de avaliación.",
-    en: "Rooms and assignment controls for the judging flow.",
-  },
   createRoom: { es: "Crear sala", gl: "Crear sala", en: "Create room" },
-  roomsManageDesc: {
-    es: "Crea y gestiona las salas de evaluación.",
-    gl: "Crea e xestiona as salas de avaliación.",
-    en: "Create and manage judging rooms.",
-  },
   noRoomsConfigured: {
     es: "No hay salas configuradas",
     gl: "Non hai salas configuradas",
@@ -1466,11 +1441,6 @@ const dict: Record<string, I18nText> = {
   slugLabel: { es: "Slug", gl: "Slug", en: "Slug" },
   locationLabel: { es: "Ubicación", gl: "Localización", en: "Location" },
   assignments: { es: "Asignaciones", gl: "Asignacións", en: "Assignments" },
-  assignmentsDesc: {
-    es: "Reto y jueces asignados a esta sala.",
-    gl: "Reto e xuíces asignados a esta sala.",
-    en: "Challenge and judges assigned to this room.",
-  },
   roomChallengeLabel: { es: "Reto de la sala", gl: "Reto da sala", en: "Room challenge" },
   noChallengeAssigned: {
     es: "Ningún reto asignado.",
@@ -1731,9 +1701,9 @@ const dict: Record<string, I18nText> = {
     en: "You can't access the judging panel",
   },
   judgingAccessDeniedDesc: {
-    es: "El acceso a evaluación requiere el permiso de operador, administrador o juez.",
-    gl: "O acceso a avaliación require o permiso de operador, administrador ou xuíz.",
-    en: "Judging access requires an operator, admin or judge capability.",
+    es: "Pide a un administrador acceso como operador, administrador o juez.",
+    gl: "Pide a un administrador acceso como operador, administrador ou xuíz.",
+    en: "Ask an administrator for operator, admin, or judge access.",
   },
   roomLabel: { es: "Sala", gl: "Sala", en: "Room" },
   selectRoomPlaceholder: {
@@ -1809,7 +1779,7 @@ const dict: Record<string, I18nText> = {
   queueStatsEvaluated: {
     es: "Evaluados",
     gl: "Avaliados",
-    en: "Evaluated",
+    en: "Scored",
   },
   queueStatsAvgTime: {
     es: "Tiempo medio/equipo",
@@ -2166,11 +2136,6 @@ const dict: Record<string, I18nText> = {
   colCloses: { es: "Cierra", gl: "Pecha", en: "Closes" },
   colQuota: { es: "Cupo", gl: "Cota", en: "Quota" },
   unlimitedDash: { es: "— sin límite", gl: "— sen límite", en: "— unlimited" },
-  applicationsDesc: {
-    es: "Define formularios de solicitud por tipo de persona, fija sus ventanas de apertura/cierre y su cupo, y luego revisa las respuestas y envía las decisiones.",
-    gl: "Define formularios de solicitude por tipo de persoa, fixa as súas ventás de apertura/peche e a súa cota, e despois revisa as respostas e envía as decisións.",
-    en: "Define application forms per person type, set their open/close windows and quota, then review responses and send decisions.",
-  },
   newForm: { es: "Nuevo formulario", gl: "Novo formulario", en: "New form" },
   searchFormsPlaceholder: {
     es: "Buscar formularios…",
@@ -2425,9 +2390,9 @@ const dict: Record<string, I18nText> = {
     en: "You can't manage the schedule",
   },
   scheduleDeniedDesc: {
-    es: "Esta página requiere el permiso schedule:manage.",
-    gl: "Esta páxina require o permiso schedule:manage.",
-    en: "The schedule page requires schedule:manage.",
+    es: "Pide a un administrador acceso a la gestión del programa.",
+    gl: "Pide a un administrador acceso á xestión do programa.",
+    en: "Ask an administrator for schedule-management access.",
   },
   colItem: { es: "Elemento", gl: "Elemento", en: "Item" },
   typeActivity: { es: "Actividad", gl: "Actividade", en: "Activity" },
@@ -2562,9 +2527,9 @@ const dict: Record<string, I18nText> = {
     en: "You can't manage announcements",
   },
   announcementsDeniedDesc: {
-    es: "Los avisos requieren el permiso announcements:manage.",
-    gl: "Os avisos requiren o permiso announcements:manage.",
-    en: "Announcements require the announcements:manage capability.",
+    es: "Pide a un administrador acceso a avisos.",
+    gl: "Pide a un administrador acceso a avisos.",
+    en: "Ask an administrator for announcement access.",
   },
   colAnnouncement: { es: "Aviso", gl: "Aviso", en: "Announcement" },
   colAudience: { es: "Audiencia", gl: "Audiencia", en: "Audience" },
@@ -2579,11 +2544,6 @@ const dict: Record<string, I18nText> = {
   deliveryDelivered: { es: "Entregado", gl: "Entregado", en: "Delivered" },
   deliverySending: { es: "Enviando…", gl: "Enviando…", en: "Sending…" },
   deliveryNotSent: { es: "Aún no enviado", gl: "Aínda non enviado", en: "Not sent yet" },
-  announcementsDesc: {
-    es: "Publica mensajes temporales en pantallas, móviles y la bandeja de entrada.",
-    gl: "Publica mensaxes temporais en pantallas, móbiles e a caixa de entrada.",
-    en: "Publish timed messages to screens, mobiles and the in-app inbox.",
-  },
   newAnnouncement: { es: "Nuevo aviso", gl: "Novo aviso", en: "New announcement" },
   searchAnnouncementsPlaceholder: {
     es: "Buscar avisos…",
@@ -2684,9 +2644,9 @@ const dict: Record<string, I18nText> = {
     en: "You can't control the TV displays",
   },
   tvControlDeniedDesc: {
-    es: "Esta página requiere el permiso tv:control.",
-    gl: "Esta páxina require o permiso tv:control.",
-    en: "This page requires the tv:control capability.",
+    es: "Pide a un administrador acceso al control de pantallas de TV.",
+    gl: "Pide a un administrador acceso ao control de pantallas de TV.",
+    en: "Ask an administrator for TV-display control access.",
   },
   tvControlDesc: {
     es: "Cambia todas las pantallas de TV abiertas sin cambiar su URL.",
@@ -3041,11 +3001,6 @@ const dict: Record<string, I18nText> = {
   colScannedBy: { es: "Escaneado por", gl: "Escaneado por", en: "Scanned by" },
   presenceSystemActor: { es: "Sistema", gl: "Sistema", en: "System" },
   columnActions: { es: "Acciones", gl: "Accións", en: "Actions" },
-  presenceDesc: {
-    es: "Señales de puerta, comidas y actividades, estimadas en sesiones.",
-    gl: "Sinais de porta, comidas e actividades, estimadas en sesións.",
-    en: "Door, meal and activity signals, estimated into sessions.",
-  },
   estimatedHours: { es: "Horas estimadas", gl: "Horas estimadas", en: "Estimated hours" },
   fromEntryExitActivity: {
     es: "A partir de la actividad de entrada y salida",
@@ -3253,9 +3208,9 @@ const dict: Record<string, I18nText> = {
     en: "Applications hidden",
   },
   needApplicationsReviewCap: {
-    es: "Necesitas el permiso applications:review para ver las solicitudes de este usuario.",
-    gl: "Precisas o permiso applications:review para ver as solicitudes deste usuario.",
-    en: "You need the applications:review capability to see this user's applications.",
+    es: "Pide a un administrador acceso a revisión de solicitudes para ver las de este usuario.",
+    gl: "Pide a un administrador acceso a revisión de solicitudes para ver as deste usuario.",
+    en: "Ask an administrator for application-review access to see this user's applications.",
   },
   couldNotLoadApplicationsTitle: {
     es: "No se han podido cargar las solicitudes",
@@ -3318,9 +3273,9 @@ const dict: Record<string, I18nText> = {
     en: "Audit log unavailable",
   },
   needAuditReadCap: {
-    es: "Necesitas el permiso audit:read para ver el registro de auditoría de este usuario.",
-    gl: "Precisas o permiso audit:read para ver o rexistro de auditoría deste usuario.",
-    en: "You need the audit:read capability to view this user's audit log.",
+    es: "Pide a un administrador acceso al registro de auditoría para ver el de este usuario.",
+    gl: "Pide a un administrador acceso ao rexistro de auditoría para ver o deste usuario.",
+    en: "Ask an administrator for audit-log access to view this user's audit log.",
   },
   couldNotLoadAuditLog: {
     es: "No se ha podido cargar el registro de auditoría",
@@ -3335,11 +3290,6 @@ const dict: Record<string, I18nText> = {
   colAction: { es: "Acción", gl: "Acción", en: "Action" },
   colEntity: { es: "Entidad", gl: "Entidade", en: "Entity" },
   colSource: { es: "Origen", gl: "Orixe", en: "Source" },
-  auditLogDesc: {
-    es: "Ediciones del equipo y otros cambios auditados en el registro de este usuario.",
-    gl: "Edicións do equipo e outros cambios auditados no rexistro deste usuario.",
-    en: "Staff edits and other audited changes to this user's record.",
-  },
   noAuditEntriesYet: {
     es: "Aún no hay entradas de auditoría",
     gl: "Aínda non hai entradas de auditoría",
@@ -3364,9 +3314,9 @@ const dict: Record<string, I18nText> = {
     en: "Presence unavailable",
   },
   presenceUnavailableDesc: {
-    es: "Necesitas el permiso presence:scan o logistics:stats para ver la asistencia.",
-    gl: "Precisas o permiso presence:scan ou logistics:stats para ver a asistencia.",
-    en: "You need the presence:scan or logistics:stats capability to view attendance.",
+    es: "Pide a un administrador acceso a presencia o estadísticas de logística para ver la asistencia.",
+    gl: "Pide a un administrador acceso a presenza ou estatísticas de loxística para ver a asistencia.",
+    en: "Ask an administrator for presence-scan or logistics-stats access to view attendance.",
   },
   couldNotLoadPresenceTitle: {
     es: "No se ha podido cargar la presencia",
@@ -3394,11 +3344,6 @@ const dict: Record<string, I18nText> = {
     gl: "Aínda non te presentaches a nada",
     en: "You haven't applied to anything yet",
   },
-  notAppliedYetDesc: {
-    es: "Los formularios abiertos a los que puedes presentarte se listan abajo.",
-    gl: "Os formularios abertos aos que podes presentarte lístanse abaixo.",
-    en: "Open forms you can apply to are listed below.",
-  },
   submittedOnPrefix: { es: "Enviado el {date}", gl: "Enviado o {date}", en: "Submitted {date}" },
   notSubmittedYet: { es: "Aún sin enviar", gl: "Aínda sen enviar", en: "Not submitted yet" },
   openToApply: { es: "Abiertos para solicitar", gl: "Abertos para solicitar", en: "Open to apply" },
@@ -3411,11 +3356,6 @@ const dict: Record<string, I18nText> = {
     es: "No hay formularios abiertos ahora mismo",
     gl: "Non hai formularios abertos agora mesmo",
     en: "No open forms right now",
-  },
-  noOpenFormsDesc: {
-    es: "Vuelve más tarde — aquí aparecerán las nuevas ventanas de solicitud.",
-    gl: "Volve máis tarde — aquí aparecerán as novas ventás de solicitude.",
-    en: "Check back later — new application windows will show up here.",
   },
   closesInline: { es: " · cierra el {date}", gl: " · pecha o {date}", en: " · closes {date}" },
   couldNotVerifyLink: {
@@ -3633,9 +3573,9 @@ const dict: Record<string, I18nText> = {
     en: "You can't access projects",
   },
   projectAccessDeniedDesc: {
-    es: "El acceso a proyectos requiere el permiso projects:read.",
-    gl: "O acceso a proxectos require o permiso projects:read.",
-    en: "Project access requires the projects:read capability.",
+    es: "Pide a un administrador acceso a proyectos.",
+    gl: "Pide a un administrador acceso a proxectos.",
+    en: "Ask an administrator for project access.",
   },
   projectsDesc: {
     es: "Envíos de Devpost importados a hackOS, con equipos, retos y premios.",
@@ -3684,9 +3624,9 @@ const dict: Record<string, I18nText> = {
   },
   projectDemoUrlLabel: { es: "Demo (URL)", gl: "Demo (URL)", en: "Demo URL" },
   projectChallengesHint: {
-    es: "Cada reto elegido añade el equipo al final de su cola (H21).",
-    gl: "Cada reto elixido engade o equipo ao final da súa cola (H21).",
-    en: "Each chosen challenge appends the team to the bottom of its queue (H21).",
+    es: "El proyecto se une al final de la cola de cada reto elegido.",
+    gl: "O proxecto únese ao final da cola de cada reto elixido.",
+    en: "The project joins the end of each selected challenge's queue.",
   },
   projectCreated: {
     es: "Proyecto creado.",
@@ -3735,9 +3675,9 @@ const dict: Record<string, I18nText> = {
     en: "Participants can create projects",
   },
   participantsCanCreateProjectsDesc: {
-    es: "H19: permite que cada participante cree su propio proyecto sin depender de Devpost.",
-    gl: "H19: permite que cada participante cree o seu propio proxecto sen depender de Devpost.",
-    en: "H19: lets each participant create their own project without relying on Devpost.",
+    es: "Cada participante puede crear su propio proyecto sin depender de Devpost.",
+    gl: "Cada participante pode crear o seu propio proxecto sen depender de Devpost.",
+    en: "Each participant can create their own project without relying on Devpost.",
   },
   couldNotLoadProject: {
     es: "No se ha podido cargar el proyecto.",
@@ -3751,11 +3691,6 @@ const dict: Record<string, I18nText> = {
   },
   manualAdds: { es: "Añadidos manuales", gl: "Engadidos manuais", en: "Manual adds" },
   linksTitle: { es: "Enlaces", gl: "Ligazóns", en: "Links" },
-  externalSubmissionUrls: {
-    es: "URLs de envío externas.",
-    gl: "URLs de envío externas.",
-    en: "External submission URLs.",
-  },
   noLinksProject: {
     es: "Este proyecto no tiene enlaces.",
     gl: "Este proxecto non ten ligazóns.",
@@ -3778,11 +3713,6 @@ const dict: Record<string, I18nText> = {
     en: "Add a user to make this project visible in participant and queue views.",
   },
   addedManually: { es: "Añadido manualmente", gl: "Engadido manualmente", en: "Added manually" },
-  challengesSectionDesc: {
-    es: "Participación actual en retos de este proyecto.",
-    gl: "Participación actual en retos deste proxecto.",
-    en: "Current challenge participation for this project.",
-  },
   noChallengesAssignedTitle: {
     es: "Ningún reto asignado",
     gl: "Ningún reto asignado",
@@ -3815,11 +3745,6 @@ const dict: Record<string, I18nText> = {
     es: "No se ha podido eliminar el reto.",
     gl: "Non se puido eliminar o reto.",
     en: "Could not remove challenge.",
-  },
-  prizesSectionDesc: {
-    es: "Participación en premios importados de Devpost para este proyecto.",
-    gl: "Participación en premios importados de Devpost para este proxecto.",
-    en: "Imported Devpost prize participation for this project.",
   },
   noPrizesImportedTitle: {
     es: "Ningún premio importado",
@@ -3967,9 +3892,9 @@ const dict: Record<string, I18nText> = {
     en: "You can't import projects",
   },
   importDeniedDesc: {
-    es: "Importar requiere el permiso projects:import.",
-    gl: "Importar require o permiso projects:import.",
-    en: "Importing requires the projects:import capability.",
+    es: "Pide a un administrador acceso a la importación de proyectos.",
+    gl: "Pide a un administrador acceso á importación de proxectos.",
+    en: "Ask an administrator for project-import access.",
   },
   importCompleteTitle: {
     es: "Importación completa",
@@ -4075,11 +4000,6 @@ const dict: Record<string, I18nText> = {
     gl: "Exportacións de Devpost",
     en: "Devpost exports",
   },
-  devpostExportsDesc: {
-    es: "La exportación de proyectos (envíos) y la de participantes (inscritos).",
-    gl: "A exportación de proxectos (envíos) e a de participantes (inscritos).",
-    en: "The projects (submissions) export and the participants (registrants) export.",
-  },
   previewImport: {
     es: "Previsualizar importación",
     gl: "Previsualizar importación",
@@ -4124,14 +4044,9 @@ const dict: Record<string, I18nText> = {
     en: "You can't resolve imports",
   },
   resolveImportsDeniedDesc: {
-    es: "Resolver importaciones de Devpost requiere el permiso projects:import.",
-    gl: "Resolver importacións de Devpost require o permiso projects:import.",
-    en: "Resolving Devpost imports requires the projects:import capability.",
-  },
-  resolveUnmatchedDesc: {
-    es: "Vincula participantes de Devpost importados a usuarios de hackOS o envía correos de reclamación de cuenta.",
-    gl: "Vincula participantes de Devpost importados a usuarios de hackOS ou envía correos de reclamación de conta.",
-    en: "Link imported Devpost participants to hackOS users or send account-claim emails.",
+    es: "Pide a un administrador acceso a la importación de proyectos.",
+    gl: "Pide a un administrador acceso á importación de proxectos.",
+    en: "Ask an administrator for project-import access.",
   },
   prizeMappingTitle: { es: "Mapeo de premios", gl: "Mapeo de premios", en: "Prize mapping" },
   prizeMappingDesc: {
@@ -4155,11 +4070,6 @@ const dict: Record<string, I18nText> = {
     es: "Participantes sin emparejar",
     gl: "Participantes sen emparellar",
     en: "Unmatched participants",
-  },
-  unmatchedParticipantsDesc: {
-    es: "Participantes cuyo correo de Devpost no coincidió con ninguna cuenta de hackOS.",
-    gl: "Participantes cuxo correo de Devpost non coincidiu con ningunha conta de hackOS.",
-    en: "Participants whose Devpost email did not match a hackOS account.",
   },
   userSearchLabel: { es: "Buscar usuario", gl: "Buscar usuario", en: "User search" },
   searchUsersNameEmail: {
@@ -4375,11 +4285,6 @@ const dict: Record<string, I18nText> = {
     en: "Challenge access is available to admins and linked sponsor representatives.",
   },
   myChallenges: { es: "Mis retos", gl: "Os meus retos", en: "My challenges" },
-  challengesDesc: {
-    es: "Contenido del reto, premios, configuración del panel de jueces y publicación pública.",
-    gl: "Contido do reto, premios, configuración do panel de xuíces e publicación pública.",
-    en: "Challenge content, prizes, judging panel configuration and public reveal.",
-  },
   newChallenge: { es: "Nuevo reto", gl: "Novo reto", en: "New challenge" },
   colChallenge: { es: "Reto", gl: "Reto", en: "Challenge" },
   colReveal: { es: "Publicación", gl: "Publicación", en: "Reveal" },
@@ -4674,9 +4579,9 @@ const dict: Record<string, I18nText> = {
     en: "You can't manage sponsors",
   },
   sponsorsAccessDeniedDesc: {
-    es: "Necesitas el permiso sponsors:manage para ver y gestionar empresas.",
-    gl: "Precisas o permiso sponsors:manage para ver e xestionar empresas.",
-    en: "You need the sponsors:manage capability to view and manage enterprises.",
+    es: "Pide a un administrador acceso a patrocinadores para ver y gestionar empresas.",
+    gl: "Pide a un administrador acceso a patrocinadores para ver e xestionar empresas.",
+    en: "Ask an administrator for sponsor access to view and manage enterprises.",
   },
   couldNotLoadEnterprises: {
     es: "No se han podido cargar las empresas.",
@@ -4807,9 +4712,9 @@ const dict: Record<string, I18nText> = {
     en: "Back to enterprises",
   },
   needUsersReadSearch: {
-    es: "Necesitas el permiso users:read para buscar usuarios.",
-    gl: "Precisas o permiso users:read para buscar usuarios.",
-    en: "You need users:read to search users.",
+    es: "Pide a un administrador acceso al directorio de usuarios para buscar.",
+    gl: "Pide a un administrador acceso ao directorio de usuarios para buscar.",
+    en: "Ask an administrator for user-directory access to search users.",
   },
   searchFailedGeneric: {
     es: "La búsqueda ha fallado.",
@@ -4836,11 +4741,6 @@ const dict: Record<string, I18nText> = {
     es: "Usuarios afiliados",
     gl: "Usuarios afiliados",
     en: "Affiliated users",
-  },
-  affiliatedUsersDesc: {
-    es: "Personas vinculadas a esta empresa (representantes del patrocinador).",
-    gl: "Persoas vinculadas a esta empresa (representantes do patrocinador).",
-    en: "People linked to this enterprise (sponsor representatives).",
   },
   searchUserByNameEmail: {
     es: "Buscar un usuario por nombre o correo…",
@@ -4968,11 +4868,6 @@ const dict: Record<string, I18nText> = {
     gl: "Novo grupo de permisos",
     en: "New permission group",
   },
-  giveNameOptionalCapsDesc: {
-    es: "Dale un nombre y, opcionalmente, los permisos que otorga.",
-    gl: "Dálle un nome e, opcionalmente, os permisos que outorga.",
-    en: "Give it a name and, optionally, the capabilities it grants.",
-  },
   createGroup: { es: "Crear grupo", gl: "Crear grupo", en: "Create group" },
   whatGroupForPlaceholder: {
     es: "Para qué sirve este grupo…",
@@ -5062,23 +4957,8 @@ const dict: Record<string, I18nText> = {
   },
   noDescriptionPeriod: { es: "Sin descripción.", gl: "Sen descrición.", en: "No description." },
   groupDetailsTitle: { es: "Datos del grupo", gl: "Datos do grupo", en: "Group details" },
-  renameOrUpdateDescDesc: {
-    es: "Cambia el nombre del grupo o actualiza su descripción.",
-    gl: "Cambia o nome do grupo ou actualiza a súa descrición.",
-    en: "Rename the group or update its description.",
-  },
-  capabilitiesGrantDesc: {
-    es: "Los permisos que este grupo otorga a sus miembros.",
-    gl: "Os permisos que este grupo outorga aos seus membros.",
-    en: "The capabilities this group grants to its members.",
-  },
   saveCapabilities: { es: "Guardar permisos", gl: "Gardar permisos", en: "Save capabilities" },
   membersTitle: { es: "Miembros", gl: "Membros", en: "Members" },
-  usersInGroupDesc: {
-    es: "Usuarios que pertenecen directamente a este grupo.",
-    gl: "Usuarios que pertencen directamente a este grupo.",
-    en: "Users who belong to this group directly.",
-  },
   noMembersYetPeriod: {
     es: "Aún no hay miembros.",
     gl: "Aínda non hai membros.",
@@ -5137,11 +5017,6 @@ const dict: Record<string, I18nText> = {
     es: "Confirmación sin escritura: haz clic en eliminar para quitar {name}.",
     gl: "Confirmación sen escritura: fai clic en eliminar para quitar {name}.",
     en: "Type-free confirmation: click delete to remove {name}.",
-  },
-  searchDirectoryDesc: {
-    es: "Busca en el directorio de usuarios por nombre o correo.",
-    gl: "Busca no directorio de usuarios por nome ou correo.",
-    en: "Search the user directory by name or email.",
   },
   searchUsersEllipsisPlaceholder: {
     es: "Buscar usuarios…",
@@ -5494,11 +5369,6 @@ const dict: Record<string, I18nText> = {
   },
 
   // ---- Admin: libraries (universities, intolerances) ----
-  librariesDesc: {
-    es: "Listas de referencia compartidas usadas en el registro, los perfiles y los formularios de solicitud.",
-    gl: "Listas de referencia compartidas usadas no rexistro, os perfís e os formularios de solicitude.",
-    en: "Shared reference lists used across registration, profiles and application forms.",
-  },
   universitiesTab: { es: "Universidades", gl: "Universidades", en: "Universities" },
   couldNotLoadDictionary: {
     es: "No se ha podido cargar el catálogo.",
@@ -5853,11 +5723,11 @@ const dict: Record<string, I18nText> = {
   noNotes: { es: "Sin notas", gl: "Sen notas", en: "No notes" },
 
   // ---- Queue status labels ----
-  queueStatusWaiting: { es: "En cola", gl: "En cola", en: "In queue" },
+  queueStatusWaiting: { es: "En espera", gl: "En espera", en: "Waiting" },
   queueStatusCalled: { es: "Llamado", gl: "Chamado", en: "Called" },
   queueStatusInRoom: { es: "En la sala", gl: "Na sala", en: "In room" },
   queueStatusPresenting: { es: "Presentando", gl: "Presentando", en: "Presenting" },
-  queueStatusCompleted: { es: "Evaluado", gl: "Avaliado", en: "Evaluated" },
+  queueStatusCompleted: { es: "Evaluado", gl: "Avaliado", en: "Scored" },
   queueStatusDisqualified: { es: "Descalificado", gl: "Descualificado", en: "Disqualified" },
 
   // ---- Admin: audit log ----
@@ -5867,18 +5737,13 @@ const dict: Record<string, I18nText> = {
     en: "You can't view the audit log",
   },
   auditLogAccessDeniedDesc: {
-    es: "El registro de auditoría requiere el permiso audit:read.",
-    gl: "O rexistro de auditoría require o permiso audit:read.",
-    en: "The audit log requires the audit:read capability.",
+    es: "Pide a un administrador acceso al registro de auditoría.",
+    gl: "Pide a un administrador acceso ao rexistro de auditoría.",
+    en: "Ask an administrator for audit-log access.",
   },
   userInline: { es: "usuario #{id}", gl: "usuario #{id}", en: "user #{id}" },
   colActor: { es: "Actor", gl: "Actor", en: "Actor" },
   systemActor: { es: "sistema", gl: "sistema", en: "system" },
-  auditLogPageDesc: {
-    es: "Acciones sensibles en toda hackOS: quién, qué, cuándo y desde dónde.",
-    gl: "Accións sensibles en toda hackOS: quen, que, cando e desde onde.",
-    en: "Sensitive actions across hackOS: who, what, when and from where.",
-  },
   entityTypeLabel: { es: "Tipo de entidad", gl: "Tipo de entidade", en: "Entity type" },
   entityIdLabel: { es: "ID de entidad", gl: "ID de entidade", en: "Entity ID" },
   actorUserIdLabel: { es: "ID de usuario autor", gl: "ID de usuario autor", en: "Actor user ID" },
@@ -6104,9 +5969,9 @@ const dict: Record<string, I18nText> = {
   moveDown: { es: "Mover abajo", gl: "Mover abaixo", en: "Move down" },
   moveUp: { es: "Mover arriba", gl: "Mover arriba", en: "Move up" },
   needDecideCapability: {
-    es: "Necesitas el permiso applications:decide para aceptar o rechazar.",
-    gl: "Precisas o permiso applications:decide para aceptar ou rexeitar.",
-    en: "You need applications:decide to accept or reject.",
+    es: "Pide a un administrador acceso a decisiones de solicitudes para aceptar o rechazar.",
+    gl: "Pide a un administrador acceso a decisións de solicitudes para aceptar ou rexeitar.",
+    en: "Ask an administrator for application-decision access to accept or reject.",
   },
   needsAtLeastOneOption: {
     es: '"{key}" necesita al menos una opción.',
@@ -6573,16 +6438,6 @@ const dict: Record<string, I18nText> = {
     gl: "Empresa actualizada.",
     en: "Enterprise updated.",
   },
-  scheduleManageDesc: {
-    es: "Crea eventos del calendario y muestra u oculta el programa público en lote.",
-    gl: "Crea eventos do calendario e amosa ou agocha o programa público en lote.",
-    en: "Create event calendar items and batch show/hide them on the public agenda.",
-  },
-  projectMembersDesc: {
-    es: "Composición del equipo y asignaciones de cola de este proyecto.",
-    gl: "Composición do equipo e asignacións de cola deste proxecto.",
-    en: "Current team membership and queue assignments for this project.",
-  },
   devpostImportDesc: {
     es: "Sube o pega las dos exportaciones CSV de Devpost. La vista previa es de solo lectura — no se escribe nada hasta que confirmes.",
     gl: "Sube ou pega as dúas exportacións CSV de Devpost. A vista previa é de só lectura — non se escribe nada ata que confirmes.",
@@ -6590,11 +6445,6 @@ const dict: Record<string, I18nText> = {
   },
   viewFileLabel: { es: "Ver archivo", gl: "Ver ficheiro", en: "View file" },
   // ---- Phase statistics and privacy data lifecycle (#194) ----
-  phaseStatsDescription: {
-    es: "Datos operativos por fase, con alcance y frescura visibles.",
-    gl: "Datos operativos por fase, con alcance e frescura visibles.",
-    en: "Operational data by phase, with visible scope and freshness.",
-  },
   eventPhaseLabel: { es: "Fase del evento", gl: "Fase do evento", en: "Event phase" },
   phaseBefore: { es: "Antes", gl: "Antes", en: "Before" },
   phaseDuring: { es: "Durante", gl: "Durante", en: "During" },
@@ -6749,6 +6599,33 @@ const dict: Record<string, I18nText> = {
   dataStatusExpired: { es: "Caducada", gl: "Caducada", en: "Expired" },
   dataStatusOther: { es: "Otro estado", gl: "Outro estado", en: "Other status" },
   egPrefix: { es: "p. ej.", gl: "p. ex.", en: "e.g." },
+
+  // ---- Cookie notice (H196: localized, tokenized, Ursula joke preserved) ----
+  dismissCookieNotice: {
+    es: "Descartar el aviso de cookies",
+    gl: "Descartar o aviso de cookies",
+    en: "Dismiss cookie notice",
+  },
+  cookieNoticeTitle: {
+    es: "Aviso de cookies legalmente obligatorio",
+    gl: "Aviso de cookies legalmente obrigatorio",
+    en: "Legally-required cookie notice",
+  },
+  cookieNoticeBody: {
+    es: "hackOS guarda una cookie de sesión propia y algunos ajustes locales para que tu tema, diseño y preferencias de sesión no se reinicien cada vez que parpadeas. Un logro histórico, lo sabemos.",
+    gl: "hackOS garda unha cookie de sesión propia e algúns axustes locais para que o teu tema, deseño e preferencias de sesión non se reinicien cada vez que pestanexas. Un logro histórico, xa o sabemos.",
+    en: "hackOS keeps a first-party session cookie and a few local settings so your theme, layout, and session preferences do not reset every time you blink. Groundbreaking, we know.",
+  },
+  cookieNoticeJoke: {
+    es: "Nada de rastreadores publicitarios. No vendemos tu tráfico. No comerciamos con tu información como si fuera material de oficina.\nUrsula von der Leyen puede respirar tranquila.",
+    gl: "Nada de rastrexadores publicitarios. Non vendemos o teu tráfico. Non comerciamos coa túa información coma se fose material de oficina.\nUrsula von der Leyen xa pode respirar tranquila.",
+    en: "No ad trackers. No selling your traffic. No trading your information like office supplies.\nUrsula von der Leyen may breathe easier now.",
+  },
+  cookieNoticePrivacyLink: {
+    es: "Lee nuestra política de privacidad",
+    gl: "Le a nosa política de privacidade",
+    en: "Read our privacy policy",
+  },
 };
 
 const messages: Record<Language, Record<string, string>> = { es: {}, gl: {}, en: {} };

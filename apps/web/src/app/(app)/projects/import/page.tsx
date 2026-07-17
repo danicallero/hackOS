@@ -468,7 +468,6 @@ export default function ImportProjectsPage() {
 
       <SectionCard
         title={t("devpostExportsTitle")}
-        description={t("devpostExportsDesc")}
         icon={FileTextIcon}
         footer={
           <SubmitButton

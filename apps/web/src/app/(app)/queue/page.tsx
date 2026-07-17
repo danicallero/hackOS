@@ -621,7 +621,6 @@ function TeamMembersModal({
       open={entry != null}
       onOpenChange={onOpenChange}
       title={entry ? entryLabel(entry, t) : t("teamMembers")}
-      description={t("teamMembers")}
       size="md"
     >
       {members.length === 0 ? (

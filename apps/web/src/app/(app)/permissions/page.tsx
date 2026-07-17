@@ -182,7 +182,6 @@ export default function PermissionsPage() {
         onOpenChange={setCreateOpen}
         icon={KeyRoundIcon}
         title={t("newPermissionGroupTitle")}
-        description={t("giveNameOptionalCapsDesc")}
         footer={
           <>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>

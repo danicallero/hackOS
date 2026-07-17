@@ -15,7 +15,7 @@ export default function LibrariesSettingsPage() {
   const { t } = useLocale();
   return (
     <div className="space-y-6">
-      <PageHeader title={t("libraries")} description={t("librariesDesc")} />
+      <PageHeader title={t("libraries")} />
 
       <Tabs defaultValue="intolerances">
         <TabsList className="w-full max-w-md">

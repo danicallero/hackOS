@@ -213,7 +213,6 @@ export default function ProjectDetailPage() {
     <div className="space-y-6">
       <PageHeader
         title={repo.name}
-        description={t("projectMembersDesc")}
         actions={
           <div className="flex flex-wrap gap-2">
             {/* H18: metadata edit (name, description, links). */}
@@ -245,11 +244,7 @@ export default function ProjectDetailPage() {
         <StatCard label={t("colPrizes")} value={repo.prizes.length} />
       </div>
 
-      <SectionCard
-        title={t("linksTitle")}
-        description={t("externalSubmissionUrls")}
-        icon={ExternalLinkIcon}
-      >
+      <SectionCard title={t("linksTitle")} icon={ExternalLinkIcon}>
         <div className="flex flex-wrap gap-2">
           {repo.devpost_url && (
             <Button variant="outline" asChild>
@@ -353,12 +348,7 @@ export default function ProjectDetailPage() {
           )}
         </SectionCard>
 
-        <SectionCard
-          title={t("challenges")}
-          description={t("challengesSectionDesc")}
-          icon={TrophyIcon}
-          bodyClassName="space-y-4"
-        >
+        <SectionCard title={t("challenges")} icon={TrophyIcon} bodyClassName="space-y-4">
           {repo.challenges.length === 0 ? (
             <EmptyState
               icon={TrophyIcon}
@@ -428,12 +418,7 @@ export default function ProjectDetailPage() {
           )}
         </SectionCard>
 
-        <SectionCard
-          title={t("colPrizes")}
-          description={t("prizesSectionDesc")}
-          icon={TrophyIcon}
-          bodyClassName="space-y-4"
-        >
+        <SectionCard title={t("colPrizes")} icon={TrophyIcon} bodyClassName="space-y-4">
           {repo.prizes.length === 0 ? (
             <EmptyState
               icon={TrophyIcon}

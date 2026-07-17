@@ -92,11 +92,7 @@ export default function MyApplicationsPage() {
         bodyClassName={responses.length === 0 ? "p-0" : "space-y-2"}
       >
         {responses.length === 0 ? (
-          <EmptyState
-            icon={InboxIcon}
-            title={t("notAppliedYetTitle")}
-            description={t("notAppliedYetDesc")}
-          />
+          <EmptyState icon={InboxIcon} title={t("notAppliedYetTitle")} />
         ) : (
           responses.map((r) => (
             <Link
@@ -127,11 +123,7 @@ export default function MyApplicationsPage() {
         bodyClassName={openToApply.length === 0 ? "p-0" : "space-y-2"}
       >
         {openToApply.length === 0 ? (
-          <EmptyState
-            icon={InboxIcon}
-            title={t("noOpenFormsTitle")}
-            description={t("noOpenFormsDesc")}
-          />
+          <EmptyState icon={InboxIcon} title={t("noOpenFormsTitle")} />
         ) : (
           openToApply.map((f) => (
             <div

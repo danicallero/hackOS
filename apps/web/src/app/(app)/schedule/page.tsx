@@ -325,7 +325,6 @@ export default function SchedulePage() {
     <div className="space-y-6" data-wide>
       <PageHeader
         title={t("schedule")}
-        description={t("scheduleManageDesc")}
         actions={
           <Button onClick={() => setCreateOpen(true)}>
             <PlusIcon className="size-4" />
