@@ -18,6 +18,12 @@ const MS_PER_HOUR = 3_600_000;
 // activityId (see activities.ts's per-(user, activity) lock).
 const PRESENCE_LOCK_NS = -1;
 
+/** PostgreSQL timestamps presence signals, so live cutoffs must use its clock too. */
+async function databaseNow(client: Queryable = pool): Promise<Date> {
+  const { rows } = await client.query(`SELECT clock_timestamp() AS now`);
+  return rows[0].now as Date;
+}
+
 async function certaintyWindowMs(): Promise<number> {
   const { rows } = await pool.query(
     `SELECT presence_certainty_window_minutes FROM event_config WHERE id = 1`,
@@ -62,12 +68,13 @@ export async function presenceLookup(badgeId: string) {
   const userId = await resolveByBadge(pool, badgeId);
   const card = await loadPersonCard(pool, userId);
   const events = (await loadEvents(userId)).get(userId) ?? [];
-  const session = await openSessionAsOf(pool, userId, new Date());
+  const now = await databaseNow();
+  const session = await openSessionAsOf(pool, userId, now);
   const suspiciousGapMs = await certaintyWindowMs();
   return {
     ...card,
     badgeId,
-    present: isPresentAt(events, Date.now(), { suspiciousGapMs }),
+    present: isPresentAt(events, now.getTime(), { suspiciousGapMs }),
     openSince: session.since?.toISOString() ?? null,
   };
 }
@@ -93,14 +100,19 @@ export async function presenceScan(
 ) {
   const userId = await resolveByBadge(pool, input.badgeId);
   const manual = input.scannedAt != null;
-  const scannedAt = input.scannedAt ?? new Date();
-  if (manual && scannedAt.getTime() > Date.now()) {
-    throw new BadRequestError("Backdated scan must be in the past");
-  }
 
   const result = await withTransaction(async (client) => {
     // Serialize concurrent scans for the same person (H24 concurrency).
     await client.query(`SELECT pg_advisory_xact_lock($1, $2)`, [PRESENCE_LOCK_NS, userId]);
+
+    // Resolve live scan time after taking the lock. clock_timestamp(), unlike
+    // transaction-stable now(), cannot predate a scan whose transaction just
+    // released the same lock.
+    const dbNow = await databaseNow(client);
+    const scannedAt = input.scannedAt ?? dbNow;
+    if (manual && scannedAt.getTime() > dbNow.getTime()) {
+      throw new BadRequestError("Backdated scan must be in the past");
+    }
 
     if (input.kind === "in") {
       // A real earlier door scan supersedes an accreditation-created future
@@ -163,7 +175,8 @@ export async function presenceScan(
  * genuinely open until staff record a real `out`, or until the event-end
  * closer force-closes it at event_ends_at (presence-closer.ts).
  */
-export async function openSessions(now: number = Date.now()) {
+export async function openSessions(at?: number) {
+  const now = at ?? (await databaseNow()).getTime();
   const windowMs = await certaintyWindowMs();
   const { rows } = await pool.query(
     `SELECT tl.user_id, tl.scanned_at AS since, u.name, u.surname,
@@ -231,7 +244,8 @@ async function loadEvents(userId?: number): Promise<Map<number, PresenceEvent[]>
 }
 
 /** H24/H27: how many people are estimated to be in the venue right now. */
-export async function occupancyEstimate(at: number = Date.now()) {
+export async function occupancyEstimate(cutoff?: number) {
+  const at = cutoff ?? (await databaseNow()).getTime();
   const map = await loadEvents();
   const suspiciousGapMs = await certaintyWindowMs();
   const present: number[] = [];
@@ -243,7 +257,8 @@ export async function occupancyEstimate(at: number = Date.now()) {
 }
 
 /** H24: estimated attendance hours for one user (e.g. university-credit minimum). */
-export async function userHours(userId: number, now: number = Date.now()) {
+export async function userHours(userId: number, cutoff?: number) {
+  const now = cutoff ?? (await databaseNow()).getTime();
   const events = (await loadEvents(userId)).get(userId) ?? [];
   const suspiciousGapMs = await certaintyWindowMs();
   const intervals = buildPresenceIntervals(events, now, { suspiciousGapMs });
@@ -259,7 +274,8 @@ export async function userHours(userId: number, now: number = Date.now()) {
 }
 
 /** H24: estimated hours for every user with presence signals (bulk, admin display). */
-export async function allHours(now: number = Date.now()) {
+export async function allHours(cutoff?: number) {
+  const now = cutoff ?? (await databaseNow()).getTime();
   const map = await loadEvents();
   const suspiciousGapMs = await certaintyWindowMs();
   const userIds = [...map.keys()];
@@ -513,7 +529,8 @@ export async function deletePresenceActivity(actorId: number, id: number) {
   return { deleted: true as const };
 }
 
-export async function presenceTimeline(userId: number, now = Date.now()) {
+export async function presenceTimeline(userId: number, cutoff?: number) {
+  const now = cutoff ?? (await databaseNow()).getTime();
   const suspiciousGapMs = await certaintyWindowMs();
   const [{ rows }, { rows: activityRows }] = await Promise.all([
     pool.query(
