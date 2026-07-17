@@ -1,8 +1,8 @@
 "use client";
 
 import { AlertCircleIcon, CheckIcon, CloudUploadIcon, LoaderCircleIcon } from "lucide-react";
-import { type SaveState, saveStateLabel } from "@/app/(app)/applications/workflow";
 import { useLocale } from "@/lib/i18n";
+import { type SaveState, saveStateLabel } from "@/lib/save-state";
 import { cn } from "@/lib/utils";
 
 export function SaveStatus({ state, className }: { state: SaveState; className?: string }) {

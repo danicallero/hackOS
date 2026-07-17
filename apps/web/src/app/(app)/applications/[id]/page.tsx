@@ -88,6 +88,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { pickText, type Translate, useLocale } from "@/lib/i18n";
+import type { SaveState } from "@/lib/save-state";
 import { useCan, useMe } from "@/lib/session";
 import type { Intolerance, Language } from "@/lib/types";
 import {
@@ -115,7 +116,6 @@ import {
   applicationStatusLabel,
   generatedFieldKey,
   rowsForWorkspace,
-  type SaveState,
 } from "../workflow";
 
 const LOCALES = ["es", "en", "gl"] as const;
