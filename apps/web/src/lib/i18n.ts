@@ -1849,6 +1849,7 @@ const dict: Record<string, I18nText> = {
     en: "No-show recorded.",
   },
   callIn: { es: "Llamar", gl: "Chamar", en: "Call in" },
+  dismiss: { es: "Descartar", gl: "Descartar", en: "Dismiss" },
   moreActions: { es: "Más acciones", gl: "Máis accións", en: "More actions" },
   requeueTop: { es: "Devolver arriba", gl: "Devolver arriba", en: "Return to top" },
   requeueBottom: { es: "Devolver al final", gl: "Devolver ao final", en: "Return to end" },
@@ -1966,6 +1967,12 @@ const dict: Record<string, I18nText> = {
     es: "Llama al siguiente equipo a la sala de espera.",
     gl: "Chama ao seguinte equipo á sala de espera.",
     en: "Call the next team into the waiting room.",
+  },
+  callNextTeam: { es: "Llamar al siguiente", gl: "Chamar ao seguinte", en: "Call next team" },
+  bringInNextTeam: {
+    es: "Hacer pasar al siguiente",
+    gl: "Facer pasar ao seguinte",
+    en: "Bring in next team",
   },
   presentationStarted: {
     es: "Presentación iniciada.",
