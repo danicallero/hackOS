@@ -118,20 +118,14 @@ export default function PermissionsPage() {
     <div className="space-y-8">
       <PageHeader
         title={t("permissions")}
-        description={t("permissionsDesc")}
-        actions={
+        primaryAction={
           <Button onClick={() => setCreateOpen(true)}>
             <PlusIcon /> {t("newGroup")}
           </Button>
         }
       />
 
-      <SectionCard
-        icon={ShieldCheckIcon}
-        title={t("permissionGroupsTitle")}
-        description={t("clickGroupToEditDesc")}
-        bodyClassName="p-0"
-      >
+      <SectionCard icon={ShieldCheckIcon} title={t("permissionGroupsTitle")} bodyClassName="p-0">
         <DataTable
           columns={columns}
           data={groups}
@@ -157,9 +151,7 @@ export default function PermissionsPage() {
         <div className="space-y-5">
           {catalogue.map((group) => (
             <div key={group.domain} className="space-y-2">
-              <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-                {group.domain}
-              </p>
+              <p className="type-label text-muted-foreground">{group.domain}</p>
               <div className="flex flex-wrap gap-2">
                 {group.capabilities.map((cap) => (
                   <StatusBadge key={cap} tone={cap === "*" ? "brand" : "neutral"} dot={false}>

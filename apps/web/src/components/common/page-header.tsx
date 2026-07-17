@@ -1,28 +1,59 @@
 import { cn } from "@/lib/utils";
 
 /**
- * Consistent page title block for authed screens: title, optional description
- * and a right-aligned actions slot. Keeps spacing/typography uniform across
- * every module page.
+ * Title-first page hierarchy for authenticated screens. Descriptions are for
+ * exceptional policy or risk copy; actions expose their priority explicitly.
  */
 export function PageHeader({
+  context,
   title,
+  state,
   description,
+  primaryAction,
+  secondaryActions,
   actions,
   className,
 }: {
+  context?: React.ReactNode;
   title: string;
+  state?: React.ReactNode;
   description?: string;
+  primaryAction?: React.ReactNode;
+  secondaryActions?: React.ReactNode;
+  /** @deprecated Prefer primaryAction and secondaryActions to make priority explicit. */
   actions?: React.ReactNode;
   className?: string;
 }) {
+  const actionContent =
+    primaryAction || secondaryActions ? (
+      <>
+        {secondaryActions}
+        {primaryAction}
+      </>
+    ) : (
+      actions
+    );
+
   return (
-    <div className={cn("flex flex-wrap items-start justify-between gap-4", className)}>
-      <div className="space-y-1">
-        <h1 className="text-balance text-2xl font-semibold tracking-tight">{title}</h1>
+    <header
+      className={cn(
+        "flex flex-col gap-[var(--space-within-section)] sm:flex-row sm:items-start sm:justify-between",
+        className,
+      )}
+    >
+      <div className="min-w-0 space-y-1">
+        {context && <div className="type-meta">{context}</div>}
+        <div className="flex flex-wrap items-center gap-[var(--space-related)]">
+          <h1 className="type-page-title text-balance">{title}</h1>
+          {state && <div className="shrink-0">{state}</div>}
+        </div>
         {description && <p className="text-muted-foreground text-pretty text-sm">{description}</p>}
       </div>
-      {actions && <div className="flex items-center gap-2">{actions}</div>}
-    </div>
+      {actionContent && (
+        <div className="flex flex-wrap items-center gap-[var(--space-related)] sm:shrink-0 sm:justify-end">
+          {actionContent}
+        </div>
+      )}
+    </header>
   );
 }
