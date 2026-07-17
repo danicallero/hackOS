@@ -143,6 +143,56 @@ describe("GET /api/me (H7)", () => {
     expect(await roleOf(staff)).toBe("staff");
     expect(await roleOf(plain)).toBe("participant");
   });
+
+  it("exposes isRoomJudge/isSponsorRep independently so a sponsor rep who also judges keeps both (H8/H55, issue #187)", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+
+    // One person: a sponsor representative (sponsors.user_id) who is also
+    // assigned as a room judge (room_judges.user_id). The single-priority
+    // `role` field collapses this to "judge" — nav must not rely on it.
+    const both = await createUser();
+    const { rows: ent } = await pool.query(
+      `INSERT INTO enterprises (name) VALUES ('BothCo') RETURNING id`,
+    );
+    const { rows: sponsor } = await pool.query(
+      `INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2) RETURNING id`,
+      [ent[0].id, both],
+    );
+    const { rows: challenge } = await pool.query(
+      `INSERT INTO challenges (author, title) VALUES ($1, 'x') RETURNING id`,
+      [sponsor[0].id],
+    );
+    const { rows: room } = await pool.query(
+      `INSERT INTO rooms (name, slug) VALUES ('Sala 2', 'sala-2') RETURNING id`,
+    );
+    await pool.query(
+      `INSERT INTO room_judges (room_id, challenge_id, user_id) VALUES ($1, $2, $3)`,
+      [room[0].id, challenge[0].id, both],
+    );
+
+    const res = await a.inject({ method: "GET", url: "/api/me", headers: asUser(both) });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().role).toBe("judge"); // priority order still collapses the display-only role
+    expect(res.json().isRoomJudge).toBe(true);
+    expect(res.json().isSponsorRep).toBe(true); // ...but both association facts survive independently
+
+    const judgeOnly = await createUser();
+    const { rows: judgeOnlyRoom } = await pool.query(
+      `INSERT INTO rooms (name, slug) VALUES ('Sala 3', 'sala-3') RETURNING id`,
+    );
+    await pool.query(
+      `INSERT INTO room_judges (room_id, challenge_id, user_id) VALUES ($1, $2, $3)`,
+      [judgeOnlyRoom[0].id, challenge[0].id, judgeOnly],
+    );
+    const judgeOnlyRes = await a.inject({
+      method: "GET",
+      url: "/api/me",
+      headers: asUser(judgeOnly),
+    });
+    expect(judgeOnlyRes.json().isRoomJudge).toBe(true);
+    expect(judgeOnlyRes.json().isSponsorRep).toBe(false);
+  });
 });
 
 describe("PATCH /api/me (H7)", () => {

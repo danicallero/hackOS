@@ -15,7 +15,7 @@ import { reconcileDevpostParticipantsForUser } from "../../projects/reconciliati
 import { myProjects } from "../../projects/service.js";
 import { anonymizeUser } from "../anonymize.js";
 import { hasMobileAccess } from "../mobile-access.js";
-import { computeDerivedRole } from "../role.js";
+import { computeDerivedRole, computeMembershipFlags } from "../role.js";
 
 /**
  * Profile routes (H7).
@@ -220,6 +220,11 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     {
       preHandler: requireAuth,
       schema: {
+        description:
+          "The caller's own profile, illustrative role, effective capabilities (H8), " +
+          "the isRoomJudge/isSponsorRep association facts nav uses for multi-capability " +
+          "accounts (H55), and mobile access eligibility.",
+        summary: "Get my profile",
         response: {
           200: userResponseSchema.extend({
             role: z.enum(["admin", "judge", "sponsor", "staff", "participant"]),
@@ -228,6 +233,11 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             // capability, never by the illustrative role (H55). Authoritative
             // enforcement still happens on every guarded route server-side.
             capabilities: z.array(z.string()),
+            // Additive association facts (H55): a multi-capability account
+            // (e.g. sponsor rep + room judge) needs both workspaces, which
+            // the single-priority `role` above can't represent on its own.
+            isRoomJudge: z.boolean(),
+            isSponsorRep: z.boolean(),
           }),
         },
       },
@@ -235,12 +245,19 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     async (req) => {
       const userId = req.userId as number;
       const row = await fetchUser(userId);
-      const [role, capabilities] = await Promise.all([
+      const [role, capabilities, membership] = await Promise.all([
         computeDerivedRole(pool, userId),
         getEffectiveCapabilities(userId),
+        computeMembershipFlags(pool, userId),
       ]);
       const mobileAccess = await hasMobileAccess(pool, userId, role);
-      return { ...serializeUser(row), role, mobileAccess, capabilities: [...capabilities] };
+      return {
+        ...serializeUser(row),
+        role,
+        mobileAccess,
+        capabilities: [...capabilities],
+        ...membership,
+      };
     },
   );
 

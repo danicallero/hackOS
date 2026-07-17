@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { useLocale } from "@/lib/i18n";
-import { NAV } from "@/lib/nav";
+import { PERSONAL_NAV, WORKSPACES } from "@/lib/nav";
 
 /**
  * Current location shown in the top bar (Dokploy-style breadcrumb). This is the
@@ -12,7 +12,7 @@ import { NAV } from "@/lib/nav";
 export function HeaderTitle() {
   const pathname = usePathname();
   const { t } = useLocale();
-  const item = NAV.flatMap((s) => s.items)
+  const item = [...PERSONAL_NAV, ...WORKSPACES.flatMap((w) => w.items)]
     .filter((i) => pathname === i.href || pathname.startsWith(`${i.href}/`))
     .sort((a, b) => b.href.length - a.href.length)[0];
 

@@ -23,6 +23,9 @@ export interface Me {
   createdAt: string;
   role: "admin" | "judge" | "sponsor" | "staff" | "participant";
   capabilities: Capability[];
+  /** Association facts underlying `role` (H55) — a sponsor rep who also judges needs both workspaces. */
+  isRoomJudge: boolean;
+  isSponsorRep: boolean;
 }
 
 export type Language = "en" | "es" | "gl";

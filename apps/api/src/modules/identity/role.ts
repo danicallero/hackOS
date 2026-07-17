@@ -15,21 +15,31 @@ export async function computeDerivedRole(db: Queryable, userId: number): Promise
   const capabilities = await getEffectiveCapabilities(userId);
   if (capabilities.has(CAPABILITIES.ADMIN_ALL)) return "admin";
 
-  const { rows: judgeRows } = await db.query(
-    `SELECT 1 FROM room_judges WHERE user_id = $1 LIMIT 1`,
-    [userId],
-  );
-  if (judgeRows.length > 0) return "judge";
-
-  const { rows: sponsorRows } = await db.query(
-    `SELECT 1 FROM sponsors WHERE user_id = $1 LIMIT 1`,
-    [userId],
-  );
-  if (sponsorRows.length > 0) return "sponsor";
+  const { isRoomJudge, isSponsorRep } = await computeMembershipFlags(db, userId);
+  if (isRoomJudge) return "judge";
+  if (isSponsorRep) return "sponsor";
 
   // "any staff-ish capability" — anyone holding a capability at all is doing
   // *something* operational beyond being a plain participant.
   if (capabilities.size > 0) return "staff";
 
   return "participant";
+}
+
+/**
+ * Association-based facts underlying the illustrative `role` above, exposed
+ * independently so navigation (H8/H55, issue #187) can show every relevant
+ * workspace for a multi-capability account instead of collapsing to one
+ * illustrative label — a sponsor rep who is also a room judge needs both the
+ * sponsor and judging workspaces, not whichever `role` wins priority.
+ */
+export async function computeMembershipFlags(
+  db: Queryable,
+  userId: number,
+): Promise<{ isRoomJudge: boolean; isSponsorRep: boolean }> {
+  const [{ rows: judgeRows }, { rows: sponsorRows }] = await Promise.all([
+    db.query(`SELECT 1 FROM room_judges WHERE user_id = $1 LIMIT 1`, [userId]),
+    db.query(`SELECT 1 FROM sponsors WHERE user_id = $1 LIMIT 1`, [userId]),
+  ]);
+  return { isRoomJudge: judgeRows.length > 0, isSponsorRep: sponsorRows.length > 0 };
 }
