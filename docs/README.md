@@ -24,6 +24,9 @@ the current code implements the relevant slices.
 - [Mobile app](./mobile.md) — the Expo Router app (`apps/mobile`): Better Auth
   Expo integration, capability-driven tabs, offline scanners, and participant
   screens.
+- [Navigation: capability-based workspaces](./navigation.md) — the personal
+  area + additive work-workspace model on web, and the one-action mobile scan
+  entry, with the full capability-to-workspace mapping.
 - [Mobile development & store release](./mobile-release.md) — local device
   setup, prebuild/CNG, EAS profiles and environments, local/cloud compilation,
   signing and push credentials, icons/store artwork, submission, privacy, and

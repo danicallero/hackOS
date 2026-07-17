@@ -14,7 +14,7 @@ store assets, submission, and the release checklist, see
 | Story | Scope | Status | Notes |
 | --- | --- | --- | --- |
 | H4 | Login/logout, session persists via Better Auth Expo + `expo-secure-store` | ✅ Done | `lib/auth-client.ts`, `app/(auth)/sign-in.tsx`. Server-side logout (session revocation) reuses the existing Better Auth endpoint — no mobile-specific work needed. |
-| H55 | One app, capability-driven tabs, permission changes apply without reinstall | ✅ Done | `lib/tabs.ts` + `app/(tabs)/_layout.tsx`. Only participant tabs + one staff placeholder tab exist; more staff tabs arrive as scanners are built. |
+| H55 | One app, capability-driven tabs, permission changes apply without reinstall | ✅ Done | `lib/tabs.ts` + `app/(tabs)/_layout.tsx`. Scan promotes to a primary tab for scan-capability holders (issue #187); Account and the built scanners otherwise share the native overflow selector. |
 | H38 | Participant sees queue status/position/ETA, pre-alert, call notice | 🟡 Device QA | Push receipt/tap and the authenticated `GET /api/queue/me/stream` native fetch stream both refetch queue state immediately; 15s focused polling is the recovery path. Code/tests are complete, but APNs/FCM delivery still needs real-device verification. |
 | H51 | Notification channel preferences per category; queue calls non-optional | ✅ Done | Static category preferences, mandatory queue notices, and `schedule:<id>` activity-reminder opt-ins are available on mobile. |
 | H28 | Ticket/badge in Apple & Google Wallet; old pass auto-invalidates on badge rotation | 🟡 Device QA | QR wallet, authenticated Apple `.pkpass` download/share, Google save URL, server-side pass invalidation/push, and foreground wallet refetch on `LOGISTICS_WALLET_PASS_UPDATED` are wired. Real Wallet apps/credentials still need device QA. |
@@ -65,11 +65,14 @@ route below. No migration needed.
   session storage instead of a cookie jar (H4's explicit requirement).
 - `lib/api.ts` — thin wrapper around the auth client's underlying fetch so
   every API call (not just `/api/auth/*`) carries the restored session.
-- `lib/tabs.ts` (`visibleTabs`) — pure function mapping `me.capabilities` to
-  the visible tab set; unit-tested in `lib/tabs.test.ts`. Participant tabs
-  (schedule, queue, wallet, notifications, account) are unconditional; `scan`
-  appears only for `ACCREDIT_SCAN`/`PRESENCE_SCAN`/`ACTIVITY_SCAN` (or the
-  admin `*` wildcard).
+- `lib/tabs.ts` (`primaryTabs`/`overflowTabs`) — pure functions mapping
+  `me.capabilities` to the tab bar (issue #187: scanning is a one-action
+  entry, never behind the ellipsis, per `docs/navigation.md`). Participant
+  tabs (schedule, queue, wallet, notifications) are unconditional; `scan`
+  promotes into the primary bar for `ACCREDIT_SCAN`/`PRESENCE_SCAN`/
+  `ACTIVITY_SCAN` (or the admin `*` wildcard), and Account moves into the
+  native overflow selector only then — with no scan capability, Account
+  stays in the primary bar and there is no overflow at all.
 - `app/(tabs)/_layout.tsx` — reads capabilities from a shared `/api/me` fetch
   (`lib/me-context.tsx`, `lib/use-me.ts`) and hides tabs via Expo Router's
   `href: null` mechanism rather than omitting the route, so the underlying
@@ -99,8 +102,12 @@ route below. No migration needed.
   `queue.tsx` refetches immediately on a "queue" push
   (below) and also polls `GET /api/queue/me` every 15s while focused as a
   fallback.
-- `app/(tabs)/scan.tsx` — camera/manual scanners selected by capability:
-  accreditation, badge replacement, door presence, meals, and activities.
+- `app/(tabs)/scan.tsx` — thin wrapper around the shared
+  `GeneralScannerScreen` (camera/manual scanners selected by capability:
+  accreditation, badge replacement, door presence, meals, and activities),
+  promoted to the primary tab bar for scan-capability holders (issue #187).
+  Its person/people drill-down routes still live under
+  `app/(tabs)/others/scan/*`, reachable from either entry point.
   `lib/scanner-db.ts` owns the WAL-mode SQLite schema and durable device queue;
   `lib/scanner-sync.ts` replays in creation order with the persisted scan id as
   `Idempotency-Key`, then installs the latest server snapshot/revocation set.
