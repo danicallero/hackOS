@@ -15,7 +15,8 @@ import { reconcileDevpostParticipantsForUser } from "../../projects/reconciliati
 import { myProjects } from "../../projects/service.js";
 import { anonymizeUser } from "../anonymize.js";
 import { hasMobileAccess } from "../mobile-access.js";
-import { computeDerivedRole } from "../role.js";
+import { getAccountRemovalEligibility } from "../removal.js";
+import { computeDerivedRole, computeMembershipFlags } from "../role.js";
 
 /**
  * Profile routes (H7).
@@ -28,6 +29,7 @@ import { computeDerivedRole } from "../role.js";
  */
 
 const LANGUAGES = ["en", "es", "gl"] as const;
+const DIETARY_DATA_STATES = ["not_provided", "present", "removed_after_decline"] as const;
 
 /** Fields a user may edit on themself (H7: "consultar mis datos… y si detecto un error"). */
 const selfPatchSchema = z
@@ -82,6 +84,7 @@ const userResponseSchema = z.object({
   secondaryEmailVerified: z.boolean(),
   foodIntolerances: z.array(z.number()),
   foodIntoleranceNotes: z.string().nullable(),
+  dietaryDataState: z.enum(DIETARY_DATA_STATES),
   shirtSize: z.string().nullable(),
   universityId: z.number().nullable(),
   notes: z.string().nullable(),
@@ -119,6 +122,7 @@ interface UserRow {
   secondary_email_verified_at: Date | null;
   food_intolerances: number[];
   food_intolerance_notes: string | null;
+  dietary_data_state: (typeof DIETARY_DATA_STATES)[number];
   shirt_size: string | null;
   university_id: number | null;
   notes: string | null;
@@ -141,6 +145,7 @@ function serializeUser(row: UserRow) {
     secondaryEmailVerified: row.secondary_email_verified_at !== null,
     foodIntolerances: row.food_intolerances,
     foodIntoleranceNotes: row.food_intolerance_notes,
+    dietaryDataState: row.dietary_data_state,
     shirtSize: row.shirt_size,
     universityId: row.university_id,
     notes: row.notes,
@@ -181,10 +186,26 @@ async function applyUserPatch(
       sets.push(`${column} = $${values.length}`);
     }
     values.push(targetId);
-    const { rows: afterRows } = await client.query(
+    let { rows: afterRows } = await client.query(
       `UPDATE users SET ${sets.join(", ")} WHERE id = $${values.length} RETURNING *`,
       values,
     );
+    if (
+      entries.some(([field]) => field === "foodIntolerances" || field === "foodIntoleranceNotes")
+    ) {
+      ({ rows: afterRows } = await client.query(
+        `UPDATE users
+            SET dietary_data_state = CASE
+                  WHEN cardinality(food_intolerances) > 0
+                    OR NULLIF(BTRIM(food_intolerance_notes), '') IS NOT NULL
+                  THEN 'present'
+                  ELSE 'not_provided'
+                END
+          WHERE id = $1
+          RETURNING *`,
+        [targetId],
+      ));
+    }
     const after = afterRows[0] as UserRow;
 
     // H7/H53: audit staff edits of somebody else's profile. Self-edits of
@@ -220,6 +241,11 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     {
       preHandler: requireAuth,
       schema: {
+        description:
+          "The caller's own profile, illustrative role, effective capabilities (H8), " +
+          "the isRoomJudge/isSponsorRep association facts nav uses for multi-capability " +
+          "accounts (H55), and mobile access eligibility.",
+        summary: "Get my profile",
         response: {
           200: userResponseSchema.extend({
             role: z.enum(["admin", "judge", "sponsor", "staff", "participant"]),
@@ -228,6 +254,11 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             // capability, never by the illustrative role (H55). Authoritative
             // enforcement still happens on every guarded route server-side.
             capabilities: z.array(z.string()),
+            // Additive association facts (H55): a multi-capability account
+            // (e.g. sponsor rep + room judge) needs both workspaces, which
+            // the single-priority `role` above can't represent on its own.
+            isRoomJudge: z.boolean(),
+            isSponsorRep: z.boolean(),
           }),
         },
       },
@@ -235,12 +266,19 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     async (req) => {
       const userId = req.userId as number;
       const row = await fetchUser(userId);
-      const [role, capabilities] = await Promise.all([
+      const [role, capabilities, membership] = await Promise.all([
         computeDerivedRole(pool, userId),
         getEffectiveCapabilities(userId),
+        computeMembershipFlags(pool, userId),
       ]);
       const mobileAccess = await hasMobileAccess(pool, userId, role);
-      return { ...serializeUser(row), role, mobileAccess, capabilities: [...capabilities] };
+      return {
+        ...serializeUser(row),
+        role,
+        mobileAccess,
+        capabilities: [...capabilities],
+        ...membership,
+      };
     },
   );
 
@@ -456,6 +494,35 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     },
   );
 
+  api.get(
+    "/api/users/:id/removal-eligibility",
+    {
+      preHandler: requireCapability(CAPABILITIES.ADMIN_ALL),
+      schema: {
+        description:
+          "Read-only H54 preflight selecting the one safe account-removal action from retained references.",
+        summary: "Get account-removal eligibility",
+        params: z.object({ id: z.coerce.number().int() }),
+        response: {
+          200: z.object({
+            action: z.enum(["delete", "anonymize"]),
+            reasonCode: z.enum(["fresh_account", "operational_history"]),
+            accessRevoked: z.literal(true),
+            operationalHistoryRetained: z.boolean(),
+          }),
+        },
+      },
+    },
+    async (req) => {
+      const targetId = req.params.id;
+      if (targetId === req.userId) {
+        throw new BadRequestError("You can't remove your own account");
+      }
+      await fetchUser(targetId);
+      return getAccountRemovalEligibility(pool, targetId);
+    },
+  );
+
   // Hard-delete an account — superadmin only (ADMIN_ALL). Most references to
   // users have no ON DELETE CASCADE (audit trail, scans, evaluations…), so a
   // user who has *done* anything cannot be hard-deleted without corrupting
@@ -477,6 +544,13 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         throw new BadRequestError("You can't delete your own account");
       }
       const target = await fetchUser(targetId);
+      const eligibility = await getAccountRemovalEligibility(pool, targetId);
+      if (eligibility.action === "anonymize") {
+        throw new ConflictError(
+          "This account has activity (audit, scans, evaluations…) and can't be hard-deleted. Anonymize its personal data instead.",
+          { userId: targetId, reasonCode: eligibility.reasonCode },
+        );
+      }
       try {
         await withTransaction(async (client) => {
           await audit(client, {

@@ -360,6 +360,7 @@ export default function ImportProjectsPage() {
           data={plan.repos}
           getRowId={(r) => `${r.title}::${r.url ?? ""}`}
           onRowClick={(r) => setDetailRepo(r)}
+          getRowLabel={(r) => r.title}
           searchable={(r) => `${r.title} ${r.prizes.join(" ")}`}
           searchPlaceholder={t("searchProjectsPlaceholder")}
           pageSize={15}
@@ -467,7 +468,6 @@ export default function ImportProjectsPage() {
 
       <SectionCard
         title={t("devpostExportsTitle")}
-        description={t("devpostExportsDesc")}
         icon={FileTextIcon}
         footer={
           <SubmitButton

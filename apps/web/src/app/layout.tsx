@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Script from "next/script";
 import { Providers } from "@/components/providers";
 import "./globals.css";
 
@@ -26,9 +27,13 @@ export default function RootLayout({
   return (
     <html
       lang="es"
+      data-locale-ready="false"
       suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head>
+        <Script src="/locale-bootstrap.js" strategy="beforeInteractive" />
+      </head>
       <body className="bg-background text-foreground min-h-full">
         <Providers>{children}</Providers>
       </body>

@@ -45,6 +45,9 @@ export const queueSettingsBody = z.object({
   scheduleEndAt: z.coerce.date().optional().nullable(),
   preCallNotificationEtaMinutes: z.coerce.number().int().min(0).optional(),
   requeuePromptDefault: z.enum(["top", "bottom", "ask"]).optional(),
+  // H34/H203: configurable called-too-long warning threshold, replacing the
+  // frontend's temporary max(10 min, 2x desired minutes/team) fallback.
+  calledTooLongThresholdMinutes: z.coerce.number().int().min(1).optional(),
 });
 
 export const enqueueChallengeBody = z.object({
@@ -82,4 +85,6 @@ export const searchQuery = z.object({ q: z.string().min(1) });
 export const tvModeBody = z.object({
   mode: z.enum(["rooms", "schedule", "sponsors", "announcement", "wifi", "timer"]),
   payload: z.unknown().optional(),
+  // H42 automatic expiry: past this point tv-expiry.ts reverts the fleet to "rooms".
+  expiresAt: z.iso.datetime({ offset: true }).nullable().optional(),
 });

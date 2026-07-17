@@ -83,20 +83,16 @@ export default function MyApplicationsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={t("myApplications")} description={t("myApplicationsDesc")} />
+      <PageHeader title={t("myApplications")} />
 
       <SectionCard
         icon={ClipboardListIcon}
         title={t("myResponses")}
-        description={t("myResponsesDesc")}
+        state={<span className="type-meta tabular-nums">{responses.length}</span>}
         bodyClassName={responses.length === 0 ? "p-0" : "space-y-2"}
       >
         {responses.length === 0 ? (
-          <EmptyState
-            icon={InboxIcon}
-            title={t("notAppliedYetTitle")}
-            description={t("notAppliedYetDesc")}
-          />
+          <EmptyState icon={InboxIcon} title={t("notAppliedYetTitle")} />
         ) : (
           responses.map((r) => (
             <Link
@@ -123,15 +119,11 @@ export default function MyApplicationsPage() {
       <SectionCard
         icon={FilePlus2Icon}
         title={t("openToApply")}
-        description={t("openToApplyDesc")}
+        state={<span className="type-meta tabular-nums">{openToApply.length}</span>}
         bodyClassName={openToApply.length === 0 ? "p-0" : "space-y-2"}
       >
         {openToApply.length === 0 ? (
-          <EmptyState
-            icon={InboxIcon}
-            title={t("noOpenFormsTitle")}
-            description={t("noOpenFormsDesc")}
-          />
+          <EmptyState icon={InboxIcon} title={t("noOpenFormsTitle")} />
         ) : (
           openToApply.map((f) => (
             <div

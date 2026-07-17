@@ -6,7 +6,7 @@ import { audit } from "../../lib/audit.js";
 import { requireAnyCapability, requireCapability } from "../../lib/capabilities.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import { createApplicationSchema, idParamSchema, updateApplicationSchema } from "./schemas.js";
-import { isWindowOpen } from "./service.js";
+import { isInvitedParticipant, isWindowOpen } from "./service.js";
 
 /**
  * H11 (APPLICATIONS_MANAGE): define application forms, open/close windows,
@@ -20,9 +20,12 @@ export function registerAdminRoutes(app: FastifyInstance): void {
                    capacity, confirmation_window_hours, created_at`;
 
   // ── public: open forms with their template ──────────────────────────────────
-  r.get("/api/public/applications", async () => {
+  // A late invited participant (H10) can also discover/fetch a closed form —
+  // the same bypass service.ts already grants them for saveDraft/submitResponse.
+  r.get("/api/public/applications", async (req) => {
     const { rows } = await pool.query(`SELECT ${COLUMNS} FROM applications WHERE active = true`);
-    const open = rows.filter((a) => isWindowOpen(a));
+    const invited = req.userId ? await isInvitedParticipant(pool, req.userId) : false;
+    const open = rows.filter((a) => isWindowOpen(a) || invited);
     return { applications: open };
   });
 
@@ -31,7 +34,11 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       req.params.id,
     ]);
     const found = rows[0];
-    if (!found || !isWindowOpen(found)) throw new NotFoundError("Application not open");
+    if (!found) throw new NotFoundError("Application not open");
+    if (!isWindowOpen(found)) {
+      const invited = req.userId ? await isInvitedParticipant(pool, req.userId) : false;
+      if (!invited) throw new NotFoundError("Application not open");
+    }
     return found;
   });
 

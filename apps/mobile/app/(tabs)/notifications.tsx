@@ -383,9 +383,17 @@ function PreferencesView() {
           >
             {t("queueCalls")}
           </Text>
-          <Text selectable style={{ color: colors.secondaryLabel, fontSize: 14 }}>
-            {t("notificationsAlwaysOn")}
-          </Text>
+          <View style={{ alignItems: "center", flexDirection: "row", gap: 4 }}>
+            <SymbolView
+              name="lock.fill"
+              tintColor={colors.secondaryLabel}
+              size={13}
+              accessible={false}
+            />
+            <Text selectable style={{ color: colors.secondaryLabel, fontSize: 14 }}>
+              {t("notificationsAlwaysOn")}
+            </Text>
+          </View>
         </View>
       </Section>
 

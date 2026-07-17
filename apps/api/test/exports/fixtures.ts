@@ -4,7 +4,12 @@ import { pool } from "../../src/db/pool.js";
 
 export async function createApplicationResponse(
   userId: number,
-  overrides: Partial<{ status: string; appName: string; appType: string }> = {},
+  overrides: Partial<{
+    status: string;
+    appName: string;
+    appType: string;
+    responses: Record<string, unknown>;
+  }> = {},
 ): Promise<{ responseId: number; applicationId: number }> {
   const app = await pool.query(
     `INSERT INTO applications (name, type, template) VALUES ($1, $2, '{}'::jsonb) RETURNING id`,
@@ -12,9 +17,14 @@ export async function createApplicationResponse(
   );
   const applicationId = app.rows[0].id;
   const resp = await pool.query(
-    `INSERT INTO application_responses (user_id, application_id, status, submitted_at)
-     VALUES ($1, $2, $3, now()) RETURNING id`,
-    [userId, applicationId, overrides.status ?? "submitted"],
+    `INSERT INTO application_responses (user_id, application_id, status, responses, submitted_at)
+     VALUES ($1, $2, $3, $4::jsonb, now()) RETURNING id`,
+    [
+      userId,
+      applicationId,
+      overrides.status ?? "submitted",
+      JSON.stringify(overrides.responses ?? {}),
+    ],
   );
   return { responseId: resp.rows[0].id, applicationId };
 }

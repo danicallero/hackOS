@@ -17,6 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
+import { withReturnPath } from "@/lib/return-path";
 
 interface Prize {
   name: string;
@@ -163,7 +164,7 @@ export default function PublicChallengePage() {
           {hasOpenApplications && (
             <div className="mt-10 border-t pt-6">
               <Button size="lg" asChild>
-                <Link href="/signup">{t("applyNow")}</Link>
+                <Link href={withReturnPath("/signup", "/my-applications")}>{t("applyNow")}</Link>
               </Button>
             </div>
           )}

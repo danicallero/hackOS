@@ -15,6 +15,7 @@ import {
 } from "@/lib/operations-navigation";
 import { subscribeToNotificationChanges } from "@/lib/notification-events";
 import { subscribeToServerEvent } from "@/lib/server-events";
+import { shouldUseOverflowMenu } from "@/lib/tabs";
 import { colors } from "@/theme/colors";
 
 interface UnreadInboxResponse {
@@ -22,14 +23,15 @@ interface UnreadInboxResponse {
 }
 
 interface OperationsMenuItem extends MenuAction {
-  id: "account" | "scanner" | "activities";
+  id: "account" | "activities";
   label: string;
-  route: "/(tabs)/others/account" | "/(tabs)/others/scan" | "/(tabs)/others/activities";
+  route: "/(tabs)/others/account" | "/(tabs)/others/activities";
 }
 
 /**
- * A real platform tab bar. Operational destinations are additive and live in
- * the existing native overflow control alongside Account.
+ * A real platform tab bar. Scanning is promoted to a primary tab for any
+ * scan-capability holder (H55, issue #187); Account and the other operational
+ * destinations remain in the native overflow control.
  *
  * Important navigation contract:
  * - The overflow entries are pseudo-tabs, not ordinary stack links.
@@ -50,11 +52,7 @@ export default function TabLayout() {
   const { me, loading: meLoading } = useMeContext();
   const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
   const capabilities = me?.capabilities ?? [];
-  const operatorExperience =
-    capabilities.includes("*") ||
-    capabilities.some((capability) =>
-      ["accredit:scan", "presence:scan", "activity:scan"].includes(capability),
-    );
+  const operatorExperience = shouldUseOverflowMenu(capabilities);
   const canScanActivities = capabilities.includes("*") || capabilities.includes("activity:scan");
 
   const refreshUnreadNotifications = useCallback(async () => {
@@ -134,6 +132,12 @@ export default function TabLayout() {
           <NativeTabs.Trigger.Label>{t("tabNotifications")}</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
         {operatorExperience ? (
+          <NativeTabs.Trigger name="scan">
+            <NativeTabs.Trigger.Icon sf="qrcode.viewfinder" md="qr_code_scanner" />
+            <NativeTabs.Trigger.Label>{t("tabScan")}</NativeTabs.Trigger.Label>
+          </NativeTabs.Trigger>
+        ) : null}
+        {operatorExperience ? (
           <NativeTabs.Trigger name="others" role="search">
             <NativeTabs.Trigger.Icon sf="ellipsis" md="more_horiz" />
             <NativeTabs.Trigger.Label hidden>{t("tabOthers")}</NativeTabs.Trigger.Label>
@@ -168,13 +172,6 @@ function NativeOperationsMenu({ canScanActivities }: { canScanActivities: boolea
       label: t("tabAccount"),
       route: "/(tabs)/others/account",
       title: t("tabAccount"),
-    },
-    {
-      id: "scanner",
-      image: "qrcode.viewfinder",
-      label: t("tabScan"),
-      route: "/(tabs)/others/scan",
-      title: t("tabScan"),
     },
     ...(canScanActivities
       ? [

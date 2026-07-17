@@ -143,6 +143,56 @@ describe("GET /api/me (H7)", () => {
     expect(await roleOf(staff)).toBe("staff");
     expect(await roleOf(plain)).toBe("participant");
   });
+
+  it("exposes isRoomJudge/isSponsorRep independently so a sponsor rep who also judges keeps both (H8/H55, issue #187)", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+
+    // One person: a sponsor representative (sponsors.user_id) who is also
+    // assigned as a room judge (room_judges.user_id). The single-priority
+    // `role` field collapses this to "judge" — nav must not rely on it.
+    const both = await createUser();
+    const { rows: ent } = await pool.query(
+      `INSERT INTO enterprises (name) VALUES ('BothCo') RETURNING id`,
+    );
+    const { rows: sponsor } = await pool.query(
+      `INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2) RETURNING id`,
+      [ent[0].id, both],
+    );
+    const { rows: challenge } = await pool.query(
+      `INSERT INTO challenges (author, title) VALUES ($1, 'x') RETURNING id`,
+      [sponsor[0].id],
+    );
+    const { rows: room } = await pool.query(
+      `INSERT INTO rooms (name, slug) VALUES ('Sala 2', 'sala-2') RETURNING id`,
+    );
+    await pool.query(
+      `INSERT INTO room_judges (room_id, challenge_id, user_id) VALUES ($1, $2, $3)`,
+      [room[0].id, challenge[0].id, both],
+    );
+
+    const res = await a.inject({ method: "GET", url: "/api/me", headers: asUser(both) });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().role).toBe("judge"); // priority order still collapses the display-only role
+    expect(res.json().isRoomJudge).toBe(true);
+    expect(res.json().isSponsorRep).toBe(true); // ...but both association facts survive independently
+
+    const judgeOnly = await createUser();
+    const { rows: judgeOnlyRoom } = await pool.query(
+      `INSERT INTO rooms (name, slug) VALUES ('Sala 3', 'sala-3') RETURNING id`,
+    );
+    await pool.query(
+      `INSERT INTO room_judges (room_id, challenge_id, user_id) VALUES ($1, $2, $3)`,
+      [judgeOnlyRoom[0].id, challenge[0].id, judgeOnly],
+    );
+    const judgeOnlyRes = await a.inject({
+      method: "GET",
+      url: "/api/me",
+      headers: asUser(judgeOnly),
+    });
+    expect(judgeOnlyRes.json().isRoomJudge).toBe(true);
+    expect(judgeOnlyRes.json().isSponsorRep).toBe(false);
+  });
 });
 
 describe("PATCH /api/me (H7)", () => {
@@ -190,6 +240,16 @@ describe("PATCH /api/me (H7)", () => {
     expect(res.json().shirtSize).toBe("L");
     expect(res.json().foodIntolerances).toEqual([1, 2]);
     expect(res.json().foodIntoleranceNotes).toBe("no nuts");
+    expect(res.json().dietaryDataState).toBe("present");
+
+    const cleared = await a.inject({
+      method: "PATCH",
+      url: "/api/me",
+      headers: asUser(userId),
+      payload: { foodIntolerances: [], foodIntoleranceNotes: null },
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json().dietaryDataState).toBe("not_provided");
   });
 
   it("rejects restricted/system fields on self-edit (email, badge, dni, notes)", async () => {
@@ -297,11 +357,41 @@ describe("staff user routes (H7)", () => {
       (await a.inject({ method: "DELETE", url: `/api/users/${victim}`, headers: asUser(staff) }))
         .statusCode,
     ).toBe(403);
+    expect(
+      (
+        await a.inject({
+          method: "GET",
+          url: `/api/users/${victim}/removal-eligibility`,
+          headers: asUser(staff),
+        })
+      ).statusCode,
+    ).toBe(403);
     // Can't delete yourself.
     expect(
       (await a.inject({ method: "DELETE", url: `/api/users/${admin}`, headers: asUser(admin) }))
         .statusCode,
     ).toBe(400);
+    expect(
+      (
+        await a.inject({
+          method: "GET",
+          url: `/api/users/${admin}/removal-eligibility`,
+          headers: asUser(admin),
+        })
+      ).statusCode,
+    ).toBe(400);
+    const eligibility = await a.inject({
+      method: "GET",
+      url: `/api/users/${victim}/removal-eligibility`,
+      headers: asUser(admin),
+    });
+    expect(eligibility.statusCode).toBe(200);
+    expect(eligibility.json()).toEqual({
+      action: "delete",
+      reasonCode: "fresh_account",
+      accessRevoked: true,
+      operationalHistoryRetained: false,
+    });
     // Admin removes a fresh account.
     const ok = await a.inject({
       method: "DELETE",
@@ -314,6 +404,55 @@ describe("staff user routes (H7)", () => {
       (await a.inject({ method: "GET", url: `/api/users/${victim}`, headers: asUser(admin) }))
         .statusCode,
     ).toBe(404);
+  });
+
+  it("keeps eligibility and mutation aligned for historically referenced accounts (H54)", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const admin = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
+    const target = await createUser({ name: "Historically Referenced" });
+    const { rows: applications } = await pool.query(
+      `INSERT INTO applications (name, type, template)
+       VALUES ('Participants', 'participant', '[]'::jsonb) RETURNING id`,
+    );
+    await pool.query(
+      `INSERT INTO application_responses (user_id, application_id, status, responses)
+       VALUES ($1, $2, 'submitted', '{}'::jsonb)`,
+      [target, applications[0].id],
+    );
+
+    const eligibility = await a.inject({
+      method: "GET",
+      url: `/api/users/${target}/removal-eligibility`,
+      headers: asUser(admin),
+    });
+    expect(eligibility.statusCode).toBe(200);
+    expect(eligibility.json()).toEqual({
+      action: "anonymize",
+      reasonCode: "operational_history",
+      accessRevoked: true,
+      operationalHistoryRetained: true,
+    });
+
+    const rejectedDelete = await a.inject({
+      method: "DELETE",
+      url: `/api/users/${target}`,
+      headers: asUser(admin),
+    });
+    expect(rejectedDelete.statusCode).toBe(409);
+    expect(rejectedDelete.json().error.details.reasonCode).toBe("operational_history");
+
+    const anonymized = await a.inject({
+      method: "POST",
+      url: `/api/users/${target}/anonymize`,
+      headers: asUser(admin),
+    });
+    expect(anonymized.statusCode).toBe(200);
+    expect(anonymized.json().anonymized).toBe(true);
+    expect(
+      (await pool.query(`SELECT 1 FROM application_responses WHERE user_id = $1`, [target]))
+        .rowCount,
+    ).toBe(1);
   });
 
   it("PATCH /api/users/:id requires USERS_WRITE, can fix dni/notes, and is audited (H53)", async () => {

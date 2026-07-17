@@ -2,7 +2,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool } from "../../db/pool.js";
-import { requireCapability } from "../../lib/capabilities.js";
+import { requireAnyCapability, requireCapability } from "../../lib/capabilities.js";
 import {
   batchDecideSchema,
   batchIdsSchema,
@@ -52,7 +52,10 @@ export function registerReviewRoutes(app: FastifyInstance): void {
   r.get(
     "/api/applications/:id/responses",
     {
-      preHandler: requireCapability(CAPABILITIES.APPLICATIONS_REVIEW),
+      preHandler: requireAnyCapability(
+        CAPABILITIES.APPLICATIONS_REVIEW,
+        CAPABILITIES.APPLICATIONS_DECIDE,
+      ),
       schema: { params: idParamSchema, querystring: listResponsesQuerySchema },
     },
     async (req) => {
@@ -68,16 +71,20 @@ export function registerReviewRoutes(app: FastifyInstance): void {
       }
       const { rows } = await pool.query(
         `SELECT r.id, r.user_id, u.name, u.email, u.shirt_size,
-                u.food_intolerances, u.food_intolerance_notes,
+                u.food_intolerances, u.food_intolerance_notes, u.dietary_data_state,
                 r.status, r.responses,
                 r.staff_notes, r.submitted_at, r.decision_sent_at,
+                r.confirmed_at, r.declined_at, t.expires_at AS confirmation_expires_at,
                 COALESCE(avg(ar.score), NULL) AS avg_score,
                 count(ar.author_id)::int AS review_count
          FROM application_responses r
          JOIN users u ON u.id = r.user_id
          LEFT JOIN applicant_reviews ar ON ar.response_id = r.id
+         LEFT JOIN email_verification_tokens t ON t.id = r.confirmation_token_id
          WHERE ${filters.join(" AND ")}
-         GROUP BY r.id, u.name, u.email, u.shirt_size, u.food_intolerances, u.food_intolerance_notes
+         GROUP BY r.id, u.name, u.email, u.shirt_size, u.food_intolerances,
+                  u.food_intolerance_notes, u.dietary_data_state,
+                  t.expires_at
          ORDER BY r.id`,
         params,
       );
@@ -195,7 +202,10 @@ export function registerReviewRoutes(app: FastifyInstance): void {
   r.get(
     "/api/applications/:id/decision-pool",
     {
-      preHandler: requireCapability(CAPABILITIES.APPLICATIONS_REVIEW),
+      preHandler: requireAnyCapability(
+        CAPABILITIES.APPLICATIONS_REVIEW,
+        CAPABILITIES.APPLICATIONS_DECIDE,
+      ),
       schema: { params: idParamSchema },
     },
     async (req) => getDecisionPool(req.params.id),
@@ -232,7 +242,10 @@ export function registerReviewRoutes(app: FastifyInstance): void {
   r.get(
     "/api/responses/:responseId",
     {
-      preHandler: requireCapability(CAPABILITIES.APPLICATIONS_REVIEW),
+      preHandler: requireAnyCapability(
+        CAPABILITIES.APPLICATIONS_REVIEW,
+        CAPABILITIES.APPLICATIONS_DECIDE,
+      ),
       schema: { params: responseIdParamSchema },
     },
     async (req) => getResponseDetail(req.params.responseId),

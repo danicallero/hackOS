@@ -111,6 +111,7 @@ export default function ProjectsPage() {
     me?.role === "sponsor";
   const [repos, setRepos] = useState<ProjectRepo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!canView) {
@@ -118,12 +119,15 @@ export default function ProjectsPage() {
       return;
     }
     setLoading(true);
+    setLoadError(null);
     try {
       const res = await listRepos();
       setRepos(res.repos.map(toProjectRepo));
     } catch (err) {
       setRepos([]);
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadProjects"));
+      const message = err instanceof ApiError ? err.message : t("couldNotLoadProjects");
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -184,7 +188,10 @@ export default function ProjectsPage() {
         columns={columns}
         data={repos}
         getRowId={(r) => String(r.id)}
-        onRowClick={(r) => router.push(`/projects/${r.id}`)}
+        loading={loading}
+        error={loadError ? { message: loadError, onRetry: load } : undefined}
+        getRowHref={(r) => `/projects/${r.id}`}
+        getRowLabel={(r) => r.name}
         searchable={(r) =>
           `${r.name} ${r.prizes.join(" ")} ${r.challenges.map((c) => c.title).join(" ")} ${r.members
             .map((m) => `${m.name ?? ""} ${m.surname ?? ""} ${m.email}`)
@@ -192,11 +199,16 @@ export default function ProjectsPage() {
         }
         searchPlaceholder={t("searchProjectsPlaceholder")}
         pageSize={15}
-        loading={loading}
         empty={{
           icon: FolderGitIcon,
           title: t("noProjectsYet"),
           description: canImport ? t("importDevpostToStart") : t("projectsAppearAfterImport"),
+          action: canImport ? (
+            <Button type="button" onClick={() => router.push("/projects/import")}>
+              <UploadIcon aria-hidden="true" />
+              {t("importFromDevpost")}
+            </Button>
+          ) : undefined,
         }}
       />
     </div>

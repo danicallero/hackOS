@@ -5,10 +5,12 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { useLocale } from "@/lib/i18n";
 
 const STORAGE_KEY = "hackos.cookie-notice.dismissed";
 
 export function CookieNotice() {
+  const { t } = useLocale();
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
@@ -27,15 +29,15 @@ export function CookieNotice() {
   return (
     <aside
       aria-labelledby="cookie-notice-title"
-      className="fixed z-50 w-[calc(100vw-2rem)] max-w-[36rem] overflow-hidden rounded-lg border border-zinc-200 bg-white text-zinc-700 shadow-xl dark:border-zinc-800"
+      className="bg-card text-card-foreground fixed z-50 w-[calc(100vw-2rem)] max-w-[36rem] overflow-hidden rounded-surface border shadow-xl"
       style={{
         bottom: "max(1rem, env(safe-area-inset-bottom))",
         right: "max(1rem, env(safe-area-inset-right))",
       }}
     >
       <Button
-        aria-label="Dismiss cookie notice"
-        className="absolute right-4 top-4 z-10 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950"
+        aria-label={t("dismissCookieNotice")}
+        className="text-muted-foreground hover:bg-accent hover:text-accent-foreground absolute right-4 top-4 z-10"
         onClick={dismiss}
         size="icon"
         type="button"
@@ -56,24 +58,18 @@ export function CookieNotice() {
       />
 
       <div className="p-4" style={{ minHeight: "11rem" }}>
-        <h2
-          id="cookie-notice-title"
-          className="text-balance text-base font-semibold text-zinc-700 sm:text-lg"
-        >
-          Legally-required cookie notice
+        <h2 id="cookie-notice-title" className="text-balance text-base font-semibold sm:text-lg">
+          {t("cookieNoticeTitle")}
         </h2>
-        <p className="mt-1.5 text-pretty text-xs leading-5 text-zinc-600 sm:text-sm">
-          hackOS keeps a first-party session cookie and a few local settings so your theme, layout,
-          and session preferences do not reset every time you blink. Groundbreaking, we know.
+        <p className="text-muted-foreground mt-1.5 text-pretty text-xs leading-5 sm:text-sm">
+          {t("cookieNoticeBody")}
         </p>
-        <p className="mt-1.5 text-pretty text-xs leading-5 text-zinc-600 sm:text-sm">
-          No ad trackers. No selling your traffic. No trading your information like office supplies.
-          <br />
-          Ursula von der Leyen may breathe easier now.
+        <p className="text-muted-foreground mt-1.5 text-pretty text-xs leading-5 sm:text-sm whitespace-pre-line">
+          {t("cookieNoticeJoke")}
         </p>
         <p className="mt-2 text-xs sm:text-sm">
-          <Link className="font-medium text-zinc-900 underline underline-offset-4" href="/privacy">
-            Read our privacy policy
+          <Link className="font-medium underline underline-offset-4" href="/privacy">
+            {t("cookieNoticePrivacyLink")}
           </Link>
         </p>
       </div>

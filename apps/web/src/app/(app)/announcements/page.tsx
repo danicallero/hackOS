@@ -6,9 +6,20 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { LockIcon, MegaphoneIcon, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
+import {
+  CheckCircle2Icon,
+  ClockIcon,
+  InboxIcon,
+  LockIcon,
+  MegaphoneIcon,
+  PencilIcon,
+  PlusIcon,
+  SmartphoneIcon,
+  Trash2Icon,
+} from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { ContextualError } from "@/components/common/contextual-error";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
@@ -29,7 +40,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError } from "@/lib/api";
-import { formatScheduledDateTime, fromDatetimeLocal } from "@/lib/datetime";
+import { formatScheduledDateTime, fromDatetimeLocal, getTimeZoneLabel } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { type Announcement, type AnnouncementInput, notificationsApi } from "@/lib/notifications";
 import { useCan } from "@/lib/session";
@@ -83,23 +94,59 @@ function audienceLabel(targetRole: string | null, t: Translate): string {
   return targetRole === "participant" ? t("participantsAudience") : t("everyoneAudience");
 }
 
+/** Every announcement fans out over the same two channels today (H50). */
+function AnnouncementChannels() {
+  return (
+    <span className="text-muted-foreground inline-flex items-center gap-2 text-xs">
+      <span className="inline-flex items-center gap-1">
+        <InboxIcon className="size-3.5" aria-hidden="true" />
+        {"·"}
+      </span>
+      <span className="inline-flex items-center gap-1">
+        <SmartphoneIcon className="size-3.5" aria-hidden="true" />
+      </span>
+    </span>
+  );
+}
+
+type DeliveryState = "delivered" | "sending" | "notSent";
+
+function deliveryState(a: Announcement): DeliveryState {
+  if (a.fanned_out_at) return "delivered";
+  return announcementStatus(a) === "scheduled" ? "notSent" : "sending";
+}
+
+function deliveryLabel(state: DeliveryState, t: Translate): string {
+  const map: Record<DeliveryState, string> = {
+    delivered: t("deliveryDelivered"),
+    sending: t("deliverySending"),
+    notSent: t("deliveryNotSent"),
+  };
+  return map[state];
+}
+
 export default function AnnouncementsPage() {
   const { t } = useLocale();
   const canManage = useCan(CAPABILITIES.ANNOUNCEMENTS_MANAGE);
   const [items, setItems] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Announcement | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState<Announcement | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const result = await notificationsApi.listAnnouncements();
       setItems(result.items);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadAnnouncements"));
+      const message = err instanceof ApiError ? err.message : t("couldNotLoadAnnouncements");
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -117,13 +164,16 @@ export default function AnnouncementsPage() {
 
   async function remove(item: Announcement) {
     setBusy(true);
+    setDeleteError(null);
     try {
       await notificationsApi.deleteAnnouncement(item.id);
       toast.success(t("announcementDeleted"));
       setDeleting(null);
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotDeleteAnnouncement"));
+      const message = err instanceof ApiError ? err.message : t("couldNotDeleteAnnouncement");
+      setDeleteError(message);
+      toast.error(message);
     } finally {
       setBusy(false);
     }
@@ -182,6 +232,29 @@ export default function AnnouncementsPage() {
       ),
     },
     {
+      id: "channels",
+      header: t("colChannels"),
+      cell: () => <AnnouncementChannels />,
+    },
+    {
+      id: "delivery",
+      header: t("colDelivery"),
+      sortValue: (a) => deliveryState(a),
+      cell: (a) => {
+        const state = deliveryState(a);
+        return (
+          <span className="inline-flex items-center gap-1.5 text-xs">
+            {state === "delivered" ? (
+              <CheckCircle2Icon className="text-success size-3.5" aria-hidden="true" />
+            ) : (
+              <ClockIcon className="text-muted-foreground size-3.5" aria-hidden="true" />
+            )}
+            {deliveryLabel(state, t)}
+          </span>
+        );
+      },
+    },
+    {
       id: "created",
       header: t("colCreated"),
       sortValue: (a) => a.created_at,
@@ -197,7 +270,6 @@ export default function AnnouncementsPage() {
     <div className="space-y-6">
       <PageHeader
         title={t("announcements")}
-        description={t("announcementsDesc")}
         actions={
           <Button onClick={() => setCreateOpen(true)}>
             <PlusIcon className="size-4" />
@@ -211,6 +283,7 @@ export default function AnnouncementsPage() {
         data={items}
         getRowId={(a) => String(a.id)}
         loading={loading}
+        error={loadError ? { message: loadError, onRetry: load } : undefined}
         searchable={(a) => `${a.title} ${a.body}`}
         searchPlaceholder={t("searchAnnouncementsPlaceholder")}
         pageSize={15}
@@ -229,7 +302,10 @@ export default function AnnouncementsPage() {
               size="icon"
               aria-label={t("deleteAnnouncementAria")}
               className="text-destructive"
-              onClick={() => setDeleting(a)}
+              onClick={() => {
+                setDeleteError(null);
+                setDeleting(a);
+              }}
             >
               <Trash2Icon className="size-4" />
             </Button>
@@ -276,7 +352,10 @@ export default function AnnouncementsPage() {
         <Modal
           open={Boolean(deleting)}
           onOpenChange={(open) => {
-            if (!open) setDeleting(null);
+            if (!open) {
+              setDeleteError(null);
+              setDeleting(null);
+            }
           }}
           title={t("deleteThisAnnouncement")}
           description={t("willStopAppearing", { title: deleting.title })}
@@ -291,7 +370,10 @@ export default function AnnouncementsPage() {
             </>
           }
         >
-          <p className="text-muted-foreground text-sm">{t("cantBeUndone")}</p>
+          <div className="space-y-4">
+            {deleteError && <ContextualError message={deleteError} />}
+            <p className="text-muted-foreground text-sm">{t("cantBeUndone")}</p>
+          </div>
         </Modal>
       )}
     </div>
@@ -385,6 +467,7 @@ function AnnouncementFormModal({
               onChange={(publishAt) => setValues((v) => ({ ...v, publishAt: publishAt || null }))}
               emptyLabel={t("immediatelyLabel")}
               addLabel={t("scheduleStart")}
+              description={t("publishDestinationsHint", { timezone: getTimeZoneLabel() })}
             />
           </Field>
           <Field label={t("visibleUntil")}>

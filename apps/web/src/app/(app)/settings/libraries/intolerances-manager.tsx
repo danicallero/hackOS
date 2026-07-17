@@ -82,6 +82,7 @@ export function IntolerancesManager() {
   const { t } = useLocale();
   const [entries, setEntries] = useState<Intolerance[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   // `null` => closed; a partial with no id => create; with id => edit.
   const [editing, setEditing] = useState<Intolerance | null | undefined>(undefined);
   const [deleteTarget, setDeleteTarget] = useState<Intolerance | null>(null);
@@ -92,13 +93,16 @@ export function IntolerancesManager() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const { intolerances } = await api.get<{ intolerances: Intolerance[] }>(
         "/api/public/food-intolerances",
       );
       setEntries(intolerances);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadDictionary"));
+      const message = err instanceof ApiError ? err.message : t("couldNotLoadDictionary");
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -209,6 +213,7 @@ export function IntolerancesManager() {
         data={entries}
         getRowId={(row) => String(row.id)}
         loading={loading}
+        error={loadError ? { message: loadError, onRetry: load } : undefined}
         searchable={(row) => `${pickText(row.label, "es")} ${row.label.en} ${row.label.gl}`}
         searchPlaceholder={t("searchIntolerances")}
         empty={{

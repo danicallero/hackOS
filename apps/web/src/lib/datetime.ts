@@ -19,6 +19,22 @@ function padDatePart(value: number): string {
   return String(value).padStart(2, "0");
 }
 
+/**
+ * IANA zone id plus a UTC offset suffix (e.g. "Europe/Madrid (UTC+2)"), so
+ * publication-time fields never leave the reader guessing which clock a
+ * scheduled reveal uses (H45, H48).
+ */
+export function getTimeZoneLabel(): string {
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const offsetMinutes = -new Date().getTimezoneOffset();
+  const sign = offsetMinutes >= 0 ? "+" : "-";
+  const abs = Math.abs(offsetMinutes);
+  const hours = Math.floor(abs / 60);
+  const minutes = abs % 60;
+  const offset = minutes === 0 ? `${hours}` : `${hours}:${String(minutes).padStart(2, "0")}`;
+  return `${zone} (UTC${sign}${offset})`;
+}
+
 export function formatScheduledDateTime(value: string, locale?: string): string {
   const localMatch = dateTimeLocalPattern.exec(value);
   if (localMatch) {

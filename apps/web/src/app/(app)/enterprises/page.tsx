@@ -162,6 +162,8 @@ export default function EnterprisesPage() {
   const me = useMe();
   const [enterprises, setEnterprises] = useState<Enterprise[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [sponsorRetryNonce, setSponsorRetryNonce] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -170,13 +172,16 @@ export default function EnterprisesPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const r = await api.get<{ enterprises: Enterprise[] }>("/api/enterprises");
       setEnterprises(r.enterprises);
       setSelectedIds(new Set());
     } catch (err) {
       setEnterprises([]);
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadEnterprises"));
+      const message = err instanceof ApiError ? err.message : t("couldNotLoadEnterprises");
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -218,12 +223,13 @@ export default function EnterprisesPage() {
       void load();
       return;
     }
-    if (me?.role !== "sponsor") {
+    if (!me?.isSponsorRep) {
       setLoading(false);
       return;
     }
     let alive = true;
     setLoading(true);
+    setLoadError(null);
     api
       .get<Enterprise>("/api/enterprises/mine")
       .then((enterprise) => {
@@ -231,15 +237,17 @@ export default function EnterprisesPage() {
       })
       .catch((err) => {
         if (!alive) return;
-        toast.error(err instanceof ApiError ? err.message : t("couldNotLoadYourEnterprise"));
+        const message = err instanceof ApiError ? err.message : t("couldNotLoadYourEnterprise");
+        setLoadError(message);
+        toast.error(message);
         setLoading(false);
       });
     return () => {
       alive = false;
     };
-  }, [canManage, load, me?.role, router, liveRefresh, t]);
+  }, [canManage, load, me?.role, router, liveRefresh, sponsorRetryNonce, t]);
 
-  if (!canManage && me?.role === "sponsor" && loading) {
+  if (!canManage && me?.isSponsorRep && loading) {
     return (
       <div className="space-y-6">
         <PageHeader title={t("myEnterprise")} />
@@ -249,6 +257,23 @@ export default function EnterprisesPage() {
           getRowId={(e) => String(e.id)}
           loading
           empty={{ icon: Building2Icon, title: t("loadingEnterprise") }}
+        />
+      </div>
+    );
+  }
+
+  if (!canManage && me?.isSponsorRep && loadError) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title={t("myEnterprise")} />
+        <DataTable
+          columns={columns}
+          data={[]}
+          getRowId={(enterprise) => String(enterprise.id)}
+          error={{
+            message: loadError,
+            onRetry: () => setSponsorRetryNonce((value) => value + 1),
+          }}
         />
       </div>
     );
@@ -284,11 +309,13 @@ export default function EnterprisesPage() {
         columns={columns}
         data={enterprises}
         getRowId={(e) => String(e.id)}
-        onRowClick={(e) => router.push(`/enterprises/${e.id}`)}
+        getRowHref={(e) => `/enterprises/${e.id}`}
+        getRowLabel={(e) => e.name}
         searchable={(e) => `${e.name} ${e.website ?? ""}`}
         searchPlaceholder={t("searchEnterprisesPlaceholder")}
         pageSize={15}
         loading={loading}
+        error={loadError ? { message: loadError, onRetry: load } : undefined}
         selectable
         selectedIds={selectedIds}
         onSelectionChange={setSelectedIds}

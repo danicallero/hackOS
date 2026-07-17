@@ -69,6 +69,44 @@ describe("challenge progress (H40)", () => {
     expect(body.evaluated).toBe(1);
     expect(body.disqualified).toBe(1);
   });
+
+  it("lets a sponsor rep view progress for their own challenge without room_judges/capabilities, but not others' (H46)", async () => {
+    const { pool } = await import("../../src/db/pool.js");
+    const owner = await createUser();
+    const enterprise = await pool.query(`INSERT INTO enterprises (name) VALUES ($1) RETURNING id`, [
+      `Ent ${crypto.randomUUID()}`,
+    ]);
+    const ownerSponsor = await pool.query(
+      `INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2) RETURNING id`,
+      [enterprise.rows[0].id, owner],
+    );
+    const challenge = await pool.query(
+      `INSERT INTO challenges (author, title) VALUES ($1, $2) RETURNING id`,
+      [ownerSponsor.rows[0].id, "Sponsor Challenge"],
+    );
+    const challengeId = challenge.rows[0].id;
+
+    const rep = await createUser();
+    await pool.query(`INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2)`, [
+      enterprise.rows[0].id,
+      rep,
+    ]);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/queue/challenges/${challengeId}/progress`,
+      headers: asUser(rep),
+    });
+    expect(res.statusCode).toBe(200);
+
+    const otherChallengeId = await createChallenge();
+    const forbidden = await app.inject({
+      method: "GET",
+      url: `/api/queue/challenges/${otherChallengeId}/progress`,
+      headers: asUser(rep),
+    });
+    expect(forbidden.statusCode).toBe(403);
+  });
 });
 
 describe("room view (H41)", () => {
@@ -257,11 +295,51 @@ describe("pace (H39)", () => {
   });
 });
 
+describe("called-too-long threshold (H34, H203)", () => {
+  it("exposes a configurable threshold via queue settings and room pace, not a hardcoded fallback", async () => {
+    const challengeId = await createChallenge();
+    const roomId = await createRoom({ desiredMinutesPerTeam: 10 });
+    await assignChallengeToRoom(roomId, challengeId);
+
+    const defaultPace = await app.inject({
+      method: "GET",
+      url: `/api/queue/rooms/${roomId}/pace`,
+      headers: asUser(operatorId),
+    });
+    expect(defaultPace.json().calledTooLongThresholdMinutes).toBe(10); // migration default
+
+    const adminId = await createUserWithCapabilities([CAPABILITIES.QUEUE_ADMIN]);
+    const patch = await app.inject({
+      method: "PATCH",
+      url: "/api/queue/settings",
+      headers: asUser(adminId),
+      payload: { calledTooLongThresholdMinutes: 25 },
+    });
+    expect(patch.statusCode).toBe(200);
+    expect(patch.json().called_too_long_threshold_minutes).toBe(25);
+
+    const settings = await app.inject({
+      method: "GET",
+      url: "/api/queue/settings",
+      headers: asUser(operatorId),
+    });
+    expect(settings.json().called_too_long_threshold_minutes).toBe(25);
+
+    const pace = await app.inject({
+      method: "GET",
+      url: `/api/queue/rooms/${roomId}/pace`,
+      headers: asUser(operatorId),
+    });
+    // Reflects the operator-configured value, not the old max(10, 2x desired) formula.
+    expect(pace.json().calledTooLongThresholdMinutes).toBe(25);
+  });
+});
+
 describe("TV mode (H42)", () => {
   it("defaults to rooms, PATCH requires TV_CONTROL, changes persist in Valkey and broadcast on tv", async () => {
     const initial = await app.inject({ method: "GET", url: "/api/tv/mode" }); // public
     expect(initial.statusCode).toBe(200);
-    expect(initial.json()).toEqual({ mode: "rooms", payload: null });
+    expect(initial.json()).toMatchObject({ mode: "rooms", payload: null, expiresAt: null });
 
     const forbidden = await app.inject({
       method: "PATCH",
@@ -283,9 +361,10 @@ describe("TV mode (H42)", () => {
     expect(await broadcastCount("tv")).toBe(before + 1); // TV_MODE_CHANGED
 
     const read = await app.inject({ method: "GET", url: "/api/tv/mode" });
-    expect(read.json()).toEqual({
+    expect(read.json()).toMatchObject({
       mode: "announcement",
       payload: { title: "Apertura", body: "¡Empezamos!" },
+      expiresAt: null,
     });
 
     const { valkey } = await import("../../src/lib/valkey.js");

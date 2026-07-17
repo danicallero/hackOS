@@ -14,6 +14,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { QrCamera } from "@/components/QrCamera";
+import { ScannerQueueStatus } from "@/components/scanner-transaction-status";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { subscribeToManualActivityScan } from "@/lib/manual-activity-scan";
@@ -32,7 +33,8 @@ interface ActivityScanResult {
   badgeId: string;
   count: number;
   person: ScannerPerson;
-  state: "registered" | "repeat_pending";
+  state: "saved" | "confirmed" | "attention" | "repeat_pending";
+  error?: string;
   wasRepeat: boolean;
 }
 
@@ -46,7 +48,8 @@ export function ActivityScannerScreen() {
   const router = useRouter();
   const { language, t } = useLocale();
   const insets = useSafeAreaInsets();
-  const { sync: runSync, lastSync } = useScannerSync();
+  const syncState = useScannerSync();
+  const { sync: runSync, lastSync } = syncState;
   const [activity, setActivity] = useState<ScannerActivity | null>(null);
   const [result, setResult] = useState<ActivityScanResult | null>(null);
   const [registering, setRegistering] = useState(false);
@@ -94,7 +97,7 @@ export function ActivityScannerScreen() {
           badgeId,
           count: count + 1,
           person,
-          state: "registered",
+          state: "saved",
           wasRepeat: allowRepeat,
         });
         await runSync();
@@ -102,8 +105,17 @@ export function ActivityScannerScreen() {
         // here instead of leaving the operator believing it was registered.
         const stored = (await pendingScans()).find((scan) => scan.id === scanId);
         if (stored?.status === "failed") {
-          setResult(null);
-          setError(stored.lastError ?? t("presenceScanRejectedBody"));
+          setResult((current) =>
+            current
+              ? {
+                  ...current,
+                  error: stored.lastError ?? t("presenceScanRejectedBody"),
+                  state: "attention",
+                }
+              : current,
+          );
+        } else if (stored?.status === "acknowledged") {
+          setResult((current) => (current ? { ...current, state: "confirmed" } : current));
         }
         await loadStats();
       } finally {
@@ -208,6 +220,17 @@ export function ActivityScannerScreen() {
         </GlassView>
         <ActivityStatistics activity={activity} stats={stats} />
       </View>
+      <View
+        pointerEvents="box-none"
+        style={{ left: 16, position: "absolute", right: 16, top: insets.top + 150 }}
+      >
+        <ScannerQueueStatus
+          queue={syncState.queue}
+          syncing={syncState.syncing}
+          onSync={() => void syncState.sync()}
+          onRetry={() => void syncState.retryFailed()}
+        />
+      </View>
       {error ? (
         <GlassView
           colorScheme="dark"
@@ -236,7 +259,7 @@ export function ActivityScannerScreen() {
           </Pressable>
         </GlassView>
       ) : null}
-      {result && !error ? (
+      {result ? (
         <ActivityResultPanel
           activity={activity}
           language={language}
@@ -310,19 +333,44 @@ function ActivityResultPanel({
             <View style={{ flex: 1, gap: 5 }}>
               <View style={{ alignItems: "center", flexDirection: "row", gap: 7 }}>
                 <SymbolView
-                  name={repeatPending ? "clock.badge.exclamationmark" : "checkmark.circle.fill"}
-                  tintColor={repeatPending ? colors.warning : colors.success}
+                  name={
+                    repeatPending
+                      ? "clock.badge.exclamationmark"
+                      : result.state === "confirmed"
+                        ? "checkmark.circle.fill"
+                        : result.state === "attention"
+                          ? "exclamationmark.triangle.fill"
+                          : "internaldrive.fill"
+                  }
+                  tintColor={
+                    repeatPending || result.state === "saved"
+                      ? colors.warning
+                      : result.state === "attention"
+                        ? colors.destructive
+                        : colors.success
+                  }
                   size={18}
                 />
                 <Text
                   selectable
                   style={{
-                    color: repeatPending ? colors.warning : colors.success,
+                    color:
+                      repeatPending || result.state === "saved"
+                        ? colors.warning
+                        : result.state === "attention"
+                          ? colors.destructive
+                          : colors.success,
                     fontSize: 13,
                     fontWeight: "700",
                   }}
                 >
-                  {repeatPending ? t("scannerRepeatFound") : t("scannerPassRegistered")}
+                  {repeatPending
+                    ? t("scannerRepeatFound")
+                    : result.state === "confirmed"
+                      ? t("scannerStateConfirmed")
+                      : result.state === "attention"
+                        ? t("scannerStateAttention")
+                        : t("scannerStateSaved")}
                 </Text>
               </View>
               <Text selectable style={{ color: "white", fontSize: 23, fontWeight: "700" }}>
@@ -415,6 +463,16 @@ function ActivityResultPanel({
                 </View>
               ) : null}
             </View>
+          ) : null}
+
+          {result.error ? (
+            <Text
+              accessibilityLiveRegion="assertive"
+              selectable
+              style={{ color: colors.destructive, fontSize: 14, fontWeight: "700" }}
+            >
+              {t("scannerBusinessRejected")}: {result.error}
+            </Text>
           ) : null}
 
           {repeatPending ? (

@@ -8,7 +8,15 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowLeftIcon, Building2Icon, ImageIcon, UploadIcon } from "lucide-react";
+import {
+  ArrowLeftIcon,
+  Building2Icon,
+  CheckCircle2Icon,
+  CircleDashedIcon,
+  ImageIcon,
+  TrophyIcon,
+  UploadIcon,
+} from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -20,6 +28,7 @@ import { ScheduledDateTimeField } from "@/components/common/scheduled-datetime-f
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { SponsorLogo } from "@/components/common/sponsor-logo";
+import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -45,9 +54,22 @@ import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { API_URL } from "@/lib/env";
-import { useLocale } from "@/lib/i18n";
-import { useCan } from "@/lib/session";
-import { type Enterprise, initials, LOGO_ACCEPT, LOGO_CONTENT_TYPES } from "../shared";
+import { type MessageKey, useLocale } from "@/lib/i18n";
+import { useCan, useSessionContext } from "@/lib/session";
+import {
+  type Challenge,
+  challengeNextAction,
+  challengeState,
+  filterChallengesForEnterprise,
+  textForDisplay,
+} from "../../challenges/shared";
+import {
+  type Enterprise,
+  enterpriseNextAction,
+  initials,
+  LOGO_ACCEPT,
+  LOGO_CONTENT_TYPES,
+} from "../shared";
 
 const optionalUrl = z.string().url("Enter a valid URL").or(z.literal(""));
 const optionalPositiveInt = z
@@ -155,10 +177,152 @@ export default function EnterpriseDetailPage() {
         <h1 className="text-2xl font-semibold tracking-tight">{enterprise.name}</h1>
       </div>
 
+      <CompletenessCard enterprise={enterprise} />
       <LogoCard enterprise={enterprise} onChanged={load} />
       <EditCard enterprise={enterprise} canManage={canManage} onSaved={load} />
+      <ChallengesSummaryCard enterprise={enterprise} canManage={canManage} />
       {canManage && <MembersCard enterpriseId={enterprise.id} />}
     </div>
+  );
+}
+
+// ── Sponsor home: profile + challenge completeness (H43-H46) ────────────────
+
+const ENTERPRISE_ACTION_COPY: Record<
+  NonNullable<ReturnType<typeof enterpriseNextAction>>,
+  MessageKey
+> = {
+  addLogo: "nextActionAddLogo",
+  addWebsite: "nextActionAddWebsite",
+  addDescription: "nextActionAddDescription",
+};
+
+function CompletenessCard({ enterprise }: { enterprise: Enterprise }) {
+  const { t } = useLocale();
+  const nextAction = enterpriseNextAction(enterprise);
+  return (
+    <SectionCard
+      icon={nextAction ? CircleDashedIcon : CheckCircle2Icon}
+      title={t("profileCompletenessTitle")}
+    >
+      {nextAction ? (
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm">{t(ENTERPRISE_ACTION_COPY[nextAction])}</p>
+          <Button asChild size="sm" variant="outline">
+            <a href="#profile-edit">{t("completeAction")}</a>
+          </Button>
+        </div>
+      ) : (
+        <p className="text-muted-foreground text-sm">{t("profileCompleteMessage")}</p>
+      )}
+    </SectionCard>
+  );
+}
+
+const CHALLENGE_ACTION_COPY: Record<
+  NonNullable<ReturnType<typeof challengeNextAction>>,
+  MessageKey
+> = {
+  addDescription: "nextActionChallengeDescription",
+  addCriteria: "nextActionChallengeCriteria",
+  addPrize: "nextActionChallengePrize",
+  addJudgingCriterion: "nextActionChallengeJudging",
+  schedulePublish: "nextActionChallengePublish",
+};
+
+const CHALLENGE_STATE_TONE: Record<
+  ReturnType<typeof challengeState>,
+  "success" | "warning" | "neutral"
+> = {
+  public: "success",
+  scheduled: "warning",
+  draft: "neutral",
+};
+
+/**
+ * Owned challenge status list (H44/H46): a sponsor rep's home shows every
+ * challenge's actionable next step instead of just an edit form. Admins
+ * viewing another enterprise see the same list scoped to that enterprise
+ * (cross-enterprise management, H43).
+ */
+function ChallengesSummaryCard({
+  enterprise,
+  canManage,
+}: {
+  enterprise: Enterprise;
+  canManage: boolean;
+}) {
+  const { t } = useLocale();
+  const { me } = useSessionContext();
+  const [challenges, setChallenges] = useState<Challenge[] | null>(null);
+
+  const isOwnEnterprise = !canManage && me?.isSponsorRep;
+
+  const load = useCallback(async () => {
+    try {
+      if (canManage) {
+        const res = await api.get<{ challenges: Challenge[] }>("/api/challenges");
+        setChallenges(filterChallengesForEnterprise(res.challenges, enterprise.name));
+        return;
+      }
+      if (isOwnEnterprise) {
+        const res = await api.get<{ challenges: Challenge[] }>("/api/challenges/mine");
+        setChallenges(res.challenges);
+        return;
+      }
+      setChallenges([]);
+    } catch {
+      setChallenges([]);
+    }
+  }, [canManage, enterprise.name, isOwnEnterprise]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  if (!canManage && !isOwnEnterprise) return null;
+
+  return (
+    <SectionCard icon={TrophyIcon} title={t("challengeStatusTitle")}>
+      {challenges === null ? (
+        <div className="flex justify-center py-6">
+          <Spinner className="size-5" />
+        </div>
+      ) : challenges.length === 0 ? (
+        <EmptyState
+          icon={TrophyIcon}
+          title={t("noChallengesYetTitle")}
+          description={canManage ? undefined : t("noChallengeAssignedYet")}
+        />
+      ) : (
+        <ul className="divide-border divide-y">
+          {challenges.map((challenge) => {
+            const state = challengeState(challenge);
+            const nextAction = challengeNextAction(challenge);
+            return (
+              <li key={challenge.id} className="flex items-center justify-between gap-3 py-2.5">
+                <div className="min-w-0">
+                  <Link
+                    href={`/challenges/${challenge.id}`}
+                    className="truncate text-sm font-medium hover:underline"
+                  >
+                    {textForDisplay(challenge.title)}
+                  </Link>
+                  <p className="text-muted-foreground truncate text-xs">
+                    {nextAction
+                      ? t(CHALLENGE_ACTION_COPY[nextAction])
+                      : t("profileCompleteMessage")}
+                  </p>
+                </div>
+                <StatusBadge tone={CHALLENGE_STATE_TONE[state]} className="shrink-0 capitalize">
+                  {t(`challengeState_${state}` as MessageKey)}
+                </StatusBadge>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </SectionCard>
   );
 }
 
@@ -247,11 +411,7 @@ function MembersCard({ enterpriseId }: { enterpriseId: number }) {
   }
 
   return (
-    <SectionCard
-      icon={Building2Icon}
-      title={t("affiliatedUsersTitle")}
-      description={t("affiliatedUsersDesc")}
-    >
+    <SectionCard icon={Building2Icon} title={t("affiliatedUsersTitle")}>
       <div className="space-y-4">
         <div className="flex flex-wrap gap-2">
           <Input
@@ -495,7 +655,7 @@ function EditCard({
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)}>
+      <form id="profile-edit" onSubmit={form.handleSubmit(onSubmit)} className="scroll-mt-6">
         <SectionCard
           icon={Building2Icon}
           title={t("profileTitle")}

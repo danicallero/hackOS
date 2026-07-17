@@ -8,7 +8,7 @@
 
 import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { GraduationCapIcon, MoreHorizontalIcon, PlusIcon } from "lucide-react";
+import { GraduationCapIcon, MoreHorizontalIcon, PlusIcon, SearchIcon, XIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -50,6 +50,7 @@ export function UniversitiesManager() {
   const { t } = useLocale();
   const [entries, setEntries] = useState<University[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   // `undefined` => closed; `null` => create; a row => edit.
   const [editing, setEditing] = useState<University | null | undefined>(undefined);
@@ -61,6 +62,7 @@ export function UniversitiesManager() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const { universities } = await api.get<{ universities: University[] }>(
         "/api/public/universities",
@@ -68,7 +70,9 @@ export function UniversitiesManager() {
       );
       setEntries(universities);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadDirectory"));
+      const message = err instanceof ApiError ? err.message : t("couldNotLoadDirectory");
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -142,18 +146,61 @@ export function UniversitiesManager() {
         </Button>
       </div>
 
-      <Input
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder={t("searchUniversitiesPlaceholder")}
-        className="h-9 max-w-xs"
-      />
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative w-full max-w-xs">
+          <label htmlFor="university-search" className="sr-only">
+            {t("searchUniversities")}
+          </label>
+          <SearchIcon
+            className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+            aria-hidden="true"
+          />
+          <Input
+            id="university-search"
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t("searchUniversitiesPlaceholder")}
+            className="h-9 pr-9 pl-9"
+          />
+          {search && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="absolute top-1/2 right-0.5 size-8 -translate-y-1/2"
+              onClick={() => {
+                setSearch("");
+                document.getElementById("university-search")?.focus();
+              }}
+              aria-label={t("clearSearch")}
+            >
+              <XIcon className="size-4" aria-hidden="true" />
+            </Button>
+          )}
+        </div>
+        <span
+          role="status"
+          aria-live="polite"
+          className="text-muted-foreground text-xs tabular-nums"
+        >
+          {t("tableResultCount", { count: entries.length })}
+        </span>
+      </div>
 
       <DataTable
         columns={columns}
         data={entries}
         getRowId={(row) => String(row.id)}
         loading={loading}
+        error={loadError ? { message: loadError, onRetry: load } : undefined}
+        filteredEmpty={{
+          active: search.trim().length > 0,
+          onClear: () => {
+            setSearch("");
+            document.getElementById("university-search")?.focus();
+          },
+        }}
         empty={{
           icon: GraduationCapIcon,
           title: search.trim() ? t("noMatchesTitle") : t("noUniversitiesYetTitle"),

@@ -22,6 +22,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { signIn } from "@/lib/auth-client";
 import { useLocale } from "@/lib/i18n";
+import { safeReturnPath, withReturnPath } from "@/lib/return-path";
 import { useSessionContext } from "@/lib/session";
 
 const schema = z.object({
@@ -31,16 +32,10 @@ const schema = z.object({
 
 type Values = z.infer<typeof schema>;
 
-/** Only allow same-origin relative paths as a post-login destination — never
- * an absolute URL or protocol-relative `//host` (open-redirect guard). */
-function safeNext(next: string | null): string {
-  if (next?.startsWith("/") && !next.startsWith("//")) return next;
-  return "/dashboard";
-}
-
 function LoginInner() {
   const router = useRouter();
-  const next = safeNext(useSearchParams().get("next"));
+  const rawNext = useSearchParams().get("next");
+  const next = safeReturnPath(rawNext);
   const { status, refresh } = useSessionContext();
   const { t } = useLocale();
   const form = useForm<Values>({
@@ -86,9 +81,10 @@ function LoginInner() {
   }
 
   const emailValue = form.watch("email");
-  const forgotHref = emailValue
-    ? `/forgot-password?email=${encodeURIComponent(emailValue)}`
-    : "/forgot-password";
+  const forgotHref = withReturnPath(
+    emailValue ? `/forgot-password?email=${encodeURIComponent(emailValue)}` : "/forgot-password",
+    rawNext,
+  );
 
   return (
     <Card>
@@ -146,7 +142,10 @@ function LoginInner() {
       </CardContent>
       <div className="text-muted-foreground px-6 pb-6 text-center text-sm">
         {t("newToHackos")}{" "}
-        <Link href="/signup" className="text-foreground underline underline-offset-4">
+        <Link
+          href={withReturnPath("/signup", rawNext)}
+          className="text-foreground underline underline-offset-4"
+        >
           {t("createAccount")}
         </Link>
       </div>

@@ -92,6 +92,21 @@ describe("staff edit response", () => {
     expect(res.statusCode).toBe(200);
   });
 
+  it("does not let a staff edit reintroduce dietary response JSON", async () => {
+    const applicant = await createUser({ emailVerified: true });
+    const appId = await createApplication({ type: "participant", template });
+    const responseId = await createResponse(applicant, appId, { status: "review" });
+
+    const res = await editAnswers(responseId, {
+      field_1: "kept",
+      food_intolerances: [7],
+      food_intolerance_notes: "must not be copied",
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).responses).toEqual({ field_1: "kept" });
+  });
+
   it("still rejects a value that violates the form template", async () => {
     const applicant = await createUser({ emailVerified: true });
     const numberTemplate: TemplateField[] = [

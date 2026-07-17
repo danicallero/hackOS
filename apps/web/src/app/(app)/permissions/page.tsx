@@ -49,6 +49,7 @@ export default function PermissionsPage() {
   const router = useRouter();
   const [groups, setGroups] = useState<PermissionGroupSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
 
   const form = useForm<CreateValues>({
@@ -58,11 +59,14 @@ export default function PermissionsPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const rows = await api.get<PermissionGroupSummary[]>("/api/permission-groups");
       setGroups(rows);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadPermissionGroups"));
+      const message = err instanceof ApiError ? err.message : t("couldNotLoadPermissionGroups");
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -118,33 +122,35 @@ export default function PermissionsPage() {
     <div className="space-y-8">
       <PageHeader
         title={t("permissions")}
-        description={t("permissionsDesc")}
-        actions={
+        primaryAction={
           <Button onClick={() => setCreateOpen(true)}>
             <PlusIcon /> {t("newGroup")}
           </Button>
         }
       />
 
-      <SectionCard
-        icon={ShieldCheckIcon}
-        title={t("permissionGroupsTitle")}
-        description={t("clickGroupToEditDesc")}
-        bodyClassName="p-0"
-      >
+      <SectionCard icon={ShieldCheckIcon} title={t("permissionGroupsTitle")} bodyClassName="p-0">
         <DataTable
           columns={columns}
           data={groups}
           getRowId={(g) => String(g.id)}
           loading={loading}
+          error={loadError ? { message: loadError, onRetry: load } : undefined}
           searchable={(g) => `${g.name} ${g.description ?? ""}`}
           searchPlaceholder={t("filterGroupsPlaceholder")}
           pageSize={10}
-          onRowClick={(g) => router.push(`/permissions/${g.id}`)}
+          getRowHref={(g) => `/permissions/${g.id}`}
+          getRowLabel={(g) => g.name}
           empty={{
             icon: ShieldCheckIcon,
             title: t("noPermissionGroupsYetTitle"),
             description: t("createGroupToStart"),
+            action: (
+              <Button type="button" onClick={() => setCreateOpen(true)}>
+                <PlusIcon aria-hidden="true" />
+                {t("createGroup")}
+              </Button>
+            ),
           }}
         />
       </SectionCard>
@@ -157,9 +163,7 @@ export default function PermissionsPage() {
         <div className="space-y-5">
           {catalogue.map((group) => (
             <div key={group.domain} className="space-y-2">
-              <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-                {group.domain}
-              </p>
+              <p className="type-label text-muted-foreground">{group.domain}</p>
               <div className="flex flex-wrap gap-2">
                 {group.capabilities.map((cap) => (
                   <StatusBadge key={cap} tone={cap === "*" ? "brand" : "neutral"} dot={false}>
@@ -178,7 +182,6 @@ export default function PermissionsPage() {
         onOpenChange={setCreateOpen}
         icon={KeyRoundIcon}
         title={t("newPermissionGroupTitle")}
-        description={t("giveNameOptionalCapsDesc")}
         footer={
           <>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>

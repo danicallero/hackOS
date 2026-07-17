@@ -174,6 +174,7 @@ export async function buildExportBundle(subjectUserId: number): Promise<Record<s
       badgeIdHistory: user.badge_id_history,
       foodIntolerances: user.food_intolerances,
       foodIntoleranceNotes: user.food_intolerance_notes,
+      dietaryDataState: user.dietary_data_state,
       universityId: user.university_id,
       shirtSize: user.shirt_size,
       language: user.language,

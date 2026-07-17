@@ -27,7 +27,7 @@ export default function ActivitiesPage() {
 
   return (
     <div className="space-y-6" data-wide>
-      <PageHeader title={t("activities")} description={t("activitiesDescription")} />
+      <PageHeader title={t("activities")} />
       <ActivityScannerCard category="activity" />
     </div>
   );

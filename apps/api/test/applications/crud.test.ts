@@ -9,7 +9,7 @@ import {
   createUserWithCapabilities,
   truncateAll,
 } from "../helpers.js";
-import { createApplication, sampleTemplate } from "./fixtures.js";
+import { createApplication, markInvitedParticipant, sampleTemplate } from "./fixtures.js";
 
 /** H11 (APPLICATIONS_MANAGE): CRUD of application forms + public read of open ones. */
 
@@ -165,6 +165,64 @@ describe("applications CRUD (H11)", () => {
     const single = await a.inject({ method: "GET", url: `/api/public/applications/${openId}` });
     expect(single.statusCode).toBe(200);
     expect(single.json().name).toBe("Open");
+  });
+
+  it("H10: a late invited participant can still list and fetch a closed form", async () => {
+    const a = await getApp();
+    const past = new Date(Date.now() - 3600_000).toISOString();
+
+    const closedId = await createApplication({ name: "Closed", open_at: past, close_at: past });
+
+    const invited = await createUser({ email: "late@example.com" });
+    await markInvitedParticipant(invited, "late@example.com");
+
+    const list = await a.inject({
+      method: "GET",
+      url: "/api/public/applications",
+      headers: asUser(invited),
+    });
+    expect(list.statusCode).toBe(200);
+    const forms = list.json().applications;
+    expect(forms.map((f: { id: number }) => f.id)).toContain(closedId);
+
+    const single = await a.inject({
+      method: "GET",
+      url: `/api/public/applications/${closedId}`,
+      headers: asUser(invited),
+    });
+    expect(single.statusCode).toBe(200);
+    expect(single.json().name).toBe("Closed");
+  });
+
+  it("H10: a non-invited user still gets the closed form omitted/404", async () => {
+    const a = await getApp();
+    const past = new Date(Date.now() - 3600_000).toISOString();
+
+    const closedId = await createApplication({ name: "Closed", open_at: past, close_at: past });
+    const pleb = await createUser();
+
+    // anonymous
+    const anonList = await a.inject({ method: "GET", url: "/api/public/applications" });
+    expect(anonList.json().applications.map((f: { id: number }) => f.id)).not.toContain(closedId);
+    const anonSingle = await a.inject({
+      method: "GET",
+      url: `/api/public/applications/${closedId}`,
+    });
+    expect(anonSingle.statusCode).toBe(404);
+
+    // authenticated but not an invited participant
+    const list = await a.inject({
+      method: "GET",
+      url: "/api/public/applications",
+      headers: asUser(pleb),
+    });
+    expect(list.json().applications.map((f: { id: number }) => f.id)).not.toContain(closedId);
+    const single = await a.inject({
+      method: "GET",
+      url: `/api/public/applications/${closedId}`,
+      headers: asUser(pleb),
+    });
+    expect(single.statusCode).toBe(404);
   });
 
   it("blocks deleting a form that already has responses", async () => {

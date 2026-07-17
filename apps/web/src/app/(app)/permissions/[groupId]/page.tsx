@@ -293,7 +293,6 @@ export default function PermissionGroupDetailPage() {
           <SectionCard
             icon={SettingsIcon}
             title={t("groupDetailsTitle")}
-            description={t("renameOrUpdateDescDesc")}
             footer={
               <SubmitButton pending={form.formState.isSubmitting}>{t("saveChanges")}</SubmitButton>
             }
@@ -331,7 +330,6 @@ export default function PermissionGroupDetailPage() {
       <SectionCard
         icon={KeyRoundIcon}
         title={t("capabilitiesLabel")}
-        description={t("capabilitiesGrantDesc")}
         footer={
           <Button onClick={onSaveCaps} disabled={!capsDirty || savingCaps}>
             {savingCaps && <Spinner />}
@@ -352,7 +350,6 @@ export default function PermissionGroupDetailPage() {
       <SectionCard
         icon={UsersIcon}
         title={t("membersTitle")}
-        description={t("usersInGroupDesc")}
         action={
           <Button size="sm" variant="outline" onClick={() => setAddMemberOpen(true)}>
             <UserPlusIcon /> {t("addMemberLabel")}
@@ -545,7 +542,6 @@ function AddMemberModal({
       }}
       icon={UserPlusIcon}
       title={t("addMemberLabel")}
-      description={t("searchDirectoryDesc")}
     >
       <div className="space-y-3">
         <Input

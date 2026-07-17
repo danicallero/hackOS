@@ -80,4 +80,50 @@ describe("buildExportBundle (H54)", () => {
     const bundle = await buildExportBundle(a);
     expect(JSON.stringify(bundle)).not.toContain("SECRET_EXPO_TOKEN");
   });
+
+  it("includes dietary provenance without reconstructing removed values", async () => {
+    const a = await createUser();
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `UPDATE users
+          SET dietary_data_state = 'removed_after_decline',
+              food_intolerances = '{}', food_intolerance_notes = NULL
+        WHERE id = $1`,
+      [a],
+    );
+
+    const bundle = (await buildExportBundle(a)) as {
+      subject: {
+        dietaryDataState: string;
+        foodIntolerances: number[];
+        foodIntoleranceNotes: string | null;
+      };
+    };
+    expect(bundle.subject.dietaryDataState).toBe("removed_after_decline");
+    expect(bundle.subject.foodIntolerances).toEqual([]);
+    expect(bundle.subject.foodIntoleranceNotes).toBeNull();
+  });
+
+  it("does not export legacy dietary response JSON after decline", async () => {
+    const subject = await createUser({ email: "legacy@example.test" });
+    const { responseId } = await createApplicationResponse(subject, {
+      status: "accepted",
+      responses: {
+        motivation: "kept answer",
+        food_intolerances: [42],
+        food_intolerance_notes: "LEGACY_DIETARY_SECRET",
+      },
+    });
+    const { declineByResponseId } = await import("../../src/modules/applications/service.js");
+
+    await declineByResponseId(responseId, "web", subject, subject);
+    const bundle = await buildExportBundle(subject);
+    const serialized = JSON.stringify(bundle);
+
+    expect(serialized).toContain("kept answer");
+    expect(serialized).not.toContain("LEGACY_DIETARY_SECRET");
+    const applications = bundle.applications as Array<{ responses: Record<string, unknown> }>;
+    expect(applications).toHaveLength(1);
+    expect(applications[0]?.responses).toEqual({ motivation: "kept answer" });
+  });
 });

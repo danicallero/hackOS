@@ -1,3 +1,4 @@
+import { AlertTriangleIcon, CloudOffIcon, HardDriveIcon, LoaderCircleIcon } from "lucide-react";
 import { StatusBadge } from "@/components/common/status-badge";
 import { useLocale } from "@/lib/i18n";
 
@@ -14,6 +15,7 @@ export type OfflineScan = {
   allowRepeat: boolean;
   scannedAt: string;
   status: "pending" | "syncing" | "failed";
+  failureKind?: "offline" | "rejected";
   error?: string;
 };
 
@@ -52,13 +54,44 @@ export function OfflineQueue({ items }: { items: OfflineScan[] }) {
                 {item.badgeId} · {new Date(item.scannedAt).toLocaleTimeString()}
               </p>
             </div>
-            <StatusBadge
-              tone={
-                item.status === "failed" ? "danger" : item.status === "syncing" ? "info" : "neutral"
-              }
-            >
-              {item.status}
-            </StatusBadge>
+            <div className="flex max-w-full flex-col items-end gap-1 text-right">
+              <StatusBadge
+                tone={
+                  item.status === "failed"
+                    ? "danger"
+                    : item.failureKind === "offline"
+                      ? "warning"
+                      : item.status === "syncing"
+                        ? "info"
+                        : "neutral"
+                }
+              >
+                {item.status === "failed" ? (
+                  <AlertTriangleIcon aria-hidden className="size-3" />
+                ) : item.failureKind === "offline" ? (
+                  <CloudOffIcon aria-hidden className="size-3" />
+                ) : item.status === "syncing" ? (
+                  <LoaderCircleIcon aria-hidden className="size-3" />
+                ) : (
+                  <HardDriveIcon aria-hidden className="size-3" />
+                )}
+                {item.status === "failed"
+                  ? t("scannerStateAttention")
+                  : item.status === "syncing"
+                    ? t("scannerStateSyncing")
+                    : t("scannerStateSaved")}
+              </StatusBadge>
+              <p className="text-muted-foreground max-w-72 text-pretty text-xs">
+                {item.status === "failed"
+                  ? t("scannerBusinessRejected")
+                  : item.failureKind === "offline"
+                    ? t("scannerOfflineWaiting")
+                    : t("scannerAwaitingAcknowledgement")}
+              </p>
+              {item.error ? (
+                <p className="text-destructive max-w-72 text-pretty text-xs">{item.error}</p>
+              ) : null}
+            </div>
           </div>
         ))}
       </div>

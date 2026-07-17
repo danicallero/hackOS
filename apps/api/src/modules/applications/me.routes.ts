@@ -31,8 +31,10 @@ export function registerMeRoutes(app: FastifyInstance): void {
     { preHandler: requireAuth, schema: { params: idParamSchema } },
     async (req) => {
       const { rows } = await pool.query(
-        `SELECT a.template, a.type, r.* FROM application_responses r
+        `SELECT a.template, a.type, r.*, t.expires_at AS confirmation_expires_at
+         FROM application_responses r
          JOIN applications a ON a.id = r.application_id
+         LEFT JOIN email_verification_tokens t ON t.id = r.confirmation_token_id
          WHERE r.user_id = $1 AND r.application_id = $2`,
         [req.userId, req.params.id],
       );
@@ -40,7 +42,8 @@ export function registerMeRoutes(app: FastifyInstance): void {
       const { template, type, ...row } = rows[0];
       const enriched = await enrichTemplate(type, template);
       const { rows: userRows } = await pool.query(
-        `SELECT shirt_size, food_intolerances, food_intolerance_notes FROM users WHERE id = $1`,
+        `SELECT shirt_size, food_intolerances, food_intolerance_notes, dietary_data_state
+         FROM users WHERE id = $1`,
         [req.userId],
       );
       return {
@@ -50,6 +53,7 @@ export function registerMeRoutes(app: FastifyInstance): void {
         shirt_size: userRows[0]?.shirt_size ?? null,
         food_intolerances: userRows[0]?.food_intolerances ?? [],
         food_intolerance_notes: userRows[0]?.food_intolerance_notes ?? null,
+        dietary_data_state: userRows[0]?.dietary_data_state ?? "not_provided",
       };
     },
   );

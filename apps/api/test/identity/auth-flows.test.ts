@@ -41,7 +41,7 @@ const SIGNUP = {
   language: "es",
 };
 
-async function signUp(a: App, overrides: Partial<typeof SIGNUP> = {}) {
+async function signUp(a: App, overrides: Partial<typeof SIGNUP> & { callbackURL?: string } = {}) {
   return a.inject({
     method: "POST",
     url: "/api/auth/sign-up/email",
@@ -300,6 +300,103 @@ describe("H5 password reset", () => {
     // old password dead, new one works
     expect((await signIn(a, SIGNUP.email, SIGNUP.password)).statusCode).toBe(401);
     expect((await signIn(a, SIGNUP.email, "brand-new-pass-1")).statusCode).toBe(200);
+  });
+});
+
+describe("H188 return-path continuity", () => {
+  it("carries a same-origin `next` from sign-up through to the emailed verify link", async () => {
+    const a = await getApp();
+    await signUp(a, {
+      email: "next-signup@example.com",
+      callbackURL: "/verify-email?verified=1&next=%2Fmy-applications%2F5",
+    });
+
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows } = await pool.query(
+      `SELECT o.payload FROM notification_outbox o JOIN users u ON u.id = o.user_id
+       WHERE u.email = $1 AND o.payload->>'template' = 'auth.verify' ORDER BY o.id DESC LIMIT 1`,
+      ["next-signup@example.com"],
+    );
+    const verifyUrl = new URL(rows[0].payload.vars.verifyUrl as string);
+    const callbackURL = verifyUrl.searchParams.get("callbackURL") as string;
+    expect(callbackURL).toContain("/verify-email?verified=1&next=%2Fmy-applications%2F5");
+  });
+
+  it("rejects an absolute-URL `next` and falls back to the default destination (same-origin guard)", async () => {
+    const a = await getApp();
+    await signUp(a, {
+      email: "evil-signup@example.com",
+      callbackURL: "https://evil.example.com/steal",
+    });
+
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows } = await pool.query(
+      `SELECT o.payload FROM notification_outbox o JOIN users u ON u.id = o.user_id
+       WHERE u.email = $1 AND o.payload->>'template' = 'auth.verify' ORDER BY o.id DESC LIMIT 1`,
+      ["evil-signup@example.com"],
+    );
+    const verifyUrl = new URL(rows[0].payload.vars.verifyUrl as string);
+    const callbackURL = verifyUrl.searchParams.get("callbackURL") as string;
+    expect(callbackURL).not.toContain("evil.example.com");
+    expect(callbackURL).toContain("/verify-email?verified=1");
+  });
+
+  it("carries `next` through a resend-verification request too", async () => {
+    const a = await getApp();
+    await signUp(a, { email: "next-resend@example.com" });
+
+    const resend = await a.inject({
+      method: "POST",
+      url: "/api/auth/resend-verification",
+      payload: {
+        email: "next-resend@example.com",
+        callbackURL: "/verify-email?verified=1&next=%2Fmy-applications",
+      },
+    });
+    expect(resend.statusCode).toBe(200);
+
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows } = await pool.query(
+      `SELECT o.payload FROM notification_outbox o JOIN users u ON u.id = o.user_id
+       WHERE u.email = $1 AND o.payload->>'template' = 'auth.verify' ORDER BY o.id DESC LIMIT 1`,
+      ["next-resend@example.com"],
+    );
+    const verifyUrl = new URL(rows[0].payload.vars.verifyUrl as string);
+    expect(verifyUrl.searchParams.get("callbackURL")).toContain(
+      "/verify-email?verified=1&next=%2Fmy-applications",
+    );
+  });
+
+  it("distinguishes an expired token from an invalid one via the redirect's `error` code (H2)", async () => {
+    const a = await getApp();
+    const callbackURL = encodeURIComponent("/verify-email?verified=1");
+
+    const invalid = await a.inject({
+      method: "GET",
+      url: `/api/auth/verify-email?token=not-a-real-token&callbackURL=${callbackURL}`,
+    });
+    expect(invalid.statusCode).toBe(302);
+    const invalidLocation = new URL(invalid.headers.location as string, "http://x");
+    expect(invalidLocation.searchParams.get("error")).toBe("INVALID_TOKEN");
+
+    // A syntactically valid but expired JWT, signed the same way Better
+    // Auth signs its own verification tokens (better-auth/crypto), with a
+    // negative TTL so it's already expired.
+    const { config } = await import("../../src/config.js");
+    const { signJWT } = await import("better-auth/crypto");
+    const expiredToken = await signJWT(
+      { email: "nobody@example.com" },
+      config.BETTER_AUTH_SECRET,
+      -60,
+    );
+
+    const expired = await a.inject({
+      method: "GET",
+      url: `/api/auth/verify-email?token=${expiredToken}&callbackURL=${callbackURL}`,
+    });
+    expect(expired.statusCode).toBe(302);
+    const expiredLocation = new URL(expired.headers.location as string, "http://x");
+    expect(expiredLocation.searchParams.get("error")).toBe("TOKEN_EXPIRED");
   });
 });
 

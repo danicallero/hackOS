@@ -104,10 +104,12 @@ export async function getResponse(id: number): Promise<{
 export async function getUserSensitive(userId: number): Promise<{
   food_intolerances: number[];
   food_intolerance_notes: string | null;
+  dietary_data_state: "not_provided" | "present" | "removed_after_decline";
   shirt_size: string | null;
 }> {
   const { rows } = await pool.query(
-    `SELECT food_intolerances, food_intolerance_notes, shirt_size FROM users WHERE id = $1`,
+    `SELECT food_intolerances, food_intolerance_notes, dietary_data_state, shirt_size
+     FROM users WHERE id = $1`,
     [userId],
   );
   return rows[0];
@@ -122,6 +124,15 @@ export async function latestConfirmationToken(userId: number): Promise<string> {
     [userId],
   );
   return rows[0].token;
+}
+
+/** Mark a user as invited-participant (used account_claim, kind=participant) — H10 bypass. */
+export async function markInvitedParticipant(userId: number, email: string): Promise<void> {
+  await pool.query(
+    `INSERT INTO email_verification_tokens (token, type, email, user_id, kind, expires_at, used_at)
+     VALUES ($1, 'account_claim', $2, $3, 'participant', now() + interval '1 hour', now())`,
+    [`test-claim-${userId}-${Date.now()}`, email, userId],
+  );
 }
 
 /** Force the confirmation window to have elapsed by back-dating the token + decision. */

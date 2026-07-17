@@ -16,6 +16,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
+  AlertCircleIcon,
   ArrowDownIcon,
   ArrowLeftIcon,
   ArrowUpIcon,
@@ -40,17 +41,20 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { AlertModal } from "@/components/common/alert-modal";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { EmptyState } from "@/components/common/empty-state";
 import { FileLink } from "@/components/common/file-link";
 import { Modal } from "@/components/common/modal";
+import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
 import { type FieldValue, TemplateFieldControl } from "@/components/common/template-field-control";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -84,6 +88,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { pickText, type Translate, useLocale } from "@/lib/i18n";
+import type { SaveState } from "@/lib/save-state";
 import { useCan, useMe } from "@/lib/session";
 import type { Intolerance, Language } from "@/lib/types";
 import {
@@ -106,6 +111,12 @@ import {
   toLocalInput,
   windowState,
 } from "../lib";
+import {
+  type ApplicationWorkspace,
+  applicationStatusLabel,
+  generatedFieldKey,
+  rowsForWorkspace,
+} from "../workflow";
 
 const LOCALES = ["es", "en", "gl"] as const;
 const EMPTY_I18N: I18nText = { en: "", es: "", gl: "" };
@@ -117,6 +128,7 @@ export default function ApplicationDetailPage() {
 
   const canManage = useCan(CAPABILITIES.APPLICATIONS_MANAGE);
   const canReview = useCan(CAPABILITIES.APPLICATIONS_REVIEW);
+  const canDecide = useCan(CAPABILITIES.APPLICATIONS_DECIDE);
   const canStats = useCan(CAPABILITIES.LOGISTICS_STATS);
 
   const [form, setForm] = useState<ApplicationForm | null>(null);
@@ -186,7 +198,7 @@ export default function ApplicationDetailPage() {
     );
   }
 
-  const defaultTab = canManage ? "form" : "responses";
+  const defaultTab = canManage ? "builder" : canReview ? "review" : "decisions";
   const w = form ? windowState(form, t) : null;
 
   return (
@@ -223,13 +235,20 @@ export default function ApplicationDetailPage() {
       {canStats && stats && <StatsStrip stats={stats} />}
 
       <Tabs defaultValue={defaultTab}>
-        <TabsList className="w-full max-w-md">
-          {canManage && <TabsTrigger value="form">{t("formTabLabel")}</TabsTrigger>}
-          {canReview && <TabsTrigger value="responses">{t("responsesTabLabel")}</TabsTrigger>}
+        <TabsList className="h-auto w-full justify-start overflow-x-auto">
+          {canManage && <TabsTrigger value="builder">{t("formTabLabel")}</TabsTrigger>}
+          {canReview && <TabsTrigger value="review">{t("workspaceReview")}</TabsTrigger>}
+          {canDecide && <TabsTrigger value="decisions">{t("workspaceDecisions")}</TabsTrigger>}
+          {canDecide && (
+            <TabsTrigger value="communication">{t("workspaceCommunication")}</TabsTrigger>
+          )}
+          {canDecide && (
+            <TabsTrigger value="confirmation">{t("workspaceConfirmation")}</TabsTrigger>
+          )}
         </TabsList>
 
         {canManage && (
-          <TabsContent value="form" className="space-y-6 pt-2">
+          <TabsContent value="builder" className="space-y-6 pt-2">
             {form ? (
               <>
                 <MetadataCard form={form} onSaved={loadForm} />
@@ -246,8 +265,23 @@ export default function ApplicationDetailPage() {
         )}
 
         {canReview && (
-          <TabsContent value="responses" className="pt-2">
-            <ResponsesTab id={id} template={form?.template ?? null} />
+          <TabsContent value="review" className="pt-2">
+            <ResponsesTab id={id} template={form?.template ?? null} workspace="review" />
+          </TabsContent>
+        )}
+        {canDecide && (
+          <TabsContent value="decisions" className="pt-2">
+            <ResponsesTab id={id} template={form?.template ?? null} workspace="decisions" />
+          </TabsContent>
+        )}
+        {canDecide && (
+          <TabsContent value="communication" className="pt-2">
+            <ResponsesTab id={id} template={form?.template ?? null} workspace="communication" />
+          </TabsContent>
+        )}
+        {canDecide && (
+          <TabsContent value="confirmation" className="pt-2">
+            <ResponsesTab id={id} template={form?.template ?? null} workspace="confirmation" />
           </TabsContent>
         )}
       </Tabs>
@@ -327,6 +361,7 @@ type MetaValues = z.infer<typeof metaSchema>;
 
 function MetadataCard({ form, onSaved }: { form: ApplicationForm; onSaved: () => Promise<void> }) {
   const { t } = useLocale();
+  const [saveState, setSaveState] = useState<SaveState>("saved");
   const localizedMetaSchema = useMemo(
     () =>
       z.object({
@@ -367,6 +402,7 @@ function MetadataCard({ form, onSaved }: { form: ApplicationForm; onSaved: () =>
       return;
     }
     try {
+      setSaveState("saving");
       // PATCH /api/applications/:id (APPLICATIONS_MANAGE) — audited server-side (H11/H53).
       await api.patch<ApplicationForm>(`/api/applications/${form.id}`, {
         name: values.name.trim(),
@@ -379,8 +415,11 @@ function MetadataCard({ form, onSaved }: { form: ApplicationForm; onSaved: () =>
         confirmation_window_hours: windowHours,
       });
       await onSaved();
+      rhf.reset(values);
+      setSaveState("saved");
       toast.success(t("formUpdated"));
     } catch (err) {
+      setSaveState("error");
       toast.error(err instanceof ApiError ? err.message : t("couldNotSaveForm"));
     }
   }
@@ -392,9 +431,24 @@ function MetadataCard({ form, onSaved }: { form: ApplicationForm; onSaved: () =>
           icon={SettingsIcon}
           title={t("formSettings")}
           footer={
-            <SubmitButton pending={rhf.formState.isSubmitting}>{t("saveSettings")}</SubmitButton>
+            <>
+              <SaveStatus
+                state={
+                  rhf.formState.isSubmitting
+                    ? "saving"
+                    : saveState === "error"
+                      ? "error"
+                      : rhf.formState.isDirty
+                        ? "unsaved"
+                        : "saved"
+                }
+                className="mr-auto"
+              />
+              <SubmitButton pending={rhf.formState.isSubmitting}>{t("saveSettings")}</SubmitButton>
+            </>
           }
         >
+          <h3 className="text-balance text-sm font-semibold">{t("builderBasics")}</h3>
           <FormField
             control={rhf.control}
             name="name"
@@ -448,6 +502,9 @@ function MetadataCard({ form, onSaved }: { form: ApplicationForm; onSaved: () =>
               </FormItem>
             )}
           />
+          <h3 className="border-t pt-4 text-balance text-sm font-semibold">
+            {t("builderAvailability")}
+          </h3>
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField
               control={rhf.control}
@@ -513,6 +570,7 @@ function MetadataCard({ form, onSaved }: { form: ApplicationForm; onSaved: () =>
               )}
             />
           </div>
+          <h3 className="border-t pt-4 text-balance text-sm font-semibold">{t("builderReview")}</h3>
           <FormField
             control={rhf.control}
             name="active"
@@ -546,18 +604,26 @@ function newField(index: number): TemplateField {
 }
 
 function QuestionsCard({ form, onSaved }: { form: ApplicationForm; onSaved: () => Promise<void> }) {
-  const { t } = useLocale();
+  const { t, language } = useLocale();
   const [fields, setFields] = useState<TemplateField[]>(form.template);
   const [saving, setSaving] = useState(false);
   const [preview, setPreview] = useState(false);
+  const [previewLocale, setPreviewLocale] = useState<Language>(language);
+  const [saveState, setSaveState] = useState<SaveState>("saved");
 
   // Re-seed if the form reloads (e.g. after a metadata save).
   useEffect(() => {
+    if (saveState !== "saved") return;
     setFields(form.template);
-  }, [form.template]);
+  }, [form.template, saveState]);
 
   const update = (i: number, patch: Partial<TemplateField>) =>
     setFields((prev) => prev.map((f, idx) => (idx === i ? { ...f, ...patch } : f)));
+
+  const updateUnsaved = (i: number, patch: Partial<TemplateField>) => {
+    setSaveState("unsaved");
+    update(i, patch);
+  };
 
   const move = (i: number, dir: -1 | 1) =>
     setFields((prev) => {
@@ -565,15 +631,22 @@ function QuestionsCard({ form, onSaved }: { form: ApplicationForm; onSaved: () =
       if (j < 0 || j >= prev.length) return prev;
       const next = [...prev];
       [next[i], next[j]] = [next[j], next[i]];
+      setSaveState("unsaved");
       return next;
     });
 
-  const remove = (i: number) => setFields((prev) => prev.filter((_, idx) => idx !== i));
+  const remove = (i: number) => {
+    setSaveState("unsaved");
+    setFields((prev) => prev.filter((_, idx) => idx !== i));
+  };
 
-  const add = () => setFields((prev) => [...prev, newField(prev.length)]);
+  const add = () => {
+    setSaveState("unsaved");
+    setFields((prev) => [...prev, newField(prev.length)]);
+  };
 
   const setKind = (i: number, kind: FieldKind) =>
-    update(i, {
+    updateUnsaved(i, {
       kind,
       // Options only exist for select/multiselect; seed one when switching in.
       options: OPTION_KINDS.includes(kind)
@@ -611,6 +684,7 @@ function QuestionsCard({ form, onSaved }: { form: ApplicationForm; onSaved: () =
       return;
     }
     setSaving(true);
+    setSaveState("saving");
     try {
       // PATCH /api/applications/:id { template } (APPLICATIONS_MANAGE). The
       // server re-validates with templateSchema (unique keys, option kinds).
@@ -632,8 +706,10 @@ function QuestionsCard({ form, onSaved }: { form: ApplicationForm; onSaved: () =
         })),
       });
       await onSaved();
+      setSaveState("saved");
       toast.success(t("questionsSaved"));
     } catch (e) {
+      setSaveState("error");
       toast.error(e instanceof ApiError ? e.message : t("couldNotSaveQuestions"));
     } finally {
       setSaving(false);
@@ -669,9 +745,12 @@ function QuestionsCard({ form, onSaved }: { form: ApplicationForm; onSaved: () =
         </div>
       }
       footer={
-        <SubmitButton type="button" pending={saving} onClick={save}>
-          {t("saveQuestions")}
-        </SubmitButton>
+        <>
+          <SaveStatus state={saving ? "saving" : saveState} className="mr-auto" />
+          <SubmitButton type="button" pending={saving} onClick={save}>
+            {t("saveQuestions")}
+          </SubmitButton>
+        </>
       }
     >
       {fields.length === 0 ? (
@@ -681,20 +760,45 @@ function QuestionsCard({ form, onSaved }: { form: ApplicationForm; onSaved: () =
           description={t("noQuestionsYetDesc")}
         />
       ) : (
-        <div className="space-y-4">
-          {fields.map((field, i) => (
-            <FieldEditor
-              // biome-ignore lint/suspicious/noArrayIndexKey: fields are positional and reorderable
-              key={i}
-              field={field}
-              index={i}
-              count={fields.length}
-              onChange={(patch) => update(i, patch)}
-              onKind={(k) => setKind(i, k)}
-              onMove={(dir) => move(i, dir)}
-              onRemove={() => remove(i)}
-            />
-          ))}
+        <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(20rem,0.8fr)]">
+          <div className="space-y-4">
+            {fields.map((field, i) => (
+              <FieldEditor
+                // biome-ignore lint/suspicious/noArrayIndexKey: fields are positional and reorderable
+                key={i}
+                field={field}
+                index={i}
+                count={fields.length}
+                primaryLocale={language}
+                existingKeys={fields.filter((_, index) => index !== i).map((item) => item.key)}
+                onChange={(patch) => updateUnsaved(i, patch)}
+                onKind={(k) => setKind(i, k)}
+                onMove={(dir) => move(i, dir)}
+                onRemove={() => remove(i)}
+              />
+            ))}
+          </div>
+          <div className="hidden space-y-3 xl:sticky xl:top-4 xl:block">
+            <div className="flex items-center justify-between gap-3">
+              <Label htmlFor="preview-locale">{t("previewLocale")}</Label>
+              <Select
+                value={previewLocale}
+                onValueChange={(value) => setPreviewLocale(value as Language)}
+              >
+                <SelectTrigger id="preview-locale" className="w-36">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {LOCALES.map((locale) => (
+                    <SelectItem key={locale} value={locale}>
+                      {locale.toUpperCase()}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <FormPreviewPanel fields={fields} locale={previewLocale} />
+          </div>
         </div>
       )}
     </SectionCard>
@@ -713,64 +817,88 @@ function FormPreviewModal({
   name: string;
   fields: TemplateField[];
 }) {
-  const { t } = useLocale();
+  const { t, language } = useLocale();
+  const [locale, setLocale] = useState<Language>(language);
   return (
     <Modal open={open} onOpenChange={onOpenChange} title={t("previewTitle", { name })} size="lg">
       <div className="space-y-4">
-        <p className="text-muted-foreground text-sm">{t("previewIntro")}</p>
-        {fields.map((f) => {
-          const label = pickText(f.label, "es") || f.key;
-          const opts = f.options ?? [];
-          return (
-            <div key={f.key} className="space-y-1.5">
-              <Label>
-                {label}
-                {f.required && <span className="text-destructive"> *</span>}
-              </Label>
-              {f.kind === "textarea" ? (
-                <Textarea disabled rows={2} placeholder={t("applicantsAnswerPlaceholder")} />
-              ) : f.kind === "checkbox" ? (
-                <div className="text-muted-foreground flex items-center gap-2 text-sm">
-                  <input type="checkbox" disabled /> {t("yesNoText")}
-                </div>
-              ) : f.kind === "select" || f.kind === "multiselect" ? (
-                <div className="flex flex-wrap gap-1.5">
-                  {opts.length === 0 ? (
-                    <span className="text-muted-foreground text-sm">{t("noOptionsDefined")}</span>
-                  ) : (
-                    opts.map((o) => (
-                      <span
-                        key={o.value}
-                        className="border-input rounded-md border px-2 py-0.5 text-sm"
-                      >
-                        {pickText(o.label, "es") || o.value}
-                      </span>
-                    ))
-                  )}
-                  {f.kind === "multiselect" && (
-                    <span className="text-muted-foreground text-xs">{t("chooseAnyHint")}</span>
-                  )}
-                </div>
-              ) : (
-                <Input
-                  disabled
-                  type={f.kind === "number" ? "number" : f.kind === "date" ? "date" : "text"}
-                  placeholder={
-                    f.kind === "file-url"
-                      ? t("linkPlaceholder")
-                      : f.kind === "file"
-                        ? t("fileUploadPlaceholder")
-                        : f.kind === "university"
-                          ? t("universityPickerPlaceholder")
-                          : t("applicantsAnswerPlaceholder")
-                  }
-                />
-              )}
-            </div>
-          );
-        })}
+        <div className="flex items-center justify-between gap-3">
+          <Label htmlFor="modal-preview-locale">{t("previewLocale")}</Label>
+          <Select value={locale} onValueChange={(value) => setLocale(value as Language)}>
+            <SelectTrigger id="modal-preview-locale" className="w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {LOCALES.map((item) => (
+                <SelectItem key={item} value={item}>
+                  {item.toUpperCase()}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <FormPreviewPanel fields={fields} locale={locale} />
       </div>
     </Modal>
+  );
+}
+
+function FormPreviewPanel({ fields, locale }: { fields: TemplateField[]; locale: Language }) {
+  const { t } = useLocale();
+  return (
+    <div className="space-y-4 rounded-lg border p-4">
+      {fields.map((f) => {
+        const label = pickText(f.label, locale) || t("primaryApplicantLabel");
+        const opts = f.options ?? [];
+        return (
+          <div key={f.key} className="space-y-1.5">
+            <Label>
+              {label}
+              {f.required && <span className="text-destructive"> *</span>}
+            </Label>
+            {f.kind === "textarea" ? (
+              <Textarea disabled rows={2} placeholder={t("applicantsAnswerPlaceholder")} />
+            ) : f.kind === "checkbox" ? (
+              <div className="text-muted-foreground flex items-center gap-2 text-sm">
+                <input type="checkbox" disabled /> {t("yesNoText")}
+              </div>
+            ) : f.kind === "select" || f.kind === "multiselect" ? (
+              <div className="flex flex-wrap gap-1.5">
+                {opts.length === 0 ? (
+                  <span className="text-muted-foreground text-sm">{t("noOptionsDefined")}</span>
+                ) : (
+                  opts.map((o) => (
+                    <span
+                      key={o.value}
+                      className="border-input rounded-md border px-2 py-0.5 text-sm"
+                    >
+                      {pickText(o.label, locale) || o.value}
+                    </span>
+                  ))
+                )}
+                {f.kind === "multiselect" && (
+                  <span className="text-muted-foreground text-xs">{t("chooseAnyHint")}</span>
+                )}
+              </div>
+            ) : (
+              <Input
+                disabled
+                type={f.kind === "number" ? "number" : f.kind === "date" ? "date" : "text"}
+                placeholder={
+                  f.kind === "file-url"
+                    ? t("linkPlaceholder")
+                    : f.kind === "file"
+                      ? t("fileUploadPlaceholder")
+                      : f.kind === "university"
+                        ? t("universityPickerPlaceholder")
+                        : t("applicantsAnswerPlaceholder")
+                }
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -794,6 +922,8 @@ function FieldEditor({
   field,
   index,
   count,
+  primaryLocale,
+  existingKeys,
   onChange,
   onKind,
   onMove,
@@ -802,14 +932,25 @@ function FieldEditor({
   field: TemplateField;
   index: number;
   count: number;
+  primaryLocale: Language;
+  existingKeys: string[];
   onChange: (patch: Partial<TemplateField>) => void;
   onKind: (kind: FieldKind) => void;
   onMove: (dir: -1 | 1) => void;
   onRemove: () => void;
 }) {
   const { t } = useLocale();
-  const setLabel = (loc: (typeof LOCALES)[number], val: string) =>
-    onChange({ label: { ...field.label, [loc]: val } });
+  const setLabel = (loc: (typeof LOCALES)[number], val: string) => {
+    const followsGeneratedKey =
+      /^field_\d+$/.test(field.key) ||
+      field.key === generatedFieldKey(field.label[primaryLocale], existingKeys);
+    onChange({
+      label: { ...field.label, [loc]: val },
+      ...(loc === primaryLocale && followsGeneratedKey
+        ? { key: generatedFieldKey(val, existingKeys) }
+        : {}),
+    });
+  };
 
   const setOptions = (options: TemplateField["options"]) => onChange({ options });
 
@@ -853,17 +994,17 @@ function FieldEditor({
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_14rem]">
         <div className="space-y-1.5">
-          <Label className="text-muted-foreground text-xs uppercase">{t("fieldKeyLabel")}</Label>
+          <Label htmlFor={`question-${index}-${primaryLocale}`}>{t("primaryApplicantLabel")}</Label>
           <Input
-            value={field.key}
-            onChange={(e) => onChange({ key: e.target.value })}
-            placeholder="motivation"
+            id={`question-${index}-${primaryLocale}`}
+            value={field.label[primaryLocale]}
+            onChange={(e) => setLabel(primaryLocale, e.target.value)}
           />
         </div>
         <div className="space-y-1.5">
-          <Label className="text-muted-foreground text-xs uppercase">{t("kindLabel")}</Label>
+          <Label>{t("kindLabel")}</Label>
           <Select value={field.kind} onValueChange={(v) => onKind(v as FieldKind)}>
             <SelectTrigger className="w-full">
               <SelectValue />
@@ -879,27 +1020,54 @@ function FieldEditor({
         </div>
       </div>
 
-      <div className="space-y-2">
-        <Label className="text-muted-foreground text-xs uppercase">{t("fieldLabelLabel")}</Label>
-        <div className="grid gap-2 sm:grid-cols-3">
-          {LOCALES.map((loc) => (
-            <div key={loc} className="space-y-1">
-              <span className="text-muted-foreground text-[10px] uppercase">{loc}</span>
-              <Input
-                value={field.label[loc]}
-                onChange={(e) => setLabel(loc, e.target.value)}
-                placeholder={loc}
-              />
-            </div>
-          ))}
+      <details className="rounded-lg border p-3">
+        <summary className="cursor-pointer text-sm font-medium">
+          {t("translationsAndSettings")}
+        </summary>
+        <div className="mt-4 space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            {LOCALES.filter((loc) => loc !== primaryLocale).map((loc) => (
+              <div key={loc} className="space-y-1.5">
+                <Label htmlFor={`question-${index}-${loc}`}>{loc.toUpperCase()}</Label>
+                <Input
+                  id={`question-${index}-${loc}`}
+                  value={field.label[loc]}
+                  onChange={(e) => setLabel(loc, e.target.value)}
+                />
+              </div>
+            ))}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor={`field-key-${index}`}>{t("fieldKeyLabel")}</Label>
+            <Input
+              id={`field-key-${index}`}
+              value={field.key}
+              onChange={(e) => onChange({ key: e.target.value })}
+              aria-describedby={`field-key-hint-${index}`}
+            />
+            <p id={`field-key-hint-${index}`} className="text-muted-foreground text-xs">
+              {t("generatedAutomatically")}
+            </p>
+          </div>
         </div>
-      </div>
+      </details>
 
       {OPTION_KINDS.includes(field.kind) && (
-        <OptionsEditor options={field.options ?? []} onChange={setOptions} />
+        <OptionsEditor
+          options={field.options ?? []}
+          primaryLocale={primaryLocale}
+          onChange={setOptions}
+        />
       )}
 
-      {field.kind === FILE_KIND && <FileRestrictionsEditor field={field} onChange={onChange} />}
+      {field.kind === FILE_KIND && (
+        <details className="rounded-lg border p-3">
+          <summary className="cursor-pointer text-sm font-medium">{t("fileRestrictions")}</summary>
+          <div className="mt-3">
+            <FileRestrictionsEditor field={field} onChange={onChange} />
+          </div>
+        </details>
+      )}
 
       <div className="flex items-center gap-2">
         <Switch
@@ -917,9 +1085,11 @@ function FieldEditor({
 
 function OptionsEditor({
   options,
+  primaryLocale,
   onChange,
 }: {
   options: NonNullable<TemplateField["options"]>;
+  primaryLocale: Language;
   onChange: (options: NonNullable<TemplateField["options"]>) => void;
 }) {
   const { t } = useLocale();
@@ -940,42 +1110,71 @@ function OptionsEditor({
       {options.length === 0 && (
         <p className="text-muted-foreground text-xs">{t("addAtLeastOneOptionDesc")}</p>
       )}
-      {options.map((opt, i) => (
-        <div
-          // biome-ignore lint/suspicious/noArrayIndexKey: options are positional
-          key={i}
-          className="grid items-end gap-2 sm:grid-cols-[8rem_1fr_1fr_1fr_auto]"
-        >
-          <div className="space-y-1">
-            <span className="text-muted-foreground text-[10px] uppercase">{t("valueLabel")}</span>
-            <Input
-              value={opt.value}
-              onChange={(e) => update(i, { value: e.target.value })}
-              placeholder="yes"
-            />
-          </div>
-          {LOCALES.map((loc) => (
-            <div key={loc} className="space-y-1">
-              <span className="text-muted-foreground text-[10px] uppercase">{loc}</span>
-              <Input
-                value={opt.label[loc]}
-                onChange={(e) => update(i, { label: { ...opt.label, [loc]: e.target.value } })}
-                placeholder={loc}
-              />
-            </div>
-          ))}
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="text-destructive size-9"
-            onClick={() => remove(i)}
+      {options.map((opt, i) => {
+        const updateLabel = (locale: Language, value: string) => {
+          const followsGeneratedValue =
+            !opt.value || opt.value === generatedFieldKey(opt.label[primaryLocale]);
+          update(i, {
+            label: { ...opt.label, [locale]: value },
+            ...(locale === primaryLocale && followsGeneratedValue
+              ? { value: generatedFieldKey(value) }
+              : {}),
+          });
+        };
+        return (
+          <div
+            // biome-ignore lint/suspicious/noArrayIndexKey: options are positional
+            key={i}
+            className="space-y-3 rounded-md border p-3"
           >
-            <Trash2Icon className="size-4" />
-            <span className="sr-only">{t("removeOption")}</span>
-          </Button>
-        </div>
-      ))}
+            <div className="flex items-end gap-2">
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <Label htmlFor={`option-${i}-${primaryLocale}`}>{t("optionApplicantLabel")}</Label>
+                <Input
+                  id={`option-${i}-${primaryLocale}`}
+                  value={opt.label[primaryLocale]}
+                  onChange={(e) => updateLabel(primaryLocale, e.target.value)}
+                />
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="text-destructive size-9"
+                onClick={() => remove(i)}
+                aria-label={t("removeOption")}
+              >
+                <Trash2Icon className="size-4" />
+              </Button>
+            </div>
+            <details>
+              <summary className="cursor-pointer text-sm font-medium">
+                {t("translationsAndSettings")}
+              </summary>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                {LOCALES.filter((locale) => locale !== primaryLocale).map((locale) => (
+                  <div key={locale} className="space-y-1.5">
+                    <Label htmlFor={`option-${i}-${locale}`}>{locale.toUpperCase()}</Label>
+                    <Input
+                      id={`option-${i}-${locale}`}
+                      value={opt.label[locale]}
+                      onChange={(e) => updateLabel(locale, e.target.value)}
+                    />
+                  </div>
+                ))}
+                <div className="space-y-1.5">
+                  <Label htmlFor={`option-value-${i}`}>{t("valueLabel")}</Label>
+                  <Input
+                    id={`option-value-${i}`}
+                    value={opt.value}
+                    onChange={(e) => update(i, { value: e.target.value })}
+                  />
+                </div>
+              </div>
+            </details>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1030,20 +1229,40 @@ function FileRestrictionsEditor({
 
 const ALL = "__all__";
 
-function ResponsesTab({ id, template }: { id: number; template: TemplateField[] | null }) {
+interface DurableBatchResult {
+  label: string;
+  processed: number;
+  skipped: Array<{ id: number; reason: string; applicant: string }>;
+}
+
+function ResponsesTab({
+  id,
+  template,
+  workspace,
+}: {
+  id: number;
+  template: TemplateField[] | null;
+  workspace: ApplicationWorkspace;
+}) {
   const { t } = useLocale();
   const canDecide = useCan(CAPABILITIES.APPLICATIONS_DECIDE);
-  const [rows, setRows] = useState<ResponseRow[]>([]);
+  const [allRows, setAllRows] = useState<ResponseRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>(ALL);
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sendOpen, setSendOpen] = useState(false);
   const [batchBusy, setBatchBusy] = useState(false);
+  const [batchResult, setBatchResult] = useState<DurableBatchResult | null>(null);
+  const [confirmBatchRevoke, setConfirmBatchRevoke] = useState(false);
+
+  const rows = useMemo(() => rowsForWorkspace(allRows, workspace), [allRows, workspace]);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const { responses } = await api.get<{ responses: ResponseRow[] }>(
         `/api/applications/${id}/responses`,
@@ -1054,10 +1273,12 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
           },
         },
       );
-      setRows(responses);
+      setAllRows(responses);
       setSelectedIds(new Set());
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadResponses"));
+      const message = err instanceof ApiError ? err.message : t("couldNotLoadResponses");
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -1108,13 +1329,7 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
       header: t("statusColumn"),
       sortValue: (r) => r.status,
       cell: (r) => (
-        <StatusBadge tone={statusTone(r.status)} className="capitalize">
-          {r.status === "accepted_internal"
-            ? t("acceptedUnsentStatus")
-            : r.status === "rejected_internal"
-              ? t("rejectedUnsentStatus")
-              : r.status}
-        </StatusBadge>
+        <StatusBadge tone={statusTone(r.status)}>{applicationStatusLabel(r.status, t)}</StatusBadge>
       ),
     },
     {
@@ -1142,21 +1357,55 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
     },
   ];
 
+  if (workspace === "communication") {
+    columns.push({
+      id: "communicated",
+      header: t("decisionDeliveryColumn"),
+      align: "right",
+      sortValue: (r) => r.decision_sent_at ?? "",
+      cell: (r) => (
+        <span className="text-muted-foreground text-sm tabular-nums">
+          {r.decision_sent_at ? fmtDateTime(r.decision_sent_at) : t("notSentYet")}
+        </span>
+      ),
+    });
+  }
+
+  if (workspace === "confirmation") {
+    columns.push({
+      id: "deadline",
+      header: t("confirmationDeadlineColumn"),
+      align: "right",
+      sortValue: (r) => r.confirmation_expires_at ?? "",
+      cell: (r) => (
+        <span className="text-muted-foreground text-sm tabular-nums">
+          {r.confirmation_expires_at ? fmtDateTime(r.confirmation_expires_at) : "—"}
+        </span>
+      ),
+    });
+  }
+
   async function batchAction(label: string, fn: () => Promise<unknown>) {
     setBatchBusy(true);
     try {
-      const result = (await fn()) as { skipped?: { id: number; reason: string }[] } | undefined;
+      const result = (await fn()) as
+        | { processed?: number; sent?: number; skipped?: { id: number; reason: string }[] }
+        | undefined;
+      const skipped = (result?.skipped ?? []).map((item) => ({
+        ...item,
+        applicant:
+          allRows.find((row) => row.id === item.id)?.name ??
+          allRows.find((row) => row.id === item.id)?.email ??
+          `#${item.id}`,
+      }));
+      setBatchResult({
+        label,
+        processed:
+          result?.processed ?? result?.sent ?? Math.max(0, selectedIds.size - skipped.length),
+        skipped,
+      });
       await load();
-      // The batch endpoints now report which rows were skipped and why, so a
-      // partial batch is no longer silent (previously the flaky-looking case).
-      const skipped = result?.skipped ?? [];
-      if (skipped.length > 0) {
-        toast.warning(
-          t("batchSkipped", { label, count: skipped.length, reason: skipped[0].reason }),
-        );
-      } else {
-        toast.success(label);
-      }
+      if (skipped.length === 0) toast.success(label);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("batchActionFailed"));
     } finally {
@@ -1172,12 +1421,41 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder={t("searchByNameOrEmailPlaceholder")}
-          className="h-9 max-w-xs"
-        />
+        <div className="relative w-full max-w-xs">
+          <label htmlFor="response-search" className="sr-only">
+            {t("searchResponses")}
+          </label>
+          <Input
+            id="response-search"
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t("searchByNameOrEmailPlaceholder")}
+            className="h-9 pr-9"
+          />
+          {search && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="absolute top-1/2 right-0.5 size-8 -translate-y-1/2"
+              onClick={() => {
+                setSearch("");
+                document.getElementById("response-search")?.focus();
+              }}
+              aria-label={t("clearSearch")}
+            >
+              <XIcon aria-hidden="true" />
+            </Button>
+          )}
+        </div>
+        <span
+          role="status"
+          aria-live="polite"
+          className="text-muted-foreground text-xs tabular-nums"
+        >
+          {t("tableResultCount", { count: rows.length })}
+        </span>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="h-9 w-40 capitalize">
             <SelectValue placeholder={t("allStatuses")} />
@@ -1185,13 +1463,13 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
           <SelectContent>
             <SelectItem value={ALL}>{t("allStatuses")}</SelectItem>
             {RESPONSE_STATUSES.map((s) => (
-              <SelectItem key={s} value={s} className="capitalize">
-                {s}
+              <SelectItem key={s} value={s}>
+                {applicationStatusLabel(s, t)}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        {canDecide && (
+        {canDecide && workspace === "communication" && (
           <Button className="ml-auto" variant="outline" onClick={() => setSendOpen(true)}>
             <SendIcon />
             {t("sendDecisions")}
@@ -1199,7 +1477,7 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
         )}
       </div>
 
-      {canDecide && selectedIds.size > 0 && (
+      {canDecide && selectedIds.size > 0 && workspace !== "review" && (
         <div className="flex items-center gap-2 rounded-lg border p-3">
           <span className="text-sm font-medium">
             {t("selectedCount", { count: selectedIds.size })}
@@ -1207,126 +1485,161 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
           <div className="ml-auto flex flex-wrap gap-2">
             {/* Primary: decide + send. Everything else lives under "More" to keep
                 the bar uncluttered. */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button size="sm" variant="outline" disabled={batchBusy}>
-                  <CheckCheckIcon />
-                  {t("decide")}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onClick={() =>
-                    batchAction(t("decisionsApplied"), () =>
-                      api.post("/api/responses/batch/decide", {
-                        response_ids: selectedArr.map((r) => r.id),
-                        decision: "accepted",
-                      }),
-                    )
-                  }
-                >
-                  {t("accept")}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() =>
-                    batchAction(t("decisionsApplied"), () =>
-                      api.post("/api/responses/batch/decide", {
-                        response_ids: selectedArr.map((r) => r.id),
-                        decision: "rejected",
-                      }),
-                    )
-                  }
-                >
-                  {t("reject")}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={batchBusy}
-              onClick={() =>
-                batchAction(t("decisionsSent"), () =>
-                  api.post("/api/responses/batch/send-decision", {
-                    response_ids: selectedArr.map((r) => r.id),
-                  }),
-                )
-              }
-            >
-              <SendIcon />
-              {t("send")}
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button size="sm" variant="outline" disabled={batchBusy}>
-                  <RotateCcwIcon />
-                  {t("more")}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuLabel>{t("revert")}</DropdownMenuLabel>
-                <DropdownMenuItem
-                  onClick={() =>
-                    batchAction(t("revertedToAcceptedInternal"), () =>
-                      api.post("/api/responses/batch/revert-decision", {
-                        response_ids: selectedArr.map((r) => r.id),
-                        decision: "accepted",
-                      }),
-                    )
-                  }
-                >
-                  {t("toAcceptedUnsend")}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() =>
-                    batchAction(t("revertedToRejectedInternal"), () =>
-                      api.post("/api/responses/batch/revert-decision", {
-                        response_ids: selectedArr.map((r) => r.id),
-                        decision: "rejected",
-                      }),
-                    )
-                  }
-                >
-                  {t("toRejectedUnsend")}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() =>
-                    batchAction(t("movedBackToReview"), () =>
-                      api.post("/api/responses/batch/revert-decision", {
-                        response_ids: selectedArr.map((r) => r.id),
-                        decision: "review",
-                      }),
-                    )
-                  }
-                >
-                  {t("backToReview")}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() =>
-                    batchAction(t("reaccepted"), () =>
-                      api.post("/api/responses/batch/re-accept", {
-                        response_ids: selectedArr.map((r) => r.id),
-                      }),
-                    )
-                  }
-                >
-                  {t("reacceptDeclinedExpired")}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  variant="destructive"
-                  onClick={() =>
-                    batchAction(t("spotsRevoked"), () =>
-                      api.post("/api/responses/batch/revoke-spot", {
-                        response_ids: selectedArr.map((r) => r.id),
-                      }),
-                    )
-                  }
-                >
-                  {t("revokeSpot")}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {workspace === "decisions" && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" variant="outline" disabled={batchBusy}>
+                    <CheckCheckIcon />
+                    {t("decide")}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={() =>
+                      batchAction(t("decisionsApplied"), () =>
+                        api.post("/api/responses/batch/decide", {
+                          response_ids: selectedArr.map((r) => r.id),
+                          decision: "accepted",
+                        }),
+                      )
+                    }
+                  >
+                    {t("accept")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() =>
+                      batchAction(t("decisionsApplied"), () =>
+                        api.post("/api/responses/batch/decide", {
+                          response_ids: selectedArr.map((r) => r.id),
+                          decision: "rejected",
+                        }),
+                      )
+                    }
+                  >
+                    {t("reject")}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+            {workspace === "communication" && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={batchBusy}
+                onClick={() =>
+                  batchAction(t("decisionsSent"), () =>
+                    api.post("/api/responses/batch/send-decision", {
+                      response_ids: selectedArr.map((r) => r.id),
+                    }),
+                  )
+                }
+              >
+                <SendIcon />
+                {t("send")}
+              </Button>
+            )}
+            {workspace === "decisions" && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" variant="outline" disabled={batchBusy}>
+                    <RotateCcwIcon />
+                    {t("more")}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuLabel>{t("revert")}</DropdownMenuLabel>
+                  <DropdownMenuItem
+                    onClick={() =>
+                      batchAction(t("revertedToAcceptedInternal"), () =>
+                        api.post("/api/responses/batch/revert-decision", {
+                          response_ids: selectedArr.map((r) => r.id),
+                          decision: "accepted",
+                        }),
+                      )
+                    }
+                  >
+                    {t("toAcceptedUnsend")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() =>
+                      batchAction(t("revertedToRejectedInternal"), () =>
+                        api.post("/api/responses/batch/revert-decision", {
+                          response_ids: selectedArr.map((r) => r.id),
+                          decision: "rejected",
+                        }),
+                      )
+                    }
+                  >
+                    {t("toRejectedUnsend")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() =>
+                      batchAction(t("movedBackToReview"), () =>
+                        api.post("/api/responses/batch/revert-decision", {
+                          response_ids: selectedArr.map((r) => r.id),
+                          decision: "review",
+                        }),
+                      )
+                    }
+                  >
+                    {t("backToReview")}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() =>
+                      batchAction(t("reaccepted"), () =>
+                        api.post("/api/responses/batch/re-accept", {
+                          response_ids: selectedArr.map((r) => r.id),
+                        }),
+                      )
+                    }
+                  >
+                    {t("reacceptDeclinedExpired")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onClick={() => setConfirmBatchRevoke(true)}
+                  >
+                    {t("revokeSpot")}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+            {workspace === "confirmation" && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" variant="outline" disabled={batchBusy}>
+                    <RotateCcwIcon />
+                    {t("more")}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={() =>
+                      batchAction(t("reaccepted"), () =>
+                        api.post("/api/responses/batch/re-accept", {
+                          response_ids: selectedArr.map((r) => r.id),
+                        }),
+                      )
+                    }
+                  >
+                    {t("reacceptDeclinedExpired")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onClick={() =>
+                      batchAction(t("spotsRevoked"), () =>
+                        api.post("/api/responses/batch/revoke-spot", {
+                          response_ids: selectedArr.map((r) => r.id),
+                        }),
+                      )
+                    }
+                  >
+                    {t("revokeSpot")}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
             <Button
               size="sm"
               variant="ghost"
@@ -1340,12 +1653,66 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
         </div>
       )}
 
+      {batchResult && (
+        <Alert variant={batchResult.skipped.length > 0 ? "destructive" : "default"}>
+          <AlertCircleIcon aria-hidden="true" />
+          <AlertTitle>
+            {t("batchResultTitle")}: {batchResult.label}
+          </AlertTitle>
+          <AlertDescription>
+            <p>{t("batchProcessed", { count: batchResult.processed })}</p>
+            {batchResult.skipped.length > 0 && (
+              <div className="mt-2">
+                <p className="font-medium">
+                  {t("batchSkippedTitle", { count: batchResult.skipped.length })}
+                </p>
+                <ul className="mt-1 list-disc space-y-1 pl-5">
+                  {batchResult.skipped.map((item) => (
+                    <li key={item.id}>
+                      {item.applicant}: {item.reason}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <Button
+              className="mt-3"
+              size="sm"
+              variant="outline"
+              onClick={() => setBatchResult(null)}
+            >
+              {t("dismissResult")}
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <AlertModal
+        open={confirmBatchRevoke}
+        onOpenChange={setConfirmBatchRevoke}
+        title={t("revokeSpot")}
+        description={t("revokeSpotWarning")}
+        cancelLabel={t("cancel")}
+        confirmLabel={t("revokeSpot")}
+        destructive
+        pending={batchBusy}
+        onConfirm={() => {
+          void batchAction(t("spotsRevoked"), () =>
+            api.post("/api/responses/batch/revoke-spot", {
+              response_ids: selectedArr.map((r) => r.id),
+            }),
+          ).finally(() => setConfirmBatchRevoke(false));
+        }}
+      />
+
       <DataTable
         columns={columns}
         data={rows}
         getRowId={(r) => String(r.id)}
         loading={loading}
+        error={loadError ? { message: loadError, onRetry: load } : undefined}
         onRowClick={(r) => setSelectedId(r.id)}
+        getRowLabel={(r) => r.name ?? r.email}
         selectable={canDecide}
         selectedIds={selectedIds}
         onSelectionChange={setSelectedIds}
@@ -1358,6 +1725,14 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
               ? t("submissionsAppearHereDesc")
               : t("noResponsesMatchFilterDesc"),
         }}
+        filteredEmpty={{
+          active: statusFilter !== ALL || search.trim().length > 0,
+          onClear: () => {
+            setStatusFilter(ALL);
+            setSearch("");
+            document.getElementById("response-search")?.focus();
+          },
+        }}
       />
 
       {selected && (
@@ -1367,6 +1742,7 @@ function ResponsesTab({ id, template }: { id: number; template: TemplateField[] 
           template={template}
           onClose={() => setSelectedId(null)}
           onChanged={load}
+          workspace={workspace}
         />
       )}
 
@@ -1469,12 +1845,14 @@ export function ReviewModal({
   template,
   onClose,
   onChanged,
+  workspace = "review",
 }: {
   response: ResponseRow;
   applicationId: number;
   template: TemplateField[] | null;
   onClose: () => void;
   onChanged: () => Promise<void>;
+  workspace?: ApplicationWorkspace;
 }) {
   const { t } = useLocale();
   const canReview = useCan(CAPABILITIES.APPLICATIONS_REVIEW);
@@ -1514,7 +1892,8 @@ export function ReviewModal({
   // write-only (blank each open); the list column shows the average + count.
   const [myScore, setMyScore] = useState("");
   const [myNotes, setMyNotes] = useState("");
-  const [savingReview, setSavingReview] = useState(false);
+  const [reviewHydrated, setReviewHydrated] = useState(false);
+  const [reviewSaveState, setReviewSaveState] = useState<SaveState>("saved");
   const [busy, setBusy] = useState(false);
   // Staff edit of the applicant's answers (APPLICATIONS_EDIT_RESPONSE). Seeded
   // from the current responses; the API replaces the whole object and re-validates
@@ -1522,6 +1901,49 @@ export function ReviewModal({
   const [editing, setEditing] = useState(false);
   const [editValues, setEditValues] = useState<Record<string, unknown>>(response.responses);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [confirmRevoke, setConfirmRevoke] = useState(false);
+
+  useEffect(() => {
+    if (!me?.id || !canReview) return;
+    api
+      .get<{ reviews: Array<{ author_id: number; score: number | null; notes: string | null }> }>(
+        `/api/responses/${response.id}`,
+      )
+      .then((detail) => {
+        const mine = detail.reviews.find((review) => review.author_id === me.id);
+        setMyScore(mine?.score == null ? "" : String(mine.score));
+        setMyNotes(mine?.notes ?? "");
+        setReviewSaveState("saved");
+        setReviewHydrated(true);
+      })
+      .catch(() => {
+        setReviewSaveState("error");
+        setReviewHydrated(true);
+      });
+  }, [response.id, me?.id, canReview]);
+
+  useEffect(() => {
+    if (!reviewHydrated || !canReview) return;
+    const scoreNum = myScore.trim() ? Number(myScore) : null;
+    if (scoreNum !== null && (!Number.isInteger(scoreNum) || scoreNum < 0 || scoreNum > 100)) {
+      setReviewSaveState("error");
+      return;
+    }
+    setReviewSaveState("unsaved");
+    const handle = window.setTimeout(async () => {
+      setReviewSaveState("saving");
+      try {
+        await api.put(`/api/responses/${response.id}/my-review`, {
+          score: scoreNum,
+          notes: myNotes.trim() || null,
+        });
+        setReviewSaveState("saved");
+      } catch {
+        setReviewSaveState("error");
+      }
+    }, 700);
+    return () => window.clearTimeout(handle);
+  }, [response.id, myScore, myNotes, reviewHydrated, canReview]);
 
   function startEdit() {
     setEditValues({ ...response.responses });
@@ -1572,28 +1994,6 @@ export function ReviewModal({
     }
   }
 
-  async function saveMyReview() {
-    const scoreNum = myScore.trim() ? Number(myScore) : null;
-    if (scoreNum !== null && (!Number.isInteger(scoreNum) || scoreNum < 0 || scoreNum > 100)) {
-      toast.error(t("scoreMustBeWhole"));
-      return;
-    }
-    setSavingReview(true);
-    try {
-      // PUT /api/responses/:id/my-review (APPLICATIONS_REVIEW) — this reviewer's row.
-      await api.put(`/api/responses/${response.id}/my-review`, {
-        score: scoreNum,
-        notes: myNotes.trim() || null,
-      });
-      await onChanged();
-      toast.success(t("reviewSaved"));
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveReview"));
-    } finally {
-      setSavingReview(false);
-    }
-  }
-
   const st = response.status;
   const canScore = canReview && st !== "draft";
   const sent = Boolean(response.decision_sent_at);
@@ -1609,13 +2009,7 @@ export function ReviewModal({
     >
       <div className="max-h-[65vh] space-y-6 overflow-y-auto pr-1">
         <div className="flex flex-wrap items-center gap-2">
-          <StatusBadge tone={statusTone(st)} className="capitalize">
-            {st === "accepted_internal"
-              ? t("acceptedUnsentStatus")
-              : st === "rejected_internal"
-                ? t("rejectedUnsentStatus")
-                : st}
-          </StatusBadge>
+          <StatusBadge tone={statusTone(st)}>{applicationStatusLabel(st, t)}</StatusBadge>
           <span className="text-muted-foreground text-xs">
             avg {fmtScore(response.avg_score)} · {response.review_count}{" "}
             {response.review_count === 1 ? t("reviewWord") : t("reviewsWord")}
@@ -1626,6 +2020,14 @@ export function ReviewModal({
             </StatusBadge>
           )}
         </div>
+
+        {(st === "accepted_internal" || st === "rejected_internal") && (
+          <Alert>
+            <LockIcon aria-hidden="true" />
+            <AlertTitle>{applicationStatusLabel(st, t)}</AlertTitle>
+            <AlertDescription>{t("internalDecisionNotice")}</AlertDescription>
+          </Alert>
+        )}
 
         {/* Answers */}
         <div className="space-y-3">
@@ -1759,7 +2161,10 @@ export function ReviewModal({
         {canScore && (
           <div className="border-border space-y-3 rounded-lg border p-4">
             <p className="text-sm font-medium">{t("yourReview")}</p>
-            <p className="text-muted-foreground text-xs">{t("reviewWriteOnlyHint")}</p>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-muted-foreground text-xs">{t("reviewAutosaveHint")}</p>
+              <SaveStatus state={reviewSaveState} />
+            </div>
             <div className="grid gap-3 sm:grid-cols-[8rem_1fr]">
               <div className="space-y-1.5">
                 <Label className="text-muted-foreground text-xs uppercase">
@@ -1778,21 +2183,15 @@ export function ReviewModal({
                 <Input value={myNotes} onChange={(e) => setMyNotes(e.target.value)} />
               </div>
             </div>
-            <div className="flex justify-end">
-              <Button size="sm" disabled={savingReview} onClick={saveMyReview}>
-                {savingReview && <Spinner />}
-                {t("saveMyReview")}
-              </Button>
-            </div>
           </div>
         )}
 
         {/* Decision controls (H14) */}
-        {(canReview || canDecide) && (
+        {workspace !== "review" && (canReview || canDecide) && (
           <div className="border-border space-y-3 rounded-lg border p-4">
             <p className="text-sm font-medium">{t("decisionLabel")}</p>
             <div className="flex flex-wrap gap-2">
-              {canDecide && st === "review" && (
+              {workspace === "decisions" && canDecide && st === "review" && (
                 <>
                   <Button
                     size="sm"
@@ -1819,7 +2218,7 @@ export function ReviewModal({
                   </Button>
                 </>
               )}
-              {canDecide && st === "accepted_internal" && (
+              {workspace === "communication" && canDecide && st === "accepted_internal" && (
                 <>
                   <Button
                     size="sm"
@@ -1849,7 +2248,7 @@ export function ReviewModal({
                   </Button>
                 </>
               )}
-              {canDecide && st === "rejected_internal" && (
+              {workspace === "communication" && canDecide && st === "rejected_internal" && (
                 <>
                   <Button
                     size="sm"
@@ -1879,65 +2278,69 @@ export function ReviewModal({
                   </Button>
                 </>
               )}
-              {canDecide && ((st === "accepted" && sent) || st === "expired") && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={busy}
-                  onClick={() =>
-                    run(t("decisionResent"), () =>
-                      api.post(`/api/responses/${response.id}/resend-decision`),
-                    )
-                  }
-                >
-                  {t("resend")}
-                </Button>
-              )}
-              {canDecide && (st === "accepted" || st === "rejected") && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={busy}
-                  onClick={() =>
-                    run(t("movedBackToReview"), () =>
-                      api.post(`/api/responses/${response.id}/revert-decision`, {
-                        decision: "review",
-                      }),
-                    )
-                  }
-                >
-                  {t("backToReview")}
-                </Button>
-              )}
-              {canDecide && (st === "rejected" || st === "declined" || st === "expired") && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={busy}
-                  onClick={() =>
-                    run(t("reacceptedUnsent"), () =>
-                      api.post(`/api/responses/${response.id}/re-accept`),
-                    )
-                  }
-                >
-                  {t("reaccept")}
-                </Button>
-              )}
-              {canDecide && ((st === "accepted" && sent) || st === "confirmed") && (
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  disabled={busy}
-                  onClick={() =>
-                    run(t("spotRevoked"), () =>
-                      api.post(`/api/responses/${response.id}/revoke-spot`),
-                    )
-                  }
-                >
-                  {t("revokeSpot")}
-                </Button>
-              )}
-              {canOverride && st === "accepted" && (
+              {workspace === "communication" &&
+                canDecide &&
+                ((st === "accepted" && sent) || st === "expired") && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() =>
+                      run(t("decisionResent"), () =>
+                        api.post(`/api/responses/${response.id}/resend-decision`),
+                      )
+                    }
+                  >
+                    {t("resend")}
+                  </Button>
+                )}
+              {workspace === "decisions" &&
+                canDecide &&
+                (st === "accepted" || st === "rejected") && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() =>
+                      run(t("movedBackToReview"), () =>
+                        api.post(`/api/responses/${response.id}/revert-decision`, {
+                          decision: "review",
+                        }),
+                      )
+                    }
+                  >
+                    {t("backToReview")}
+                  </Button>
+                )}
+              {workspace === "confirmation" &&
+                canDecide &&
+                (st === "rejected" || st === "declined" || st === "expired") && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() =>
+                      run(t("reacceptedUnsent"), () =>
+                        api.post(`/api/responses/${response.id}/re-accept`),
+                      )
+                    }
+                  >
+                    {t("reaccept")}
+                  </Button>
+                )}
+              {workspace === "confirmation" &&
+                canDecide &&
+                ((st === "accepted" && sent) || st === "confirmed") && (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    disabled={busy}
+                    onClick={() => setConfirmRevoke(true)}
+                  >
+                    {t("revokeSpot")}
+                  </Button>
+                )}
+              {workspace === "confirmation" && canOverride && st === "accepted" && (
                 <>
                   <Button
                     size="sm"
@@ -1971,6 +2374,21 @@ export function ReviewModal({
             )}
           </div>
         )}
+        <AlertModal
+          open={confirmRevoke}
+          onOpenChange={setConfirmRevoke}
+          title={t("revokeSpot")}
+          description={t("revokeSpotWarning")}
+          cancelLabel={t("cancel")}
+          confirmLabel={t("revokeSpot")}
+          destructive
+          pending={busy}
+          onConfirm={() => {
+            void run(t("spotRevoked"), () =>
+              api.post(`/api/responses/${response.id}/revoke-spot`),
+            ).finally(() => setConfirmRevoke(false));
+          }}
+        />
       </div>
     </Modal>
   );

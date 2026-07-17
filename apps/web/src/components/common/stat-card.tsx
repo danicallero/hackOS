@@ -33,7 +33,7 @@ export function StatCard({
         {Icon && <Icon className="text-muted-foreground size-4 shrink-0" />}
       </div>
       <div className="mt-2 flex items-baseline gap-2">
-        <span className="text-2xl font-semibold tracking-tight">{value}</span>
+        <span className="text-2xl font-semibold tabular-nums">{value}</span>
         {delta && (
           <span
             className={cn(

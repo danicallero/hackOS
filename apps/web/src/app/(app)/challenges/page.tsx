@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { ContextualError } from "@/components/common/contextual-error";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { DevpostTagsField } from "@/components/common/devpost-tags-field";
 import { DurationInput } from "@/components/common/duration-input";
@@ -52,6 +53,7 @@ import {
 } from "./builders";
 import {
   type Challenge,
+  canAccessSponsorWorkspace,
   EMPTY_I18N,
   i18nWithEnglishFallback,
   isScheduled,
@@ -151,10 +153,11 @@ export default function ChallengesPage() {
   const { t } = useLocale();
   const { canAny, me } = useSessionContext();
   const canAdmin = canAny(CAPABILITIES.SPONSORS_MANAGE, CAPABILITIES.QUEUE_ADMIN);
-  const canSee = canAdmin || me?.role === "sponsor";
+  const canSee = canAccessSponsorWorkspace(canAdmin, Boolean(me?.isSponsorRep));
   const columns = useMemo(() => buildColumns(t), [t]);
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -165,6 +168,7 @@ export default function ChallengesPage() {
       return;
     }
     setLoading(true);
+    setLoadError(null);
     try {
       const path = canAdmin ? "/api/challenges" : "/api/challenges/mine";
       const res = await api.get<{ challenges: Challenge[] }>(path);
@@ -172,7 +176,9 @@ export default function ChallengesPage() {
       setSelectedIds(new Set());
     } catch (err) {
       setChallenges([]);
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadChallenges"));
+      const message = err instanceof ApiError ? err.message : t("couldNotLoadChallenges");
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -230,7 +236,6 @@ export default function ChallengesPage() {
     <div className="space-y-6">
       <PageHeader
         title={canAdmin ? t("challenges") : t("myChallenges")}
-        description={t("challengesDesc")}
         actions={
           canAdmin ? (
             <Button onClick={() => setCreateOpen(true)}>
@@ -245,13 +250,15 @@ export default function ChallengesPage() {
         columns={columns}
         data={challenges}
         getRowId={(c) => String(c.id)}
-        onRowClick={(c) => router.push(`/challenges/${c.id}`)}
+        getRowHref={(c) => `/challenges/${c.id}`}
+        getRowLabel={(c) => textForDisplay(c.title)}
         searchable={(c) =>
           `${textForSearch(c.title)} ${textForSearch(c.description)} ${textForSearch(c.criteria)}`
         }
         searchPlaceholder={t("searchChallengesPlaceholder")}
         pageSize={15}
         loading={loading}
+        error={loadError ? { message: loadError, onRetry: load } : undefined}
         selectable={canAdmin}
         selectedIds={selectedIds}
         onSelectionChange={setSelectedIds}
@@ -322,6 +329,8 @@ function CreateChallengeModal({
   const [descriptionI18n, setDescriptionI18n] = useState<I18nText>(EMPTY_I18N);
   const [criteriaI18n, setCriteriaI18n] = useState<I18nText>(EMPTY_I18N);
   const [devpostTags, setDevpostTags] = useState<string[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [retryNonce, setRetryNonce] = useState(0);
   const form = useForm<CreateValues>({
     resolver: zodResolver(createSchema),
     defaultValues: {
@@ -333,6 +342,7 @@ function CreateChallengeModal({
   });
   const { reset } = form;
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: retryNonce intentionally retriggers this safe modal data load.
   useEffect(() => {
     if (!open) return;
     reset();
@@ -342,6 +352,7 @@ function CreateChallengeModal({
     setTitleI18n(EMPTY_I18N);
     setDescriptionI18n(EMPTY_I18N);
     setCriteriaI18n(EMPTY_I18N);
+    setLoadError(null);
     Promise.all([
       api.get<{ enterprises: EnterpriseSummary[] }>("/api/enterprises"),
       listDevpostPrizes(),
@@ -350,10 +361,12 @@ function CreateChallengeModal({
         setEnterprises(enterprisesRes.enterprises);
         setDevpostPrizes(prizesRes.prizes);
       })
-      .catch((err) =>
-        toast.error(err instanceof ApiError ? err.message : t("couldNotLoadChallengeData")),
-      );
-  }, [open, reset, t]);
+      .catch((err) => {
+        const message = err instanceof ApiError ? err.message : t("couldNotLoadChallengeData");
+        setLoadError(message);
+        toast.error(message);
+      });
+  }, [open, reset, retryNonce, t]);
 
   async function onSubmit(values: CreateValues) {
     const title = titleI18n.en.trim();
@@ -404,6 +417,13 @@ function CreateChallengeModal({
       }
     >
       <div className="min-h-0 overflow-y-auto pr-1">
+        {loadError && (
+          <ContextualError
+            message={loadError}
+            onRetry={() => setRetryNonce((value) => value + 1)}
+            className="mb-4"
+          />
+        )}
         <Form {...form}>
           <form
             id="create-challenge-form"
