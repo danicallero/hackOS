@@ -3,7 +3,6 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
 import { SearchIcon, SlidersHorizontalIcon, UsersIcon, XIcon } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CapabilityGate } from "@/components/common/capability-gate";
@@ -268,7 +267,6 @@ function buildColumns(presentIds: Set<number> | null, t: Translate): Column<User
 }
 
 export default function UsersPage() {
-  const router = useRouter();
   const { t } = useLocale();
   const ROLE_LABEL = useMemo(() => roleLabel(t), [t]);
   const COLUMN_LABEL = useMemo(() => columnLabel(t), [t]);
@@ -380,6 +378,16 @@ export default function UsersPage() {
       }),
     [users, emailFilter, roleFilter, spotFilter],
   );
+  const hasFilters =
+    q.trim().length > 0 || emailFilter !== "all" || roleFilter !== "all" || spotFilter !== "all";
+
+  function clearUserFilters() {
+    setQ("");
+    setEmailFilter("all");
+    setRoleFilter("all");
+    setSpotFilter("all");
+    document.getElementById("user-search")?.focus();
+  }
 
   const availableColumnOptions = useMemo(
     () => COLUMN_OPTIONS.filter((id) => id !== "presence" || showPresence),
@@ -453,7 +461,10 @@ export default function UsersPage() {
               variant="ghost"
               size="icon"
               className="absolute top-1/2 right-0.5 size-8 -translate-y-1/2"
-              onClick={() => setQ("")}
+              onClick={() => {
+                setQ("");
+                document.getElementById("user-search")?.focus();
+              }}
               aria-label={t("clearSearch")}
             >
               <XIcon className="size-4" aria-hidden="true" />
@@ -530,7 +541,7 @@ export default function UsersPage() {
         columns={columns}
         data={filteredUsers}
         getRowId={(u) => String(u.id)}
-        onRowClick={(u) => router.push(`/users/${u.id}`)}
+        getRowHref={(u) => `/users/${u.id}`}
         getRowLabel={(u) => `${u.name ?? ""} ${u.surname ?? ""}`.trim() || u.email}
         pageSize={15}
         loading={loading}
@@ -541,9 +552,10 @@ export default function UsersPage() {
         }
         empty={{
           icon: UsersIcon,
-          title: q.trim() ? t("noMatchingUsers") : t("noUsersYet"),
-          description: q.trim() ? t("tryDifferentNameEmail") : t("usersAppearHere"),
+          title: t("noUsersYet"),
+          description: t("usersAppearHere"),
         }}
+        filteredEmpty={{ active: hasFilters, onClear: clearUserFilters }}
       />
     </div>
   );

@@ -308,7 +308,6 @@ function ProjectLink({ href, label }: { href: string; label: string }) {
 
 function ProjectsTab({ userId }: { userId: number }) {
   const { t } = useLocale();
-  const router = useRouter();
   const [projects, setProjects] = useState<RepoWithExtras[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -375,9 +374,7 @@ function ProjectsTab({ userId }: { userId: number }) {
       columns={projectColumns}
       data={projects}
       getRowId={(project) => String(project.id)}
-      onRowClick={(project) => {
-        router.push(`/projects/${project.id}`);
-      }}
+      getRowHref={(project) => `/projects/${project.id}`}
       getRowLabel={(project) => project.name}
       searchable={(project) =>
         `${project.name} ${(project.challenges ?? []).map((challenge) => challenge.title).join(" ")} ${

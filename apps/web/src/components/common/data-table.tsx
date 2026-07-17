@@ -4,11 +4,13 @@ import {
   ArrowDownIcon,
   ArrowUpDownIcon,
   ArrowUpIcon,
+  ChevronRightIcon,
   type LucideIcon,
   SearchIcon,
   XIcon,
 } from "lucide-react";
-import { useId, useMemo, useState } from "react";
+import Link from "next/link";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { Button } from "@/components/ui/button";
@@ -49,11 +51,12 @@ interface DataTableProps<T> {
   getRowId: (row: T) => string;
   /** Trailing actions cell (e.g. a "…" dropdown). */
   rowActions?: (row: T) => React.ReactNode;
+  /** Native button action rendered in its own table cell. */
   onRowClick?: (row: T) => void;
-  /** Accessible name for an interactive row. Required in practice with onRowClick. */
+  /** Native link destination rendered in its own table cell. */
+  getRowHref?: (row: T) => string;
+  /** Accessible name for the row link or button. */
   getRowLabel?: (row: T) => string;
-  /** Use button semantics when activating the row opens an in-page detail view. */
-  rowRole?: "link" | "button";
   /** Provide searchable text per row to show a filter box. */
   searchable?: (row: T) => string;
   searchPlaceholder?: string;
@@ -64,6 +67,12 @@ interface DataTableProps<T> {
   pageSize?: number;
   loading?: boolean;
   empty?: { icon?: LucideIcon; title: string; description?: string; action?: React.ReactNode };
+  filteredEmpty?: {
+    active: boolean;
+    onClear: () => void;
+    title?: string;
+    description?: string;
+  };
   error?: { message: string; onRetry?: () => void };
   className?: string;
   /** Enable row selection via checkboxes. */
@@ -88,8 +97,8 @@ export function DataTable<T>({
   getRowId,
   rowActions,
   onRowClick,
+  getRowHref,
   getRowLabel,
-  rowRole = "link",
   searchable,
   searchPlaceholder,
   searchLabel,
@@ -97,6 +106,7 @@ export function DataTable<T>({
   pageSize,
   loading,
   empty,
+  filteredEmpty,
   error,
   className,
   selectable,
@@ -108,6 +118,15 @@ export function DataTable<T>({
   const [sort, setSort] = useState<{ id: string; dir: "asc" | "desc" } | null>(null);
   const [page, setPage] = useState(0);
   const searchId = useId();
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const restoreSearchFocus = useRef(false);
+
+  useEffect(() => {
+    if (!query && restoreSearchFocus.current) {
+      restoreSearchFocus.current = false;
+      searchInputRef.current?.focus();
+    }
+  }, [query]);
 
   const filtered = useMemo(() => {
     if (!searchable || !query.trim()) return data;
@@ -138,7 +157,8 @@ export function DataTable<T>({
 
   const showToolbar = Boolean(searchable || toolbar);
   const checkboxCol = selectable ? 1 : 0;
-  const colCount = columns.length + checkboxCol + (rowActions ? 1 : 0);
+  const rowInteractionCol = onRowClick || getRowHref ? 1 : 0;
+  const colCount = columns.length + checkboxCol + rowInteractionCol + (rowActions ? 1 : 0);
 
   const allSelected =
     selectable && selectedIds && data.length > 0 && data.every((r) => selectedIds.has(getRowId(r)));
@@ -161,6 +181,7 @@ export function DataTable<T>({
   };
 
   const clearSearch = () => {
+    restoreSearchFocus.current = true;
     setQuery("");
     setPage(0);
   };
@@ -182,6 +203,7 @@ export function DataTable<T>({
                   aria-hidden="true"
                 />
                 <Input
+                  ref={searchInputRef}
                   id={searchId}
                   type="search"
                   value={query}
@@ -270,6 +292,11 @@ export function DataTable<T>({
                   )}
                 </TableHead>
               ))}
+              {rowInteractionCol > 0 && (
+                <TableHead className="w-12">
+                  <span className="sr-only">{t("openRow")}</span>
+                </TableHead>
+              )}
               {rowActions && <TableHead className="w-12" />}
             </TableRow>
           </TableHeader>
@@ -295,12 +322,17 @@ export function DataTable<T>({
             ) : rows.length === 0 ? (
               <TableRow className="hover:bg-transparent">
                 <TableCell colSpan={colCount} className="p-0">
-                  {query.trim() ? (
+                  {query.trim() || filteredEmpty?.active ? (
                     <EmptyState
-                      title={t("noFilteredResults")}
-                      description={t("tryDifferentSearch")}
+                      title={filteredEmpty?.title ?? t("noFilteredResults")}
+                      description={filteredEmpty?.description ?? t("tryDifferentSearch")}
                       action={
-                        <Button type="button" variant="outline" size="sm" onClick={clearSearch}>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={filteredEmpty?.active ? filteredEmpty.onClear : clearSearch}
+                        >
                           {t("clearFilters")}
                         </Button>
                       }
@@ -320,31 +352,7 @@ export function DataTable<T>({
                 const rowId = getRowId(row);
                 const checked = selectable && selectedIds?.has(rowId);
                 return (
-                  <TableRow
-                    key={rowId}
-                    onClick={onRowClick ? () => onRowClick(row) : undefined}
-                    onKeyDown={
-                      onRowClick
-                        ? (event) => {
-                            if (event.target !== event.currentTarget) return;
-                            if (
-                              event.key === "Enter" ||
-                              (rowRole === "button" && event.key === " ")
-                            ) {
-                              event.preventDefault();
-                              onRowClick(row);
-                            }
-                          }
-                        : undefined
-                    }
-                    tabIndex={onRowClick ? 0 : undefined}
-                    role={onRowClick ? rowRole : undefined}
-                    aria-label={onRowClick ? (getRowLabel?.(row) ?? rowId) : undefined}
-                    className={cn(
-                      onRowClick &&
-                        "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
-                    )}
-                  >
+                  <TableRow key={rowId}>
                     {selectable && (
                       <TableCell className="w-10" onClick={(e) => e.stopPropagation()}>
                         <Checkbox
@@ -362,6 +370,28 @@ export function DataTable<T>({
                         {col.cell(row)}
                       </TableCell>
                     ))}
+                    {rowInteractionCol > 0 && (
+                      <TableCell className="text-right">
+                        {getRowHref ? (
+                          <Button variant="ghost" size="icon" className="size-8" asChild>
+                            <Link href={getRowHref(row)} aria-label={getRowLabel?.(row) ?? rowId}>
+                              <ChevronRightIcon className="size-4" aria-hidden="true" />
+                            </Link>
+                          </Button>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="size-8"
+                            onClick={() => onRowClick?.(row)}
+                            aria-label={getRowLabel?.(row) ?? rowId}
+                          >
+                            <ChevronRightIcon className="size-4" aria-hidden="true" />
+                          </Button>
+                        )}
+                      </TableCell>
+                    )}
                     {rowActions && (
                       <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         {rowActions(row)}

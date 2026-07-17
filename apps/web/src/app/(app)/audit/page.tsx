@@ -63,6 +63,8 @@ export default function AuditPage() {
   const [items, setItems] = useState<AuditRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [retryNonce, setRetryNonce] = useState(0);
   const [selected, setSelected] = useState<AuditRow | null>(null);
 
   // Debounce the filter bar, and reset to page 1 on any change.
@@ -87,6 +89,7 @@ export default function AuditPage() {
     }
     let cancelled = false;
     setLoading(true);
+    setLoadError(null);
     notificationsApi
       .queryAudit({
         entityType: debounced.entityType.trim() || undefined,
@@ -107,7 +110,9 @@ export default function AuditPage() {
         if (cancelled) return;
         setItems([]);
         setTotal(0);
-        toast.error(err instanceof ApiError ? err.message : t("couldNotLoadAuditLog"));
+        const message = err instanceof ApiError ? err.message : t("couldNotLoadAuditLog");
+        setLoadError(message);
+        toast.error(message);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -115,7 +120,7 @@ export default function AuditPage() {
     return () => {
       cancelled = true;
     };
-  }, [canRead, debounced, offset, liveRefresh, t]);
+  }, [canRead, debounced, offset, liveRefresh, retryNonce, t]);
 
   if (!canRead) {
     return (
@@ -258,14 +263,19 @@ export default function AuditPage() {
         data={items}
         getRowId={(r) => String(r.id)}
         loading={loading}
+        error={
+          loadError
+            ? { message: loadError, onRetry: () => setRetryNonce((value) => value + 1) }
+            : undefined
+        }
         onRowClick={setSelected}
         getRowLabel={(r) => `${r.action} ${r.entity_type} ${r.entity_id}`}
-        rowRole="button"
         empty={{
           icon: ScrollTextIcon,
           title: t("noAuditEntriesTitle"),
           description: hasFilters ? t("noEntriesMatchFilters") : t("sensitiveActionsAppearDesc"),
         }}
+        filteredEmpty={{ active: hasFilters, onClear: () => setFilters(EMPTY_FILTERS) }}
       />
 
       {total > 0 && (

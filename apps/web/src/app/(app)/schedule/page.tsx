@@ -113,6 +113,7 @@ export default function SchedulePage() {
   const canManage = useCan(CAPABILITIES.SCHEDULE_MANAGE);
   const [items, setItems] = useState<PublicScheduleItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<PublicScheduleItem | null>(null);
   const [duplicating, setDuplicating] = useState<PublicScheduleItem | null>(null);
@@ -121,12 +122,15 @@ export default function SchedulePage() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const result = await logisticsApi.schedule();
       setItems(result.items);
       setSelectedIds(new Set());
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadSchedule"));
+      const message = err instanceof ApiError ? err.message : t("couldNotLoadSchedule");
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -255,6 +259,7 @@ export default function SchedulePage() {
         data={items}
         getRowId={(item) => String(item.id)}
         loading={loading}
+        error={loadError ? { message: loadError, onRetry: load } : undefined}
         selectable
         selectedIds={selectedIds}
         onSelectionChange={setSelectedIds}

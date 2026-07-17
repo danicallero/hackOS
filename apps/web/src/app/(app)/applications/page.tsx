@@ -239,7 +239,7 @@ export default function ApplicationsPage() {
         getRowId={(f) => String(f.id)}
         loading={loading}
         error={loadError ? { message: loadError, onRetry: load } : undefined}
-        onRowClick={(f) => router.push(`/applications/${f.id}`)}
+        getRowHref={(f) => `/applications/${f.id}`}
         getRowLabel={(f) => f.name}
         searchable={(f) => `${f.name} ${f.type}`}
         searchPlaceholder={t("searchFormsPlaceholder")}

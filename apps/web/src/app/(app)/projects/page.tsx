@@ -190,7 +190,7 @@ export default function ProjectsPage() {
         getRowId={(r) => String(r.id)}
         loading={loading}
         error={loadError ? { message: loadError, onRetry: load } : undefined}
-        onRowClick={(r) => router.push(`/projects/${r.id}`)}
+        getRowHref={(r) => `/projects/${r.id}`}
         getRowLabel={(r) => r.name}
         searchable={(r) =>
           `${r.name} ${r.prizes.join(" ")} ${r.challenges.map((c) => c.title).join(" ")} ${r.members

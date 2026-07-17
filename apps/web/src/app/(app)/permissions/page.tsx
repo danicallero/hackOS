@@ -139,7 +139,7 @@ export default function PermissionsPage() {
           searchable={(g) => `${g.name} ${g.description ?? ""}`}
           searchPlaceholder={t("filterGroupsPlaceholder")}
           pageSize={10}
-          onRowClick={(g) => router.push(`/permissions/${g.id}`)}
+          getRowHref={(g) => `/permissions/${g.id}`}
           getRowLabel={(g) => g.name}
           empty={{
             icon: ShieldCheckIcon,

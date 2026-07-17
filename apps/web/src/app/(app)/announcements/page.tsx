@@ -88,6 +88,7 @@ export default function AnnouncementsPage() {
   const canManage = useCan(CAPABILITIES.ANNOUNCEMENTS_MANAGE);
   const [items, setItems] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Announcement | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -95,11 +96,14 @@ export default function AnnouncementsPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const result = await notificationsApi.listAnnouncements();
       setItems(result.items);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadAnnouncements"));
+      const message = err instanceof ApiError ? err.message : t("couldNotLoadAnnouncements");
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -211,6 +215,7 @@ export default function AnnouncementsPage() {
         data={items}
         getRowId={(a) => String(a.id)}
         loading={loading}
+        error={loadError ? { message: loadError, onRetry: load } : undefined}
         searchable={(a) => `${a.title} ${a.body}`}
         searchPlaceholder={t("searchAnnouncementsPlaceholder")}
         pageSize={15}

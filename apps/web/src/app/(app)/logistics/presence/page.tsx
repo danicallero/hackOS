@@ -13,7 +13,6 @@ import {
   UsersIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import { type Column, DataTable } from "@/components/common/data-table";
@@ -146,7 +145,6 @@ function PresencePanel({
   onScanned: () => void;
 }) {
   const { t } = useLocale();
-  const router = useRouter();
   const [badgeId, setBadgeId] = useState("");
   const [lookup, setLookup] = useState<PresenceLookup | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
@@ -356,7 +354,7 @@ function PresencePanel({
           columns={columns}
           data={hours}
           getRowId={(row) => String(row.userId)}
-          onRowClick={(row) => router.push(`/users/${row.userId}?tab=presence`)}
+          getRowHref={(row) => `/users/${row.userId}?tab=presence`}
           getRowLabel={(row) =>
             `${row.name ?? ""} ${row.surname ?? ""}`.trim() || String(row.userId)
           }
@@ -382,7 +380,7 @@ function PresencePanel({
           columns={getOpenSessionColumns(t)}
           data={openSessions}
           getRowId={(row) => String(row.userId)}
-          onRowClick={(row) => router.push(`/users/${row.userId}?tab=presence`)}
+          getRowHref={(row) => `/users/${row.userId}?tab=presence`}
           getRowLabel={(row) =>
             `${row.name ?? ""} ${row.surname ?? ""}`.trim() || String(row.userId)
           }

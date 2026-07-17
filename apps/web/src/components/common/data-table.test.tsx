@@ -1,4 +1,5 @@
-import { act } from "react";
+import userEvent from "@testing-library/user-event";
+import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type Column, DataTable } from "./data-table";
@@ -27,6 +28,7 @@ vi.mock("@/lib/i18n", () => ({
         selectAll: "Select all",
         selectRow: "Select row",
         retry: "Retry",
+        openRow: "Open row",
       };
       return Object.entries(values).reduce(
         (text, [name, value]) => text.replace(`{${name}}`, String(value)),
@@ -74,27 +76,77 @@ describe("DataTable accessibility and interactions", () => {
     act(() => root.render(table));
   }
 
-  it("makes interactive rows focusable and activates them with Enter", () => {
-    const onActivate = vi.fn();
+  it("keeps rows semantic and activates the native link with Enter", async () => {
     render(
       <DataTable
         columns={columns}
         data={rows}
         getRowId={(row) => row.id}
-        onRowClick={onActivate}
+        getRowHref={(row) => `/people/${row.id}`}
         getRowLabel={(row) => `Open ${row.name}`}
       />,
     );
 
-    const row = container.querySelector<HTMLElement>('[role="link"]');
-    expect(row?.tabIndex).toBe(0);
-    expect(row?.getAttribute("aria-label")).toBe("Open Ada");
+    const link = container.querySelector<HTMLAnchorElement>('a[aria-label="Open Ada"]');
+    const row = link?.closest("tr");
+    expect(link?.getAttribute("href")).toBe("/people/1");
+    expect(row?.getAttribute("role")).toBeNull();
+    expect(row?.getAttribute("tabindex")).toBeNull();
     act(() => {
-      row?.focus();
-      row?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      link?.focus();
     });
-    expect(document.activeElement).toBe(row);
-    expect(onActivate).toHaveBeenCalledWith(rows[0]);
+    expect(document.activeElement).toBe(link);
+    const activated = vi.fn();
+    link?.addEventListener("click", (event) => {
+      event.preventDefault();
+      activated();
+    });
+    await act(async () => {
+      await userEvent.keyboard("{Enter}");
+    });
+    expect(activated).toHaveBeenCalledOnce();
+  });
+
+  it("uses a native Space-activated button and isolates nested controls", async () => {
+    const activate = vi.fn();
+    const nested = vi.fn();
+    const select = vi.fn();
+    render(
+      <DataTable
+        columns={columns}
+        data={rows}
+        getRowId={(row) => row.id}
+        onRowClick={activate}
+        getRowLabel={(row) => `Review ${row.name}`}
+        selectable
+        selectedIds={new Set()}
+        onSelectionChange={select}
+        rowActions={() => (
+          <button type="button" onClick={nested}>
+            More
+          </button>
+        )}
+      />,
+    );
+
+    const action = container.querySelector<HTMLButtonElement>('button[aria-label="Review Ada"]');
+    expect(action?.tagName).toBe("BUTTON");
+    expect(action?.type).toBe("button");
+    const nestedButton = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "More",
+    );
+    act(() => nestedButton?.click());
+    expect(nested).toHaveBeenCalledOnce();
+    expect(activate).not.toHaveBeenCalled();
+    const checkboxes = container.querySelectorAll('[role="checkbox"]');
+    act(() => (checkboxes[1] as HTMLElement | undefined)?.click());
+    expect(select).toHaveBeenCalledOnce();
+    expect(activate).not.toHaveBeenCalled();
+    action?.focus();
+    await act(async () => {
+      await userEvent.keyboard(" ");
+    });
+    expect(activate).toHaveBeenCalledWith(rows[0]);
   });
 
   it("labels search, reports results, clears search, and distinguishes filtered zero", () => {
@@ -120,12 +172,46 @@ describe("DataTable accessibility and interactions", () => {
     expect(container.textContent).toContain("0 results");
     expect(container.textContent).toContain("No results");
     expect(container.querySelector('button[aria-label="Clear search"]')).not.toBeNull();
+    const clearSearch = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Clear search"]',
+    );
+    act(() => clearSearch?.click());
+    expect(input?.value).toBe("");
+    expect(document.activeElement).toBe(input);
+
+    act(() => {
+      if (!input) return;
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      valueSetter?.call(input, "missing");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
     const clearFilters = [...container.querySelectorAll("button")].find(
       (button) => button.textContent === "Clear filters",
     );
     act(() => clearFilters?.click());
     expect(input?.value).toBe("");
     expect(container.textContent).not.toContain("No results");
+  });
+
+  it("supports externally filtered zero states and their clear action", () => {
+    const clear = vi.fn();
+    render(
+      <DataTable
+        columns={columns}
+        data={[]}
+        getRowId={(row) => row.id}
+        empty={{ title: "No people yet" }}
+        filteredEmpty={{ active: true, onClear: clear }}
+      />,
+    );
+
+    expect(container.textContent).toContain("No results");
+    expect(container.textContent).not.toContain("No people yet");
+    const clearButton = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Clear filters",
+    );
+    act(() => clearButton?.click());
+    expect(clear).toHaveBeenCalledOnce();
   });
 
   it("keeps dataset-empty actions distinct from filtered-zero recovery", () => {
@@ -156,7 +242,7 @@ describe("DataTable accessibility and interactions", () => {
     expect(create).toHaveBeenCalledOnce();
   });
 
-  it("exposes sort direction, pagination, and selection announcements", () => {
+  it("updates sort direction and pagination announcements with the visible page", () => {
     render(
       <DataTable
         columns={columns}
@@ -176,9 +262,39 @@ describe("DataTable accessibility and interactions", () => {
     expect(header?.getAttribute("aria-sort")).toBe("ascending");
     act(() => sort?.click());
     expect(header?.getAttribute("aria-sort")).toBe("descending");
+    act(() => sort?.click());
+    expect(header?.getAttribute("aria-sort")).toBe("none");
     expect(container.querySelector('nav[aria-label="Table pagination"]')?.textContent).toContain(
       "Page 1 of 2",
     );
+    const next = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Next",
+    );
+    act(() => next?.click());
+    expect(container.textContent).toContain("Page 2 of 2");
+    expect(container.textContent).toContain("Grace");
+    expect(container.textContent).not.toContain("Ada");
+  });
+
+  it("announces live selection changes", () => {
+    function SelectableTable() {
+      const [selected, setSelected] = useState<Set<string>>(new Set());
+      return (
+        <DataTable
+          columns={columns}
+          data={rows}
+          getRowId={(row) => row.id}
+          selectable
+          selectedIds={selected}
+          onSelectionChange={setSelected}
+        />
+      );
+    }
+
+    render(<SelectableTable />);
+    expect(container.textContent).toContain("0 rows selected");
+    const rowCheckboxes = container.querySelectorAll('[role="checkbox"]');
+    act(() => (rowCheckboxes[1] as HTMLElement | undefined)?.click());
     expect(container.textContent).toContain("1 rows selected");
   });
 

@@ -630,8 +630,19 @@ const dict: Record<string, I18nText> = {
   // ---- Data table selection ----
   selectAll: { es: "Seleccionar todo", gl: "Seleccionar todo", en: "Select all" },
   selectRow: { es: "Seleccionar fila", gl: "Seleccionar fila", en: "Select row" },
+  openRow: { es: "Abrir fila", gl: "Abrir fila", en: "Open row" },
   searchTable: { es: "Buscar en la tabla", gl: "Buscar na táboa", en: "Search table" },
   searchUsers: { es: "Buscar usuarios", gl: "Buscar usuarios", en: "Search users" },
+  searchUniversities: {
+    es: "Buscar universidades",
+    gl: "Buscar universidades",
+    en: "Search universities",
+  },
+  searchResponses: {
+    es: "Buscar respuestas",
+    gl: "Buscar respostas",
+    en: "Search responses",
+  },
   clearSearch: { es: "Borrar búsqueda", gl: "Borrar busca", en: "Clear search" },
   tableResultCount: {
     es: "{count} resultados",
