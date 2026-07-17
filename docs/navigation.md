@@ -81,16 +81,14 @@ Account in the primary bar and has no overflow menu at all.
 
 ## Known gap (backend follow-up needed)
 
-Several domain pages still gate *content* on the single-priority `role`
-instead of the new `isRoomJudge`/`isSponsorRep` facts (e.g.
-`apps/web/src/app/(app)/projects/page.tsx`,
+A domain page can still gate *content* on the single-priority `role` instead
+of the new `isRoomJudge`/`isSponsorRep` facts (e.g.
 `apps/web/src/app/(app)/dashboard/page.tsx`). This means a sponsor+judge
-account can now reach every relevant workspace from the sidebar, but a couple
-of the pages behind those links may still only render sponsor- or judge-
-specific content for whichever `role` value won priority. Fixing that is
-domain page content, out of this issue's Agent boundary (owned by #190
-Queue/judging); `isRoomJudge`/`isSponsorRep` are now available on `Me` for
-that issue to adopt.
+account can now reach every relevant workspace from the sidebar, but such a
+page may still only render sponsor- or judge-specific content for whichever
+`role` value won priority. Fixing that is domain page content, out of this
+issue's Agent boundary (owned by #190 Queue/judging); `isRoomJudge`/
+`isSponsorRep` are now available on `Me` for that issue to adopt.
 
 `apps/web/src/app/(app)/judging/page.tsx` was fixed to `isRoomJudge` by
 issue #225 (H40): the page previously gated `canUse`/`canJudge` purely on
@@ -101,6 +99,15 @@ added by a sponsor rep with zero capability grants could see the nav link
 even though the backend already allowed them in via the `room_judges`
 fallback. `workspaceAccess` now takes `isRoomJudge` and folds it into
 `canJudge`/`canUse` alongside the capability checks.
+
+`apps/web/src/app/(app)/projects/page.tsx` was fixed the same way: `canView`
+gated judges on `judge:panel` (missing the `room_judges` association
+fallback, H40) and gated sponsors on `me?.role === "sponsor"` — which
+collapses to `"judge"` for a sponsor rep who also judges, per the single-
+priority `role` problem this doc calls out above — instead of `isSponsorRep`
+(H46). `GET /api/repos` (`resolveRepoScope` in
+`apps/api/src/modules/projects/routes.ts`) already scoped correctly for
+both; only the frontend gate was stale.
 
 `apps/web/src/app/(app)/challenges/page.tsx`, `apps/web/src/app/(app)/enterprises/page.tsx`,
 and `apps/web/src/app/(app)/queue/rooms/page.tsx` were fixed to `isSponsorRep`
