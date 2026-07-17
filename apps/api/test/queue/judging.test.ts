@@ -277,6 +277,19 @@ describe("collaborative review (H36)", () => {
     expect(projects.statusCode).toBe(200);
     expect(projects.json().repos.map((r: { id: number }) => r.id)).toEqual([repoId]);
 
+    const repoChallenges = await app.inject({
+      method: "GET",
+      url: `/api/queue/repos/${repoId}/challenges`,
+      headers: asUser(assignedJudge),
+    });
+    expect(repoChallenges.statusCode).toBe(200);
+    expect(
+      repoChallenges
+        .json()
+        .map((c: { id: number }) => c.id)
+        .sort(),
+    ).toEqual([challengeId, otherChallengeId].sort());
+
     const review = await app.inject({
       method: "PATCH",
       url: `/api/queue/entries/${entryId}/review`,
@@ -362,6 +375,44 @@ describe("manual search (H37)", () => {
       headers: asUser(judgeA),
     });
     expect(byId.json().some((h: { repo_id: number }) => h.repo_id === r2)).toBe(true);
+  });
+
+  it("lets a sponsor rep search their own challenge without room_judges/capabilities, but not others' (H46)", async () => {
+    const { pool } = await import("../../src/db/pool.js");
+    const owner = await createUser();
+    const enterprise = await pool.query(`INSERT INTO enterprises (name) VALUES ($1) RETURNING id`, [
+      `Ent ${crypto.randomUUID()}`,
+    ]);
+    const ownerSponsor = await pool.query(
+      `INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2) RETURNING id`,
+      [enterprise.rows[0].id, owner],
+    );
+    const challenge = await pool.query(
+      `INSERT INTO challenges (author, title, judging_panel_criteria) VALUES ($1, $2, $3) RETURNING id`,
+      [ownerSponsor.rows[0].id, "Sponsor Challenge", JSON.stringify(CRITERIA)],
+    );
+    const challengeId = challenge.rows[0].id;
+
+    const rep = await createUser();
+    await pool.query(`INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2)`, [
+      enterprise.rows[0].id,
+      rep,
+    ]);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/queue/challenges/${challengeId}/search?q=x`,
+      headers: asUser(rep),
+    });
+    expect(res.statusCode).toBe(200);
+
+    const otherChallengeId = await createChallenge({ judgingPanelCriteria: CRITERIA });
+    const forbidden = await app.inject({
+      method: "GET",
+      url: `/api/queue/challenges/${otherChallengeId}/search?q=x`,
+      headers: asUser(rep),
+    });
+    expect(forbidden.statusCode).toBe(403);
   });
 });
 

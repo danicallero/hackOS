@@ -3,7 +3,7 @@ import type { FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastif
 import { pool } from "../../db/pool.js";
 import { ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
 
-type ParamName = "roomId" | "challengeId" | "entryId";
+type ParamName = "roomId" | "challengeId" | "entryId" | "repoId";
 
 function numberParam(req: FastifyRequest, name: ParamName): number {
   const params = req.params as Partial<Record<ParamName, unknown>>;
@@ -61,6 +61,36 @@ export async function userCanJudgeChallenge(userId: number, challengeId: number)
   return rows.length > 0;
 }
 
+export async function userCanJudgeRepo(userId: number, repoId: number): Promise<boolean> {
+  if (await userHasCapabilityDirect(userId, CAPABILITIES.JUDGE_PANEL)) return true;
+  const { rows } = await pool.query(
+    `SELECT 1
+       FROM queue_entries qe
+       JOIN room_judges rj ON rj.challenge_id = qe.challenge_id AND rj.user_id = $1
+      WHERE qe.repo_id = $2
+      LIMIT 1`,
+    [userId, repoId],
+  );
+  return rows.length > 0;
+}
+
+/**
+ * Ownership fallback for sponsor reps (H46): recognizes the challenge's
+ * owning enterprise, mirroring assertCanExportChallenge / assertCanReadRoomAssignments.
+ */
+export async function userOwnsChallenge(userId: number, challengeId: number): Promise<boolean> {
+  const { rows } = await pool.query(
+    `SELECT 1
+       FROM challenges c
+       JOIN sponsors author ON author.id = c.author
+       JOIN sponsors mine ON mine.enterprise_id = author.enterprise_id
+      WHERE c.id = $1 AND mine.user_id = $2
+      LIMIT 1`,
+    [challengeId, userId],
+  );
+  return rows.length > 0;
+}
+
 export async function userCanJudgeEntry(userId: number, entryId: number): Promise<boolean> {
   if (await userHasCapabilityDirect(userId, CAPABILITIES.JUDGE_PANEL)) return true;
   const { rows } = await pool.query(
@@ -96,8 +126,19 @@ export function requireChallengeJudgeOrCapability(
   return async (req: FastifyRequest, _reply: FastifyReply) => {
     if (req.userId == null) throw new UnauthorizedError();
     if (await hasAnyCapability(req.userId, capabilities)) return;
-    if (await userCanJudgeChallenge(req.userId, numberParam(req, "challengeId"))) return;
+    const challengeId = numberParam(req, "challengeId");
+    if (await userCanJudgeChallenge(req.userId, challengeId)) return;
+    if (await userOwnsChallenge(req.userId, challengeId)) return;
     throw new ForbiddenError("Not allowed to access this challenge", { capabilities });
+  };
+}
+
+export function requireRepoJudgeOrCapability(...capabilities: Capability[]): preHandlerHookHandler {
+  return async (req: FastifyRequest, _reply: FastifyReply) => {
+    if (req.userId == null) throw new UnauthorizedError();
+    if (await hasAnyCapability(req.userId, capabilities)) return;
+    if (await userCanJudgeRepo(req.userId, numberParam(req, "repoId"))) return;
+    throw new ForbiddenError("Not allowed to access this repo's challenges", { capabilities });
   };
 }
 

@@ -2,16 +2,12 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool } from "../../db/pool.js";
-import {
-  requireAnyCapability,
-  requireAuth,
-  requireCapability,
-  userHasCapability,
-} from "../../lib/capabilities.js";
+import { requireAuth, requireCapability, userHasCapability } from "../../lib/capabilities.js";
 import { ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
 import { subscribe } from "../../lib/sse.js";
 import {
   requireChallengeJudgeOrCapability,
+  requireRepoJudgeOrCapability,
   requireRoomJudgeOrCapability,
 } from "./contextual-access.js";
 import {
@@ -65,7 +61,7 @@ export function registerReadsRoutes(app: FastifyInstance): void {
   typed.get(
     "/api/queue/repos/:repoId/challenges",
     {
-      preHandler: requireAnyCapability(
+      preHandler: requireRepoJudgeOrCapability(
         CAPABILITIES.JUDGE_PANEL,
         CAPABILITIES.QUEUE_OPERATE,
         CAPABILITIES.QUEUE_ADMIN,
