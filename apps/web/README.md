@@ -112,6 +112,7 @@ running app for a live gallery of every one with variations.
 | `Modal` | Reusable dialog: `title`/`icon`/`size`/`footer`, controlled or with a `trigger`. |
 | `TrendChart` | Area/line time-series, one or many tone-colored series. |
 | `DonutChart` | Distribution donut with optional centered label/value. |
+| `TimezonePicker` | Searchable IANA timezone combobox (built on `components/ui/command`). |
 
 **Tones & colors.** `lib/tones.ts` maps semantic tones
 (`success`/`warning`/`danger`/`info`/`brand`/`neutral`) to theme-token classes.

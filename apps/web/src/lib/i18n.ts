@@ -5172,11 +5172,6 @@ const dict: Record<string, I18nText> = {
     en: "Could not save event settings.",
   },
   eventTitle: { es: "Evento", gl: "Evento", en: "Event" },
-  eventDesc: {
-    es: "Identidad del evento: nombre, eslogan y zona horaria.",
-    gl: "Identidade do evento: nome, eslogan e fuso horario.",
-    en: "The event's identity: name, tagline and timezone.",
-  },
   taglineLabel: { es: "Eslogan", gl: "Eslogan", en: "Tagline" },
   taglineShortLinePlaceholder: {
     es: "Una línea breve que se muestra junto al nombre",
@@ -5184,17 +5179,7 @@ const dict: Record<string, I18nText> = {
     en: "A short line shown alongside the name",
   },
   timezoneLabel: { es: "Zona horaria", gl: "Fuso horario", en: "Timezone" },
-  timezoneHintDesc: {
-    es: "Nombre de zona horaria IANA (p. ej. Europe/Madrid). Configura las horas del hackathon desde una máquina en esta zona — los campos de abajo usan la hora local de tu navegador.",
-    gl: "Nome de fuso horario IANA (p. ex. Europe/Madrid). Configura as horas do hackathon desde unha máquina nesta zona — os campos de abaixo usan a hora local do teu navegador.",
-    en: "IANA timezone name (e.g. Europe/Madrid). Set the hacking times from a machine in this zone — the fields below use your browser's local time.",
-  },
   scheduleSectionTitle: { es: "Horario", gl: "Horario", en: "Schedule" },
-  scheduleSectionDesc: {
-    es: "Apertura de puertas y ventana de hacking. La ventana de hacking controla la cuenta atrás en la web y las pantallas de TV.",
-    gl: "Apertura de portas e ventá de hacking. A ventá de hacking controla a conta atrás na web e nas pantallas de TV.",
-    en: "Doors open and the hacking window. The hacking window drives the countdown on the website and TV panels.",
-  },
   eventStartsLabel: {
     es: "Empieza el evento (apertura de puertas)",
     gl: "Comeza o evento (apertura de portas)",
@@ -5246,11 +5231,6 @@ const dict: Record<string, I18nText> = {
     gl: "Sede",
     en: "Venue",
   },
-  venueSectionDesc: {
-    es: "Dónde se celebra el evento. El nombre y las coordenadas también se usan en el pase de Apple Wallet (aviso en la pantalla de bloqueo al llegar a la sede).",
-    gl: "Onde se celebra o evento. O nome e as coordenadas tamén se usan no pase de Apple Wallet (aviso na pantalla de bloqueo ao chegar á sede).",
-    en: "Where the event takes place. The name and coordinates also feed the Apple Wallet pass (lock-screen prompt when arriving at the venue).",
-  },
   venueNameLabel: {
     es: "Nombre de la sede",
     gl: "Nome da sede",
@@ -5278,20 +5258,10 @@ const dict: Record<string, I18nText> = {
     gl: "Pase de Apple Wallet",
     en: "Apple Wallet pass",
   },
-  walletPassSectionDesc: {
-    es: "Qué muestra el pase. Los campos se rellenan solos con los datos de cada asistente y del evento — aquí eliges cuáles se muestran y con qué etiqueta.",
-    gl: "Que amosa o pase. Os campos énchense sós cos datos de cada asistente e do evento — aquí escolles cales se amosan e con que etiqueta.",
-    en: "What the pass shows. Fields fill themselves from each attendee's and the event's data — here you choose which appear and with what caption.",
-  },
   passFrontFieldsLabel: {
     es: "Anverso del pase",
     gl: "Anverso do pase",
     en: "Front of the pass",
-  },
-  passFrontFieldsDesc: {
-    es: "Activa o desactiva cada campo y personaliza su etiqueta si quieres.",
-    gl: "Activa ou desactiva cada campo e personaliza a súa etiqueta se queres.",
-    en: "Toggle each field on or off and customize its caption if you like.",
   },
   passFieldParticipantTitle: {
     es: "Nombre del asistente",
@@ -5347,11 +5317,6 @@ const dict: Record<string, I18nText> = {
     gl: "Reverso do pase",
     en: "Back of the pass",
   },
-  passBackBuiltinDesc: {
-    es: "Estos campos aparecen al dar la vuelta al pase, ya rellenos con la información del evento.",
-    gl: "Estes campos aparecen ao voltear o pase, xa enchidos coa información do evento.",
-    en: "These fields appear when flipping the pass over, already filled with the event's info.",
-  },
   passFillEventName: {
     es: "Nombre del evento (arriba)",
     gl: "Nome do evento (arriba)",
@@ -5372,11 +5337,6 @@ const dict: Record<string, I18nText> = {
     es: "Campos adicionales del reverso",
     gl: "Campos adicionais do reverso",
     en: "Extra back fields",
-  },
-  passBackFieldsDesc: {
-    es: "Pares etiqueta/valor que se añaden al reverso del pase (horario, normas, enlaces...).",
-    gl: "Pares etiqueta/valor que se engaden ao reverso do pase (horario, normas, ligazóns...).",
-    en: "Label/value pairs added to the back of the pass (schedule, rules, links…).",
   },
   backFieldLabelPlaceholder: { es: "Etiqueta", gl: "Etiqueta", en: "Label" },
   backFieldValuePlaceholder: { es: "Valor", gl: "Valor", en: "Value" },
@@ -5417,6 +5377,121 @@ const dict: Record<string, I18nText> = {
     en: "Judging starts",
   },
   judgingEndsLabel: { es: "Termina la evaluación", gl: "Remata a avaliación", en: "Judging ends" },
+
+  // ---- Event settings: local navigation, previews, save state (H195) ----
+  eventSettingsPageTitle: {
+    es: "Ajustes del evento",
+    gl: "Axustes do evento",
+    en: "Event settings",
+  },
+  unsavedChangesConfirm: {
+    es: "Hay cambios sin guardar en esta sección. ¿Salir de todos modos?",
+    gl: "Hai cambios sen gardar nesta sección. ¿Saír de todos os xeitos?",
+    en: "There are unsaved changes in this section. Leave anyway?",
+  },
+  searchTimezonePlaceholder: {
+    es: "Buscar zona horaria…",
+    gl: "Buscar fuso horario…",
+    en: "Search timezone…",
+  },
+  noTimezoneMatch: {
+    es: "Ninguna zona horaria coincide.",
+    gl: "Ningún fuso horario coincide.",
+    en: "No timezone matches.",
+  },
+  selectTimezonePlaceholder: {
+    es: "Selecciona una zona horaria",
+    gl: "Selecciona un fuso horario",
+    en: "Select a timezone",
+  },
+  zonedTimeSameZone: {
+    es: "En la zona horaria del evento ({zone}).",
+    gl: "No fuso horario do evento ({zone}).",
+    en: "In the event's timezone ({zone}).",
+  },
+  zonedTimePreview: {
+    es: "En la zona horaria del evento ({zone}): {reading}.",
+    gl: "No fuso horario do evento ({zone}): {reading}.",
+    en: "In the event's timezone ({zone}): {reading}.",
+  },
+  countdownPreviewEmpty: {
+    es: "Define el inicio y el fin del hacking para previsualizar la cuenta atrás.",
+    gl: "Define o inicio e o fin do hacking para previsualizar a conta atrás.",
+    en: "Set the hacking start and end to preview the countdown.",
+  },
+  venuePreviewLabel: {
+    es: "Vista previa de la sede",
+    gl: "Vista previa da sede",
+    en: "Venue preview",
+  },
+  venueNameUnset: { es: "Sede sin nombre", gl: "Sede sen nome", en: "Unnamed venue" },
+  venuePinUnset: {
+    es: "Sin coordenadas todavía",
+    gl: "Sen coordenadas todavía",
+    en: "No pin yet",
+  },
+  openInMap: { es: "Abrir en el mapa", gl: "Abrir no mapa", en: "Open in map" },
+  judgingPacePreviewLabel: {
+    es: "Vista previa del ritmo",
+    gl: "Vista previa do ritmo",
+    en: "Pace preview",
+  },
+  judgingWindowUnsetDesc: {
+    es: "Define el inicio y el fin de la evaluación para previsualizar el ritmo.",
+    gl: "Define o inicio e o fin da avaliación para previsualizar o ritmo.",
+    en: "Set the judging start and end to preview the pace.",
+  },
+  judgingPaceStartsIn: {
+    es: "La evaluación empieza en {duration}.",
+    gl: "A avaliación comeza en {duration}.",
+    en: "Judging starts in {duration}.",
+  },
+  judgingPaceRemaining: {
+    es: "Quedan {duration} de evaluación.",
+    gl: "Quedan {duration} de avaliación.",
+    en: "{duration} of judging remaining.",
+  },
+  judgingPaceEnded: {
+    es: "La ventana de evaluación ya ha terminado.",
+    gl: "A ventá de avaliación xa rematou.",
+    en: "The judging window has already ended.",
+  },
+  judgingPaceTotalWindow: {
+    es: "Ventana total: {duration}. Las salas ajustan su ritmo por equipo automáticamente a medida que se acerca el final.",
+    gl: "Ventá total: {duration}. As salas axustan o seu ritmo por equipo automaticamente a medida que se achega o final.",
+    en: "Total window: {duration}. Rooms tighten their per-team pace automatically as the end approaches.",
+  },
+  durationMinutes: { es: "{minutes} min", gl: "{minutes} min", en: "{minutes} min" },
+  durationHours: { es: "{hours} h", gl: "{hours} h", en: "{hours} h" },
+  durationHoursMinutes: {
+    es: "{hours} h {minutes} min",
+    gl: "{hours} h {minutes} min",
+    en: "{hours} h {minutes} min",
+  },
+  presencePolicyDetailsToggle: {
+    es: "Cómo funciona esta política",
+    gl: "Como funciona esta política",
+    en: "How this policy works",
+  },
+  walletAdvancedFieldsToggle: {
+    es: "Campos avanzados del pase (reverso)",
+    gl: "Campos avanzados do pase (reverso)",
+    en: "Advanced pass fields (back)",
+  },
+  walletPreviewLabel: {
+    es: "Vista previa del pase",
+    gl: "Vista previa do pase",
+    en: "Pass preview",
+  },
+  passSampleParticipant: { es: "Ada Lovelace", gl: "Ada Lovelace", en: "Ada Lovelace" },
+  passSampleRole: { es: "Participante", gl: "Participante", en: "Participant" },
+  passSampleTicket: { es: "Entrada", gl: "Entrada", en: "Ticket" },
+  passSampleUniversity: { es: "UDC", gl: "UDC", en: "UDC" },
+  passSampleEmail: {
+    es: "ada@ejemplo.com",
+    gl: "ada@exemplo.com",
+    en: "ada@example.com",
+  },
 
   // ---- Admin: libraries (universities, intolerances) ----
   librariesDesc: {

@@ -2,7 +2,6 @@ import type { Translate } from "@/lib/i18n";
 import type { ResponseRow } from "./lib";
 
 export type ApplicationWorkspace = "review" | "decisions" | "communication" | "confirmation";
-export type SaveState = "saved" | "saving" | "unsaved" | "error";
 
 export function availableApplicationWorkspaces(capabilities: {
   manage: boolean;
@@ -60,15 +59,6 @@ export function generatedFieldKey(label: string, existing: string[] = []): strin
   let suffix = 2;
   while (existing.includes(`${base}_${suffix}`)) suffix++;
   return `${base}_${suffix}`;
-}
-
-export function saveStateLabel(state: SaveState, t: Translate): string {
-  return {
-    saved: t("saveStateSaved"),
-    saving: t("saveStateSaving"),
-    unsaved: t("saveStateUnsaved"),
-    error: t("saveStateError"),
-  }[state];
 }
 
 export function applicantTimelineState(status: string, submittedAt: string | null) {

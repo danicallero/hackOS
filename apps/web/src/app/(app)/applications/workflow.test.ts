@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { pickText, type Translate } from "@/lib/i18n";
+import { type SaveState, saveStateLabel } from "@/lib/save-state";
 import type { Language } from "@/lib/types";
 import type { ResponseRow } from "./lib";
 import {
@@ -8,8 +9,6 @@ import {
   availableApplicationWorkspaces,
   generatedFieldKey,
   rowsForWorkspace,
-  type SaveState,
-  saveStateLabel,
 } from "./workflow";
 
 const translate: Translate = (key) => key;
