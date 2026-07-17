@@ -1,7 +1,16 @@
 "use client";
 
 import { EVENTS } from "@hackos/shared/events";
-import { ActivityIcon, RepeatIcon, ScanLineIcon, SoupIcon, UsersIcon } from "lucide-react";
+import {
+  ActivityIcon,
+  CheckCircleIcon,
+  HardDriveIcon,
+  RepeatIcon,
+  ScanLineIcon,
+  SoupIcon,
+  TriangleAlertIcon,
+  UsersIcon,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/common/empty-state";
@@ -57,6 +66,9 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [offline, setOffline] = useState<OfflineScan[]>([]);
+  const [transactionState, setTransactionState] = useState<
+    "ready" | "saved" | "confirmed" | "attention"
+  >("ready");
   const selected = items.find((a) => String(a.activityId) === activityId) ?? null;
 
   useEffect(() => {
@@ -79,6 +91,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
         allowRepeat,
       });
       setResult(scan);
+      setTransactionState("confirmed");
       toast.success(scan.firstTime ? t("scanRegistered") : t("repeatRegistered"));
       setBadgeId("");
       setRepeatPrompt(null);
@@ -92,6 +105,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
       ) {
         setRepeatPrompt(err.details as ActivityScanResult);
       } else {
+        setTransactionState("attention");
         setError(errorMessage(err, t("scanFailed")));
       }
     } finally {
@@ -114,39 +128,58 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
       },
     ]);
     setBadgeId("");
+    setTransactionState("saved");
     toast.success(t("scanQueuedLocally"));
   };
 
   const syncOffline = async () => {
-    const groups = new Map<number, OfflineScan[]>();
-    for (const item of offline.filter((scan) => scan.status !== "syncing")) {
-      groups.set(item.activityId, [...(groups.get(item.activityId) ?? []), item]);
-    }
-    if (groups.size === 0) return;
+    const queued = offline.filter((scan) => scan.status !== "syncing");
+    if (queued.length === 0) return;
     setBusy(true);
-    let next: OfflineScan[] = offline.map((scan) => ({ ...scan, status: "syncing" }));
-    persistOffline(next);
-    for (const [id, scans] of groups) {
+    let next = [...offline];
+    // Replay in capture order. A transient failure stops the queue; a server
+    // business rejection is inspectable and does not block later operations.
+    for (const scan of queued) {
+      next = next.map((item) =>
+        item.clientScanId === scan.clientScanId
+          ? { ...item, status: "syncing", error: undefined, failureKind: undefined }
+          : item,
+      );
+      persistOffline(next);
       try {
-        await logisticsApi.mealBatch(id, {
+        await logisticsApi.mealBatch(scan.activityId, {
           deviceId: "web-scanner",
-          scans: scans.map((scan) => ({
-            clientScanId: scan.clientScanId,
-            badgeId: scan.badgeId,
-            allowRepeat: scan.allowRepeat,
-            scannedAt: scan.scannedAt,
-          })),
+          scans: [
+            {
+              clientScanId: scan.clientScanId,
+              badgeId: scan.badgeId,
+              allowRepeat: scan.allowRepeat,
+              scannedAt: scan.scannedAt,
+            },
+          ],
         });
-        next = next.filter(
-          (scan) => !scans.some((sent) => sent.clientScanId === scan.clientScanId),
-        );
+        next = next.filter((item) => item.clientScanId !== scan.clientScanId);
+        setTransactionState("confirmed");
       } catch (err) {
         const message = errorMessage(err, t("offlineSyncFailed"));
-        next = next.map((scan) =>
-          scans.some((sent) => sent.clientScanId === scan.clientScanId)
-            ? { ...scan, status: "failed", error: message }
-            : scan,
+        const businessRejection =
+          err instanceof ApiError &&
+          err.status >= 400 &&
+          err.status < 500 &&
+          ![401, 403, 408, 429].includes(err.status);
+        next = next.map((item) =>
+          item.clientScanId === scan.clientScanId
+            ? {
+                ...item,
+                status: businessRejection ? "failed" : "pending",
+                error: message,
+                failureKind: businessRejection ? "rejected" : "offline",
+              }
+            : item,
         );
+        persistOffline(next);
+        setTransactionState(businessRejection ? "attention" : "saved");
+        if (!businessRejection) break;
       }
       persistOffline(next);
     }
@@ -197,6 +230,45 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
           />
         ) : (
           <>
+            <div
+              aria-live={transactionState === "attention" ? "assertive" : "polite"}
+              className="bg-muted/40 flex min-h-11 items-center gap-3 rounded-lg border px-3 py-2"
+              role="status"
+            >
+              {transactionState === "confirmed" ? (
+                <CheckCircleIcon aria-hidden className="text-success size-5 shrink-0" />
+              ) : transactionState === "attention" ? (
+                <TriangleAlertIcon aria-hidden className="text-destructive size-5 shrink-0" />
+              ) : transactionState === "saved" ? (
+                <HardDriveIcon aria-hidden className="text-warning size-5 shrink-0" />
+              ) : (
+                <ScanLineIcon aria-hidden className="text-primary size-5 shrink-0" />
+              )}
+              <div className="min-w-0">
+                <p className="text-sm font-medium">
+                  {t(
+                    transactionState === "ready"
+                      ? "scannerStateReady"
+                      : transactionState === "saved"
+                        ? "scannerStateSaved"
+                        : transactionState === "confirmed"
+                          ? "scannerStateConfirmed"
+                          : "scannerStateAttention",
+                  )}
+                </p>
+                <p className="text-muted-foreground text-pretty text-xs">
+                  {t(
+                    transactionState === "ready"
+                      ? "scannerReadyDescription"
+                      : transactionState === "saved"
+                        ? "scannerAwaitingAcknowledgement"
+                        : transactionState === "confirmed"
+                          ? "scannerConfirmedDescription"
+                          : "scannerAttentionDescription",
+                  )}
+                </p>
+              </div>
+            </div>
             <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_minmax(180px,0.8fr)_140px]">
               <Field label={t("colActivity")}>
                 <Select value={activityId} onValueChange={setActivityId}>
@@ -279,11 +351,6 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
                   >
                     {t("syncPending", { count: offline.length })}
                   </Button>
-                  {offline.length > 0 && (
-                    <Button variant="ghost" onClick={() => persistOffline([])} disabled={busy}>
-                      {t("clearLocalQueue")}
-                    </Button>
-                  )}
                 </div>
                 {offline.length > 0 && <OfflineQueue items={offline} />}
               </>

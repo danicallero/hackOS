@@ -6,8 +6,10 @@ import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { QrCamera } from "@/components/QrCamera";
+import { ScannerQueueStatus } from "@/components/scanner-transaction-status";
 import { useLocale } from "@/lib/i18n";
 import { findPersonByBadge, findPersonByTicket } from "@/lib/scanner-db";
+import { useScannerSync } from "@/lib/use-scanner";
 import { colors } from "@/theme/colors";
 
 export function GeneralScannerScreen() {
@@ -16,6 +18,7 @@ export function GeneralScannerScreen() {
   const { t } = useLocale();
   const insets = useSafeAreaInsets();
   const [error, setError] = useState<string | null>(null);
+  const sync = useScannerSync();
 
   const resolve = useCallback(
     async (raw: string) => {
@@ -66,6 +69,17 @@ export function GeneralScannerScreen() {
           <SymbolView name="list.bullet" tintColor="white" size={19} weight="semibold" />
         </Pressable>
       </GlassView>
+      <View
+        pointerEvents="box-none"
+        style={{ left: 72, position: "absolute", right: 72, top: insets.top + 12 }}
+      >
+        <ScannerQueueStatus
+          queue={sync.queue}
+          syncing={sync.syncing}
+          onSync={() => void sync.sync()}
+          onRetry={() => void sync.retryFailed()}
+        />
+      </View>
       {error ? (
         <GlassView
           colorScheme="dark"

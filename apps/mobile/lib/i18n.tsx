@@ -435,6 +435,48 @@ const dict = {
   },
   scannerSync: { en: "Sync now", es: "Sincronizar", gl: "Sincronizar" },
   scannerSyncing: { en: "Syncing…", es: "Sincronizando…", gl: "Sincronizando…" },
+  scannerStateReady: { en: "Ready", es: "Listo", gl: "Listo" },
+  scannerStateSaved: {
+    en: "Saved on this device",
+    es: "Guardado en este dispositivo",
+    gl: "Gardado neste dispositivo",
+  },
+  scannerStateConfirmed: { en: "Confirmed", es: "Confirmado", gl: "Confirmado" },
+  scannerStateAttention: {
+    en: "Needs attention",
+    es: "Necesita atención",
+    gl: "Precisa atención",
+  },
+  scannerAwaitingAcknowledgement: {
+    en: "Waiting for server acknowledgement.",
+    es: "Esperando la confirmación del servidor.",
+    gl: "Agardando a confirmación do servidor.",
+  },
+  scannerOfflineWaiting: {
+    en: "Still saved; connection retry pending",
+    es: "Sigue guardado; pendiente de reintento de conexión",
+    gl: "Segue gardado; pendente de reintento da conexión",
+  },
+  scannerBusinessRejected: {
+    en: "Server rejected this operation",
+    es: "El servidor rechazó esta operación",
+    gl: "O servidor rexeitou esta operación",
+  },
+  scannerQueueSavedCount: {
+    en: "Saved: {count}",
+    es: "Guardados: {count}",
+    gl: "Gardados: {count}",
+  },
+  scannerQueueAttentionCount: {
+    en: "Needs attention: {count}",
+    es: "Necesitan atención: {count}",
+    gl: "Precisan atención: {count}",
+  },
+  scannerOfflineCount: {
+    en: "Waiting for connection: {count}",
+    es: "Esperando conexión: {count}",
+    gl: "Agardando conexión: {count}",
+  },
   scannerNeverSynced: {
     en: "Never synchronized",
     es: "Nunca sincronizado",

@@ -5452,6 +5452,49 @@ const dict: Record<string, I18nText> = {
   },
   clearLocalQueue: { es: "Vaciar cola local", gl: "Baleirar cola local", en: "Clear local queue" },
   localQueueTitle: { es: "Cola local", gl: "Cola local", en: "Local queue" },
+  scannerStateSaved: {
+    es: "Guardado en este dispositivo",
+    gl: "Gardado neste dispositivo",
+    en: "Saved on this device",
+  },
+  scannerStateReady: { es: "Listo", gl: "Listo", en: "Ready" },
+  scannerStateConfirmed: { es: "Confirmado", gl: "Confirmado", en: "Confirmed" },
+  scannerStateSyncing: { es: "Sincronizando", gl: "Sincronizando", en: "Synchronizing" },
+  scannerStateAttention: {
+    es: "Necesita atención",
+    gl: "Precisa atención",
+    en: "Needs attention",
+  },
+  scannerAwaitingAcknowledgement: {
+    es: "Esperando la confirmación del servidor.",
+    gl: "Agardando a confirmación do servidor.",
+    en: "Waiting for server acknowledgement.",
+  },
+  scannerOfflineWaiting: {
+    es: "Sigue guardado; se reintentará cuando vuelva la conexión.",
+    gl: "Segue gardado; reintentarase cando volva a conexión.",
+    en: "Still saved; it will retry when the connection returns.",
+  },
+  scannerBusinessRejected: {
+    es: "El servidor rechazó esta operación. Revísala antes de reintentar.",
+    gl: "O servidor rexeitou esta operación. Revísaa antes de reintentar.",
+    en: "The server rejected this operation. Review it before retrying.",
+  },
+  scannerReadyDescription: {
+    es: "El escáner está preparado para la siguiente operación.",
+    gl: "O escáner está preparado para a seguinte operación.",
+    en: "The scanner is ready for the next operation.",
+  },
+  scannerConfirmedDescription: {
+    es: "El servidor confirmó la operación.",
+    gl: "O servidor confirmou a operación.",
+    en: "The server acknowledged the operation.",
+  },
+  scannerAttentionDescription: {
+    es: "Revisa el motivo antes de reintentar.",
+    gl: "Revisa o motivo antes de reintentar.",
+    en: "Review the reason before retrying.",
+  },
   intoleranceFallback: { es: "Intolerancia", gl: "Intolerancia", en: "Intolerance" },
   notConfirmedBadge: { es: "Sin confirmar", gl: "Sen confirmar", en: "Not confirmed" },
   badgeCapitalInline: {

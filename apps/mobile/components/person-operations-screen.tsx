@@ -16,6 +16,7 @@ import {
 } from "@/components/native-ui";
 import { PresenceManagement } from "@/components/presence-management";
 import { QrCamera } from "@/components/QrCamera";
+import { ScannerTransactionStatus } from "@/components/scanner-transaction-status";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
@@ -25,7 +26,7 @@ import {
   findPersonByTicket,
   pendingScans,
 } from "@/lib/scanner-db";
-import type { ScannerPerson } from "@/lib/scanner-types";
+import type { PendingScan, ScannerPerson } from "@/lib/scanner-types";
 import { useScannerSync } from "@/lib/use-scanner";
 import { colors } from "@/theme/colors";
 
@@ -53,6 +54,7 @@ export function PersonOperationsScreen() {
   const [cameraAction, setCameraAction] = useState<"assign" | "replace" | null>(null);
   const [scannedAt, setScannedAt] = useState(new Date());
   const [busy, setBusy] = useState(false);
+  const [lastOperation, setLastOperation] = useState<PendingScan | null>(null);
   // Server-side last door log, reported by the presence timeline below —
   // the local snapshot alone can lag behind manual edits or other devices.
   const [serverDoor, setServerDoor] = useState<{ kind: "in" | "out"; at: string } | null>(null);
@@ -93,7 +95,7 @@ export function PersonOperationsScreen() {
       return;
     }
     const currentBadge = person.badgeId;
-    await enqueueLocalScan(
+    const scanId = await enqueueLocalScan(
       currentBadge
         ? {
             kind: "badge_rotation",
@@ -109,9 +111,10 @@ export function PersonOperationsScreen() {
             method: "manual",
           },
     );
-    setPerson({ ...person, badgeId: nextBadge });
     setCameraAction(null);
+    setLastOperation((await pendingScans()).find((scan) => scan.id === scanId) ?? null);
     await sync.sync();
+    setLastOperation((await pendingScans()).find((scan) => scan.id === scanId) ?? null);
     await load();
   }
 
@@ -145,14 +148,16 @@ export function PersonOperationsScreen() {
         style: "destructive",
         onPress: () =>
           void (async () => {
-            await enqueueLocalScan({
+            const scanId = await enqueueLocalScan({
               kind: "badge_removal",
               userId,
               currentBadgeId: person.badgeId!,
               reason: t("badgeRemovalReason"),
             });
-            setPerson({ ...person, badgeId: null });
+            setLastOperation((await pendingScans()).find((scan) => scan.id === scanId) ?? null);
             await sync.sync();
+            setLastOperation((await pendingScans()).find((scan) => scan.id === scanId) ?? null);
+            await load();
           })(),
       },
     ]);
@@ -168,11 +173,13 @@ export function PersonOperationsScreen() {
         direction,
         scannedAt: scannedAt.toISOString(),
       });
+      setLastOperation((await pendingScans()).find((scan) => scan.id === scanId) ?? null);
       await sync.sync();
       // The offline queue fails 4xx replays permanently (e.g. an entry while
       // a session is already open) — without this check the rejection is
       // invisible and the log just never appears.
       const stored = (await pendingScans()).find((scan) => scan.id === scanId);
+      setLastOperation(stored ?? null);
       if (stored?.status === "failed") {
         Alert.alert(
           t("presenceScanRejectedTitle"),
@@ -397,6 +404,8 @@ export function PersonOperationsScreen() {
             </StatusPill>
           </View>
         </View>
+
+        <ScannerTransactionStatus scan={lastOperation} />
 
         <Section title={t("personPersonalData")}>
           {person.email ? (
