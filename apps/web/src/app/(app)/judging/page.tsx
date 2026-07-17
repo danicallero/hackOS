@@ -26,6 +26,7 @@ import {
   SkipForwardIcon,
   UsersIcon,
   WifiOffIcon,
+  XIcon,
 } from "lucide-react";
 import { AlertDialog as AlertDialogPrimitive } from "radix-ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -282,6 +283,25 @@ export default function QueuePage() {
     [refreshLive, t],
   );
 
+  // Shared by the queue panel's per-entry actions and the empty-room
+  // "call next" / "bring in next" shortcuts on the presentation panel.
+  const handleManualCall = useCallback(
+    (entry: QueueEntry, targetStatus: "called" | "in_room") =>
+      activeRoomId &&
+      mutate(
+        `manual-${entry.id}`,
+        () =>
+          entryAction(
+            entry.id,
+            "manual-call",
+            { targetStatus, roomId: activeRoomId, reason: "Manual queue selection" },
+            crypto.randomUUID(),
+          ),
+        targetStatus === "in_room" ? t("teamBroughtIn") : t("teamCalled"),
+      ),
+    [activeRoomId, mutate, t],
+  );
+
   // H37 search-as-you-type: debounce the query and refresh results as the
   // operator types. An empty query clears the list.
   useEffect(() => {
@@ -453,9 +473,17 @@ export default function QueuePage() {
       {actionError && (
         <div
           role="alert"
-          className="border-destructive/40 bg-destructive/5 text-destructive rounded-md border px-4 py-3 text-sm"
+          className="border-destructive/40 bg-destructive/5 text-destructive flex items-start justify-between gap-3 rounded-md border px-4 py-3 text-sm"
         >
-          {actionError}
+          <span>{actionError}</span>
+          <button
+            type="button"
+            aria-label={t("dismiss")}
+            onClick={() => setActionError(null)}
+            className="shrink-0 opacity-70 transition-opacity hover:opacity-100"
+          >
+            <XIcon className="size-4" />
+          </button>
         </div>
       )}
 
@@ -493,20 +521,7 @@ export default function QueuePage() {
               searching={searching}
               searchDisabled={!effectiveChallengeId}
               onQuery={setSearch}
-              onManualCall={(entry, targetStatus) =>
-                activeRoomId &&
-                mutate(
-                  `manual-${entry.id}`,
-                  () =>
-                    entryAction(
-                      entry.id,
-                      "manual-call",
-                      { targetStatus, roomId: activeRoomId, reason: "Manual queue selection" },
-                      crypto.randomUUID(),
-                    ),
-                  targetStatus === "in_room" ? t("teamBroughtIn") : t("teamCalled"),
-                )
-              }
+              onManualCall={handleManualCall}
               onEntryAction={(entry, action, body, label) =>
                 mutate(
                   `${action}-${entry.id}`,
@@ -570,7 +585,10 @@ export default function QueuePage() {
               challenge={activeChallenge}
               pace={pace.data}
               waitingRoomCount={view.called.length}
+              nextWaitingEntry={view.next[0] ?? null}
+              firstCalledEntry={view.called[0] ?? null}
               canJudge={canJudge}
+              canOperate={canOperate}
               busy={busy}
               onEntryAction={(entry, action, body, label) =>
                 mutate(
@@ -579,6 +597,7 @@ export default function QueuePage() {
                   label,
                 )
               }
+              onManualCall={handleManualCall}
             />
 
             <ReviewForm
@@ -1026,7 +1045,7 @@ function TeamSearch({
 
 /**
  * Actions for a team at the door, compacted to two button rows: a primary
- * row (Bring in / Call in) and a "More" menu for the rarer moves (requeue,
+ * row (Call in / Bring in) and a "More" menu for the rarer moves (requeue,
  * no-show, disqualify) instead of five separate buttons wrapping across
  * three rows in the 360px sidebar.
  */
@@ -1058,20 +1077,20 @@ function CalledEntryActions({
     <div className="grid grid-cols-2 gap-2">
       <Button
         size="sm"
-        disabled={busy != null || !canJudge}
-        onClick={() => onEntryAction(entry, "bring-in", undefined, t("teamBroughtInShort"))}
-      >
-        <DoorOpenIcon className="size-4" />
-        {t("bringIn")}
-      </Button>
-      <Button
-        size="sm"
         variant="outline"
         disabled={busy != null || canModerate}
         onClick={() => onEntryAction(entry, "notify-enter", undefined, t("entranceNoticeSent"))}
       >
         <SendIcon className="size-4" />
         {t("callIn")}
+      </Button>
+      <Button
+        size="sm"
+        disabled={busy != null || !canJudge}
+        onClick={() => onEntryAction(entry, "bring-in", undefined, t("teamBroughtInShort"))}
+      >
+        <DoorOpenIcon className="size-4" />
+        {t("bringIn")}
       </Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -1238,22 +1257,32 @@ function PresentationPanel({
   challenge,
   pace,
   waitingRoomCount,
+  nextWaitingEntry,
+  firstCalledEntry,
   canJudge,
+  canOperate,
   busy,
   onEntryAction,
+  onManualCall,
 }: {
   entry: QueueEntry | null;
   challenge: Challenge | null;
   pace: RoomPace | null;
   waitingRoomCount: number;
+  /** Front of the challenge queue (status `waiting`) — powers the "call next" shortcut. */
+  nextWaitingEntry: QueueEntry | null;
+  /** Front of the waiting room (status `called`) — powers the "bring in next" shortcut. */
+  firstCalledEntry: QueueEntry | null;
   canJudge: boolean;
+  canOperate: boolean;
   busy: string | null;
   onEntryAction: (
     entry: QueueEntry,
-    action: "start" | "complete" | "send-back",
+    action: "start" | "complete" | "send-back" | "bring-in",
     body: Record<string, unknown> | undefined,
     label: string,
   ) => void;
+  onManualCall: (entry: QueueEntry, targetStatus: "called" | "in_room") => void;
 }) {
   const { t } = useLocale();
   const isPresenting = entry?.status === "presenting";
@@ -1295,6 +1324,36 @@ function PresentationPanel({
             <p className="text-muted-foreground mt-1 text-sm">
               {waitingRoomCount > 0 ? t("teamsWaitingDoor") : t("callNextTeamPrompt")}
             </p>
+            {(nextWaitingEntry || firstCalledEntry) && (
+              <div className="mt-4 flex gap-2">
+                {nextWaitingEntry && (
+                  <Button
+                    variant="outline"
+                    disabled={!canOperate || busy != null}
+                    onClick={() => onManualCall(nextWaitingEntry, "called")}
+                  >
+                    <SendIcon className="size-4" />
+                    {t("callNextTeam")}
+                  </Button>
+                )}
+                {waitingRoomCount > 0 && firstCalledEntry && (
+                  <Button
+                    disabled={!canJudge || busy != null}
+                    onClick={() =>
+                      onEntryAction(
+                        firstCalledEntry,
+                        "bring-in",
+                        undefined,
+                        t("teamBroughtInShort"),
+                      )
+                    }
+                  >
+                    <DoorOpenIcon className="size-4" />
+                    {t("bringInNextTeam")}
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
         ) : (
           <>
