@@ -15,6 +15,7 @@ import { reconcileDevpostParticipantsForUser } from "../../projects/reconciliati
 import { myProjects } from "../../projects/service.js";
 import { anonymizeUser } from "../anonymize.js";
 import { hasMobileAccess } from "../mobile-access.js";
+import { getAccountRemovalEligibility } from "../removal.js";
 import { computeDerivedRole, computeMembershipFlags } from "../role.js";
 
 /**
@@ -473,6 +474,35 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     },
   );
 
+  api.get(
+    "/api/users/:id/removal-eligibility",
+    {
+      preHandler: requireCapability(CAPABILITIES.ADMIN_ALL),
+      schema: {
+        description:
+          "Read-only H54 preflight selecting the one safe account-removal action from retained references.",
+        summary: "Get account-removal eligibility",
+        params: z.object({ id: z.coerce.number().int() }),
+        response: {
+          200: z.object({
+            action: z.enum(["delete", "anonymize"]),
+            reasonCode: z.enum(["fresh_account", "operational_history"]),
+            accessRevoked: z.literal(true),
+            operationalHistoryRetained: z.boolean(),
+          }),
+        },
+      },
+    },
+    async (req) => {
+      const targetId = req.params.id;
+      if (targetId === req.userId) {
+        throw new BadRequestError("You can't remove your own account");
+      }
+      await fetchUser(targetId);
+      return getAccountRemovalEligibility(pool, targetId);
+    },
+  );
+
   // Hard-delete an account — superadmin only (ADMIN_ALL). Most references to
   // users have no ON DELETE CASCADE (audit trail, scans, evaluations…), so a
   // user who has *done* anything cannot be hard-deleted without corrupting
@@ -494,6 +524,13 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         throw new BadRequestError("You can't delete your own account");
       }
       const target = await fetchUser(targetId);
+      const eligibility = await getAccountRemovalEligibility(pool, targetId);
+      if (eligibility.action === "anonymize") {
+        throw new ConflictError(
+          "This account has activity (audit, scans, evaluations…) and can't be hard-deleted. Anonymize its personal data instead.",
+          { userId: targetId, reasonCode: eligibility.reasonCode },
+        );
+      }
       try {
         await withTransaction(async (client) => {
           await audit(client, {
