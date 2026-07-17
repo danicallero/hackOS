@@ -8,7 +8,6 @@ import {
   BellRingIcon,
   Building2Icon,
   DoorOpenIcon,
-  RefreshCwIcon,
   RotateCcwIcon,
   SearchIcon,
   TicketIcon,
@@ -42,8 +41,8 @@ import {
   searchTeams,
 } from "@/lib/queue";
 import { useSessionContext } from "@/lib/session";
-import { cn } from "@/lib/utils";
 import { textForDisplay } from "../challenges/shared";
+import { GenerateQueuesAction } from "./generate-queues-action";
 
 export default function QueueOperationsPage() {
   const { t } = useLocale();
@@ -144,10 +143,7 @@ export default function QueueOperationsPage() {
         title={t("queueOperations")}
         primaryAction={
           canAdmin ? (
-            <Button onClick={() => void onGenerate()} disabled={busy}>
-              <RefreshCwIcon className={cn("size-4", busy && "animate-spin")} />
-              {t("generateQueues")}
-            </Button>
+            <GenerateQueuesAction busy={busy} onGenerate={() => void onGenerate()} />
           ) : undefined
         }
         secondaryActions={

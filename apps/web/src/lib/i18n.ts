@@ -755,6 +755,11 @@ const dict: Record<string, I18nText> = {
     en: "Generated {inserted} queue entries across {challenges} challenges.",
   },
   generateQueues: { es: "Generar colas", gl: "Xerar colas", en: "Generate queues" },
+  generatingQueues: {
+    es: "Generando colas. Espera a que termine.",
+    gl: "Xerando colas. Agarda a que remate.",
+    en: "Generating queues. Wait for it to finish.",
+  },
   openJudging: { es: "Abrir evaluación", gl: "Abrir avaliación", en: "Open judging" },
   couldNotLoadQueueOps: {
     es: "No se han podido cargar las operaciones de cola",
