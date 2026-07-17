@@ -1,6 +1,6 @@
 import "./env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { App } from "../../src/app.js";
 import {
   asUser,
@@ -32,6 +32,10 @@ afterAll(async () => {
   await stopQueues();
   await closeValkey();
   await pool.end();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 describe("H24 presence scan + estimation", () => {
@@ -106,6 +110,11 @@ describe("H24 presence scan + estimation", () => {
       payload: { badgeId: "P-3", kind: "in" },
     });
 
+    // Simulate the API clock lagging behind PostgreSQL. Live estimates must
+    // use the database clock or the just-committed scan is filtered out.
+    const nodeNow = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(nodeNow - 60_000);
+
     const est = await app.inject({
       method: "GET",
       url: "/api/presence/estimate",
@@ -114,6 +123,10 @@ describe("H24 presence scan + estimation", () => {
     expect(est.statusCode).toBe(200);
     expect(est.json().presentCount).toBe(1);
     expect(est.json().present).toContain(uid);
+
+    const { userHours } = await import("../../src/modules/logistics/presence.js");
+    const justArrivedHours = await userHours(uid);
+    expect(justArrivedHours.intervals).toHaveLength(1);
 
     // a meal an hour ago also contributes to the hours estimate
     const meal = await createMeal();
