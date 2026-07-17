@@ -223,7 +223,7 @@ export default function EnterprisesPage() {
       void load();
       return;
     }
-    if (me?.role !== "sponsor") {
+    if (!me?.isSponsorRep) {
       setLoading(false);
       return;
     }
@@ -247,7 +247,7 @@ export default function EnterprisesPage() {
     };
   }, [canManage, load, me?.role, router, liveRefresh, sponsorRetryNonce, t]);
 
-  if (!canManage && me?.role === "sponsor" && loading) {
+  if (!canManage && me?.isSponsorRep && loading) {
     return (
       <div className="space-y-6">
         <PageHeader title={t("myEnterprise")} />
@@ -262,7 +262,7 @@ export default function EnterprisesPage() {
     );
   }
 
-  if (!canManage && me?.role === "sponsor" && loadError) {
+  if (!canManage && me?.isSponsorRep && loadError) {
     return (
       <div className="space-y-6">
         <PageHeader title={t("myEnterprise")} />

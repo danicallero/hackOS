@@ -53,6 +53,7 @@ import {
 } from "./builders";
 import {
   type Challenge,
+  canAccessSponsorWorkspace,
   EMPTY_I18N,
   i18nWithEnglishFallback,
   isScheduled,
@@ -152,7 +153,7 @@ export default function ChallengesPage() {
   const { t } = useLocale();
   const { canAny, me } = useSessionContext();
   const canAdmin = canAny(CAPABILITIES.SPONSORS_MANAGE, CAPABILITIES.QUEUE_ADMIN);
-  const canSee = canAdmin || me?.role === "sponsor";
+  const canSee = canAccessSponsorWorkspace(canAdmin, Boolean(me?.isSponsorRep));
   const columns = useMemo(() => buildColumns(t), [t]);
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [loading, setLoading] = useState(true);
