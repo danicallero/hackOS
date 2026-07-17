@@ -28,6 +28,7 @@ import { computeDerivedRole, computeMembershipFlags } from "../role.js";
  */
 
 const LANGUAGES = ["en", "es", "gl"] as const;
+const DIETARY_DATA_STATES = ["not_provided", "present", "removed_after_decline"] as const;
 
 /** Fields a user may edit on themself (H7: "consultar mis datos… y si detecto un error"). */
 const selfPatchSchema = z
@@ -82,6 +83,7 @@ const userResponseSchema = z.object({
   secondaryEmailVerified: z.boolean(),
   foodIntolerances: z.array(z.number()),
   foodIntoleranceNotes: z.string().nullable(),
+  dietaryDataState: z.enum(DIETARY_DATA_STATES),
   shirtSize: z.string().nullable(),
   universityId: z.number().nullable(),
   notes: z.string().nullable(),
@@ -119,6 +121,7 @@ interface UserRow {
   secondary_email_verified_at: Date | null;
   food_intolerances: number[];
   food_intolerance_notes: string | null;
+  dietary_data_state: (typeof DIETARY_DATA_STATES)[number];
   shirt_size: string | null;
   university_id: number | null;
   notes: string | null;
@@ -141,6 +144,7 @@ function serializeUser(row: UserRow) {
     secondaryEmailVerified: row.secondary_email_verified_at !== null,
     foodIntolerances: row.food_intolerances,
     foodIntoleranceNotes: row.food_intolerance_notes,
+    dietaryDataState: row.dietary_data_state,
     shirtSize: row.shirt_size,
     universityId: row.university_id,
     notes: row.notes,
@@ -181,10 +185,26 @@ async function applyUserPatch(
       sets.push(`${column} = $${values.length}`);
     }
     values.push(targetId);
-    const { rows: afterRows } = await client.query(
+    let { rows: afterRows } = await client.query(
       `UPDATE users SET ${sets.join(", ")} WHERE id = $${values.length} RETURNING *`,
       values,
     );
+    if (
+      entries.some(([field]) => field === "foodIntolerances" || field === "foodIntoleranceNotes")
+    ) {
+      ({ rows: afterRows } = await client.query(
+        `UPDATE users
+            SET dietary_data_state = CASE
+                  WHEN cardinality(food_intolerances) > 0
+                    OR NULLIF(BTRIM(food_intolerance_notes), '') IS NOT NULL
+                  THEN 'present'
+                  ELSE 'not_provided'
+                END
+          WHERE id = $1
+          RETURNING *`,
+        [targetId],
+      ));
+    }
     const after = afterRows[0] as UserRow;
 
     // H7/H53: audit staff edits of somebody else's profile. Self-edits of

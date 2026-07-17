@@ -547,6 +547,12 @@ export function registerInviteRoutes(app: FastifyInstance): void {
                language = COALESCE($3, language),
                food_intolerances = COALESCE($4, food_intolerances),
                food_intolerance_notes = COALESCE($5, food_intolerance_notes),
+               dietary_data_state = CASE
+                 WHEN cardinality(COALESCE($4, food_intolerances)) > 0
+                   OR NULLIF(BTRIM(COALESCE($5, food_intolerance_notes)), '') IS NOT NULL
+                 THEN 'present'
+                 ELSE 'not_provided'
+               END,
                shirt_size = COALESCE($6, shirt_size)
            WHERE id = $1`,
           [

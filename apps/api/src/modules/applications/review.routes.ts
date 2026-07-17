@@ -71,7 +71,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
       }
       const { rows } = await pool.query(
         `SELECT r.id, r.user_id, u.name, u.email, u.shirt_size,
-                u.food_intolerances, u.food_intolerance_notes,
+                u.food_intolerances, u.food_intolerance_notes, u.dietary_data_state,
                 r.status, r.responses,
                 r.staff_notes, r.submitted_at, r.decision_sent_at,
                 r.confirmed_at, r.declined_at, t.expires_at AS confirmation_expires_at,
@@ -82,7 +82,8 @@ export function registerReviewRoutes(app: FastifyInstance): void {
          LEFT JOIN applicant_reviews ar ON ar.response_id = r.id
          LEFT JOIN email_verification_tokens t ON t.id = r.confirmation_token_id
          WHERE ${filters.join(" AND ")}
-         GROUP BY r.id, u.name, u.email, u.shirt_size, u.food_intolerances, u.food_intolerance_notes,
+         GROUP BY r.id, u.name, u.email, u.shirt_size, u.food_intolerances,
+                  u.food_intolerance_notes, u.dietary_data_state,
                   t.expires_at
          ORDER BY r.id`,
         params,

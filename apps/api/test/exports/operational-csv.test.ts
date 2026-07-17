@@ -106,5 +106,7 @@ describe("applications.csv", () => {
     expect(res.statusCode).toBe(200);
     expect(res.body).toContain("Applicant One");
     expect(res.body).toContain("Applicant Two");
+    expect(res.body).toContain("dietary_data_state");
+    expect(res.body).toContain("not_provided");
   });
 });

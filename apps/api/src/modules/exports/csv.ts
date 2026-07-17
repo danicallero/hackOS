@@ -62,6 +62,7 @@ export async function exportApplicationsCsv(applicationId?: number): Promise<str
     `SELECT ar.id AS response_id, u.id AS user_id, u.name, u.surname, u.email,
             app.name AS application_name, app.type AS application_type,
             ar.status, ar.submitted_at, ar.confirmed_at, ar.declined_at,
+            u.dietary_data_state,
             (SELECT AVG(score) FROM applicant_reviews WHERE response_id = ar.id) AS avg_score
        FROM application_responses ar
        JOIN applications app ON app.id = ar.application_id
@@ -82,6 +83,7 @@ export async function exportApplicationsCsv(applicationId?: number): Promise<str
     "submitted_at",
     "confirmed_at",
     "declined_at",
+    "dietary_data_state",
     "avg_score",
   ];
   return toCsv(

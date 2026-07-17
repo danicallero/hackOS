@@ -42,7 +42,8 @@ export function registerMeRoutes(app: FastifyInstance): void {
       const { template, type, ...row } = rows[0];
       const enriched = await enrichTemplate(type, template);
       const { rows: userRows } = await pool.query(
-        `SELECT shirt_size, food_intolerances, food_intolerance_notes FROM users WHERE id = $1`,
+        `SELECT shirt_size, food_intolerances, food_intolerance_notes, dietary_data_state
+         FROM users WHERE id = $1`,
         [req.userId],
       );
       return {
@@ -52,6 +53,7 @@ export function registerMeRoutes(app: FastifyInstance): void {
         shirt_size: userRows[0]?.shirt_size ?? null,
         food_intolerances: userRows[0]?.food_intolerances ?? [],
         food_intolerance_notes: userRows[0]?.food_intolerance_notes ?? null,
+        dietary_data_state: userRows[0]?.dietary_data_state ?? "not_provided",
       };
     },
   );
