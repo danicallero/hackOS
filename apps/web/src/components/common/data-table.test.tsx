@@ -90,6 +90,8 @@ describe("DataTable accessibility and interactions", () => {
     const link = container.querySelector<HTMLAnchorElement>('a[aria-label="Open Ada"]');
     const row = link?.closest("tr");
     expect(link?.getAttribute("href")).toBe("/people/1");
+    expect(link?.classList.contains("size-11")).toBe(true);
+    expect(link?.classList.contains("md:size-8")).toBe(true);
     expect(row?.getAttribute("role")).toBeNull();
     expect(row?.getAttribute("tabindex")).toBeNull();
     act(() => {
@@ -132,6 +134,8 @@ describe("DataTable accessibility and interactions", () => {
     const action = container.querySelector<HTMLButtonElement>('button[aria-label="Review Ada"]');
     expect(action?.tagName).toBe("BUTTON");
     expect(action?.type).toBe("button");
+    expect(action?.classList.contains("size-11")).toBe(true);
+    expect(action?.classList.contains("md:size-8")).toBe(true);
     const nestedButton = [...container.querySelectorAll("button")].find(
       (button) => button.textContent === "More",
     );
@@ -312,6 +316,29 @@ describe("DataTable accessibility and interactions", () => {
     expect(container.querySelector('[role="alert"]')?.textContent).toContain(
       "Could not load people",
     );
+    const retryButton = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Retry",
+    );
+    act(() => retryButton?.click());
+    expect(retry).toHaveBeenCalledOnce();
+  });
+
+  it("keeps rows available beside persistent mutation errors and safely retries", () => {
+    const retry = vi.fn();
+    render(
+      <DataTable
+        columns={columns}
+        data={rows}
+        getRowId={(row) => row.id}
+        mutationError={{ message: "Could not update selected rows", onRetry: retry }}
+      />,
+    );
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "Could not update selected rows",
+    );
+    expect(container.textContent).toContain("Ada");
+    expect(container.textContent).toContain("Grace");
     const retryButton = [...container.querySelectorAll("button")].find(
       (button) => button.textContent === "Retry",
     );

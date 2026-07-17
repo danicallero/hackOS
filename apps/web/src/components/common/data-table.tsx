@@ -74,6 +74,8 @@ interface DataTableProps<T> {
     description?: string;
   };
   error?: { message: string; onRetry?: () => void };
+  /** Persistent mutation feedback that leaves the current rows available. */
+  mutationError?: { message: string; onRetry?: () => void };
   className?: string;
   /** Enable row selection via checkboxes. */
   selectable?: boolean;
@@ -108,6 +110,7 @@ export function DataTable<T>({
   empty,
   filteredEmpty,
   error,
+  mutationError,
   className,
   selectable,
   selectedIds,
@@ -238,6 +241,13 @@ export function DataTable<T>({
           )}
           {toolbar && <div className="ml-auto flex items-center gap-2">{toolbar}</div>}
         </div>
+      )}
+      {mutationError && (
+        <ContextualError
+          message={mutationError.message}
+          onRetry={mutationError.onRetry}
+          className="m-4"
+        />
       )}
       <div className="overflow-x-auto">
         <Table>
@@ -373,7 +383,7 @@ export function DataTable<T>({
                     {rowInteractionCol > 0 && (
                       <TableCell className="text-right">
                         {getRowHref ? (
-                          <Button variant="ghost" size="icon" className="size-8" asChild>
+                          <Button variant="ghost" size="icon" className="size-11 md:size-8" asChild>
                             <Link href={getRowHref(row)} aria-label={getRowLabel?.(row) ?? rowId}>
                               <ChevronRightIcon className="size-4" aria-hidden="true" />
                             </Link>
@@ -383,7 +393,7 @@ export function DataTable<T>({
                             type="button"
                             variant="ghost"
                             size="icon"
-                            className="size-8"
+                            className="size-11 md:size-8"
                             onClick={() => onRowClick?.(row)}
                             aria-label={getRowLabel?.(row) ?? rowId}
                           >
