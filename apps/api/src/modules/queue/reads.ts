@@ -72,8 +72,13 @@ export async function challengeProgress(challengeId: number) {
   };
 }
 
-/** H41: per-room presenting/called/next — feeds both the operator panel and the TV. */
-export async function roomView(roomId: number) {
+/**
+ * H41: per-room presenting/called/next — feeds both the operator panel and
+ * the TV. `includeCrossRoomSkips` (H203) is opt-in and only ever passed by
+ * the authenticated operator/judge route: it names other teams and rooms, so
+ * it must never reach the public, unauthenticated TV feed.
+ */
+export async function roomView(roomId: number, opts: { includeCrossRoomSkips?: boolean } = {}) {
   const room = (await pool.query(`SELECT * FROM rooms WHERE id = $1`, [roomId])).rows[0];
   if (!room) throw new NotFoundError("Room not found", { roomId });
   const state = (await pool.query(`SELECT * FROM room_queue_state WHERE room_id = $1`, [roomId]))
@@ -137,7 +142,83 @@ export async function roomView(roomId: number) {
       ).rows
     : [];
 
-  return { room, state, challenge, active, called, next };
+  // H30/H203: read-only projection of the same cross-room busy-member guard
+  // callNextForRoom enforces (guard.ts) — explains, without mutating
+  // anything, why a waiting team at the top of the queue was not (yet)
+  // called into THIS room. Recomputed on every read, so it clears the moment
+  // the blocking member's other entry leaves called/in_room/presenting.
+  const crossRoomSkips = opts.includeCrossRoomSkips
+    ? await crossRoomSkipReasons(next as { id: number; repo_id: number; position: number | null }[])
+    : [];
+
+  return { room, state, challenge, active, called, next, crossRoomSkips };
+}
+
+/**
+ * For each given waiting entry, reports the OTHER live queue_entries row
+ * (called/in_room/presenting) that shares a team member and is therefore
+ * blocking call_next from selecting it (H30). Mirrors
+ * `isRepoBlockedByBusyMember` (guard.ts) exactly, minus the advisory lock —
+ * this is informational only, never used to decide a transition. Exposes
+ * just enough context to explain the skip (blocking room + team name)
+ * without leaking which specific member is shared.
+ */
+async function crossRoomSkipReasons(
+  entries: { id: number; repo_id: number; position: number | null }[],
+): Promise<
+  {
+    entryId: number;
+    position: number | null;
+    blockingRoomId: number;
+    blockingRoomName: string;
+    blockingTeamName: string;
+    blockingStatus: string;
+    positionPreserved: true;
+  }[]
+> {
+  if (entries.length === 0) return [];
+  const { rows } = await pool.query(
+    `SELECT DISTINCT ON (qe.id)
+            qe.id AS entry_id,
+            br.id AS blocking_room_id, br.name AS blocking_room_name,
+            bqe.status AS blocking_status, brepo.name AS blocking_team_name
+       FROM queue_entries qe
+       JOIN submissions s1 ON s1.repo_id = qe.repo_id
+       JOIN submissions s2 ON s2.user_id = s1.user_id
+       JOIN queue_entries bqe ON bqe.repo_id = s2.repo_id
+                              AND bqe.status IN ('called', 'in_room', 'presenting')
+       JOIN rooms br ON br.id = bqe.assigned_room_id
+       JOIN repos brepo ON brepo.id = bqe.repo_id
+      WHERE qe.id = ANY($1)
+      ORDER BY qe.id, bqe.id`,
+    [entries.map((e) => e.id)],
+  );
+  const byEntryId = new Map(
+    (
+      rows as {
+        entry_id: number;
+        blocking_room_id: number;
+        blocking_room_name: string;
+        blocking_status: string;
+        blocking_team_name: string;
+      }[]
+    ).map((r) => [r.entry_id, r]),
+  );
+  return entries
+    .filter((e) => byEntryId.has(e.id))
+    .map((e) => {
+      const r = byEntryId.get(e.id)!;
+      return {
+        entryId: e.id,
+        position: e.position,
+        blockingRoomId: r.blocking_room_id,
+        blockingRoomName: r.blocking_room_name,
+        blockingTeamName: r.blocking_team_name,
+        blockingStatus: r.blocking_status,
+        // H30 guarantee: a skip never reorders the queue, only call_next does.
+        positionPreserved: true,
+      };
+    });
 }
 
 /** H46 read surface: current room -> challenge and room -> judge assignments. */
@@ -398,6 +479,9 @@ export async function roomPace(roomId: number) {
     suggestedMinutesPerTeam,
     effectiveMinutesPerTeam,
     autoAdjusted,
+    // H34/H203: operator-configured called-too-long warning threshold,
+    // replacing the frontend's temporary max(10, 2x desired) fallback.
+    calledTooLongThresholdMinutes: settings.called_too_long_threshold_minutes,
   };
 }
 
