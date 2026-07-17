@@ -1508,6 +1508,16 @@ const dict: Record<string, I18nText> = {
     gl: "Ningún xuíz asignado.",
     en: "No judges assigned.",
   },
+  challengeProgressTitle: {
+    es: "Progreso y resultados del reto",
+    gl: "Progreso e resultados do reto",
+    en: "Challenge progress & results",
+  },
+  couldNotLoadChallengeProgress: {
+    es: "No se ha podido cargar el progreso del reto.",
+    gl: "Non se puido cargar o progreso do reto.",
+    en: "Could not load challenge progress.",
+  },
 
   // ---- Admin: user directory ----
   peopleCountOne: { es: "{count} persona", gl: "{count} persoa", en: "{count} person" },
@@ -1783,17 +1793,6 @@ const dict: Record<string, I18nText> = {
     en: "Waiting room and challenge queue.",
   },
   callNext: { es: "Llamar siguiente", gl: "Chamar seguinte", en: "Call next" },
-  forceCall: { es: "Llamar sobre el cupo", gl: "Chamar sobre a cota", en: "Call above capacity" },
-  forceCallTitle: {
-    es: "Superar el cupo de espera",
-    gl: "Superar a cota de espera",
-    en: "Exceed waiting capacity",
-  },
-  forceCallDescription: {
-    es: "Llama al siguiente equipo aunque ya esté cubierto el cupo de espera de la sala.",
-    gl: "Chama ao seguinte equipo aínda que xa estea cuberta a cota de espera da sala.",
-    en: "Call the next team even though this room's waiting capacity is already full.",
-  },
   waitingRoomCount: {
     es: "Sala de espera ({count})",
     gl: "Sala de espera ({count})",
@@ -2017,11 +2016,6 @@ const dict: Record<string, I18nText> = {
   onTime: { es: "En tiempo", gl: "En tempo", en: "On time" },
   ofDuration: { es: "de {duration}", gl: "de {duration}", en: "of {duration}" },
   scoring: { es: "Evaluación", gl: "Avaliación", en: "Scoring" },
-  physicalFlow: { es: "Flujo físico", gl: "Fluxo físico", en: "Physical flow" },
-  physicalCalled: { es: "Llamado", gl: "Chamado", en: "Called" },
-  physicalInRoom: { es: "En sala", gl: "Na sala", en: "In room" },
-  physicalPresenting: { es: "Presentando", gl: "Presentando", en: "Presenting" },
-  physicalScored: { es: "Evaluado", gl: "Avaliado", en: "Scored" },
   scoringFormDesc: {
     es: "El formulario de evaluación aparece cuando hay un equipo en la sala.",
     gl: "O formulario de avaliación aparece cando hai un equipo na sala.",

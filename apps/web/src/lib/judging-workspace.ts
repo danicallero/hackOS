@@ -38,13 +38,6 @@ export function canTransition(status: QueueStatus | string, action: JudgingActio
   return LEGAL_ACTIONS[status]?.includes(action) ?? false;
 }
 
-export const PHYSICAL_STATES = ["called", "in_room", "presenting", "completed"] as const;
-
-export function physicalStateIndex(status: QueueStatus | string | null): number {
-  if (!status) return -1;
-  return PHYSICAL_STATES.indexOf(status as (typeof PHYSICAL_STATES)[number]);
-}
-
 /** Temporary UX warning rule approved for #190; backend follow-up will make it configurable. */
 export function calledTooLongThresholdMinutes(desiredMinutesPerTeam: number | null): number {
   return Math.max(10, (desiredMinutesPerTeam ?? 0) * 2);
@@ -63,21 +56,29 @@ export function hasWaitedTooLong(
 
 export type CollaborationState = "saving" | "saved" | "offline" | "conflict" | "unsaved";
 
+/**
+ * Judge access is association-based (`room_judges`), not capability-based
+ * (H40): a judge added by a sponsor rep can hold zero capabilities and still
+ * needs the panel, matching the API's `requireRoomJudgeOrCapability` fallback.
+ */
 export function workspaceAccess({
   operate,
   judge,
   admin,
   exportData,
+  isRoomJudge = false,
 }: {
   operate: boolean;
   judge: boolean;
   admin: boolean;
   exportData: boolean;
+  isRoomJudge?: boolean;
 }) {
+  const canJudge = judge || isRoomJudge;
   return {
-    canUse: operate || judge || admin,
+    canUse: operate || canJudge || admin,
     canOperate: operate,
-    canJudge: judge,
+    canJudge,
     canAdmin: admin,
     canExport: exportData,
   };
