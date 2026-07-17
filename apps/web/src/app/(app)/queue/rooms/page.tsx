@@ -40,7 +40,7 @@ import {
 } from "@/lib/queue";
 import { useSessionContext } from "@/lib/session";
 import type { UserList } from "@/lib/types";
-import { type Challenge, textForDisplay } from "../../challenges/shared";
+import { type Challenge, canAccessSponsorWorkspace, textForDisplay } from "../../challenges/shared";
 
 type RoomEditor = {
   name: string;
@@ -56,7 +56,7 @@ export default function QueueRoomsPage() {
   const { t } = useLocale();
   const { can, me } = useSessionContext();
   const canAdmin = can(CAPABILITIES.QUEUE_ADMIN);
-  const canManageRooms = canAdmin || me?.role === "sponsor";
+  const canManageRooms = canAccessSponsorWorkspace(canAdmin, Boolean(me?.isSponsorRep));
   const [rooms, setRooms] = useState<Room[]>([]);
   const [assignments, setAssignments] = useState<Record<number, RoomAssignments | null>>({});
   const [challenges, setChallenges] = useState<Challenge[]>([]);

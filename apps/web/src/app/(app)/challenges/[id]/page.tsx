@@ -4,7 +4,13 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
 import type { I18nText, Question } from "@hackos/shared/questions";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowLeftIcon, TrophyIcon } from "lucide-react";
+import {
+  ArrowLeftIcon,
+  DownloadIcon,
+  HistoryIcon,
+  TriangleAlertIcon,
+  TrophyIcon,
+} from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -19,6 +25,7 @@ import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
+import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
@@ -29,12 +36,16 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
+import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
 import { listDevpostPrizes } from "@/lib/projects";
+import { exportUrls } from "@/lib/queue";
 import { useSessionContext } from "@/lib/session";
+import type { EventConfig } from "@/lib/types";
 import {
   JudgingPanelBuilder,
   MultilingualInput,
@@ -42,15 +53,19 @@ import {
   normalizeQuestions,
   PrizeBuilder,
 } from "../builders";
+import { useChallengeRoomStatus } from "../judging-mode";
 import {
   asI18n,
   type Challenge,
+  canAccessSponsorWorkspace,
+  challengeState,
   i18nWithEnglishFallback,
   isScheduled,
   type Prize,
   textForDisplay,
   visibilityTone,
 } from "../shared";
+import { VersionHistory } from "./version-history";
 
 const optionalPositiveInt = z
   .string()
@@ -91,15 +106,21 @@ type DevpostPrize = {
   mappedChallengeTitle: string | null;
 };
 
+function exportHref(path: string): string {
+  return `${API_URL}${path}`;
+}
+
 export default function ChallengeDetailPage() {
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
   const { t } = useLocale();
-  const { can, canAny } = useSessionContext();
+  const { can, canAny, me } = useSessionContext();
   const canAdmin = canAny(CAPABILITIES.SPONSORS_MANAGE, CAPABILITIES.QUEUE_ADMIN);
   const canMapPrizes = can(CAPABILITIES.QUEUE_ADMIN);
+  const canManageRooms = canAccessSponsorWorkspace(canAdmin, Boolean(me?.isSponsorRep));
   const [challenge, setChallenge] = useState<Challenge | null>(null);
   const [devpostPrizes, setDevpostPrizes] = useState<DevpostPrize[]>([]);
+  const [eventConfig, setEventConfig] = useState<Pick<EventConfig, "timezone"> | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -122,6 +143,16 @@ export default function ChallengeDetailPage() {
       setStatus("error");
     }
   }, [canMapPrizes, id, t]);
+
+  // The event timezone is anonymous (H45 public countdown feed) — reused
+  // here purely to label the scheduled-reveal instant, not to expose the
+  // admin-only event settings surface to sponsors.
+  useEffect(() => {
+    api
+      .get<Pick<EventConfig, "timezone">>("/api/public/event")
+      .then(setEventConfig)
+      .catch(() => setEventConfig(null));
+  }, []);
 
   // Soft, in-place refresh instead of a hard reload when another admin edits
   // this challenge elsewhere.
@@ -171,7 +202,9 @@ export default function ChallengeDetailPage() {
         challenge={challenge}
         canAdmin={canAdmin}
         canMapPrizes={canMapPrizes}
+        canManageRooms={canManageRooms}
         devpostPrizes={devpostPrizes}
+        timezone={eventConfig?.timezone ?? null}
         onSaved={load}
       />
     </div>
@@ -195,13 +228,17 @@ function EditCard({
   challenge,
   canAdmin,
   canMapPrizes,
+  canManageRooms,
   devpostPrizes,
+  timezone,
   onSaved,
 }: {
   challenge: Challenge;
   canAdmin: boolean;
   canMapPrizes: boolean;
+  canManageRooms: boolean;
   devpostPrizes: DevpostPrize[];
+  timezone: string | null;
   onSaved: () => Promise<void>;
 }) {
   const { t } = useLocale();
@@ -291,168 +328,347 @@ function EditCard({
   }
 
   const generalDisabled = !canAdmin && challenge.visibility === "visible";
+  const watchedVisibility = form.watch("visibility");
+  const watchedAvailableFrom = form.watch("availableFrom");
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)}>
-        <SectionCard
-          icon={TrophyIcon}
-          title={t("challengeLabel")}
-          description={t("editPublicContentDesc")}
-          footer={
-            <SubmitButton pending={form.formState.isSubmitting}>{t("saveChanges")}</SubmitButton>
-          }
-        >
-          <fieldset disabled={generalDisabled} className="space-y-5 disabled:opacity-60">
-            <MultilingualInput label={t("titleLabel")} value={titleI18n} onChange={setTitleI18n} />
-            <MultilingualInput
-              label={t("descriptionLabel")}
-              optional
-              textarea
-              value={descriptionI18n}
-              onChange={setDescriptionI18n}
-            />
-            <MultilingualInput
-              label={t("publicCriteria")}
-              optional
-              textarea
-              value={criteriaI18n}
-              onChange={setCriteriaI18n}
-            />
-            <section className="space-y-3 rounded-lg border p-4">
-              <h3 className="text-sm font-medium">{t("prizesLabel")}</h3>
-              <PrizeBuilder value={prizes} onChange={setPrizes} />
-            </section>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <Tabs defaultValue="content">
+          <TabsList className="w-full max-w-2xl flex-wrap">
+            <TabsTrigger value="content">{t("contentTabLabel")}</TabsTrigger>
+            <TabsTrigger value="prizes">{t("prizesTabLabel")}</TabsTrigger>
+            <TabsTrigger value="judging">{t("judgingTabLabel")}</TabsTrigger>
+            <TabsTrigger value="publish">{t("publishTabLabel")}</TabsTrigger>
+            <TabsTrigger value="history">{t("historyTabLabel")}</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="content" className="pt-4">
+            <SectionCard icon={TrophyIcon} title={t("challengeLabel")}>
+              <fieldset disabled={generalDisabled} className="space-y-5 disabled:opacity-60">
+                {generalDisabled && (
+                  <p className="text-muted-foreground text-sm">{t("publicContentFrozenDesc")}</p>
+                )}
+                <MultilingualInput
+                  label={t("titleLabel")}
+                  value={titleI18n}
+                  onChange={setTitleI18n}
+                />
+                <MultilingualInput
+                  label={t("descriptionLabel")}
+                  optional
+                  textarea
+                  value={descriptionI18n}
+                  onChange={setDescriptionI18n}
+                />
+                <MultilingualInput
+                  label={t("publicCriteria")}
+                  optional
+                  textarea
+                  value={criteriaI18n}
+                  onChange={setCriteriaI18n}
+                />
+              </fieldset>
+            </SectionCard>
+          </TabsContent>
+
+          <TabsContent value="prizes" className="space-y-6 pt-4">
+            <SectionCard title={t("prizesLabel")}>
+              <fieldset disabled={generalDisabled} className="disabled:opacity-60">
+                <PrizeBuilder value={prizes} onChange={setPrizes} />
+              </fieldset>
+            </SectionCard>
             {canMapPrizes && (
-              <DevpostTagsField
-                value={devpostTags}
-                onChange={setDevpostTags}
-                options={devpostPrizes.map((prize) => ({
-                  value: prize.name,
-                  label: prize.name,
-                  description:
-                    prize.repoCount === 1
-                      ? t("projectCountOne", { count: prize.repoCount })
-                      : t("projectCountOther", { count: prize.repoCount }),
-                }))}
-                emptyText={t("noImportedPrizes")}
-              />
+              <SectionCard title={t("devpostTagsLabel")}>
+                <DevpostTagsField
+                  value={devpostTags}
+                  onChange={setDevpostTags}
+                  options={devpostPrizes.map((prize) => ({
+                    value: prize.name,
+                    label: prize.name,
+                    description:
+                      prize.repoCount === 1
+                        ? t("projectCountOne", { count: prize.repoCount })
+                        : t("projectCountOther", { count: prize.repoCount }),
+                  }))}
+                  emptyText={t("noImportedPrizes")}
+                />
+              </SectionCard>
             )}
-          </fieldset>
-          <section className="space-y-3 rounded-lg border p-4">
-            <h3 className="text-sm font-medium">{t("judgingPanel")}</h3>
-            <JudgingPanelBuilder value={questions} onChange={setQuestions} />
-          </section>
-          <FormField
-            control={form.control}
-            name="maxPresentationSeconds"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("maxPresentationTime")}</FormLabel>
-                <FormControl>
-                  <DurationInput value={field.value} onChange={field.onChange} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="maxInWaitingArea"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("waitingRoomCapacity")}</FormLabel>
-                <FormControl>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={field.value}
-                    onChange={(e) => field.onChange(e.target.value)}
-                    disabled={!canAdmin}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="visibility"
-            render={({ field }) => (
-              <FormItem>
-                <div className="flex items-center justify-between gap-4 rounded-md border p-3">
-                  <FormLabel>{t("visibleLabel")}</FormLabel>
-                  <FormControl>
-                    <Switch
-                      checked={field.value === "visible"}
-                      disabled={!canAdmin}
-                      onCheckedChange={(checked) => field.onChange(checked ? "visible" : "hidden")}
-                    />
-                  </FormControl>
+            {canMapPrizes && (
+              <SectionCard title={t("importedDevpostPrizesTitle")}>
+                <div className="space-y-2">
+                  {devpostPrizes.length === 0 ? (
+                    <p className="text-muted-foreground text-sm">{t("noImportedPrizes")}</p>
+                  ) : (
+                    devpostPrizes.map((prize) => (
+                      <div
+                        key={prize.name}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-medium">{prize.name}</p>
+                          <p className="text-muted-foreground text-xs">
+                            {prize.repoCount === 1
+                              ? t("projectCountOne", { count: prize.repoCount })
+                              : t("projectCountOther", { count: prize.repoCount })}
+                          </p>
+                        </div>
+                        {prize.mappedChallengeId ? (
+                          <StatusBadge tone="success">
+                            {t("mappedToInline", { title: prize.mappedChallengeTitle ?? "" })}
+                          </StatusBadge>
+                        ) : (
+                          <StatusBadge tone="neutral">{t("unmappedBadge")}</StatusBadge>
+                        )}
+                      </div>
+                    ))
+                  )}
                 </div>
-                <FormMessage />
-              </FormItem>
+              </SectionCard>
             )}
-          />
-          <FormField
-            control={form.control}
-            name="availableFrom"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("publishDate")}</FormLabel>
-                <FormControl>
-                  <ScheduledDateTimeField
-                    value={field.value}
-                    disabled={!canAdmin}
-                    onChange={(value) =>
-                      form.setValue("availableFrom", value, { shouldDirty: true })
-                    }
-                    addLabel={t("addPublishDate")}
-                    inputLabel={t("publishDateTime")}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </SectionCard>
-        {canMapPrizes && (
-          <SectionCard
-            title={t("importedDevpostPrizesTitle")}
-            description={t("importedDevpostPrizesDesc")}
-            className="mt-6"
-          >
-            <div className="mt-4 space-y-2">
-              {devpostPrizes.length === 0 ? (
-                <p className="text-muted-foreground text-sm">{t("noImportedPrizes")}</p>
-              ) : (
-                devpostPrizes.map((prize) => (
-                  <div
-                    key={prize.name}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm"
-                  >
-                    <div className="min-w-0">
-                      <p className="font-medium">{prize.name}</p>
-                      <p className="text-muted-foreground text-xs">
-                        {prize.repoCount === 1
-                          ? t("projectCountOne", { count: prize.repoCount })
-                          : t("projectCountOther", { count: prize.repoCount })}
-                      </p>
-                    </div>
-                    {prize.mappedChallengeId ? (
-                      <StatusBadge tone="success">
-                        {t("mappedToInline", { title: prize.mappedChallengeTitle ?? "" })}
-                      </StatusBadge>
-                    ) : (
-                      <StatusBadge tone="neutral">{t("unmappedBadge")}</StatusBadge>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
-          </SectionCard>
-        )}
+          </TabsContent>
+
+          <TabsContent value="judging" className="space-y-6 pt-4">
+            <SectionCard title={t("judgingPanel")}>
+              <JudgingPanelBuilder value={questions} onChange={setQuestions} />
+            </SectionCard>
+            <SectionCard title={t("judgingTimingTitle")}>
+              <div className="grid gap-5 sm:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="maxPresentationSeconds"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("maxPresentationTime")}</FormLabel>
+                      <FormControl>
+                        <DurationInput value={field.value} onChange={field.onChange} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="maxInWaitingArea"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("waitingRoomCapacity")}</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min={0}
+                          value={field.value}
+                          onChange={(e) => field.onChange(e.target.value)}
+                          disabled={!canAdmin}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </SectionCard>
+            {canManageRooms && <JudgingModeCard challengeId={challenge.id} />}
+          </TabsContent>
+
+          <TabsContent value="publish" className="space-y-6 pt-4">
+            <SectionCard title={t("publicationTitle")}>
+              <div className="space-y-5">
+                <FormField
+                  control={form.control}
+                  name="visibility"
+                  render={({ field }) => (
+                    <FormItem>
+                      <div className="flex items-center justify-between gap-4 rounded-md border p-3">
+                        <FormLabel>{t("visibleLabel")}</FormLabel>
+                        <FormControl>
+                          <Switch
+                            checked={field.value === "visible"}
+                            disabled={!canAdmin}
+                            onCheckedChange={(checked) =>
+                              field.onChange(checked ? "visible" : "hidden")
+                            }
+                          />
+                        </FormControl>
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="availableFrom"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("publishDate")}</FormLabel>
+                      <FormControl>
+                        <ScheduledDateTimeField
+                          value={field.value}
+                          disabled={!canAdmin}
+                          onChange={(value) =>
+                            form.setValue("availableFrom", value, { shouldDirty: true })
+                          }
+                          addLabel={t("addPublishDate")}
+                          inputLabel={t("publishDateTime")}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </SectionCard>
+            <RevealPreviewCard
+              titleEn={titleI18n.en}
+              descriptionEn={descriptionI18n.en}
+              prizes={prizes}
+              visibility={watchedVisibility}
+              availableFrom={watchedAvailableFrom}
+              timezone={timezone}
+            />
+          </TabsContent>
+
+          <TabsContent value="history" className="pt-4">
+            <SectionCard icon={HistoryIcon} title={t("versionHistoryTitle")}>
+              <VersionHistory challengeId={challenge.id} />
+            </SectionCard>
+          </TabsContent>
+        </Tabs>
+
+        <div className="flex justify-end">
+          <SubmitButton pending={form.formState.isSubmitting}>{t("saveChanges")}</SubmitButton>
+        </div>
       </form>
     </Form>
+  );
+}
+
+// ── Publish tab: scheduled-reveal timezone + public outcome preview (H45) ───
+
+function RevealPreviewCard({
+  titleEn,
+  descriptionEn,
+  prizes,
+  visibility,
+  availableFrom,
+  timezone,
+}: {
+  titleEn: string;
+  descriptionEn: string;
+  prizes: Prize[];
+  visibility: "visible" | "hidden";
+  availableFrom: string;
+  timezone: string | null;
+}) {
+  const { t } = useLocale();
+  const state = challengeState({
+    visibility,
+    available_from: fromDatetimeLocal(availableFrom),
+  });
+  const revealDate = availableFrom ? new Date(availableFrom) : null;
+  const revealValid = revealDate && !Number.isNaN(revealDate.getTime());
+
+  return (
+    <SectionCard title={t("scheduledRevealTitle")}>
+      <div className="space-y-4">
+        {state === "draft" && (
+          <p className="text-muted-foreground text-sm">{t("draftStateDesc")}</p>
+        )}
+        {state === "scheduled" && revealValid && (
+          <p className="text-sm">
+            {t("revealScheduledForDesc", {
+              date: revealDate.toLocaleString(undefined, {
+                dateStyle: "medium",
+                timeStyle: "short",
+              }),
+              timezone: timezone ?? t("eventTimezoneUnknown"),
+            })}
+          </p>
+        )}
+        {state === "public" && <p className="text-sm">{t("revealPublicNowDesc")}</p>}
+
+        <div className="rounded-lg border p-4">
+          <p className="text-muted-foreground mb-2 text-xs uppercase tracking-wide">
+            {t("publicPreviewLabel")}
+          </p>
+          <p className="font-medium">{titleEn || t("untitledChallenge")}</p>
+          {descriptionEn && (
+            <p className="text-muted-foreground mt-1 line-clamp-3 text-sm">{descriptionEn}</p>
+          )}
+          {prizes.length > 0 && (
+            <ul className="mt-2 flex flex-wrap gap-2">
+              {prizes.map((prize) => (
+                <li key={prize.name}>
+                  <StatusBadge tone="neutral">{prize.name}</StatusBadge>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </SectionCard>
+  );
+}
+
+// ── Judging tab: external mode + CSV export + unresolved room gaps (H46) ────
+
+function JudgingModeCard({ challengeId }: { challengeId: number }) {
+  const { t } = useLocale();
+  const { can, canAny } = useSessionContext();
+  const canExport = canAny(CAPABILITIES.JUDGING_EXPORT, CAPABILITIES.QUEUE_ADMIN);
+  const { loading, mode, gaps } = useChallengeRoomStatus(challengeId, true);
+
+  return (
+    <SectionCard title={t("judgingModeTitle")}>
+      {loading ? (
+        <Spinner className="size-5" />
+      ) : (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <StatusBadge tone={mode === "external" ? "warning" : "success"}>
+              {mode === "external" ? t("externalJudgingBadge") : t("queueJudgingBadge")}
+            </StatusBadge>
+            <p className="text-muted-foreground text-sm">
+              {mode === "external" ? t("externalJudgingDesc") : t("queueJudgingDesc")}
+            </p>
+          </div>
+
+          {gaps.length > 0 && (
+            <div className="flex items-start gap-2 rounded-md border p-3 text-sm">
+              <TriangleAlertIcon className="mt-0.5 size-4 shrink-0 text-amber-600" />
+              <p>
+                {gaps.length === 1
+                  ? t("roomsMissingJudgesDescOne")
+                  : t("roomsMissingJudgesDescOther", { count: gaps.length })}
+              </p>
+            </div>
+          )}
+
+          {canExport ? (
+            <div className="flex flex-wrap gap-2">
+              <Button asChild variant="outline" size="sm">
+                <a href={exportHref(exportUrls(challengeId).evaluations)}>
+                  <DownloadIcon className="size-4" />
+                  {t("exportEvaluationsCsv")}
+                </a>
+              </Button>
+              {mode === "queue" && (
+                <Button asChild variant="outline" size="sm">
+                  <a href={exportHref(exportUrls(challengeId).queue)}>
+                    <DownloadIcon className="size-4" />
+                    {t("exportQueueCsv")}
+                  </a>
+                </Button>
+              )}
+            </div>
+          ) : (
+            !can(CAPABILITIES.JUDGING_EXPORT) && (
+              <p className="text-muted-foreground text-sm">{t("askAdminForExportAccess")}</p>
+            )
+          )}
+        </div>
+      )}
+    </SectionCard>
   );
 }

@@ -85,13 +85,14 @@ Several domain pages still gate *content* on the single-priority `role`
 instead of the new `isRoomJudge`/`isSponsorRep` facts (e.g.
 `apps/web/src/app/(app)/judging/page.tsx`,
 `apps/web/src/app/(app)/projects/page.tsx`,
-`apps/web/src/app/(app)/challenges/page.tsx`,
-`apps/web/src/app/(app)/enterprises/page.tsx`,
-`apps/web/src/app/(app)/queue/rooms/page.tsx`,
 `apps/web/src/app/(app)/dashboard/page.tsx`). This means a sponsor+judge
 account can now reach every relevant workspace from the sidebar, but a couple
 of the pages behind those links may still only render sponsor- or judge-
 specific content for whichever `role` value won priority. Fixing that is
 domain page content, out of this issue's Agent boundary (owned by #190
-Queue/judging and #192 Sponsor workspace); `isRoomJudge`/`isSponsorRep` are
-now available on `Me` for those issues to adopt.
+Queue/judging); `isRoomJudge`/`isSponsorRep` are now available on `Me` for
+that issue to adopt.
+
+`apps/web/src/app/(app)/challenges/page.tsx`, `apps/web/src/app/(app)/enterprises/page.tsx`,
+and `apps/web/src/app/(app)/queue/rooms/page.tsx` were fixed to `isSponsorRep`
+by #192 (Sponsor workspace).
