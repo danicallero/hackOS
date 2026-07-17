@@ -205,7 +205,12 @@ export function ScannerQueueStatus({
             <View style={{ justifyContent: "center", minHeight: 44, paddingHorizontal: 52 }}>
               <Text
                 selectable
-                style={{ color: colors.label, fontSize: 20, fontWeight: "700", textAlign: "center" }}
+                style={{
+                  color: colors.label,
+                  fontSize: 20,
+                  fontWeight: "700",
+                  textAlign: "center",
+                }}
               >
                 {t("scannerQueue")}
               </Text>
@@ -235,9 +240,7 @@ export function ScannerQueueStatus({
                       const subject = subjectLabel(scan, people);
                       return (
                         <View key={scan.id} style={{ gap: 3 }}>
-                          <View
-                            style={{ alignItems: "baseline", flexDirection: "row", gap: 8 }}
-                          >
+                          <View style={{ alignItems: "baseline", flexDirection: "row", gap: 8 }}>
                             <Text
                               numberOfLines={1}
                               style={{
@@ -273,7 +276,7 @@ export function ScannerQueueStatus({
                 icon="clock.arrow.circlepath"
                 onPress={() => {
                   setOpen(false);
-                  router.push("/(tabs)/others/scan-log");
+                  router.push("/(tabs)/scan/scan-log");
                 }}
               />
             </Section>

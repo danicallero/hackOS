@@ -9,13 +9,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
-import {
-  resolveOperationsNavigationAction,
-  type OperationsRoute,
-} from "@/lib/operations-navigation";
 import { subscribeToNotificationChanges } from "@/lib/notification-events";
+import {
+  type OperationsRoute,
+  resolveOperationsNavigationAction,
+} from "@/lib/operations-navigation";
 import { subscribeToServerEvent } from "@/lib/server-events";
-import { shouldUseOverflowMenu } from "@/lib/tabs";
+import { canScanActivities, shouldUseOverflowMenu } from "@/lib/tabs";
 import { colors } from "@/theme/colors";
 
 interface UnreadInboxResponse {
@@ -23,17 +23,17 @@ interface UnreadInboxResponse {
 }
 
 interface OperationsMenuItem extends MenuAction {
-  id: "account" | "scan" | "activities";
+  id: "account" | "queue" | "wallet";
   label: string;
-  route: "/(tabs)/others/account" | "/(tabs)/others/scan" | "/(tabs)/others/activities";
+  route: "/(tabs)/others/account" | "/(tabs)/others/queue" | "/(tabs)/others/wallet";
 }
 
 /**
  * A real platform tab bar. A native `UITabBarController` silently collapses
  * anything past its fifth item into iOS's own "More" screen — which bypasses
- * our custom overflow menu entirely — so the primary bar never grows past 4
- * participant tabs + 1 overflow trigger. Account and Scanner (and Activities,
- * for scan-capability holders) live behind that overflow control instead.
+ * our custom overflow menu entirely. Participants keep their personal tabs;
+ * operators prioritize Scanner and Activities while Queue, Wallet, and Account
+ * move behind the overflow control.
  *
  * Important navigation contract:
  * - The overflow entries are pseudo-tabs, not ordinary stack links.
@@ -46,7 +46,7 @@ interface OperationsMenuItem extends MenuAction {
  *
  * Keep this behavior documented and tested. Earlier versions regressed by
  * treating the overflow menu as a plain stack launcher, which duplicated
- * scanner/activity pages and broke back behavior.
+ * overflow pages and broke back behavior.
  */
 export default function TabLayout() {
   useColorScheme();
@@ -55,7 +55,7 @@ export default function TabLayout() {
   const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
   const capabilities = me?.capabilities ?? [];
   const operatorExperience = shouldUseOverflowMenu(capabilities);
-  const canScanActivities = capabilities.includes("*") || capabilities.includes("activity:scan");
+  const activitiesVisible = canScanActivities(capabilities);
 
   const refreshUnreadNotifications = useCallback(async () => {
     if (!me) return;
@@ -108,19 +108,30 @@ export default function TabLayout() {
           <NativeTabs.Trigger.Icon sf="calendar" md="calendar_month" />
           <NativeTabs.Trigger.Label>{t("tabSchedule")}</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
-        <NativeTabs.Trigger name="queue">
+        <NativeTabs.Trigger name="queue" hidden={operatorExperience}>
           <NativeTabs.Trigger.Icon
             sf={{ default: "clock", selected: "clock.fill" }}
             md="schedule"
           />
           <NativeTabs.Trigger.Label>{t("tabQueue")}</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
-        <NativeTabs.Trigger name="wallet">
+        <NativeTabs.Trigger name="wallet" hidden={operatorExperience}>
           <NativeTabs.Trigger.Icon
             sf={{ default: "wallet.pass", selected: "wallet.pass.fill" }}
             md="account_balance_wallet"
           />
           <NativeTabs.Trigger.Label>{t("tabWallet")}</NativeTabs.Trigger.Label>
+        </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="scan" hidden={!operatorExperience}>
+          <NativeTabs.Trigger.Icon sf="qrcode.viewfinder" md="qr_code_scanner" />
+          <NativeTabs.Trigger.Label>{t("tabScan")}</NativeTabs.Trigger.Label>
+        </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="activities" hidden={!activitiesVisible}>
+          <NativeTabs.Trigger.Icon
+            sf={{ default: "list.bullet.rectangle", selected: "list.bullet.rectangle.fill" }}
+            md="event_list"
+          />
+          <NativeTabs.Trigger.Label>{t("tabActivities")}</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
         <NativeTabs.Trigger name="notifications">
           <NativeTabs.Trigger.Icon
@@ -134,7 +145,8 @@ export default function TabLayout() {
           <NativeTabs.Trigger.Label>{t("tabNotifications")}</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
         {operatorExperience ? (
-          <NativeTabs.Trigger name="others" role="search">
+          // biome-ignore lint/a11y/useValidAriaRole: Expo NativeTabs supports the native `more` role.
+          <NativeTabs.Trigger name="others" role="more">
             <NativeTabs.Trigger.Icon sf="ellipsis" md="more_horiz" />
             <NativeTabs.Trigger.Label hidden>{t("tabOthers")}</NativeTabs.Trigger.Label>
           </NativeTabs.Trigger>
@@ -148,20 +160,34 @@ export default function TabLayout() {
           </NativeTabs.Trigger>
         )}
       </NativeTabs>
-      {operatorExperience ? <NativeOperationsMenu canScanActivities={canScanActivities} /> : null}
+      {operatorExperience ? <NativeOperationsMenu tabCount={activitiesVisible ? 5 : 4} /> : null}
     </View>
   );
 }
 
-function NativeOperationsMenu({ canScanActivities }: { canScanActivities: boolean }) {
+function NativeOperationsMenu({ tabCount }: { tabCount: number }) {
   const { bottom } = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { t } = useLocale();
   const pathname = usePathname();
   const router = useRouter();
   const triggerHeight = bottom + 60;
-  const triggerWidth = process.env.EXPO_OS === "ios" ? 76 : width / 5;
+  const triggerWidth = process.env.EXPO_OS === "ios" ? 76 : width / tabCount;
   const items: OperationsMenuItem[] = [
+    {
+      id: "queue",
+      image: "clock",
+      label: t("tabQueue"),
+      route: "/(tabs)/others/queue",
+      title: t("tabQueue"),
+    },
+    {
+      id: "wallet",
+      image: "wallet.pass",
+      label: t("tabWallet"),
+      route: "/(tabs)/others/wallet",
+      title: t("tabWallet"),
+    },
     {
       id: "account",
       image: "person.crop.circle",
@@ -169,24 +195,6 @@ function NativeOperationsMenu({ canScanActivities }: { canScanActivities: boolea
       route: "/(tabs)/others/account",
       title: t("tabAccount"),
     },
-    {
-      id: "scan",
-      image: "qrcode.viewfinder",
-      label: t("tabScan"),
-      route: "/(tabs)/others/scan",
-      title: t("tabScan"),
-    },
-    ...(canScanActivities
-      ? [
-          {
-            id: "activities" as const,
-            image: "list.bullet.rectangle" as const,
-            label: t("tabActivities"),
-            route: "/(tabs)/others/activities" as const,
-            title: t("tabActivities"),
-          },
-        ]
-      : []),
   ];
 
   return (

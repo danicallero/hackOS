@@ -13,6 +13,7 @@ import { MeProvider, useMeContext } from "@/lib/me-context";
 import { setupNotificationListeners } from "@/lib/notifications-setup";
 import { registerForPushNotifications } from "@/lib/push";
 import { startPersonalEventStream } from "@/lib/server-events";
+import { isOperator } from "@/lib/tabs";
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -115,24 +116,28 @@ function PushRegistration({ authenticated }: { authenticated: boolean }) {
 /** Routes queue-notification taps after the native navigator is ready. */
 function NotificationListeners() {
   const router = useRouter();
+  const { me } = useMeContext();
   const navigationState = useRootNavigationState();
   const isReady = useRef(false);
   const pendingNavigation = useRef(false);
   const navigationReady = Boolean(navigationState?.key);
+  const queueRoute = isOperator(me?.capabilities ?? []) ? "/(tabs)/others/queue" : "/(tabs)/queue";
+  const queueRouteRef = useRef(queueRoute);
 
   isReady.current = navigationReady;
+  queueRouteRef.current = queueRoute;
 
   useEffect(() => {
     if (pendingNavigation.current && navigationReady) {
       pendingNavigation.current = false;
-      router.push("/(tabs)/queue");
+      router.push(queueRouteRef.current);
     }
   }, [navigationReady, router]);
 
   useEffect(
     () =>
       setupNotificationListeners(() => {
-        if (isReady.current) router.push("/(tabs)/queue");
+        if (isReady.current) router.push(queueRouteRef.current);
         else pendingNavigation.current = true;
       }),
     [router],

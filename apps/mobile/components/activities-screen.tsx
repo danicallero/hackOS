@@ -73,7 +73,7 @@ export function ActivitiesScreen() {
           onPress={() => {
             returningFromScanner.current = true;
             router.push({
-              pathname: "/(tabs)/others/activities/[id]",
+              pathname: "/(tabs)/activities/[id]",
               params: { id: String(item.id) },
             });
           }}

@@ -107,7 +107,7 @@ export function PeopleDirectoryScreen() {
       return;
     }
     router.push({
-      pathname: "/(tabs)/others/scan/person/[id]",
+      pathname: "/(tabs)/scan/person/[id]",
       params: { id: String(person.userId) },
     });
   }

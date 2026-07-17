@@ -275,7 +275,7 @@ export default function AccountScreen() {
           <ActionButton
             label={t("scannerSeeHistory")}
             icon="clock.arrow.circlepath"
-            onPress={() => router.push("/(tabs)/others/scan-log")}
+            onPress={() => router.push("/(tabs)/scan/scan-log")}
           />
         </Section>
       ) : null}
