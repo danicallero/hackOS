@@ -617,6 +617,7 @@ const dict = {
   scannerPeople: { en: "People", es: "Personas", gl: "Persoas" },
   scannerViewPeople: { en: "View people", es: "Ver personas", gl: "Ver persoas" },
   scannerSearchPerson: { en: "Search for a person", es: "Buscar persona", gl: "Buscar persoa" },
+  clear: { en: "Clear", es: "Borrar", gl: "Borrar" },
   scannerPeopleSearchPlaceholder: {
     en: "Name, email, or badge",
     es: "Nombre, correo o acreditación",
