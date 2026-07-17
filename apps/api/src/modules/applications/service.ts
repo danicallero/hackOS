@@ -151,6 +151,18 @@ export function validateResponses(
   }
 }
 
+/**
+ * Dietary answers are validated with the rest of the form, then persisted only
+ * on the user row. Drafts may temporarily contain them so applicants can resume
+ * before submit, but no submitted/staff-edited response JSON may retain a copy.
+ */
+export function stripDietaryResponses(responses: Record<string, unknown>): Record<string, unknown> {
+  const sanitized = { ...responses };
+  delete sanitized.food_intolerances;
+  delete sanitized.food_intolerance_notes;
+  return sanitized;
+}
+
 const SHIRT_SIZE_FIELD: TemplateField = {
   key: "shirt_size",
   label: { en: "T-shirt size", es: "Talla de camiseta", gl: "Talla de camiseta" },
@@ -231,16 +243,24 @@ export function privacyNotice(language: string | null | undefined): string {
 // ── sensitive-data wipe (H12 / H27) ──────────────────────────────────────────
 
 /**
- * Delete the user's food intolerances unless they still hold another confirmed
- * response (they might participate under a different application type). Called
- * on decline (H15) and on expiry (plan/07 §5.2) — the privacy promise made at
- * submit (H12).
+ * Delete dietary keys from the closing response JSON, and delete the canonical
+ * user values unless another confirmed response still needs them (the user may
+ * participate under a different application type). Called on decline (H15) and
+ * expiry (plan/07 §5.2) — the privacy promise made at submit (H12).
  */
 export async function wipeSensitiveDataIfOrphan(
   client: pg.PoolClient,
   userId: number,
   exceptResponseId: number,
 ): Promise<boolean> {
+  // Always scrub the response being closed, even when another confirmed spot
+  // means the canonical user-row values still have a valid purpose.
+  await client.query(
+    `UPDATE application_responses
+     SET responses = responses - 'food_intolerances' - 'food_intolerance_notes'
+     WHERE id = $1`,
+    [exceptResponseId],
+  );
   const { rows } = await client.query(
     `SELECT 1 FROM application_responses
      WHERE user_id = $1 AND status = 'confirmed' AND id <> $2 LIMIT 1`,
@@ -489,6 +509,7 @@ export async function submitResponse(
 
     const enrichedTemplate = await enrichTemplate(app.type, app.template);
     validateResponses(enrichedTemplate, merged);
+    const storedResponses = stripDietaryResponses(merged);
 
     // Sensitive/logistics data lives on the user row, not the response (H12).
     await client.query(
@@ -512,7 +533,7 @@ export async function submitResponse(
            status = $4,
            submitted_at = now()
        WHERE id = $1 AND user_id = $2 RETURNING *`,
-      [existing.id, userId, JSON.stringify(merged), invited ? "confirmed" : "review"],
+      [existing.id, userId, JSON.stringify(storedResponses), invited ? "confirmed" : "review"],
     );
 
     if (invited) {
@@ -1389,6 +1410,7 @@ export async function editResponse(
   // here made every edit fail with "shirt_size required" whenever that logistics
   // field was blank, a field staff can't even set in this form.
   validateResponses(template, responses);
+  const storedResponses = stripDietaryResponses(responses);
 
   return withTransaction(async (client) => {
     const { rows: locked } = await client.query(
@@ -1399,7 +1421,7 @@ export async function editResponse(
 
     const updated = await client.query(
       `UPDATE application_responses SET responses = $2::jsonb WHERE id = $1 RETURNING *`,
-      [responseId, JSON.stringify(responses)],
+      [responseId, JSON.stringify(storedResponses)],
     );
 
     await audit(client, {

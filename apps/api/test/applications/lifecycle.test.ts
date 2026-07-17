@@ -423,6 +423,18 @@ describe("confirm / decline (H15)", () => {
     const appId = await createApplication();
     const { userId, responseId } = await toAcceptedSent(appId);
     expect((await getUserSensitive(userId)).food_intolerances).toEqual([7]);
+    await pool.query(
+      `UPDATE application_responses
+       SET responses = responses || $2::jsonb
+       WHERE id = $1`,
+      [
+        responseId,
+        JSON.stringify({
+          food_intolerances: [7],
+          food_intolerance_notes: "legacy decline secret",
+        }),
+      ],
+    );
 
     const res = await a.inject({
       method: "POST",
@@ -450,6 +462,12 @@ describe("confirm / decline (H15)", () => {
       headers: asUser(reviewer),
     });
     expect(staff.json().responses[0].dietary_data_state).toBe("removed_after_decline");
+    const { rows: scrubbed } = await pool.query(
+      `SELECT responses FROM application_responses WHERE id = $1`,
+      [responseId],
+    );
+    expect(scrubbed[0].responses).not.toHaveProperty("food_intolerances");
+    expect(scrubbed[0].responses).not.toHaveProperty("food_intolerance_notes");
 
     const again = await a.inject({
       method: "POST",
@@ -501,6 +519,19 @@ describe("confirm / decline (H15)", () => {
       headers: asUser(userId2),
     });
 
+    await pool.query(
+      `UPDATE application_responses
+       SET responses = responses || $2::jsonb
+       WHERE id = $1`,
+      [
+        respA,
+        JSON.stringify({
+          food_intolerances: [7],
+          food_intolerance_notes: "legacy duplicate",
+        }),
+      ],
+    );
+
     // declining A must NOT wipe, because B is confirmed
     const res = await a.inject({
       method: "POST",
@@ -509,6 +540,12 @@ describe("confirm / decline (H15)", () => {
     });
     expect(res.json().sensitive_wiped).toBe(false);
     expect((await getUserSensitive(userId2)).food_intolerances).toEqual([7]);
+    const { rows: scrubbed } = await pool.query(
+      `SELECT responses FROM application_responses WHERE id = $1`,
+      [respA],
+    );
+    expect(scrubbed[0].responses).not.toHaveProperty("food_intolerances");
+    expect(scrubbed[0].responses).not.toHaveProperty("food_intolerance_notes");
   });
 
   it("expired window: confirm is a 409, resend gives a fresh token that works", async () => {
