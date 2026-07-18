@@ -17,7 +17,8 @@
     "check:copy": "node scripts/check-copy.mjs",
     "migrate": "pnpm --filter @hackos/api migrate",
     "infra:up": "docker compose up -d",
-    "infra:down": "docker compose down"
+    "infra:down": "docker compose down",
+    "prepare": "husky"
   },
   "pnpm": {
     "supportedArchitectures": {
@@ -36,6 +37,13 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.2",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.1.0",
     "typescript": "^6.0.3"
+  },
+  "lint-staged": {
+    "*": [
+      "biome check --write --no-errors-on-unmatched"
+    ]
   }
 }

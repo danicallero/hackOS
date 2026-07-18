@@ -482,7 +482,10 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
     async (req) => {
       const callerId = actor(req.userId);
       const staffId = req.query.staffId ?? callerId;
-      if (staffId !== callerId && !(await userHasCapability(callerId, CAPABILITIES.LOGISTICS_STATS))) {
+      if (
+        staffId !== callerId &&
+        !(await userHasCapability(callerId, CAPABILITIES.LOGISTICS_STATS))
+      ) {
         throw new ForbiddenError("Cannot view another staff member's scan log");
       }
       return queryScanLog(staffId, req.query.limit, req.query.offset);

@@ -173,8 +173,8 @@ const dict: Record<string, I18nText> = {
   },
   didntGetIt: { es: "¿No lo has recibido?", gl: "Non o recibiches?", en: "Didn't get it?" },
   checkSpamFolder: {
-    es: "¿No lo encuentras? Revisa tu carpeta de spam o correo no deseado y marca el remitente como \"no es spam\" para que te lleguen los correos con enlaces.",
-    gl: "Non o atopas? Revisa o teu cartafol de spam ou correo non desexado e marca o remitente como \"non é spam\" para que che cheguen os correos con ligazóns.",
+    es: '¿No lo encuentras? Revisa tu carpeta de spam o correo no deseado y marca el remitente como "no es spam" para que te lleguen los correos con enlaces.',
+    gl: 'Non o atopas? Revisa o teu cartafol de spam ou correo non desexado e marca o remitente como "non é spam" para que che cheguen os correos con ligazóns.',
     en: "Can't find it? Check your spam or junk folder and mark the sender as not spam so emails with links reach your inbox.",
   },
   couldNotCreateAccount: {

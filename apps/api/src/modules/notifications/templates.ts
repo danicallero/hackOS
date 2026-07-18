@@ -97,11 +97,11 @@ const TEMPLATES: Record<string, TemplateDefinition> = {
     },
     es: {
       subject: "Verifica tu correo de hackOS",
-      body: "Hola {{name}},\n\nConfirma tu dirección de correo para desbloquear el resto de hackOS:\n\n[Verificar correo]({{verifyUrl}})\n\n¿No ves este correo? Revisa la carpeta de spam o correo no deseado y márcalo como \"no es spam\" para que los próximos mensajes (incluidos los que llevan enlaces) te lleguen a la bandeja de entrada.\n\nSi no lo has pedido tú, ignora este mensaje.",
+      body: 'Hola {{name}},\n\nConfirma tu dirección de correo para desbloquear el resto de hackOS:\n\n[Verificar correo]({{verifyUrl}})\n\n¿No ves este correo? Revisa la carpeta de spam o correo no deseado y márcalo como "no es spam" para que los próximos mensajes (incluidos los que llevan enlaces) te lleguen a la bandeja de entrada.\n\nSi no lo has pedido tú, ignora este mensaje.',
     },
     gl: {
       subject: "Verifica o teu correo de hackOS",
-      body: "Ola {{name}},\n\nConfirma o teu enderezo de correo para desbloquear o resto de hackOS:\n\n[Verificar correo]({{verifyUrl}})\n\nNon ves este correo? Revisa o cartafol de spam ou correo non desexado e márcao como \"non é spam\" para que as próximas mensaxes (incluídas as que levan ligazóns) che cheguen á caixa de entrada.\n\nSe non o pediches ti, ignora esta mensaxe.",
+      body: 'Ola {{name}},\n\nConfirma o teu enderezo de correo para desbloquear o resto de hackOS:\n\n[Verificar correo]({{verifyUrl}})\n\nNon ves este correo? Revisa o cartafol de spam ou correo non desexado e márcao como "non é spam" para que as próximas mensaxes (incluídas as que levan ligazóns) che cheguen á caixa de entrada.\n\nSe non o pediches ti, ignora esta mensaxe.',
     },
   },
   "auth.reset": {
