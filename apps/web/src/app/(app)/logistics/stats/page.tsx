@@ -18,7 +18,6 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { EmptyState } from "@/components/common/empty-state";
-import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
 import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -109,6 +108,15 @@ function errorMessage(error: unknown, fallback: string) {
   return error instanceof ApiError ? error.message : fallback;
 }
 
+const PHASE_STORAGE_KEY = "hackos.logisticsStats.phase";
+const DATA_PHASES: DataPhase[] = ["before", "during", "after"];
+
+function loadStoredPhase(): DataPhase | null {
+  if (typeof window === "undefined") return null;
+  const stored = window.localStorage.getItem(PHASE_STORAGE_KEY);
+  return DATA_PHASES.includes(stored as DataPhase) ? (stored as DataPhase) : null;
+}
+
 export default function LogisticsStatsPage() {
   const { t } = useLocale();
   const canStats = useCan(CAPABILITIES.LOGISTICS_STATS);
@@ -132,6 +140,14 @@ export default function LogisticsStatsPage() {
     LOGISTICS_EVENTS,
     { enabled: canStats },
   );
+
+  useEffect(() => {
+    const stored = loadStoredPhase();
+    if (stored) {
+      phaseWasChosen.current = true;
+      setPhase(stored);
+    }
+  }, []);
 
   useEffect(() => {
     if (!canStats) return;
@@ -195,7 +211,6 @@ export default function LogisticsStatsPage() {
   if (!canStats) {
     return (
       <div className="space-y-6">
-        <PageHeader title={t("logisticsStats")} />
         <EmptyState
           icon={LockIcon}
           title={t("logisticsStatsDeniedTitle")}
@@ -208,11 +223,11 @@ export default function LogisticsStatsPage() {
   const selectPhase = (value: string) => {
     phaseWasChosen.current = true;
     setPhase(value as DataPhase);
+    window.localStorage.setItem(PHASE_STORAGE_KEY, value);
   };
 
   return (
     <div className="space-y-6" data-wide>
-      <PageHeader title={t("logisticsStats")} />
       <Tabs value={phase} onValueChange={selectPhase}>
         <TabsList aria-label={t("eventPhaseLabel")} className="w-full sm:w-fit">
           <TabsTrigger value="before">{t("phaseBefore")}</TabsTrigger>
