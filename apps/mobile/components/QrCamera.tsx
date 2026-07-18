@@ -11,14 +11,14 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 
 import { useLocale } from "@/lib/i18n";
-import { isBarcodeInsideFrame } from "@/lib/qr-frame";
+import { getBarcodeFrameObservation } from "@/lib/qr-frame";
+import { advanceQrScanCandidate, type QrScanCandidate } from "@/lib/qr-scan-stability";
 import { colors } from "@/theme/colors";
 
 export function QrCamera({
@@ -35,9 +35,10 @@ export function QrCamera({
   const [permission, requestPermission] = useCameraPermissions();
   const { t } = useLocale();
   const isFocused = useIsFocused();
-  const { height, width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const locked = useRef(false);
+  const scanCandidate = useRef<QrScanCandidate | null>(null);
+  const [{ height, width }, setViewport] = useState({ height: 0, width: 0 });
   const [torchEnabled, setTorchEnabled] = useState(false);
   const [manualEntryVisible, setManualEntryVisible] = useState(false);
   const [manualCode, setManualCode] = useState("");
@@ -66,6 +67,7 @@ export function QrCamera({
   useEffect(() => {
     if (!isFocused) {
       locked.current = false;
+      scanCandidate.current = null;
       setTorchEnabled(false);
       setManualEntryVisible(false);
       setManualCode("");
@@ -73,6 +75,7 @@ export function QrCamera({
   }, [isFocused]);
 
   useEffect(() => {
+    scanCandidate.current = null;
     if (scanningEnabled) locked.current = false;
   }, [scanningEnabled]);
 
@@ -119,7 +122,18 @@ export function QrCamera({
   }
 
   return (
-    <View style={styles.black}>
+    <View
+      onLayout={({ nativeEvent }) => {
+        const next = nativeEvent.layout;
+        if (height !== next.height || width !== next.width) scanCandidate.current = null;
+        setViewport((current) =>
+          current.height === next.height && current.width === next.width
+            ? current
+            : { height: next.height, width: next.width },
+        );
+      }}
+      style={styles.black}
+    >
       {isFocused ? (
         <CameraView
           active={isFocused}
@@ -130,8 +144,20 @@ export function QrCamera({
           onBarcodeScanned={
             scanningEnabled && !manualEntryVisible
               ? (result: BarcodeScanningResult) => {
-                  if (locked.current || !isBarcodeInsideFrame(result, { height, width }, FRAME))
+                  if (locked.current) return;
+                  const observation = getBarcodeFrameObservation(result, { height, width }, FRAME);
+                  if (!observation) {
+                    scanCandidate.current = null;
                     return;
+                  }
+                  const confirmation = advanceQrScanCandidate(
+                    scanCandidate.current,
+                    result.data,
+                    observation,
+                    Date.now(),
+                  );
+                  scanCandidate.current = confirmation.candidate;
+                  if (!confirmation.accepted) return;
                   locked.current = true;
                   onValue(result.data);
                   setTimeout(() => {
@@ -190,7 +216,10 @@ export function QrCamera({
         <Pressable
           accessibilityLabel={t("scannerEnterManually")}
           accessibilityRole="button"
-          onPress={() => setManualEntryVisible(true)}
+          onPress={() => {
+            scanCandidate.current = null;
+            setManualEntryVisible(true);
+          }}
           style={styles.cameraControlPressable}
         >
           <SymbolView name="keyboard" tintColor="white" size={23} weight="semibold" />
