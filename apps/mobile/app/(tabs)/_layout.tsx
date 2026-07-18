@@ -145,8 +145,11 @@ export default function TabLayout() {
           <NativeTabs.Trigger.Label>{t("tabNotifications")}</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
         {operatorExperience ? (
-          // biome-ignore lint/a11y/useValidAriaRole: Expo NativeTabs supports the native `more` role.
-          <NativeTabs.Trigger name="others" role="more">
+          // `role="search"` is what gives this item the separated Liquid Glass
+          // capsule treatment on iOS 18+ — it's still the same custom overflow
+          // menu underneath (NativeOperationsMenu), just visually split off
+          // from the rest of the tab bar instead of grouped in with them.
+          <NativeTabs.Trigger name="others" role="search">
             <NativeTabs.Trigger.Icon sf="ellipsis" md="more_horiz" />
             <NativeTabs.Trigger.Label hidden>{t("tabOthers")}</NativeTabs.Trigger.Label>
           </NativeTabs.Trigger>
