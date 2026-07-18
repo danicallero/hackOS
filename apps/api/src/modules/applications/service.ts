@@ -859,15 +859,42 @@ export async function sendDecisionsBatch(
   });
 }
 
-/** Resend an accepted decision — regenerates the token + email, second chance for the expired (H15). */
+/**
+ * Resend an already-sent decision (H14/H15). For accepted/expired this
+ * regenerates the confirmation token + email (also the expired applicant's
+ * second chance); for rejected it just re-enqueues the rejection email. Always
+ * an explicit, single-response action — never triggered as a side effect of
+ * sending unsent decisions (see `batchSendDecisions`), which is what caused
+ * rejection emails to go out twice.
+ */
 export async function resendDecision(
   actorId: number,
   responseId: number,
 ): Promise<{ response: ResponseRow; confirmationToken: string | null }> {
   return withTransaction(async (client) => {
     const resp = await lockResponse(client, responseId);
+
+    if (resp.status === "rejected") {
+      const app = await requireApplication(client, resp.application_id);
+      const user = await loadUserComms(client, resp.user_id);
+      await client.query(
+        `UPDATE application_responses SET decision_sent_at = now() WHERE id = $1`,
+        [resp.id],
+      );
+      await enqueueDecisionEmailRow(client, resp.user_id, user, app, "rejected", null);
+      await audit(client, {
+        actorId,
+        entityType: "application_response",
+        entityId: resp.id,
+        action: "decision_resent",
+        before: { status: "rejected" },
+        after: { status: "rejected" },
+      });
+      return { response: resp, confirmationToken: null };
+    }
+
     if (resp.status !== "accepted" && resp.status !== "expired") {
-      throw new ConflictError("Only accepted or expired responses can be resent", {
+      throw new ConflictError("Only accepted, rejected, or expired responses can be resent", {
         status: resp.status,
       });
     }
@@ -1120,6 +1147,13 @@ export async function batchRevokeSpots(
   return runBatch(responseIds, (id) => revokeSpot(actorId, id));
 }
 
+/**
+ * Send every still-unsent internal decision in the batch (outbox → sent).
+ * Only ever acts on `accepted_internal`/`rejected_internal` rows — any other
+ * status (already sent, already final) is skipped rather than resent, so this
+ * can never double-send an email. Explicit re-sends go through
+ * `batchResendDecisions` instead (H14).
+ */
 export async function batchSendDecisions(
   actorId: number,
   responseIds: number[],
@@ -1144,13 +1178,6 @@ export async function batchSendDecisions(
       if (status === "accepted_internal" || status === "rejected_internal") {
         const result = await sendDecision(actorId, id);
         tokens.push({ responseId: id, token: result.confirmationToken });
-      } else if (status === "accepted" || status === "expired") {
-        const result = await resendDecision(actorId, id);
-        tokens.push({ responseId: id, token: result.confirmationToken });
-      } else if (status === "rejected") {
-        // re-send a rejected decision: just re-enqueue the email
-        await resendRejectedDecision(actorId, id);
-        tokens.push({ responseId: id, token: null });
       } else {
         skipped.push({ id, reason: `nothing to send from status ${status}` });
       }
@@ -1161,29 +1188,12 @@ export async function batchSendDecisions(
   return { sent: tokens.length, tokens, skipped };
 }
 
-async function resendRejectedDecision(actorId: number, responseId: number): Promise<void> {
-  return withTransaction(async (client) => {
-    const resp = await lockResponse(client, responseId);
-    if (resp.status !== "rejected") {
-      throw new ConflictError("Only rejected responses can be resent via this path", {
-        status: resp.status,
-      });
-    }
-    const app = await requireApplication(client, resp.application_id);
-    const user = await loadUserComms(client, resp.user_id);
-    await client.query(`UPDATE application_responses SET decision_sent_at = now() WHERE id = $1`, [
-      resp.id,
-    ]);
-    await enqueueDecisionEmailRow(client, resp.user_id, user, app, "rejected", null);
-    await audit(client, {
-      actorId,
-      entityType: "application_response",
-      entityId: resp.id,
-      action: "decision_resent",
-      before: { status: resp.status },
-      after: { status: "rejected" },
-    });
-  });
+/** Explicitly re-send an already-sent decision (accepted/rejected/expired) for each id in the batch (H14/H15). */
+export async function batchResendDecisions(
+  actorId: number,
+  responseIds: number[],
+): Promise<BatchResult> {
+  return runBatch(responseIds, (id) => resendDecision(actorId, id));
 }
 
 export async function batchRevertDecisions(

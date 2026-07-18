@@ -1,7 +1,15 @@
 import type { Translate } from "@/lib/i18n";
 import type { ResponseRow } from "./lib";
 
-export type ApplicationWorkspace = "review" | "decisions" | "communication" | "confirmation";
+// Three workspaces instead of four: "review" also makes the internal
+// accept/reject call (score → decide, no separate "decisions" tab that
+// duplicated review's own row set); "outbox" is every internal decision not
+// yet communicated; "sent" is every response whose decision has been
+// communicated, whatever its final state (accepted/rejected/confirmed/
+// declined/expired) — one filterable list instead of splitting "communication"
+// and "confirmation" across two tabs that each only showed part of a status's
+// lifecycle.
+export type ApplicationWorkspace = "review" | "outbox" | "sent";
 
 export function availableApplicationWorkspaces(capabilities: {
   manage: boolean;
@@ -11,15 +19,14 @@ export function availableApplicationWorkspaces(capabilities: {
   return [
     ...(capabilities.manage ? (["builder"] as const) : []),
     ...(capabilities.review ? (["review"] as const) : []),
-    ...(capabilities.decide ? (["decisions", "communication", "confirmation"] as const) : []),
+    ...(capabilities.decide ? (["outbox", "sent"] as const) : []),
   ];
 }
 
 const WORKSPACE_STATUSES: Record<ApplicationWorkspace, ReadonlySet<string>> = {
   review: new Set(["submitted", "review"]),
-  decisions: new Set(["review", "accepted_internal", "rejected_internal"]),
-  communication: new Set(["accepted_internal", "rejected_internal", "accepted", "rejected"]),
-  confirmation: new Set(["accepted", "confirmed", "declined", "expired"]),
+  outbox: new Set(["accepted_internal", "rejected_internal"]),
+  sent: new Set(["accepted", "rejected", "confirmed", "declined", "expired"]),
 };
 
 export function rowsForWorkspace(

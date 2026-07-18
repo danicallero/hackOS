@@ -21,6 +21,7 @@ import {
 import {
   batchDecide,
   batchReAccept,
+  batchResendDecisions,
   batchRevertDecisions,
   batchRevokeSpots,
   batchSendDecisions,
@@ -278,6 +279,24 @@ export function registerReviewRoutes(app: FastifyInstance): void {
       schema: { body: batchSendDecisionsSchema },
     },
     async (req) => batchSendDecisions(req.userId as number, req.body.response_ids),
+  );
+
+  // ── H14/H15: batch re-send already-sent decisions (accepted/rejected/expired) ─
+  r.post(
+    "/api/responses/batch/resend-decision",
+    {
+      preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
+      schema: {
+        summary: "Batch re-send already-sent decisions",
+        description:
+          "Explicitly re-sends the decision email for each response id, for responses " +
+          "already at accepted, rejected, or expired (an expired one returns to accepted — " +
+          "a second chance). Distinct from batch send-decision, which only sends never-sent " +
+          "internal decisions and never resends.",
+        body: batchIdsSchema,
+      },
+    },
+    async (req) => batchResendDecisions(req.userId as number, req.body.response_ids),
   );
 
   r.post(

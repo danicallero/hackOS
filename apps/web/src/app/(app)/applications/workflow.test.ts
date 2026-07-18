@@ -39,21 +39,19 @@ describe("application capability workspaces", () => {
     ]);
   });
 
-  it("adds decision, communication, and confirmation without removing review", () => {
+  it("adds outbox and sent without removing review", () => {
     expect(availableApplicationWorkspaces({ manage: true, review: true, decide: true })).toEqual([
       "builder",
       "review",
-      "decisions",
-      "communication",
-      "confirmation",
+      "outbox",
+      "sent",
     ]);
   });
 
   it("supports a decision-only account without inventing a role switch", () => {
     expect(availableApplicationWorkspaces({ manage: false, review: false, decide: true })).toEqual([
-      "decisions",
-      "communication",
-      "confirmation",
+      "outbox",
+      "sent",
     ]);
   });
 });
@@ -68,9 +66,9 @@ describe("application lifecycle presentation", () => {
     row(6, "expired"),
   ];
 
-  it("keeps internal decisions out of sent and confirmation workspaces", () => {
-    expect(rowsForWorkspace(rows, "communication").map((item) => item.id)).toEqual([2, 3]);
-    expect(rowsForWorkspace(rows, "confirmation").map((item) => item.id)).toEqual([3, 4, 5, 6]);
+  it("keeps unsent internal decisions in the outbox and every communicated status in sent", () => {
+    expect(rowsForWorkspace(rows, "outbox").map((item) => item.id)).toEqual([2]);
+    expect(rowsForWorkspace(rows, "sent").map((item) => item.id)).toEqual([3, 4, 5, 6]);
     expect(applicationStatusLabel("accepted_internal", translate)).toBe("acceptedInternalOnly");
     expect(applicationStatusLabel("accepted", translate)).toBe("acceptanceSent");
   });
