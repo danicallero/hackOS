@@ -54,6 +54,14 @@ function formatRooms(rooms: MyQueueRoom[]): string {
   return rooms.map(formatRoom).join(", ");
 }
 
+/** First room plus a "+N" count for the rest, with the full list as a tooltip —
+ * multi-room challenges can list 4+ rooms, which otherwise wraps into an
+ * unreadable comma chain on narrow screens. */
+function formatRoomsSummary(rooms: MyQueueRoom[]): { primary: string; extra: number } {
+  const [first, ...rest] = rooms;
+  return { primary: formatRoom(first), extra: rest.length };
+}
+
 const CALL_EVENTS = [
   EVENTS.USER_QUEUE_CALLED,
   EVENTS.USER_QUEUE_PRECALL,
@@ -197,35 +205,41 @@ function ProjectQueueCard({ repoName, entries }: { repoName: string; entries: My
 function QueueRow({ entry }: { entry: MyQueueEntry }) {
   const { t } = useLocale();
   const eta = formatEta(entry.etaMinutes, t("anyMoment"));
+  const rooms = entry.status === "waiting" ? entry.rooms : entry.room ? [entry.room] : [];
+  const roomsSummary = rooms.length > 0 ? formatRoomsSummary(rooms) : null;
+
   return (
-    <div className="relative flex flex-wrap items-stretch justify-between gap-3 rounded-xl border">
+    <div className="relative flex flex-col rounded-xl border sm:flex-row sm:items-stretch">
       <span
         aria-hidden
-        className="bg-card absolute top-1/2 -left-2 size-4 -translate-y-1/2 rounded-full border"
+        className="bg-card absolute top-1/2 -left-2 size-4 -translate-y-1/2 rounded-full border max-sm:hidden"
       />
       <span
         aria-hidden
-        className="bg-card absolute top-1/2 -right-2 size-4 -translate-y-1/2 rounded-full border"
+        className="bg-card absolute top-1/2 -right-2 size-4 -translate-y-1/2 rounded-full border max-sm:hidden"
       />
       <div className="min-w-0 flex-1 space-y-0.5 px-4 py-3">
         <div className="truncate font-medium">
           {textForDisplay(entry.challengeTitle as TranslatedText)}
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-l border-dashed px-4 py-3 text-sm">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-dashed px-4 py-3 text-sm sm:border-t-0 sm:border-l">
         {entry.status === "waiting" && entry.position != null && (
           <span className="text-muted-foreground">
             {t("position")} <span className="text-foreground font-semibold">#{entry.position}</span>
           </span>
         )}
         {entry.status === "waiting" && eta && <span className="text-muted-foreground">{eta}</span>}
-        {/* Waiting: show every room that could judge this challenge (multi-room aware).
-            Called or beyond: show only the room the team was actually called to. */}
-        {entry.status === "waiting" && entry.rooms.length > 0 && (
-          <span className="text-muted-foreground">{formatRooms(entry.rooms)}</span>
-        )}
-        {entry.status !== "waiting" && entry.room && (
-          <span className="text-muted-foreground">{formatRoom(entry.room)}</span>
+        {/* Waiting: show every room that could judge this challenge (multi-room aware),
+            collapsed to the first plus a count. Called or beyond: the one room the
+            team was actually called to. */}
+        {roomsSummary && (
+          <span className="text-muted-foreground truncate" title={formatRooms(rooms)}>
+            {roomsSummary.primary}
+            {roomsSummary.extra > 0 && (
+              <span className="text-muted-foreground/70"> +{roomsSummary.extra}</span>
+            )}
+          </span>
         )}
         <QueueStatusBadge status={entry.status} />
       </div>
