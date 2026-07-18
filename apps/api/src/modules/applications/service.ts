@@ -229,59 +229,15 @@ export async function enrichTemplate(
 // ── privacy notice (H12) ─────────────────────────────────────────────────────
 
 const PRIVACY_NOTICE_EN =
-  "Your dietary restrictions are stored only to plan meals. If you do not confirm your spot (or you decline it), this sensitive data is deleted and no longer processed.";
+  "Your dietary restrictions are stored only to plan meals for participants who confirm their spot.";
 const PRIVACY_NOTICE: Record<string, string> = {
   en: PRIVACY_NOTICE_EN,
-  es: "Tus restricciones alimenticias se guardan solo para planificar las comidas. Si no confirmas tu plaza (o la rechazas), ese dato sensible se elimina y no se trata para nada más.",
-  gl: "As túas restricións alimenticias gárdanse só para planificar as comidas. Se non confirmas a túa praza (ou a rexeitas), ese dato sensible elimínase e non se trata para nada máis.",
+  es: "Tus restricciones alimenticias se guardan solo para planificar las comidas de quienes confirman su plaza.",
+  gl: "As túas restricións alimenticias gárdanse só para planificar as comidas de quen confirma a súa praza.",
 };
 
 export function privacyNotice(language: string | null | undefined): string {
   return PRIVACY_NOTICE[language ?? "en"] ?? PRIVACY_NOTICE_EN;
-}
-
-// ── sensitive-data wipe (H12 / H27) ──────────────────────────────────────────
-
-/**
- * Delete dietary keys from the closing response JSON, and delete the canonical
- * user values unless another confirmed response still needs them (the user may
- * participate under a different application type). Called on decline (H15) and
- * expiry (plan/07 §5.2) — the privacy promise made at submit (H12).
- */
-export async function wipeSensitiveDataIfOrphan(
-  client: pg.PoolClient,
-  userId: number,
-  exceptResponseId: number,
-): Promise<boolean> {
-  // Always scrub the response being closed, even when another confirmed spot
-  // means the canonical user-row values still have a valid purpose.
-  await client.query(
-    `UPDATE application_responses
-     SET responses = responses - 'food_intolerances' - 'food_intolerance_notes'
-     WHERE id = $1`,
-    [exceptResponseId],
-  );
-  const { rows } = await client.query(
-    `SELECT 1 FROM application_responses
-     WHERE user_id = $1 AND status = 'confirmed' AND id <> $2 LIMIT 1`,
-    [userId, exceptResponseId],
-  );
-  if (rows.length > 0) return false;
-  await client.query(
-    `UPDATE users
-        SET dietary_data_state = CASE
-              WHEN cardinality(food_intolerances) > 0
-                OR NULLIF(BTRIM(food_intolerance_notes), '') IS NOT NULL
-                OR dietary_data_state = 'present'
-              THEN 'removed_after_decline'
-              ELSE dietary_data_state
-            END,
-            food_intolerances = '{}',
-            food_intolerance_notes = NULL
-      WHERE id = $1`,
-    [userId],
-  );
-  return true;
 }
 
 // ── countdown formatting ──────────────────────────────────────────────────────
@@ -1004,9 +960,10 @@ export async function reAccept(
  * Revoke an already-sent acceptance — the "reject / decline spot" action that
  * must work EVEN AFTER the participant has confirmed (M2). Moves accepted or
  * confirmed → rejected: invalidates any pending confirmation token, frees the
- * capacity slot, wipes now-orphaned sensitive data (H12) and notifies the
- * applicant. A revoked spot is a normal `rejected` row, so it can later be
- * re-accepted like any other. Admin operation (APPLICATIONS_DECIDE).
+ * capacity slot and notifies the applicant. A revoked spot is a normal
+ * `rejected` row, so it can later be re-accepted like any other — dietary
+ * data is left untouched precisely so a re-accept doesn't lose it.
+ * Admin operation (APPLICATIONS_DECIDE).
  */
 export async function revokeSpot(actorId: number, responseId: number): Promise<ResponseRow> {
   return withTransaction(async (client) => {
@@ -1031,9 +988,6 @@ export async function revokeSpot(actorId: number, responseId: number): Promise<R
        WHERE id = $1 RETURNING *`,
       [responseId],
     );
-    // A confirmed applicant kept their sensitive data; revoking frees it (H12).
-    await wipeSensitiveDataIfOrphan(client, resp.user_id, responseId);
-
     const user = await loadUserComms(client, resp.user_id);
     await enqueueDecisionEmailRow(client, resp.user_id, user, app, "rejected", null);
 
@@ -1301,7 +1255,7 @@ export interface ResponseDetail {
     shirt_size: string | null;
     food_intolerances: number[];
     food_intolerance_notes: string | null;
-    dietary_data_state: "not_provided" | "present" | "removed_after_decline";
+    dietary_data_state: "not_provided" | "present";
   };
   application: { id: number; name: string; type: ApplicationType; template: TemplateField[] };
   reviews: Array<{ author_id: number; score: number | null; notes: string | null }>;
@@ -1517,9 +1471,9 @@ async function doDecline(
   resp: ResponseRow,
   via: ConfirmVia,
   actorId: number | null,
-): Promise<{ status: string; alreadyDeclined: boolean; wiped: boolean }> {
+): Promise<{ status: string; alreadyDeclined: boolean }> {
   if (resp.status === "declined") {
-    return { status: "declined", alreadyDeclined: true, wiped: false };
+    return { status: "declined", alreadyDeclined: true };
   }
   if (resp.status !== "accepted" && resp.status !== "confirmed") {
     throw new ConflictError("This spot is not in a declinable state", { status: resp.status });
@@ -1534,8 +1488,6 @@ async function doDecline(
       [resp.confirmation_token_id],
     );
   }
-  // Privacy promise (H12): wipe dietary data unless another confirmed spot needs it.
-  const wiped = await wipeSensitiveDataIfOrphan(client, resp.user_id, resp.id);
   await audit(client, {
     actorId,
     entityType: "application_response",
@@ -1543,9 +1495,9 @@ async function doDecline(
     action: "declined",
     source: via,
     before: { status: resp.status },
-    after: { status: "declined", sensitive_wiped: wiped },
+    after: { status: "declined" },
   });
-  return { status: "declined", alreadyDeclined: false, wiped };
+  return { status: "declined", alreadyDeclined: false };
 }
 
 export async function confirmByToken(token: string): Promise<ConfirmResult> {
@@ -1582,7 +1534,6 @@ export async function confirmByResponseId(
 export async function declineByToken(token: string): Promise<{
   status: string;
   alreadyDeclined: boolean;
-  wiped: boolean;
 }> {
   return withTransaction(async (client) => {
     const { rows } = await client.query(
@@ -1604,7 +1555,7 @@ export async function declineByResponseId(
   via: ConfirmVia,
   actorId: number | null,
   requireOwner?: number,
-): Promise<{ status: string; alreadyDeclined: boolean; wiped: boolean }> {
+): Promise<{ status: string; alreadyDeclined: boolean }> {
   return withTransaction(async (client) => {
     const resp = await lockResponse(client, responseId);
     if (requireOwner != null && resp.user_id !== requireOwner) {
@@ -1618,8 +1569,8 @@ export async function declineByResponseId(
 
 /**
  * Mark accepted responses whose confirmation window has elapsed as expired,
- * wiping sensitive data exactly like decline, one audit row each. Directly
- * invokable so tests don't wait on BullMQ repeat timing.
+ * one audit row each. Directly invokable so tests don't wait on BullMQ repeat
+ * timing.
  */
 export async function expireDueConfirmations(): Promise<{ expired: number }> {
   return withTransaction(async (client) => {
@@ -1643,7 +1594,6 @@ export async function expireDueConfirmations(): Promise<{ expired: number }> {
           [resp.confirmation_token_id],
         );
       }
-      const wiped = await wipeSensitiveDataIfOrphan(client, resp.user_id, resp.id);
       await audit(client, {
         actorId: null,
         entityType: "application_response",
@@ -1651,7 +1601,7 @@ export async function expireDueConfirmations(): Promise<{ expired: number }> {
         action: "expired",
         source: "system",
         before: { status: "accepted" },
-        after: { status: "expired", sensitive_wiped: wiped },
+        after: { status: "expired" },
       });
     }
     return { expired: rows.length };

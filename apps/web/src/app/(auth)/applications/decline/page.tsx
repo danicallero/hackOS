@@ -3,8 +3,7 @@
 // Public spot-decline landing page (H15). The acceptance email links here with
 // ?token=… (service.ts builds ${WEB_URL}/applications/decline?token=…) so an
 // applicant who can't make it frees their spot in one click — no sign-in
-// required. Declining wipes any dietary data unless another confirmed spot
-// still needs it (H12). A second click is idempotent (already_declined).
+// required. A second click is idempotent (already_declined).
 
 import { CalendarXIcon, TriangleAlertIcon } from "lucide-react";
 import Link from "next/link";
@@ -19,7 +18,6 @@ import { useLocale } from "@/lib/i18n";
 interface DeclineResult {
   status: string;
   already_declined: boolean;
-  sensitive_wiped: boolean;
 }
 
 function DeclineInner() {

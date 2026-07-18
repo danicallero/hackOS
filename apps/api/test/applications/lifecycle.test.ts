@@ -418,23 +418,11 @@ describe("confirm / decline (H15)", () => {
     expect(rows[0].source).toBe("admin_override");
   });
 
-  it("decline wipes dietary data (H12) and is idempotent", async () => {
+  it("decline keeps dietary data intact (so a later re-accept doesn't lose it) and is idempotent", async () => {
     const a = await getApp();
     const appId = await createApplication();
     const { userId, responseId } = await toAcceptedSent(appId);
     expect((await getUserSensitive(userId)).food_intolerances).toEqual([7]);
-    await pool.query(
-      `UPDATE application_responses
-       SET responses = responses || $2::jsonb
-       WHERE id = $1`,
-      [
-        responseId,
-        JSON.stringify({
-          food_intolerances: [7],
-          food_intolerance_notes: "legacy decline secret",
-        }),
-      ],
-    );
 
     const res = await a.inject({
       method: "POST",
@@ -442,32 +430,24 @@ describe("confirm / decline (H15)", () => {
       headers: asUser(userId),
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json().sensitive_wiped).toBe(true);
     expect((await getResponse(responseId)).status).toBe("declined");
     const sensitive = await getUserSensitive(userId);
-    expect(sensitive.food_intolerances).toEqual([]);
-    expect(sensitive.food_intolerance_notes).toBeNull();
-    expect(sensitive.dietary_data_state).toBe("removed_after_decline");
+    expect(sensitive.food_intolerances).toEqual([7]);
+    expect(sensitive.dietary_data_state).toBe("present");
 
     const applicant = await a.inject({
       method: "GET",
       url: `/api/applications/${appId}/response`,
       headers: asUser(userId),
     });
-    expect(applicant.json().dietary_data_state).toBe("removed_after_decline");
+    expect(applicant.json().dietary_data_state).toBe("present");
 
     const staff = await a.inject({
       method: "GET",
       url: `/api/applications/${appId}/responses`,
       headers: asUser(reviewer),
     });
-    expect(staff.json().responses[0].dietary_data_state).toBe("removed_after_decline");
-    const { rows: scrubbed } = await pool.query(
-      `SELECT responses FROM application_responses WHERE id = $1`,
-      [responseId],
-    );
-    expect(scrubbed[0].responses).not.toHaveProperty("food_intolerances");
-    expect(scrubbed[0].responses).not.toHaveProperty("food_intolerance_notes");
+    expect(staff.json().responses[0].dietary_data_state).toBe("present");
 
     const again = await a.inject({
       method: "POST",
@@ -475,77 +455,6 @@ describe("confirm / decline (H15)", () => {
       headers: asUser(userId),
     });
     expect(again.json().already_declined).toBe(true);
-  });
-
-  it("does NOT wipe dietary data if the user still has another confirmed response", async () => {
-    const a = await getApp();
-    const appA = await createApplication({ name: "A" });
-    const appB = await createApplication({ name: "B", type: "mentor" });
-    const { userId, responseId: respA } = await toAcceptedSent(appA);
-
-    // same user gets a second accepted+sent response on form B, then confirms it
-    const userId2 = userId;
-    await a.inject({
-      method: "PUT",
-      url: `/api/applications/${appB}/response`,
-      headers: asUser(userId2),
-      payload: { responses: { motivation: "b" } },
-    });
-    await a.inject({
-      method: "POST",
-      url: `/api/applications/${appB}/response/submit`,
-      headers: asUser(userId2),
-      payload: { food_intolerances: [7], shirt_size: "M" },
-    });
-    const { rows } = await pool.query(
-      `SELECT id FROM application_responses WHERE user_id=$1 AND application_id=$2`,
-      [userId2, appB],
-    );
-    const respB = rows[0].id;
-    await a.inject({
-      method: "POST",
-      url: `/api/responses/${respB}/decide`,
-      headers: asUser(decider),
-      payload: { decision: "accepted" },
-    });
-    await a.inject({
-      method: "POST",
-      url: `/api/responses/${respB}/send-decision`,
-      headers: asUser(decider),
-    });
-    await a.inject({
-      method: "POST",
-      url: `/api/me/responses/${respB}/confirm`,
-      headers: asUser(userId2),
-    });
-
-    await pool.query(
-      `UPDATE application_responses
-       SET responses = responses || $2::jsonb
-       WHERE id = $1`,
-      [
-        respA,
-        JSON.stringify({
-          food_intolerances: [7],
-          food_intolerance_notes: "legacy duplicate",
-        }),
-      ],
-    );
-
-    // declining A must NOT wipe, because B is confirmed
-    const res = await a.inject({
-      method: "POST",
-      url: `/api/me/responses/${respA}/decline`,
-      headers: asUser(userId2),
-    });
-    expect(res.json().sensitive_wiped).toBe(false);
-    expect((await getUserSensitive(userId2)).food_intolerances).toEqual([7]);
-    const { rows: scrubbed } = await pool.query(
-      `SELECT responses FROM application_responses WHERE id = $1`,
-      [respA],
-    );
-    expect(scrubbed[0].responses).not.toHaveProperty("food_intolerances");
-    expect(scrubbed[0].responses).not.toHaveProperty("food_intolerance_notes");
   });
 
   it("expired window: confirm is a 409, resend gives a fresh token that works", async () => {
@@ -738,7 +647,7 @@ describe("confirm / decline (H15)", () => {
 });
 
 describe("cancel after confirming", () => {
-  it("decline from confirmed status transitions to declined and wipes sensitive data", async () => {
+  it("decline from confirmed status transitions to declined and keeps sensitive data", async () => {
     const a = await getApp();
     const appId = await createApplication();
     const { userId, responseId } = await toAcceptedSent(appId);
@@ -760,9 +669,8 @@ describe("cancel after confirming", () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().status).toBe("declined");
-    expect(res.json().sensitive_wiped).toBe(true);
     expect((await getResponse(responseId)).status).toBe("declined");
-    expect((await getUserSensitive(userId)).food_intolerances).toEqual([]);
+    expect((await getUserSensitive(userId)).food_intolerances).toEqual([7]);
   });
 
   it("admin override can decline a confirmed response and it's idempotent", async () => {
@@ -861,7 +769,9 @@ describe("re-accept (admin)", () => {
     const r = await getResponse(responseId);
     expect(r.status).toBe("accepted");
     expect(r.declined_at).toBeNull();
-    expect((await getUserSensitive(userId)).dietary_data_state).toBe("removed_after_decline");
+    // decline never wiped the data, so a re-accept still has it to confirm with
+    expect((await getUserSensitive(userId)).dietary_data_state).toBe("present");
+    expect((await getUserSensitive(userId)).food_intolerances).toEqual([7]);
 
     // a fresh decision email was enqueued
     const { rows: outbox } = await pool.query(
@@ -1138,7 +1048,7 @@ describe("revoke spot + batch actions (M2)", () => {
     await a.inject({ method: "POST", url: "/api/applications/confirm", payload: { token } });
   }
 
-  it("revokes an already-CONFIRMED spot back to rejected and wipes sensitive data", async () => {
+  it("revokes an already-CONFIRMED spot back to rejected and keeps sensitive data (in case of re-accept)", async () => {
     const a = await getApp();
     const appId = await createApplication({ capacity: 1 });
     const { userId, responseId } = await toAcceptedSent(appId);
@@ -1152,10 +1062,8 @@ describe("revoke spot + batch actions (M2)", () => {
     });
     expect(res.statusCode).toBe(200);
     expect((await getResponse(responseId)).status).toBe("rejected");
-    // H12: revoking a confirmed spot frees the retained sensitive data.
     const sensitive = await getUserSensitive(userId);
-    expect(sensitive.food_intolerances).toEqual([]);
-    expect(sensitive.food_intolerance_notes).toBeNull();
+    expect(sensitive.food_intolerances).toEqual([7]);
 
     // The freed capacity slot lets someone else be accepted.
     const other = await toAcceptedSent(appId);
