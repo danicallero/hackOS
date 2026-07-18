@@ -22,10 +22,17 @@ import { type EmailPayload, normalizeLanguage, renderEmailTemplate } from "./tem
 export type NotificationChannel = "in_app" | "email" | "push" | "discord";
 export const ALL_CHANNELS: NotificationChannel[] = ["in_app", "email", "push", "discord"];
 /** Channels used when a caller doesn't name any explicitly. Discord opts in only when asked (post-MVP no-op). */
-const DEFAULT_CHANNELS: NotificationChannel[] = ["in_app", "email", "push"];
+export const DEFAULT_CHANNELS: NotificationChannel[] = ["in_app", "email", "push"];
 
 const MANDATORY_CATEGORY = "queue";
 export const QUEUE_STAFF_CATEGORY = "queue.staff";
+/**
+ * Shared channel config for every activity reminder (H51 rework): individual
+ * (`schedule:<id>`) and kind (`schedule:type:<kind>`) opt-ins only decide
+ * WHICH activities a user is reminded about — this category decides on
+ * WHICH channels, for all of them at once. See schedule-reminders.ts.
+ */
+export const REMINDER_CHANNEL_CATEGORY = "schedule";
 
 export interface NotifyOptions {
   userId: number;
@@ -35,7 +42,7 @@ export interface NotifyOptions {
 }
 
 /** Expands `candidates` per H51 preferences: no explicit row = default enabled; explicit row governs. */
-async function resolveChannels(
+export async function resolveChannels(
   db: Queryable,
   userId: number,
   category: string,
@@ -103,8 +110,14 @@ export interface PreferenceRow {
   enabled: boolean;
 }
 
-/** Static categories every user can see in the matrix even with zero override rows. Dynamic `schedule:<id>` rows (activity reminders, H51) only show up once a user has opted in. */
-export const STATIC_CATEGORIES = ["announcements", "application"];
+/**
+ * Static categories every user can see in the matrix even with zero override
+ * rows. `schedule` is the shared channel config for all activity reminders
+ * (H51 rework); the per-activity/per-kind opt-in rows themselves
+ * (`schedule:<id>`, `schedule:type:<kind>`) are membership markers, not
+ * channel rows, and stay out of this table.
+ */
+export const STATIC_CATEGORIES = ["announcements", "application", REMINDER_CHANNEL_CATEGORY];
 
 export async function getPreferences(
   db: Queryable,

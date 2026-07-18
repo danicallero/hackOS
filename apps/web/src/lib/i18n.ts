@@ -2310,6 +2310,11 @@ const dict: Record<string, I18nText> = {
     gl: "Actualizacións de solicitude",
     en: "Application updates",
   },
+  categoryReminderChannels: {
+    es: "Recordatorios de actividades",
+    gl: "Recordatorios de actividades",
+    en: "Activity reminders",
+  },
   channelInApp: { es: "En la app", gl: "Na app", en: "In-app" },
   channelPush: { es: "Push", gl: "Push", en: "Push" },
   channelDiscord: { es: "Discord", gl: "Discord", en: "Discord" },
@@ -2318,6 +2323,41 @@ const dict: Record<string, I18nText> = {
     es: "Actividad #{id} (no disponible)",
     gl: "Actividade #{id} (non dispoñible)",
     en: "Activity #{id} (unavailable)",
+  },
+  reminderKindLabel: {
+    es: "Todas: {kind}",
+    gl: "Todas: {kind}",
+    en: "All: {kind}",
+  },
+  kindMeal: { es: "Comidas", gl: "Comidas", en: "Meals" },
+  kindWorkshop: { es: "Talleres", gl: "Obradoiros", en: "Workshops" },
+  kindCeremony: { es: "Ceremonias", gl: "Cerimonias", en: "Ceremonies" },
+  kindActivity: { es: "Actividades", gl: "Actividades", en: "Activities" },
+  kindOther: { es: "Otros", gl: "Outros", en: "Other" },
+  chooseActivityKind: {
+    es: "Elige un tipo de actividad…",
+    gl: "Escolle un tipo de actividade…",
+    en: "Choose an activity kind…",
+  },
+  noUpcomingActivityKinds: {
+    es: "No hay tipos de actividad próximos disponibles para activar ahora mismo.",
+    gl: "Non hai tipos de actividade próximos dispoñibles para activar agora mesmo.",
+    en: "No upcoming activity kinds available to opt into right now.",
+  },
+  activeReminders: {
+    es: "Recordatorios activos",
+    gl: "Recordatorios activos",
+    en: "Active reminders",
+  },
+  noActiveReminders: {
+    es: "Aún no te has apuntado a ningún recordatorio.",
+    gl: "Aínda non te apuntaches a ningún recordatorio.",
+    en: "You haven't opted into any reminders yet.",
+  },
+  removeReminderAria: {
+    es: "Quitar recordatorio: {label}",
+    gl: "Quitar recordatorio: {label}",
+    en: "Remove reminder: {label}",
   },
   couldNotMarkRead: {
     es: "No se ha podido marcar como leído.",

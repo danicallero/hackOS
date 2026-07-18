@@ -1,17 +1,21 @@
 import { config } from "../../config.js";
 import { withTransaction } from "../../db/pool.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
-import { type NotificationChannel, notify } from "./service.js";
+import { DEFAULT_CHANNELS, notify, REMINDER_CHANNEL_CATEGORY, resolveChannels } from "./service.js";
 
 /**
  * Activity reminder job (H51: "apuntarme a recordatorios de actividades
- * concretas del horario"; issue #80). schedule:<id> is opt-IN, unlike
- * notify()'s default-enabled fallback for ordinary categories (see
- * resolveChannels in service.ts) — so recipients and their exact channel set
- * come straight from notification_preferences rows with enabled=true, not
- * from notify()'s DEFAULT_CHANNELS. Shape mirrors announcements-publisher.ts
- * + fanOutAnnouncement: FOR UPDATE SKIP LOCKED claim, per-recipient notify(),
- * then a bookkeeping timestamp (reminded_at) so a later poll never repeats it.
+ * concretas del horario, o de todas las de un tipo"; issue #80). Opting in —
+ * individually (`schedule:<id>`) or by kind (`schedule:type:<kind>`, e.g.
+ * "all meals") — is a plain membership marker (any enabled=true row), unlike
+ * notify()'s default-enabled fallback for ordinary categories. What channels
+ * actually fire is a separate, shared decision: the `schedule` category,
+ * resolved the same default-enabled-unless-overridden way as any other
+ * category (see resolveChannels in service.ts) — one config for every
+ * reminder a user gets, not one per activity. Shape mirrors
+ * announcements-publisher.ts + fanOutAnnouncement: FOR UPDATE SKIP LOCKED
+ * claim, per-recipient notify(), then a bookkeeping timestamp (reminded_at)
+ * so a later poll never repeats it.
  */
 
 const QUEUE_NAME = "schedule-reminders";
@@ -22,6 +26,7 @@ interface DueScheduleRow {
   title: string;
   location: string | null;
   starts_at: Date;
+  type: string | null;
 }
 
 /**
@@ -47,7 +52,7 @@ function formatStartsAt(startsAt: Date, timezone: string): string {
 export async function runScheduleRemindersOnce(): Promise<{ reminded: number; notified: number }> {
   return withTransaction(async (client) => {
     const { rows } = await client.query(
-      `SELECT id, title, location, starts_at FROM schedule
+      `SELECT id, title, location, starts_at, type FROM schedule
         WHERE visibility = 'shown'
           AND reminded_at IS NULL
           AND starts_at > now()
@@ -68,22 +73,25 @@ export async function runScheduleRemindersOnce(): Promise<{ reminded: number; no
       // DB clock (see announcements-publisher.ts for the same reasoning).
       for (const row of rows as DueScheduleRow[]) {
         const category = `schedule:${row.id}`;
-        const { rows: prefRows } = await client.query(
-          `SELECT user_id, channel FROM notification_preferences
-          WHERE category = $1 AND enabled = true`,
-          [category],
+        const kindCategory = row.type ? `schedule:type:${row.type}` : null;
+        const { rows: audienceRows } = await client.query(
+          `SELECT DISTINCT user_id FROM notification_preferences
+          WHERE enabled = true
+            AND (category = $1 OR ($2::text IS NOT NULL AND category = $2))`,
+          [category, kindCategory],
         );
-        const channelsByUser = new Map<number, NotificationChannel[]>();
-        for (const pref of prefRows as { user_id: number; channel: NotificationChannel }[]) {
-          const list = channelsByUser.get(pref.user_id) ?? [];
-          list.push(pref.channel);
-          channelsByUser.set(pref.user_id, list);
-        }
 
         const startsAtLabel = formatStartsAt(row.starts_at, timezone);
         const locationLine = row.location ? `\n\nLocation: ${row.location}` : "";
         const locationSuffix = row.location ? ` · ${row.location}` : "";
-        for (const [userId, channels] of channelsByUser) {
+        for (const { user_id: userId } of audienceRows as { user_id: number }[]) {
+          const channels = await resolveChannels(
+            client,
+            userId,
+            REMINDER_CHANNEL_CATEGORY,
+            DEFAULT_CHANNELS,
+          );
+          if (channels.length === 0) continue;
           await notify(client, {
             userId,
             category,

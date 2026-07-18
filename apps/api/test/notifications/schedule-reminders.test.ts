@@ -37,22 +37,44 @@ afterAll(async () => {
   await pool.end();
 });
 
-async function createScheduleItem(startsAt: Date): Promise<number> {
+async function createScheduleItem(startsAt: Date, type: string | null = null): Promise<number> {
   const { rows } = await pool.query(
-    `INSERT INTO schedule (title, starts_at, ends_at, visibility)
-     VALUES ($1, $2::timestamptz, $2::timestamptz + interval '1 hour', 'shown')
+    `INSERT INTO schedule (title, starts_at, ends_at, visibility, type)
+     VALUES ($1, $2::timestamptz, $2::timestamptz + interval '1 hour', 'shown', $3)
      RETURNING id`,
-    [`Activity ${crypto.randomUUID()}`, startsAt],
+    [`Activity ${crypto.randomUUID()}`, startsAt, type],
   );
   return rows[0].id;
 }
 
-async function optIn(userId: number, scheduleId: number, channel: string): Promise<void> {
+/** Individual opt-in (H51 rework): membership marker, not a channel choice — see service.ts REMINDER_CHANNEL_CATEGORY. */
+async function optIn(userId: number, scheduleId: number): Promise<void> {
   await pool.query(
     `INSERT INTO notification_preferences (user_id, category, channel, enabled)
-     VALUES ($1, $2, $3, true)`,
-    [userId, `schedule:${scheduleId}`, channel],
+     VALUES ($1, $2, 'in_app', true)`,
+    [userId, `schedule:${scheduleId}`],
   );
+}
+
+/** Kind opt-in (H51 rework): "remind me for every activity of this type". */
+async function optInKind(userId: number, type: string): Promise<void> {
+  await pool.query(
+    `INSERT INTO notification_preferences (user_id, category, channel, enabled)
+     VALUES ($1, $2, 'in_app', true)`,
+    [userId, `schedule:type:${type}`],
+  );
+}
+
+/** Restricts the shared reminder channel config to exactly `channels` (H51 rework). */
+async function setReminderChannels(userId: number, channels: string[]): Promise<void> {
+  const allCandidates = ["in_app", "email", "push"];
+  for (const channel of allCandidates) {
+    await pool.query(
+      `INSERT INTO notification_preferences (user_id, category, channel, enabled)
+       VALUES ($1, 'schedule', $2, $3)`,
+      [userId, channel, channels.includes(channel)],
+    );
+  }
 }
 
 async function outboxCount(scheduleId: number): Promise<number> {
@@ -69,13 +91,14 @@ async function remindedAt(scheduleId: number): Promise<Date | null> {
 }
 
 describe("schedule reminders (H51, issue #80)", () => {
-  it("due: opted-in user gets exactly one reminder on the channels they chose", async () => {
+  it("due: opted-in user gets exactly one reminder on the channels the shared reminder config chose", async () => {
     const { runScheduleRemindersOnce } = await import(
       "../../src/modules/notifications/schedule-reminders.js"
     );
     const scheduleId = await createScheduleItem(new Date(Date.now() + 10 * 60_000));
     const userId = await createUser();
-    await optIn(userId, scheduleId, "push");
+    await optIn(userId, scheduleId);
+    await setReminderChannels(userId, ["push"]);
 
     const result = await runScheduleRemindersOnce();
     expect(result.reminded).toBe(1);
@@ -89,13 +112,56 @@ describe("schedule reminders (H51, issue #80)", () => {
     expect(await remindedAt(scheduleId)).not.toBeNull();
   });
 
+  it("kind: a user opted into a whole activity kind is reminded without an individual opt-in", async () => {
+    const { runScheduleRemindersOnce } = await import(
+      "../../src/modules/notifications/schedule-reminders.js"
+    );
+    const scheduleId = await createScheduleItem(new Date(Date.now() + 10 * 60_000), "meal");
+    const userId = await createUser();
+    await optInKind(userId, "meal");
+    await setReminderChannels(userId, ["push"]);
+
+    const result = await runScheduleRemindersOnce();
+    expect(result.notified).toBe(1);
+
+    const { rows } = await pool.query(
+      `SELECT user_id, channel FROM notification_outbox WHERE category = $1`,
+      [`schedule:${scheduleId}`],
+    );
+    expect(rows).toEqual([{ user_id: userId, channel: "push" }]);
+  });
+
+  it("shared channels: disabling a channel on the shared reminder config suppresses it for both individual and kind opt-ins", async () => {
+    const { runScheduleRemindersOnce } = await import(
+      "../../src/modules/notifications/schedule-reminders.js"
+    );
+    const individualId = await createScheduleItem(new Date(Date.now() + 10 * 60_000));
+    const kindId = await createScheduleItem(new Date(Date.now() + 10 * 60_000), "meal");
+    const userId = await createUser();
+    await optIn(userId, individualId);
+    await optInKind(userId, "meal");
+    await setReminderChannels(userId, ["push"]); // email/in_app explicitly off
+
+    await runScheduleRemindersOnce();
+
+    const { rows } = await pool.query(
+      `SELECT category, channel FROM notification_outbox WHERE user_id = $1 ORDER BY category`,
+      [userId],
+    );
+    expect(rows).toEqual([
+      { category: `schedule:${individualId}`, channel: "push" },
+      { category: `schedule:${kindId}`, channel: "push" },
+    ]);
+  });
+
   it("retry: re-polling after a successful run never double-sends", async () => {
     const { runScheduleRemindersOnce } = await import(
       "../../src/modules/notifications/schedule-reminders.js"
     );
     const scheduleId = await createScheduleItem(new Date(Date.now() + 10 * 60_000));
     const userId = await createUser();
-    await optIn(userId, scheduleId, "email");
+    await optIn(userId, scheduleId);
+    await setReminderChannels(userId, ["email"]);
 
     await runScheduleRemindersOnce();
     expect(await outboxCount(scheduleId)).toBe(1);
@@ -113,7 +179,8 @@ describe("schedule reminders (H51, issue #80)", () => {
     for (let i = 0; i < 5; i += 1) {
       const scheduleId = await createScheduleItem(new Date(Date.now() + 10 * 60_000));
       const userId = await createUser();
-      await optIn(userId, scheduleId, "in_app");
+      await optIn(userId, scheduleId);
+      await setReminderChannels(userId, ["in_app"]);
       scheduleIds.push(scheduleId);
     }
 
@@ -135,7 +202,7 @@ describe("schedule reminders (H51, issue #80)", () => {
     );
     const scheduleId = await createScheduleItem(new Date(Date.now() - 60 * 60_000));
     const userId = await createUser();
-    await optIn(userId, scheduleId, "push");
+    await optIn(userId, scheduleId);
 
     const result = await runScheduleRemindersOnce();
     expect(result.reminded).toBe(0);
@@ -158,7 +225,8 @@ describe("schedule reminders (H51, issue #80)", () => {
     );
     const scheduleId = rows[0].id;
     const userId = await createUser({ email: `reminder-${scheduleId}@test.local` });
-    await optIn(userId, scheduleId, "email");
+    await optIn(userId, scheduleId);
+    await setReminderChannels(userId, ["email"]);
 
     const result = await runScheduleRemindersOnce();
     expect(result.notified).toBe(1);
@@ -187,10 +255,8 @@ describe("schedule reminders (H51, issue #80)", () => {
     );
     const scheduleId = rows[0].id;
     const userId = await createUser();
-    // Mirrors the web "remind me" action (inbox/page.tsx REMINDER_DEFAULT_CHANNELS),
-    // which writes in_app alongside email/push so the reminder is always
-    // visible in the inbox regardless of which push/email channels fire.
-    await optIn(userId, scheduleId, "in_app");
+    await optIn(userId, scheduleId);
+    await setReminderChannels(userId, ["in_app"]);
 
     const result = await runScheduleRemindersOnce();
     expect(result.notified).toBe(1);

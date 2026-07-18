@@ -64,7 +64,23 @@ function categoryLabelMap(t: Translate): Record<string, string> {
     queue: t("categoryQueueCalls"),
     announcements: t("announcements"),
     application: t("categoryApplicationUpdates"),
+    schedule: t("categoryReminderChannels"),
   };
+}
+
+/** `schedule.type` labels (H51 kind-based reminders) — free text on the backend, not DB-enforced, so unrecognized kinds fall back to the raw string. */
+function kindLabelMap(t: Translate): Record<string, string> {
+  return {
+    meal: t("kindMeal"),
+    workshop: t("kindWorkshop"),
+    ceremony: t("kindCeremony"),
+    activity: t("kindActivity"),
+    other: t("kindOther"),
+  };
+}
+
+function kindLabel(kind: string, t: Translate): string {
+  return kindLabelMap(t)[kind] ?? kind;
 }
 
 function channelLabelMap(t: Translate): Record<NotificationChannel, string> {
@@ -120,6 +136,10 @@ function categoryLabel(
 ): string {
   const labels = categoryLabelMap(t);
   if (labels[category]) return labels[category];
+  if (category.startsWith("schedule:type:")) {
+    const kind = category.slice("schedule:type:".length);
+    return t("reminderKindLabel", { kind: kindLabel(kind, t) });
+  }
   if (category.startsWith("schedule:")) {
     const id = Number(category.slice("schedule:".length));
     const item = scheduleItems.find((i) => i.id === id);
@@ -390,6 +410,7 @@ function PreferencesTab() {
   const [scheduleItems, setScheduleItems] = useState<PublicScheduleItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [addingActivity, setAddingActivity] = useState("");
+  const [addingKind, setAddingKind] = useState("");
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -442,6 +463,25 @@ function PreferencesTab() {
     }
   }
 
+  async function addKindReminder(kind: string) {
+    setBusy(true);
+    try {
+      const items: PreferenceOverride[] = REMINDER_DEFAULT_CHANNELS.map((channel) => ({
+        category: `schedule:type:${kind}`,
+        channel,
+        enabled: true,
+      }));
+      const next = await notificationsApi.setPreferences(items);
+      setPrefs(next);
+      setAddingKind("");
+      toast.success(t("reminderAdded"));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotAddReminder"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function removeReminder(category: string, channels: NotificationChannel[]) {
     setBusy(true);
     try {
@@ -477,17 +517,29 @@ function PreferencesTab() {
     );
   }
 
-  const dynamicCategories = [
+  const enabledReminderCategories = [
     ...new Set(
-      prefs.overrides.map((o) => o.category).filter((category) => category.startsWith("schedule:")),
+      prefs.overrides
+        .filter((o) => o.enabled && o.category.startsWith("schedule:"))
+        .map((o) => o.category),
     ),
   ];
-
-  const addableActivities = scheduleItems.filter(
-    (item) =>
-      !dynamicCategories.includes(`schedule:${item.id}`) &&
-      new Date(item.endsAt).getTime() > Date.now(),
+  const individualReminders = enabledReminderCategories.filter(
+    (category) => !category.startsWith("schedule:type:"),
   );
+  const kindReminders = enabledReminderCategories.filter((category) =>
+    category.startsWith("schedule:type:"),
+  );
+
+  const upcomingItems = scheduleItems.filter(
+    (item) => new Date(item.endsAt).getTime() > Date.now(),
+  );
+  const addableActivities = upcomingItems.filter(
+    (item) => !individualReminders.includes(`schedule:${item.id}`),
+  );
+  const addableKinds = [
+    ...new Set(upcomingItems.map((item) => item.type).filter((kind): kind is string => !!kind)),
+  ].filter((kind) => !kindReminders.includes(`schedule:type:${kind}`));
 
   function overrideFor(category: string, channel: NotificationChannel) {
     return prefs?.overrides.find((o) => o.category === category && o.channel === channel);
@@ -500,10 +552,6 @@ function PreferencesTab() {
       mandatory: true,
     })),
     ...STATIC_CATEGORIES.map((category) => ({
-      category,
-      label: categoryLabel(category, scheduleItems, t),
-    })),
-    ...dynamicCategories.map((category) => ({
       category,
       label: categoryLabel(category, scheduleItems, t),
     })),
@@ -525,7 +573,6 @@ function PreferencesTab() {
                   {channelLabels[channel]}
                 </th>
               ))}
-              <th className="w-10" />
             </tr>
           </thead>
           <tbody>
@@ -575,18 +622,6 @@ function PreferencesTab() {
                     </td>
                   );
                 })}
-                <td className="px-2 text-right">
-                  {row.category.startsWith("schedule:") && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={busy}
-                      onClick={() => removeReminder(row.category, prefs.channels)}
-                    >
-                      {t("turnOff")}
-                    </Button>
-                  )}
-                </td>
               </tr>
             ))}
           </tbody>
@@ -594,31 +629,93 @@ function PreferencesTab() {
       </SectionCard>
 
       <SectionCard icon={CalendarClockIcon} title={t("activityReminders")}>
-        {addableActivities.length === 0 ? (
-          <p className="text-muted-foreground text-sm">{t("noUpcomingActivities")}</p>
-        ) : (
-          <div className="flex flex-wrap items-end gap-2">
-            <Select value={addingActivity} onValueChange={setAddingActivity}>
-              <SelectTrigger className="w-64">
-                <SelectValue placeholder={t("chooseActivity")} />
-              </SelectTrigger>
-              <SelectContent>
-                {addableActivities.map((item) => (
-                  <SelectItem key={item.id} value={String(item.id)}>
-                    {item.title} — {formatScheduledDateTime(item.startsAt)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button
-              disabled={!addingActivity || busy}
-              onClick={() => addingActivity && addReminder(addingActivity)}
-            >
-              <PlusIcon className="size-4" />
-              {t("addReminder")}
-            </Button>
+        <div className="space-y-4">
+          <div>
+            <p className="mb-2 text-sm font-medium">{t("activeReminders")}</p>
+            {enabledReminderCategories.length === 0 ? (
+              <p className="text-muted-foreground text-sm">{t("noActiveReminders")}</p>
+            ) : (
+              <ul className="divide-border divide-y rounded-lg border">
+                {enabledReminderCategories.map((category) => {
+                  const label = categoryLabel(category, scheduleItems, t);
+                  return (
+                    <li
+                      key={category}
+                      className="flex items-center justify-between gap-2 px-4 py-2 text-sm"
+                    >
+                      {label}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => removeReminder(category, prefs.channels)}
+                        aria-label={t("removeReminderAria", { label })}
+                      >
+                        {t("turnOff")}
+                      </Button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </div>
-        )}
+
+          <div className="flex flex-wrap items-end gap-2">
+            {addableActivities.length === 0 ? (
+              <p className="text-muted-foreground text-sm">{t("noUpcomingActivities")}</p>
+            ) : (
+              <>
+                <Select value={addingActivity} onValueChange={setAddingActivity}>
+                  <SelectTrigger className="w-64">
+                    <SelectValue placeholder={t("chooseActivity")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {addableActivities.map((item) => (
+                      <SelectItem key={item.id} value={String(item.id)}>
+                        {item.title} — {formatScheduledDateTime(item.startsAt)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  disabled={!addingActivity || busy}
+                  onClick={() => addingActivity && addReminder(addingActivity)}
+                >
+                  <PlusIcon className="size-4" />
+                  {t("addReminder")}
+                </Button>
+              </>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-end gap-2">
+            {addableKinds.length === 0 ? (
+              <p className="text-muted-foreground text-sm">{t("noUpcomingActivityKinds")}</p>
+            ) : (
+              <>
+                <Select value={addingKind} onValueChange={setAddingKind}>
+                  <SelectTrigger className="w-64">
+                    <SelectValue placeholder={t("chooseActivityKind")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {addableKinds.map((kind) => (
+                      <SelectItem key={kind} value={kind}>
+                        {kindLabel(kind, t)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  disabled={!addingKind || busy}
+                  onClick={() => addingKind && addKindReminder(addingKind)}
+                >
+                  <PlusIcon className="size-4" />
+                  {t("addReminder")}
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
       </SectionCard>
     </div>
   );
