@@ -75,7 +75,7 @@ import {
 } from "@/lib/logistics";
 import { type AccountRemovalEligibility, accountRemovalRequest } from "@/lib/privacy-removal";
 import { type RepoWithExtras, userProjects } from "@/lib/projects";
-import { useCan, useSessionContext } from "@/lib/session";
+import { useCan, useMe, useSessionContext } from "@/lib/session";
 import type { Tone } from "@/lib/tones";
 import type {
   DerivedRole,
@@ -494,7 +494,8 @@ function QrTab({ user }: { user: UserDetail }) {
 function DeleteAccountButton({ user }: { user: UserDetail }) {
   const { t } = useLocale();
   const router = useRouter();
-  const canDelete = useCan(CAPABILITIES.ADMIN_ALL);
+  const me = useMe();
+  const canDelete = useCan(CAPABILITIES.ADMIN_ALL) && me?.id !== user.id;
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [loading, setLoading] = useState(true);
