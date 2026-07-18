@@ -142,7 +142,7 @@ const dict = {
   tabWallet: { en: "Wallet", es: "Cartera", gl: "Carteira" },
   tabNotifications: { en: "Alerts", es: "Avisos", gl: "Avisos" },
   tabAccount: { en: "Account", es: "Cuenta", gl: "Conta" },
-  tabScan: { en: "Scanners", es: "Escáneres", gl: "Escáneres" },
+  tabScan: { en: "Scanner", es: "Escáner", gl: "Escáner" },
   tabActivities: { en: "Activities", es: "Actividades", gl: "Actividades" },
   tabOthers: { en: "Others", es: "Otros", gl: "Outros" },
   loading: { en: "Loading…", es: "Cargando…", gl: "Cargando…" },
