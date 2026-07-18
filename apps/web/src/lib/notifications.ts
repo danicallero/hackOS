@@ -95,6 +95,7 @@ export const notificationsApi = {
     }),
   markInboxRead: (id: number) =>
     api.post<{ id: number; read_at: string }>(`/api/me/notifications/${id}/read`),
+  deleteInbox: (id: number) => api.delete<{ id: number }>(`/api/me/notifications/${id}`),
 
   getPreferences: () => api.get<PreferencesResponse>("/api/me/notification-preferences"),
   setPreferences: (items: PreferenceOverride[]) =>
