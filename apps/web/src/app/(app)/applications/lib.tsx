@@ -114,19 +114,6 @@ export interface ApplicationStats {
 
 // ── status presentation ───────────────────────────────────────────────────────
 
-export const RESPONSE_STATUSES = [
-  "draft",
-  "submitted",
-  "review",
-  "accepted_internal",
-  "rejected_internal",
-  "accepted",
-  "rejected",
-  "confirmed",
-  "declined",
-  "expired",
-] as const;
-
 const STATUS_TONE: Record<string, Tone> = {
   draft: "neutral",
   submitted: "info",
