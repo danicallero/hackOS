@@ -262,6 +262,17 @@ export function AppSidebar() {
           );
 
           return visibleWorkspaces.map(({ workspace, items }) => {
+            if (items.length === 1) {
+              // A single visible item has nothing to collapse: an accordion
+              // with one row is just a link wearing an extra click.
+              return (
+                <SidebarGroup key={workspace.id}>
+                  <SidebarMenu>
+                    <NavLink item={items[0]} showUnreadDot={false} />
+                  </SidebarMenu>
+                </SidebarGroup>
+              );
+            }
             const containsActiveRoute = items.some(isActiveItem);
             const shouldOpenInitially =
               containsActiveRoute || (!anyWorkspaceMatchesRoute && lastWorkspace === workspace.id);
