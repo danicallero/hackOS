@@ -710,5 +710,15 @@ describe("staff user routes (H7)", () => {
     expect(rows[0].phone).toBeNull();
     expect(rows[0].dni).toBeNull();
     expect(rows[0].email_verified).toBe(false);
+
+    // The audit trail for the anonymize action must not retain the very PII
+    // it was supposed to scrub.
+    const auditRows = await pool.query(
+      `SELECT before, after FROM audit_log WHERE entity_type = 'user' AND entity_id = $1 AND action = 'anonymized'`,
+      [String(target)],
+    );
+    expect(auditRows.rows).toHaveLength(1);
+    expect(JSON.stringify(auditRows.rows[0].before ?? "")).not.toContain("person@example.test");
+    expect(JSON.stringify(auditRows.rows[0].after ?? "")).not.toContain("person@example.test");
   });
 });

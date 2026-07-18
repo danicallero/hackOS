@@ -24,7 +24,7 @@ export async function anonymizeUser(client: Queryable, opts: AnonymizeUserOption
   if (opts.actorId != null && opts.actorId === opts.targetId) {
     throw new BadRequestError("You can't anonymize your own account");
   }
-  const { rows } = await client.query(`SELECT email FROM users WHERE id = $1 FOR UPDATE`, [
+  const { rows } = await client.query(`SELECT id FROM users WHERE id = $1 FOR UPDATE`, [
     opts.targetId,
   ]);
   if (!rows[0]) throw new NotFoundError("User not found", { userId: opts.targetId });
@@ -43,6 +43,8 @@ export async function anonymizeUser(client: Queryable, opts: AnonymizeUserOption
   // them explicitly so the anonymized row can no longer authenticate.
   await client.query(`DELETE FROM sessions WHERE user_id = $1`, [opts.targetId]);
   await client.query(`DELETE FROM accounts WHERE user_id = $1`, [opts.targetId]);
+  // No `before`: the whole point of anonymizing is erasing PII, so the
+  // original email must not be retained anywhere afterward — including here.
   await audit(client, {
     actorId: opts.actorId,
     entityType: "user",
@@ -50,6 +52,5 @@ export async function anonymizeUser(client: Queryable, opts: AnonymizeUserOption
     action: "anonymized",
     source: opts.source,
     reason: opts.reason,
-    before: { email: rows[0].email },
   });
 }
