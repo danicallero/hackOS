@@ -1,12 +1,11 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { SymbolView } from "expo-symbols";
 import { useEffect } from "react";
 import { ScrollView, Text, useColorScheme, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
 import { EmptyState, FloatingBackButton, FloatingGlassButton } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
+import { SymbolView } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
 import { fetchPublicSchedule } from "@/lib/schedule";
 import { useActivityReminders } from "@/lib/use-activity-reminders";

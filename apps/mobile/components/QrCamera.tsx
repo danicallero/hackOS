@@ -1,7 +1,5 @@
 import { type BarcodeScanningResult, CameraView, useCameraPermissions } from "expo-camera";
-import { GlassView } from "expo-glass-effect";
 import { useIsFocused } from "expo-router";
-import { SymbolView } from "expo-symbols";
 import { useEffect, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -15,6 +13,8 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
+import { GlassView } from "@/components/glass-view";
+import { SymbolView } from "@/components/symbol";
 
 import { useLocale } from "@/lib/i18n";
 import { getBarcodeFrameObservation } from "@/lib/qr-frame";

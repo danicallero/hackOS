@@ -1,4 +1,3 @@
-import { SymbolView, type SymbolViewProps } from "expo-symbols";
 import type { ReactNode, RefObject } from "react";
 import {
   ActivityIndicator,
@@ -12,6 +11,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { SymbolView, type SymbolViewProps } from "@/components/symbol";
 
 import { colors } from "@/theme/colors";
 

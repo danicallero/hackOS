@@ -1,10 +1,9 @@
 import { MenuView } from "@expo/ui/community/menu";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
-import { SymbolView } from "expo-symbols";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
-
 import { EmptyState, Separator } from "@/components/native-ui";
+import { SymbolView } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
 import { emitManualActivityScan } from "@/lib/manual-activity-scan";
 import { listScannerPeople } from "@/lib/scanner-db";

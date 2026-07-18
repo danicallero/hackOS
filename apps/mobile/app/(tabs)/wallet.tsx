@@ -1,20 +1,22 @@
 import { EVENTS } from "@hackos/shared/events";
 import { ButtonStyle, ButtonType, RNWalletView } from "@premieroctet/react-native-wallet";
-import { SymbolView } from "expo-symbols";
+import { File, Paths } from "expo-file-system";
+import * as Sharing from "expo-sharing";
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Linking, Platform, ScrollView, Text, useColorScheme, View } from "react-native";
 import QRCode from "react-native-qrcode-svg";
-
 import { ActionButton, EmptyState, InfoRow, Section, Separator } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SegmentedControl } from "@/components/segmented-control";
 import { StaleDataBanner } from "@/components/stale-data-banner";
+import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { subscribeToServerEvent } from "@/lib/server-events";
+import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { colors } from "@/theme/colors";
 
@@ -34,6 +36,7 @@ interface TicketPayload {
 export default function WalletScreen() {
   useColorScheme();
   const { t } = useLocale();
+  const androidTopInset = useAndroidTopInset();
   const { me, refetch: refetchMe } = useMeContext();
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [actionBusy, setActionBusy] = useState(false);
@@ -82,6 +85,32 @@ export default function WalletScreen() {
     }
   }
 
+  /**
+   * The `.pkpass` file behind `react-native-wallet-manager`'s iOS-only
+   * handoff is a portable, signed archive that several third-party Android
+   * wallet apps can import directly. This downloads the same authenticated
+   * endpoint and opens the system share sheet so the user can route it to
+   * whichever app supports `.pkpass` import (or save it), instead of
+   * leaving Android users with no way to get this pass off this screen at
+   * all.
+   */
+  async function downloadPkpass(purpose: "ticket" | "badge") {
+    const passUrl = `${API_URL}/api/me/wallet/apple/${purpose}.pkpass`;
+    const cookie = authClient.getCookie();
+    const destination = new File(Paths.cache, `${purpose}.pkpass`);
+    const file = await File.downloadFileAsync(passUrl, destination, {
+      headers: { Cookie: cookie },
+      idempotent: true,
+    });
+    if (!(await Sharing.isAvailableAsync())) {
+      throw new Error("Sharing is not available on this device");
+    }
+    await Sharing.shareAsync(file.uri, {
+      mimeType: "application/vnd.apple.pkpass",
+      dialogTitle: t("walletDownloadPkpass"),
+    });
+  }
+
   async function runAction(action: () => Promise<void>) {
     setActionBusy(true);
     setActionError(null);
@@ -111,7 +140,12 @@ export default function WalletScreen() {
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{ gap: 20, padding: 16, paddingBottom: 32 }}
+      contentContainerStyle={{
+        gap: 20,
+        padding: 16,
+        paddingBottom: 32,
+        paddingTop: 16 + androidTopInset,
+      }}
     >
       <StaleDataBanner updatedAt={staleSince} />
       {error ? <RequestFeedback error={error} onRetry={() => void load()} /> : null}
@@ -269,6 +303,23 @@ export default function WalletScreen() {
                 }}
                 style={{ opacity: actionBusy ? 0.5 : 1 }}
               />
+            </View>
+          ) : null}
+          {Platform.OS === "android" ? <Separator /> : null}
+          {Platform.OS === "android" ? (
+            <View style={{ padding: 16 }}>
+              <ActionButton
+                label={t("walletDownloadPkpass")}
+                icon="arrow.down.circle"
+                busy={actionBusy}
+                onPress={() => void runAction(() => downloadPkpass(purpose))}
+              />
+              <Text
+                selectable
+                style={{ color: colors.secondaryLabel, fontSize: 13, paddingTop: 4 }}
+              >
+                {t("walletDownloadPkpassHint")}
+              </Text>
             </View>
           ) : null}
         </Section>

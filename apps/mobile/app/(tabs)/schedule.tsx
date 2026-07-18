@@ -1,5 +1,4 @@
 import { useRouter } from "expo-router";
-import { SymbolView } from "expo-symbols";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   type GestureResponderEvent,
@@ -12,13 +11,14 @@ import {
   useColorScheme,
   View,
 } from "react-native";
-
 import { EmptyState, StatusPill } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
+import { SymbolView } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
 import { fetchPublicSchedule, type ScheduleItem } from "@/lib/schedule";
 import { useActivityReminders } from "@/lib/use-activity-reminders";
+import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { colors } from "@/theme/colors";
 
@@ -40,6 +40,7 @@ export default function ScheduleScreen() {
   const listRef = useRef<SectionList<SectionRow, ScheduleSection>>(null);
   const scrolledOnLoad = useRef(false);
   const reminders = useActivityReminders();
+  const androidTopInset = useAndroidTopInset();
 
   const { data, loading, error, staleSince, load } = useCachedApi("schedule", fetchPublicSchedule);
   const items = data ?? [];
@@ -132,7 +133,7 @@ export default function ScheduleScreen() {
       sections={sections}
       keyExtractor={(row) => (row.kind === "now" ? row.id : String(row.id))}
       contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{ flexGrow: 1, paddingBottom: 24 }}
+      contentContainerStyle={{ flexGrow: 1, paddingBottom: 24, paddingTop: androidTopInset }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       stickySectionHeadersEnabled={false}
       onScrollToIndexFailed={() => {

@@ -11,6 +11,7 @@ import { type Lang, useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { fetchMyScanStats, type MyScanStats } from "@/lib/scan-log";
 import { isOperator } from "@/lib/tabs";
+import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { colors } from "@/theme/colors";
 
 interface Intolerance {
@@ -25,6 +26,7 @@ export default function AccountScreen() {
   useColorScheme();
   const router = useRouter();
   const { t, language } = useLocale();
+  const androidTopInset = useAndroidTopInset();
   const { me, loading, error, refetch } = useMeContext();
   const [intolerances, setIntolerances] = useState<Intolerance[]>([]);
   const [signingOut, setSigningOut] = useState(false);
@@ -111,7 +113,12 @@ export default function AccountScreen() {
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{ gap: 20, padding: 16, paddingBottom: 36 }}
+      contentContainerStyle={{
+        gap: 20,
+        padding: 16,
+        paddingBottom: 36,
+        paddingTop: 16 + androidTopInset,
+      }}
     >
       {error ? <RequestFeedback error={error} onRetry={() => void refetch()} /> : null}
       {signOutError ? <RequestFeedback error={signOutError} /> : null}
