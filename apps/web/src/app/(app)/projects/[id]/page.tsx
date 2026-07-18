@@ -27,6 +27,7 @@ import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
+import { ProjectDescription } from "@/components/projects/project-description";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -234,7 +235,9 @@ export default function ProjectDetailPage() {
       />
 
       {repo.description && (
-        <p className="text-muted-foreground max-w-prose text-pretty text-sm">{repo.description}</p>
+        <div className="max-w-prose">
+          <ProjectDescription text={repo.description} />
+        </div>
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
