@@ -342,6 +342,16 @@ const dict = {
     es: "Los pases se actualizan automáticamente si cambian tus credenciales.",
     gl: "Os pases actualízanse automaticamente se cambian as túas credenciais.",
   },
+  walletDownloadPkpass: {
+    en: "Download .pkpass",
+    es: "Descargar .pkpass",
+    gl: "Descargar .pkpass",
+  },
+  walletDownloadPkpassHint: {
+    en: "For wallet apps that can import a .pkpass file directly.",
+    es: "Para apps de cartera que pueden importar un archivo .pkpass directamente.",
+    gl: "Para apps de carteira que poden importar un ficheiro .pkpass directamente.",
+  },
   walletPassAlreadyAddedTitle: {
     en: "Already in Apple Wallet",
     es: "Ya está en Apple Wallet",
@@ -654,6 +664,8 @@ const dict = {
   scannerConfirmAccreditation: { en: "Assign badge", es: "Asignar badge", gl: "Asignar badge" },
   scannerRotate: { en: "Rotate badge", es: "Rotar badge", gl: "Rotar badge" },
   scannerRegister: { en: "Register scan", es: "Registrar pase", gl: "Rexistrar pase" },
+  scannerDateField: { en: "Date", es: "Fecha", gl: "Data" },
+  scannerTimeField: { en: "Time", es: "Hora", gl: "Hora" },
   scannerIn: { en: "Entry", es: "Entrada", gl: "Entrada" },
   scannerOut: { en: "Exit", es: "Salida", gl: "Saída" },
   scannerBackdated: {
@@ -1114,6 +1126,8 @@ const dict = {
     gl: "Non hai actividades dispoñibles.",
   },
   presenceDateAndTime: { en: "Date and time", es: "Fecha y hora", gl: "Data e hora" },
+  presenceDateField: { en: "Date", es: "Fecha", gl: "Data" },
+  presenceTimeField: { en: "Time", es: "Hora", gl: "Hora" },
   presenceNotes: { en: "Notes", es: "Notas", gl: "Notas" },
   presenceNotesPlaceholder: {
     en: "Reason for the manual correction (optional)",

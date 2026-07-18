@@ -1,11 +1,9 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import DateTimePicker from "@react-native-community/datetimepicker";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { SymbolView } from "expo-symbols";
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, useColorScheme, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
+import { DateTimeField } from "@/components/date-time-field";
 import {
   ActionButton,
   FloatingBackButton,
@@ -17,6 +15,7 @@ import {
 import { PresenceManagement } from "@/components/presence-management";
 import { QrCamera } from "@/components/QrCamera";
 import { ScannerTransactionStatus } from "@/components/scanner-transaction-status";
+import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
@@ -325,39 +324,15 @@ export function PersonOperationsScreen() {
             padding: 16,
           }}
         >
-          {process.env.EXPO_OS === "android" ? (
-            <View style={{ flex: 1, flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-              <DateTimePicker
-                value={scannedAt}
-                mode="date"
-                maximumDate={new Date()}
-                onValueChange={(_, date) => {
-                  if (!date) return;
-                  date.setHours(scannedAt.getHours(), scannedAt.getMinutes());
-                  setScannedAt(date);
-                }}
-              />
-              <DateTimePicker
-                value={scannedAt}
-                mode="time"
-                onValueChange={(_, date) => {
-                  if (!date) return;
-                  const next = new Date(scannedAt);
-                  next.setHours(date.getHours(), date.getMinutes());
-                  setScannedAt(next);
-                }}
-              />
-            </View>
-          ) : (
-            <View style={{ alignItems: "flex-start", flex: 1 }}>
-              <DateTimePicker
-                value={scannedAt}
-                mode="datetime"
-                maximumDate={new Date()}
-                onValueChange={(_, date) => date && setScannedAt(date)}
-              />
-            </View>
-          )}
+          <View style={{ alignItems: "flex-start", flex: 1 }}>
+            <DateTimeField
+              dateAccessibilityLabel={t("scannerDateField")}
+              timeAccessibilityLabel={t("scannerTimeField")}
+              maximumDate={new Date()}
+              value={scannedAt}
+              onChange={setScannedAt}
+            />
+          </View>
           {registerButton}
         </View>
       </Section>

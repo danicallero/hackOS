@@ -1,5 +1,5 @@
-import { SymbolView } from "expo-symbols";
 import { Text, View } from "react-native";
+import { SymbolView } from "@/components/symbol";
 
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";

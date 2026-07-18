@@ -7,14 +7,14 @@ import {
   frame,
   multilineTextAlignment,
 } from "@expo/ui/swift-ui/modifiers";
-import { GlassView } from "expo-glass-effect";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { SymbolView } from "expo-symbols";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { GlassView } from "@/components/glass-view";
 import { QrCamera } from "@/components/QrCamera";
 import { ScannerQueueStatus } from "@/components/scanner-transaction-status";
+import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { subscribeToManualActivityScan } from "@/lib/manual-activity-scan";

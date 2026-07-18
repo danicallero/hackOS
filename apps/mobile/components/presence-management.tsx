@@ -1,6 +1,4 @@
 import { MenuView } from "@expo/ui/community/menu";
-import DateTimePicker from "@react-native-community/datetimepicker";
-import { SymbolView } from "expo-symbols";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -14,7 +12,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
+import { DateTimeField } from "@/components/date-time-field";
 import {
   ActionButton,
   EmptyState,
@@ -25,6 +23,7 @@ import {
   StatusPill,
 } from "@/components/native-ui";
 import { SegmentedControl } from "@/components/segmented-control";
+import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { durationMinutes, securedWindowFraction } from "@/lib/presence-timeline";
@@ -714,41 +713,14 @@ function SignalEditor({
             footer={draft.bounds ? t("presenceConflictBounds") : undefined}
           >
             <View style={{ gap: 12, padding: 16 }}>
-              {process.env.EXPO_OS === "android" ? (
-                <>
-                  <DateTimePicker
-                    minimumDate={draft.bounds?.min}
-                    maximumDate={draft.bounds?.max ?? new Date()}
-                    mode="date"
-                    value={draft.occurredAt}
-                    onValueChange={(_, date) => {
-                      if (!date) return;
-                      date.setHours(draft.occurredAt.getHours(), draft.occurredAt.getMinutes());
-                      onChange({ ...draft, occurredAt: clampToBounds(date) });
-                    }}
-                  />
-                  <DateTimePicker
-                    mode="time"
-                    value={draft.occurredAt}
-                    onValueChange={(_, date) => {
-                      if (!date) return;
-                      const next = new Date(draft.occurredAt);
-                      next.setHours(date.getHours(), date.getMinutes());
-                      onChange({ ...draft, occurredAt: clampToBounds(next) });
-                    }}
-                  />
-                </>
-              ) : (
-                <DateTimePicker
-                  minimumDate={draft.bounds?.min}
-                  maximumDate={draft.bounds?.max ?? new Date()}
-                  mode="datetime"
-                  value={draft.occurredAt}
-                  onValueChange={(_, date) =>
-                    date && onChange({ ...draft, occurredAt: clampToBounds(date) })
-                  }
-                />
-              )}
+              <DateTimeField
+                dateAccessibilityLabel={t("presenceDateField")}
+                timeAccessibilityLabel={t("presenceTimeField")}
+                minimumDate={draft.bounds?.min}
+                maximumDate={draft.bounds?.max ?? new Date()}
+                value={draft.occurredAt}
+                onChange={(date) => onChange({ ...draft, occurredAt: clampToBounds(date) })}
+              />
             </View>
           </Section>
 

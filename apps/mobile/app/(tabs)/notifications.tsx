@@ -2,7 +2,6 @@ import { MenuView } from "@expo/ui/community/menu";
 import { ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { SymbolView } from "expo-symbols";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -14,11 +13,11 @@ import {
   useColorScheme,
   View,
 } from "react-native";
-
 import { ActionButton, EmptyState, Section, Separator } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SegmentedControl } from "@/components/segmented-control";
 import { StaleDataBanner } from "@/components/stale-data-banner";
+import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
@@ -29,6 +28,7 @@ import {
 } from "@/lib/notification-events";
 import { fetchPublicSchedule, type ScheduleItem } from "@/lib/schedule";
 import { subscribeToServerEvent } from "@/lib/server-events";
+import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { colors } from "@/theme/colors";
 
@@ -63,11 +63,17 @@ export default function NotificationsScreen() {
   useColorScheme();
   const { t } = useLocale();
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const androidTopInset = useAndroidTopInset();
 
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{ gap: 18, padding: 16, paddingBottom: 32 }}
+      contentContainerStyle={{
+        gap: 18,
+        padding: 16,
+        paddingBottom: 32,
+        paddingTop: 16 + androidTopInset,
+      }}
       keyboardShouldPersistTaps="handled"
     >
       <SegmentedControl

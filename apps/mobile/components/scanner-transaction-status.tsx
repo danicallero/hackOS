@@ -1,10 +1,9 @@
 import { useRouter } from "expo-router";
-import { SymbolView, type SymbolViewProps } from "expo-symbols";
 import { useEffect, useState } from "react";
 import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
 import { ActionButton, FloatingGlassButton, Section } from "@/components/native-ui";
+import { SymbolView, type SymbolViewProps } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
 import { listScannerActivities, listScannerPeople } from "@/lib/scanner-db";
 import { scannerQueueHealth, scannerTransactionState } from "@/lib/scanner-state";

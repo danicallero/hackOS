@@ -1,9 +1,8 @@
 import { useFocusEffect, useRouter } from "expo-router";
-import { SymbolView } from "expo-symbols";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FlatList, Pressable, RefreshControl, Text, useColorScheme, View } from "react-native";
-
 import { EmptyState, StatusPill } from "@/components/native-ui";
+import { SymbolView } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
 import { listScannerActivities } from "@/lib/scanner-db";
 import type { ScannerActivity } from "@/lib/scanner-types";

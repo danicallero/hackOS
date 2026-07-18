@@ -1,10 +1,9 @@
 import { useNavigation } from "expo-router";
-import { SymbolView, type SymbolViewProps } from "expo-symbols";
 import { useCallback, useEffect, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
-
 import { ActionButton, Section, Separator } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
+import { SymbolView, type SymbolViewProps } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
 import { fetchScanLog, type ScanLogEntry } from "@/lib/scan-log";
 import { colors } from "@/theme/colors";

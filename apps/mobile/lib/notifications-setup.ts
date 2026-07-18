@@ -17,10 +17,15 @@ Notifications.setNotificationHandler({
 });
 
 if (Platform.OS === "android") {
+  // `sound` here isn't a magic passthrough to the system default like on
+  // iOS — expo-notifications looks it up as a bundled raw resource name
+  // (registered via the expo-notifications config plugin's `sounds` array),
+  // and a literal `"default"` with no matching resource throws "Custom
+  // sound 'default' not found in native app". Omitting `sound` entirely
+  // uses the channel's actual system default sound.
   void Notifications.setNotificationChannelAsync("default", {
     name: "hackOS",
     importance: Notifications.AndroidImportance.HIGH,
-    sound: "default",
   });
 }
 

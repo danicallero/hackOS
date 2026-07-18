@@ -1,12 +1,11 @@
-import { GlassView } from "expo-glass-effect";
 import { usePathname, useRouter } from "expo-router";
-import { SymbolView } from "expo-symbols";
 import { useCallback, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
+import { GlassView } from "@/components/glass-view";
 import { QrCamera } from "@/components/QrCamera";
 import { ScannerQueueStatus } from "@/components/scanner-transaction-status";
+import { SymbolView } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
 import { findPersonByBadge, findPersonByTicket } from "@/lib/scanner-db";
 import { useScannerSync } from "@/lib/use-scanner";

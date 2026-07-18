@@ -1,17 +1,17 @@
 import { EVENTS, type SseEnvelope } from "@hackos/shared/events";
 import { useFocusEffect } from "expo-router";
-import { SymbolView } from "expo-symbols";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, RefreshControl, Text, useColorScheme, View } from "react-native";
-
 import { EmptyState, StatusPill } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
+import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { subscribeToCategory } from "@/lib/notification-events";
 import { subscribeToServerEvent } from "@/lib/server-events";
+import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { colors } from "@/theme/colors";
 
@@ -39,6 +39,7 @@ export default function QueueScreen() {
   useColorScheme();
   const { t } = useLocale();
   const { me } = useMeContext();
+  const androidTopInset = useAndroidTopInset();
   const [precalled, setPrecalled] = useState<Set<number>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
 
@@ -110,7 +111,12 @@ export default function QueueScreen() {
       data={orderedEntries}
       keyExtractor={(item) => String(item.entryId)}
       contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{ flexGrow: 1, gap: 12, padding: 16 }}
+      contentContainerStyle={{
+        flexGrow: 1,
+        gap: 12,
+        padding: 16,
+        paddingTop: 16 + androidTopInset,
+      }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       ListHeaderComponent={<StaleDataBanner updatedAt={staleSince} />}
       ListEmptyComponent={

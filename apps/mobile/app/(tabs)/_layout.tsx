@@ -1,9 +1,16 @@
-import { type MenuAction, MenuView } from "@expo/ui/community/menu";
+import { type MenuAction, type MenuComponentRef, MenuView } from "@expo/ui/community/menu";
 import { EVENTS } from "@hackos/shared/events";
 import { usePathname, useRouter } from "expo-router";
 import { NativeTabs } from "expo-router/unstable-native-tabs";
-import { useCallback, useEffect, useState } from "react";
-import { AppState, useColorScheme, useWindowDimensions, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  AppState,
+  Platform,
+  Pressable,
+  useColorScheme,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { apiFetch } from "@/lib/api";
@@ -174,6 +181,7 @@ function NativeOperationsMenu({ tabCount }: { tabCount: number }) {
   const { t } = useLocale();
   const pathname = usePathname();
   const router = useRouter();
+  const menuRef = useRef<MenuComponentRef>(null);
   const triggerHeight = bottom + 60;
   const triggerWidth = process.env.EXPO_OS === "ios" ? 76 : width / tabCount;
   const items: OperationsMenuItem[] = [
@@ -201,35 +209,60 @@ function NativeOperationsMenu({ tabCount }: { tabCount: number }) {
   ];
 
   return (
-    <MenuView
-      actions={items}
-      onPressAction={({ nativeEvent }) => {
-        const item = items.find(({ id }) => id === nativeEvent.event);
-        if (!item) return;
-        const action = resolveOperationsNavigationAction(pathname, item.route as OperationsRoute);
-        if (action === "noop") return;
-        router.replace(item.route);
-      }}
-      style={{
-        bottom: 0,
-        height: triggerHeight,
-        position: "absolute",
-        right: 0,
-        width: triggerWidth,
-        zIndex: 2,
-      }}
-      testID="others-native-menu"
-    >
-      <View
-        accessible
-        accessibilityLabel={t("tabOthers")}
-        accessibilityRole="button"
-        style={{
-          backgroundColor: colors.invisibleHitTarget,
-          height: triggerHeight,
-          width: triggerWidth,
+    <>
+      <MenuView
+        ref={menuRef}
+        actions={items}
+        onPressAction={({ nativeEvent }) => {
+          const item = items.find(({ id }) => id === nativeEvent.event);
+          if (!item) return;
+          const action = resolveOperationsNavigationAction(pathname, item.route as OperationsRoute);
+          if (action === "noop") return;
+          router.replace(item.route);
         }}
-      />
-    </MenuView>
+        style={{
+          bottom: 0,
+          height: triggerHeight,
+          position: "absolute",
+          right: 0,
+          width: triggerWidth,
+          zIndex: 2,
+        }}
+        testID="others-native-menu"
+      >
+        <View
+          accessible={Platform.OS !== "android"}
+          accessibilityLabel={t("tabOthers")}
+          accessibilityRole="button"
+          style={{
+            backgroundColor: colors.invisibleHitTarget,
+            height: triggerHeight,
+            width: triggerWidth,
+          }}
+        />
+      </MenuView>
+      {Platform.OS === "android" ? (
+        // The tap target above lives inside `MenuView`'s Jetpack Compose
+        // interop tree (`Host matchContents` -> `RNHostView` -> `Pressable`),
+        // which intermittently drops the very first touch on Android before
+        // the interop bridge finishes attaching — the popup silently fails
+        // to open. A plain RN `Pressable` gets reliable touch delivery and
+        // opens the same menu through its documented imperative `ref.show()`
+        // escape hatch instead of depending on the Compose-hosted tap.
+        <Pressable
+          accessibilityLabel={t("tabOthers")}
+          accessibilityRole="button"
+          onPress={() => menuRef.current?.show()}
+          style={{
+            bottom: 0,
+            height: triggerHeight,
+            position: "absolute",
+            right: 0,
+            width: triggerWidth,
+            zIndex: 3,
+          }}
+        />
+      ) : null}
+    </>
   );
 }

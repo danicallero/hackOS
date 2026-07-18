@@ -1,5 +1,3 @@
-import { GlassView } from "expo-glass-effect";
-import { SymbolView, type SymbolViewProps } from "expo-symbols";
 import type { ReactNode } from "react";
 import {
   ActivityIndicator,
@@ -9,6 +7,8 @@ import {
   View,
   type ViewStyle,
 } from "react-native";
+import { GlassView } from "@/components/glass-view";
+import { SymbolView, type SymbolViewProps } from "@/components/symbol";
 
 import { useLocale } from "@/lib/i18n";
 import { colors } from "@/theme/colors";
