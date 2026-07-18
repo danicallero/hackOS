@@ -1,6 +1,7 @@
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
+import { isImplausiblyFuture } from "../../lib/clock.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
 import { resolveByBadge } from "./badge.js";
@@ -54,7 +55,7 @@ export async function activityScan(
   }
 
   const userId = await resolveByBadge(pool, input.badgeId);
-  if (input.scannedAt && input.scannedAt.getTime() > Date.now()) {
+  if (input.scannedAt && isImplausiblyFuture(input.scannedAt)) {
     throw new BadRequestError("Offline scan timestamp must be in the past");
   }
 
