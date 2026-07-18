@@ -2344,6 +2344,31 @@ const dict: Record<string, I18nText> = {
     gl: "{start}–{end} de {total}",
     en: "{start}–{end} of {total}",
   },
+  deleteNotification: {
+    es: "Eliminar",
+    gl: "Eliminar",
+    en: "Delete",
+  },
+  deleteNotificationAria: {
+    es: "Eliminar este mensaje",
+    gl: "Eliminar esta mensaxe",
+    en: "Delete this message",
+  },
+  deleteThisNotification: {
+    es: "¿Eliminar este mensaje?",
+    gl: "¿Eliminar esta mensaxe?",
+    en: "Delete this message?",
+  },
+  deleteNotificationDesc: {
+    es: "Esta acción no se puede deshacer.",
+    gl: "Esta acción non se pode desfacer.",
+    en: "This action cannot be undone.",
+  },
+  couldNotDeleteNotification: {
+    es: "No se ha podido eliminar el mensaje.",
+    gl: "Non se puido eliminar a mensaxe.",
+    en: "Could not delete this message.",
+  },
   couldNotLoadPreferencesTitle: {
     es: "No se han podido cargar tus preferencias",
     gl: "Non se puideron cargar as túas preferencias",

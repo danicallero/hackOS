@@ -240,6 +240,64 @@ describe("in-app inbox (H50/H51)", () => {
     });
     expect(res.json().total).toBe(0);
   });
+
+  it("deletes an inbox notification", async () => {
+    const userId = await createUser();
+    const [id] = await notify(pool, {
+      userId,
+      category: "announcements",
+      channels: ["in_app"],
+      payload: { subject: "gone soon", body: "b" },
+    });
+
+    const del = await app.inject({
+      method: "DELETE",
+      url: `/api/me/notifications/${id}`,
+      headers: asUser(userId),
+    });
+    expect(del.statusCode).toBe(200);
+    expect(del.json().id).toBe(id);
+
+    const list = await app.inject({
+      method: "GET",
+      url: "/api/me/notifications",
+      headers: asUser(userId),
+    });
+    expect(list.json().total).toBe(0);
+
+    // deleting again 404s — already gone
+    const again = await app.inject({
+      method: "DELETE",
+      url: `/api/me/notifications/${id}`,
+      headers: asUser(userId),
+    });
+    expect(again.statusCode).toBe(404);
+  });
+
+  it("cannot delete another user's notification", async () => {
+    const owner = await createUser();
+    const intruder = await createUser();
+    const [id] = await notify(pool, {
+      userId: owner,
+      category: "announcements",
+      channels: ["in_app"],
+      payload: { subject: "private", body: "b" },
+    });
+
+    const del = await app.inject({
+      method: "DELETE",
+      url: `/api/me/notifications/${id}`,
+      headers: asUser(intruder),
+    });
+    expect(del.statusCode).toBe(404);
+
+    const list = await app.inject({
+      method: "GET",
+      url: "/api/me/notifications",
+      headers: asUser(owner),
+    });
+    expect(list.json().total).toBe(1);
+  });
 });
 
 describe("audit surface (H53)", () => {
