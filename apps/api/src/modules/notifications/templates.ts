@@ -205,15 +205,15 @@ const TEMPLATES: Record<string, TemplateDefinition> = {
   "schedule.reminder": {
     en: {
       subject: "Reminder: {{title}}",
-      body: "Hi,\n\n{{title}} starts at {{startsAt}}.{{locationLine}}\n\nSee you there!",
+      body: "Hi,\n\n{{title}} starts at {{startsAtLabel}}.{{locationLine}}\n\nSee you there!",
     },
     es: {
       subject: "Recordatorio: {{title}}",
-      body: "Hola,\n\n{{title}} empieza a las {{startsAt}}.{{locationLine}}\n\n¡Nos vemos allí!",
+      body: "Hola,\n\n{{title}} empieza a las {{startsAtLabel}}.{{locationLine}}\n\n¡Nos vemos allí!",
     },
     gl: {
       subject: "Lembranza: {{title}}",
-      body: "Ola,\n\n{{title}} comeza ás {{startsAt}}.{{locationLine}}\n\nVémonos alí!",
+      body: "Ola,\n\n{{title}} comeza ás {{startsAtLabel}}.{{locationLine}}\n\nVémonos alí!",
     },
   },
 };
@@ -255,6 +255,20 @@ const PUSH_TEMPLATES: Record<string, PushTemplateDefinition> = {
     gl: {
       title: "Entra xa na sala {{roomName}}",
       body: "É a quenda do teu equipo para {{challengeName}}.",
+    },
+  },
+  "schedule.reminder": {
+    en: {
+      title: "{{title}}",
+      body: "Starts at {{startsAtLabel}}{{locationSuffix}}",
+    },
+    es: {
+      title: "{{title}}",
+      body: "Empieza a las {{startsAtLabel}}{{locationSuffix}}",
+    },
+    gl: {
+      title: "{{title}}",
+      body: "Comeza ás {{startsAtLabel}}{{locationSuffix}}",
     },
   },
 };
