@@ -29,6 +29,7 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { AlertModal } from "@/components/common/alert-modal";
 import { type Column, DataTable } from "@/components/common/data-table";
+import { DateTimeInput } from "@/components/common/datetime-input";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
 import { MultiSelect } from "@/components/common/multi-select";
@@ -1558,12 +1559,7 @@ function EditTimeLogModal({
         </div>
         <div className="space-y-2">
           <Label htmlFor="edit-presence-time">{t("timeLabel")}</Label>
-          <Input
-            id="edit-presence-time"
-            type="datetime-local"
-            value={scannedAt}
-            onChange={(e) => setScannedAt(e.target.value)}
-          />
+          <DateTimeInput id="edit-presence-time" value={scannedAt} onChange={setScannedAt} />
         </div>
         <div className="space-y-2">
           <Label htmlFor="edit-presence-notes">{t("notes")}</Label>
@@ -1737,12 +1733,11 @@ function PresenceSignalModal({
         )}
         <div className="space-y-2">
           <Label htmlFor="presence-signal-time">{t("timeLabel")}</Label>
-          <Input
+          <DateTimeInput
             id="presence-signal-time"
-            type="datetime-local"
             value={occurredAt}
             max={toDatetimeLocal(new Date().toISOString())}
-            onChange={(event) => setOccurredAt(event.target.value)}
+            onChange={setOccurredAt}
           />
         </div>
         <div className="space-y-2">

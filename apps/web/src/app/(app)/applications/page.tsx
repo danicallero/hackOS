@@ -16,6 +16,7 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 import { type Column, DataTable } from "@/components/common/data-table";
+import { DateTimeInput } from "@/components/common/datetime-input";
 import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -322,9 +323,12 @@ export default function ApplicationsPage() {
                   <FormItem>
                     <FormLabel>{t("colOpens")}</FormLabel>
                     <FormControl>
-                      <Input type="datetime-local" {...field} />
+                      <DateTimeInput
+                        value={field.value}
+                        onChange={field.onChange}
+                        nullOption={{ label: t("openImmediately") }}
+                      />
                     </FormControl>
-                    <FormDescription>{t("blankOpenNow")}</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -336,9 +340,12 @@ export default function ApplicationsPage() {
                   <FormItem>
                     <FormLabel>{t("colCloses")}</FormLabel>
                     <FormControl>
-                      <Input type="datetime-local" {...field} />
+                      <DateTimeInput
+                        value={field.value}
+                        onChange={field.onChange}
+                        nullOption={{ label: t("neverCloses") }}
+                      />
                     </FormControl>
-                    <FormDescription>{t("blankNeverCloses")}</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}

@@ -49,7 +49,7 @@ export function ScheduledDateTimeField({
   const hasValue = Boolean(value);
   const display = hasValue ? formatScheduledDateTime(value, undefined) : resolvedEmptyLabel;
   const fieldChrome =
-    "h-10 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm dark:bg-input/50";
+    "min-h-10 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm dark:bg-input/50";
 
   function commitDraft() {
     onChange(draft);
@@ -68,7 +68,7 @@ export function ScheduledDateTimeField({
             type="datetime-local"
             value={draft}
             disabled={disabled}
-            className="tabular-nums"
+            className="min-w-[14rem] tabular-nums"
             onChange={(e) => {
               setDraft(e.target.value);
             }}

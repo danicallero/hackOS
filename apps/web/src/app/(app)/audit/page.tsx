@@ -12,6 +12,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { type Column, DataTable } from "@/components/common/data-table";
+import { DateTimeInput } from "@/components/common/datetime-input";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
@@ -236,18 +237,16 @@ export default function AuditPage() {
           />
         </FilterField>
         <FilterField label={t("fromLabel")}>
-          <Input
-            type="datetime-local"
+          <DateTimeInput
             value={filters.dateFrom}
-            onChange={(e) => setFilters((f) => ({ ...f, dateFrom: e.target.value }))}
+            onChange={(v) => setFilters((f) => ({ ...f, dateFrom: v }))}
             className="h-9"
           />
         </FilterField>
         <FilterField label={t("toLabel")}>
-          <Input
-            type="datetime-local"
+          <DateTimeInput
             value={filters.dateTo}
-            onChange={(e) => setFilters((f) => ({ ...f, dateTo: e.target.value }))}
+            onChange={(v) => setFilters((f) => ({ ...f, dateTo: v }))}
             className="h-9"
           />
         </FilterField>

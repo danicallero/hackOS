@@ -5,6 +5,7 @@ import { EVENTS } from "@hackos/shared/events";
 import { AlertTriangleIcon, MonitorUpIcon, RadioIcon, WifiIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { DateTimeInput } from "@/components/common/datetime-input";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
@@ -303,13 +304,12 @@ export default function TvControlPage() {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="timer-end">{t("customEndTime")}</Label>
-              <Input
+              <DateTimeInput
                 id="timer-end"
-                type="datetime-local"
                 value={endsAt}
-                onChange={(event) => setEndsAt(event.target.value)}
+                onChange={setEndsAt}
+                nullOption={{ label: t("useEventEndTime") }}
               />
-              <p className="text-muted-foreground text-sm">{t("leaveBlankEventEndTime")}</p>
             </div>
           </div>
         )}

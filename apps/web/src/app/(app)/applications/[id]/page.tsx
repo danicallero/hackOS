@@ -513,9 +513,12 @@ function MetadataCard({ form, onSaved }: { form: ApplicationForm; onSaved: () =>
                 <FormItem>
                   <FormLabel>{t("colOpens")}</FormLabel>
                   <FormControl>
-                    <DateTimeInput value={field.value} onChange={field.onChange} />
+                    <DateTimeInput
+                      value={field.value}
+                      onChange={field.onChange}
+                      nullOption={{ label: t("openImmediately") }}
+                    />
                   </FormControl>
-                  <FormDescription>{t("blankOpenNow")}</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -527,9 +530,12 @@ function MetadataCard({ form, onSaved }: { form: ApplicationForm; onSaved: () =>
                 <FormItem>
                   <FormLabel>{t("colCloses")}</FormLabel>
                   <FormControl>
-                    <DateTimeInput value={field.value} onChange={field.onChange} />
+                    <DateTimeInput
+                      value={field.value}
+                      onChange={field.onChange}
+                      nullOption={{ label: t("neverCloses") }}
+                    />
                   </FormControl>
-                  <FormDescription>{t("blankNeverCloses")}</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
