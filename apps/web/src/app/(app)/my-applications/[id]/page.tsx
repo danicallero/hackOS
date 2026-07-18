@@ -533,11 +533,14 @@ function ApplicationTimeline({ response }: { response: MyResponseDetail | null }
       </h2>
       <ol className="mt-3 grid gap-2 sm:grid-cols-5">
         {steps.map((step, index) => (
-          <li key={step.label} className="flex items-center gap-2 text-sm sm:block">
+          <li
+            key={step.label}
+            className="flex items-center gap-2 text-sm sm:flex-col sm:gap-1.5 sm:text-center"
+          >
             <span
               aria-hidden="true"
               className={cn(
-                "inline-flex size-6 items-center justify-center rounded-full border text-xs font-medium tabular-nums",
+                "inline-flex size-6 shrink-0 items-center justify-center rounded-full border text-xs font-medium tabular-nums",
                 step.reached
                   ? "border-primary bg-primary text-primary-foreground"
                   : "text-muted-foreground",
