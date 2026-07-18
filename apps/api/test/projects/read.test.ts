@@ -618,3 +618,35 @@ describe("POST /api/devpost/prizes/:prizeName/map", () => {
     expect(res.statusCode).toBe(404);
   });
 });
+
+describe("GET /api/devpost/prizes", () => {
+  it("is readable by PROJECTS_IMPORT (H17: importers must see unmapped prizes), not just QUEUE_ADMIN", async () => {
+    const server = await getApp();
+    await seedMatchableUsers();
+    const operator = await createUserWithCapabilities([CAPABILITIES.PROJECTS_IMPORT]);
+    await importFixtures(operator);
+
+    const res = await server.inject({
+      method: "GET",
+      url: "/api/devpost/prizes",
+      headers: asUser(operator),
+    });
+    expect(res.statusCode).toBe(200);
+    const { prizes } = res.json();
+    expect(prizes.map((p: { name: string }) => p.name)).toContain("Most Caffeinated");
+    expect(
+      prizes.every((p: { mappedChallengeId: number | null }) => p.mappedChallengeId === null),
+    ).toBe(true);
+  });
+
+  it("403s for a caller without PROJECTS_IMPORT or QUEUE_ADMIN", async () => {
+    const server = await getApp();
+    const bystander = await createUser();
+    const res = await server.inject({
+      method: "GET",
+      url: "/api/devpost/prizes",
+      headers: asUser(bystander),
+    });
+    expect(res.statusCode).toBe(403);
+  });
+});

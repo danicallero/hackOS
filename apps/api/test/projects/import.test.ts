@@ -183,6 +183,7 @@ describe("POST /api/devpost/imports/confirm (H16)", () => {
       participantsMatched: 2, // alice (primary) + bob (verified secondary)
       participantsUnmatched: 3, // carol (unverified), dave, frank
       prizesSeen: 2,
+      prizesUnmapped: 2, // neither prize is mapped to a challenge yet
     });
 
     const { pool } = await import("../../src/db/pool.js");

@@ -79,6 +79,7 @@ export interface ConfirmImportResult {
     participantsMatched: number;
     participantsUnmatched: number;
     prizesSeen: number;
+    prizesUnmapped: number;
   };
   repos: Array<{ id: number; title: string; action: "create" | "update" }>;
 }
@@ -172,12 +173,29 @@ export async function confirmImport(
       }
     }
 
+    // H17: surface how many of the prizes this import saw still have no
+    // reto mapping, so the "done" screen can point back at the resolution
+    // screen even when every participant matched.
+    let prizesUnmapped = 0;
+    if (prizeNamesSeen.size > 0) {
+      const { rows: mappedRows } = await client.query(
+        `SELECT devpost_tags FROM challenges WHERE devpost_tags ?| $1::text[]`,
+        [[...prizeNamesSeen]],
+      );
+      const mappedPrizeNames = new Set<string>();
+      for (const row of mappedRows as Array<{ devpost_tags: string[] }>) {
+        for (const tag of row.devpost_tags) mappedPrizeNames.add(tag);
+      }
+      prizesUnmapped = [...prizeNamesSeen].filter((name) => !mappedPrizeNames.has(name)).length;
+    }
+
     const counts = {
       reposCreated,
       reposUpdated,
       participantsMatched,
       participantsUnmatched,
       prizesSeen: prizeNamesSeen.size,
+      prizesUnmapped,
     };
 
     await audit(client, {

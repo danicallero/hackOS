@@ -4174,6 +4174,66 @@ const dict: Record<string, I18nText> = {
     en: "Claim email queued.",
   },
   claimEmail: { es: "Correo de reclamación", gl: "Correo de reclamación", en: "Claim email" },
+  resolveImports: {
+    es: "Resolver importación",
+    gl: "Resolver importación",
+    en: "Resolve import",
+  },
+  unresolvedConflictsTitle: {
+    es: "Conflictos por resolver",
+    gl: "Conflitos por resolver",
+    en: "Unresolved conflicts",
+  },
+  unresolvedConflictsDesc: {
+    es: "Todo lo que la última importación de Devpost dejó pendiente: participantes sin cuenta y premios sin reto asociado.",
+    gl: "Todo o que a última importación de Devpost deixou pendente: participantes sen conta e premios sen reto asociado.",
+    en: "Everything the last Devpost import left unresolved: participants without an account and prizes without a mapped challenge.",
+  },
+  noConflictsTitle: {
+    es: "Sin conflictos pendientes",
+    gl: "Sen conflitos pendentes",
+    en: "No pending conflicts",
+  },
+  noConflictsDesc: {
+    es: "Todos los participantes importados están vinculados y todos los premios están asociados a un reto.",
+    gl: "Todos os participantes importados están vinculados e todos os premios están asociados a un reto.",
+    en: "Every imported participant is linked and every prize maps to a challenge.",
+  },
+  unmappedPrizesTitle: {
+    es: "Premios sin asociar",
+    gl: "Premios sen asociar",
+    en: "Unmapped prizes",
+  },
+  unmappedPrizesDesc: {
+    es: "Premios de Devpost vistos en la importación que todavía no se corresponden con ningún reto de hackOS.",
+    gl: "Premios de Devpost vistos na importación que aínda non se corresponden con ningún reto de hackOS.",
+    en: "Devpost prizes seen on import that don't yet map to a hackOS challenge.",
+  },
+  noUnmappedPrizesTitle: {
+    es: "Sin premios por asociar",
+    gl: "Sen premios por asociar",
+    en: "No unmapped prizes",
+  },
+  allPrizesMappedDesc: {
+    es: "Todos los premios de Devpost importados están asociados a un reto.",
+    gl: "Todos os premios de Devpost importados están asociados a un reto.",
+    en: "All imported Devpost prizes are mapped to a challenge.",
+  },
+  colPrizesUnmapped: {
+    es: "Premios sin asociar",
+    gl: "Premios sen asociar",
+    en: "Prizes unmapped",
+  },
+  prizesUnmappedNoteOne: {
+    es: "{count} premio detectado no está asociado a ningún reto. Resuélvelo en la página de sin emparejar.",
+    gl: "{count} premio detectado non está asociado a ningún reto. Resólveo na páxina de sen emparellar.",
+    en: "{count} detected prize isn't mapped to a challenge. Resolve it on the unmatched page.",
+  },
+  prizesUnmappedNoteOther: {
+    es: "{count} premios detectados no están asociados a ningún reto. Resuélvelos en la página de sin emparejar.",
+    gl: "{count} premios detectados non están asociados a ningún reto. Resólveos na páxina de sen emparellar.",
+    en: "{count} detected prizes aren't mapped to a challenge. Resolve them on the unmatched page.",
+  },
 
   // ---- Admin: judging criteria & question types ----
   typeNumeric010: { es: "Numérico 0-10", gl: "Numérico 0-10", en: "Numeric 0-10" },

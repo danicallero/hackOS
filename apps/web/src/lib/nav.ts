@@ -160,6 +160,16 @@ export const WORKSPACES: Workspace[] = [
         sponsorVisible: true,
         judgeVisible: true,
       },
+      {
+        // H17: persistent entry point to the import conflict resolution screen —
+        // previously only reachable via a conditional link right after a fresh
+        // import, so unresolved conflicts from an earlier import (or one with
+        // only unmapped prizes) had no way back in.
+        title: "resolveImports",
+        href: "/projects/unmatched",
+        icon: UsersIcon,
+        capability: CAPABILITIES.PROJECTS_IMPORT,
+      },
     ],
   },
   {

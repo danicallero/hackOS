@@ -3,7 +3,12 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { pool } from "../../db/pool.js";
-import { requireAuth, requireCapability, userHasCapability } from "../../lib/capabilities.js";
+import {
+  requireAnyCapability,
+  requireAuth,
+  requireCapability,
+  userHasCapability,
+} from "../../lib/capabilities.js";
 import { ForbiddenError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { listDevpostPrizes } from "../challenges/service.js";
@@ -189,9 +194,11 @@ export function registerProjectRoutes(app: FastifyInstance): void {
       mapPrizeToChallenge(req.userId as number, req.params.prizeName, req.body.challengeId),
   );
 
+  // H17: importers also need this list to see which imported prizes still
+  // need mapping on the conflict-resolution screen, not just queue admins.
   r.get(
     "/api/devpost/prizes",
-    { preHandler: requireCapability(CAPABILITIES.QUEUE_ADMIN) },
+    { preHandler: requireAnyCapability(CAPABILITIES.QUEUE_ADMIN, CAPABILITIES.PROJECTS_IMPORT) },
     async () => ({ prizes: await listDevpostPrizes() }),
   );
 

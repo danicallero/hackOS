@@ -6,6 +6,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
 import {
   ArrowLeftIcon,
+  CheckCircle2Icon,
   LinkIcon,
   LockIcon,
   MailIcon,
@@ -19,6 +20,7 @@ import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
+import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,8 +36,10 @@ import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import {
+  type DevpostPrize,
   linkParticipant,
   linkSecondaryEmail,
+  listDevpostPrizes,
   listUnmatched,
   mapPrize,
   sendClaimEmail,
@@ -66,14 +70,20 @@ export default function UnmatchedProjectsPage() {
   const { can } = useSessionContext();
   const canImport = can(CAPABILITIES.PROJECTS_IMPORT);
   const [rows, setRows] = useState<UnmatchedRow[]>([]);
+  const [prizes, setPrizes] = useState<DevpostPrize[]>([]);
   const [users, setUsers] = useState<UserOption[]>([]);
   const [challenges, setChallenges] = useState<PublicChallenge[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [userQuery, setUserQuery] = useState("");
   const [selectedUsers, setSelectedUsers] = useState<Record<string, string>>({});
+  const [selectedPrizeChallenges, setSelectedPrizeChallenges] = useState<Record<string, string>>(
+    {},
+  );
   const [prizeName, setPrizeName] = useState("");
   const [challengeId, setChallengeId] = useState("");
+
+  const unmappedPrizes = prizes.filter((p) => p.mappedChallengeId === null);
 
   const load = useCallback(async () => {
     if (!canImport) {
@@ -82,11 +92,13 @@ export default function UnmatchedProjectsPage() {
     }
     setLoading(true);
     try {
-      const [unmatched, publicChallenges] = await Promise.all([
+      const [unmatched, devpostPrizes, publicChallenges] = await Promise.all([
         listUnmatched(),
+        listDevpostPrizes(),
         api.get<{ items: PublicChallenge[] }>("/api/public/challenges"),
       ]);
       setRows(unmatched.participants.map(toUnmatchedRow));
+      setPrizes(devpostPrizes.prizes);
       setChallenges(publicChallenges.items);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("couldNotLoadUnmatched"));
@@ -163,6 +175,84 @@ export default function UnmatchedProjectsPage() {
           </Button>
         }
       />
+
+      {!loading && (
+        <SectionCard
+          title={t("unresolvedConflictsTitle")}
+          description={t("unresolvedConflictsDesc")}
+        >
+          {rows.length === 0 && unmappedPrizes.length === 0 ? (
+            <EmptyState
+              icon={CheckCircle2Icon}
+              title={t("noConflictsTitle")}
+              description={t("noConflictsDesc")}
+            />
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <StatCard label={t("colMembersUnmatched")} value={rows.length} />
+              <StatCard label={t("colPrizesUnmapped")} value={unmappedPrizes.length} />
+            </div>
+          )}
+        </SectionCard>
+      )}
+
+      {unmappedPrizes.length > 0 && (
+        <SectionCard title={t("unmappedPrizesTitle")} description={t("unmappedPrizesDesc")}>
+          <ul className="space-y-3">
+            {unmappedPrizes.map((prize) => {
+              const key = `prize:${prize.name}`;
+              const selected = selectedPrizeChallenges[key] ?? "";
+              return (
+                <li key={prize.name} className="rounded-md border p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{prize.name}</p>
+                      <p className="text-muted-foreground text-xs">
+                        {prize.repoCount === 1
+                          ? t("projectCountOne", { count: prize.repoCount })
+                          : t("projectCountOther", { count: prize.repoCount })}
+                      </p>
+                    </div>
+                    <StatusBadge tone="warning">{t("unmappedBadge")}</StatusBadge>
+                  </div>
+                  <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto] lg:items-end">
+                    <div className="space-y-2">
+                      <Label htmlFor={`prize-challenge-${key}`}>{t("challengeLabel")}</Label>
+                      <Select
+                        value={selected}
+                        onValueChange={(value) =>
+                          setSelectedPrizeChallenges((current) => ({ ...current, [key]: value }))
+                        }
+                      >
+                        <SelectTrigger id={`prize-challenge-${key}`} className="w-full">
+                          <SelectValue placeholder={t("selectChallengePlaceholder")} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {challenges.map((challenge) => (
+                            <SelectItem key={challenge.id} value={String(challenge.id)}>
+                              {challengeTitleText(challenge.title)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button
+                      variant="outline"
+                      disabled={!selected || busy === key}
+                      onClick={() =>
+                        mutate(key, () => mapPrize(prize.name, Number(selected)), t("prizeMapped"))
+                      }
+                    >
+                      <LinkIcon className="size-4" />
+                      {t("mapPrize")}
+                    </Button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </SectionCard>
+      )}
 
       <SectionCard
         title={t("prizeMappingTitle")}
