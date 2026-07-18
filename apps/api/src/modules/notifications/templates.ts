@@ -93,43 +93,43 @@ const TEMPLATES: Record<string, TemplateDefinition> = {
   "auth.verify": {
     en: {
       subject: "Verify your hackOS email",
-      body: "Hi {{name}},\n\nConfirm your email address to unlock the rest of hackOS:\n\n[Verify email]({{verifyUrl}})\n\nDon't see this email? Check your spam or junk folder — mark it as not spam so future messages (including ones with links) reach your inbox.\n\nIf you didn't request this, ignore this message.",
+      body: "Hi {{name}},\n\nConfirm your email address to unlock the rest of hackOS:\n\n[Verify email]({{verifyUrl}})\n\nDid we land in spam? Move this message to your inbox and add {{fromAddress}} to your contacts so you don't miss future messages.\n\nIf you didn't request this, ignore this message.",
     },
     es: {
       subject: "Verifica tu correo de hackOS",
-      body: 'Hola {{name}},\n\nConfirma tu dirección de correo para desbloquear el resto de hackOS:\n\n[Verificar correo]({{verifyUrl}})\n\n¿No ves este correo? Revisa la carpeta de spam o correo no deseado y márcalo como "no es spam" para que los próximos mensajes (incluidos los que llevan enlaces) te lleguen a la bandeja de entrada.\n\nSi no lo has pedido tú, ignora este mensaje.',
+      body: "Hola {{name}},\n\nConfirma tu dirección de correo para desbloquear el resto de hackOS:\n\n[Verificar correo]({{verifyUrl}})\n\n¿Caímos en spam? Mueve este mensaje a la bandeja de entrada y añade {{fromAddress}} a tus contactos para no perderte ningún mensaje.\n\nSi no lo has pedido tú, ignora este mensaje.",
     },
     gl: {
       subject: "Verifica o teu correo de hackOS",
-      body: 'Ola {{name}},\n\nConfirma o teu enderezo de correo para desbloquear o resto de hackOS:\n\n[Verificar correo]({{verifyUrl}})\n\nNon ves este correo? Revisa o cartafol de spam ou correo non desexado e márcao como "non é spam" para que as próximas mensaxes (incluídas as que levan ligazóns) che cheguen á caixa de entrada.\n\nSe non o pediches ti, ignora esta mensaxe.',
+      body: "Ola {{name}},\n\nConfirma o teu enderezo de correo para desbloquear o resto de hackOS:\n\n[Verificar correo]({{verifyUrl}})\n\nCaemos en spam? Move esta mensaxe á caixa de entrada e engade {{fromAddress}} aos teus contactos para non perder ningunha mensaxe.\n\nSe non o pediches ti, ignora esta mensaxe.",
     },
   },
   "auth.reset": {
     en: {
       subject: "Reset your hackOS password",
-      body: "Hi {{name}},\n\nUse this button to set a new password:\n\n[Reset password]({{resetUrl}})\n\nIf you didn't request this, you can safely ignore this email — your password hasn't changed.",
+      body: "Hi {{name}},\n\nUse this button to set a new password:\n\n[Reset password]({{resetUrl}})\n\nDid we land in spam? Move this message to your inbox and add {{fromAddress}} to your contacts so you don't miss future messages.\n\nIf you didn't request this, you can safely ignore this email — your password hasn't changed.",
     },
     es: {
       subject: "Restablece tu contraseña de hackOS",
-      body: "Hola {{name}},\n\nUsa este botón para fijar una contraseña nueva:\n\n[Restablecer contraseña]({{resetUrl}})\n\nSi no lo has pedido tú, puedes ignorar este correo — tu contraseña no ha cambiado.",
+      body: "Hola {{name}},\n\nUsa este botón para fijar una contraseña nueva:\n\n[Restablecer contraseña]({{resetUrl}})\n\n¿Caímos en spam? Mueve este mensaje a la bandeja de entrada y añade {{fromAddress}} a tus contactos para no perderte ningún mensaje.\n\nSi no lo has pedido tú, puedes ignorar este correo — tu contraseña no ha cambiado.",
     },
     gl: {
       subject: "Restablece o teu contrasinal de hackOS",
-      body: "Ola {{name}},\n\nUsa este botón para fixar un contrasinal novo:\n\n[Restablecer contrasinal]({{resetUrl}})\n\nSe non o pediches ti, podes ignorar este correo — o teu contrasinal non cambiou.",
+      body: "Ola {{name}},\n\nUsa este botón para fixar un contrasinal novo:\n\n[Restablecer contrasinal]({{resetUrl}})\n\nCaemos en spam? Move esta mensaxe á caixa de entrada e engade {{fromAddress}} aos teus contactos para non perder ningunha mensaxe.\n\nSe non o pediches ti, podes ignorar este correo — o teu contrasinal non cambiou.",
     },
   },
   "auth.invite": {
     en: {
       subject: "You're invited to hackOS",
-      body: "Hi,\n\nCreate your account to continue:\n\n[Create account]({{claimUrl}})\n\nSet your password, name and the rest of your details from there.",
+      body: "Hi,\n\nCreate your account to continue:\n\n[Create account]({{claimUrl}})\n\nDid we land in spam? Move this message to your inbox and add {{fromAddress}} to your contacts so you don't miss future messages.\n\nSet your password, name and the rest of your details from there.",
     },
     es: {
       subject: "Te han invitado a hackOS",
-      body: "Hola,\n\nCrea tu cuenta para continuar:\n\n[Crear cuenta]({{claimUrl}})\n\nDesde ahí fijas tu contraseña, nombre y el resto de tus datos.",
+      body: "Hola,\n\nCrea tu cuenta para continuar:\n\n[Crear cuenta]({{claimUrl}})\n\n¿Caímos en spam? Mueve este mensaje a la bandeja de entrada y añade {{fromAddress}} a tus contactos para no perderte ningún mensaje.\n\nDesde ahí fijas tu contraseña, nombre y el resto de tus datos.",
     },
     gl: {
       subject: "Convidáronte a hackOS",
-      body: "Ola,\n\nCrea a túa conta para continuar:\n\n[Crear conta]({{claimUrl}})\n\nDende alí fixa o teu contrasinal, nome e o resto dos teus datos.",
+      body: "Ola,\n\nCrea a túa conta para continuar:\n\n[Crear conta]({{claimUrl}})\n\nCaemos en spam? Move esta mensaxe á caixa de entrada e engade {{fromAddress}} aos teus contactos para non perder ningunha mensaxe.\n\nDende alí fixa o teu contrasinal, nome e o resto dos teus datos.",
     },
   },
   "queue.called": {
@@ -447,6 +447,7 @@ export function renderEmailTemplate(
   const vars = {
     subject: payload.subject ?? "hackOS notification",
     body: payload.body ?? "",
+    fromAddress: config.MAIL_FROM_ADDRESS,
     ...payload.vars,
   };
   const subject = interpolate(variant.subject, vars);
