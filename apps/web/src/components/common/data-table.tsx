@@ -10,6 +10,7 @@ import {
   XIcon,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
@@ -158,6 +159,7 @@ export function DataTable<T>({
       s?.id === id ? (s.dir === "asc" ? { id, dir: "desc" } : null) : { id, dir: "asc" },
     );
 
+  const router = useRouter();
   const showToolbar = Boolean(searchable || toolbar);
   const checkboxCol = selectable ? 1 : 0;
   const rowInteractionCol = onRowClick || getRowHref ? 1 : 0;
@@ -361,8 +363,17 @@ export function DataTable<T>({
               rows.map((row) => {
                 const rowId = getRowId(row);
                 const checked = selectable && selectedIds?.has(rowId);
+                const rowHref = getRowHref?.(row);
                 return (
-                  <TableRow key={rowId}>
+                  <TableRow
+                    key={rowId}
+                    className={rowInteractionCol > 0 ? "cursor-pointer" : undefined}
+                    onClick={
+                      rowInteractionCol > 0
+                        ? () => (rowHref ? router.push(rowHref) : onRowClick?.(row))
+                        : undefined
+                    }
+                  >
                     {selectable && (
                       <TableCell className="w-10" onClick={(e) => e.stopPropagation()}>
                         <Checkbox
@@ -381,7 +392,7 @@ export function DataTable<T>({
                       </TableCell>
                     ))}
                     {rowInteractionCol > 0 && (
-                      <TableCell className="text-right">
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         {getRowHref ? (
                           <Button variant="ghost" size="icon" className="size-11 md:size-8" asChild>
                             <Link href={getRowHref(row)} aria-label={getRowLabel?.(row) ?? rowId}>
