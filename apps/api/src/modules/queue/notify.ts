@@ -92,6 +92,9 @@ export async function notifyTeamCalled(
   for (const userId of memberIds) {
     await broadcast(`${SSE_TOPICS.USER_PREFIX}${userId}`, EVENTS.USER_QUEUE_CALLED, payload);
   }
+  // Operator-facing echo on the shared queue topic, carrying the team name so
+  // the queue-ops screen can hint "team X should arrive at room Y" (opt-in).
+  await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_TEAM_CALLED, { ...payload, teamName });
 }
 
 /** H38 pre-aviso: estimated wait <= queue_settings.pre_call_notification_eta_minutes. */
