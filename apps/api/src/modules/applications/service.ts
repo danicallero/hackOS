@@ -527,32 +527,6 @@ export async function submitResponse(
 
 // ── review (H13) ─────────────────────────────────────────────────────────────
 
-export async function startReview(actorId: number, responseId: number): Promise<ResponseRow> {
-  return withTransaction(async (client) => {
-    const resp = await lockResponse(client, responseId);
-    if (resp.status === "review") return resp; // idempotent
-    if (resp.status !== "submitted") {
-      throw new ConflictError(
-        "Responses move to review automatically on submit; cannot start review from this status",
-        { status: resp.status },
-      );
-    }
-    const updated = await client.query(
-      `UPDATE application_responses SET status = 'review' WHERE id = $1 RETURNING *`,
-      [responseId],
-    );
-    await audit(client, {
-      actorId,
-      entityType: "application_response",
-      entityId: responseId,
-      action: "review_started",
-      before: { status: "submitted" },
-      after: { status: "review" },
-    });
-    return updated.rows[0];
-  });
-}
-
 export async function upsertReview(
   authorId: number,
   responseId: number,
@@ -623,7 +597,12 @@ export async function decide(
     );
     const app = appRows[0] as ApplicationRow;
 
-    if (resp.status !== "review") {
+    // "submitted" is a deprecated pre-review state — submitResponse now always
+    // lands directly on "review" (or "confirmed" if invited), but rows created
+    // before that change can still be stuck at "submitted" with no other path
+    // forward (there's no separate start-review step anymore). Treat it as an
+    // alias of "review" here so those don't get permanently stranded.
+    if (resp.status !== "review" && resp.status !== "submitted") {
       throw new ConflictError("Only reviewed responses can be decided", { status: resp.status });
     }
 
@@ -1276,9 +1255,9 @@ export interface ResponseDetail {
 function computeAvailableActions(status: string): string[] {
   const actions: string[] = ["staff-notes"];
   switch (status) {
-    case "submitted":
+    case "submitted": // deprecated alias of "review" — see decide()
     case "review":
-      actions.push("my-review");
+      actions.push("my-review", "decide");
       break;
     case "accepted_internal":
     case "rejected_internal":

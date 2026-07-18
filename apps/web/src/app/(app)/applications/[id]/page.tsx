@@ -1,13 +1,16 @@
 "use client";
 
-// Application form detail (H11–H14). Two tabs:
+// Application form detail (H11–H15). Up to four tabs, gated per capability:
 //   • Form (applications:manage) — edit metadata (window, quota, type) and a
 //     questions editor (add/remove/reorder template fields with i18n labels).
 //     Persists via PATCH /api/applications/:id.
-//   • Responses (applications:review) — the submitted responses with review
-//     controls (start-review, my-review score/notes, shared staff-notes) and,
-//     for deciders (applications:decide), accept/reject + send/resend + confirm
-//     /decline overrides. Optional stats strip needs logistics:stats.
+//   • Review (applications:review) — submitted responses: my-review score/
+//     notes, shared staff-notes, and (for deciders) the accept/reject call.
+//   • Outbox / Sent decisions (applications:decide) — internal decisions not
+//     yet sent vs. every already-communicated final status, with
+//     send/resend/re-accept/revoke/confirm-override actions gated by each
+//     row's actual status (see ../workflow.ts). Optional stats strip needs
+//     logistics:stats.
 //
 // NOTE: the applications template uses templateFieldSchema (FIELD_KINDS), not
 // the judging questionSchema. i18n labels carry {en,es,gl} (plan/07 §2).
@@ -103,7 +106,6 @@ import {
   fromLocalInput,
   type I18nText,
   OPTION_KINDS,
-  RESPONSE_STATUSES,
   type ResponseRow,
   SHIRT_TYPES,
   statusTone,
@@ -116,6 +118,7 @@ import {
   applicationStatusLabel,
   generatedFieldKey,
   rowsForWorkspace,
+  statusesForWorkspace,
 } from "../workflow";
 
 const LOCALES = ["es", "en", "gl"] as const;
@@ -1455,7 +1458,7 @@ function ResponsesTab({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>{t("allStatuses")}</SelectItem>
-            {RESPONSE_STATUSES.map((s) => (
+            {statusesForWorkspace(workspace).map((s) => (
               <SelectItem key={s} value={s}>
                 {applicationStatusLabel(s, t)}
               </SelectItem>
@@ -2211,7 +2214,7 @@ export function ReviewModal({
 
         {/* Decide accept/reject — lives in the review workspace itself now, no
             separate "decisions" tab duplicating this row set (H13/H14). */}
-        {workspace === "review" && st === "review" && (
+        {workspace === "review" && (st === "review" || st === "submitted") && (
           <div className="border-border space-y-3 rounded-lg border p-4">
             <p className="text-sm font-medium">{t("decisionLabel")}</p>
             {canDecide ? (

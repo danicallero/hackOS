@@ -37,6 +37,11 @@ export function rowsForWorkspace(
   return rows.filter((row) => statuses.has(row.status));
 }
 
+/** Status filter options for a workspace — only statuses that tab can show. */
+export function statusesForWorkspace(workspace: ApplicationWorkspace): string[] {
+  return [...WORKSPACE_STATUSES[workspace]];
+}
+
 export function applicationStatusLabel(status: string, t: Translate): string {
   const labels: Record<string, string> = {
     draft: t("statusDraft"),

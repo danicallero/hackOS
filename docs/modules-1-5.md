@@ -174,12 +174,33 @@ status in one tab with all of its applicable actions.
   are gated per-row by actual status instead of by which of two tabs a row
   happened to render in.
 
+**Follow-up — status filter now scoped per tab.**
+The status filter dropdown listed every `app_response_status` value
+regardless of which tab was open (e.g. "Confirmed" selectable from Review).
+`workflow.ts` now exports `statusesForWorkspace(workspace)`, and the dropdown
+in `[id]/page.tsx` maps over that instead of the flat, unscoped
+`RESPONSE_STATUSES` (removed from `../lib` — it had no other consumer).
+
+**Bug fix — responses stuck at `submitted` with no path forward (H13).**
+`submitResponse` now always lands directly on `review` (or `confirmed` if
+invited) — there's no separate start-review step in the current flow — but
+rows created before that change could still be sitting at `submitted`, and
+`decide()` only accepted `review`, so those had **no action that could move
+them anywhere**: not decidable, and the unused `startReview()` (dead code, no
+route ever called it) was the only thing that could have unstuck them.
+Fixed two ways: a one-time backfill migration
+(`0204_backfill_stuck_submitted.sql`) folds any existing `submitted` row into
+`review`; and `decide()` now treats `submitted` as an alias of `review` (belt
+and suspenders, so nothing can strand there again). Removed the dead
+`startReview` function.
+
 **Endpoints.** New `POST /api/responses/batch/resend-decision`
 (`APPLICATIONS_DECIDE`).
 
-**State transitions.** None new; `resendDecision` now also accepts `rejected`
-as a starting status (previously only reachable via the removed
-`resendRejectedDecision`).
+**State transitions.** `resendDecision` now also accepts `rejected` as a
+starting status (previously only reachable via the removed
+`resendRejectedDecision`). `decide()` now also accepts `submitted` (deprecated
+alias of `review`, see above).
 
 ---
 
