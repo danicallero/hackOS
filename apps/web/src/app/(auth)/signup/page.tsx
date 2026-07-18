@@ -100,17 +100,20 @@ function SignUpInner() {
           <CardTitle>{t("checkInbox")}</CardTitle>
           <CardDescription>{t("verificationSent", { email: submittedEmail })}</CardDescription>
         </CardHeader>
-        <CardContent className="text-muted-foreground text-center text-sm">
-          {t("didntGetIt")}{" "}
-          <Link
-            href={withReturnPath(
-              `/verify-email?email=${encodeURIComponent(submittedEmail)}`,
-              next || null,
-            )}
-            className="text-foreground underline underline-offset-4"
-          >
-            {t("resendVerification")}
-          </Link>
+        <CardContent className="text-muted-foreground space-y-2 text-center text-sm">
+          <p>{t("checkSpamFolder")}</p>
+          <p>
+            {t("didntGetIt")}{" "}
+            <Link
+              href={withReturnPath(
+                `/verify-email?email=${encodeURIComponent(submittedEmail)}`,
+                next || null,
+              )}
+              className="text-foreground underline underline-offset-4"
+            >
+              {t("resendVerification")}
+            </Link>
+          </p>
         </CardContent>
       </Card>
     );
