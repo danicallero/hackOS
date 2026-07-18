@@ -64,7 +64,6 @@ export function PersonOperationsScreen() {
   const load = useCallback(async () => {
     const local = await findPersonById(userId);
     if (!local) return;
-    setPerson(local);
     if (canAccredit) {
       try {
         const details = await apiFetch<PersonDetails>("/api/accreditation/lookup-user", {
@@ -72,11 +71,17 @@ export function PersonOperationsScreen() {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ userId }),
         });
+        // Single setPerson call with the fully-merged result: setting the
+        // local-only snapshot first and the enriched one after causes a
+        // visible flicker as dni/phone/shirtSize/badge briefly disappear and
+        // reappear on every periodic sync.
         setPerson({ ...local, ...details, badgeId: details.currentBadge ?? local.badgeId });
+        return;
       } catch {
-        /* The local person card remains available offline. */
+        /* Fall through to the local-only card, e.g. while offline. */
       }
     }
+    setPerson(local);
   }, [canAccredit, userId]);
 
   // Reload on every scanner sync: the register derives its direction from

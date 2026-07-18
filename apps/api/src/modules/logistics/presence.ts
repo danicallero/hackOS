@@ -1,6 +1,7 @@
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
+import { isImplausiblyFuture } from "../../lib/clock.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
 import { resolveByBadge } from "./badge.js";
@@ -110,7 +111,7 @@ export async function presenceScan(
     // released the same lock.
     const dbNow = await databaseNow(client);
     const scannedAt = input.scannedAt ?? dbNow;
-    if (manual && scannedAt.getTime() > dbNow.getTime()) {
+    if (manual && isImplausiblyFuture(scannedAt, dbNow.getTime())) {
       throw new BadRequestError("Backdated scan must be in the past");
     }
 
@@ -345,7 +346,7 @@ export async function updateTimeLog(
   id: number,
   input: { kind?: "in" | "out"; scannedAt?: Date; notes?: string | null },
 ) {
-  if (input.scannedAt != null && input.scannedAt.getTime() > Date.now()) {
+  if (input.scannedAt != null && isImplausiblyFuture(input.scannedAt)) {
     throw new BadRequestError("Scan time must be in the past");
   }
 
