@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./activity-kinds": "./src/activity-kinds.ts",
     "./capabilities": "./src/capabilities.ts",
     "./events": "./src/events.ts",
     "./questions": "./src/questions.ts",

@@ -1,5 +1,6 @@
 "use client";
 
+import { ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
 import {
@@ -57,8 +58,6 @@ const EMPTY_FORM: ScheduleInput = {
   visibility: "hidden",
   publishAt: null,
 };
-
-const TYPE_OPTIONS = ["activity", "meal", "workshop", "talk", "ceremony", "other"];
 
 function toForm(item: PublicScheduleItem): ScheduleInput {
   return {
@@ -517,7 +516,7 @@ function ScheduleFormModal({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {TYPE_OPTIONS.map((type) => (
+                {ACTIVITY_KINDS.map((type) => (
                   <SelectItem key={type} value={type}>
                     {typeLabel(type, t)}
                   </SelectItem>
