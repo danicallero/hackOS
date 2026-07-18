@@ -273,6 +273,10 @@ export default function ImportProjectsPage() {
   // ── phase 3: confirmed ─────────────────────────────────────────────────────
   if (result) {
     const c = result.counts;
+    // H17: every kind of conflict the confirm step can leave behind — an
+    // unmatched participant AND an unmapped prize both need the same
+    // resolution screen, so the link back to it must account for both.
+    const hasConflicts = c.participantsUnmatched > 0 || c.prizesUnmapped > 0;
     return (
       <div className="space-y-6">
         <PageHeader
@@ -290,6 +294,7 @@ export default function ImportProjectsPage() {
             <StatCard label={t("colMembersMatched")} value={c.participantsMatched} />
             <StatCard label={t("colMembersUnmatched")} value={c.participantsUnmatched} />
             <StatCard label={t("colPrizesSeen")} value={c.prizesSeen} />
+            <StatCard label={t("colPrizesUnmapped")} value={c.prizesUnmapped} />
           </div>
           {c.participantsUnmatched > 0 && (
             <p className="text-muted-foreground text-sm">
@@ -298,11 +303,18 @@ export default function ImportProjectsPage() {
                 : t("participantsUnmatchedNoteOther", { count: c.participantsUnmatched })}
             </p>
           )}
+          {c.prizesUnmapped > 0 && (
+            <p className="text-muted-foreground text-sm">
+              {c.prizesUnmapped === 1
+                ? t("prizesUnmappedNoteOne", { count: c.prizesUnmapped })
+                : t("prizesUnmappedNoteOther", { count: c.prizesUnmapped })}
+            </p>
+          )}
           <div className="flex flex-wrap gap-2">
             <Button asChild>
               <Link href="/projects">{t("viewProjects")}</Link>
             </Button>
-            {c.participantsUnmatched > 0 && (
+            {hasConflicts && (
               <Button asChild variant="outline">
                 <Link href="/projects/unmatched">{t("resolveUnmatched")}</Link>
               </Button>

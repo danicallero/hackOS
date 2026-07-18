@@ -135,6 +135,7 @@ export interface ConfirmResult {
     participantsMatched: number;
     participantsUnmatched: number;
     prizesSeen: number;
+    prizesUnmapped: number;
   };
   repos: Array<{ id: number; title: string; action: "create" | "update" }>;
 }
