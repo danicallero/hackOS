@@ -129,6 +129,28 @@ describe("notification preferences (H51)", () => {
     expect(wrongChannel.statusCode).toBe(400);
   });
 
+  it("accepts the shared 'schedule' channel category and 'schedule:type:<kind>' kind opt-ins (H51 rework)", async () => {
+    const userId = await createUser();
+    const res = await app.inject({
+      method: "PUT",
+      url: "/api/me/notification-preferences",
+      headers: asUser(userId),
+      payload: {
+        preferences: [
+          { category: "schedule", channel: "discord", enabled: false },
+          { category: "schedule:type:meal", channel: "in_app", enabled: true },
+        ],
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().overrides).toEqual(
+      expect.arrayContaining([
+        { category: "schedule", channel: "discord", enabled: false },
+        { category: "schedule:type:meal", channel: "in_app", enabled: true },
+      ]),
+    );
+  });
+
   it("activity reminder opt-in is a schedule:<id> preference row (contract for the schedule WS)", async () => {
     const userId = await createUser();
     const res = await app.inject({
