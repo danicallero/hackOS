@@ -7,6 +7,7 @@ import {
   HardDriveIcon,
   RepeatIcon,
   ScanLineIcon,
+  SearchIcon,
   SoupIcon,
   TriangleAlertIcon,
   UsersIcon,
@@ -18,6 +19,7 @@ import { Modal } from "@/components/common/modal";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { StatCard } from "@/components/common/stat-card";
+import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -30,7 +32,7 @@ import {
 import { useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
-import { type ActivityScanResult, logisticsApi } from "@/lib/logistics";
+import { type ActivityScanResult, logisticsApi, type PersonSearchResult } from "@/lib/logistics";
 import {
   loadOfflineQueue,
   OfflineQueue,
@@ -41,6 +43,14 @@ import { ScanResult } from "./scan-result";
 import { errorMessage, Field, InlineError } from "./ui";
 
 const SCAN_EVENTS = [EVENTS.LOGISTICS_ACTIVITY_SCAN, EVENTS.LOGISTICS_MEAL_SCAN_BATCH];
+
+/** i18n key for how a search result matched — null for the plain name/email fallback. */
+const MATCH_LABEL_KEY: Record<PersonSearchResult["matchedBy"], string | null> = {
+  ticket: "matchTicket",
+  badge: "matchBadge",
+  badge_history: "matchOldBadge",
+  profile: null,
+};
 
 /**
  * Meal (H25) / registrable-activity (H26) scanner station. Sources its list
@@ -70,6 +80,40 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
     "ready" | "saved" | "confirmed" | "attention"
   >("ready");
   const selected = items.find((a) => String(a.activityId) === activityId) ?? null;
+
+  const [findOpen, setFindOpen] = useState(false);
+  const [findQuery, setFindQuery] = useState("");
+  const [findResults, setFindResults] = useState<PersonSearchResult[] | null>(null);
+  const [findBusy, setFindBusy] = useState(false);
+  const [findError, setFindError] = useState("");
+
+  const doFind = async () => {
+    const q = findQuery.trim();
+    if (!q) return;
+    setFindBusy(true);
+    setFindError("");
+    try {
+      const { results } = await logisticsApi.searchPeople(q, ["email", "badgeId", "confirmed"]);
+      setFindResults(results);
+    } catch (err) {
+      setFindResults(null);
+      setFindError(errorMessage(err, t("userSearchFailed")));
+    } finally {
+      setFindBusy(false);
+    }
+  };
+
+  const pickFound = (person: PersonSearchResult) => {
+    if (!person.badgeId) {
+      toast.error(t("noBadge"));
+      return;
+    }
+    setBadgeId(person.badgeId);
+    setFindOpen(false);
+    setFindQuery("");
+    setFindResults(null);
+    setFindError("");
+  };
 
   useEffect(() => {
     if (isMeal) setOffline(loadOfflineQueue());
@@ -287,12 +331,24 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
                 </Select>
               </Field>
               <Field label={t("badgeLabel")}>
-                <Input
-                  value={badgeId}
-                  onChange={(e) => setBadgeId(e.target.value)}
-                  placeholder={t("badgePlaceholder")}
-                  autoComplete="off"
-                />
+                <div className="flex gap-2">
+                  <Input
+                    value={badgeId}
+                    onChange={(e) => setBadgeId(e.target.value)}
+                    placeholder={t("badgePlaceholder")}
+                    autoComplete="off"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    aria-label={t("personSearchTitle")}
+                    title={t("personSearchTitle")}
+                    onClick={() => setFindOpen(true)}
+                  >
+                    <UsersIcon className="size-4" />
+                  </Button>
+                </div>
               </Field>
               <div className="flex items-end">
                 <Button
@@ -332,6 +388,84 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
               }
             >
               {repeatPrompt && <ScanResult result={repeatPrompt} />}
+            </Modal>
+
+            <Modal
+              open={findOpen}
+              onOpenChange={(open) => {
+                setFindOpen(open);
+                if (!open) {
+                  setFindQuery("");
+                  setFindResults(null);
+                  setFindError("");
+                }
+              }}
+              icon={SearchIcon}
+              title={t("personSearchTitle")}
+              description={t("personSearchDesc")}
+            >
+              <div className="space-y-4">
+                <form
+                  className="flex gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void doFind();
+                  }}
+                >
+                  <Input
+                    value={findQuery}
+                    onChange={(e) => setFindQuery(e.target.value)}
+                    placeholder={t("personSearchPlaceholder")}
+                    autoComplete="off"
+                    autoFocus
+                  />
+                  <Button type="submit" disabled={findBusy || !findQuery.trim()}>
+                    {findBusy ? <Spinner /> : <SearchIcon className="size-4" />}
+                    {t("search")}
+                  </Button>
+                </form>
+
+                {findError && <InlineError message={findError} />}
+
+                {findResults && findResults.length === 0 && (
+                  <p className="text-muted-foreground text-sm">{t("noResultsLabel")}</p>
+                )}
+                {findResults && findResults.length > 0 && (
+                  <div className="max-h-80 overflow-y-auto rounded-lg border">
+                    {findResults.map((person) => {
+                      const matchKey = MATCH_LABEL_KEY[person.matchedBy];
+                      return (
+                        <button
+                          key={person.userId}
+                          type="button"
+                          className="hover:bg-muted flex w-full items-center justify-between gap-3 border-b px-3 py-2 text-left last:border-b-0"
+                          onClick={() => pickFound(person)}
+                        >
+                          <span>
+                            <span className="block text-sm font-medium">
+                              {[person.name, person.surname].filter(Boolean).join(" ") ||
+                                person.email}
+                            </span>
+                            <span className="text-muted-foreground block text-xs">
+                              {person.email}
+                            </span>
+                          </span>
+                          <span className="flex flex-wrap justify-end gap-2">
+                            {matchKey && (
+                              <StatusBadge tone="info" dot={false}>
+                                {t(matchKey)}
+                              </StatusBadge>
+                            )}
+                            <StatusBadge tone={person.badgeId ? "info" : "neutral"} dot={false}>
+                              {person.badgeId ?? t("noBadge")}
+                            </StatusBadge>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </Modal>
 
             {isMeal && (
