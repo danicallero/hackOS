@@ -13,19 +13,22 @@
 import { EVENTS } from "@hackos/shared/events";
 import {
   CalendarClockIcon,
-  CheckIcon,
   ChevronDownIcon,
   InboxIcon,
   LockIcon,
   PlusIcon,
   SlidersHorizontalIcon,
+  Trash2Icon,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
+import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
+import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -152,6 +155,9 @@ function MessagesTab() {
   const [offset, setOffset] = useState(0);
   // Which items are expanded to show the full body + every other payload field.
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const [deleting, setDeleting] = useState<InboxItem | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   const fetcher = useCallback(
     () => notificationsApi.listInbox({ unread: unreadOnly || undefined, limit: LIMIT, offset }),
@@ -165,15 +171,6 @@ function MessagesTab() {
     { queryKey: [unreadOnly, offset] },
   );
 
-  function toggleExpanded(id: number) {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
   async function markRead(item: InboxItem) {
     try {
       await notificationsApi.markInboxRead(item.id);
@@ -181,6 +178,35 @@ function MessagesTab() {
       refetch();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("couldNotMarkRead"));
+    }
+  }
+
+  // Desktop parity with mobile (apps/mobile notifications tab): opening an
+  // item marks it seen automatically, no separate "mark read" click needed.
+  function toggleExpanded(item: InboxItem) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(item.id)) next.delete(item.id);
+      else next.add(item.id);
+      return next;
+    });
+    if (!item.read_at) void markRead(item);
+  }
+
+  async function remove(item: InboxItem) {
+    setDeleteBusy(true);
+    setDeleteError(null);
+    try {
+      await notificationsApi.deleteInbox(item.id);
+      notifyNotificationsRead();
+      setDeleting(null);
+      refetch();
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : t("couldNotDeleteNotification");
+      setDeleteError(message);
+      toast.error(message);
+    } finally {
+      setDeleteBusy(false);
     }
   }
 
@@ -232,7 +258,7 @@ function MessagesTab() {
               <li key={item.id} className={unread ? "bg-primary/5" : ""}>
                 <button
                   type="button"
-                  onClick={() => toggleExpanded(item.id)}
+                  onClick={() => toggleExpanded(item)}
                   aria-expanded={isOpen}
                   className="hover:bg-muted/50 flex w-full items-start gap-3 p-4 text-left"
                 >
@@ -277,17 +303,19 @@ function MessagesTab() {
                     ) : (
                       <p className="text-muted-foreground text-sm">{t("noAdditionalDetails")}</p>
                     )}
-                    {unread && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => markRead(item)}
-                        aria-label={t("markRead")}
-                      >
-                        <CheckIcon className="size-4" />
-                        {t("markRead")}
-                      </Button>
-                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => {
+                        setDeleteError(null);
+                        setDeleting(item);
+                      }}
+                      aria-label={t("deleteNotificationAria")}
+                    >
+                      <Trash2Icon className="size-4" />
+                      {t("deleteNotification")}
+                    </Button>
                   </div>
                 )}
               </li>
@@ -320,6 +348,36 @@ function MessagesTab() {
             </Button>
           </div>
         </div>
+      )}
+
+      {deleting && (
+        <Modal
+          open={Boolean(deleting)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setDeleteError(null);
+              setDeleting(null);
+            }
+          }}
+          title={t("deleteThisNotification")}
+          description={t("deleteNotificationDesc")}
+          footer={
+            <>
+              <Button variant="outline" onClick={() => setDeleting(null)}>
+                {t("cancel")}
+              </Button>
+              <SubmitButton
+                variant="destructive"
+                pending={deleteBusy}
+                onClick={() => remove(deleting)}
+              >
+                {t("deleteAction")}
+              </SubmitButton>
+            </>
+          }
+        >
+          {deleteError && <ContextualError message={deleteError} />}
+        </Modal>
       )}
     </div>
   );

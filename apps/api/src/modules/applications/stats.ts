@@ -9,7 +9,8 @@ import { requireApplication } from "./service.js";
  * template-field histogram, and shirt-size / food-intolerance distributions.
  *
  * Sensitive rule (H27): shirt sizes and food intolerances count ONLY users
- * who CONFIRMED — declined/expired dietary data is wiped and must not surface.
+ * who CONFIRMED — non-confirmed applicants' logistics data must not surface
+ * in aggregate stats even though it's kept on the user row.
  */
 
 interface Counts {

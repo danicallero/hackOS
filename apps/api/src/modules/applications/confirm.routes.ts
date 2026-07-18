@@ -17,8 +17,9 @@ import {
  *   via=web        : authenticated owner action on their own response
  *   via=admin_override : staff (APPLICATIONS_DECIDE) acting on behalf
  * Confirm only while the token is unexpired AND status is accepted; a second
- * confirm is idempotent-friendly (returns already-confirmed). Decline wipes
- * dietary data unless another confirmed spot needs it (H12).
+ * confirm is idempotent-friendly (returns already-confirmed). Declining just
+ * moves status → declined; dietary data is left in place so the applicant
+ * can be re-accepted later without losing it.
  */
 export function registerConfirmRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
@@ -46,7 +47,6 @@ export function registerConfirmRoutes(app: FastifyInstance): void {
       return {
         status: res.status,
         already_declined: res.alreadyDeclined,
-        sensitive_wiped: res.wiped,
       };
     },
   );
@@ -75,7 +75,6 @@ export function registerConfirmRoutes(app: FastifyInstance): void {
       return {
         status: res.status,
         already_declined: res.alreadyDeclined,
-        sensitive_wiped: res.wiped,
       };
     },
   );
@@ -116,7 +115,6 @@ export function registerConfirmRoutes(app: FastifyInstance): void {
       return {
         status: res.status,
         already_declined: res.alreadyDeclined,
-        sensitive_wiped: res.wiped,
       };
     },
   );

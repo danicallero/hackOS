@@ -5,9 +5,9 @@ import { expireDueConfirmations } from "./service.js";
 /**
  * Spot-confirmation expirer (plan/07 §5.2, H15). A repeatable BullMQ job
  * marks accepted responses whose confirmation window elapsed as `expired`,
- * wiping dietary data exactly like decline (H12 privacy promise) and writing
- * one audit row each. The processor delegates to `expireDueConfirmations()`,
- * which tests invoke directly instead of waiting on BullMQ repeat timing.
+ * writing one audit row each. The processor delegates to
+ * `expireDueConfirmations()`, which tests invoke directly instead of waiting
+ * on BullMQ repeat timing.
  */
 
 const QUEUE_NAME = "applications-expirer";

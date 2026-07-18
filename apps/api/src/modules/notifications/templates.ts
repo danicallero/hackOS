@@ -93,15 +93,15 @@ const TEMPLATES: Record<string, TemplateDefinition> = {
   "auth.verify": {
     en: {
       subject: "Verify your hackOS email",
-      body: "Hi {{name}},\n\nConfirm your email address to unlock the rest of hackOS:\n\n[Verify email]({{verifyUrl}})\n\nIf you didn't request this, ignore this message.",
+      body: "Hi {{name}},\n\nConfirm your email address to unlock the rest of hackOS:\n\n[Verify email]({{verifyUrl}})\n\nDon't see this email? Check your spam or junk folder — mark it as not spam so future messages (including ones with links) reach your inbox.\n\nIf you didn't request this, ignore this message.",
     },
     es: {
       subject: "Verifica tu correo de hackOS",
-      body: "Hola {{name}},\n\nConfirma tu dirección de correo para desbloquear el resto de hackOS:\n\n[Verificar correo]({{verifyUrl}})\n\nSi no lo has pedido tú, ignora este mensaje.",
+      body: "Hola {{name}},\n\nConfirma tu dirección de correo para desbloquear el resto de hackOS:\n\n[Verificar correo]({{verifyUrl}})\n\n¿No ves este correo? Revisa la carpeta de spam o correo no deseado y márcalo como \"no es spam\" para que los próximos mensajes (incluidos los que llevan enlaces) te lleguen a la bandeja de entrada.\n\nSi no lo has pedido tú, ignora este mensaje.",
     },
     gl: {
       subject: "Verifica o teu correo de hackOS",
-      body: "Ola {{name}},\n\nConfirma o teu enderezo de correo para desbloquear o resto de hackOS:\n\n[Verificar correo]({{verifyUrl}})\n\nSe non o pediches ti, ignora esta mensaxe.",
+      body: "Ola {{name}},\n\nConfirma o teu enderezo de correo para desbloquear o resto de hackOS:\n\n[Verificar correo]({{verifyUrl}})\n\nNon ves este correo? Revisa o cartafol de spam ou correo non desexado e márcao como \"non é spam\" para que as próximas mensaxes (incluídas as que levan ligazóns) che cheguen á caixa de entrada.\n\nSe non o pediches ti, ignora esta mensaxe.",
     },
   },
   "auth.reset": {
@@ -205,15 +205,15 @@ const TEMPLATES: Record<string, TemplateDefinition> = {
   "schedule.reminder": {
     en: {
       subject: "Reminder: {{title}}",
-      body: "Hi,\n\n{{title}} starts at {{startsAt}}.{{locationLine}}\n\nSee you there!",
+      body: "Hi,\n\n{{title}} starts at {{startsAtLabel}}.{{locationLine}}\n\nSee you there!",
     },
     es: {
       subject: "Recordatorio: {{title}}",
-      body: "Hola,\n\n{{title}} empieza a las {{startsAt}}.{{locationLine}}\n\n¡Nos vemos allí!",
+      body: "Hola,\n\n{{title}} empieza a las {{startsAtLabel}}.{{locationLine}}\n\n¡Nos vemos allí!",
     },
     gl: {
       subject: "Lembranza: {{title}}",
-      body: "Ola,\n\n{{title}} comeza ás {{startsAt}}.{{locationLine}}\n\nVémonos alí!",
+      body: "Ola,\n\n{{title}} comeza ás {{startsAtLabel}}.{{locationLine}}\n\nVémonos alí!",
     },
   },
 };
@@ -255,6 +255,20 @@ const PUSH_TEMPLATES: Record<string, PushTemplateDefinition> = {
     gl: {
       title: "Entra xa na sala {{roomName}}",
       body: "É a quenda do teu equipo para {{challengeName}}.",
+    },
+  },
+  "schedule.reminder": {
+    en: {
+      title: "{{title}}",
+      body: "Starts at {{startsAtLabel}}{{locationSuffix}}",
+    },
+    es: {
+      title: "{{title}}",
+      body: "Empieza a las {{startsAtLabel}}{{locationSuffix}}",
+    },
+    gl: {
+      title: "{{title}}",
+      body: "Comeza ás {{startsAtLabel}}{{locationSuffix}}",
     },
   },
 };

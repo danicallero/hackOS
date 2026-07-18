@@ -197,3 +197,18 @@ export async function markNotificationRead(
   if (!rows[0]) throw new NotFoundError("Notification not found");
   return rows[0];
 }
+
+export async function deleteInboxNotification(
+  db: Queryable,
+  userId: number,
+  notificationId: number,
+): Promise<{ id: number }> {
+  const { rows } = await db.query(
+    `DELETE FROM notification_outbox
+     WHERE id = $1 AND user_id = $2 AND channel = 'in_app'
+     RETURNING id`,
+    [notificationId, userId],
+  );
+  if (!rows[0]) throw new NotFoundError("Notification not found");
+  return rows[0];
+}

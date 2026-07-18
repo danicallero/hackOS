@@ -43,7 +43,7 @@ async function getApp(): Promise<App> {
 }
 
 describe("confirmation expirer (plan/07 §5.2)", () => {
-  it("expires accepted responses past their window, wipes dietary data, one audit row, idempotent", async () => {
+  it("expires accepted responses past their window, keeps dietary data, one audit row, idempotent", async () => {
     const { expireDueConfirmations } = await import("../../src/modules/applications/service.js");
     const appId = await createApplication({ confirmation_window_hours: 24 });
     const userId = await createUser({ emailVerified: true });
@@ -53,24 +53,14 @@ describe("confirmation expirer (plan/07 §5.2)", () => {
     const responseId = await createResponse(userId, appId, {
       status: "accepted",
       decision_sent_at: new Date(Date.now() - 100 * 3600_000).toISOString(),
-      responses: {
-        motivation: "legacy applicant",
-        food_intolerances: [7],
-        food_intolerance_notes: "legacy expiry secret",
-      },
+      responses: { motivation: "legacy applicant" },
     });
 
     const first = await expireDueConfirmations();
     expect(first.expired).toBe(1);
     expect((await getResponse(responseId)).status).toBe("expired");
     const sensitive = await getUserSensitive(userId);
-    expect(sensitive.food_intolerances).toEqual([]);
-    expect(sensitive.dietary_data_state).toBe("removed_after_decline");
-    const { rows: scrubbed } = await pool.query(
-      `SELECT responses FROM application_responses WHERE id = $1`,
-      [responseId],
-    );
-    expect(scrubbed[0].responses).toEqual({ motivation: "legacy applicant" });
+    expect(sensitive.food_intolerances).toEqual([7]);
 
     // second pass finds nothing (idempotent)
     const second = await expireDueConfirmations();
@@ -129,7 +119,7 @@ describe("pre-event stats (H27)", () => {
     ]);
     await createResponse(u2, appId, { status: "confirmed", responses: { credits: "no" } });
 
-    // declined user — dietary wiped, must NOT count in intolerances
+    // declined user (no dietary data set) — must NOT count in intolerances
     const u3 = await createUser({ emailVerified: true });
     await createResponse(u3, appId, { status: "declined", responses: { credits: "yes" } });
 
@@ -149,7 +139,7 @@ describe("pre-event stats (H27)", () => {
     expect(body.counts_by_status.declined).toBe(1);
     expect(body.counts_by_status.submitted).toBe(1);
 
-    // confirmed-only intolerances: nut-free x2, gluten-free x1 (u3 wiped/declined excluded)
+    // confirmed-only intolerances: nut-free x2, gluten-free x1 (u3 declined, excluded)
     const intoleranceMap = Object.fromEntries(
       body.food_intolerances_confirmed.map((r: { intolerance_id: number; n: number }) => [
         r.intolerance_id,

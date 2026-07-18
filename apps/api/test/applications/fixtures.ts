@@ -104,7 +104,7 @@ export async function getResponse(id: number): Promise<{
 export async function getUserSensitive(userId: number): Promise<{
   food_intolerances: number[];
   food_intolerance_notes: string | null;
-  dietary_data_state: "not_provided" | "present" | "removed_after_decline";
+  dietary_data_state: "not_provided" | "present";
   shirt_size: string | null;
 }> {
   const { rows } = await pool.query(

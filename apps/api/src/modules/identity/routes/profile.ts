@@ -29,7 +29,7 @@ import { computeDerivedRole, computeMembershipFlags } from "../role.js";
  */
 
 const LANGUAGES = ["en", "es", "gl"] as const;
-const DIETARY_DATA_STATES = ["not_provided", "present", "removed_after_decline"] as const;
+const DIETARY_DATA_STATES = ["not_provided", "present"] as const;
 
 /** Fields a user may edit on themself (H7: "consultar mis datos… y si detecto un error"). */
 const selfPatchSchema = z

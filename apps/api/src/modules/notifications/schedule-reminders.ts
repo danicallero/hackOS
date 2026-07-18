@@ -24,6 +24,26 @@ interface DueScheduleRow {
   starts_at: Date;
 }
 
+/**
+ * Renders a compact, human time for reminder copy ("Sat, 08:20") instead of
+ * the raw ISO instant — the latter reads fine in an API response but is
+ * useless in a push notification header (see issue: notif showed
+ * "starts at 2026-07-18T06:20:00.000Z" verbatim). Formatted in the event's
+ * configured timezone, with a fixed en-GB/24h locale: reminders fan out to
+ * many recipients across languages in one pass (vars are shared, not
+ * per-recipient), so this stays legible regardless of the reader's language
+ * rather than picking one user's locale for everyone.
+ */
+function formatStartsAt(startsAt: Date, timezone: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZone: timezone,
+  }).format(startsAt);
+}
+
 export async function runScheduleRemindersOnce(): Promise<{ reminded: number; notified: number }> {
   return withTransaction(async (client) => {
     const { rows } = await client.query(
@@ -38,41 +58,51 @@ export async function runScheduleRemindersOnce(): Promise<{ reminded: number; no
     );
 
     let notified = 0;
-    // No JS-side window re-check: the claim query above already gated on the
-    // DB clock (see announcements-publisher.ts for the same reasoning).
-    for (const row of rows as DueScheduleRow[]) {
-      const category = `schedule:${row.id}`;
-      const { rows: prefRows } = await client.query(
-        `SELECT user_id, channel FROM notification_preferences
-          WHERE category = $1 AND enabled = true`,
-        [category],
+    if (rows.length > 0) {
+      const { rows: eventRows } = await client.query(
+        `SELECT timezone FROM event_config WHERE id = 1`,
       );
-      const channelsByUser = new Map<number, NotificationChannel[]>();
-      for (const pref of prefRows as { user_id: number; channel: NotificationChannel }[]) {
-        const list = channelsByUser.get(pref.user_id) ?? [];
-        list.push(pref.channel);
-        channelsByUser.set(pref.user_id, list);
-      }
+      const timezone: string = eventRows[0]?.timezone || "UTC";
 
-      const locationLine = row.location ? `\n\nLocation: ${row.location}` : "";
-      for (const [userId, channels] of channelsByUser) {
-        await notify(client, {
-          userId,
-          category,
-          channels,
-          payload: {
-            template: "schedule.reminder",
-            vars: {
-              title: row.title,
-              locationLine,
-              startsAt: row.starts_at.toISOString(),
+      // No JS-side window re-check: the claim query above already gated on the
+      // DB clock (see announcements-publisher.ts for the same reasoning).
+      for (const row of rows as DueScheduleRow[]) {
+        const category = `schedule:${row.id}`;
+        const { rows: prefRows } = await client.query(
+          `SELECT user_id, channel FROM notification_preferences
+          WHERE category = $1 AND enabled = true`,
+          [category],
+        );
+        const channelsByUser = new Map<number, NotificationChannel[]>();
+        for (const pref of prefRows as { user_id: number; channel: NotificationChannel }[]) {
+          const list = channelsByUser.get(pref.user_id) ?? [];
+          list.push(pref.channel);
+          channelsByUser.set(pref.user_id, list);
+        }
+
+        const startsAtLabel = formatStartsAt(row.starts_at, timezone);
+        const locationLine = row.location ? `\n\nLocation: ${row.location}` : "";
+        const locationSuffix = row.location ? ` · ${row.location}` : "";
+        for (const [userId, channels] of channelsByUser) {
+          await notify(client, {
+            userId,
+            category,
+            channels,
+            payload: {
+              template: "schedule.reminder",
+              vars: {
+                title: row.title,
+                locationLine,
+                locationSuffix,
+                startsAtLabel,
+              },
             },
-          },
-        });
-        notified += 1;
-      }
+          });
+          notified += 1;
+        }
 
-      await client.query(`UPDATE schedule SET reminded_at = now() WHERE id = $1`, [row.id]);
+        await client.query(`UPDATE schedule SET reminded_at = now() WHERE id = $1`, [row.id]);
+      }
     }
     return { reminded: rows.length, notified };
   });

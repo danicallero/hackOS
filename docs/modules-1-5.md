@@ -50,8 +50,9 @@ confirmed|declined|expired`).
   This is the "reject / decline a spot even after the participant confirmed"
   case, which had **no path** before (`decide` requires `review`;
   `revertDecision` only flips *unsent* internal decisions). It invalidates the
-  confirmation token, frees the capacity slot, wipes now-orphaned sensitive data
-  (H12 `wipeSensitiveDataIfOrphan`), and notifies the applicant.
+  confirmation token, frees the capacity slot, and notifies the applicant;
+  dietary data is left on the user row (a revoked spot can be re-accepted
+  later, and wiping it made that re-accept lose the data).
 - Back to submitted / accept-pending-confirmation already existed
   (`revertDecision(…, "submitted")`, `decide` + `send-decision`) — verified.
 

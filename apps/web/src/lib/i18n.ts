@@ -172,6 +172,11 @@ const dict: Record<string, I18nText> = {
     en: "Resend verification",
   },
   didntGetIt: { es: "¿No lo has recibido?", gl: "Non o recibiches?", en: "Didn't get it?" },
+  checkSpamFolder: {
+    es: "¿No lo encuentras? Revisa tu carpeta de spam o correo no deseado y marca el remitente como \"no es spam\" para que te lleguen los correos con enlaces.",
+    gl: "Non o atopas? Revisa o teu cartafol de spam ou correo non desexado e marca o remitente como \"non é spam\" para que che cheguen os correos con ligazóns.",
+    en: "Can't find it? Check your spam or junk folder and mark the sender as not spam so emails with links reach your inbox.",
+  },
   couldNotCreateAccount: {
     es: "No se ha podido crear la cuenta.",
     gl: "Non se puido crear a conta.",
@@ -2338,6 +2343,31 @@ const dict: Record<string, I18nText> = {
     es: "{start}–{end} de {total}",
     gl: "{start}–{end} de {total}",
     en: "{start}–{end} of {total}",
+  },
+  deleteNotification: {
+    es: "Eliminar",
+    gl: "Eliminar",
+    en: "Delete",
+  },
+  deleteNotificationAria: {
+    es: "Eliminar este mensaje",
+    gl: "Eliminar esta mensaxe",
+    en: "Delete this message",
+  },
+  deleteThisNotification: {
+    es: "¿Eliminar este mensaje?",
+    gl: "¿Eliminar esta mensaxe?",
+    en: "Delete this message?",
+  },
+  deleteNotificationDesc: {
+    es: "Esta acción no se puede deshacer.",
+    gl: "Esta acción non se pode desfacer.",
+    en: "This action cannot be undone.",
+  },
+  couldNotDeleteNotification: {
+    es: "No se ha podido eliminar el mensaje.",
+    gl: "Non se puido eliminar a mensaxe.",
+    en: "Could not delete this message.",
   },
   couldNotLoadPreferencesTitle: {
     es: "No se han podido cargar tus preferencias",

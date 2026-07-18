@@ -132,9 +132,11 @@ Como solicitante quiero rellenar el formulario, poder guardarlo a medias y envia
 cuando esté listo, y consultar después en qué estado está mi solicitud.
 Al enviar se me piden también las restricciones alimenticias y, en los formularios de
 participante y mentor, la talla de camiseta: logística necesita ambas (el pedido de
-camisetas y la comida). En ese momento se me informa con claridad de que, si al final
-no confirmo plaza (o la rechazo), ese dato sensible se elimina y no se trata para
-nada.
+camisetas y la comida). En ese momento se me informa con claridad de que ese dato
+sensible se guarda mientras exista mi cuenta y solo se usa para planificar la
+comida de quien confirma su plaza — no se borra al rechazar o caducar, porque la
+organización puede darme otra oportunidad más adelante y no queremos perder el dato
+en ese caso.
 
 **H13. Revisar solicitudes**
 Como revisor quiero ver las solicitudes enviadas, puntuarlas y añadirles notas, cada
@@ -269,8 +271,9 @@ nivel de estudios) y logística: distribución de tallas de camiseta para el ped
 distribución de restricciones alimenticias para la comida.
 Ojo con las restricciones alimenticias: se piden al enviar la solicitud, pero solo
 cuentan para las estadísticas las de la gente que ha confirmado plaza. Si alguien
-rechaza la plaza, ese dato se borra (es información sensible que ya no tiene sentido
-tratar), tal y como se le informó al meterlo (H12).
+rechaza la plaza el dato no se borra (H12) — se queda por si la organización decide
+darle otra oportunidad más adelante — pero sigue sin salir en las estadísticas
+mientras no confirme.
 
 **H28. Entrada en el móvil**
 Como participante quiero llevar mi entrada y mi badge en la cartera del móvil (Apple
