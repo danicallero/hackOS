@@ -2331,6 +2331,7 @@ const dict: Record<string, I18nText> = {
   },
   kindMeal: { es: "Comidas", gl: "Comidas", en: "Meals" },
   kindWorkshop: { es: "Talleres", gl: "Obradoiros", en: "Workshops" },
+  kindTalk: { es: "Charlas", gl: "Charlas", en: "Talks" },
   kindCeremony: { es: "Ceremonias", gl: "Cerimonias", en: "Ceremonies" },
   kindActivity: { es: "Actividades", gl: "Actividades", en: "Activities" },
   kindOther: { es: "Otros", gl: "Outros", en: "Other" },
@@ -2455,6 +2456,13 @@ const dict: Record<string, I18nText> = {
     gl: "Non se puido quitar este recordatorio.",
     en: "Could not remove this reminder.",
   },
+  reminderRemovalProgress: {
+    es: "Quitando {count} recordatorio(s)…",
+    gl: "Quitando {count} recordatorio(s)…",
+    en: "Removing {count} reminder(s)…",
+  },
+  removalQueued: { es: "En cola", gl: "Na cola", en: "Queued" },
+  removingReminder: { es: "Quitando…", gl: "Quitando…", en: "Removing…" },
   channelForRow: {
     es: "{channel} para {label}",
     gl: "{channel} para {label}",

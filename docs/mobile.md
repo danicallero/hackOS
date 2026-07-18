@@ -16,7 +16,7 @@ store assets, submission, and the release checklist, see
 | H4 | Login/logout, session persists via Better Auth Expo + `expo-secure-store` | ✅ Done | `lib/auth-client.ts`, `app/(auth)/sign-in.tsx`. Server-side logout (session revocation) reuses the existing Better Auth endpoint — no mobile-specific work needed. |
 | H55 | One app, capability-driven tabs, permission changes apply without reinstall | ✅ Done | `lib/tabs.ts` + `app/(tabs)/_layout.tsx`. The primary bar is always the 4 participant tabs plus, for scan-capability holders, one native overflow trigger — a `UITabBarController` collapses anything past its fifth item into iOS's own "More" screen, bypassing the app's overflow menu, so Account, Scanner, and Activities all share the native overflow selector instead of any of them getting a dedicated primary slot. |
 | H38 | Participant sees queue status/position/ETA, pre-alert, call notice | 🟡 Device QA | Push receipt/tap and the authenticated `GET /api/queue/me/stream` native fetch stream both refetch queue state immediately; 15s focused polling is the recovery path. Code/tests are complete, but APNs/FCM delivery still needs real-device verification. |
-| H51 | Notification channel preferences per category; queue calls non-optional | ✅ Done | Static category preferences and mandatory queue notices are available on mobile. `schedule:<id>` per-activity reminder opt-in is available via the calendar bell (`lib/use-activity-reminders.ts`). The shared `schedule` reminder-channel row and `schedule:type:<kind>` kind-based opt-ins (web-only rework) aren't rendered on mobile yet — `PreferencesView`'s `editableCategories` only lists `announcements` (+ `queue.staff` for eligible staff), so no mobile change was needed for API compatibility. |
+| H51 | Notification channel preferences per category; queue calls non-optional | ✅ Done | Static category preferences and mandatory queue notices are available on mobile. `schedule:<id>` per-activity reminder opt-in is available via the calendar bell (`lib/use-activity-reminders.ts`) and the preferences tab. The tab also exposes the shared `schedule` reminder channels and `schedule:type:<kind>` kind opt-ins. Reminder removals use a visible serial queue, so several can be tapped without racing full preference responses. |
 | H28 | Ticket/badge in Apple & Google Wallet; old pass auto-invalidates on badge rotation | 🟡 Device QA | QR wallet, authenticated Apple `.pkpass` download/share, Google save URL, server-side pass invalidation/push, and foreground wallet refetch on `LOGISTICS_WALLET_PASS_UPDATED` are wired. Real Wallet apps/credentials still need device QA. |
 | H22 | Accreditation scanner: local SQLite lookup, badge assignment, server-confirmed | 🟡 Device QA | Ticket/person cards live in SQLite. The assignment is persisted/retried but is explicitly shown as **not accredited** until the API acknowledges the idempotent request. |
 | H23 | Badge replacement, offline-first, revocation synced later | 🟡 Device QA | Rotation updates the originating scanner immediately; each successful full snapshot replaces the complete revoked-badge set so every scanner rejects old badges. |
@@ -150,7 +150,9 @@ route below. No migration needed.
   the existing `saveUrl` endpoint via `Linking.openURL`.
   `queue.tsx` refetches immediately on a "queue" push
   (below) and also polls `GET /api/queue/me` every 15s while focused as a
-  fallback.
+  fallback. `notifications.tsx` pages past the initial 20 inbox messages on
+  demand, allows an expanded message to be deleted after native confirmation,
+  and mirrors the web activity/kind reminder preferences.
 - `app/(tabs)/others/scan/index.tsx` — thin wrapper around the shared
   `GeneralScannerScreen` (camera/manual scanners selected by capability:
   accreditation, badge replacement, door presence, meals, and activities),

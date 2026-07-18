@@ -10,6 +10,7 @@
 // generic "your own topic" stream despite living in the queue module, so we
 // reuse it here instead of adding a new route.
 
+import { ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
 import { EVENTS } from "@hackos/shared/events";
 import {
   CalendarClockIcon,
@@ -20,7 +21,7 @@ import {
   SlidersHorizontalIcon,
   Trash2Icon,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
@@ -73,6 +74,7 @@ function kindLabelMap(t: Translate): Record<string, string> {
   return {
     meal: t("kindMeal"),
     workshop: t("kindWorkshop"),
+    talk: t("kindTalk"),
     ceremony: t("kindCeremony"),
     activity: t("kindActivity"),
     other: t("kindOther"),
@@ -412,6 +414,12 @@ function PreferencesTab() {
   const [addingActivity, setAddingActivity] = useState("");
   const [addingKind, setAddingKind] = useState("");
   const [busy, setBusy] = useState(false);
+  const [removalStates, setRemovalStates] = useState<
+    Record<string, "queued" | "removing" | "failed">
+  >({});
+  const removalQueue = useRef<Array<{ category: string; channels: NotificationChannel[] }>>([]);
+  const queuedRemovalCategories = useRef(new Set<string>());
+  const processingRemovals = useRef(false);
 
   const load = useCallback(async () => {
     try {
@@ -482,21 +490,42 @@ function PreferencesTab() {
     }
   }
 
-  async function removeReminder(category: string, channels: NotificationChannel[]) {
-    setBusy(true);
-    try {
-      const items: PreferenceOverride[] = channels.map((channel) => ({
-        category,
-        channel,
-        enabled: false,
-      }));
-      const next = await notificationsApi.setPreferences(items);
-      setPrefs(next);
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveReminder"));
-    } finally {
-      setBusy(false);
+  async function drainRemovalQueue() {
+    if (processingRemovals.current) return;
+    processingRemovals.current = true;
+    while (removalQueue.current.length > 0) {
+      const operation = removalQueue.current.shift();
+      if (!operation) continue;
+      setRemovalStates((current) => ({ ...current, [operation.category]: "removing" }));
+      try {
+        const items: PreferenceOverride[] = operation.channels.map((channel) => ({
+          category: operation.category,
+          channel,
+          enabled: false,
+        }));
+        const next = await notificationsApi.setPreferences(items);
+        setPrefs(next);
+        setRemovalStates((current) => {
+          const nextStates = { ...current };
+          delete nextStates[operation.category];
+          return nextStates;
+        });
+      } catch (err) {
+        setRemovalStates((current) => ({ ...current, [operation.category]: "failed" }));
+        toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveReminder"));
+      } finally {
+        queuedRemovalCategories.current.delete(operation.category);
+      }
     }
+    processingRemovals.current = false;
+  }
+
+  function enqueueReminderRemoval(category: string, channels: NotificationChannel[]) {
+    if (queuedRemovalCategories.current.has(category)) return;
+    queuedRemovalCategories.current.add(category);
+    setRemovalStates((current) => ({ ...current, [category]: "queued" }));
+    removalQueue.current.push({ category, channels });
+    void drainRemovalQueue();
   }
 
   if (loading) {
@@ -538,8 +567,14 @@ function PreferencesTab() {
     (item) => !individualReminders.includes(`schedule:${item.id}`),
   );
   const addableKinds = [
-    ...new Set(upcomingItems.map((item) => item.type).filter((kind): kind is string => !!kind)),
+    ...new Set([
+      ...ACTIVITY_KINDS,
+      ...scheduleItems.map((item) => item.type).filter((kind): kind is string => !!kind),
+    ]),
   ].filter((kind) => !kindReminders.includes(`schedule:type:${kind}`));
+  const pendingRemovalCount = Object.values(removalStates).filter(
+    (state) => state === "queued" || state === "removing",
+  ).length;
 
   function overrideFor(category: string, channel: NotificationChannel) {
     return prefs?.overrides.find((o) => o.category === category && o.channel === channel);
@@ -610,7 +645,7 @@ function PreferencesTab() {
                     <td key={channel} className="px-4 py-3 text-center">
                       <Checkbox
                         checked={enabled}
-                        disabled={busy}
+                        disabled={busy || pendingRemovalCount > 0}
                         onCheckedChange={(checked) =>
                           toggle(row.category, channel, checked === true)
                         }
@@ -630,6 +665,18 @@ function PreferencesTab() {
 
       <SectionCard icon={CalendarClockIcon} title={t("activityReminders")}>
         <div className="space-y-4">
+          {pendingRemovalCount > 0 && (
+            <div
+              className="bg-muted flex items-center gap-2 rounded-md border px-3 py-2 text-sm"
+              role="status"
+              aria-live="polite"
+            >
+              <Spinner className="size-4" />
+              <span className="tabular-nums">
+                {t("reminderRemovalProgress", { count: pendingRemovalCount })}
+              </span>
+            </div>
+          )}
           <div>
             <p className="mb-2 text-sm font-medium">{t("activeReminders")}</p>
             {enabledReminderCategories.length === 0 ? (
@@ -638,21 +685,39 @@ function PreferencesTab() {
               <ul className="divide-border divide-y rounded-lg border">
                 {enabledReminderCategories.map((category) => {
                   const label = categoryLabel(category, scheduleItems, t);
+                  const removalState = removalStates[category];
                   return (
                     <li
                       key={category}
-                      className="flex items-center justify-between gap-2 px-4 py-2 text-sm"
+                      className="flex items-center justify-between gap-3 px-4 py-2 text-sm"
                     >
-                      {label}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={busy}
-                        onClick={() => removeReminder(category, prefs.channels)}
-                        aria-label={t("removeReminderAria", { label })}
-                      >
-                        {t("turnOff")}
-                      </Button>
+                      <div className="min-w-0 flex-1">
+                        <span className="block truncate">{label}</span>
+                        {removalState === "failed" && (
+                          <span className="text-destructive block text-xs" role="alert">
+                            {t("couldNotRemoveReminder")}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        {(removalState === "queued" || removalState === "removing") && (
+                          <span className="text-muted-foreground inline-flex items-center gap-1.5 text-xs">
+                            <Spinner className="size-3.5" />
+                            {t(removalState === "queued" ? "removalQueued" : "removingReminder")}
+                          </span>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={
+                            busy || removalState === "queued" || removalState === "removing"
+                          }
+                          onClick={() => enqueueReminderRemoval(category, prefs.channels)}
+                          aria-label={t("removeReminderAria", { label })}
+                        >
+                          {removalState === "failed" ? t("retry") : t("turnOff")}
+                        </Button>
+                      </div>
                     </li>
                   );
                 })}
@@ -678,7 +743,7 @@ function PreferencesTab() {
                   </SelectContent>
                 </Select>
                 <Button
-                  disabled={!addingActivity || busy}
+                  disabled={!addingActivity || busy || pendingRemovalCount > 0}
                   onClick={() => addingActivity && addReminder(addingActivity)}
                 >
                   <PlusIcon className="size-4" />
@@ -706,7 +771,7 @@ function PreferencesTab() {
                   </SelectContent>
                 </Select>
                 <Button
-                  disabled={!addingKind || busy}
+                  disabled={!addingKind || busy || pendingRemovalCount > 0}
                   onClick={() => addingKind && addKindReminder(addingKind)}
                 >
                   <PlusIcon className="size-4" />
