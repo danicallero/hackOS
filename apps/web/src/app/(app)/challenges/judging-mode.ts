@@ -46,7 +46,7 @@ export function useChallengeRoomStatus(challengeId: number, enabled: boolean): C
       setAssignedRooms(
         details.filter(
           (a): a is RoomAssignments =>
-            a !== null && a.challenges.some((c) => c.challenge_id === challengeId),
+            a?.challenges.some((c) => c.challenge_id === challengeId) ?? false,
         ),
       );
     } catch {
