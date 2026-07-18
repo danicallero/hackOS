@@ -2,6 +2,7 @@ import "./env.js";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { pool } from "../../src/db/pool.js";
 import { createUser } from "../helpers.js";
+import { clearMailpit, getMailpitMessage, listMailpitMessages } from "./mailpit-helpers.js";
 import { resetNotificationsState } from "./notif-helpers.js";
 
 /**
@@ -13,7 +14,20 @@ import { resetNotificationsState } from "./notif-helpers.js";
 
 beforeEach(async () => {
   await resetNotificationsState();
+  await clearMailpit();
 });
+
+async function waitForMailpit(count: number, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const messages = await listMailpitMessages();
+    if (messages.length >= count) return messages;
+    if (Date.now() > deadline) {
+      throw new Error(`Mailpit: expected ${count} messages, got ${messages.length}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
 
 afterAll(async () => {
   const { stopQueues } = await import("../../src/lib/queues.js");
@@ -127,6 +141,70 @@ describe("schedule reminders (H51, issue #80)", () => {
     expect(result.reminded).toBe(0);
     expect(await outboxCount(scheduleId)).toBe(0);
     expect(await remindedAt(scheduleId)).toBeNull();
+  });
+
+  it("delivers a real email through the dispatcher with a human-readable time, not raw ISO", async () => {
+    const { runScheduleRemindersOnce } = await import(
+      "../../src/modules/notifications/schedule-reminders.js"
+    );
+    const { drainOutboxOnce } = await import("../../src/modules/notifications/dispatcher.js");
+
+    const startsAt = new Date(Date.now() + 10 * 60_000);
+    const { rows } = await pool.query(
+      `INSERT INTO schedule (title, starts_at, ends_at, visibility, location)
+       VALUES ($1, $2::timestamptz, $2::timestamptz + interval '1 hour', 'shown', $3)
+       RETURNING id`,
+      [`Desayuno ${crypto.randomUUID()}`, startsAt, "Planta 1"],
+    );
+    const scheduleId = rows[0].id;
+    const userId = await createUser({ email: `reminder-${scheduleId}@test.local` });
+    await optIn(userId, scheduleId, "email");
+
+    const result = await runScheduleRemindersOnce();
+    expect(result.notified).toBe(1);
+
+    const drain = await drainOutboxOnce();
+    expect(drain.sent).toBe(1);
+
+    const messages = await waitForMailpit(1);
+    expect(messages[0]!.To[0]!.Address).toBe(`reminder-${scheduleId}@test.local`);
+    const detail = await getMailpitMessage(messages[0]!.ID);
+    expect(detail.Text).toContain("Planta 1");
+    expect(detail.Text).not.toMatch(/\d{4}-\d{2}-\d{2}T/); // no raw ISO instant leaking into the copy
+  });
+
+  it("in-app: opting in also lands a rendered, readable row in the inbox", async () => {
+    const { runScheduleRemindersOnce } = await import(
+      "../../src/modules/notifications/schedule-reminders.js"
+    );
+
+    const startsAt = new Date(Date.now() + 10 * 60_000);
+    const { rows } = await pool.query(
+      `INSERT INTO schedule (title, starts_at, ends_at, visibility, location)
+       VALUES ($1, $2::timestamptz, $2::timestamptz + interval '1 hour', 'shown', $3)
+       RETURNING id`,
+      ["Desayuno Sábado", startsAt, "Planta 1"],
+    );
+    const scheduleId = rows[0].id;
+    const userId = await createUser();
+    // Mirrors the web "remind me" action (inbox/page.tsx REMINDER_DEFAULT_CHANNELS),
+    // which writes in_app alongside email/push so the reminder is always
+    // visible in the inbox regardless of which push/email channels fire.
+    await optIn(userId, scheduleId, "in_app");
+
+    const result = await runScheduleRemindersOnce();
+    expect(result.notified).toBe(1);
+
+    const { rows: outboxRows } = await pool.query(
+      `SELECT channel, payload FROM notification_outbox WHERE category = $1`,
+      [`schedule:${scheduleId}`],
+    );
+    expect(outboxRows).toHaveLength(1);
+    expect(outboxRows[0].channel).toBe("in_app");
+    const payload = outboxRows[0].payload as { subject: string; body: string };
+    expect(payload.subject).toBe("Reminder: Desayuno Sábado");
+    expect(payload.body).toContain("Planta 1");
+    expect(payload.body).not.toMatch(/\d{4}-\d{2}-\d{2}T/); // human time, not the raw ISO instant
   });
 
   it("no-recipient: a due item with nobody opted in sends nothing but is still marked reminded", async () => {
