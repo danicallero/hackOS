@@ -129,5 +129,59 @@ foreign-keys on the email string.
 
 ---
 
+## Module 6 — Applications review/decide IA + duplicate-rejection-email fix
+
+**Schema.** None new; same `app_response_status` enum as Module 2.
+
+**Bug fix — rejection email sent twice (H14).**
+`service.ts:batchSendDecisions` (the row-selection "Send" action,
+`POST /api/responses/batch/send-decision`) used to fall through to a resend for
+any row already at `accepted`/`rejected`/`expired`, with no
+`decision_sent_at` guard — unlike the toolbar's `sendDecisionsBatch`, which
+does filter `decision_sent_at IS NULL`. Since the old "Communication" tab
+listed unsent (`accepted_internal`/`rejected_internal`) and already-sent
+(`accepted`/`rejected`) rows together, a "select all + Send" there could
+re-fire a real rejection email. Fixed: `batchSendDecisions` now only ever acts
+on `accepted_internal`/`rejected_internal` and skips (reports, doesn't resend)
+anything else. Explicit re-sends are a separate, deliberate action: `service.ts
+:resendDecision` now also handles `rejected` (folded in what used to be the
+private `resendRejectedDecision`), and a new
+`batchResendDecisions` / `POST /api/responses/batch/resend-decision` covers the
+batch case. See the `resendDecision`/`batchSendDecisions` doc comments.
+
+**Bug fix — could not re-accept a rejected application (H15).**
+The backend transition already supported `rejected|declined|expired →
+accepted` (`reAccept`/`batchReAccept`, re-checking capacity); the gap was
+UI-only. The old "Confirmation" tab (where the re-accept button lived) never
+listed `rejected` rows — those only appeared in "Communication", which had no
+re-accept control at all. Fixed by the IA change below, which puts every final
+status in one tab with all of its applicable actions.
+
+**IA change — 4 tabs → 3 (review / outbox / sent decisions).**
+`(app)/applications/workflow.ts` `WORKSPACE_STATUSES` collapsed
+"Review"/"Decisions"/"Communication"/"Confirmation" into:
+- **Review** (`submitted`, `review`) — scoring/notes, *and* the accept/reject
+  call itself (moved here from the old "Decisions" tab, which duplicated
+  Review's own row set).
+- **Outbox** (`accepted_internal`, `rejected_internal`) — internal decisions
+  not yet communicated: send (individual/batch/toolbar modal), revert to
+  review or to the other internal decision.
+- **Sent decisions** (`accepted`, `rejected`, `confirmed`, `declined`,
+  `expired`) — everything already communicated, one status-filterable list
+  instead of splitting `accepted`/`rejected` (old "Communication") from
+  `confirmed`/`declined`/`expired` (old "Confirmation"): resend, re-accept,
+  revoke spot, confirm/decline override, revert-decision all live together and
+  are gated per-row by actual status instead of by which of two tabs a row
+  happened to render in.
+
+**Endpoints.** New `POST /api/responses/batch/resend-decision`
+(`APPLICATIONS_DECIDE`).
+
+**State transitions.** None new; `resendDecision` now also accepts `rejected`
+as a starting status (previously only reachable via the removed
+`resendRejectedDecision`).
+
+---
+
 See [background-workers.md](./background-workers.md) for which of the above run
 synchronously in the request vs. are handed to a worker.

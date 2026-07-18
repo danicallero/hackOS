@@ -6048,6 +6048,11 @@ const dict: Record<string, I18nText> = {
   },
   decisionSent: { es: "Decisión enviada.", gl: "Decisión enviada.", en: "Decision sent." },
   decisionsSent: { es: "Decisiones enviadas.", gl: "Decisións enviadas.", en: "Decisions sent." },
+  decisionsResent: {
+    es: "Decisiones reenviadas.",
+    gl: "Decisións reenviadas.",
+    en: "Decisions resent.",
+  },
   declinedHint: {
     es: "{unsent} sin enviar · {sent} enviadas · {declined} rechazadas · {expired} caducadas",
     gl: "{unsent} sen enviar · {sent} enviadas · {declined} rexeitadas · {expired} caducadas",
@@ -6369,16 +6374,11 @@ const dict: Record<string, I18nText> = {
   yesNoText: { es: "Sí / No", gl: "Si / Non", en: "Yes / No" },
   yourReview: { es: "Tu evaluación", gl: "A túa avaliación", en: "Your review" },
   workspaceReview: { es: "Revisión", gl: "Revisión", en: "Review" },
-  workspaceDecisions: { es: "Decisiones", gl: "Decisións", en: "Decisions" },
-  workspaceCommunication: {
-    es: "Comunicación",
-    gl: "Comunicación",
-    en: "Communication",
-  },
-  workspaceConfirmation: {
-    es: "Confirmación",
-    gl: "Confirmación",
-    en: "Confirmation",
+  workspaceOutbox: { es: "Bandeja de salida", gl: "Bandexa de saída", en: "Outbox" },
+  workspaceSentDecisions: {
+    es: "Decisiones enviadas",
+    gl: "Decisións enviadas",
+    en: "Sent decisions",
   },
   decisionDeliveryColumn: {
     es: "Comunicación",

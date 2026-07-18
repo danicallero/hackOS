@@ -881,11 +881,16 @@ describe("re-accept (admin)", () => {
   });
 });
 
-describe("batch send resends already-sent decisions", () => {
-  it("batch send resends an already-sent accepted response", async () => {
+describe("batch send only sends never-sent decisions (no double-send)", () => {
+  it("batch send skips an already-sent accepted response instead of resending it", async () => {
     const a = await getApp();
     const appId = await createApplication();
     const { userId, responseId } = await toAcceptedSent(appId);
+
+    const { rows: before } = await pool.query(
+      `SELECT count(*)::int AS n FROM notification_outbox WHERE user_id = $1`,
+      [userId],
+    );
 
     const res = await a.inject({
       method: "POST",
@@ -894,10 +899,61 @@ describe("batch send resends already-sent decisions", () => {
       payload: { response_ids: [responseId] },
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json().sent).toBe(1);
-    expect(res.json().tokens[0].token).toBeTruthy();
+    expect(res.json().sent).toBe(0);
+    expect(res.json().skipped).toHaveLength(1);
+    expect(res.json().skipped[0].reason).toMatch(/nothing to send/);
 
-    // a fresh email was enqueued
+    // no second email was enqueued
+    const { rows: after } = await pool.query(
+      `SELECT count(*)::int AS n FROM notification_outbox WHERE user_id = $1`,
+      [userId],
+    );
+    expect(after[0].n).toBe(before[0].n);
+  });
+
+  it("batch send skips an already-rejected response instead of resending it", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { responseId } = await submittedApplicant(appId);
+    await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/decide`,
+      headers: asUser(decider),
+      payload: { decision: "rejected" },
+    });
+    await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/send-decision`,
+      headers: asUser(decider),
+    });
+    expect((await getResponse(responseId)).status).toBe("rejected");
+
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/responses/batch/send-decision",
+      headers: asUser(decider),
+      payload: { response_ids: [responseId] },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().sent).toBe(0);
+    expect(res.json().skipped).toHaveLength(1);
+  });
+});
+
+describe("resend-decision (explicit re-send, separate from batch send)", () => {
+  it("resends an already-sent accepted response's email", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { userId, responseId } = await toAcceptedSent(appId);
+
+    const res = await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/resend-decision`,
+      headers: asUser(decider),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().confirmationToken).toBeTruthy();
+
     const { rows: outbox } = await pool.query(
       `SELECT count(*)::int AS n FROM notification_outbox WHERE user_id = $1`,
       [userId],
@@ -905,7 +961,7 @@ describe("batch send resends already-sent decisions", () => {
     expect(outbox[0].n).toBeGreaterThanOrEqual(2);
   });
 
-  it("batch send resends an expired response (second chance)", async () => {
+  it("resends an expired response (second chance)", async () => {
     const a = await getApp();
     const appId = await createApplication();
     const { responseId } = await toAcceptedSent(appId);
@@ -913,14 +969,62 @@ describe("batch send resends already-sent decisions", () => {
 
     const res = await a.inject({
       method: "POST",
-      url: "/api/responses/batch/send-decision",
+      url: `/api/responses/${responseId}/resend-decision`,
       headers: asUser(decider),
-      payload: { response_ids: [responseId] },
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json().sent).toBe(1);
     const r = await getResponse(responseId);
     expect(r.status).toBe("accepted"); // resend flipped it back
+  });
+
+  it("resends an already-rejected response's email", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { responseId } = await submittedApplicant(appId);
+    await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/decide`,
+      headers: asUser(decider),
+      payload: { decision: "rejected" },
+    });
+    const sent = await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/send-decision`,
+      headers: asUser(decider),
+    });
+    expect(sent.statusCode).toBe(200);
+
+    const res = await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/resend-decision`,
+      headers: asUser(decider),
+    });
+    expect(res.statusCode).toBe(200);
+    expect((await getResponse(responseId)).status).toBe("rejected");
+  });
+
+  it("batch resend-decision re-sends accepted/rejected/expired but skips others", async () => {
+    const a = await getApp();
+    const appId = await createApplication({ capacity: 10 });
+    const acceptedSent = await toAcceptedSent(appId);
+    const stillInternal = await submittedApplicant(appId);
+    await a.inject({
+      method: "POST",
+      url: `/api/responses/${stillInternal.responseId}/decide`,
+      headers: asUser(decider),
+      payload: { decision: "accepted" },
+    });
+
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/responses/batch/resend-decision",
+      headers: asUser(decider),
+      payload: { response_ids: [acceptedSent.responseId, stillInternal.responseId] },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().processed).toBe(1);
+    expect(res.json().skipped).toHaveLength(1);
+    expect(res.json().skipped[0].id).toBe(stillInternal.responseId);
   });
 });
 

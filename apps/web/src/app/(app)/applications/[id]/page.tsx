@@ -198,7 +198,7 @@ export default function ApplicationDetailPage() {
     );
   }
 
-  const defaultTab = canManage ? "builder" : canReview ? "review" : "decisions";
+  const defaultTab = canManage ? "builder" : canReview ? "review" : "outbox";
   const w = form ? windowState(form, t) : null;
 
   return (
@@ -238,13 +238,8 @@ export default function ApplicationDetailPage() {
         <TabsList className="h-auto w-full justify-start overflow-x-auto">
           {canManage && <TabsTrigger value="builder">{t("formTabLabel")}</TabsTrigger>}
           {canReview && <TabsTrigger value="review">{t("workspaceReview")}</TabsTrigger>}
-          {canDecide && <TabsTrigger value="decisions">{t("workspaceDecisions")}</TabsTrigger>}
-          {canDecide && (
-            <TabsTrigger value="communication">{t("workspaceCommunication")}</TabsTrigger>
-          )}
-          {canDecide && (
-            <TabsTrigger value="confirmation">{t("workspaceConfirmation")}</TabsTrigger>
-          )}
+          {canDecide && <TabsTrigger value="outbox">{t("workspaceOutbox")}</TabsTrigger>}
+          {canDecide && <TabsTrigger value="sent">{t("workspaceSentDecisions")}</TabsTrigger>}
         </TabsList>
 
         {canManage && (
@@ -270,18 +265,13 @@ export default function ApplicationDetailPage() {
           </TabsContent>
         )}
         {canDecide && (
-          <TabsContent value="decisions" className="pt-2">
-            <ResponsesTab id={id} template={form?.template ?? null} workspace="decisions" />
+          <TabsContent value="outbox" className="pt-2">
+            <ResponsesTab id={id} template={form?.template ?? null} workspace="outbox" />
           </TabsContent>
         )}
         {canDecide && (
-          <TabsContent value="communication" className="pt-2">
-            <ResponsesTab id={id} template={form?.template ?? null} workspace="communication" />
-          </TabsContent>
-        )}
-        {canDecide && (
-          <TabsContent value="confirmation" className="pt-2">
-            <ResponsesTab id={id} template={form?.template ?? null} workspace="confirmation" />
+          <TabsContent value="sent" className="pt-2">
+            <ResponsesTab id={id} template={form?.template ?? null} workspace="sent" />
           </TabsContent>
         )}
       </Tabs>
@@ -1363,7 +1353,7 @@ function ResponsesTab({
     },
   ];
 
-  if (workspace === "communication") {
+  if (workspace === "sent") {
     columns.push({
       id: "communicated",
       header: t("decisionDeliveryColumn"),
@@ -1375,9 +1365,6 @@ function ResponsesTab({
         </span>
       ),
     });
-  }
-
-  if (workspace === "confirmation") {
     columns.push({
       id: "deadline",
       header: t("confirmationDeadlineColumn"),
@@ -1475,7 +1462,7 @@ function ResponsesTab({
             ))}
           </SelectContent>
         </Select>
-        {canDecide && workspace === "communication" && (
+        {canDecide && workspace === "outbox" && (
           <Button className="ml-auto" variant="outline" onClick={() => setSendOpen(true)}>
             <SendIcon />
             {t("sendDecisions")}
@@ -1483,15 +1470,15 @@ function ResponsesTab({
         )}
       </div>
 
-      {canDecide && selectedIds.size > 0 && workspace !== "review" && (
+      {canDecide && selectedIds.size > 0 && (
         <div className="flex items-center gap-2 rounded-lg border p-3">
           <span className="text-sm font-medium">
             {t("selectedCount", { count: selectedIds.size })}
           </span>
           <div className="ml-auto flex flex-wrap gap-2">
-            {/* Primary: decide + send. Everything else lives under "More" to keep
-                the bar uncluttered. */}
-            {workspace === "decisions" && (
+            {/* Primary action per workspace (decide / send / resend). Everything
+                else lives under "More" to keep the bar uncluttered. */}
+            {workspace === "review" && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button size="sm" variant="outline" disabled={batchBusy}>
@@ -1527,7 +1514,7 @@ function ResponsesTab({
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
-            {workspace === "communication" && (
+            {workspace === "outbox" && (
               <Button
                 size="sm"
                 variant="outline"
@@ -1544,7 +1531,73 @@ function ResponsesTab({
                 {t("send")}
               </Button>
             )}
-            {workspace === "decisions" && (
+            {workspace === "sent" && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={batchBusy}
+                onClick={() =>
+                  batchAction(t("decisionsResent"), () =>
+                    api.post("/api/responses/batch/resend-decision", {
+                      response_ids: selectedArr.map((r) => r.id),
+                    }),
+                  )
+                }
+              >
+                <SendIcon />
+                {t("resend")}
+              </Button>
+            )}
+            {workspace === "outbox" && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" variant="outline" disabled={batchBusy}>
+                    <RotateCcwIcon />
+                    {t("more")}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuLabel>{t("revert")}</DropdownMenuLabel>
+                  <DropdownMenuItem
+                    onClick={() =>
+                      batchAction(t("revertedToAcceptedInternal"), () =>
+                        api.post("/api/responses/batch/revert-decision", {
+                          response_ids: selectedArr.map((r) => r.id),
+                          decision: "accepted",
+                        }),
+                      )
+                    }
+                  >
+                    {t("toAcceptedUnsend")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() =>
+                      batchAction(t("revertedToRejectedInternal"), () =>
+                        api.post("/api/responses/batch/revert-decision", {
+                          response_ids: selectedArr.map((r) => r.id),
+                          decision: "rejected",
+                        }),
+                      )
+                    }
+                  >
+                    {t("toRejectedUnsend")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() =>
+                      batchAction(t("movedBackToReview"), () =>
+                        api.post("/api/responses/batch/revert-decision", {
+                          response_ids: selectedArr.map((r) => r.id),
+                          decision: "review",
+                        }),
+                      )
+                    }
+                  >
+                    {t("backToReview")}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+            {workspace === "sent" && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button size="sm" variant="outline" disabled={batchBusy}>
@@ -1605,41 +1658,6 @@ function ResponsesTab({
                   <DropdownMenuItem
                     variant="destructive"
                     onClick={() => setConfirmBatchRevoke(true)}
-                  >
-                    {t("revokeSpot")}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-            {workspace === "confirmation" && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="sm" variant="outline" disabled={batchBusy}>
-                    <RotateCcwIcon />
-                    {t("more")}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                    onClick={() =>
-                      batchAction(t("reaccepted"), () =>
-                        api.post("/api/responses/batch/re-accept", {
-                          response_ids: selectedArr.map((r) => r.id),
-                        }),
-                      )
-                    }
-                  >
-                    {t("reacceptDeclinedExpired")}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    variant="destructive"
-                    onClick={() =>
-                      batchAction(t("spotsRevoked"), () =>
-                        api.post("/api/responses/batch/revoke-spot", {
-                          response_ids: selectedArr.map((r) => r.id),
-                        }),
-                      )
-                    }
                   >
                     {t("revokeSpot")}
                   </DropdownMenuItem>
@@ -2002,7 +2020,6 @@ export function ReviewModal({
 
   const st = response.status;
   const canScore = canReview && st !== "draft";
-  const sent = Boolean(response.decision_sent_at);
 
   return (
     <Modal
@@ -2192,101 +2209,81 @@ export function ReviewModal({
           </div>
         )}
 
+        {/* Decide accept/reject — lives in the review workspace itself now, no
+            separate "decisions" tab duplicating this row set (H13/H14). */}
+        {workspace === "review" && st === "review" && (
+          <div className="border-border space-y-3 rounded-lg border p-4">
+            <p className="text-sm font-medium">{t("decisionLabel")}</p>
+            {canDecide ? (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  disabled={busy}
+                  onClick={() =>
+                    run(t("acceptedUnsentToast"), () =>
+                      api.post(`/api/responses/${response.id}/decide`, { decision: "accepted" }),
+                    )
+                  }
+                >
+                  {t("accept")}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  disabled={busy}
+                  onClick={() =>
+                    run(t("rejectedUnsentToast"), () =>
+                      api.post(`/api/responses/${response.id}/decide`, { decision: "rejected" }),
+                    )
+                  }
+                >
+                  {t("reject")}
+                </Button>
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-xs">{t("needDecideCapability")}</p>
+            )}
+          </div>
+        )}
+
         {/* Decision controls (H14) */}
-        {workspace !== "review" && (canReview || canDecide) && (
+        {workspace !== "review" && canDecide && (
           <div className="border-border space-y-3 rounded-lg border p-4">
             <p className="text-sm font-medium">{t("decisionLabel")}</p>
             <div className="flex flex-wrap gap-2">
-              {workspace === "decisions" && canDecide && st === "review" && (
-                <>
-                  <Button
-                    size="sm"
-                    disabled={busy}
-                    onClick={() =>
-                      run(t("acceptedUnsentToast"), () =>
-                        api.post(`/api/responses/${response.id}/decide`, { decision: "accepted" }),
-                      )
-                    }
-                  >
-                    {t("accept")}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    disabled={busy}
-                    onClick={() =>
-                      run(t("rejectedUnsentToast"), () =>
-                        api.post(`/api/responses/${response.id}/decide`, { decision: "rejected" }),
-                      )
-                    }
-                  >
-                    {t("reject")}
-                  </Button>
-                </>
-              )}
-              {workspace === "communication" && canDecide && st === "accepted_internal" && (
-                <>
-                  <Button
-                    size="sm"
-                    disabled={busy}
-                    onClick={() =>
-                      run(t("decisionSent"), () =>
-                        api.post(`/api/responses/${response.id}/send-decision`),
-                      )
-                    }
-                  >
-                    <SendIcon />
-                    {t("sendDecision")}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() =>
-                      run(t("movedBackToReview"), () =>
-                        api.post(`/api/responses/${response.id}/revert-decision`, {
-                          decision: "review",
-                        }),
-                      )
-                    }
-                  >
-                    {t("backToReview")}
-                  </Button>
-                </>
-              )}
-              {workspace === "communication" && canDecide && st === "rejected_internal" && (
-                <>
-                  <Button
-                    size="sm"
-                    disabled={busy}
-                    onClick={() =>
-                      run(t("decisionSent"), () =>
-                        api.post(`/api/responses/${response.id}/send-decision`),
-                      )
-                    }
-                  >
-                    <SendIcon />
-                    {t("sendDecision")}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() =>
-                      run(t("movedBackToReview"), () =>
-                        api.post(`/api/responses/${response.id}/revert-decision`, {
-                          decision: "review",
-                        }),
-                      )
-                    }
-                  >
-                    {t("backToReview")}
-                  </Button>
-                </>
-              )}
-              {workspace === "communication" &&
-                canDecide &&
-                ((st === "accepted" && sent) || st === "expired") && (
+              {workspace === "outbox" &&
+                (st === "accepted_internal" || st === "rejected_internal") && (
+                  <>
+                    <Button
+                      size="sm"
+                      disabled={busy}
+                      onClick={() =>
+                        run(t("decisionSent"), () =>
+                          api.post(`/api/responses/${response.id}/send-decision`),
+                        )
+                      }
+                    >
+                      <SendIcon />
+                      {t("sendDecision")}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() =>
+                        run(t("movedBackToReview"), () =>
+                          api.post(`/api/responses/${response.id}/revert-decision`, {
+                            decision: "review",
+                          }),
+                        )
+                      }
+                    >
+                      {t("backToReview")}
+                    </Button>
+                  </>
+                )}
+              {workspace === "sent" &&
+                (st === "accepted" || st === "rejected" || st === "expired") && (
                   <Button
                     size="sm"
                     variant="outline"
@@ -2300,26 +2297,23 @@ export function ReviewModal({
                     {t("resend")}
                   </Button>
                 )}
-              {workspace === "decisions" &&
-                canDecide &&
-                (st === "accepted" || st === "rejected") && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() =>
-                      run(t("movedBackToReview"), () =>
-                        api.post(`/api/responses/${response.id}/revert-decision`, {
-                          decision: "review",
-                        }),
-                      )
-                    }
-                  >
-                    {t("backToReview")}
-                  </Button>
-                )}
-              {workspace === "confirmation" &&
-                canDecide &&
+              {workspace === "sent" && (st === "accepted" || st === "rejected") && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() =>
+                    run(t("movedBackToReview"), () =>
+                      api.post(`/api/responses/${response.id}/revert-decision`, {
+                        decision: "review",
+                      }),
+                    )
+                  }
+                >
+                  {t("backToReview")}
+                </Button>
+              )}
+              {workspace === "sent" &&
                 (st === "rejected" || st === "declined" || st === "expired") && (
                   <Button
                     size="sm"
@@ -2334,19 +2328,17 @@ export function ReviewModal({
                     {t("reaccept")}
                   </Button>
                 )}
-              {workspace === "confirmation" &&
-                canDecide &&
-                ((st === "accepted" && sent) || st === "confirmed") && (
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    disabled={busy}
-                    onClick={() => setConfirmRevoke(true)}
-                  >
-                    {t("revokeSpot")}
-                  </Button>
-                )}
-              {workspace === "confirmation" && canOverride && st === "accepted" && (
+              {workspace === "sent" && (st === "accepted" || st === "confirmed") && (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  disabled={busy}
+                  onClick={() => setConfirmRevoke(true)}
+                >
+                  {t("revokeSpot")}
+                </Button>
+              )}
+              {workspace === "sent" && canOverride && st === "accepted" && (
                 <>
                   <Button
                     size="sm"
@@ -2375,9 +2367,6 @@ export function ReviewModal({
                 </>
               )}
             </div>
-            {st === "review" && !canDecide && (
-              <p className="text-muted-foreground text-xs">{t("needDecideCapability")}</p>
-            )}
           </div>
         )}
         <AlertModal
