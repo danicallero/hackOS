@@ -16,5 +16,9 @@
   },
   "dependencies": {
     "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@hackos/typescript-config": "workspace:*",
+    "typescript": "^6.0.3"
   }
 }

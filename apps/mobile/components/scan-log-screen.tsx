@@ -102,7 +102,9 @@ export function ScanLogScreen() {
 
   if (items.length === 0) {
     return (
-      <View style={{ alignItems: "center", flex: 1, gap: 10, justifyContent: "center", padding: 32 }}>
+      <View
+        style={{ alignItems: "center", flex: 1, gap: 10, justifyContent: "center", padding: 32 }}
+      >
         <SymbolView name="clock.arrow.circlepath" size={36} tintColor={colors.tertiaryLabel} />
         <Text style={{ color: colors.secondaryLabel, fontSize: 15, textAlign: "center" }}>
           {t("scanLogEmpty")}
@@ -175,9 +177,18 @@ function ScanLogRow({ entry }: { entry: ScanLogEntry }) {
         paddingVertical: 10,
       }}
     >
-      <SymbolView accessible={false} name={SOURCE_ICON[entry.source]} size={19} tintColor={colors.accent} />
+      <SymbolView
+        accessible={false}
+        name={SOURCE_ICON[entry.source]}
+        size={19}
+        tintColor={colors.accent}
+      />
       <View style={{ flex: 1, gap: 2 }}>
-        <Text selectable numberOfLines={1} style={{ color: colors.label, fontSize: 15, fontWeight: "700" }}>
+        <Text
+          selectable
+          numberOfLines={1}
+          style={{ color: colors.label, fontSize: 15, fontWeight: "700" }}
+        >
           {subject}
         </Text>
         <Text numberOfLines={1} style={{ color: colors.secondaryLabel, fontSize: 13 }}>

@@ -78,7 +78,7 @@ async function betterAuthPassthrough(
 
   const init: RequestInit = { method: request.method, headers };
   const hasBody = !["GET", "HEAD"].includes(request.method) && Buffer.isBuffer(request.body);
-  if (hasBody) init.body = request.body as Buffer;
+  if (hasBody) init.body = new Uint8Array(request.body as Buffer);
 
   const webRequest = new Request(url, init);
   const response = await auth.handler(webRequest);

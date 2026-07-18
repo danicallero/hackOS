@@ -92,7 +92,7 @@ describe("staff scan stats and scan-log (extends H22-H27)", () => {
     expect(a?.total).toBe(2);
     expect(b?.total).toBe(1);
     // busiest first
-    expect(items[0].staffId).toBe(operatorA);
+    expect(items[0]?.staffId).toBe(operatorA);
   });
 
   it("GET /api/logistics/stats/by-staff requires LOGISTICS_STATS, not just a scan capability", async () => {
