@@ -3,7 +3,17 @@ import { GlassView } from "expo-glass-effect";
 import { useIsFocused } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import {
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 
@@ -29,6 +39,8 @@ export function QrCamera({
   const insets = useSafeAreaInsets();
   const locked = useRef(false);
   const [torchEnabled, setTorchEnabled] = useState(false);
+  const [manualEntryVisible, setManualEntryVisible] = useState(false);
+  const [manualCode, setManualCode] = useState("");
   const frameLeft = (width - FRAME) / 2;
   const frameTop = (height - FRAME) / 2;
   const frameRight = frameLeft + FRAME;
@@ -55,12 +67,22 @@ export function QrCamera({
     if (!isFocused) {
       locked.current = false;
       setTorchEnabled(false);
+      setManualEntryVisible(false);
+      setManualCode("");
     }
   }, [isFocused]);
 
   useEffect(() => {
     if (scanningEnabled) locked.current = false;
   }, [scanningEnabled]);
+
+  function submitManualEntry() {
+    const value = manualCode.trim();
+    if (!value) return;
+    setManualEntryVisible(false);
+    setManualCode("");
+    onValue(value);
+  }
 
   if (!permission) return <View style={styles.black} />;
   if (!permission.granted) {
@@ -106,7 +128,7 @@ export function QrCamera({
           enableTorch={torchEnabled}
           barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
           onBarcodeScanned={
-            scanningEnabled
+            scanningEnabled && !manualEntryVisible
               ? (result: BarcodeScanningResult) => {
                   if (locked.current || !isBarcodeInsideFrame(result, { height, width }, FRAME))
                     return;
@@ -159,6 +181,21 @@ export function QrCamera({
           />
         </Pressable>
       </GlassView>
+      <GlassView
+        glassEffectStyle="regular"
+        isInteractive
+        colorScheme="dark"
+        style={[styles.cameraControl, styles.cameraControlLeft, { bottom: insets.bottom + 26 }]}
+      >
+        <Pressable
+          accessibilityLabel={t("scannerEnterManually")}
+          accessibilityRole="button"
+          onPress={() => setManualEntryVisible(true)}
+          style={styles.cameraControlPressable}
+        >
+          <SymbolView name="keyboard" tintColor="white" size={23} weight="semibold" />
+        </Pressable>
+      </GlassView>
       {onClose ? (
         <GlassView
           glassEffectStyle="regular"
@@ -176,6 +213,51 @@ export function QrCamera({
           </Pressable>
         </GlassView>
       ) : null}
+      <Modal
+        animationType="slide"
+        transparent
+        visible={manualEntryVisible}
+        onRequestClose={() => setManualEntryVisible(false)}
+      >
+        <Pressable
+          accessibilityLabel={t("close")}
+          accessibilityRole="button"
+          onPress={() => setManualEntryVisible(false)}
+          style={styles.manualEntryBackdrop}
+        />
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          pointerEvents="box-none"
+          style={styles.manualEntryWrapper}
+        >
+          <View style={[styles.manualEntrySheet, { paddingBottom: insets.bottom + 20 }]}>
+            <Text selectable style={styles.manualEntryTitle}>
+              {t("scannerManualEntryTitle")}
+            </Text>
+            <TextInput
+              autoCapitalize="characters"
+              autoCorrect={false}
+              autoFocus
+              onChangeText={setManualCode}
+              onSubmitEditing={submitManualEntry}
+              placeholder={t("scannerManualEntryPlaceholder")}
+              placeholderTextColor={colors.secondaryLabel}
+              returnKeyType="done"
+              style={styles.manualEntryInput}
+              value={manualCode}
+            />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !manualCode.trim() }}
+              disabled={!manualCode.trim()}
+              onPress={submitManualEntry}
+              style={[styles.primaryButton, !manualCode.trim() && styles.primaryButtonDisabled]}
+            >
+              <Text style={styles.primaryButtonText}>{t("scannerManualEntrySubmit")}</Text>
+            </Pressable>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -239,6 +321,7 @@ const styles = StyleSheet.create({
     right: 22,
     width: 60,
   },
+  cameraControlLeft: { left: 22, right: undefined },
   backControl: {
     borderRadius: 22,
     height: 44,
@@ -281,6 +364,34 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     textAlign: "center",
   },
+  primaryButtonDisabled: { opacity: 0.45 },
   secondaryButton: { padding: 12 },
   secondaryButtonText: { color: colors.accent, fontSize: 16, fontWeight: "600" },
+  manualEntryBackdrop: {
+    backgroundColor: "rgba(0,0,0,0.4)",
+    bottom: 0,
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0,
+  },
+  manualEntryWrapper: { flex: 1, justifyContent: "flex-end" },
+  manualEntrySheet: {
+    backgroundColor: colors.background,
+    borderCurve: "continuous",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    gap: 14,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  manualEntryTitle: { color: colors.label, fontSize: 18, fontWeight: "700" },
+  manualEntryInput: {
+    backgroundColor: colors.surface,
+    borderCurve: "continuous",
+    borderRadius: 12,
+    color: colors.label,
+    fontSize: 17,
+    padding: 14,
+  },
 });

@@ -534,6 +534,22 @@ const dict = {
     es: "Apagar linterna",
     gl: "Apagar a lanterna",
   },
+  scannerEnterManually: {
+    en: "Enter code manually",
+    es: "Introducir código manualmente",
+    gl: "Introducir código manualmente",
+  },
+  scannerManualEntryTitle: {
+    en: "Enter badge code",
+    es: "Introducir código de badge",
+    gl: "Introducir código de badge",
+  },
+  scannerManualEntryPlaceholder: {
+    en: "Badge code",
+    es: "Código del badge",
+    gl: "Código do badge",
+  },
+  scannerManualEntrySubmit: { en: "Assign", es: "Asignar", gl: "Asignar" },
   scannerConfirmAccreditation: { en: "Assign badge", es: "Asignar badge", gl: "Asignar badge" },
   scannerRotate: { en: "Rotate badge", es: "Rotar badge", gl: "Rotar badge" },
   scannerRegister: { en: "Register scan", es: "Registrar pase", gl: "Rexistrar pase" },
