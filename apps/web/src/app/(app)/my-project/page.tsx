@@ -14,6 +14,7 @@ import { QueueStatusBadge } from "@/components/common/queue-status-badge";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
+import { ProjectDescription } from "@/components/projects/project-description";
 import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError } from "@/lib/api";
@@ -95,9 +96,9 @@ function MyProjectCard({ repo }: { repo: ProjectRepo }) {
     <div className="space-y-5">
       <SectionCard title={repo.name} icon={FolderGitIcon} bodyClassName="space-y-3">
         {repo.description && (
-          <p className="text-muted-foreground max-w-prose text-pretty text-sm">
-            {repo.description}
-          </p>
+          <div className="max-w-prose">
+            <ProjectDescription text={repo.description} />
+          </div>
         )}
         {links.length > 0 ? (
           <div className="flex flex-wrap gap-2">
