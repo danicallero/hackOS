@@ -112,7 +112,12 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
       ((await userHasCapability(req.userId, CAPABILITIES.QUEUE_OPERATE)) ||
         (await userHasCapability(req.userId, CAPABILITIES.QUEUE_ADMIN)))
     ) {
-      const { rows } = await pool.query(`SELECT * FROM rooms ORDER BY id ASC`);
+      const { rows } = await pool.query(
+        `SELECT rooms.*, CASE WHEN rqs.is_paused THEN 'paused' ELSE 'active' END AS status
+         FROM rooms
+         LEFT JOIN room_queue_state rqs ON rqs.room_id = rooms.id
+         ORDER BY rooms.id ASC`,
+      );
       return rows;
     }
 
@@ -126,9 +131,14 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
     if (roomIds.length === 0) {
       throw new ForbiddenError("Not allowed to list queue rooms");
     }
-    const { rows } = await pool.query(`SELECT * FROM rooms WHERE id = ANY($1) ORDER BY id ASC`, [
-      roomIds,
-    ]);
+    const { rows } = await pool.query(
+      `SELECT rooms.*, CASE WHEN rqs.is_paused THEN 'paused' ELSE 'active' END AS status
+       FROM rooms
+       LEFT JOIN room_queue_state rqs ON rqs.room_id = rooms.id
+       WHERE rooms.id = ANY($1)
+       ORDER BY rooms.id ASC`,
+      [roomIds],
+    );
     return rows;
   });
 
