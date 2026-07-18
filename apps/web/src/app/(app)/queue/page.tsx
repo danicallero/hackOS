@@ -13,7 +13,7 @@ import {
   TicketIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { type SseEnvelope, useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError } from "@/lib/api";
 import { type Translate, useLocale } from "@/lib/i18n";
@@ -57,8 +58,30 @@ export default function QueueOperationsPage() {
   const [roomAssignments, setRoomAssignments] = useState<Record<number, RoomAssignments | null>>(
     {},
   );
+  const [arrivalHints, setArrivalHints] = useState(false);
+  const arrivalHintsRef = useRef(false);
+  useEffect(() => {
+    const stored = window.localStorage.getItem("queue-ops-arrival-hints") === "1";
+    setArrivalHints(stored);
+    arrivalHintsRef.current = stored;
+  }, []);
+  const toggleArrivalHints = useCallback((checked: boolean) => {
+    setArrivalHints(checked);
+    arrivalHintsRef.current = checked;
+    window.localStorage.setItem("queue-ops-arrival-hints", checked ? "1" : "0");
+  }, []);
+
   const announceTeamEnter = useCallback(
     (event: SseEnvelope) => {
+      if (event.type === EVENTS.QUEUE_TEAM_CALLED) {
+        if (!arrivalHintsRef.current) return;
+        if (!event.data || typeof event.data !== "object") return;
+        const data = event.data as Record<string, unknown>;
+        const team = typeof data.teamName === "string" ? data.teamName : t("challengeFallback");
+        const room = typeof data.roomName === "string" ? data.roomName : t("noLocation");
+        toast.info(t("teamShouldArrive", { team, room }), { duration: 10_000 });
+        return;
+      }
       if (event.type !== EVENTS.QUEUE_NOTIFY_ENTER || !event.data || typeof event.data !== "object")
         return;
       const data = event.data as Record<string, unknown>;
@@ -75,7 +98,12 @@ export default function QueueOperationsPage() {
   const roomViews = useLiveQuery<RoomView[]>(
     () => getAllRoomViews(),
     "/api/queue/stream",
-    [EVENTS.QUEUE_ENTRY_CHANGED, EVENTS.QUEUE_ROOM_CHANGED, EVENTS.QUEUE_NOTIFY_ENTER],
+    [
+      EVENTS.QUEUE_ENTRY_CHANGED,
+      EVENTS.QUEUE_ROOM_CHANGED,
+      EVENTS.QUEUE_NOTIFY_ENTER,
+      EVENTS.QUEUE_TEAM_CALLED,
+    ],
     { enabled: canUse, onEvent: announceTeamEnter },
   );
 
@@ -162,12 +190,26 @@ export default function QueueOperationsPage() {
           ) : undefined
         }
         secondaryActions={
-          <Button variant="outline" asChild>
-            <Link href="/judging">
-              <ArrowRightIcon className="size-4" />
-              {t("openJudging")}
-            </Link>
-          </Button>
+          <>
+            <label
+              className="text-muted-foreground flex items-center gap-2 text-sm"
+              htmlFor="arrival-hints"
+              title={t("arrivalHintsDescription")}
+            >
+              <Switch
+                id="arrival-hints"
+                checked={arrivalHints}
+                onCheckedChange={toggleArrivalHints}
+              />
+              {t("arrivalHints")}
+            </label>
+            <Button variant="outline" asChild>
+              <Link href="/judging">
+                <ArrowRightIcon className="size-4" />
+                {t("openJudging")}
+              </Link>
+            </Button>
+          </>
         }
       />
 
@@ -300,8 +342,15 @@ function RoomQueueCard({
                 {room.active ? entryLabel(room.active, t) : t("noTeamPresenting")}
               </span>
             </span>
-            <span className="text-muted-foreground shrink-0 tabular-nums">
-              {t("calledTeams", { count: room.called.length })}
+            <span className="min-w-0">
+              <span className="text-muted-foreground block text-xs">
+                {t("calledTeams", { count: room.called.length })}
+              </span>
+              <span className="block truncate font-medium">
+                {room.called.length > 0
+                  ? room.called.map((entry) => entryLabel(entry, t)).join(", ")
+                  : t("noTeamsCalled")}
+              </span>
             </span>
           </div>
           <span className="text-primary shrink-0 text-sm font-medium group-open:hidden">

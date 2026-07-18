@@ -41,6 +41,7 @@ export const EVENTS = {
   QUEUE_ENTRY_CHANGED: "queue.entry.status_changed", // any queue_entries transition
   QUEUE_ROOM_CHANGED: "queue.room.state_changed", // pause/resume/settings
   QUEUE_NOTIFY_ENTER: "queue.entry.notify_enter", // H31
+  QUEUE_TEAM_CALLED: "queue.entry.team_called", // H29/H38, operator-facing echo of a "called" transition
   TV_MODE_CHANGED: "tv.mode.changed", // H42
   CONTENT_SCHEDULE_CHANGED: "content.schedule.changed", // H47
   CONTENT_ANNOUNCEMENT: "content.announcement", // H50

@@ -1945,6 +1945,17 @@ const dict: Record<string, I18nText> = {
     gl: "O panel de xuíces indicou que o equipo entre xa.",
     en: "The judging panel asked the team to enter now.",
   },
+  arrivalHints: { es: "Avisos de llegada", gl: "Avisos de chegada", en: "Arrival hints" },
+  arrivalHintsDescription: {
+    es: "Muestra un aviso cuando se llama a un nuevo equipo.",
+    gl: "Mostra un aviso cando se chama a un novo equipo.",
+    en: "Show a hint when a new team gets called.",
+  },
+  teamShouldArrive: {
+    es: "{team} debería llegar a {room}",
+    gl: "{team} debería chegar a {room}",
+    en: "{team} should arrive at {room}",
+  },
   closeExistingEvaluation: {
     es: "Volver a la sala",
     gl: "Volver á sala",
