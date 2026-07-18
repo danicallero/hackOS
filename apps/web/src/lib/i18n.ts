@@ -2219,12 +2219,8 @@ const dict: Record<string, I18nText> = {
   },
   createForm: { es: "Crear formulario", gl: "Crear formulario", en: "Create form" },
   personTypeLabel: { es: "Tipo de persona", gl: "Tipo de persoa", en: "Person type" },
-  blankOpenNow: { es: "Vacío = abre ahora.", gl: "Baleiro = abre agora.", en: "Blank = open now." },
-  blankNeverCloses: {
-    es: "Vacío = no cierra nunca.",
-    gl: "Baleiro = non pecha nunca.",
-    en: "Blank = never closes.",
-  },
+  openImmediately: { es: "Abre inmediatamente", gl: "Abre inmediatamente", en: "Open immediately" },
+  neverCloses: { es: "No cierra nunca", gl: "Non pecha nunca", en: "Never closes" },
   unlimitedPlaceholder: { es: "Sin límite", gl: "Sen límite", en: "Unlimited" },
   optionalCapDesc: {
     es: "Límite opcional de plazas aceptadas.",
@@ -2851,10 +2847,10 @@ const dict: Record<string, I18nText> = {
     gl: "Hora de fin personalizada",
     en: "Custom end time",
   },
-  leaveBlankEventEndTime: {
-    es: "Déjalo en blanco para usar la hora de fin del evento.",
-    gl: "Déixao en branco para usar a hora de fin do evento.",
-    en: "Leave blank to use the event end time.",
+  useEventEndTime: {
+    es: "Usar la hora de fin del evento",
+    gl: "Usar a hora de fin do evento",
+    en: "Use the event end time",
   },
   currentBroadcast: { es: "Emisión actual", gl: "Emisión actual", en: "Current broadcast" },
   liveTvPreview: {

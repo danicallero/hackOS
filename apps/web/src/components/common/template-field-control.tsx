@@ -7,6 +7,7 @@
 // multiselect, boolean for checkbox. The university id is kept numeric here so
 // callers never have to remember the string↔number dance.
 
+import { DateTimeInput } from "@/components/common/datetime-input";
 import { FileLink } from "@/components/common/file-link";
 import { FileUploadField } from "@/components/common/file-upload-field";
 import { MultiSelect } from "@/components/common/multi-select";
@@ -136,12 +137,12 @@ export function TemplateFieldControl({
       break;
     case "date":
       control = (
-        <Input
+        <DateTimeInput
           type="date"
           // A native date input only shows a yyyy-MM-dd value; slice off any time
           // part so a stored ISO datetime still renders instead of going blank.
           value={typeof value === "string" ? value.slice(0, 10) : ""}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(v) => onChange(v)}
           disabled={disabled}
         />
       );

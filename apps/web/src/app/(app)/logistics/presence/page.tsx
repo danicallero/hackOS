@@ -16,6 +16,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 import { type Column, DataTable } from "@/components/common/data-table";
+import { DateTimeInput } from "@/components/common/datetime-input";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
@@ -325,11 +326,7 @@ function PresencePanel({
                     </Select>
                   </Field>
                   <Field label={t("timeLabel")}>
-                    <Input
-                      type="datetime-local"
-                      value={manualScannedAt}
-                      onChange={(e) => setManualScannedAt(e.target.value)}
-                    />
+                    <DateTimeInput value={manualScannedAt} onChange={setManualScannedAt} />
                   </Field>
                 </div>
                 <Button
