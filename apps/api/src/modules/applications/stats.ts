@@ -24,8 +24,9 @@ export async function applicationStats(
   const app = await requireApplication(pool, applicationId);
 
   const statusCounts = await pool.query(
-    `SELECT status, count(*)::int AS n FROM application_responses
-     WHERE application_id = $1 GROUP BY status`,
+    `SELECT r.status, count(*)::int AS n FROM application_responses r
+     JOIN users u ON u.id = r.user_id AND u.anonymized_at IS NULL
+     WHERE r.application_id = $1 GROUP BY r.status`,
     [applicationId],
   );
   const byStatus: Counts = {};
@@ -36,41 +37,47 @@ export async function applicationStats(
   // Funnel among sent decisions (H27): sent, still-in-window, expired, declined, confirmed.
   const funnel = await pool.query(
     `SELECT
-       count(*) FILTER (WHERE decision_sent_at IS NOT NULL AND status IN ('accepted','confirmed','declined','expired'))::int AS sent,
-       count(*) FILTER (WHERE status = 'accepted' AND decision_sent_at IS NOT NULL)::int AS still_in_window,
-       count(*) FILTER (WHERE status = 'expired')::int AS expired,
-       count(*) FILTER (WHERE status = 'declined')::int AS declined,
-       count(*) FILTER (WHERE status = 'confirmed')::int AS confirmed
-     FROM application_responses WHERE application_id = $1`,
+       count(*) FILTER (WHERE r.decision_sent_at IS NOT NULL AND r.status IN ('accepted','confirmed','declined','expired'))::int AS sent,
+       count(*) FILTER (WHERE r.status = 'accepted' AND r.decision_sent_at IS NOT NULL)::int AS still_in_window,
+       count(*) FILTER (WHERE r.status = 'expired')::int AS expired,
+       count(*) FILTER (WHERE r.status = 'declined')::int AS declined,
+       count(*) FILTER (WHERE r.status = 'confirmed')::int AS confirmed
+     FROM application_responses r
+     JOIN users u ON u.id = r.user_id AND u.anonymized_at IS NULL
+     WHERE r.application_id = $1`,
     [applicationId],
   );
 
-  // Time series of submissions and confirmations.
+  // Time series of submissions and confirmations (anonymized applicants excluded).
   const submissionsByDay = await pool.query(
-    `SELECT to_char(date_trunc('day', submitted_at), 'YYYY-MM-DD') AS bucket, count(*)::int AS n
-     FROM application_responses
-     WHERE application_id = $1 AND submitted_at IS NOT NULL
+    `SELECT to_char(date_trunc('day', r.submitted_at), 'YYYY-MM-DD') AS bucket, count(*)::int AS n
+     FROM application_responses r
+     JOIN users u ON u.id = r.user_id AND u.anonymized_at IS NULL
+     WHERE r.application_id = $1 AND r.submitted_at IS NOT NULL
      GROUP BY bucket ORDER BY bucket`,
     [applicationId],
   );
   const confirmationsByDay = await pool.query(
-    `SELECT to_char(date_trunc('day', confirmed_at), 'YYYY-MM-DD') AS bucket, count(*)::int AS n
-     FROM application_responses
-     WHERE application_id = $1 AND confirmed_at IS NOT NULL
+    `SELECT to_char(date_trunc('day', r.confirmed_at), 'YYYY-MM-DD') AS bucket, count(*)::int AS n
+     FROM application_responses r
+     JOIN users u ON u.id = r.user_id AND u.anonymized_at IS NULL
+     WHERE r.application_id = $1 AND r.confirmed_at IS NOT NULL
      GROUP BY bucket ORDER BY bucket`,
     [applicationId],
   );
   const submissionsByHour = await pool.query(
-    `SELECT extract(hour FROM submitted_at)::int AS hour, count(*)::int AS n
-     FROM application_responses
-     WHERE application_id = $1 AND submitted_at IS NOT NULL
+    `SELECT extract(hour FROM r.submitted_at)::int AS hour, count(*)::int AS n
+     FROM application_responses r
+     JOIN users u ON u.id = r.user_id AND u.anonymized_at IS NULL
+     WHERE r.application_id = $1 AND r.submitted_at IS NOT NULL
      GROUP BY hour ORDER BY hour`,
     [applicationId],
   );
   const submissionsByDow = await pool.query(
-    `SELECT extract(dow FROM submitted_at)::int AS dow, count(*)::int AS n
-     FROM application_responses
-     WHERE application_id = $1 AND submitted_at IS NOT NULL
+    `SELECT extract(dow FROM r.submitted_at)::int AS dow, count(*)::int AS n
+     FROM application_responses r
+     JOIN users u ON u.id = r.user_id AND u.anonymized_at IS NULL
+     WHERE r.application_id = $1 AND r.submitted_at IS NOT NULL
      GROUP BY dow ORDER BY dow`,
     [applicationId],
   );
@@ -91,6 +98,7 @@ export async function applicationStats(
     `SELECT u.shirt_size AS value, count(*)::int AS n
      FROM application_responses r JOIN users u ON u.id = r.user_id
      WHERE r.application_id = $1 AND r.status = 'confirmed' AND u.shirt_size IS NOT NULL
+       AND u.anonymized_at IS NULL
      GROUP BY u.shirt_size ORDER BY n DESC`,
     [applicationId],
   );
@@ -102,7 +110,7 @@ export async function applicationStats(
      JOIN users u ON u.id = r.user_id
      JOIN LATERAL unnest(u.food_intolerances) AS uid(id) ON true
      JOIN food_intolerances fi ON fi.id = uid.id
-     WHERE r.application_id = $1 AND r.status = 'confirmed'
+     WHERE r.application_id = $1 AND r.status = 'confirmed' AND u.anonymized_at IS NULL
      GROUP BY fi.id, fi.label ORDER BY n DESC`,
     [applicationId],
   );

@@ -35,7 +35,8 @@ export async function anonymizeUser(client: Queryable, opts: AnonymizeUserOption
            phone = NULL, dni = NULL, image = NULL,
            secondary_email = NULL, secondary_email_verified_at = NULL,
            food_intolerances = '{}', food_intolerance_notes = NULL,
-           dietary_data_state = 'not_provided', notes = NULL
+           dietary_data_state = 'not_provided', notes = NULL,
+           anonymized_at = now()
      WHERE id = $1`,
     [opts.targetId, anonEmail],
   );

@@ -147,7 +147,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Synchronize native scanner data",
         description:
-          "Returns the lightweight people, current/revoked badge, activity, and scan-count snapshot used by offline native scanners. A successful response replaces the local snapshot; queued mutations remain separate and replay with idempotency keys.",
+          "Returns the lightweight people, current/revoked badge, activity, and scan-count snapshot used by offline native scanners. A successful response replaces the local snapshot; queued mutations remain separate and replay with idempotency keys. Anonymized accounts (H54) are excluded from `people`.",
         response: { 200: scannerSnapshotResponse },
       },
     },
@@ -193,7 +193,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       schema: {
         body: personSearchBody,
         description:
-          "Unified person lookup for logistics stations (H22-H27). Every comparison is case-insensitive, and the fuzzy tier is also accent-insensitive ('perez' finds 'Pérez'). `q` is resolved as: an exact ticket token, then someone's CURRENT badge id (a rotated-away badge never shadows the current holder), then a rotated-away badge (matchedBy `badge_history`), then a name / surname / 'name surname' / 'surname name' / email substring. Exact identifier hits return exactly one person; the fuzzy fallback returns up to 10. `fields` whitelists which extra user fields come back (email, badgeId, dni, phone, shirtSize, notes, confirmed); defaults to email + badgeId + confirmed. Read-only; any logistics capability grants access.",
+          "Unified person lookup for logistics stations (H22-H27). Every comparison is case-insensitive, and the fuzzy tier is also accent-insensitive ('perez' finds 'Pérez'). `q` is resolved as: an exact ticket token, then someone's CURRENT badge id (a rotated-away badge never shadows the current holder), then a rotated-away badge (matchedBy `badge_history`), then a name / surname / 'name surname' / 'surname name' / email substring. Exact identifier hits return exactly one person; the fuzzy fallback returns up to 10. `fields` whitelists which extra user fields come back (email, badgeId, dni, phone, shirtSize, notes, confirmed); defaults to email + badgeId + confirmed. Anonymized accounts (H54) never match, on any tier. Read-only; any logistics capability grants access.",
       },
     },
     async (req) => ({ results: await searchPeople(req.body.q, req.body.fields) }),

@@ -701,7 +701,7 @@ describe("staff user routes (H7)", () => {
     expect(ok.json().anonymized).toBe(true);
 
     const { rows } = await pool.query(
-      `SELECT email, name, surname, phone, dni, email_verified FROM users WHERE id = $1`,
+      `SELECT email, name, surname, phone, dni, email_verified, anonymized_at FROM users WHERE id = $1`,
       [target],
     );
     expect(rows[0].email).toBe(`anonymized+${target}@deleted.invalid`);
@@ -710,6 +710,7 @@ describe("staff user routes (H7)", () => {
     expect(rows[0].phone).toBeNull();
     expect(rows[0].dni).toBeNull();
     expect(rows[0].email_verified).toBe(false);
+    expect(rows[0].anonymized_at).not.toBeNull();
 
     // The audit trail for the anonymize action must not retain the very PII
     // it was supposed to scrub.

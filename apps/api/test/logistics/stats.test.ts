@@ -90,6 +90,41 @@ describe("H27 logistics stats", () => {
     expect(talk.attendees).toBe(1);
   });
 
+  it("excludes anonymized profiles from accredited counts (H54)", async () => {
+    const a = await createUser();
+    await assignBadge(a, "S-ANON");
+    const b = await createUser();
+    await assignBadge(b, "S-KEPT");
+
+    const admin = await createUserWithCapabilities(["*"]);
+    const anon = await app.inject({
+      method: "POST",
+      url: `/api/users/${a}/anonymize`,
+      headers: asUser(admin),
+    });
+    expect(anon.statusCode).toBe(200);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/logistics/stats",
+      headers: asUser(statsStaff),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().accreditedCount).toBe(1);
+
+    const byRole = await app.inject({
+      method: "GET",
+      url: "/api/accreditation/stats",
+      headers: asUser(admin),
+    });
+    expect(byRole.statusCode).toBe(200);
+    const total = (byRole.json().byRole as Array<{ count: number }>).reduce(
+      (sum, r) => sum + r.count,
+      0,
+    );
+    expect(total).toBe(1);
+  });
+
   it("requires LOGISTICS_STATS", async () => {
     const res = await app.inject({
       method: "GET",

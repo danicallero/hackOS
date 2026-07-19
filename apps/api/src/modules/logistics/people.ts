@@ -52,23 +52,28 @@ export async function searchPeople(
   const needle = q.trim();
   if (!needle) return [];
 
-  const ticket = await pool.query(`SELECT user_id FROM tickets WHERE upper(token) = upper($1)`, [
-    needle,
-  ]);
+  const ticket = await pool.query(
+    `SELECT t.user_id FROM tickets t
+      JOIN users u ON u.id = t.user_id
+     WHERE upper(t.token) = upper($1) AND u.anonymized_at IS NULL`,
+    [needle],
+  );
   if (ticket.rows[0]) {
     return loadResults([ticket.rows[0].user_id as number], "ticket", fields);
   }
 
-  const badge = await pool.query(`SELECT id FROM users WHERE upper(badge_id) = upper($1)`, [
-    needle,
-  ]);
+  const badge = await pool.query(
+    `SELECT id FROM users WHERE upper(badge_id) = upper($1) AND anonymized_at IS NULL`,
+    [needle],
+  );
   if (badge.rows[0]) {
     return loadResults([badge.rows[0].id as number], "badge", fields);
   }
 
   const history = await pool.query(
     `SELECT id FROM users
-      WHERE EXISTS (SELECT 1 FROM unnest(badge_id_history) b WHERE upper(b) = upper($1))`,
+      WHERE EXISTS (SELECT 1 FROM unnest(badge_id_history) b WHERE upper(b) = upper($1))
+        AND anonymized_at IS NULL`,
     [needle],
   );
   if (history.rows.length > 0) {
@@ -84,11 +89,12 @@ export async function searchPeople(
   const like = `%${needle}%`;
   const fuzzy = await pool.query(
     `SELECT id FROM users
-      WHERE unaccent(name) ILIKE unaccent($1)
+      WHERE anonymized_at IS NULL
+        AND (unaccent(name) ILIKE unaccent($1)
          OR unaccent(surname) ILIKE unaccent($1)
          OR unaccent(email) ILIKE unaccent($1)
          OR unaccent(name || ' ' || surname) ILIKE unaccent($1)
-         OR unaccent(surname || ' ' || name) ILIKE unaccent($1)
+         OR unaccent(surname || ' ' || name) ILIKE unaccent($1))
       ORDER BY surname NULLS LAST, name NULLS LAST, id
       LIMIT 10`,
     [like],

@@ -59,6 +59,9 @@ route below. No migration needed.
   scan counts, and last door state needed by H22-H26. A full snapshot
   is deliberate: badge-history values have no individual timestamp, and a
   complete replacement guarantees convergence after any missed refresh.
+  Anonymized accounts (H54, `users.anonymized_at`) are excluded, so an
+  erased profile never syncs to a scanner and never resolves through
+  `/api/logistics/people/search` — even by a still-active badge or ticket.
 - `GET /api/logistics/scan-log` (`apps/api/src/modules/logistics/scan-log.ts`)
   — paginated, most-recent-first feed unioning accreditation check-ins,
   presence door-scans, and activity/meal scans by the *actor* who performed

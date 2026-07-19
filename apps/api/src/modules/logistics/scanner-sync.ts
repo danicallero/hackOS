@@ -56,6 +56,7 @@ export async function scannerSnapshot() {
          FROM users u
          LEFT JOIN user_caps uc ON uc.user_id = u.id
          LEFT JOIN tickets t ON t.user_id = u.id
+         -- Anonymized profiles (H54) must never reach a scanner's local store.
          LEFT JOIN LATERAL (
            -- As-of-now, like presenceScan's session guard: a future scheduled
            -- entry (accreditation's presence_auto_entry_at) must not make
@@ -66,6 +67,7 @@ export async function scannerSnapshot() {
             ORDER BY tl.scanned_at DESC, tl.id DESC
             LIMIT 1
          ) last_presence ON true
+        WHERE u.anonymized_at IS NULL
         ORDER BY u.id`,
     ),
     pool.query(
