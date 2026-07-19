@@ -183,11 +183,10 @@ function ManualLogDetails({
   return (
     <View
       style={{
-        backgroundColor: colors.surface,
-        borderCurve: "continuous",
-        borderRadius: 14,
+        borderLeftColor: colors.destructive,
+        borderLeftWidth: 2,
         gap: 8,
-        padding: 13,
+        paddingLeft: 10,
       }}
     >
       <Text style={{ color: colors.secondaryLabel, fontSize: 12, lineHeight: 16 }}>
@@ -275,7 +274,14 @@ function SwipeableQueueRow({
   );
 }
 
-export function ScannerTransactionStatus({ scan }: { scan?: PendingScan | null }) {
+export function ScannerTransactionStatus({
+  scan,
+  bare = false,
+}: {
+  scan?: PendingScan | null;
+  /** Renders as a plain icon+text row with no card chrome, for use inside a row that's already card-framed (e.g. the device queue list). */
+  bare?: boolean;
+}) {
   const { t } = useLocale();
   const state = scannerTransactionState(scan);
   const presentation = {
@@ -300,25 +306,29 @@ export function ScannerTransactionStatus({ scan }: { scan?: PendingScan | null }
     <View
       accessibilityLiveRegion={state === "attention" ? "assertive" : "polite"}
       accessibilityRole="summary"
-      style={{
-        alignItems: "center",
-        backgroundColor: colors.surface,
-        borderCurve: "continuous",
-        borderRadius: 14,
-        flexDirection: "row",
-        gap: 10,
-        minHeight: 50,
-        paddingHorizontal: 14,
-      }}
+      style={
+        bare
+          ? { alignItems: "center", flexDirection: "row", gap: 8 }
+          : {
+              alignItems: "center",
+              backgroundColor: colors.surface,
+              borderCurve: "continuous",
+              borderRadius: 14,
+              flexDirection: "row",
+              gap: 10,
+              minHeight: 50,
+              paddingHorizontal: 14,
+            }
+      }
     >
       <SymbolView
         accessible={false}
         name={presentation.icon as SymbolViewProps["name"]}
-        size={19}
+        size={bare ? 15 : 19}
         tintColor={presentation.tone}
       />
-      <View style={{ flex: 1, gap: 2, paddingVertical: 10 }}>
-        <Text style={{ color: colors.label, fontSize: 15, fontWeight: "700" }}>
+      <View style={{ flex: 1, gap: 2, paddingVertical: bare ? 0 : 10 }}>
+        <Text style={{ color: colors.label, fontSize: bare ? 13 : 15, fontWeight: "700" }}>
           {presentation.label}
         </Text>
         {scan?.lastError ? (
@@ -454,61 +464,75 @@ export function ScannerQueueStatus({
               <ClockSkewBanner />
             ) : null}
 
-            <Section title={t("scannerQueue")}>
-              {queue.length === 0 ? (
-                <ScannerTransactionStatus />
-              ) : (
-                <View style={{ gap: 10, padding: 16 }}>
-                  {queue
-                    .slice(-20)
-                    .reverse()
-                    .map((scan) => {
-                      const subject = subjectLabel(scan, people);
-                      const deletable = scan.status === "failed";
-                      return (
-                        <SwipeableQueueRow
-                          key={scan.id}
-                          deletable={deletable}
-                          onDelete={() => onDelete(scan.id)}
+            <Text
+              selectable
+              style={{
+                color: colors.secondaryLabel,
+                fontSize: 13,
+                fontWeight: "600",
+                paddingHorizontal: 16,
+              }}
+            >
+              {t("scannerQueue").toLocaleUpperCase()}
+            </Text>
+
+            {queue.length === 0 ? (
+              <ScannerTransactionStatus />
+            ) : (
+              <View style={{ gap: 10 }}>
+                {queue
+                  .slice(-20)
+                  .reverse()
+                  .map((scan) => {
+                    const subject = subjectLabel(scan, people);
+                    const deletable = scan.status === "failed";
+                    return (
+                      <SwipeableQueueRow
+                        key={scan.id}
+                        deletable={deletable}
+                        onDelete={() => onDelete(scan.id)}
+                      >
+                        <View
+                          style={{
+                            backgroundColor: colors.surface,
+                            borderCurve: "continuous",
+                            borderRadius: 14,
+                            gap: 3,
+                            padding: 13,
+                          }}
                         >
-                          <View style={{ backgroundColor: colors.background, gap: 3 }}>
-                            <View style={{ alignItems: "baseline", flexDirection: "row", gap: 8 }}>
-                              <Text
-                                numberOfLines={1}
-                                style={{
-                                  color: colors.label,
-                                  flex: 1,
-                                  fontSize: 14,
-                                  fontWeight: "700",
-                                }}
-                              >
-                                {subject ?? operationLabel(scan)}
-                              </Text>
-                              <Text style={{ color: colors.secondaryLabel, fontSize: 12 }}>
-                                {new Date(scan.createdAt).toLocaleTimeString()}
-                              </Text>
-                            </View>
-                            <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>
-                              {operationLabel(scan)} · {detailLabel(scan, activities, t)}
-                              {scan.attempts > 1
-                                ? ` · ${t("scannerAttemptsCount", { count: String(scan.attempts) })}`
-                                : ""}
+                          <View style={{ alignItems: "baseline", flexDirection: "row", gap: 8 }}>
+                            <Text
+                              numberOfLines={1}
+                              style={{
+                                color: colors.label,
+                                flex: 1,
+                                fontSize: 14,
+                                fontWeight: "700",
+                              }}
+                            >
+                              {subject ?? operationLabel(scan)}
                             </Text>
-                            <ScannerTransactionStatus scan={scan} />
-                            {deletable ? (
-                              <ManualLogDetails
-                                scan={scan}
-                                people={people}
-                                activities={activities}
-                              />
-                            ) : null}
+                            <Text style={{ color: colors.secondaryLabel, fontSize: 12 }}>
+                              {new Date(scan.createdAt).toLocaleTimeString()}
+                            </Text>
                           </View>
-                        </SwipeableQueueRow>
-                      );
-                    })}
-                </View>
-              )}
-            </Section>
+                          <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>
+                            {operationLabel(scan)} · {detailLabel(scan, activities, t)}
+                            {scan.attempts > 1
+                              ? ` · ${t("scannerAttemptsCount", { count: String(scan.attempts) })}`
+                              : ""}
+                          </Text>
+                          <ScannerTransactionStatus scan={scan} bare />
+                          {deletable ? (
+                            <ManualLogDetails scan={scan} people={people} activities={activities} />
+                          ) : null}
+                        </View>
+                      </SwipeableQueueRow>
+                    );
+                  })}
+              </View>
+            )}
 
             <Section>
               <ActionButton
