@@ -14,6 +14,29 @@ export class ApiError extends Error {
 }
 
 /**
+ * A device clock running ahead of the server's causes otherwise-valid
+ * offline scans (H25) to be rejected as "in the future" — see
+ * apps/api/src/lib/clock.ts CLOCK_SKEW_TOLERANCE_MS. Every response carries
+ * a standard `Date` header, so we track the observed skew here without a
+ * dedicated time endpoint.
+ */
+export const CLOCK_SKEW_TOLERANCE_MS = 60_000;
+
+let clockSkewMs: number | null = null;
+
+export function getClockSkewMs(): number | null {
+  return clockSkewMs;
+}
+
+function recordServerDate(response: Response): void {
+  const header = response.headers.get("date");
+  if (!header) return;
+  const serverTime = Date.parse(header);
+  if (Number.isNaN(serverTime)) return;
+  clockSkewMs = serverTime - Date.now();
+}
+
+/**
  * Thin wrapper around the Better Auth client's underlying fetch
  * (`authClient.$fetch`, powered by better-fetch) so every authenticated call
  * to the hackOS API — not just the /api/auth/* endpoints Better Auth itself
@@ -35,6 +58,8 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     method: init?.method as "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | undefined,
     body: init?.body,
     headers: init?.headers as Record<string, string> | undefined,
+    onResponse: (context) => recordServerDate(context.response),
+    onError: (context) => recordServerDate(context.response),
     // Reads can safely ride through the short origin gap during a Dokploy
     // replacement. Do not automatically retry non-idempotent writes.
     retry:

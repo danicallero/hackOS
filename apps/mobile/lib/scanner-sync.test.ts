@@ -1,5 +1,7 @@
 jest.mock("./api", () => ({
   apiFetch: jest.fn(),
+  getClockSkewMs: jest.fn(() => null),
+  CLOCK_SKEW_TOLERANCE_MS: 60_000,
   ApiError: class ApiError extends Error {
     status: number;
     code: string;
@@ -15,14 +17,22 @@ jest.mock("./api", () => ({
 jest.mock("./scanner-db", () => ({
   acknowledgeScan: jest.fn(),
   applyScannerSnapshot: jest.fn(),
+  correctScanTimestamp: jest.fn(),
   failScan: jest.fn(),
   markScanAttempt: jest.fn(),
   noteRetryableError: jest.fn(),
   pendingScans: jest.fn(),
 }));
 
-import { ApiError, apiFetch } from "./api";
-import { applyScannerSnapshot, failScan, noteRetryableError, pendingScans } from "./scanner-db";
+import { ApiError, apiFetch, getClockSkewMs } from "./api";
+import {
+  acknowledgeScan,
+  applyScannerSnapshot,
+  correctScanTimestamp,
+  failScan,
+  noteRetryableError,
+  pendingScans,
+} from "./scanner-db";
 import { synchronizeScanner } from "./scanner-sync";
 import type { PendingScan } from "./scanner-types";
 
@@ -31,6 +41,9 @@ const mockPendingScans = pendingScans as jest.Mock;
 const mockApplySnapshot = applyScannerSnapshot as jest.Mock;
 const mockFailScan = failScan as jest.Mock;
 const mockNoteRetryable = noteRetryableError as jest.Mock;
+const mockGetClockSkewMs = getClockSkewMs as jest.Mock;
+const mockCorrectScanTimestamp = correctScanTimestamp as jest.Mock;
+const mockAcknowledgeScan = acknowledgeScan as jest.Mock;
 // The mocked ApiError constructor is (status, code, message).
 const apiError = (status: number, message: string) =>
   new (ApiError as unknown as new (status: number, code: string, message: string) => Error)(
@@ -49,6 +62,21 @@ function badgeRemoval(id: string): PendingScan {
     lastError: null,
     createdAt: "2026-01-01T00:00:00.000Z",
     acknowledgedAt: null,
+    clockCorrected: false,
+  };
+}
+
+function presenceScan(id: string, scannedAt = "2026-01-01T00:00:00.000Z"): PendingScan {
+  return {
+    id,
+    kind: "presence",
+    payload: { kind: "presence", badgeId: "B-1", direction: "in", scannedAt },
+    status: "pending",
+    attempts: 0,
+    lastError: null,
+    createdAt: scannedAt,
+    acknowledgedAt: null,
+    clockCorrected: false,
   };
 }
 
@@ -59,6 +87,9 @@ describe("synchronizeScanner", () => {
     mockApplySnapshot.mockReset();
     mockFailScan.mockReset();
     mockNoteRetryable.mockReset();
+    mockGetClockSkewMs.mockReset().mockReturnValue(null);
+    mockCorrectScanTimestamp.mockReset();
+    mockAcknowledgeScan.mockReset();
   });
 
   it("reruns for a caller who enqueues while a sync is already in flight", async () => {
@@ -134,6 +165,43 @@ describe("synchronizeScanner", () => {
 
     expect(mockFailScan).toHaveBeenCalledWith("scan-1", "No badge to remove");
     expect(mockApiFetch).toHaveBeenCalledTimes(3);
+  });
+
+  it("corrects a timestamp rejected as future by the measured clock skew and retries once", async () => {
+    // Device clock is 5 minutes ahead of the server's.
+    mockGetClockSkewMs.mockReturnValue(-5 * 60_000);
+    const scan = presenceScan("scan-1", "2026-01-01T00:05:00.000Z");
+    mockPendingScans.mockResolvedValue([scan]);
+    mockApiFetch
+      .mockRejectedValueOnce(apiError(400, "Offline scan timestamp must be in the past"))
+      .mockResolvedValueOnce({}) // corrected retry succeeds
+      .mockResolvedValueOnce({ generatedAt: "t0", people: [], activities: [], activityStates: [] });
+
+    await synchronizeScanner();
+
+    expect(mockCorrectScanTimestamp).toHaveBeenCalledWith(
+      "scan-1",
+      expect.objectContaining({ scannedAt: "2026-01-01T00:00:00.000Z" }),
+    );
+    expect(mockFailScan).not.toHaveBeenCalled();
+    expect(mockAcknowledgeScan).toHaveBeenCalled();
+  });
+
+  it("fails a scan permanently if it's still rejected as future after a clock-skew correction", async () => {
+    mockGetClockSkewMs.mockReturnValue(-5 * 60_000);
+    const scan = { ...presenceScan("scan-1"), clockCorrected: true };
+    mockPendingScans.mockResolvedValue([scan]);
+    mockApiFetch
+      .mockRejectedValueOnce(apiError(400, "Offline scan timestamp must be in the past"))
+      .mockResolvedValueOnce({ generatedAt: "t0", people: [], activities: [], activityStates: [] });
+
+    await synchronizeScanner();
+
+    expect(mockCorrectScanTimestamp).not.toHaveBeenCalled();
+    expect(mockFailScan).toHaveBeenCalledWith(
+      "scan-1",
+      "Offline scan timestamp must be in the past",
+    );
   });
 
   it("clears the in-flight lock after a failed sync so the next call retries the network", async () => {

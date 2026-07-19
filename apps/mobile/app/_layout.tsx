@@ -4,6 +4,7 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from "expo-router/react-naviga
 import { Stack } from "expo-router/stack";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect, useRef, useState } from "react";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 
 import { useColorScheme } from "@/components/useColorScheme";
@@ -43,9 +44,11 @@ export default function RootLayout() {
   }
 
   return (
-    <LocaleProvider>
-      <RootLayoutSession />
-    </LocaleProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <LocaleProvider>
+        <RootLayoutSession />
+      </LocaleProvider>
+    </GestureHandlerRootView>
   );
 }
 

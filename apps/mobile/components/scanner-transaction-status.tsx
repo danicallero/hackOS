@@ -1,14 +1,50 @@
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Modal, Pressable, ScrollView, Text, View } from "react-native";
+import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
+import Animated, { type SharedValue, useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ActionButton, FloatingGlassButton, Section } from "@/components/native-ui";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
+import { CLOCK_SKEW_TOLERANCE_MS } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { listScannerActivities, listScannerPeople } from "@/lib/scanner-db";
 import { scannerQueueHealth, scannerTransactionState } from "@/lib/scanner-state";
 import type { PendingScan, ScannerActivity, ScannerPerson } from "@/lib/scanner-types";
 import { colors } from "@/theme/colors";
+
+function ClockSkewBanner() {
+  const { t } = useLocale();
+  return (
+    <View
+      accessibilityRole="alert"
+      style={{
+        alignItems: "flex-start",
+        backgroundColor: colors.warningSurface,
+        borderCurve: "continuous",
+        borderRadius: 14,
+        flexDirection: "row",
+        gap: 10,
+        padding: 13,
+      }}
+    >
+      <SymbolView
+        name="clock.badge.exclamationmark.fill"
+        tintColor={colors.warning}
+        size={20}
+        accessible={false}
+      />
+      <View style={{ flex: 1, gap: 3 }}>
+        <Text selectable style={{ color: colors.warning, fontSize: 15, fontWeight: "700" }}>
+          {t("clockSkewTitle")}
+        </Text>
+        <Text selectable style={{ color: colors.warning, fontSize: 13, lineHeight: 18 }}>
+          {t("clockSkewBody")}
+        </Text>
+      </View>
+    </View>
+  );
+}
 
 function findSubject(scan: PendingScan, people: ScannerPerson[]): ScannerPerson | undefined {
   const p = scan.payload;
@@ -54,6 +90,189 @@ function detailLabel(
       return `${p.badgeId} · ${activity?.name ?? `#${p.activityId}`}`;
     }
   }
+}
+
+/**
+ * Everything an operator needs to manually replicate a permanently rejected
+ * scan in the web admin panel before discarding it from the device queue —
+ * the queue's local `scannerPeople`/`activities` cache can resolve a badge
+ * ID or user ID to the person's name/email even if the admin lookup can't.
+ */
+function manualLogDetails(
+  scan: PendingScan,
+  people: ScannerPerson[],
+  activities: ScannerActivity[],
+  t: ReturnType<typeof useLocale>["t"],
+): Array<{ label: string; value: string }> {
+  const p = scan.payload;
+  const subject = findSubject(scan, people);
+  const details: Array<{ label: string; value: string }> = [];
+  if (subject) {
+    details.push({
+      label: t("scannerFieldPerson"),
+      value: `${[subject.name, subject.surname].filter(Boolean).join(" ") || subject.email} (${subject.email})`,
+    });
+    details.push({ label: t("scannerFieldUserId"), value: String(subject.userId) });
+  } else if ("userId" in p) {
+    details.push({ label: t("scannerFieldUserId"), value: String(p.userId) });
+  } else {
+    details.push({ label: t("scannerFieldPerson"), value: t("scannerFieldUnknownPerson") });
+  }
+  switch (p.kind) {
+    case "accreditation":
+      details.push({ label: t("scannerFieldTicket"), value: p.ticketToken });
+      details.push({ label: t("scannerFieldBadge"), value: p.badgeId });
+      details.push({ label: t("scannerFieldMethod"), value: p.method });
+      break;
+    case "accreditation_user":
+      details.push({ label: t("scannerFieldBadge"), value: p.badgeId });
+      details.push({ label: t("scannerFieldMethod"), value: p.method });
+      break;
+    case "badge_rotation":
+      details.push({ label: t("scannerFieldCurrentBadge"), value: p.currentBadgeId });
+      details.push({ label: t("scannerFieldNewBadge"), value: p.newBadgeId });
+      details.push({ label: t("scannerFieldReason"), value: p.reason });
+      break;
+    case "badge_removal":
+      details.push({ label: t("scannerFieldCurrentBadge"), value: p.currentBadgeId });
+      details.push({ label: t("scannerFieldReason"), value: p.reason });
+      break;
+    case "presence":
+      details.push({ label: t("scannerFieldBadge"), value: p.badgeId });
+      details.push({
+        label: t("scannerFieldDirection"),
+        value: p.direction === "in" ? t("presenceSignalEntry") : t("presenceSignalExit"),
+      });
+      details.push({
+        label: t("scannerFieldTimestamp"),
+        value: new Date(p.scannedAt).toLocaleString(),
+      });
+      break;
+    case "activity": {
+      const activity = activities.find((a) => a.id === p.activityId);
+      details.push({ label: t("scannerFieldBadge"), value: p.badgeId });
+      details.push({
+        label: t("scannerFieldActivity"),
+        value: activity ? `${activity.name} (#${p.activityId})` : `#${p.activityId}`,
+      });
+      details.push({
+        label: t("scannerFieldAllowRepeat"),
+        value: p.allowRepeat ? t("scannerYes") : t("scannerNo"),
+      });
+      details.push({
+        label: t("scannerFieldTimestamp"),
+        value: new Date(p.scannedAt).toLocaleString(),
+      });
+      break;
+    }
+  }
+  return details;
+}
+
+function ManualLogDetails({
+  scan,
+  people,
+  activities,
+}: {
+  scan: PendingScan;
+  people: ScannerPerson[];
+  activities: ScannerActivity[];
+}) {
+  const { t } = useLocale();
+  const details = manualLogDetails(scan, people, activities, t);
+  return (
+    <View
+      style={{
+        backgroundColor: colors.surface,
+        borderCurve: "continuous",
+        borderRadius: 14,
+        gap: 8,
+        padding: 13,
+      }}
+    >
+      <Text style={{ color: colors.secondaryLabel, fontSize: 12, lineHeight: 16 }}>
+        {t("scannerManualLogHint")}
+      </Text>
+      <View style={{ gap: 4 }}>
+        {details.map((detail) => (
+          <View key={detail.label} style={{ flexDirection: "row", gap: 8 }}>
+            <Text style={{ color: colors.secondaryLabel, fontSize: 13, width: 96 }}>
+              {detail.label}
+            </Text>
+            <Text selectable style={{ color: colors.label, flex: 1, fontSize: 13 }}>
+              {detail.value}
+            </Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+/**
+ * The action panel revealed by swiping a failed scan's row left, matching
+ * the OS notification center's swipe-to-clear gesture: swiping only reveals
+ * the button, and the scan is discarded on the deliberate follow-up tap —
+ * never by the swipe distance alone, so a stray swipe can't delete data.
+ */
+function DeleteRevealAction({
+  progress,
+  onDelete,
+}: {
+  progress: SharedValue<number>;
+  onDelete: () => void;
+}) {
+  const { t } = useLocale();
+  const style = useAnimatedStyle(() => ({ opacity: progress.value }));
+  return (
+    <Animated.View style={[{ justifyContent: "center", marginLeft: 8 }, style]}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t("scannerDeleteScan")}
+        onPress={onDelete}
+        style={({ pressed }) => ({
+          alignItems: "center",
+          backgroundColor: colors.destructive,
+          borderCurve: "continuous",
+          borderRadius: 14,
+          flexDirection: "row",
+          gap: 6,
+          height: "100%",
+          justifyContent: "center",
+          opacity: pressed ? 0.75 : 1,
+          paddingHorizontal: 18,
+        })}
+      >
+        <SymbolView name="trash.fill" tintColor="white" size={16} accessible={false} />
+        <Text style={{ color: "white", fontSize: 14, fontWeight: "700" }}>
+          {t("scannerDeleteScan")}
+        </Text>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+/** Wraps a failed scan's row in the swipe-to-reveal-delete gesture; other statuses render inert. */
+function SwipeableQueueRow({
+  deletable,
+  onDelete,
+  children,
+}: {
+  deletable: boolean;
+  onDelete: () => void;
+  children: ReactNode;
+}) {
+  if (!deletable) return <>{children}</>;
+  return (
+    <Swipeable
+      renderRightActions={(progress) => (
+        <DeleteRevealAction progress={progress} onDelete={onDelete} />
+      )}
+      rightThreshold={40}
+    >
+      {children}
+    </Swipeable>
+  );
 }
 
 export function ScannerTransactionStatus({ scan }: { scan?: PendingScan | null }) {
@@ -123,11 +342,15 @@ export function ScannerQueueStatus({
   syncing,
   onSync,
   onRetry,
+  onDelete,
+  clockSkewMs = null,
 }: {
   queue: PendingScan[];
   syncing: boolean;
+  clockSkewMs?: number | null;
   onSync: () => void;
   onRetry: () => void;
+  onDelete: (id: string) => void;
 }) {
   const { t } = useLocale();
   const router = useRouter();
@@ -227,6 +450,10 @@ export function ScannerQueueStatus({
               </Text>
             </View>
 
+            {clockSkewMs !== null && Math.abs(clockSkewMs) > CLOCK_SKEW_TOLERANCE_MS ? (
+              <ClockSkewBanner />
+            ) : null}
+
             <Section title={t("scannerQueue")}>
               {queue.length === 0 ? (
                 <ScannerTransactionStatus />
@@ -237,32 +464,46 @@ export function ScannerQueueStatus({
                     .reverse()
                     .map((scan) => {
                       const subject = subjectLabel(scan, people);
+                      const deletable = scan.status === "failed";
                       return (
-                        <View key={scan.id} style={{ gap: 3 }}>
-                          <View style={{ alignItems: "baseline", flexDirection: "row", gap: 8 }}>
-                            <Text
-                              numberOfLines={1}
-                              style={{
-                                color: colors.label,
-                                flex: 1,
-                                fontSize: 14,
-                                fontWeight: "700",
-                              }}
-                            >
-                              {subject ?? operationLabel(scan)}
+                        <SwipeableQueueRow
+                          key={scan.id}
+                          deletable={deletable}
+                          onDelete={() => onDelete(scan.id)}
+                        >
+                          <View style={{ backgroundColor: colors.background, gap: 3 }}>
+                            <View style={{ alignItems: "baseline", flexDirection: "row", gap: 8 }}>
+                              <Text
+                                numberOfLines={1}
+                                style={{
+                                  color: colors.label,
+                                  flex: 1,
+                                  fontSize: 14,
+                                  fontWeight: "700",
+                                }}
+                              >
+                                {subject ?? operationLabel(scan)}
+                              </Text>
+                              <Text style={{ color: colors.secondaryLabel, fontSize: 12 }}>
+                                {new Date(scan.createdAt).toLocaleTimeString()}
+                              </Text>
+                            </View>
+                            <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>
+                              {operationLabel(scan)} · {detailLabel(scan, activities, t)}
+                              {scan.attempts > 1
+                                ? ` · ${t("scannerAttemptsCount", { count: String(scan.attempts) })}`
+                                : ""}
                             </Text>
-                            <Text style={{ color: colors.secondaryLabel, fontSize: 12 }}>
-                              {new Date(scan.createdAt).toLocaleTimeString()}
-                            </Text>
+                            <ScannerTransactionStatus scan={scan} />
+                            {deletable ? (
+                              <ManualLogDetails
+                                scan={scan}
+                                people={people}
+                                activities={activities}
+                              />
+                            ) : null}
                           </View>
-                          <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>
-                            {operationLabel(scan)} · {detailLabel(scan, activities, t)}
-                            {scan.attempts > 1
-                              ? ` · ${t("scannerAttemptsCount", { count: String(scan.attempts) })}`
-                              : ""}
-                          </Text>
-                          <ScannerTransactionStatus scan={scan} />
-                        </View>
+                        </SwipeableQueueRow>
                       );
                     })}
                 </View>

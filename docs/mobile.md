@@ -158,6 +158,22 @@ route below. No migration needed.
   `lib/scanner-db.ts` owns the WAL-mode SQLite schema and durable device queue;
   `lib/scanner-sync.ts` replays in creation order with the persisted scan id as
   `Idempotency-Key`, then installs the latest server snapshot/revocation set.
+  A scan rejected as "timestamp must be in the past" (device clock running
+  ahead of the server's) is corrected once by the measured clock skew — read
+  from the API's `Date` response header in `lib/api.ts` — and retried before
+  being failed permanently, instead of looping forever on the same stale
+  timestamp; the "Device queue" sheet (`ScannerQueueStatus` in
+  `components/scanner-transaction-status.tsx`) shows a clock-skew warning
+  banner when this is happening. A permanently rejected scan expands into a
+  `ManualLogDetails` block with every field (person/badge/user IDs, method,
+  reason, timestamp, activity, etc., resolved against the local
+  `scanner_people`/`scanner_activities` cache where possible) an operator
+  needs to log the transaction by hand in the web admin panel; swiping that
+  row left (`react-native-gesture-handler`'s `Swipeable`, OS notification
+  center-style — the row's `GestureHandlerRootView` wrapper lives in
+  `app/_layout.tsx`) reveals a delete action that discards it (`deleteScan`
+  in `lib/scanner-db.ts`) on the follow-up tap — always a manual, per-scan
+  gesture, never automatic or triggered by attempt count alone.
 - `lib/push.ts` — best-effort Expo push token registration, called once after
   sign-in from `app/_layout.tsx`.
 - `lib/notifications-setup.ts` — the actual delivery handling: configures

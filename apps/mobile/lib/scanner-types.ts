@@ -79,4 +79,6 @@ export interface PendingScan {
   lastError: string | null;
   createdAt: string;
   acknowledgedAt: string | null;
+  /** Whether a device-clock-skew timestamp correction has already been applied (see scanner-sync.ts). */
+  clockCorrected: boolean;
 }

@@ -1,7 +1,8 @@
-import { ApiError, apiFetch } from "./api";
+import { ApiError, apiFetch, CLOCK_SKEW_TOLERANCE_MS, getClockSkewMs } from "./api";
 import {
   acknowledgeScan,
   applyScannerSnapshot,
+  correctScanTimestamp,
   failScan,
   markScanAttempt,
   noteRetryableError,
@@ -13,6 +14,9 @@ import type { PendingScan, ScannerSnapshot } from "./scanner-types";
 let activeSync: Promise<void> | null = null;
 let rerunRequested = false;
 
+/** Matches apps/api/src/modules/logistics/activities.ts BadRequestError text. */
+const TIMESTAMP_FUTURE_ERROR = "Offline scan timestamp must be in the past";
+
 async function replay(scan: PendingScan): Promise<void> {
   const request = requestForPendingScan(scan);
   await apiFetch(request.path, {
@@ -20,6 +24,34 @@ async function replay(scan: PendingScan): Promise<void> {
     headers: request.headers,
     body: JSON.stringify(request.body),
   });
+}
+
+/**
+ * A scan rejected for having a "future" timestamp because the device clock
+ * runs ahead of the server's would otherwise be stuck forever: the queue
+ * only ever resubmits the same stored payload, so a plain retry reproduces
+ * the identical rejection. Rather than discarding the originally logged
+ * time, shift it by the measured clock skew and retry once — a scan that
+ * still fails after that correction is a genuine business rejection (e.g. a
+ * deliberately backdated entry) and is failed permanently as before.
+ */
+async function attemptClockSkewCorrection(scan: PendingScan): Promise<boolean> {
+  if (scan.clockCorrected || !("scannedAt" in scan.payload)) return false;
+  const skewMs = getClockSkewMs();
+  if (skewMs === null || Math.abs(skewMs) <= CLOCK_SKEW_TOLERANCE_MS) return false;
+  const corrected = {
+    ...scan.payload,
+    scannedAt: new Date(Date.parse(scan.payload.scannedAt) + skewMs).toISOString(),
+  };
+  await correctScanTimestamp(scan.id, corrected);
+  try {
+    await replay({ ...scan, payload: corrected });
+    await acknowledgeScan(scan.id, corrected);
+  } catch {
+    // Correction didn't resolve it; fall through to normal handling on the
+    // next sync pass (clockCorrected is now set, so it won't loop).
+  }
+  return true;
 }
 
 /** Replays in original device order and stops after the first network error. */
@@ -41,6 +73,14 @@ export async function replayPendingScans(): Promise<void> {
       if (error instanceof ApiError && [401, 403, 408, 429].includes(error.status)) {
         await noteRetryableError(scan.id, error.message);
         break;
+      }
+      if (
+        error instanceof ApiError &&
+        error.status === 400 &&
+        error.message.includes(TIMESTAMP_FUTURE_ERROR) &&
+        (await attemptClockSkewCorrection(scan))
+      ) {
+        continue;
       }
       if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
         await failScan(scan.id, error.message);
