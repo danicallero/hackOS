@@ -333,13 +333,20 @@ export function ScannerTransactionStatus({
             color: colors.label,
             fontSize: bare ? 13 : 15,
             fontWeight: "700",
-            paddingTop: state === "attention" ? 2 : 0,
+            paddingTop: state === "attention" ? 10 : 0,
           }}
         >
           {presentation.label}
         </Text>
         {scan?.lastError ? (
-          <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13 }}>
+          <Text 
+            selectable
+            style={{
+              color: colors.secondaryLabel,
+              fontSize: 13,
+              paddingBottom: state === "attention" ? 10 : 0, 
+            }}
+          >
             {scan.status === "failed" ? t("scannerBusinessRejected") : t("scannerOfflineWaiting")}
             {": "}
             {scan.lastError}
