@@ -39,6 +39,17 @@ async function broadcastEntry(entry: QueueEntryRow): Promise<QueueEntryRow> {
   return entry;
 }
 
+/**
+ * Participant-facing read-model signal only, no `SSE_TOPICS.QUEUE` broadcast.
+ * Used where `notifyTeamCalled` already broadcast `QUEUE_TEAM_CALLED` to the
+ * queue topic for this same action — plan/07 invariant 5 allows exactly one
+ * queue-topic broadcast per action, so this avoids doubling it up.
+ */
+async function signalChallengeQueueChanged(entry: QueueEntryRow): Promise<QueueEntryRow> {
+  await notifyChallengeQueueChanged(pool, entry.challenge_id);
+  return entry;
+}
+
 function assertFrom(entry: QueueEntryRow, allowed: string[], action: string): void {
   if (!allowed.includes(entry.status)) {
     throw new ConflictError(`Cannot ${action} from status "${entry.status}"`, {
@@ -138,7 +149,7 @@ export async function callNextForRoom(
     }
     return null; // nobody eligible right now — candidates keep their position
   }).then(async (entry) => {
-    if (entry) await broadcastEntry(entry);
+    if (entry) await signalChallengeQueueChanged(entry);
     return entry;
   });
 }
@@ -743,7 +754,13 @@ export async function manualCall(
       });
     }
     return updated;
-  }).then(broadcastEntry);
+  }).then(async (updated) => {
+    // targetStatus === "called" already broadcast QUEUE_TEAM_CALLED to the
+    // queue topic above (notifyTeamCalled) — plan/07 invariant 5, one
+    // broadcast per action.
+    if (updated.status === "called") return signalChallengeQueueChanged(updated);
+    return broadcastEntry(updated);
+  });
 }
 
 // ── enqueue (admin) ──────────────────────────────────────────────────────────
