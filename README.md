@@ -52,6 +52,8 @@ Useful scripts:
 
 ```sh
 pnpm --filter @hackos/api test   # vitest, wipes + remigrates hackos_test, runs serially
+pnpm --filter @hackos/web test   # vitest, colocated unit tests
+pnpm --filter @hackos/mobile test  # jest
 pnpm lint                        # biome + copy/localization check, whole repo
 pnpm check:copy                  # just the copy/localization check (scripts/check-copy.mjs)
 pnpm --filter @hackos/api superadmin:create   # bootstrap the first admin
@@ -108,5 +110,8 @@ tags and auth requirements are derived, and `CLAUDE.md` for the rule).
 - State transitions run inside `withTransaction` + `SELECT ... FOR UPDATE` so
   exactly one request wins a race.
 - Sensitive mutations are audited in the same transaction as the write.
+- User-facing copy is trilingual (Spanish, Galician, English) via each app's
+  i18n dictionary; `pnpm check:copy` fails the lint if a locale is missing or
+  copy leaks internal identifiers.
 
-The full list is in `CLAUDE.md` — read it before touching `apps/api`.
+The full list is in `CLAUDE.md` — read it before touching anything.

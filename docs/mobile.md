@@ -14,7 +14,7 @@ store assets, submission, and the release checklist, see
 | Story | Scope | Status | Notes |
 | --- | --- | --- | --- |
 | H4 | Login/logout, session persists via Better Auth Expo + `expo-secure-store` | ✅ Done | `lib/auth-client.ts`, `app/(auth)/sign-in.tsx`. Server-side logout (session revocation) reuses the existing Better Auth endpoint — no mobile-specific work needed. |
-| H55 | One app, capability-driven tabs, permission changes apply without reinstall | ✅ Done | `lib/tabs.ts` + `app/(tabs)/_layout.tsx`. The primary bar is always the 4 participant tabs plus, for scan-capability holders, one native overflow trigger — a `UITabBarController` collapses anything past its fifth item into iOS's own "More" screen, bypassing the app's overflow menu, so Account, Scanner, and Activities all share the native overflow selector instead of any of them getting a dedicated primary slot. |
+| H55 | One app, capability-driven tabs, permission changes apply without reinstall | ✅ Done | `lib/tabs.ts` + `app/(tabs)/_layout.tsx`. Five-item native bar (`UITabBarController` collapses a sixth item into iOS's own "More" screen). Participants: schedule/queue/wallet/notifications + Account. Operators: schedule/**Scanner**/Activities (`activity:scan` only)/notifications + the "Others" dropdown selector, behind which Queue, Wallet, and Account live as pseudo-tabs — see `docs/navigation.md`. |
 | H38 | Participant sees queue status/position/ETA, pre-alert, call notice | 🟡 Device QA | Push receipt/tap and the authenticated `GET /api/queue/me/stream` native fetch stream both refetch queue state immediately; 15s focused polling is the recovery path. Code/tests are complete, but APNs/FCM delivery still needs real-device verification. |
 | H51 | Notification channel preferences per category; queue calls non-optional | ✅ Done | Static category preferences and mandatory queue notices are available on mobile. `schedule:<id>` per-activity reminder opt-in is available via the calendar bell (`lib/use-activity-reminders.ts`) and the preferences tab. The tab also exposes the shared `schedule` reminder channels and `schedule:type:<kind>` kind opt-ins. Reminder removals use a visible serial queue, so several can be tapped without racing full preference responses. |
 | H28 | Ticket/badge in Apple & Google Wallet; old pass auto-invalidates on badge rotation | 🟡 Device QA | QR wallet, authenticated Apple `.pkpass` download/share, Google save URL, server-side pass invalidation/push, and foreground wallet refetch on `LOGISTICS_WALLET_PASS_UPDATED` are wired. Real Wallet apps/credentials still need device QA. |
@@ -65,7 +65,7 @@ route below. No migration needed.
   them (extends H22-H27; not a new story). Defaults to the caller's own
   scans; a scan-capable operator without `LOGISTICS_STATS` may only request
   their own `staffId`. Backs the mobile "scan history" screen
-  (`app/(tabs)/others/scan-log/`), reachable from Account and from the
+  (`app/(tabs)/scan/scan-log.tsx`), reachable from Account and from the
   device-queue popup.
 - `GET /api/me/logistics/stats` — the caller's own accreditation/presence/
   activity scan counts, shown on Account for operators. `GET
@@ -89,15 +89,15 @@ route below. No migration needed.
   every API call (not just `/api/auth/*`) carries the restored session.
 - `lib/tabs.ts` (`primaryTabs`/`overflowTabs`) — pure functions mapping
   `me.capabilities` to the tab bar; see `docs/navigation.md` for the full
-  rationale, including why this deliberately walks back issue #187's
-  "scanning is never behind an ellipsis" finding. Participant tabs
-  (schedule, queue, wallet, notifications) are unconditional; a native tab
-  bar collapses anything past its fifth item into iOS's own "More" screen,
-  so `ACCREDIT_SCAN`/`PRESENCE_SCAN`/`ACTIVITY_SCAN` (or the admin `*`
-  wildcard) capability holders get exactly one more slot: the native
-  overflow trigger, behind which Account and Scanner (and Activities, for
-  `ACTIVITY_SCAN` holders) live as pseudo-tabs. With no scan capability,
-  Account stays directly in the primary bar and there is no overflow at all.
+  model. The native bar holds at most five items (iOS collapses a sixth into
+  its own "More" screen). With no scan capability, the bar is the four
+  participant tabs plus Account, and there is no overflow at all. For
+  `ACCREDIT_SCAN`/`PRESENCE_SCAN`/`ACTIVITY_SCAN` (or the admin `*`
+  wildcard) holders, the daily tools take the bar — schedule, Scanner,
+  Activities (for `ACTIVITY_SCAN`), notifications — and the fifth slot is
+  the "Others" selector: a `role="search"` tab trigger (the separated
+  capsule on iOS 18+) overlaid with a native `MenuView` dropdown listing
+  Queue, Wallet, and Account as pseudo-tabs.
 - `app/(tabs)/_layout.tsx` — reads capabilities from a shared `/api/me` fetch
   (`lib/me-context.tsx`, `lib/use-me.ts`) and hides tabs via Expo Router's
   `href: null` mechanism rather than omitting the route, so the underlying
@@ -105,25 +105,22 @@ route below. No migration needed.
   capability change made elsewhere (web admin) shows up without a reinstall
   (H55's explicit acceptance bar).
 
-  The overflow actions inside the native "Others" control are intentionally
-  pseudo-tabs:
+  The entries inside the native "Others" dropdown (Queue, Wallet, Account —
+  routes under `app/(tabs)/others/`) are intentionally pseudo-tabs
+  (`lib/operations-navigation.ts`):
 
-  - Account is the profile root.
-  - Scanner and Activities are section roots that live on top of Account.
-  - Tapping the active pseudo-tab is a no-op.
+  - Selecting the pseudo-tab whose section is already on screen is a no-op.
   - Changing pseudo-tabs always uses `replace()`, never `push()`, so repeated
-    taps do not stack duplicate scanner/activity screens.
-  - Account stays directly reachable from every section.
-  - Any non-`/others/...` tab must still be able to jump to Account; do not
-    classify schedule/queue/wallet/notifications as Account for the purpose of
-    suppressing the switch.
+    selections do not stack duplicate queue/wallet/account screens.
+  - Deeper screens inside a section (e.g. the person drill-downs) still push
+    normally on top of that section's root.
   - Route matching must normalize Expo Router route groups first, because
     `usePathname()` may return `/others/...` while tests and typed hrefs still
     use `/(tabs)/others/...`.
 
   Do not re-implement these as plain `push()` calls or stack-style route
-  launches. That regresses the back stack, duplicates scanner pages, and
-  makes the profile route stop behaving like the base of the workspace.
+  launches. That regresses the back stack and duplicates overflow pages —
+  earlier versions broke exactly this way.
 - `app/(auth)/sign-in.tsx` — email/password only; no in-app registration. The
   anonymous event feed supplies the configured name and tagline, and the screen
   explains that only accepted participants can sign in and directs them to the
@@ -138,7 +135,7 @@ route below. No migration needed.
   provides a confirmed sign-out action for the device session. For operators
   (any scan capability, `lib/tabs.ts`'s `isOperator`) it also shows a "My
   stats" section (`/api/me/logistics/stats`) and a link to the scan-history
-  screen (`app/(tabs)/others/scan-log/`, `/api/logistics/scan-log`, grouped by
+  screen (`app/(tabs)/scan/scan-log.tsx`, `/api/logistics/scan-log`, grouped by
   day into `Section`s with a native list look). `wallet.tsx`
   renders ticket/badge QR codes. The Apple Wallet action is the system
   `PKAddPassButton` control (`@premieroctet/react-native-wallet`'s
@@ -153,12 +150,11 @@ route below. No migration needed.
   fallback. `notifications.tsx` pages past the initial 20 inbox messages on
   demand, allows an expanded message to be deleted after native confirmation,
   and mirrors the web activity/kind reminder preferences.
-- `app/(tabs)/others/scan/index.tsx` — thin wrapper around the shared
+- `app/(tabs)/scan/index.tsx` — thin wrapper around the shared
   `GeneralScannerScreen` (camera/manual scanners selected by capability:
   accreditation, badge replacement, door presence, meals, and activities),
-  reached as a pseudo-tab behind the native overflow selector (see
-  `docs/navigation.md`) rather than a dedicated primary tab. Its person/people
-  drill-down routes live under `app/(tabs)/others/scan/*`.
+  a dedicated primary tab for operators (see `docs/navigation.md`). Its
+  person/people drill-down routes live under `app/(tabs)/scan/*`.
   `lib/scanner-db.ts` owns the WAL-mode SQLite schema and durable device queue;
   `lib/scanner-sync.ts` replays in creation order with the persisted scan id as
   `Idempotency-Key`, then installs the latest server snapshot/revocation set.

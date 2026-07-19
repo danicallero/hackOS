@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Lightweight guard for the H196 copy rules (docs/ux-ui-audit.md §8):
+ * Lightweight guard for the H196 copy rules (docs/DESIGN.md §10):
  * every i18n entry has all three locales, and no entry leaks story
  * identifiers or raw capability-key syntax into user-facing copy.
  *
@@ -88,7 +88,7 @@ if (failures.length > 0) {
   console.error(`check-copy: ${failures.length} issue(s) found\n`);
   for (const f of failures) console.error(`  - ${f}`);
   console.error(
-    "\nSee docs/ux-ui-audit.md §8 (microcopy rules) and CLAUDE.md's Non-negotiable conventions.\n" +
+    "\nSee docs/DESIGN.md §10 (copy rules) and CLAUDE.md's Non-negotiable conventions.\n" +
       "Story identifiers and capability keys belong in code comments, never in user-facing copy.\n" +
       "Every changed i18n key needs real Spanish, Galician, and English text (not a copy of another locale).",
   );
