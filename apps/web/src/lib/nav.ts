@@ -205,6 +205,13 @@ export const WORKSPACES: Workspace[] = [
         anyCapability: [CAPABILITIES.QUEUE_ADMIN],
         sponsorVisible: true,
       },
+      {
+        title: "reviewsOverview",
+        href: "/queue/reviews",
+        icon: ClipboardListIcon,
+        anyCapability: [CAPABILITIES.QUEUE_ADMIN],
+        sponsorVisible: true,
+      },
     ],
   },
   {

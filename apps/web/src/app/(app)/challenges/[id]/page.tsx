@@ -8,6 +8,8 @@ import {
   ArrowLeftIcon,
   DownloadIcon,
   HistoryIcon,
+  PlusIcon,
+  Trash2Icon,
   TriangleAlertIcon,
   TrophyIcon,
 } from "lucide-react";
@@ -35,6 +37,13 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
@@ -339,6 +348,7 @@ function EditCard({
             <TabsTrigger value="content">{t("contentTabLabel")}</TabsTrigger>
             <TabsTrigger value="prizes">{t("prizesTabLabel")}</TabsTrigger>
             <TabsTrigger value="judging">{t("judgingTabLabel")}</TabsTrigger>
+            <TabsTrigger value="winners">{t("winnersTabLabel")}</TabsTrigger>
             <TabsTrigger value="publish">{t("publishTabLabel")}</TabsTrigger>
             <TabsTrigger value="history">{t("historyTabLabel")}</TabsTrigger>
           </TabsList>
@@ -370,6 +380,7 @@ function EditCard({
                 />
               </fieldset>
             </SectionCard>
+            {canAdmin && <BulkEnrollmentCard challengeId={challenge.id} />}
           </TabsContent>
 
           <TabsContent value="prizes" className="space-y-6 pt-4">
@@ -470,6 +481,10 @@ function EditCard({
               </div>
             </SectionCard>
             {canManageRooms && <JudgingModeCard challengeId={challenge.id} />}
+          </TabsContent>
+
+          <TabsContent value="winners" className="space-y-6 pt-4">
+            <WinnersCard challengeId={challenge.id} />
           </TabsContent>
 
           <TabsContent value="publish" className="space-y-6 pt-4">
@@ -666,6 +681,228 @@ function JudgingModeCard({ challengeId }: { challengeId: number }) {
               <p className="text-muted-foreground text-sm">{t("askAdminForExportAccess")}</p>
             )
           )}
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+// ── H21: bulk enroll/withdraw every project on this challenge (admin-only) ──
+
+interface BulkChallengeResponse {
+  total: number;
+  added?: number;
+  removed?: number;
+  alreadyEnrolled?: number;
+  alreadySkipped?: number;
+}
+
+function BulkEnrollmentCard({ challengeId }: { challengeId: number }) {
+  const { t } = useLocale();
+  const [busy, setBusy] = useState<"add" | "remove" | null>(null);
+
+  async function run(kind: "add" | "remove") {
+    const confirmMessage = kind === "add" ? t("bulkAddConfirm") : t("bulkRemoveConfirm");
+    if (!window.confirm(confirmMessage)) return;
+    setBusy(kind);
+    try {
+      const result = await api.post<BulkChallengeResponse>(
+        `/api/challenges/${challengeId}/repos/bulk-${kind}`,
+      );
+      toast.success(
+        kind === "add"
+          ? t("bulkAddResult", { added: result.added ?? 0, total: result.total })
+          : t("bulkRemoveResult", { removed: result.removed ?? 0, total: result.total }),
+      );
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("bulkActionFailed"));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <SectionCard title={t("bulkEnrollmentTitle")} description={t("bulkEnrollmentDesc")}>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={busy !== null}
+          onClick={() => run("add")}
+        >
+          {t("bulkAddAllProjects")}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={busy !== null}
+          onClick={() => run("remove")}
+        >
+          {t("bulkRemoveAllProjects")}
+        </Button>
+      </div>
+    </SectionCard>
+  );
+}
+
+// ── H46: internal winner ranking (admin / owning sponsor only) ─────────────
+// Reaching this page at all means GET /api/challenges/:id already passed the
+// same admin-or-owning-sponsor check the winners endpoints enforce, so no
+// extra capability gate is needed here — only the caller who could edit this
+// challenge ever sees this tab rendered with real data.
+
+interface Winner {
+  rank: number;
+  repoId: number;
+  repoName: string;
+}
+
+interface EligibleRepo {
+  id: number;
+  name: string;
+}
+
+async function loadEligibleRepos(challengeId: number): Promise<EligibleRepo[]> {
+  const { repos } = await api.get<{
+    repos: Array<{
+      id: number;
+      name: string;
+      challenges: Array<{ id: number; status: string | null }>;
+    }>;
+  }>("/api/repos");
+  return repos
+    .filter((repo) => repo.challenges.some((c) => c.id === challengeId && c.status !== null))
+    .map((repo) => ({ id: repo.id, name: repo.name }));
+}
+
+function WinnersCard({ challengeId }: { challengeId: number }) {
+  const { t } = useLocale();
+  const [winners, setWinners] = useState<Winner[]>([]);
+  const [eligible, setEligible] = useState<EligibleRepo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [newRank, setNewRank] = useState("");
+  const [newRepoId, setNewRepoId] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [{ winners: list }, repos] = await Promise.all([
+        api.get<{ winners: Winner[] }>(`/api/challenges/${challengeId}/winners`),
+        loadEligibleRepos(challengeId),
+      ]);
+      setWinners(list);
+      setEligible(repos);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadWinners"));
+    } finally {
+      setLoading(false);
+    }
+  }, [challengeId, t]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function addWinner() {
+    const rank = Number(newRank);
+    const repoId = Number(newRepoId);
+    if (!Number.isInteger(rank) || rank < 1 || !Number.isInteger(repoId)) return;
+    setBusy(true);
+    try {
+      await api.put(`/api/challenges/${challengeId}/winners/${rank}`, { repoId });
+      toast.success(t("winnerSaved"));
+      setNewRank("");
+      setNewRepoId("");
+      await load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveWinner"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeWinner(rank: number) {
+    setBusy(true);
+    try {
+      await api.delete(`/api/challenges/${challengeId}/winners/${rank}`);
+      toast.success(t("winnerRemoved"));
+      await load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveWinner"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <SectionCard title={t("winnersTitle")} description={t("winnersDesc")} icon={TrophyIcon}>
+      {loading ? (
+        <Spinner className="size-5" />
+      ) : (
+        <div className="space-y-4">
+          {winners.length === 0 ? (
+            <EmptyState icon={TrophyIcon} title={t("noWinnersSetTitle")} />
+          ) : (
+            <ul className="space-y-2">
+              {winners.map((winner) => (
+                <li
+                  key={winner.rank}
+                  className="flex items-center justify-between gap-3 rounded-md border p-3"
+                >
+                  <div className="flex items-center gap-3">
+                    <StatusBadge tone="success">
+                      {t("rankLabel", { rank: winner.rank })}
+                    </StatusBadge>
+                    <span className="font-medium">{winner.repoName}</span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => removeWinner(winner.rank)}
+                  >
+                    <Trash2Icon className="size-4" />
+                    {t("remove")}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <div className="grid gap-2 sm:grid-cols-[100px_minmax(200px,1fr)_auto]">
+            <Input
+              type="number"
+              min={1}
+              placeholder={t("rankPlaceholder")}
+              value={newRank}
+              onChange={(e) => setNewRank(e.target.value)}
+            />
+            <Select value={newRepoId} onValueChange={setNewRepoId}>
+              <SelectTrigger>
+                <SelectValue placeholder={t("selectProjectPlaceholder")} />
+              </SelectTrigger>
+              <SelectContent>
+                {eligible.map((repo) => (
+                  <SelectItem key={repo.id} value={String(repo.id)}>
+                    {repo.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              type="button"
+              size="sm"
+              disabled={busy || !newRank || !newRepoId}
+              onClick={addWinner}
+            >
+              <PlusIcon className="size-4" />
+              {t("saveWinner")}
+            </Button>
+          </div>
         </div>
       )}
     </SectionCard>

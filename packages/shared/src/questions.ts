@@ -129,6 +129,21 @@ export const questionnaireSchema = z.array(questionSchema).superRefine((question
 });
 export type Questionnaire = z.infer<typeof questionnaireSchema>;
 
+/**
+ * Headline numeric score for a panel ("nota"): the first question in author
+ * order whose kind carries a plain number, rather than a reserved key name —
+ * sponsors author their own panel (H44) and forcing a fixed key like "nota"
+ * would be a silent footgun for existing/typo'd panels. Used by the reviews
+ * overview and by the project-detail evaluation badge so both derive the same
+ * value the same way.
+ */
+export function firstNumericQuestionKey(questions: Question[]): string | null {
+  const numeric = questions.find(
+    (q) => q.kind === "scale" || q.kind === "integer" || q.kind === "float",
+  );
+  return numeric?.key ?? null;
+}
+
 export type AnswerValue = number | boolean | string | string[];
 export interface AnswerError {
   key: string;

@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
+import { firstNumericQuestionKey, type Question } from "@hackos/shared/questions";
 import { config } from "../../config.js";
 import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
@@ -562,6 +563,10 @@ interface RepoChallenge {
   assignedRoomName: string | null;
   mappedPrizes: string[];
   source: "queue" | "prize" | "queue_and_prize";
+  /** H36 evaluation status — null both when unevaluated AND when the caller
+   * has no visibility into this challenge (see visibleChallengeIds below). */
+  reviewStatus: "draft" | "submitted" | null;
+  nota: number | null;
 }
 
 interface RepoWithExtras extends RepoRow {
@@ -577,10 +582,22 @@ interface RepoWithExtras extends RepoRow {
  * — so operators can see who still needs linking. Challenges include both
  * prize-mapped participation and live queue membership so project detail hot
  * edits are visible immediately after adding a challenge.
+ *
+ * `visibleChallengeIds` gates the H36 evaluation fields (reviewStatus/nota)
+ * per challenge entry: "all" for full-access staff, or the exact set of
+ * challenge ids the caller may see review data for (their own sponsor
+ * enterprise's challenges, or the challenges they judge). Entries outside
+ * that set come back with reviewStatus/nota = null — indistinguishable from
+ * "not evaluated yet" — so a sponsor can't infer anything about another
+ * company's judging progress from their own project view.
  */
-async function attachMembersAndPrizes(repoRows: RepoRow[]): Promise<RepoWithExtras[]> {
+async function attachMembersAndPrizes(
+  repoRows: RepoRow[],
+  visibleChallengeIds: number[] | "all" = "all",
+): Promise<RepoWithExtras[]> {
   const ids = repoRows.map((r) => r.id);
   if (ids.length === 0) return [];
+  const visibleSet = visibleChallengeIds === "all" ? null : new Set(visibleChallengeIds);
 
   const membersRes = await pool.query(
     `SELECT repo_id, email, name, surname, devpost_username, user_id, merge_status
@@ -633,10 +650,12 @@ async function attachMembersAndPrizes(repoRows: RepoRow[]): Promise<RepoWithExtr
 
   const queueRes = await pool.query(
     `SELECT qe.repo_id, qe.challenge_id AS id, c.title, qe.status, qe.position,
-            qe.assigned_room_id, r.name AS assigned_room_name
+            qe.assigned_room_id, r.name AS assigned_room_name,
+            c.judging_panel_criteria, ar.status AS review_status, ar.scores AS review_scores
        FROM queue_entries qe
        JOIN challenges c ON c.id = qe.challenge_id
        LEFT JOIN rooms r ON r.id = qe.assigned_room_id
+       LEFT JOIN attempt_review ar ON ar.attempt_id = qe.id
       WHERE qe.repo_id = ANY($1::int[])
         AND qe.status NOT IN ('cancelled', 'disqualified')
       ORDER BY qe.repo_id, qe.position ASC NULLS LAST, qe.id ASC`,
@@ -699,7 +718,17 @@ async function attachMembersAndPrizes(repoRows: RepoRow[]): Promise<RepoWithExtr
     position: number | null;
     assigned_room_id: number | null;
     assigned_room_name: string | null;
+    judging_panel_criteria: unknown;
+    review_status: "draft" | "submitted" | null;
+    review_scores: Record<string, unknown> | null;
   }>) {
+    const canSeeReview = visibleSet === null || visibleSet.has(row.id);
+    let nota: number | null = null;
+    if (canSeeReview && row.review_scores && Array.isArray(row.judging_panel_criteria)) {
+      const notaKey = firstNumericQuestionKey(row.judging_panel_criteria as Question[]);
+      const value = notaKey ? row.review_scores[notaKey] : undefined;
+      if (typeof value === "number") nota = value;
+    }
     const arr = queueChallengesByRepo.get(row.repo_id) ?? [];
     arr.push({
       id: row.id,
@@ -710,6 +739,8 @@ async function attachMembersAndPrizes(repoRows: RepoRow[]): Promise<RepoWithExtr
       assignedRoomName: row.assigned_room_name,
       mappedPrizes: [],
       source: "queue",
+      reviewStatus: canSeeReview ? (row.review_status ?? null) : null,
+      nota,
     });
     queueChallengesByRepo.set(row.repo_id, arr);
   }
@@ -733,6 +764,8 @@ async function attachMembersAndPrizes(repoRows: RepoRow[]): Promise<RepoWithExtr
           assignedRoomName: null,
           mappedPrizes: [prize],
           source: "prize",
+          reviewStatus: null,
+          nota: null,
         });
       }
     }
@@ -746,6 +779,8 @@ async function attachMembersAndPrizes(repoRows: RepoRow[]): Promise<RepoWithExtr
           assignedRoomId: c.assignedRoomId,
           assignedRoomName: c.assignedRoomName,
           source: "queue_and_prize",
+          reviewStatus: c.reviewStatus,
+          nota: c.nota,
         });
         continue;
       }
@@ -853,7 +888,9 @@ export async function listReposForUser(
   const { rows } = await pool.query(`${REPO_SELECT} WHERE id = ANY($1::int[]) ORDER BY name`, [
     repoIds,
   ]);
-  return attachMembersAndPrizes(rows);
+  // Evaluation visibility is capped to this caller's own challenges (their
+  // sponsor enterprise's, or the ones they judge) — never another sponsor's.
+  return attachMembersAndPrizes(rows, challengeIds);
 }
 
 /** Single repo scoped to `userId` — 404 (never leak) if outside their scope. */
@@ -866,7 +903,11 @@ export async function getRepoForUser(
   const challengeIds = await scopedChallengeIds(userId, scope);
   const repoIds = await repoIdsForChallenges(challengeIds);
   if (!repoIds.includes(id)) throw new NotFoundError(`Repo ${id} not found`);
-  return getRepo(id);
+  const { rows } = await pool.query(`${REPO_SELECT} WHERE id = $1`, [id]);
+  if (rows.length === 0) throw new NotFoundError(`Repo ${id} not found`);
+  const [withExtras] = await attachMembersAndPrizes(rows, challengeIds);
+  if (!withExtras) throw new NotFoundError(`Repo ${id} not found`);
+  return withExtras;
 }
 
 /**
@@ -894,7 +935,8 @@ export async function myProjects(userId: number): Promise<RepoWithExtras[]> {
      ORDER BY r.name`,
     [userId],
   );
-  return attachMembersAndPrizes(rows);
+  // H20 is read-only self-view — participants never see judging internals.
+  return attachMembersAndPrizes(rows, []);
 }
 
 export async function addRepoMember(actorId: number, repoId: number, userId: number) {
@@ -1177,6 +1219,137 @@ export async function removeRepoChallenge(actorId: number, repoId: number, chall
   await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ENTRY_CHANGED, result.entry);
   await notifyChallengeQueueChanged(pool, result.entry.challenge_id);
   return result;
+}
+
+export interface BulkAddResult {
+  total: number;
+  added: number;
+  alreadyEnrolled: number;
+}
+
+export interface BulkRemoveResult {
+  total: number;
+  removed: number;
+  alreadySkipped: number;
+}
+
+/**
+ * H21 "apuntar TODOS los proyectos a un reto" — enrolls every existing repo
+ * into `challengeId` in one transaction, reusing the same per-repo enqueue
+ * logic as the single add (`enqueueRepoOnChallenge`), so idempotency (the
+ * unique challenge_id/repo_id index) and the revive-vs-insert behavior are
+ * identical to the single-repo path. Repos already actively queued are
+ * skipped, not duplicated.
+ */
+export async function bulkAddRepoChallenge(
+  actorId: number,
+  challengeId: number,
+): Promise<BulkAddResult> {
+  const { outcomes, total } = await withTransaction(async (client) => {
+    const challenge = await client.query(`SELECT id FROM challenges WHERE id = $1`, [challengeId]);
+    if (!challenge.rows[0]) throw new NotFoundError(`Challenge ${challengeId} not found`);
+
+    const repos = await client.query(`SELECT id FROM repos ORDER BY id`);
+    const repoIds = repos.rows.map((r: { id: number }) => r.id);
+
+    const outcomes: EnqueueOutcome[] = [];
+    for (const repoId of repoIds) {
+      const outcome = await enqueueRepoOnChallenge(client, actorId, repoId, challengeId, "admin");
+      if (outcome) outcomes.push(outcome);
+    }
+
+    await audit(client, {
+      actorId,
+      entityType: "challenge",
+      entityId: challengeId,
+      action: "bulk_add_repos",
+      after: { total: repoIds.length, added: outcomes.length },
+      source: "admin",
+    });
+
+    return { outcomes, total: repoIds.length };
+  });
+
+  await announceQueueOutcomes(outcomes);
+  return { total, added: outcomes.length, alreadyEnrolled: total - outcomes.length };
+}
+
+/**
+ * H21 "dar de baja TODOS los proyectos de un reto" — mirrors
+ * `removeRepoChallenge`'s per-entry transition (waiting/called -> cancelled,
+ * anything else in progress -> disqualified, same as a live correction is
+ * allowed to force) but applies it to every active entry of the challenge in
+ * one transaction, with a single position compaction at the end instead of
+ * one per entry.
+ */
+export async function bulkRemoveRepoChallenge(
+  actorId: number,
+  challengeId: number,
+): Promise<BulkRemoveResult> {
+  const { updatedEntries, total } = await withTransaction(async (client) => {
+    const challenge = await client.query(`SELECT id FROM challenges WHERE id = $1`, [challengeId]);
+    if (!challenge.rows[0]) throw new NotFoundError(`Challenge ${challengeId} not found`);
+
+    const entriesRes = await client.query(
+      `SELECT * FROM queue_entries WHERE challenge_id = $1 FOR UPDATE`,
+      [challengeId],
+    );
+    const entries = entriesRes.rows as Array<{ id: number; repo_id: number; status: string }>;
+    const removable = entries.filter((e) => !["cancelled", "disqualified"].includes(e.status));
+
+    const updatedEntries: Array<Record<string, unknown> & { challenge_id: number }> = [];
+    for (const entry of removable) {
+      const nextStatus = ["waiting", "called"].includes(entry.status)
+        ? "cancelled"
+        : "disqualified";
+      const updated = await client.query(
+        `UPDATE queue_entries
+            SET status = $1, assigned_room_id = NULL, position = NULL, called_at = NULL,
+                precalled_at = NULL, presentation_started_at = NULL, completed_at = NULL
+          WHERE id = $2
+          RETURNING *`,
+        [nextStatus, entry.id],
+      );
+      await writeQueueHistory(client, {
+        entryId: entry.id,
+        actorId,
+        previousStatus: entry.status,
+        newStatus: nextStatus,
+        action: "remove_from_challenge",
+        reason: "Removed from challenge (bulk)",
+      });
+      await audit(client, {
+        actorId,
+        entityType: "queue_entry",
+        entityId: entry.id,
+        action: "remove_from_challenge",
+        before: { status: entry.status, challengeId, repoId: entry.repo_id },
+        after: { status: nextStatus },
+        reason: "Removed from challenge (bulk)",
+        source: "admin",
+      });
+      updatedEntries.push(updated.rows[0]);
+    }
+    if (removable.length > 0) await compactChallengePositions(client, challengeId);
+
+    await audit(client, {
+      actorId,
+      entityType: "challenge",
+      entityId: challengeId,
+      action: "bulk_remove_repos",
+      after: { total: entries.length, removed: removable.length },
+      source: "admin",
+    });
+
+    return { updatedEntries, total: entries.length };
+  });
+
+  for (const entry of updatedEntries) {
+    await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ENTRY_CHANGED, entry);
+  }
+  if (updatedEntries.length > 0) await notifyChallengeQueueChanged(pool, challengeId);
+
+  return { total, removed: updatedEntries.length, alreadySkipped: total - updatedEntries.length };
 }
 
 // ── native project lifecycle (H18-H19) ─────────────────────────────────────

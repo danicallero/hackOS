@@ -17,10 +17,12 @@ import {
   searchChallengeQueue,
   upsertAttemptReview,
 } from "./judging.js";
+import { exportReviewsCsv, listReviews, resolveReviewScope } from "./reviews.js";
 import {
   challengeIdParam,
   entryIdParam,
   reviewPatchBody,
+  reviewsQuery,
   searchQuery,
   sessionJoinBody,
 } from "./schemas.js";
@@ -128,6 +130,25 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
         `attachment; filename="challenge-${req.params.challengeId}-evaluations.csv"`,
       );
       return exportEvaluationsCsv(req.params.challengeId);
+    },
+  );
+
+  // Reviews overview: admin sees every challenge, a sponsor rep only ever
+  // sees their own enterprise's — enforced inside resolveReviewScope/listReviews,
+  // not by a capability flag (see reviews.ts for why).
+  typed.get("/api/queue/reviews", { schema: { querystring: reviewsQuery } }, async (req) => {
+    const scope = await resolveReviewScope(req.userId);
+    return { reviews: await listReviews(scope, req.query) };
+  });
+
+  typed.get(
+    "/api/queue/reviews/export.csv",
+    { schema: { querystring: reviewsQuery } },
+    async (req, reply) => {
+      const scope = await resolveReviewScope(req.userId);
+      reply.header("content-type", "text/csv; charset=utf-8");
+      reply.header("content-disposition", `attachment; filename="reviews.csv"`);
+      return exportReviewsCsv(scope, req.query);
     },
   );
 }

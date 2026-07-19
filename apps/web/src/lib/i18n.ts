@@ -3848,20 +3848,30 @@ const dict: Record<string, I18nText> = {
     gl: "Non se puido eliminar o reto.",
     en: "Could not remove challenge.",
   },
-  noPrizesImportedTitle: {
-    es: "Ningún premio importado",
-    gl: "Ningún premio importado",
-    en: "No prizes imported",
+  unmappedPrizesLabel: {
+    es: "Premios sin vincular",
+    gl: "Premios sen vincular",
+    en: "Unmapped prizes",
   },
-  prizesAppearAfterImport: {
-    es: "Los premios aparecerán aquí tras una importación de Devpost.",
-    gl: "Os premios aparecerán aquí despois dunha importación de Devpost.",
-    en: "Prizes appear here after a Devpost import.",
+  challengeReviewNotStarted: {
+    es: "Sin evaluar",
+    gl: "Sen avaliar",
+    en: "Not evaluated",
   },
-  linkedToChallenges: {
-    es: "Vinculado a {challenges}",
-    gl: "Vinculado a {challenges}",
-    en: "Linked to {challenges}",
+  challengeReviewDraft: {
+    es: "Evaluación en borrador",
+    gl: "Avaliación en borrador",
+    en: "Evaluation in draft",
+  },
+  challengeReviewSubmitted: {
+    es: "Evaluación enviada",
+    gl: "Avaliación enviada",
+    en: "Evaluation submitted",
+  },
+  challengeReviewSubmittedWithNota: {
+    es: "Evaluación enviada — nota: {nota}",
+    gl: "Avaliación enviada — nota: {nota}",
+    en: "Evaluation submitted — score: {nota}",
   },
   noLinkedChallenge: {
     es: "Ningún reto vinculado",
@@ -4450,6 +4460,8 @@ const dict: Record<string, I18nText> = {
   newChallenge: { es: "Nuevo reto", gl: "Novo reto", en: "New challenge" },
   colChallenge: { es: "Reto", gl: "Reto", en: "Challenge" },
   colReveal: { es: "Publicación", gl: "Publicación", en: "Reveal" },
+  colRoom: { es: "Sala", gl: "Sala", en: "Room" },
+  colJudges: { es: "Jueces", gl: "Xuíces", en: "Judges" },
   searchChallengesPlaceholder: {
     es: "Buscar retos…",
     gl: "Buscar retos…",
@@ -4629,6 +4641,125 @@ const dict: Record<string, I18nText> = {
     es: "Pide a administración acceso de exportación.",
     gl: "Pide a administración acceso de exportación.",
     en: "Ask an administrator for export access.",
+  },
+  bulkEnrollmentTitle: {
+    es: "Inscripción masiva",
+    gl: "Inscrición masiva",
+    en: "Bulk enrollment",
+  },
+  bulkEnrollmentDesc: {
+    es: "Apunta o retira de golpe todos los proyectos existentes de este reto.",
+    gl: "Apunta ou retira dun golpe todos os proxectos existentes deste reto.",
+    en: "Enroll or withdraw every existing project from this challenge at once.",
+  },
+  bulkAddAllProjects: {
+    es: "Añadir todos los proyectos",
+    gl: "Engadir todos os proxectos",
+    en: "Add all projects",
+  },
+  bulkRemoveAllProjects: {
+    es: "Quitar todos los proyectos",
+    gl: "Quitar todos os proxectos",
+    en: "Remove all projects",
+  },
+  bulkAddConfirm: {
+    es: "Se apuntará a todos los proyectos existentes a este reto (los ya inscritos no se duplican). ¿Continuar?",
+    gl: "Apuntarase a todos os proxectos existentes a este reto (os xa inscritos non se duplican). Continuar?",
+    en: "Every existing project will be enrolled in this challenge (already-enrolled ones are skipped). Continue?",
+  },
+  bulkRemoveConfirm: {
+    es: "Se dará de baja a todos los proyectos de este reto. Las presentaciones en curso se marcarán como descalificadas. ¿Continuar?",
+    gl: "Darase de baixa a todos os proxectos deste reto. As presentacións en curso marcaranse como descualificadas. Continuar?",
+    en: "Every project will be withdrawn from this challenge. In-progress presentations will be marked disqualified. Continue?",
+  },
+  bulkAddResult: {
+    es: "Añadidos {added} de {total} proyectos (el resto ya estaba inscrito).",
+    gl: "Engadidos {added} de {total} proxectos (o resto xa estaba inscrito).",
+    en: "Added {added} of {total} projects (the rest were already enrolled).",
+  },
+  bulkRemoveResult: {
+    es: "Retirados {removed} de {total} proyectos.",
+    gl: "Retirados {removed} de {total} proxectos.",
+    en: "Removed {removed} of {total} projects.",
+  },
+  bulkActionFailed: {
+    es: "No se ha podido completar la acción masiva.",
+    gl: "Non se puido completar a acción masiva.",
+    en: "Could not complete the bulk action.",
+  },
+  winnersTabLabel: { es: "Ganadores", gl: "Gañadores", en: "Winners" },
+  winnersTitle: { es: "Ranking de ganadores", gl: "Ranking de gañadores", en: "Winner ranking" },
+  winnersDesc: {
+    es: "Uso interno: solo lo ven administradores y el personal de esta empresa. Añade tantos puestos como quieras (1º, 2º, premios extraordinarios...).",
+    gl: "Uso interno: só o ven administradores e o persoal desta empresa. Engade tantos postos como queiras (1º, 2º, premios extraordinarios...).",
+    en: "Internal only — visible to admins and this company's own staff. Add as many placements as you like (1st, 2nd, special prizes...).",
+  },
+  noWinnersSetTitle: {
+    es: "Aún no hay ningún ganador marcado",
+    gl: "Aínda non hai ningún gañador marcado",
+    en: "No winners set yet",
+  },
+  rankLabel: { es: "Puesto {rank}", gl: "Posto {rank}", en: "Rank {rank}" },
+  rankPlaceholder: { es: "Puesto", gl: "Posto", en: "Rank" },
+  selectProjectPlaceholder: {
+    es: "Selecciona un proyecto",
+    gl: "Selecciona un proxecto",
+    en: "Select a project",
+  },
+  saveWinner: { es: "Guardar", gl: "Gardar", en: "Save" },
+  winnerSaved: { es: "Ganador guardado.", gl: "Gañador gardado.", en: "Winner saved." },
+  couldNotSaveWinner: {
+    es: "No se ha podido guardar el ganador.",
+    gl: "Non se puido gardar o gañador.",
+    en: "Could not save the winner.",
+  },
+  winnerRemoved: { es: "Ganador eliminado.", gl: "Gañador eliminado.", en: "Winner removed." },
+  couldNotRemoveWinner: {
+    es: "No se ha podido eliminar el ganador.",
+    gl: "Non se puido eliminar o gañador.",
+    en: "Could not remove the winner.",
+  },
+  couldNotLoadWinners: {
+    es: "No se han podido cargar los ganadores.",
+    gl: "Non se puideron cargar os gañadores.",
+    en: "Could not load winners.",
+  },
+  reviewsOverview: { es: "Evaluaciones", gl: "Avaliacións", en: "Reviews" },
+  reviewsOverviewTitle: {
+    es: "Todas las evaluaciones",
+    gl: "Todas as avaliacións",
+    en: "All reviews",
+  },
+  reviewsOverviewDesc: {
+    es: "Visibilidad según tu rol: el personal ve todas las evaluaciones; una empresa patrocinadora solo ve las de sus propios retos.",
+    gl: "Visibilidade segundo o teu rol: o persoal ve todas as avaliacións; unha empresa patrocinadora só ve as dos seus propios retos.",
+    en: "Visibility depends on your role: staff sees every review; a sponsor company only sees its own challenges'.",
+  },
+  couldNotLoadReviews: {
+    es: "No se han podido cargar las evaluaciones.",
+    gl: "Non se puideron cargar as avaliacións.",
+    en: "Could not load reviews.",
+  },
+  filterByChallenge: { es: "Filtrar por reto", gl: "Filtrar por reto", en: "Filter by challenge" },
+  allChallenges: { es: "Todos los retos", gl: "Todos os retos", en: "All challenges" },
+  filterByRoom: { es: "Filtrar por sala", gl: "Filtrar por sala", en: "Filter by room" },
+  allRooms: { es: "Todas las salas", gl: "Todas as salas", en: "All rooms" },
+  filterByStatus: { es: "Filtrar por estado", gl: "Filtrar por estado", en: "Filter by status" },
+  searchReviewsPlaceholder: {
+    es: "Buscar por reto, proyecto o sala…",
+    gl: "Buscar por reto, proxecto ou sala…",
+    en: "Search by challenge, project or room…",
+  },
+  noReviewsYet: {
+    es: "Aún no hay ninguna evaluación",
+    gl: "Aínda non hai ningunha avaliación",
+    en: "No reviews yet",
+  },
+  exportCsv: { es: "Exportar CSV", gl: "Exportar CSV", en: "Export CSV" },
+  exportStarted: {
+    es: "Descarga iniciada.",
+    gl: "Descarga iniciada.",
+    en: "Download started.",
   },
   versionHistoryTitle: {
     es: "Historial de versiones",

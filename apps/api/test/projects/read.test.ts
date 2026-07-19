@@ -1,6 +1,7 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
+import { pool } from "../../src/db/pool.js";
 import {
   asUser,
   buildTestApp,
@@ -86,6 +87,8 @@ describe("GET /api/repos + /api/repos/:id (PROJECTS_READ)", () => {
         assignedRoomName: null,
         mappedPrizes: ["Best AI Hack"],
         source: "prize",
+        reviewStatus: null,
+        nota: null,
       },
     ]);
     expect(beans.unmappedPrizes).toEqual(["Most Caffeinated"]);
@@ -148,6 +151,112 @@ describe("GET /api/repos + /api/repos/:id (PROJECTS_READ)", () => {
         source: "queue",
       }),
     );
+  });
+
+  it("scopes evaluation status/nota to full-access staff and the owning sponsor only", async () => {
+    const server = await getApp();
+    await seedMatchableUsers();
+    const challengeId = await createChallenge("Judged Challenge", []);
+    await pool.query(`UPDATE challenges SET judging_panel_criteria = $1::jsonb WHERE id = $2`, [
+      JSON.stringify([
+        {
+          key: "score",
+          kind: "scale",
+          label: { en: "Score", es: "Nota", gl: "Nota" },
+          min: 0,
+          max: 10,
+        },
+      ]),
+      challengeId,
+    ]);
+    const owner = (
+      await pool.query(
+        `SELECT s.user_id FROM challenges c JOIN sponsors s ON s.id = c.author WHERE c.id = $1`,
+        [challengeId],
+      )
+    ).rows[0].user_id;
+
+    const operator = await createUserWithCapabilities([
+      CAPABILITIES.PROJECTS_IMPORT,
+      CAPABILITIES.PROJECTS_READ,
+      CAPABILITIES.PROJECTS_EDIT,
+    ]);
+    await importFixtures(operator);
+    const repos = await server.inject({
+      method: "GET",
+      url: "/api/repos",
+      headers: asUser(operator),
+    });
+    const beans = repos.json().repos.find((r: { name: string }) => r.name === "Neural Beans");
+    const add = await server.inject({
+      method: "POST",
+      url: `/api/repos/${beans.id}/challenges`,
+      headers: asUser(operator),
+      payload: { challengeId },
+    });
+    expect(add.statusCode).toBe(200);
+    const entryId = (
+      await pool.query(`SELECT id FROM queue_entries WHERE challenge_id = $1 AND repo_id = $2`, [
+        challengeId,
+        beans.id,
+      ])
+    ).rows[0].id;
+    await pool.query(
+      `INSERT INTO attempt_review (attempt_id, scores, status) VALUES ($1, $2::jsonb, 'submitted')`,
+      [entryId, JSON.stringify({ score: 8 })],
+    );
+
+    // Full-access staff see the real status and derived nota.
+    const asStaff = await server.inject({
+      method: "GET",
+      url: `/api/repos/${beans.id}`,
+      headers: asUser(operator),
+    });
+    expect(asStaff.json().challenges).toContainEqual(
+      expect.objectContaining({ id: challengeId, reviewStatus: "submitted", nota: 8 }),
+    );
+
+    // The owning sponsor rep sees it too.
+    const asOwner = await server.inject({
+      method: "GET",
+      url: `/api/repos/${beans.id}`,
+      headers: asUser(owner),
+    });
+    expect(asOwner.json().challenges).toContainEqual(
+      expect.objectContaining({ id: challengeId, reviewStatus: "submitted", nota: 8 }),
+    );
+
+    // A different sponsor's rep sees the entry (via full-access? no — must not
+    // have any scope onto this repo at all unless linked to that challenge).
+    // Instead, verify a sponsor of a DIFFERENT challenge that also judges this
+    // same repo cannot see this challenge's evaluation.
+    const otherChallengeId = await createChallenge("Other Challenge", []);
+    const otherOwner = (
+      await pool.query(
+        `SELECT s.user_id FROM challenges c JOIN sponsors s ON s.id = c.author WHERE c.id = $1`,
+        [otherChallengeId],
+      )
+    ).rows[0].user_id;
+    await server.inject({
+      method: "POST",
+      url: `/api/repos/${beans.id}/challenges`,
+      headers: asUser(operator),
+      payload: { challengeId: otherChallengeId },
+    });
+    const asOtherOwner = await server.inject({
+      method: "GET",
+      url: `/api/repos/${beans.id}`,
+      headers: asUser(otherOwner),
+    });
+    const judgedEntry = asOtherOwner
+      .json()
+      .challenges.find((c: { id: number }) => c.id === challengeId);
+    expect(judgedEntry.reviewStatus).toBeNull();
+    expect(judgedEntry.nota).toBeNull();
+    const ownEntry = asOtherOwner
+      .json()
+      .challenges.find((c: { id: number }) => c.id === otherChallengeId);
+    expect(ownEntry.reviewStatus).toBeNull(); // not yet evaluated, but visible (not hidden)
   });
 
   it("removes an imported prize from a project", async () => {
