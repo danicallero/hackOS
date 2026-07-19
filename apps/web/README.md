@@ -28,6 +28,7 @@ pnpm dev            # from the repo root: API on :3000 + web on :3001
 pnpm dev:web        # web only
 pnpm --filter @hackos/web build      # production build
 pnpm --filter @hackos/web typecheck  # tsc --noEmit
+pnpm --filter @hackos/web test       # vitest — colocated *.test.ts(x) unit tests
 ```
 
 Config: copy `.env.example` → `.env.local`. `NEXT_PUBLIC_API_URL` is the API
@@ -50,9 +51,14 @@ Secure` in production — are enabled).
 src/
   app/
     (auth)/            unauthenticated flows — centered card shell (H1–H5)
-      login, signup, forgot-password, reset-password, verify-email
+      login, signup, forgot-password, reset-password, verify-email,
+      claim-account, applications (public application form)
     (app)/             authenticated shell — sidebar + top bar, AuthGuard
-      dashboard, settings/profile (H7)
+      dashboard · personal area (my-applications, my-project, my-queue,
+      wallet, inbox, schedule, settings/profile) · staff workspaces
+      (applications, projects, challenges, enterprises, queue, judging,
+      logistics, announcements, timetable, tv, users, permissions, audit,
+      settings/event) — one directory per module, gated by capability
     layout.tsx         root: fonts + <Providers>
     page.tsx           routes to /dashboard or /login by session
   components/
@@ -64,9 +70,15 @@ src/
     api.ts             credentialed fetch wrapper → ApiError
     auth-client.ts     Better Auth browser client
     session.tsx        SessionProvider + useSessionContext/useMe/useCan
-    nav.ts             sidebar model (capability-gated) — extend per module
+    nav.ts             sidebar model: PERSONAL_NAV + capability-gated
+                       WORKSPACES — extend per module (docs/navigation.md)
+    i18n.ts            the trilingual copy dictionary (see Conventions)
+    tones.ts           semantic tone → theme-token class mapping
     types.ts           API DTOs (Me, …)
     env.ts, utils.ts   config + cn()
+    <domain>.ts        per-domain helpers/models (queue.ts, projects.ts,
+                       logistics.ts, judging-workspace.ts, …) with colocated
+                       *.test.ts(x) run by `pnpm --filter @hackos/web test`
 ```
 
 ## The component library — reuse, don't recreate
@@ -113,6 +125,20 @@ running app for a live gallery of every one with variations.
 | `TrendChart` | Area/line time-series, one or many tone-colored series. |
 | `DonutChart` | Distribution donut with optional centered label/value. |
 | `TimezonePicker` | Searchable IANA timezone combobox (built on `components/ui/command`). |
+| `AlertModal` | Confirm/destructive-action dialog (the "are you sure" pattern). |
+| `ContextualError` | Inline error block for failed loads/submits — not a toast. |
+| `SaveStatus` | Saving/saved/error indicator next to autosaving forms (`lib/save-state.ts`). |
+| `DatetimeInput` / `DurationInput` / `ScheduledDatetimeField` | Date/time entry, durations, and "publish at" scheduling fields. |
+| `MultiSelect` / `LanguageSelect` / `UniversityPicker` | Multi-value combobox and the two domain pickers built on it. |
+| `TemplateFieldControl` | Renders one application-template field (any kind) — the single renderer both the applicant form and staff review use. |
+| `FileUploadField` / `FileLink` | Upload control + presigned-download link for stored files. |
+| `QrCode` | QR rendering (tickets, badges, wallet). |
+| `StatusBadge` variants | `QueueStatusBadge` wraps `StatusBadge` for queue states; prefer wrapping over forking. |
+| `SponsorLogo` / `DevpostTagsField` | Sponsor branding image + prize-tag editor. |
+
+This table is the quick map, not the contract — the live gallery at
+`/components` in the running app is canonical, and new shared widgets belong
+in this table when added.
 
 **Tones & colors.** `lib/tones.ts` maps semantic tones
 (`success`/`warning`/`danger`/`info`/`brand`/`neutral`) to theme-token classes.
@@ -141,7 +167,15 @@ authed shell.
   password reset go through `lib/auth-client.ts`, then `refresh()` the session.
 - **Theme tokens only.** Style with semantic tokens (`bg-background`,
   `text-muted-foreground`, `border`, `text-destructive`, …) defined in
-  `app/globals.css`. Never hardcode hex/oklch in a component.
+  `app/globals.css`. Never hardcode hex/oklch in a component. Spacing, type
+  scale, control sizes, and the `Surface`/`Section`/`Overlay` container
+  contract are specified in [`docs/DESIGN.md`](../../docs/DESIGN.md) — the
+  consolidated design/UX rulebook; read it before building screens.
+- **All copy through `lib/i18n.ts`, in all three locales.** Every user-facing
+  string is a dictionary entry with `es`, `gl`, and `en` — no hardcoded
+  literals in components, no partial entries. Copy must never leak story IDs
+  (`H29`) or capability keys (`queue:admin`); `pnpm check:copy` (part of
+  `pnpm lint`) enforces both rules.
 
 ## Adding a new story module (the pattern)
 

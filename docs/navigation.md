@@ -1,7 +1,8 @@
 # Navigation: capability-based workspaces
 
 Implements issue [#187](https://github.com/danicallero/hackOS/issues/187)
-(`docs/ux-ui-audit.md` §3). Stories: H8 (capability groups, never role), H55
+(IA rules now consolidated in [`DESIGN.md`](./DESIGN.md) §7). Stories: H8
+(capability groups, never role), H55
 (one app, additive tabs), and every domain story a workspace links to.
 
 Web: `apps/web/src/lib/nav.ts` (data) + `apps/web/src/components/layout/app-sidebar.tsx`
@@ -71,28 +72,41 @@ every workspace and every item (`apps/web/src/lib/session.tsx`).
 ## Mobile: overflow selector for operators (H55)
 
 `apps/mobile/lib/tabs.ts` computes `primaryTabs()`/`overflowTabs()` from
-effective capabilities. The primary bar never grows past 4 participant tabs
-(schedule, queue, wallet, notifications) plus one more slot: a native
-`UITabBarController` silently collapses anything past its fifth item into
-iOS's own "More" screen, which bypasses the app's custom overflow menu
-entirely (`apps/mobile/app/(tabs)/others/scan` was getting swallowed by that
-system screen before this was fixed). So for a non-operator account, that
-fifth slot is Account, directly in the primary bar, no overflow menu at all.
-For any of the three scan capabilities (`accredit:scan`, `presence:scan`,
-`activity:scan`) or the admin wildcard, that fifth slot is instead the native
-"Others" overflow trigger, and Account, Scanner
-(`apps/mobile/app/(tabs)/others/scan`), and — for `activity:scan` holders —
-Activities all live behind it as pseudo-tabs (see
-`apps/mobile/lib/operations-navigation.ts`).
+effective capabilities. The bar is a real platform tab bar
+(`expo-router/unstable-native-tabs` in `app/(tabs)/_layout.tsx`), and a
+native `UITabBarController` silently collapses anything past its fifth item
+into iOS's own "More" screen — which bypasses the app's custom overflow menu
+entirely — so the bar is capped at five items, and which triggers show is
+toggled per experience with `hidden` (hidden screens stay routable):
 
-This deliberately walks back the original #187 finding that scanning must
-never sit behind an ellipsis: promoting Scan to its own primary slot only
-works as long as nothing else also needs a slot, and Account already needed
-one. A 6-tab bar (4 base + Scan + Others) is not an option — it isn't a
-styling choice, it's iOS's own tab-bar collapse taking over. If scan-as-
-always-primary is reinstated later, Account/Activities need a non-tab-slot
-home (e.g. a button inside the Scan screen itself) instead of a dedicated
-"Others" trigger.
+- **Non-operator account**: schedule, queue, wallet, notifications +
+  **Account** directly in the fifth slot. No overflow menu at all.
+- **Operator** (any of `accredit:scan`, `presence:scan`, `activity:scan`, or
+  the admin wildcard): the daily shift tools take the bar — schedule,
+  **Scanner**, Activities (`activity:scan` holders only), notifications —
+  honouring the #187 finding that scanning must never sit behind an
+  ellipsis. The fifth slot becomes the **"Others" overflow selector**, and
+  the less-frequent personal destinations (Queue, Wallet, Account) move
+  behind it as pseudo-tabs.
+
+The "Others" slot is a tab trigger that opens a **native dropdown selector**,
+not a screen. It's declared with `role="search"`, which on iOS 18+ renders it
+as the separated (Liquid Glass) capsule visually split from the tab group,
+with an ellipsis icon and hidden label. The trigger itself never navigates:
+an invisible native `MenuView` (`@expo/ui/community/menu`) is positioned over
+the capsule and pops the dropdown listing Queue, Wallet, and Account with
+icons and localized labels. On Android, a plain `Pressable` overlay opens the
+same menu via its imperative `show()`, because the Compose interop tree
+intermittently drops the very first touch.
+
+Selection simulates tab navigation
+(`apps/mobile/lib/operations-navigation.ts`
+`resolveOperationsNavigationAction`): picking the section already on screen
+is a no-op, and picking another always `router.replace()`s — a tab switch,
+never a stack push — so overflow screens don't stack duplicates and back
+behaviour stays sane; deeper screens inside a section still push normally on
+top of it. Pathname matching normalizes Expo Router route groups first
+(`/others/...` vs `/(tabs)/others/...`).
 
 ## Known gap (backend follow-up needed)
 

@@ -9,6 +9,8 @@ conflict, that file wins. Hard invariants live in `plan/07-datos-relevantes-ers.
 - `apps/api` — Fastify 5 + BullMQ + Postgres + Valkey.
 - `apps/web` — Next.js 16 frontend. Its own conventions live in `apps/web/README.md`;
   read that before touching it.
+- `apps/mobile` — Expo Router (React Native) app; `docs/mobile.md` covers what's
+  built, `docs/mobile-release.md` the build/store runbook.
 - `packages/shared` — capability catalogue (`capabilities.ts`) and SSE event
   contract (`events.ts`). Add new capability/event names THERE, never inline.
 - `packages/typescript-config` — shared tsconfig base.
@@ -67,8 +69,11 @@ Auth context: `req.userId` (null if anonymous) is decorated by
 pnpm infra:up          # docker compose: postgres on HOST PORT 5433, valkey:6379, minio:9000, mailpit:8025
 pnpm migrate           # apply migrations to dev DB
 pnpm --filter @hackos/api test   # vitest; wipes + remigrates hackos_test, then runs suites serially
-pnpm dev               # API on :3000 (tsx watch)
-pnpm lint              # biome
+pnpm --filter @hackos/api test test/queue/…      # single file/dir (any vitest filter arg)
+pnpm dev               # API on :3000 + web on :3001 (pnpm dev:api / dev:web for one)
+pnpm lint              # biome + i18n copy check (scripts/check-copy.mjs)
+pnpm --filter @hackos/api seed               # seed dev data
+pnpm --filter @hackos/api superadmin:create  # bootstrap first admin
 ```
 
 - Tests are **integration-first** against real Postgres/Valkey (no mocks of
@@ -78,6 +83,9 @@ pnpm lint              # biome
 - Import app code lazily (inside tests) or after `test/setup.ts` ran.
 - Every story you implement needs tests for: happy path, business-error path,
   and concurrency/idempotency where the story mentions it.
+- User-facing copy is trilingual: every i18n entry (`apps/web/src/lib/i18n.ts`,
+  `apps/mobile/lib/i18n.tsx`) needs `es`/`gl`/`en`, and copy must not leak story
+  IDs (`H29`) or raw capability keys (`queue:admin`) — `pnpm check:copy` enforces this.
 
 ## Deployment (keep working)
 
@@ -104,6 +112,10 @@ Concrete triggers — if your change does X, update Y:
 | A `deploy/services/*/docker-compose.yml` env var (added/renamed/removed) | The matching row in `docs/env-vars.md`, `deploy/README.md`'s shared/service-only tables, **and** that service's `dokploy.env.example` (add/rename/remove the `${{environment.VAR}}` line to match) |
 | Root-level dev workflow (`pnpm` scripts, ports, infra services) | `README.md` |
 | `apps/web` conventions or component library | `apps/web/README.md` |
+| Design tokens, container/action hierarchy, accessibility or copy rules (any UI surface) | `docs/DESIGN.md` — the consolidated design/UX rulebook |
+| `apps/mobile` screens, scanners, or story coverage | `docs/mobile.md` (build/signing/store steps: `docs/mobile-release.md`) |
+| Navigation (`apps/web/src/lib/nav.ts` workspaces, `apps/mobile/lib/tabs.ts` tabs) | `docs/navigation.md`'s workspace/tab mapping |
+| Worker registration or tick cadence (`registerWorker`) | `docs/background-workers.md`'s queue table |
 | A conflict between `plan/` and any other doc | Nothing in `plan/` — it's read-only and wins by definition. Fix the other doc, or flag the conflict to a human if `plan/` itself looks wrong. |
 
 New routes are not exempt from having real docs: a route registered without an
