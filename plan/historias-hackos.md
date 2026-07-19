@@ -1,511 +1,441 @@
-# hackOS — Historias de usuario
+# hackOS — User stories
 
-hackOS es una plataforma única de gestión para hackathones. Sustituye a las
-cuatro herramientas sueltas que usábamos hasta ahora (la db de contenido público, el
-gestor de inscripciones, la app de acreditación por QR y el sistema de colas de
-judging), que no compartían datos entre sí.
+hackOS is a single management platform for hackathons. It replaces four
+disconnected legacy tools (the public content DB, the enrollment manager, the QR
+check-in app, and the judging queue system) that shared no data.
 
-## 0. Aclaraciones técnicas de plataforma
+## 0. Technical platform notes
 
-- Arquitectura: API (Fastify + BullMQ), web (Next.js) y móvil
-  (React Native + Expo), con `packages/typescript-config` compartido.
-- Autenticación: Better Auth vive dentro de la API de Fastify; la app móvil usa el
-  plugin oficial de Expo y guarda la sesión en `expo-secure-store`.
-- Archivos: cualquier subida va por el SDK S3 contra MinIO autohospedado.
-- Correo: proveedor configurable por base de datos con adaptadores para Resend,
-  SMTP y Postal; todo envío sale asíncrono por BullMQ.
-- Memoria/colas: Valkey soporta BullMQ y los microestados en tiempo real de judging.
-- Móvil operativo: alertas con Expo Push Notifications y badges offline-first en
-  SQLite local, con validación QR local y sincronización posterior; las comidas y
-  actividades usan cola local con reintentos idempotentes para no perder registros.
-- TV y judging: SSE nativo en Fastify para pantallas; nada de WebSockets complejos.
-- Apple Wallet: los pases `.pkpass` se sirven con endpoints nativos y actualización
-  del pase cuando cambie el estado del participante.
-- Fuente de verdad: la base de datos de hackOS manda; los importes externos solo la
-  alimentan.
+- Architecture: API (Fastify + BullMQ), web (Next.js), mobile (React Native + Expo).
+- Auth: Better Auth (API); Expo plugin + `expo-secure-store` (mobile).
+- Files: S3/MinIO. Email: Resend/SMTP/Postal via BullMQ.
+- Queues/realtime: Valkey (BullMQ + SSE). TV: native SSE.
+- Apple/Google Wallet: native endpoints, update on state change.
+- **Source of truth: the hackOS database.** External imports only feed it.
 
 ---
 
-## 1. Cuenta e identidad
+## 1. Account & identity
 
-Todo el mundo entra al sistema con una cuenta propia; no hay cuentas compartidas ni
-accesos por hoja de cálculo. A priori todas las cuentas son iguales: cada una lleva
-un rol ilustrativo (participante, staff, juez…) que orienta lo que se ve en pantalla,
-pero los permisos reales no dependen de ese rol sino de **grupos de capacidades** que
-administración concede y retira.
+Each account has an illustrative role (participant, staff, judge…), but real
+permissions depend on **capability groups** that administration grants and
+revokes. One person can hold multiple (a judge who also competes).
+See `CLAUDE.md` and `plan/07` for the full model.
 
-¿Qué es un grupo de capacidades? Un conjunto de cosas concretas que una cuenta puede
-hacer. Un administrador lo puede hacer todo; pero a un miembro del staff al que le
-creas la cuenta el mismo día del evento igual no te interesa darle acceso a los datos
-de todos los usuarios, ni a modificar actividades, ni a aceptar solicitudes: solo
-quieres que pueda escanear acreditaciones para hacer check-ins o registrar
-actividades. O quieres a alguien que únicamente lea las inscripciones y no toque nada
-más. Todo eso se define con grupos, y se pueden crear incluso grupos de grupos, para
-no repetir la misma lista de permisos veinte veces. Una misma persona puede acumular
-varios (un juez que también compite, por ejemplo).
+**H1. Create an account**
+As a visitor I want to register with my name, surname, email and password to
+enroll in the event.
+On registration I receive an email with a verification code. Until I verify, I
+can log in but do nothing transactional (enroll, confirm a spot…). The account
+lives in Better Auth inside the API and emails go out via the configurable
+async queue. If the email already exists, I'm warned without revealing more.
 
-**H1. Crear una cuenta**
-Como visitante quiero registrarme con mi nombre, apellidos, correo y contraseña para
-poder inscribirme al evento.
-Al registrarme recibo un correo con un código para verificar mi dirección. Hasta que
-no verifico, puedo entrar pero no hacer nada transaccional (inscribirme, confirmar
-plaza…). La cuenta vive en Better Auth dentro de la API y los correos salen por la
-cola asíncrona configurable. Si el correo ya existe, se me avisa sin revelar nada más.
+**H2. Verify email**
+As an applicant I want to confirm my address by following the email link to
+unlock the rest of the system. If the link expired I can request another; if I
+already used it, I'm told I'm verified instead of getting an error.
 
-**H2. Verificar el correo**
-Como solicitante quiero confirmar mi dirección siguiendo el enlace del correo para
-desbloquear el resto del sistema. Si el enlace caducó, puedo pedir otro; si ya lo usé,
-se me dice que ya estoy verificado en lugar de dar error.
+**H3. Resend verification**
+As an unverified user I want to request a resend if the email didn't arrive.
+There's a limit (3 per hour, 60 seconds between attempts) to prevent abuse, and
+the screen shows how long until I can retry.
 
-**H3. Reenviar la verificación**
-Como usuario sin verificar quiero pedir que me reenvíen el correo si no me llegó.
-Hay un límite (3 por hora, con 60 segundos entre intentos) para evitar abusos, y la
-pantalla muestra cuánto falta para poder reintentar.
+**H4. Sign in and out**
+As a user I want to sign in and out. The session persists across visits without
+re-entering the password. On sign-out the session is truly invalidated server-side.
+On mobile the same session is maintained via the Better Auth Expo plugin and
+`expo-secure-store`.
 
-**H4. Entrar y salir**
-Como usuario quiero iniciar y cerrar sesión. La sesión se mantiene entre visitas sin
-tener que volver a escribir la contraseña cada vez. Al cerrar sesión, esa sesión deja
-de valer de verdad, también en el servidor. En la app móvil la misma sesión se
-mantiene con el plugin oficial de Better Auth para Expo y `expo-secure-store`.
+**H5. Reset password**
+As a user I want to request a reset link if I forgot my password. The response
+is the same whether the email exists or not (the form can't be used to discover
+registered users). The link is sent via the configurable async email system.
+When I set a new password all my old sessions are closed.
 
-**H5. Recuperar la contraseña**
-Como usuario quiero pedir un enlace de recuperación si olvidé mi contraseña. La
-respuesta es la misma exista o no el correo (no se puede usar el formulario para
-averiguar quién está registrado). El enlace se envía por el sistema de correo
-asíncrono configurable. Al fijar contraseña nueva se cierran todas mis sesiones
-antiguas.
+**H6. Secondary email**
+As a participant I want to add and verify a second email address, because I
+registered on Devpost with a different account and this lets the system
+recognize my projects on import. That secondary email can't match anyone's
+primary or another secondary: each address identifies exactly one account.
 
-**H6. Correo secundario**
-Como participante quiero añadir y verificar una segunda dirección de correo, porque en
-Devpost me registré con otra cuenta y así el sistema podrá reconocer mis proyectos al
-importarlos. Ese correo secundario no puede coincidir con el correo primario de nadie
-ni con el secundario de otra persona: cada dirección identifica a una única cuenta.
+**H7. Edit my profile**
+As a user I want to view my data (name, phone, shirt size, language, dietary
+restrictions…) and if I spot an error an organization member can correct it so
+check-in and meals work with accurate information. The platform runs in Spanish,
+Galician and English; the chosen language applies to emails and screens.
 
-**H7. Editar mi perfil**
-Como usuario quiero consultar mis datos (nombre, teléfono, talla de camiseta, idioma,
-restricciones alimenticias…), y si detecto un error un miembro de la organización podrá
-modificarlo para que acreditación y comidas trabajen con información
-correcta. La plataforma funciona en castellano, gallego e inglés; el idioma elegido
-aplica a correos y pantallas.
+**H8. Manage permissions by capability groups**
+As administration I want to create capability groups (and groups that nest other
+groups), and assign or remove people, to give each account exactly the access it
+needs: the check-in scanner for a one-day volunteer, read-only enrollment access
+for someone helping review, everything for an admin. The system always checks the
+concrete capability, never the role.
 
-**H8. Gestionar permisos por grupos de capacidades**
-Como administración quiero crear grupos de capacidades (y grupos que agrupen a otros
-grupos), y asignar o quitar personas, para dar a cada cuenta exactamente el acceso
-que necesita: el escáner de acreditación para el voluntario de un día, solo lectura
-de inscripciones para quien ayuda a revisar, todo para un administrador. El sistema
-comprueba siempre la capacidad concreta, nunca el rol.
+**H9. Join via company invitation link**
+As a sponsor company member I want to create my account from the invitation link
+generated when my company was set up, and be linked to it automatically with no
+manual configuration. If the link expired the organization can generate another.
 
-**H9. Entrar por enlace de invitación de empresa**
-Como miembro de una empresa patrocinadora quiero crear mi cuenta desde el enlace de
-invitación que se generó al dar de alta mi empresa, y quedar vinculado a ella
-automáticamente, sin que nadie me tenga que configurar nada a mano. Si el enlace
-caducó, la organización puede generar otro.
-
-**H10. Crear cuentas por invitación (staff, sponsors y participantes añadidos a mano)**
-Como administración quiero dar de alta cuentas que no pasan por inscripción — staff,
-organización, sponsors — indicando solo el correo y el tipo de cuenta. El
-administrador no rellena los datos de nadie: a esa dirección le llega un "crea tu
-cuenta en el sistema" y es la propia persona quien, siguiendo el enlace, pone su
-contraseña, su nombre y apellidos y el resto de su información. Ahí es donde mete sus
-restricciones alimenticias, porque en este flujo no hay inscripción que las pida y
-esta gente también come. La invitación se manda por la cola de correo asíncrona.
-El mismo mecanismo sirve para el participante que entra fuera de plazo con la
-inscripción ya cerrada: se le envía el "crea tu cuenta como participante" y, al
-crearla, se le piden los datos relevantes de su tipo — restricciones y talla de
-camiseta (de participantes y mentores necesitamos ambas por logística) — y rellena a
-mano el formulario de inscripción aunque esté cerrado. Ese formulario no es papeleo:
-de ahí salen el currículum que se entrega a las empresas, la fecha de fin de estudios
-que ven los jueces, etcétera; si se lo saltara, sería el único participante sin esos
-datos.
+**H10. Create accounts by invitation (staff, sponsors, and manually-added participants)**
+As administration I want to create accounts that skip enrollment — staff,
+organization, sponsors — providing only email and type. The admin doesn't fill
+in anyone's data: the address receives a "create your account" link and the
+person sets their own password, name and surname. They also enter their dietary
+restrictions there. The same mechanism works for late participants: they receive
+the link and, when creating the account, fill in the enrollment form even if
+enrollment is closed (résumé, end-of-study date, etc.).
 
 ---
 
-## 2. Inscripción (applications)
+## 2. Enrollment (applications)
 
-**H11. Publicar formularios de inscripción**
-Como administración quiero definir formularios distintos por tipo de persona
-(participante, mentor…) con sus campos, fechas de apertura y cierre opcional y, si aplica, un
-cupo de plazas, para abrir la inscripción sin depender de nadie técnico.
+**H11. Publish enrollment forms**
+As administration I want to define different forms per person type (participant,
+mentor…) with their fields, opening/closing dates and optional capacity, to open
+enrollment without needing anyone technical.
 
-**H12. Inscribirme**
-Como solicitante quiero rellenar el formulario, poder guardarlo a medias y enviarlo
-cuando esté listo, y consultar después en qué estado está mi solicitud.
-Al enviar se me piden también las restricciones alimenticias y, en los formularios de
-participante y mentor, la talla de camiseta: logística necesita ambas (el pedido de
-camisetas y la comida). En ese momento se me informa con claridad de que ese dato
-sensible se guarda mientras exista mi cuenta y solo se usa para planificar la
-comida de quien confirma su plaza — no se borra al rechazar o caducar, porque la
-organización puede darme otra oportunidad más adelante y no queremos perder el dato
-en ese caso.
+**H12. Enroll**
+As an applicant I want to fill in the form, save it partway, and submit when
+ready, then check my application status later.
+On submit I'm also asked for dietary restrictions and, for participant/mentor
+forms, shirt size: logistics needs both (shirt order and meals). I'm clearly
+informed that this sensitive data is kept while my account exists and only used
+to plan meals for confirmed participants — it's not deleted on rejection or
+expiry, because the organization might give me another chance later.
 
-**H13. Revisar solicitudes**
-Como revisor quiero ver las solicitudes enviadas, puntuarlas y añadirles notas, cada
-revisor con su propia valoración, para que la decisión final se tome con criterio.
+**H13. Review applications**
+As a reviewer I want to see submitted applications, score them and add notes,
+each reviewer with their own assessment, so the final decision is informed.
 
-**H14. Decidir y comunicar**
-Como administración quiero marcar como aceptadas las solicitudes que decidamos entre
-las ya revisadas, sin que el solicitante lo vea todavía: la decisión es interna hasta
-que se envía. Cuando toque comunicar, quiero poder mandar la decisión a todos los
-aceptados de golpe, o enviar decisiones individuales caso a caso.
+**H14. Decide and communicate**
+As administration I want to mark reviewed applications as accepted, invisible to
+the applicant: the decision is internal until sent. When it's time to
+communicate, I want to send decisions to all accepted applicants at once, or
+send individual decisions case by case.
 
-**H15. Confirmar la plaza (y qué pasa si se me pasa el plazo)**
-Como aceptado quiero confirmar mi plaza desde el enlace del correo o desde la web,
-dentro del plazo que se me indica. Si el plazo caduca, ya no puedo confirmar con ese
-enlace: tengo que pedir a la organización que me reenvíe el correo de aceptación, y
-la organización decide si me da otra oportunidad o no. Al confirmar paso a ser
-participante de pleno derecho y se me emite mi entrada. Todo queda registrado: quién
-confirmó, cuándo y por qué vía.
+**H15. Confirm the spot (and what happens if I miss the deadline)**
+As an accepted applicant I want to confirm my spot via the email link or the
+web, within the indicated deadline. If the deadline passes I can no longer
+confirm with that link: I need to ask the organization to resend the acceptance
+email, and they decide whether to give me another chance. On confirmation I
+become a full participant and my ticket is issued. Everything is logged: who
+confirmed, when, and via which channel.
 
 ---
 
-## 3. Equipos y proyectos
+## 3. Teams and projects
 
-Los proyectos se entregan principalmente en Devpost, como FastTrack. hackOS importa esa
-información para montar las colas de judging sin recopilar nada a mano. La base de
-datos de hackOS es la fuente de verdad; cualquier importación externa solo alimenta ese
-modelo y no crea una segunda verdad paralela.
+Projects are mainly submitted via Devpost (FastTrack). hackOS imports that
+information to build the judging queues without manual data entry. The hackOS
+database is the source of truth; any external import only feeds that model and
+doesn't create a parallel truth.
 
-**H16. Importar los proyectos de Devpost**
-Como operador de colas quiero subir los dos ficheros que exporta Devpost, ver una
-previsualización de lo que se va a crear (equipos, miembros, retos elegidos) y
-confirmar la importación. El sistema reconoce a la gente por su correo (el de la
-cuenta o el secundario de H6) y me enseña aparte a quién no supo reconocer.
+**H16. Import Devpost projects**
+As a queue operator I want to upload the two Devpost export files, see a
+preview of what will be created (teams, members, selected challenges) and
+confirm the import. The system recognizes people by their email (the account
+email or the secondary from H6) and shows me separately who it couldn't match.
 
-**H17. Resolver personas no reconocidas**
-Como operador quiero vincular manualmente a las personas que Devpost trae con un
-correo que no casa con ninguna cuenta, para que nadie se quede sin su proyecto por
-haberse registrado con otra dirección.
+**H17. Resolve unmatched people**
+As an operator I want to manually link people Devpost brings with an email
+that doesn't match any account, so nobody loses their project for having
+registered with a different address.
 
-Estas dos siguientes historias quedan como extensión post-MVP, una vez la
-importación de Devpost esté estable y el modelo de proyectos ya viva dentro de
-hackOS.
+These next two stories are post-MVP extensions, once the Devpost import is
+stable and the project model lives inside hackOS.
 
-**H18. Crear proyectos dentro de hackOS**
-Como organización quiero poder crear proyectos directamente en hackOS, unirles
-personas y completar toda su información — título, descripción, enlaces, retos y
-demás datos — para que el sistema pueda funcionar como un clon interno de Devpost
-cuando el evento ya no dependa solo de importaciones externas.
+**H18. Create projects inside hackOS**
+As the organization I want to create projects directly in hackOS, attach people
+and fill in all their information — title, description, links, challenges and
+other data — so the system can function as an internal Devpost clone when the
+event no longer depends only on external imports.
 
-**H19. Permitir que participantes creen proyectos**
-Como organización quiero poder activar, en los ajustes del evento, que los propios
-participantes creen sus proyectos sin depender de Devpost, para que ese flujo quede
-disponible solo cuando el evento lo decida.
+**H19. Let participants create projects**
+As the organization I want to toggle in event settings whether participants can
+create their own projects without Devpost, so this flow is available only when
+the event decides.
 
-**H20. Ver mi proyecto**
-Como participante quiero ver mi proyecto, su equipo y a qué retos se presenta. No
-puedo modificar nada de esto yo mismo: si hay que corregir algo, lo pido y lo hace la
-gestión de colas o administración.
+**H20. View my project**
+As a participant I want to see my project, its team and which challenges it's
+entered. I can't modify any of this myself: if something needs correcting I ask
+queue management or administration.
 
-**H21. Corregir equipos y retos, incluso en caliente**
-Como operador de colas quiero añadir o quitar personas de un equipo y apuntar o
-retirar un equipo de un reto, también con el judging ya en marcha. Si las colas ya
-están generadas, apuntar un equipo a un reto lo añade al final de la cola de ese
-reto; retirarlo lo saca de la cola y el resto sube una posición. Todo auditado.
-
----
-
-## 4. Acreditación, comidas y presencia
-
-La identidad física del evento es el badge (el "papelito" con QR). La entrada
-(ticket) y el badge son cosas distintas a propósito: la entrada se emite al confirmar
-plaza y no se anula nunca; el badge se asigna al llegar y se puede sustituir si se
-pierde, dejando el viejo desvinculado.
-
-**H22. Acreditar a un asistente**
-Como logística quiero escanear la entrada de quien llega, ver su ficha (nombre,
-estado de plaza, restricciones alimenticias) y asignarle un badge, para que el
-check-in sea un gesto de segundos. El lector trabaja contra una copia local ligera en
-SQLite para tolerar cortes de Wi-Fi y validar el QR en local, pero no cierra el alta
-sin confirmación del servidor: si no hay conexión, se espera y se reintenta en vivo
-hasta recibir el OK real, para evitar que una misma acreditación se asigne dos veces.
-
-**H23. Reponer un badge perdido**
-Como logística quiero rotar el badge de alguien que lo perdió: el nuevo funciona al
-momento y el viejo queda rechazado en todos los escáneres. La revocación se sincroniza
-después con la API cuando vuelve la conexión.
-
-**H24. Presencia y horas de asistencia**
-Como logística quiero escanear badges en la puerta para registrar entradas y salidas
-(con posibilidad de apuntar un pase manual con hora pasada si hubo un corte). Pero no
-nos podemos fiar de que todo el mundo avise al salir, así que el sistema estima la
-presencia combinando todos los registros: puertas, comidas y actividades. Si alguien
-tiene registrada la cena pero no el desayuno, lo razonable es que haya dormido fuera;
-si pasó por la comida, sabemos que como mínimo a esa hora estaba; si antes de comer
-pasó por un taller, sabemos que llegó antes. Con eso el sistema estima de forma
-automática cuánta gente hay en el recinto en cada momento y cuántas horas ha pasado
-cada persona — que necesitamos, por ejemplo, para garantizar el mínimo de horas si se
-reconocen créditos universitarios. Es normal que haya gente que no pase por ninguna
-actividad y solo por las comidas; la estimación cuenta con ello.
-
-**H25. Servir comidas**
-Como miembro del staff en la cola de la comida quiero escanear el badge de cada
-persona según pasa. Cada comida (el desayuno del sábado, la comida, la cena…) está
-definida como una actividad por la gestión de actividades, así que el escáner sabe en
-qué comida estoy. Si la persona no ha comido todavía, se registra la ración
-automáticamente y me sale que es su primera vez, junto con sus restricciones
-alimenticias y las notas de su perfil. Si ya tiene ración registrada, me avisa: "ojo,
-esta persona ya ha comido X veces, ¿le dejas repetir?" — y lo decido yo; si le dejo,
-se registra la repetición. Así sabemos cuánta gente ha comido y cuántas veces cada
-una. La cola de la comida debe soportar muchos escáneres simultáneos sin perder
-registros: cada escaneo se guarda en una cola local del dispositivo y no sale de ahí
-hasta recibir el OK del servidor; si la red cae o el servidor se satura, queda
-pendiente para reenviarse después sin duplicar ni omitir ningún pase.
-
-**H26. Actividades registrables**
-Como staff quiero escanear badges a la entrada de una charla, un taller o cualquier
-actividad marcada como registrable, igual que en las comidas, para registrar quién ha
-pasado por ahí. Además del interés propio de cada actividad, estos registros
-alimentan la estimación de presencia de H24.
-
-**H27. Paneles de estadísticas**
-Como organización quiero distintos paneles de estadísticas según el momento del
-evento. Antes del evento, mientras la gente se inscribe y se hacen los pedidos:
-cuántos participantes y mentores se han inscrito y cuántos han confirmado; la
-evolución temporal de inscripciones y confirmaciones (por días, incluso por horas del
-día y días de la semana); cuánto tarda la gente en confirmar desde que le mandamos el
-correo de aceptación; y el estado del embudo: a cuántos se les envió la decisión y
-aún están en plazo, a cuántos les caducó sin confirmar, cuántos rechazaron la plaza.
-También quiero poder sacar gráficos y tablas de cualquier campo del formulario (¿vas
-a pedir créditos?, ¿quieres compartir tu currículum?), demografía (género, centro y
-nivel de estudios) y logística: distribución de tallas de camiseta para el pedido y
-distribución de restricciones alimenticias para la comida.
-Ojo con las restricciones alimenticias: se piden al enviar la solicitud, pero solo
-cuentan para las estadísticas las de la gente que ha confirmado plaza. Si alguien
-rechaza la plaza el dato no se borra (H12) — se queda por si la organización decide
-darle otra oportunidad más adelante — pero sigue sin salir en las estadísticas
-mientras no confirme.
-
-**H28. Entrada en el móvil**
-Como participante quiero llevar mi entrada y mi badge en la cartera del móvil (Apple
-y Google) para no depender del papel. Si me rotan el badge, el pase viejo se anula
-solo. En Apple Wallet, el pase se sirve con endpoints nativos de PassKit y se empuja
-la actualización cuando cambia mi estado.
+**H21. Correct teams and challenges, even live**
+As a queue operator I want to add or remove people from a team and enter or
+withdraw a team from a challenge, even while judging is running. If queues are
+already generated, entering a team adds them to the end of that challenge's
+queue; withdrawing removes them and the rest move up one position. All audited.
 
 ---
 
-## 5. Colas y judging
+## 4. Accreditation, meals & presence
 
-El corazón del evento y lo primero que tiene que estar estable. Cada reto tiene una
-única cola; si varias salas evalúan el mismo reto, se reparten esa cola entre ellas.
-Un equipo pasa por etapas físicas explícitas: **llamado** (avisado para esperar fuera
-de la sala, antes se llamaba *standby*), **en sala** (dentro, pero el cronómetro no
-corre aún) y **presentando** (cronómetro en marcha).
+The event's physical identity is the badge (the QR card). The ticket and badge
+are intentionally distinct: the ticket is issued on spot confirmation and never
+revoked; the badge is assigned on arrival and can be replaced if lost, leaving
+the old one invalidated.
 
-Separar "hacer pasar" de "empezar a presentar" es deliberado:
-el botón único que lo arrancaba todo fue una queja reiterada de los jueces el año
-pasado.
+**H22. Accredit an attendee**
+As logistics I want to scan the ticket of someone arriving, view their profile
+(name, spot status, dietary restrictions) and assign them a badge, so check-in
+takes seconds. The reader works against a lightweight local SQLite copy to
+tolerate Wi-Fi outages and validate QR locally, but doesn't complete the
+assignment without server confirmation: if there's no connection it waits and
+retries live until it gets the real OK, preventing the same accreditation from
+being assigned twice.
 
-Cada reto define la cantidad de equipos que deben estar llamados a la puerta mientras
-un equipo está dentro. El reto general, por ejemplo, puede decidir hacer presentaciones
-de 5 minutos, por lo que tener dos o tres equipos esperando en la puerta es razonable. Un
-patrocinador con menos participantes, quizá quiere dedicarle 15 minutos a cada uno, así
-que tener a una persona esperando mientras otra presenta puede ser suficiente.
+**H23. Replace a lost badge**
+As logistics I want to rotate someone's lost badge: the new one works
+immediately and the old one is rejected on all readers. Revocation syncs to
+the API when connection returns.
 
-**H29. Llamar al siguiente equipo**
-Quiero llamar al siguiente equipo de la cola para que vaya llegando mientras se termina
-la presentación anterior. El equipo recibe un aviso en el móvil ("ve a esperar a la
-sala X"). Hay un cupo de equipos esperando por sala, y el sistema lo rellena solo
-mientras la sala está activa; puedo llamar por encima del cupo si hace falta. El
-estado rápido de la sala vive en Valkey para que la actualización sea instantánea.
+**H24. Presence and attendance hours**
+As logistics I want to scan badges at the door to register entries and exits
+(with the option to log a manual pass with a past time if there was an outage).
+The system estimates presence by combining door, meal and activity records —
+we need to know how many hours each person spent (university credits, etc.).
 
-**H30. Nunca dos salas a la vez**
-Como organización queremos la garantía dura de que jamás se llama a un equipo si
-alguno de sus miembros está ya llamado, en sala o presentando en otra sala (pasa con
-equipos que se presentan a varios retos). El sistema salta esa entrada y la retoma
-más tarde: ejecutar "llamar al siguiente equipo" llamaría al siguiente disponible sin
-que el ocupado pierda su posición en la cola.
+**H25. Serve meals**
+As staff at the meal line I want to scan each person's badge. Each meal is an
+activity, so the scanner knows which one I'm at. First time → automatic
+registration with restrictions. Repeat → warning and manual decision. Supports
+many simultaneous scanners: each scan is saved in the device's local queue and
+only leaves it after server OK (offline queue with idempotent retries).
 
-**H31. Avisar de que entre**
-Como juez quiero pulsar "que entre" y que al equipo le llegue el aviso al móvil, y a
-los operadores de cola una notificación en su panel de coordinación de presentaciones
-para que puedan revisar que el equipo está informado, en lugar de que alguien salga
-a gritar el nombre por el pasillo.
+**H26. Recordable activities**
+As staff I want to scan badges at the entrance of a talk, workshop or any
+activity marked as recordable, just like meals, to register who attended.
+Beyond the activity's own interest, these records feed the presence estimation
+in H24.
 
-**H32. Hacer pasar y empezar**
-Como juez quiero hacer pasar al equipo (veo su proyecto, equipo y retos de un vistazo
-mientras montan) y arrancar el cronómetro solo cuando de verdad empiezan a presentar.
-En esa ficha aparece también la información relevante de la inscripción de cada
-miembro: si el reto es "mejor proyecto rookie", por ejemplo, el panel me enseña en
-qué año de carrera está cada uno.
+**H27. Statistics dashboards**
+As the organization I want different statistics dashboards depending on the
+event moment. Pre-event: enrolled and confirmed counts, enrollment evolution
+over time, confirmation speed, funnel state (decisions sent, pending, expired,
+declined). I also want charts and tables for any form field, demographics
+(gender, university, study level) and logistics: shirt size distribution for
+the order and dietary restriction distribution for meals.
+Note: dietary restrictions are collected at enrollment but only count in
+statistics for people who confirmed a spot. If someone declines, the data
+isn't deleted (H12) — kept in case they get another chance — but doesn't
+appear in stats until they confirm.
 
-**H33. Deshacer y casos raros**
-Como juez u operador quiero poder devolver un equipo a la zona de espera (llamado) sin
-que pierda su turno (demo rota, entró antes de tiempo), devolverlo a la cola, o
-recuperar a un "equipo olvidado" y meterlo en cualquier cola, arriba o abajo, en
-cualquier momento.
-
-**H34. No-show con criterio humano**
-Como operador quiero ver cuánto tiempo lleva llamado cada equipo, con resaltado a
-partir de un umbral, y decidir yo si lo marco como no presentado.
-Quien acumula llamadas fallidas va bajando en prioridad automáticamente, no queda eliminado.
-
-Los jueces también pueden desde su vista marcar como no presente a un equipo, y
-este volverá al final de la cola del reto.
-
-Se podrá descalificar manualmente a un equipo que en reiteradas ocasiones no se
-haya presentado.
-
-**H35. Pausar una sala**
-Como operador o juez quiero pausar una sala (descanso, incidencia): los equipos que
-estaban llamados a esa sala vuelven a la cola con prioridad máxima (top), el que
-está dentro o presentando termina normalmente, y no se llama a nadie más hasta reanudar.
-
-**H36. Evaluar en equipo**
-Como juez quiero puntuar con el formulario propio de cada reto, a la vez que mis
-compañeros de sala sobre la misma ficha, viendo los cambios de los demás al momento.
-Cada guardado conserva el borrador (cerrar el portátil no pierde nada) y deja rastro
-de quién cambió qué y cuándo ("Innovación pasó de 7 a 9, lo cambió la jueza A a las
-18:42"). Enviar cierra la presentación; se puede corregir después y queda versionado.
-
-**H37. Buscar un equipo a mano**
-Como juez quiero buscar un equipo por nombre, título o número cuando algo se sale del
-guion: si aún no está evaluado, hacerlo pasar directamente (registrado como manual);
-si ya lo está, abrir su evaluación existente. Nunca se crea una segunda evaluación
-del mismo equipo para el mismo reto.
-
-**H38. Seguir mi turno como participante**
-Como participante quiero ver, para cada reto al que me presento, mi estado, posición
-y tiempo estimado; recibir un pre-aviso cuando falten pocos minutos y un aviso claro
-cuando me llamen ("ve a esperar a la sala X").
-
-**H39. Ritmo de la sala**
-Como operador quiero fijar los minutos deseados por equipo y que el sistema los
-contraste con el tiempo restante y los equipos pendientes, avisando visiblemente si
-no hay tiempo suficiente para dedicar esa cantidad por equipo y ajustando el ritmo.
-El cronómetro cambia de color al acercarse al límite de tiempo de cada equipo.
-
-**H40. Progreso y exportación**
-Como operador de colas quiero un panel de progreso por reto (en cola, evaluados, en curso,
-descalificados) y poder descargar la cola o las evaluaciones de cualquier reto en CSV
-en cualquier momento, con una columna por criterio, para los sponsors que no usen el
-sistema.
+**H28. Ticket on mobile**
+As a participant I want to carry my ticket and badge in my phone wallet (Apple
+and Google) without depending on paper. If my badge is rotated the old pass is
+automatically invalidated. On Apple Wallet the pass is served via native
+PassKit endpoints and the update is pushed when my state changes.
 
 ---
 
-## 6. Pantallas (TV)
+## 5. Queues & judging
 
-**H41. Pantallas de sala**
-Como asistente quiero ver en las pantallas del recinto quién presenta ahora, quién
-está llamado y los siguientes de cada sala, actualizado al segundo, sin que nadie
-toque nada. Hay una vista general con todas las salas (que se adapta a cuántas haya)
-y se alimenta por SSE nativo.
+The heart of the event and the first thing that must be stable. Each challenge
+has a single queue; if multiple rooms evaluate the same challenge they share
+that queue. A team passes through explicit physical stages: **called**
+(notified to wait outside), **in room** (inside, timer not running) and
+**presenting** (timer running). Separating "bring in" from "start presenting"
+is deliberate (judge complaint from last year). Each challenge defines how many
+teams should be called to the door while one presents.
 
-**H42. Modos de pantalla**
-Como organización queremos que las pantallas puedan mostrar también el horario, las
-horas que llevamos de evento, el grid de sponsors, la contraseña del wifi, un
-anuncio a pantalla completa (apertura, aviso urgente)... De forma manual se selecciona
-qué muestra la vista de TV de la web, para no depender de redireccionar la URL
-a la que apuntan las teles durante el evento. Los cambios de modo también se propagan
-por SSE.
+**H29. Call the next team**
+I want to call the next team from the queue so they start heading over while the
+current presentation finishes. The team gets a mobile notification ("go wait at
+room X"). There's a waiting quota per room and the system fills it automatically
+while the room is active; I can call beyond the quota if needed. Room state
+lives in Valkey for instant updates.
 
----
+**H30. Never two rooms at once**
+As the organization we want a hard guarantee that a team is never called if any
+of its members is already called, in room or presenting elsewhere (happens with
+teams entering multiple challenges). The system skips that entry and resumes
+later: "call next" calls the next available without the occupied team losing
+its queue position.
 
-## 7. Patrocinadores
+**H31. Notify to enter**
+As a judge I want to press "let them in" and have the team receive a mobile
+notification, and queue operators a notification on their coordination panel to
+verify the team was informed, instead of someone going to shout names in the
+hallway.
 
-**H43. Invitar a un sponsor**
-Como administración quiero que, al dar de alta una empresa, se genere su enlace de
-invitación; quien lo abre crea su cuenta y queda vinculado a esa empresa con los
-permisos de sponsor (H9), sin altas manuales.
+**H32. Bring in and start**
+As a judge I want to bring in the team (I see their project, team and
+challenges at a glance while they set up) and start the timer only when they
+actually begin presenting. The card also shows relevant enrollment info for
+each member: for a "best rookie project" challenge, for example, it shows
+which year of study each person is in.
 
-**H44. Editar mi empresa y mi reto**
-Como sponsor quiero mantener el perfil de mi empresa (logo, web, descripción) y
-editar mi reto: descripción, premios y los criterios con los que se puntuará,
-construyéndolos yo mismo. Cada cambio guarda una versión, para poder saber qué decía
-el reto en cualquier momento.
+**H33. Undo and edge cases**
+As a judge or operator I want to return a team to the waiting zone (called)
+without losing their turn (broken demo, entered too early), send them back to
+the queue, or recover a "forgotten team" and insert them in any queue, top or
+bottom, at any time.
 
-**H45. Revelado programado**
-Como organización queremos programar cuándo se hace público cada reto ("los
-patrocinadores se revelan a las 10") y que aparezca solo, a su hora, en la web y las
-pantallas, sin spoilers ni botones a mano.
+**H34. No-show with human judgment**
+As an operator I want to see how long each team has been called (highlighted
+past a threshold) and decide whether to mark them as no-show. Judges can also
+mark no-show from their view. Accumulating failed calls automatically lowers
+priority. Manual disqualification for repeated no-shows.
 
-**H46. Mis jueces y mis resultados**
-Como sponsor quiero dar de alta a mis jueces, consultar las salas que se le
-han asignado a mi empresa para evaluar, y distribuir mis jueces entre esas salas, ver las
-evaluaciones de mi reto y llevarme la clasificación. Si prefiero no usar el sistema
-de colas, puedo decidir no usarlo, mis retos no bloquearán la llamada de ningún proyecto
-en otras salas, y se me exportará un listado de proyectos con datos relevantes en un CSV
-para que gestione como vea conveniente la evaluación.
+**H35. Pause a room**
+As an operator or judge I want to pause a room (break, incident): teams that
+were called return to the queue at top priority, the one inside or presenting
+finishes normally, and nobody else is called until resumed.
 
----
+**H36. Evaluate as a team**
+As a judge I want to score using the challenge's own form, simultaneously with
+my fellow judges on the same card, seeing each other's changes in real time.
+Every save preserves the draft (closing the laptop loses nothing) and leaves a
+trace of who changed what and when ("Innovation went from 7 to 9, changed by
+Judge A at 18:42"). Submitting closes the presentation; it can be corrected
+afterwards and is versioned.
 
-## 8. Horario y contenido público
+**H37. Search for a team manually**
+As a judge I want to search for a team by name, title or number when things go
+off script: if not yet evaluated, bring them in directly (logged as manual); if
+already evaluated, open their existing review. A second evaluation for the same
+team and challenge is never created.
 
-**H47. Horario vivo**
-Como asistente quiero consultar el horario del evento en la web y el móvil, y que los
-cambios de última hora se reflejen al momento en todas partes, pantallas incluidas.
+**H38. Follow my queue status as a participant**
+As a participant I want to see, for each challenge I'm entered in, my status,
+position and estimated time; receive a heads-up when a few minutes remain and a
+clear notification when called ("go wait at room X").
 
-**H48. Editar el horario y las actividades**
-Como gestión de actividades quiero crear y editar todas las actividades del evento —
-título, localización, descripción, hora de inicio y, si la tiene, hora de fin — y
-decidir cuándo se hacen visibles, con publicación programada si hace falta. Aquí se
-definen también las comidas y qué actividades son registrables por escáner (H25 y
-H26). La lista es consultable por cualquiera y está disponible públicamente para que
-otras webs (la del evento, por ejemplo) la muestren sin duplicarla a mano.
+**H39. Room pace**
+As an operator I want to set desired minutes per team and have the system
+compare against remaining time and pending teams, visibly warning if there
+isn't enough time per team and adjusting the pace. The timer changes color
+approaching each team's time limit.
 
-**H49. Web pública**
-Como visitante quiero ver sin registrarme los retos publicados con sus premios, la
-malla de empresas patrocinadoras y el horario visible.
-
----
-
-## 9. Avisos y notificaciones
-
-**H50. Anuncios**
-Como organización quiero redactar un anuncio y publicarlo a la vez en pantallas,
-móviles y bandeja de la app, con ventana de vigencia (aparece y desaparece solo, por
-ejemplo "la cena está lista" o "quedan 30 minutos de hackeo").
-
-**H51. Preferencias de aviso**
-Como participante quiero decidir qué avisos me llegan al móvil,
-correo electrónico u otros canales y apuntarme a recordatorios de
-actividades concretas del horario. Los avisos operativos de mi turno
-de cola no son opcionales, porque sin ellos el sistema de llamadas no funciona.
-
-**H52. Correos que llegan**
-Como organización queremos que todos los correos del sistema (verificación,
-recuperación, decisiones) salgan con nuestra imagen, en el idioma de cada persona, y
-que un fallo temporal del proveedor de correo no pierda ningún envío: quedan en cola
-y se reintentan solos. El proveedor se elige por base de datos entre Resend, SMTP o
-Postal, pero el envío siempre pasa por BullMQ.
-
----
-
-## 10. Administración y auditoría
-
-**H53. Auditoría**
-Como administración quiero un registro consultable de las acciones sensibles con quién, qué,
-cuándo y desde dónde, para resolver cualquier disputa con datos.
-
-**H54. Exportaciones y datos personales**
-Como administración quiero exportar los datos operativos (evaluaciones, asistencia,
-colas) y poder atender una solicitud de exportación o borrado de datos personales de
-cualquier usuario.
+**H40. Progress and export**
+As a queue operator I want a progress panel per challenge (queued, evaluated,
+in progress, disqualified) and to download the queue or evaluations of any
+challenge as CSV at any time, one column per criterion, for sponsors who don't
+use the system.
 
 ---
 
-## 11. Móvil
+## 6. TV screens
 
-**H55. Una sola app**
-Como usuario quiero una única app en la que cada cual ve lo suyo: el participante, su
-horario, sus turnos de cola y sus pases; el staff, además, los escáneres que le
-correspondan según sus permisos. Al cambiar los permisos de alguien, sus pestañas
-cambian sin reinstalar nada. La app usa las sesiones de Better Auth para Expo y las
-notificaciones operativas llegan por Expo Push Notifications.
+**H41. Room screens**
+As an attendee I want to see on venue screens who's presenting now, who's
+called and the next teams for each room, updated in real time with no manual
+intervention. There's an overview with all rooms (adapting to however many
+there are) fed by native SSE.
+
+**H42. Screen modes**
+As the organization we want screens to also show the schedule, event hours,
+sponsor grid, Wi-Fi password, a full-screen announcement (opening, urgent
+notice)... Mode selection is manual via the web's TV view, avoiding the need
+to redirect the URL during the event. Mode changes also propagate via SSE.
 
 ---
 
-## Orden de desarrollo propuesto
+## 7. Sponsors
 
-El bloque de colas es innegociable. FastTrack tiene que mejorar, el resto es opcional.
+**H43. Invite a sponsor**
+As administration I want an invitation link generated when creating a company;
+whoever opens it creates their account and is linked to that company with
+sponsor permissions (H9), with no manual account creation.
 
-1. **Cuenta, identidad y permisos** (sección 1)
-2. **Colas, judging y pantallas** (secciones 5 y 6)
-3. **Inscripción** (sección 2) y **equipos/Devpost** (sección 3) pueden avanzar en
-   paralelo con lo anterior.
-4. **Acreditación y logística** (sección 4) y **contenido público y horario**
-   (sección 8).
-5. **Sponsors** (sección 7), que depende de las invitaciones de empresa (H9) y de que
-   exista el judging.
-6. **Notificaciones completas** (sección 9)
-7. **Móvil** (sección 11) y **pases de cartera** (H28), al final, sobre lo ya
-   estable.
+**H44. Edit my company and challenge**
+As a sponsor I want to maintain my company profile (logo, website, description)
+and edit my challenge: description, prizes and the criteria it will be scored
+on, building them myself. Each change saves a version, so I can see what the
+challenge said at any point in time.
+
+**H45. Scheduled reveal**
+As the organization we want to schedule when each challenge becomes public
+("sponsors are revealed at 10") and have it appear automatically, on time, on
+the web and screens, with no spoilers or manual buttons.
+
+**H46. My judges and my results**
+As a sponsor I want to register my judges, see which rooms my company has been
+assigned to evaluate, distribute my judges across those rooms, view
+evaluations of my challenge and take the classification. If I prefer not to use
+the queue system I can opt out, my challenges won't block any project call in
+other rooms, and I'll get a CSV export of projects with relevant data to manage
+evaluation as I see fit.
+
+---
+
+## 8. Schedule & public content
+
+**H47. Live schedule**
+As an attendee I want to view the event schedule on the web and mobile, with
+last-minute changes reflected instantly everywhere, screens included.
+
+**H48. Edit the schedule and activities**
+As the activities manager I want to create and edit all event activities —
+title, location, description, start time and optional end time — and decide
+when they become visible, with scheduled publication if needed. Meals and
+recordable activities (H25, H26) are also defined here. The list is publicly
+queryable so other websites can display it without duplicating it manually.
+
+**H49. Public website**
+As a visitor I want to see published challenges with prizes, the sponsor grid
+and the visible schedule without registering.
+
+---
+
+## 9. Announcements & notifications
+
+**H50. Announcements**
+As the organization I want to draft an announcement and publish it simultaneously
+on screens, mobile and the app inbox, with a validity window (appears and
+disappears automatically, e.g. "dinner is ready" or "30 minutes of hacking
+left").
+
+**H51. Notification preferences**
+As a participant I want to decide which notifications reach my mobile, email or
+other channels, and sign up for reminders for specific schedule activities.
+Operational queue turn notifications are not optional, because without them the
+calling system doesn't work.
+
+**H52. Emails that arrive**
+As the organization we want all system emails (verification, recovery,
+decisions) to go out with our branding, in each person's language, and for a
+temporary provider failure not to lose any send: they stay in queue and retry
+automatically. The provider is chosen per database between Resend, SMTP or
+Postal, but sending always goes through BullMQ.
+
+---
+
+## 10. Administration & audit
+
+**H53. Audit trail**
+As administration I want a queryable record of sensitive actions with who, what,
+when and where, to resolve any dispute with data.
+
+**H54. Data exports and personal data**
+As administration I want to export operational data (evaluations, attendance,
+queues) and to handle a user's data export or deletion request.
+
+---
+
+## 11. Mobile
+
+**H55. One single app**
+As a user I want a single app where each person sees their own: participants
+see their schedule, queue turns and passes; staff also see the scanners
+matching their permissions. When someone's permissions change their tabs update
+without reinstalling. The app uses Better Auth sessions for Expo and
+operational notifications arrive via Expo Push Notifications.
+
+---
+
+## Proposed development order
+
+The queue block is non-negotiable. FastTrack must improve; the rest is optional.
+
+1. **Account, identity and permissions** (section 1)
+2. **Queues, judging and screens** (sections 5 and 6)
+3. **Enrollment** (section 2) and **teams/Devpost** (section 3) can run in
+   parallel with the above.
+4. **Accreditation and logistics** (section 4) and **public content and
+   schedule** (section 8).
+5. **Sponsors** (section 7), depending on company invitations (H9) and judging
+   being in place.
+6. **Full notifications** (section 9)
+7. **Mobile** (section 11) and **wallet passes** (H28), last, built on top of
+   what's already stable.

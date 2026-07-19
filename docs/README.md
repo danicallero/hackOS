@@ -6,9 +6,10 @@ normative functional source of truth remains `plan/historias-hackos.md`
 this folder explains *how* the code implements the relevant slices. If a doc
 here disagrees with `plan/`, the plan wins and the doc (or the code) is the bug.
 
-Reading order for a new agent/contributor: root [`README.md`](../README.md)
-(setup) → `CLAUDE.md` (conventions every change must follow) → the
-**one-paragraph orientation** below → whichever module doc matches your task.
+Reading order for a new agent/contributor: [`AGENTS.md`](../AGENTS.md)
+(entry point, prescribed reads) → `CLAUDE.md` (conventions every change must
+follow) → root [`README.md`](../README.md) (setup) → the **one-paragraph
+orientation** below → whichever module doc matches your task.
 
 ## Index
 
@@ -60,27 +61,4 @@ conventions and the component library, and
 [`deploy/README.md`](../deploy/README.md) for the full deployment story
 (networking, secrets, Dokploy modes).
 
-## One-paragraph orientation
-
-hackOS is a single Fastify 5 API (`apps/api`) plus a Next.js 16 web app
-(`apps/web`) and an Expo Router mobile app (`apps/mobile`), backed by Postgres
-and Valkey (Redis-compatible), with `packages/shared` holding the two contracts
-every app imports: the capability catalogue and the SSE event names.
-Permissions are by **capability, never role** (`requireCapability(...)`; the
-`role` string is display-only). Sensitive mutations are **audited in the same
-transaction** as the write (`audit(...)`). State transitions use
-`withTransaction` + `SELECT … FOR UPDATE` so exactly one writer wins. Realtime
-goes out over SSE; deferred work goes through **repeatable BullMQ "tick" jobs
-that drain database-backed queues** — the durability and retry story lives in
-the DB rows, not in BullMQ (see the worker doc). User-facing copy is
-trilingual (es/gl/en) via per-app i18n dictionaries.
-
-## Corrections the brief needed (grounded against the schema)
-
-| Brief assumption | Reality | What we did |
-| --- | --- | --- |
-| Map a `DNA` question to a `User.DNA` field | No such field; `DNA` was a typo for **`DNI`** (which exists on `users`) | Mirror a `dni`-keyed answer → `users.dni` |
-| `email` is the primary key needing cascading FK updates | `users.id` is the PK; `email` is a plain `UNIQUE` column; credential login keys on `user_id` | Primary-email change is a single-column update + uniqueness check + audit |
-| "Delete account" is failing | Hard-delete works for fresh accounts and *intentionally* 409s for accounts with history (H54 says anonymize) | Added the H54 **anonymize** path the 409 already pointed to |
-| Remove the "check-ins" concept | Check-in vs door-presence is modelled deliberately (H23/H24) | Folded check-ins into a unified **Presence** view; a badge assignment is just the first door scan |
-| Assign a "Batch" to a user | No `batch` column; the thing assigned on entry (and re-issued on loss) is the **badge** (`badge_id` + history) | Interpreted "Batch" as **badge**; assignment control deferred (needs guard/schema care) |
+## Index

@@ -84,34 +84,6 @@ Adding a route means giving it a real `summary`/`description` in its schema,
 not leaving the auto-generated placeholder (see `apps/api/src/app.ts` for how
 tags and auth requirements are derived, and `CLAUDE.md` for the rule).
 
-## Where things are documented
 
-- **`plan/`** — the normative stories and hard invariants (permissions by
-  capability, ticket vs. badge, idempotent scanners, etc.). Read-only; if code
-  and plan disagree, the plan wins and the code is the bug.
-- **`docs/`** — living docs explaining how the current code implements those
-  stories: module-by-module summaries, the background worker/queue model, the
-  challenges/Devpost pipeline, and the per-service environment variable
-  reference. Start at [`docs/README.md`](docs/README.md).
-- **`deploy/README.md`** — how to actually run this in production on Dokploy
-  (or plain compose), including the two deployment modes and the full secrets
-  list.
-- **`CLAUDE.md`** — the conventions every change in this repo is expected to
-  follow (capability-based auth, audited mutations, transactional state
-  transitions, traceability to story IDs) and the rules for keeping docs in
-  sync with code.
 
-## Conventions worth knowing before you open a PR
 
-- Every commit/PR references the story it implements (`feat(queue): call_next
-  transition (H29, H30)`).
-- Permissions are checked by capability (`requireCapability(...)`), never by
-  role — `role` is a display label, not a guard.
-- State transitions run inside `withTransaction` + `SELECT ... FOR UPDATE` so
-  exactly one request wins a race.
-- Sensitive mutations are audited in the same transaction as the write.
-- User-facing copy is trilingual (Spanish, Galician, English) via each app's
-  i18n dictionary; `pnpm check:copy` fails the lint if a locale is missing or
-  copy leaks internal identifiers.
-
-The full list is in `CLAUDE.md` — read it before touching anything.

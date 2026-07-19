@@ -1,5 +1,8 @@
 # hackOS
 
+> **Agents:** `AGENTS.md` is the entry point — it tells you what to read before
+> writing code. This file contains the conventions themselves.
+
 Hackathon management platform: one API replacing four legacy tools. **Functional
 source of truth: `plan/historias-hackos.md`** (user stories H1-H55). If docs
 conflict, that file wins. Hard invariants live in `plan/07-datos-relevantes-ers.md`.
@@ -7,18 +10,12 @@ conflict, that file wins. Hard invariants live in `plan/07-datos-relevantes-ers.
 ## Layout
 
 - `apps/api` — Fastify 5 + BullMQ + Postgres + Valkey.
-- `apps/web` — Next.js 16 frontend. Its own conventions live in `apps/web/README.md`;
-  read that before touching it.
-- `apps/mobile` — Expo Router (React Native) app; `docs/mobile.md` covers what's
-  built, `docs/mobile-release.md` the build/store runbook.
-- `packages/shared` — capability catalogue (`capabilities.ts`) and SSE event
-  contract (`events.ts`). Add new capability/event names THERE, never inline.
-- `packages/typescript-config` — shared tsconfig base.
+- `apps/web` — Next.js 16; conventions in `apps/web/README.md`.
+- `apps/mobile` — Expo Router; `docs/mobile.md`, `docs/mobile-release.md`.
+- `packages/shared` — `capabilities.ts` + `events.ts`. Add new names THERE, never inline.
 - `plan/` — normative docs. Read-only.
-- `docs/` — living docs on how the current code implements the stories in
-  `plan/`. Keep in sync with code — see **Documentation** below.
-- `deploy/` — Dokploy / docker-compose deployment; `deploy/README.md` is
-  normative for anything env-var or infrastructure related.
+- `docs/` — living implementation docs. Keep in sync with code.
+- `deploy/` — Dokploy / docker-compose; `deploy/README.md` is normative.
 
 ## Non-negotiable conventions
 
@@ -65,27 +62,17 @@ Auth context: `req.userId` (null if anonymous) is decorated by
 
 ## Local dev & tests
 
-```sh
-pnpm infra:up          # docker compose: postgres on HOST PORT 5433, valkey:6379, minio:9000, mailpit:8025
-pnpm migrate           # apply migrations to dev DB
-pnpm --filter @hackos/api test   # vitest; wipes + remigrates hackos_test, then runs suites serially
-pnpm --filter @hackos/api test test/queue/…      # single file/dir (any vitest filter arg)
-pnpm dev               # API on :3000 + web on :3001 (pnpm dev:api / dev:web for one)
-pnpm lint              # biome + i18n copy check (scripts/check-copy.mjs)
-pnpm --filter @hackos/api seed               # seed dev data
-pnpm --filter @hackos/api superadmin:create  # bootstrap first admin
-```
+See root `README.md` for the full command reference. Key points for agents:
 
-- Tests are **integration-first** against real Postgres/Valkey (no mocks of
-  the DB). Use `test/helpers.ts`: `truncateAll()`, `createUser()`,
-  `createUserWithCapabilities([...])`, `asUser(id)` header for `app.inject()`.
-- `x-test-user-id` header authenticates requests in NODE_ENV=test only.
+- Tests are **integration-first** against real Postgres/Valkey (no mocks).
+  Use `test/helpers.ts`: `truncateAll()`, `createUser()`,
+  `createUserWithCapabilities([...])`, `asUser(id)` for `app.inject()`.
+- `x-test-user-id` header authenticates in NODE_ENV=test only.
 - Import app code lazily (inside tests) or after `test/setup.ts` ran.
-- Every story you implement needs tests for: happy path, business-error path,
-  and concurrency/idempotency where the story mentions it.
-- User-facing copy is trilingual: every i18n entry (`apps/web/src/lib/i18n.ts`,
-  `apps/mobile/lib/i18n.tsx`) needs `es`/`gl`/`en`, and copy must not leak story
-  IDs (`H29`) or raw capability keys (`queue:admin`) — `pnpm check:copy` enforces this.
+- Every story needs tests: happy path, business-error path, and
+  concurrency/idempotency where the story mentions it.
+- Trilingual copy: every i18n entry needs `es`/`gl`/`en`. `pnpm check:copy`
+  enforces no leaked story IDs or capability keys.
 
 ## Deployment (keep working)
 
