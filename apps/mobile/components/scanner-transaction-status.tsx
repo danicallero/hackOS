@@ -328,7 +328,14 @@ export function ScannerTransactionStatus({
         tintColor={presentation.tone}
       />
       <View style={{ flex: 1, gap: 2, paddingVertical: bare ? 0 : 10 }}>
-        <Text style={{ color: colors.label, fontSize: bare ? 13 : 15, fontWeight: "700" }}>
+        <Text
+          style={{
+            color: colors.label,
+            fontSize: bare ? 13 : 15,
+            fontWeight: "700",
+            paddingTop: state === "attention" ? 2 : 0,
+          }}
+        >
           {presentation.label}
         </Text>
         {scan?.lastError ? (
