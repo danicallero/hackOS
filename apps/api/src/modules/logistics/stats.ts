@@ -90,7 +90,7 @@ export async function accreditationCountsByRole() {
                 ELSE 'participant'
               END AS role
          FROM users u
-        WHERE u.badge_id IS NOT NULL
+        WHERE u.badge_id IS NOT NULL AND u.anonymized_at IS NULL
      )
      SELECT role, count(*)::int AS count
        FROM classified GROUP BY role ORDER BY role`,
@@ -106,7 +106,7 @@ export async function accreditationCountsByRole() {
  */
 export async function logisticsStats() {
   const accredited = await pool.query(
-    `SELECT count(*)::int AS n FROM users WHERE badge_id IS NOT NULL`,
+    `SELECT count(*)::int AS n FROM users WHERE badge_id IS NOT NULL AND anonymized_at IS NULL`,
   );
   const occ = await occupancyEstimate();
   const meals = await scannableActivities("meal");

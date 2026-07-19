@@ -179,4 +179,66 @@ describe("pre-event stats (H27)", () => {
     });
     expect(res.statusCode).toBe(403);
   });
+
+  it("excludes anonymized applicants from every count (H54)", async () => {
+    const a = await getApp();
+    const statsUser = await createUserWithCapabilities([CAPABILITIES.LOGISTICS_STATS]);
+    const admin = await createUserWithCapabilities(["*"]);
+    const appId = await createApplication({ capacity: 10 });
+    const nutFree = await createFoodIntolerance("nut-free", statsUser);
+
+    const kept = await createUser({ emailVerified: true });
+    await pool.query(`UPDATE users SET food_intolerances = $2, shirt_size = 'L' WHERE id = $1`, [
+      kept,
+      [nutFree],
+    ]);
+    await createResponse(kept, appId, { status: "confirmed" });
+    await pool.query(
+      `UPDATE application_responses SET confirmed_at = now() WHERE user_id = $1 AND application_id = $2`,
+      [kept, appId],
+    );
+
+    const anonymized = await createUser({ emailVerified: true });
+    await pool.query(`UPDATE users SET food_intolerances = $2, shirt_size = 'M' WHERE id = $1`, [
+      anonymized,
+      [nutFree],
+    ]);
+    await createResponse(anonymized, appId, { status: "confirmed" });
+    await pool.query(
+      `UPDATE application_responses SET confirmed_at = now() WHERE user_id = $1 AND application_id = $2`,
+      [anonymized, appId],
+    );
+
+    const anon = await a.inject({
+      method: "POST",
+      url: `/api/users/${anonymized}/anonymize`,
+      headers: asUser(admin),
+    });
+    expect(anon.statusCode).toBe(200);
+
+    const res = await a.inject({
+      method: "GET",
+      url: `/api/applications/${appId}/stats`,
+      headers: asUser(statsUser),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+
+    expect(body.counts_by_status.confirmed).toBe(1);
+    expect(body.funnel.confirmed).toBe(1);
+
+    const shirtMap = Object.fromEntries(
+      body.shirt_sizes_confirmed.map((r: { value: string; n: number }) => [r.value, r.n]),
+    );
+    expect(shirtMap.L).toBe(1);
+    expect(shirtMap.M).toBeUndefined();
+
+    const intoleranceMap = Object.fromEntries(
+      body.food_intolerances_confirmed.map((r: { intolerance_id: number; n: number }) => [
+        r.intolerance_id,
+        r.n,
+      ]),
+    );
+    expect(intoleranceMap[nutFree]).toBe(1);
+  });
 });

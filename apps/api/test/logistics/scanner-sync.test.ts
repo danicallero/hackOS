@@ -103,6 +103,28 @@ describe("H22-H26 native scanner snapshot", () => {
     });
   });
 
+  it("excludes anonymized profiles from the snapshot (H54)", async () => {
+    const userId = await createUser({ name: "Ada" });
+    await assignBadge(userId, "BADGE-ANON");
+
+    const admin = await createUserWithCapabilities(["*"]);
+    const anon = await app.inject({
+      method: "POST",
+      url: `/api/users/${userId}/anonymize`,
+      headers: asUser(admin),
+    });
+    expect(anon.statusCode).toBe(200);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/scanner/snapshot",
+      headers: asUser(scanner),
+    });
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.people.some((p: { userId: number }) => p.userId === userId)).toBe(false);
+  });
+
   it("requires a scanner or logistics capability", async () => {
     const participant = await createUser();
     const response = await app.inject({
