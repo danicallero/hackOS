@@ -13,6 +13,8 @@ import {
   useColorScheme,
   View,
 } from "react-native";
+import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
+import Animated, { type SharedValue, useAnimatedStyle } from "react-native-reanimated";
 import { ActionButton, EmptyState, Section, Separator } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SegmentedControl } from "@/components/segmented-control";
@@ -303,6 +305,48 @@ function MessagesView() {
   );
 }
 
+/**
+ * The action panel revealed by swiping a notification left, matching the OS
+ * notification center's swipe-to-clear gesture: swiping only reveals the
+ * button, and the notification is discarded on the deliberate follow-up tap
+ * — never by the swipe distance alone, so a stray swipe can't delete data.
+ */
+function DeleteRevealAction({
+  progress,
+  onDelete,
+}: {
+  progress: SharedValue<number>;
+  onDelete: () => void;
+}) {
+  const { t } = useLocale();
+  const style = useAnimatedStyle(() => ({ opacity: progress.value }));
+  return (
+    <Animated.View style={[{ justifyContent: "center", marginLeft: 8 }, style]}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t("notificationsDelete")}
+        onPress={onDelete}
+        style={({ pressed }) => ({
+          alignItems: "center",
+          backgroundColor: colors.destructive,
+          borderCurve: "continuous",
+          flexDirection: "row",
+          gap: 6,
+          height: "100%",
+          justifyContent: "center",
+          opacity: pressed ? 0.75 : 1,
+          paddingHorizontal: 18,
+        })}
+      >
+        <SymbolView name="trash.fill" tintColor="white" size={16} accessible={false} />
+        <Text style={{ color: "white", fontSize: 14, fontWeight: "700" }}>
+          {t("notificationsDelete")}
+        </Text>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
 function NotificationRow({
   item,
   expanded,
@@ -318,14 +362,19 @@ function NotificationRow({
   deleting: boolean;
   onDelete: () => void;
 }) {
-  const { t } = useLocale();
   const subject = payloadField(item.payload, "subject") ?? item.category;
   const body = payloadField(item.payload, "body");
   const details = payloadDetails(item.payload);
   const unread = !item.read_at;
 
   return (
-    <View>
+    <Swipeable
+      enabled={!deleting}
+      renderRightActions={(progress) => (
+        <DeleteRevealAction progress={progress} onDelete={onDelete} />
+      )}
+      rightThreshold={40}
+    >
       <Pressable
         accessibilityRole="button"
         accessibilityState={{ expanded }}
@@ -414,19 +463,7 @@ function NotificationRow({
           />
         </View>
       </Pressable>
-      {expanded ? (
-        <>
-          <Separator inset={50} />
-          <ActionButton
-            label={t("notificationsDelete")}
-            icon="trash"
-            destructive
-            busy={deleting}
-            onPress={onDelete}
-          />
-        </>
-      ) : null}
-    </View>
+    </Swipeable>
   );
 }
 
