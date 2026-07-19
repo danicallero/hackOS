@@ -198,6 +198,12 @@ Forms:
   offline) and sticky actions.
 - Put a live preview beside configuration whenever the user is shaping a
   visible artifact (Wallet pass, TV mode, application form).
+- An optional date/time whose absence has behavioral meaning ("opens
+  immediately", "never closes", "no end date") gets an explicit checkbox
+  (`DateTimeInput`'s `nullOption`) that states the meaning in its label —
+  never a hint telling the user to "leave it blank" or "clear it" to get that
+  behavior. The input keeps a min-width floor so the native date/time text
+  never clips inside a narrow grid or flex slot.
 
 Loading / empty / error:
 

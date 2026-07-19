@@ -21,10 +21,10 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { type Column, DataTable } from "@/components/common/data-table";
+import { DateTimeInput } from "@/components/common/datetime-input";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
-import { ScheduledDateTimeField } from "@/components/common/scheduled-datetime-field";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
@@ -557,28 +557,27 @@ function ScheduleFormModal({
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label={t("colStarts")}>
-            <ScheduledDateTimeField
+            <DateTimeInput
               value={values.startsAt}
               onChange={(startsAt) => setValues((v) => ({ ...v, startsAt }))}
-              addLabel={t("addStartTime")}
             />
           </Field>
           <Field label={t("endsLabel")}>
-            <ScheduledDateTimeField
+            <DateTimeInput
               value={values.endsAt}
               onChange={(endsAt) => setValues((v) => ({ ...v, endsAt }))}
-              addLabel={t("addEndTime")}
             />
           </Field>
         </div>
         <Field label={t("publishAtLabel")}>
-          <ScheduledDateTimeField
+          <DateTimeInput
             value={values.publishAt ?? ""}
             onChange={(publishAt) => setValues((v) => ({ ...v, publishAt: publishAt || null }))}
-            emptyLabel={t("immediate")}
-            addLabel={t("schedulePublication")}
-            description={t("publishDestinationsHint", { timezone: getTimeZoneLabel() })}
+            nullOption={{ label: t("immediate") }}
           />
+          <p className="text-muted-foreground text-sm text-pretty">
+            {t("publishDestinationsHint", { timezone: getTimeZoneLabel() })}
+          </p>
         </Field>
         <Field label={t("locationLabel")}>
           <Input

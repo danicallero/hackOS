@@ -23,8 +23,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { DateTimeInput } from "@/components/common/datetime-input";
 import { EmptyState } from "@/components/common/empty-state";
-import { ScheduledDateTimeField } from "@/components/common/scheduled-datetime-field";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { SponsorLogo } from "@/components/common/sponsor-logo";
@@ -792,13 +792,12 @@ function EditCard({
                   <FormItem>
                     <FormLabel>{t("revealFromLabel")}</FormLabel>
                     <FormControl>
-                      <ScheduledDateTimeField
+                      <DateTimeInput
                         value={field.value}
                         onChange={(value) =>
                           form.setValue("availableFrom", value, { shouldDirty: true })
                         }
-                        addLabel={t("addRevealTimeField")}
-                        inputLabel={t("revealDateTime")}
+                        nullOption={{ label: t("immediate") }}
                       />
                     </FormControl>
                     <FormMessage />
