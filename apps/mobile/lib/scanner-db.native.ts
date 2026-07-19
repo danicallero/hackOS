@@ -58,7 +58,8 @@ async function db(): Promise<SQLite.SQLiteDatabase> {
           attempts INTEGER NOT NULL DEFAULT 0,
           last_error TEXT,
           created_at TEXT NOT NULL,
-          acknowledged_at TEXT
+          acknowledged_at TEXT,
+          clock_corrected INTEGER NOT NULL DEFAULT 0
         );
         CREATE INDEX IF NOT EXISTS pending_scans_status ON pending_scans(status, created_at);
         CREATE TABLE IF NOT EXISTS scanner_metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -87,6 +88,15 @@ async function db(): Promise<SQLite.SQLiteDatabase> {
       );
       if (!activityColumns.has("starts_at"))
         await opened.execAsync("ALTER TABLE scanner_activities ADD COLUMN starts_at TEXT");
+      const pendingScanColumns = new Set(
+        (await opened.getAllAsync<{ name: string }>("PRAGMA table_info(pending_scans)")).map(
+          (column) => column.name,
+        ),
+      );
+      if (!pendingScanColumns.has("clock_corrected"))
+        await opened.execAsync(
+          "ALTER TABLE pending_scans ADD COLUMN clock_corrected INTEGER NOT NULL DEFAULT 0",
+        );
       // Devices that synced before entitlements were removed still have the
       // old NOT NULL "entitled" column — drop it so inserts without that
       // value keep working.
@@ -391,6 +401,7 @@ export async function pendingScans(onlyPending = false): Promise<PendingScan[]> 
     last_error: string | null;
     created_at: string;
     acknowledged_at: string | null;
+    clock_corrected: number;
   }>(`SELECT * FROM pending_scans ${where} ORDER BY created_at ASC`);
   return rows.map((row) => ({
     id: row.id,
@@ -401,6 +412,7 @@ export async function pendingScans(onlyPending = false): Promise<PendingScan[]> 
     lastError: row.last_error,
     createdAt: row.created_at,
     acknowledgedAt: row.acknowledged_at,
+    clockCorrected: row.clock_corrected === 1,
   }));
 }
 
@@ -448,10 +460,34 @@ export async function noteRetryableError(id: string, message: string): Promise<v
   await (await db()).runAsync(`UPDATE pending_scans SET last_error = ? WHERE id = ?`, message, id);
 }
 
+/**
+ * Applies a device-clock-skew correction to a scan's stored payload (only
+ * ever done once per scan, see scanner-sync.ts) rather than discarding the
+ * originally logged time — the correction shifts it by the measured skew
+ * instead of replacing it with "now".
+ */
+export async function correctScanTimestamp(id: string, payload: ScanPayload): Promise<void> {
+  await (await db()).runAsync(
+    `UPDATE pending_scans SET payload_json = ?, clock_corrected = 1, last_error = NULL WHERE id = ?`,
+    JSON.stringify(payload),
+    id,
+  );
+}
+
 export async function retryFailedScans(): Promise<void> {
   await (await db()).runAsync(
     `UPDATE pending_scans SET status = 'pending', last_error = NULL WHERE status = 'failed'`,
   );
+}
+
+/**
+ * Discards a scan the operator has decided to give up on (e.g. after logging
+ * it manually in the web admin panel instead). Only ever invoked by an
+ * explicit operator action — never called automatically, since a queued
+ * scan is the only record of that transaction until it's acknowledged.
+ */
+export async function deleteScan(id: string): Promise<void> {
+  await (await db()).runAsync(`DELETE FROM pending_scans WHERE id = ?`, id);
 }
 
 export async function getScannerMeta(): Promise<{ lastSync: string | null; pending: number }> {

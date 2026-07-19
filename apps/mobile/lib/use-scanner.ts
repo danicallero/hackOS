@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { AppState } from "react-native";
-import { getScannerMeta, pendingScans, retryFailedScans } from "./scanner-db";
+import { getClockSkewMs } from "./api";
+import { deleteScan, getScannerMeta, pendingScans, retryFailedScans } from "./scanner-db";
 import { synchronizeScanner } from "./scanner-sync";
 import type { PendingScan } from "./scanner-types";
 
@@ -9,6 +10,7 @@ export function useScannerSync() {
   const [lastSync, setLastSync] = useState<string | null>(null);
   const [queue, setQueue] = useState<PendingScan[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [clockSkewMs, setClockSkewMs] = useState<number | null>(null);
 
   const refreshLocal = useCallback(async () => {
     const [meta, scans] = await Promise.all([getScannerMeta(), pendingScans()]);
@@ -25,6 +27,7 @@ export function useScannerSync() {
       setError(cause instanceof Error ? cause.message : "Sync failed");
     } finally {
       await refreshLocal();
+      setClockSkewMs(getClockSkewMs());
       setSyncing(false);
     }
   }, [refreshLocal]);
@@ -33,6 +36,21 @@ export function useScannerSync() {
     await retryFailedScans();
     await sync();
   }, [sync]);
+
+  /**
+   * Manual, one-at-a-time discard for a scan the operator has given up
+   * retrying (typically after logging it by hand in the web admin panel).
+   * Never invoked automatically — there is no attempt-count threshold that
+   * deletes a scan on its own, since a queued scan is the only record of
+   * that transaction until it's acknowledged by the server.
+   */
+  const discardScan = useCallback(
+    async (id: string) => {
+      await deleteScan(id);
+      await refreshLocal();
+    },
+    [refreshLocal],
+  );
 
   useEffect(() => {
     void refreshLocal().then(sync);
@@ -46,5 +64,15 @@ export function useScannerSync() {
     };
   }, [refreshLocal, sync]);
 
-  return { syncing, lastSync, queue, error, sync, retryFailed, refreshLocal };
+  return {
+    syncing,
+    lastSync,
+    queue,
+    error,
+    clockSkewMs,
+    sync,
+    retryFailed,
+    discardScan,
+    refreshLocal,
+  };
 }

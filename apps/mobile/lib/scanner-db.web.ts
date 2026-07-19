@@ -93,6 +93,7 @@ export async function enqueueLocalScan(payload: ScanPayload): Promise<string> {
     lastError: null,
     createdAt: new Date().toISOString(),
     acknowledgedAt: null,
+    clockCorrected: false,
   });
   return id;
 }
@@ -125,10 +126,20 @@ export async function noteRetryableError(id: string, message: string): Promise<v
   scans = scans.map((scan) => (scan.id === id ? { ...scan, lastError: message } : scan));
 }
 
+export async function correctScanTimestamp(id: string, payload: ScanPayload): Promise<void> {
+  scans = scans.map((scan) =>
+    scan.id === id ? { ...scan, payload, clockCorrected: true, lastError: null } : scan,
+  );
+}
+
 export async function retryFailedScans(): Promise<void> {
   scans = scans.map((scan) =>
     scan.status === "failed" ? { ...scan, status: "pending", lastError: null } : scan,
   );
+}
+
+export async function deleteScan(id: string): Promise<void> {
+  scans = scans.filter((scan) => scan.id !== id);
 }
 
 export async function getScannerMeta(): Promise<{ lastSync: string | null; pending: number }> {

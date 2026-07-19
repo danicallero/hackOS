@@ -75,6 +75,8 @@ export function GeneralScannerScreen() {
           syncing={sync.syncing}
           onSync={() => void sync.sync()}
           onRetry={() => void sync.retryFailed()}
+          onDelete={(id) => void sync.discardScan(id)}
+          clockSkewMs={sync.clockSkewMs}
         />
       </View>
       {error ? (

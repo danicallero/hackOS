@@ -229,6 +229,8 @@ export function ActivityScannerScreen() {
           syncing={syncState.syncing}
           onSync={() => void syncState.sync()}
           onRetry={() => void syncState.retryFailed()}
+          onDelete={(id) => void syncState.discardScan(id)}
+          clockSkewMs={syncState.clockSkewMs}
         />
       </View>
       {error ? (
