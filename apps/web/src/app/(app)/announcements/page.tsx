@@ -21,10 +21,10 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ContextualError } from "@/components/common/contextual-error";
 import { type Column, DataTable } from "@/components/common/data-table";
+import { DateTimeInput } from "@/components/common/datetime-input";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
-import { ScheduledDateTimeField } from "@/components/common/scheduled-datetime-field";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
@@ -462,20 +462,20 @@ function AnnouncementFormModal({
         </Field>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label={t("visibleFrom")}>
-            <ScheduledDateTimeField
+            <DateTimeInput
               value={values.publishAt ?? ""}
               onChange={(publishAt) => setValues((v) => ({ ...v, publishAt: publishAt || null }))}
-              emptyLabel={t("immediatelyLabel")}
-              addLabel={t("scheduleStart")}
-              description={t("publishDestinationsHint", { timezone: getTimeZoneLabel() })}
+              nullOption={{ label: t("immediatelyLabel") }}
             />
+            <p className="text-muted-foreground text-sm text-pretty">
+              {t("publishDestinationsHint", { timezone: getTimeZoneLabel() })}
+            </p>
           </Field>
           <Field label={t("visibleUntil")}>
-            <ScheduledDateTimeField
+            <DateTimeInput
               value={values.expiresAt ?? ""}
               onChange={(expiresAt) => setValues((v) => ({ ...v, expiresAt: expiresAt || null }))}
-              emptyLabel={t("noEndDate")}
-              addLabel={t("scheduleEnd")}
+              nullOption={{ label: t("noEndDate") }}
             />
           </Field>
         </div>

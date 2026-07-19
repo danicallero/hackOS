@@ -128,7 +128,7 @@ running app for a live gallery of every one with variations.
 | `AlertModal` | Confirm/destructive-action dialog (the "are you sure" pattern). |
 | `ContextualError` | Inline error block for failed loads/submits — not a toast. |
 | `SaveStatus` | Saving/saved/error indicator next to autosaving forms (`lib/save-state.ts`). |
-| `DatetimeInput` / `DurationInput` / `ScheduledDatetimeField` | Date/time entry, durations, and "publish at" scheduling fields. |
+| `DatetimeInput` / `DurationInput` | Date/time entry (with an explicit "leave blank" checkbox via `nullOption`, never an implicit clear-to-mean-X), and duration fields. |
 | `MultiSelect` / `LanguageSelect` / `UniversityPicker` | Multi-value combobox and the two domain pickers built on it. |
 | `TemplateFieldControl` | Renders one application-template field (any kind) — the single renderer both the applicant form and staff review use. |
 | `FileUploadField` / `FileLink` | Upload control + presigned-download link for stored files. |

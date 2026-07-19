@@ -17,10 +17,10 @@ import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { DateTimeInput } from "@/components/common/datetime-input";
 import { DevpostTagsField } from "@/components/common/devpost-tags-field";
 import { DurationInput } from "@/components/common/duration-input";
 import { EmptyState } from "@/components/common/empty-state";
-import { ScheduledDateTimeField } from "@/components/common/scheduled-datetime-field";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -503,14 +503,13 @@ function EditCard({
                     <FormItem>
                       <FormLabel>{t("publishDate")}</FormLabel>
                       <FormControl>
-                        <ScheduledDateTimeField
+                        <DateTimeInput
                           value={field.value}
                           disabled={!canAdmin}
                           onChange={(value) =>
                             form.setValue("availableFrom", value, { shouldDirty: true })
                           }
-                          addLabel={t("addPublishDate")}
-                          inputLabel={t("publishDateTime")}
+                          nullOption={{ label: t("immediate") }}
                         />
                       </FormControl>
                       <FormMessage />
