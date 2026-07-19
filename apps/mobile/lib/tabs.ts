@@ -7,7 +7,8 @@ export type TabKey =
   | "notifications"
   | "account"
   | "scan"
-  | "activities";
+  | "activities"
+  | "operations";
 
 const PARTICIPANT_PRIMARY_TAB_KEYS = ["schedule", "queue", "wallet", "notifications"] as const;
 
@@ -29,6 +30,18 @@ export function canScanActivities(capabilities: string[]): boolean {
   return has(capabilities, CAPABILITIES.ACTIVITY_SCAN);
 }
 
+/** Queue controls are a separate work surface from the offline scanners. */
+export function canOperateQueues(capabilities: string[]): boolean {
+  return (
+    has(capabilities, CAPABILITIES.QUEUE_OPERATE) || has(capabilities, CAPABILITIES.QUEUE_ADMIN)
+  );
+}
+
+/** Queue-only operators get Q Operations in the bar; scanner operators use Others. */
+export function queueOperationsInPrimaryBar(capabilities: string[]): boolean {
+  return canOperateQueues(capabilities) && !isOperator(capabilities);
+}
+
 /**
  * H55: which tabs a signed-in user sees, driven entirely by their effective
  * capabilities (never by `role`) — mirrors the server-side `hasCapability`
@@ -48,6 +61,9 @@ export function visibleTabs(capabilities: string[]): TabKey[] {
  * frequently used personal destinations in the overflow selector.
  */
 export function primaryTabs(capabilities: string[]): TabKey[] {
+  if (queueOperationsInPrimaryBar(capabilities)) {
+    return ["schedule", "operations", "notifications"];
+  }
   if (!isOperator(capabilities)) return [...PARTICIPANT_PRIMARY_TAB_KEYS, "account"];
 
   return [
@@ -60,7 +76,15 @@ export function primaryTabs(capabilities: string[]): TabKey[] {
 
 /** Tabs represented inside the native Others selector rather than the main bar. */
 export function overflowTabs(capabilities: string[]): TabKey[] {
-  return isOperator(capabilities) ? ["queue", "wallet", "account"] : [];
+  if (!isOperator(capabilities) && !canOperateQueues(capabilities)) return [];
+  return [
+    "queue",
+    "wallet",
+    "account",
+    ...(isOperator(capabilities) && canOperateQueues(capabilities)
+      ? (["operations"] as const)
+      : []),
+  ];
 }
 
 /** True whenever any tab lives outside the primary bar and needs the overflow selector. */
