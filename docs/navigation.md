@@ -88,13 +88,19 @@ toggled per experience with `hidden` (hidden screens stay routable):
   ellipsis. The fifth slot becomes the **"Others" overflow selector**, and
   the less-frequent personal destinations (Queue, Wallet, Account) move
   behind it as pseudo-tabs.
+- **Queue-only operator** (`queue:operate`, `queue:admin`, or `*`, without a
+  scanner capability): Q Operations is a direct tab alongside Schedule and
+  Alerts; Queue, Wallet, and Account move to Others. If the person also has a
+  scanner capability, Q Operations joins Others so Scanner stays directly
+  reachable.
 
 The "Others" slot is a tab trigger that opens a **native dropdown selector**,
 not a screen. It's declared with `role="search"`, which on iOS 18+ renders it
 as the separated (Liquid Glass) capsule visually split from the tab group,
 with an ellipsis icon and hidden label. The trigger itself never navigates:
 an invisible native `MenuView` (`@expo/ui/community/menu`) is positioned over
-the capsule and pops the dropdown listing Queue, Wallet, and Account with
+the capsule and pops the dropdown listing Queue, Wallet, Account, and (for a
+scanner operator with queue access) Q Operations with
 icons and localized labels. On Android, a plain `Pressable` overlay opens the
 same menu via its imperative `show()`, because the Compose interop tree
 intermittently drops the very first touch.

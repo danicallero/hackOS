@@ -22,7 +22,13 @@ import {
   resolveOperationsNavigationAction,
 } from "@/lib/operations-navigation";
 import { subscribeToServerEvent } from "@/lib/server-events";
-import { canScanActivities, shouldUseOverflowMenu } from "@/lib/tabs";
+import {
+  canOperateQueues,
+  canScanActivities,
+  isOperator,
+  queueOperationsInPrimaryBar,
+  shouldUseOverflowMenu,
+} from "@/lib/tabs";
 import { colors } from "@/theme/colors";
 
 interface UnreadInboxResponse {
@@ -30,9 +36,13 @@ interface UnreadInboxResponse {
 }
 
 interface OperationsMenuItem extends MenuAction {
-  id: "account" | "queue" | "wallet";
+  id: "account" | "queue" | "wallet" | "operations";
   label: string;
-  route: "/(tabs)/others/account" | "/(tabs)/others/queue" | "/(tabs)/others/wallet";
+  route:
+    | "/(tabs)/others/account"
+    | "/(tabs)/others/queue"
+    | "/(tabs)/others/wallet"
+    | "/(tabs)/others/operations";
 }
 
 /**
@@ -62,7 +72,10 @@ export default function TabLayout() {
   const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
   const capabilities = me?.capabilities ?? [];
   const operatorExperience = shouldUseOverflowMenu(capabilities);
+  const scannerExperience = isOperator(capabilities);
   const activitiesVisible = canScanActivities(capabilities);
+  const queueOperationsVisible = canOperateQueues(capabilities);
+  const queueOperationsPrimary = queueOperationsInPrimaryBar(capabilities);
 
   const refreshUnreadNotifications = useCallback(async () => {
     if (!me) return;
@@ -129,7 +142,14 @@ export default function TabLayout() {
           />
           <NativeTabs.Trigger.Label>{t("tabWallet")}</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
-        <NativeTabs.Trigger name="scan" hidden={!operatorExperience}>
+        <NativeTabs.Trigger name="operations" hidden={!queueOperationsPrimary}>
+          <NativeTabs.Trigger.Icon
+            sf={{ default: "rectangle.3.group", selected: "rectangle.3.group.fill" }}
+            md="dashboard"
+          />
+          <NativeTabs.Trigger.Label>{t("tabQueueOperations")}</NativeTabs.Trigger.Label>
+        </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="scan" hidden={!scannerExperience}>
           <NativeTabs.Trigger.Icon sf="qrcode.viewfinder" md="qr_code_scanner" />
           <NativeTabs.Trigger.Label>{t("tabScan")}</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
@@ -170,12 +190,23 @@ export default function TabLayout() {
           </NativeTabs.Trigger>
         )}
       </NativeTabs>
-      {operatorExperience ? <NativeOperationsMenu tabCount={activitiesVisible ? 5 : 4} /> : null}
+      {operatorExperience ? (
+        <NativeOperationsMenu
+          tabCount={activitiesVisible ? 5 : 4}
+          showQueueOperations={queueOperationsVisible && !queueOperationsPrimary}
+        />
+      ) : null}
     </View>
   );
 }
 
-function NativeOperationsMenu({ tabCount }: { tabCount: number }) {
+function NativeOperationsMenu({
+  tabCount,
+  showQueueOperations,
+}: {
+  tabCount: number;
+  showQueueOperations: boolean;
+}) {
   const { bottom } = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { t } = useLocale();
@@ -206,6 +237,17 @@ function NativeOperationsMenu({ tabCount }: { tabCount: number }) {
       route: "/(tabs)/others/account",
       title: t("tabAccount"),
     },
+    ...(showQueueOperations
+      ? [
+          {
+            id: "operations" as const,
+            image: "rectangle.3.group" as const,
+            label: t("tabQueueOperations"),
+            route: "/(tabs)/others/operations" as const,
+            title: t("tabQueueOperations"),
+          },
+        ]
+      : []),
   ];
 
   return (
