@@ -48,6 +48,11 @@ export const repoChallengeParamsSchema = z.object({
   challengeId: z.coerce.number().int().positive(),
 });
 
+/** POST /api/challenges/:challengeId/repos:bulk-add|bulk-remove (H21 bulk enrollment). */
+export const challengeIdOnlyParamsSchema = z.object({
+  challengeId: z.coerce.number().int().positive(),
+});
+
 export const repoPrizeParamsSchema = z.object({
   repoId: z.coerce.number().int().positive(),
   prizeName: z.string().min(1),

@@ -39,6 +39,12 @@ export interface RepoChallenge {
   assignedRoomName: string | null;
   mappedPrizes: string[];
   source: "queue" | "prize" | "queue_and_prize";
+  /** H36 evaluation status for this challenge — null when the viewer has no
+   * visibility into it (e.g. a sponsor viewing a challenge they don't own). */
+  reviewStatus: "draft" | "submitted" | null;
+  /** Derived headline score (first numeric judging-panel question), same
+   * visibility rule as reviewStatus. */
+  nota: number | null;
 }
 
 export interface ProjectRepo {
@@ -56,6 +62,26 @@ export interface ProjectRepo {
 
 export function toProjectRepo(repo: RepoWithExtras): ProjectRepo {
   return repo as unknown as ProjectRepo;
+}
+
+/**
+ * Unified project↔challenge/prize row (H16, H21). Prizes/challenges used to be
+ * two separate lists on the project page, which duplicated any prize already
+ * mapped to a challenge (it showed once as a challenge row and again as a
+ * prize row). A mapped prize always ends up inside `repo.challenges` (source
+ * "prize"/"queue_and_prize"), so the only prizes needing their own row are the
+ * ones in `repo.unmappedPrizes` — this merges both into one ordered list with
+ * no duplicates.
+ */
+export type UnifiedProjectEntry =
+  | { kind: "challenge"; challenge: RepoChallenge }
+  | { kind: "unmapped_prize"; prize: string };
+
+export function toUnifiedEntries(repo: ProjectRepo): UnifiedProjectEntry[] {
+  return [
+    ...repo.challenges.map((challenge): UnifiedProjectEntry => ({ kind: "challenge", challenge })),
+    ...repo.unmappedPrizes.map((prize): UnifiedProjectEntry => ({ kind: "unmapped_prize", prize })),
+  ];
 }
 
 // ── unmatched (GET /api/devpost/imports/unmatched) — service.ts UnmatchedParticipant ──

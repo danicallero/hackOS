@@ -13,6 +13,7 @@ import { ForbiddenError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { listDevpostPrizes } from "../challenges/service.js";
 import {
+  challengeIdOnlyParamsSchema,
   claimEmailBodySchema,
   createMyProjectBodySchema,
   createRepoBodySchema,
@@ -32,6 +33,8 @@ import {
 import {
   addRepoChallenge,
   addRepoMember,
+  bulkAddRepoChallenge,
+  bulkRemoveRepoChallenge,
   confirmImport,
   createMyProject,
   createRepoNative,
@@ -309,6 +312,26 @@ export function registerProjectRoutes(app: FastifyInstance): void {
     },
     async (req) =>
       removeRepoChallenge(req.userId as number, req.params.repoId, req.params.challengeId),
+  );
+
+  // H21 "apuntar/dar de baja TODOS los proyectos": bulk enrollment, admin-only
+  // (an operational tool, distinct from a sponsor's per-challenge content edit).
+  r.post(
+    "/api/challenges/:challengeId/repos/bulk-add",
+    {
+      preHandler: [requireCapability(CAPABILITIES.PROJECTS_EDIT), idempotencyGuard],
+      schema: { params: challengeIdOnlyParamsSchema },
+    },
+    async (req) => bulkAddRepoChallenge(req.userId as number, req.params.challengeId),
+  );
+
+  r.post(
+    "/api/challenges/:challengeId/repos/bulk-remove",
+    {
+      preHandler: requireCapability(CAPABILITIES.PROJECTS_EDIT),
+      schema: { params: challengeIdOnlyParamsSchema },
+    },
+    async (req) => bulkRemoveRepoChallenge(req.userId as number, req.params.challengeId),
   );
 
   r.delete(

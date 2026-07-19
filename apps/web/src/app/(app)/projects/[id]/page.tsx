@@ -61,6 +61,7 @@ import {
   mergeStatusTone,
   type ProjectRepo,
   toProjectRepo,
+  toUnifiedEntries,
 } from "../shared";
 
 type ChallengeOption = {
@@ -154,17 +155,7 @@ export default function ProjectDetailPage() {
       ),
     [repo],
   );
-  const prizeChallengeTitles = useMemo(() => {
-    const titles = new Map<string, string[]>();
-    for (const challenge of repo?.challenges ?? []) {
-      for (const prize of challenge.mappedPrizes ?? []) {
-        const arr = titles.get(prize) ?? [];
-        arr.push(challengeTitleText(challenge.title));
-        titles.set(prize, arr);
-      }
-    }
-    return titles;
-  }, [repo]);
+  const unifiedEntries = useMemo(() => (repo ? toUnifiedEntries(repo) : []), [repo]);
   const availableChallenges = useMemo(
     () => challenges.filter((challenge) => !queueChallengeIds.has(challenge.id)),
     [challenges, queueChallengeIds],
@@ -244,7 +235,7 @@ export default function ProjectDetailPage() {
         <StatCard label={t("teamMembers")} value={repo.members.length} />
         <StatCard label={t("manualAdds")} value={manualMemberCount(repo)} />
         <StatCard label={t("challenges")} value={challengeCount} />
-        <StatCard label={t("colPrizes")} value={repo.prizes.length} />
+        <StatCard label={t("unmappedPrizesLabel")} value={repo.unmappedPrizes.length} />
       </div>
 
       <SectionCard title={t("linksTitle")} icon={ExternalLinkIcon}>
@@ -352,7 +343,7 @@ export default function ProjectDetailPage() {
         </SectionCard>
 
         <SectionCard title={t("challenges")} icon={TrophyIcon} bodyClassName="space-y-4">
-          {repo.challenges.length === 0 ? (
+          {unifiedEntries.length === 0 ? (
             <EmptyState
               icon={TrophyIcon}
               title={t("noChallengesAssignedTitle")}
@@ -360,100 +351,75 @@ export default function ProjectDetailPage() {
             />
           ) : (
             <ul className="space-y-3">
-              {repo.challenges.map((challenge) => (
-                <li key={challenge.id} className="rounded-md border p-3">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">{challengeTitleText(challenge.title)}</p>
-                      <p className="text-muted-foreground text-xs">
-                        {challenge.status
-                          ? challenge.assignedRoomName
-                            ? t("roomColon", { room: challenge.assignedRoomName })
-                            : t("noRoomAssigned")
-                          : challenge.mappedPrizes.length === 1
-                            ? t("linkedByPrizeOne", { count: challenge.mappedPrizes.length })
-                            : t("linkedByPrizeOther", { count: challenge.mappedPrizes.length })}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {challenge.status ? (
-                        <QueueStatusBadge status={challenge.status} />
-                      ) : (
-                        <StatusBadge tone="info">{t("prizeBadge")}</StatusBadge>
-                      )}
-                      {canEdit && challenge.status && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={async () => {
-                            try {
-                              await removeRepoChallenge(repo.id, challenge.id);
-                              toast.success(t("challengeRemoved"));
-                              await load();
-                            } catch (err) {
-                              toast.error(
-                                err instanceof ApiError
-                                  ? err.message
-                                  : t("couldNotRemoveChallenge"),
-                              );
-                            }
-                          }}
-                        >
-                          {t("remove")}
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {canEdit && (
-            <ProjectChallengeAdder
-              repoId={repo.id}
-              challenges={availableChallenges}
-              onAdd={async (challengeId) => {
-                await addRepoChallenge(repo.id, challengeId, crypto.randomUUID());
-                await load();
-              }}
-            />
-          )}
-        </SectionCard>
-
-        <SectionCard title={t("colPrizes")} icon={TrophyIcon} bodyClassName="space-y-4">
-          {repo.prizes.length === 0 ? (
-            <EmptyState
-              icon={TrophyIcon}
-              title={t("noPrizesImportedTitle")}
-              description={t("prizesAppearAfterImport")}
-            />
-          ) : (
-            <ul className="space-y-3">
-              {repo.prizes.map((prize) => {
-                const linkedChallenges = prizeChallengeTitles.get(prize) ?? [];
-                return (
-                  <li key={prize} className="rounded-md border p-3">
+              {unifiedEntries.map((entry) =>
+                entry.kind === "challenge" ? (
+                  <li key={`challenge-${entry.challenge.id}`} className="rounded-md border p-3">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="truncate font-medium">{prize}</p>
+                        <p className="truncate font-medium">
+                          {challengeTitleText(entry.challenge.title)}
+                        </p>
                         <p className="text-muted-foreground text-xs">
-                          {linkedChallenges.length > 0
-                            ? t("linkedToChallenges", { challenges: linkedChallenges.join(", ") })
-                            : t("noLinkedChallenge")}
+                          {entry.challenge.status
+                            ? entry.challenge.assignedRoomName
+                              ? t("roomColon", { room: entry.challenge.assignedRoomName })
+                              : t("noRoomAssigned")
+                            : entry.challenge.mappedPrizes.length === 1
+                              ? t("linkedByPrizeOne", {
+                                  count: entry.challenge.mappedPrizes.length,
+                                })
+                              : t("linkedByPrizeOther", {
+                                  count: entry.challenge.mappedPrizes.length,
+                                })}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        {linkedChallenges.length === 0 && (
-                          <StatusBadge tone="warning">{t("unlinkedBadge")}</StatusBadge>
+                        {entry.challenge.status ? (
+                          <QueueStatusBadge status={entry.challenge.status} />
+                        ) : (
+                          <StatusBadge tone="info">{t("prizeBadge")}</StatusBadge>
                         )}
+                        <ReviewStatusBadge challenge={entry.challenge} />
+                        {canEdit && entry.challenge.status && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                await removeRepoChallenge(repo.id, entry.challenge.id);
+                                toast.success(t("challengeRemoved"));
+                                await load();
+                              } catch (err) {
+                                toast.error(
+                                  err instanceof ApiError
+                                    ? err.message
+                                    : t("couldNotRemoveChallenge"),
+                                );
+                              }
+                            }}
+                          >
+                            {t("remove")}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </li>
+                ) : (
+                  <li key={`prize-${entry.prize}`} className="rounded-md border p-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{entry.prize}</p>
+                        <p className="text-muted-foreground text-xs">{t("noLinkedChallenge")}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <StatusBadge tone="warning">{t("unlinkedBadge")}</StatusBadge>
                         {canEdit && (
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={async () => {
                               try {
-                                await removeRepoPrize(repo.id, prize);
+                                await removeRepoPrize(repo.id, entry.prize);
                                 toast.success(t("prizeRemoved"));
                                 await load();
                               } catch (err) {
@@ -469,14 +435,50 @@ export default function ProjectDetailPage() {
                       </div>
                     </div>
                   </li>
-                );
-              })}
+                ),
+              )}
             </ul>
+          )}
+
+          {canEdit && (
+            <ProjectChallengeAdder
+              repoId={repo.id}
+              challenges={availableChallenges}
+              onAdd={async (challengeId) => {
+                await addRepoChallenge(repo.id, challengeId, crypto.randomUUID());
+                await load();
+              }}
+            />
           )}
         </SectionCard>
       </div>
     </div>
   );
+}
+
+/**
+ * H36 evaluation status badge. Only rendered for actual queue entries (a
+ * prize-only pseudo row has no evaluation to show). `reviewStatus === null`
+ * covers both "not evaluated yet" and "you don't own this challenge" — the
+ * backend deliberately makes those indistinguishable so a sponsor can't tell
+ * whether another company's challenge has started judging.
+ */
+function ReviewStatusBadge({ challenge }: { challenge: ProjectRepo["challenges"][number] }) {
+  const { t } = useLocale();
+  if (!challenge.status) return null;
+  if (challenge.reviewStatus === "submitted") {
+    return (
+      <StatusBadge tone="success">
+        {challenge.nota !== null
+          ? t("challengeReviewSubmittedWithNota", { nota: challenge.nota })
+          : t("challengeReviewSubmitted")}
+      </StatusBadge>
+    );
+  }
+  if (challenge.reviewStatus === "draft") {
+    return <StatusBadge tone="info">{t("challengeReviewDraft")}</StatusBadge>;
+  }
+  return <StatusBadge tone="neutral">{t("challengeReviewNotStarted")}</StatusBadge>;
 }
 
 function MemberRemoveButton({

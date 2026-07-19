@@ -89,6 +89,8 @@ export interface RepoWithExtras {
     assignedRoomName: string | null;
     mappedPrizes: string[];
     source: "queue" | "prize" | "queue_and_prize";
+    reviewStatus: "draft" | "submitted" | null;
+    nota: number | null;
   }>;
   unmappedPrizes?: string[];
   [k: string]: unknown;

@@ -3,13 +3,16 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { requireAnyCapability, requireAuth, userHasCapability } from "../../lib/capabilities.js";
 import { UnauthorizedError } from "../../lib/errors.js";
+import { idempotencyGuard } from "../../lib/idempotency.js";
 import { assertCanEditChallenge, assertCanViewPanel } from "./access.js";
 import {
   bulkVisibilityBody,
   challengeIdParam,
   createChallengeBody,
   publishChallengeBody,
+  setWinnerBody,
   updateChallengeBody,
+  winnerRankParam,
 } from "./schemas.js";
 import {
   createChallenge,
@@ -24,6 +27,7 @@ import {
   unpublishChallenge,
   updateChallenge,
 } from "./service.js";
+import { getChallengeWinners, removeChallengeWinner, setChallengeWinner } from "./winners.js";
 
 function actor(userId: number | null): number {
   if (userId == null) throw new UnauthorizedError();
@@ -129,4 +133,30 @@ export function registerChallengeRoutes(app: FastifyInstance): void {
     await assertCanEditChallenge(req.userId, req.params.id);
     return { versions: await listVersions(req.params.id) };
   });
+
+  // H46: internal winner ranking — same access as editing the challenge
+  // (admin or the owning sponsor rep), never public, never other sponsors.
+  r.get("/api/challenges/:id/winners", { schema: { params: challengeIdParam } }, async (req) => {
+    await assertCanEditChallenge(req.userId, req.params.id);
+    return { winners: await getChallengeWinners(req.params.id) };
+  });
+
+  r.put(
+    "/api/challenges/:id/winners/:rank",
+    { preHandler: idempotencyGuard, schema: { params: winnerRankParam, body: setWinnerBody } },
+    async (req) => {
+      await assertCanEditChallenge(req.userId, req.params.id);
+      return setChallengeWinner(actor(req.userId), req.params.id, req.params.rank, req.body.repoId);
+    },
+  );
+
+  r.delete(
+    "/api/challenges/:id/winners/:rank",
+    { schema: { params: winnerRankParam } },
+    async (req) => {
+      await assertCanEditChallenge(req.userId, req.params.id);
+      await removeChallengeWinner(actor(req.userId), req.params.id, req.params.rank);
+      return { removed: true };
+    },
+  );
 }

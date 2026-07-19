@@ -105,3 +105,17 @@ export const bulkVisibilityBody = z
   .strict();
 
 export type BulkVisibilityBody = z.infer<typeof bulkVisibilityBody>;
+
+/** H46: internal winner ranking — open-ended rank, not a fixed top-3. */
+export const winnerRankParam = z.object({
+  id: z.coerce.number().int().positive(),
+  rank: z.coerce.number().int().min(1),
+});
+
+export const setWinnerBody = z
+  .object({
+    repoId: z.number().int().positive(),
+  })
+  .strict();
+
+export type SetWinnerBody = z.infer<typeof setWinnerBody>;

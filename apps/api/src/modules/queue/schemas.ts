@@ -82,6 +82,13 @@ export const sessionJoinBody = z.object({ roomId: z.coerce.number().int().positi
 
 export const searchQuery = z.object({ q: z.string().min(1) });
 
+/** GET /api/queue/reviews(.csv) filters — sponsor-scoping happens server-side. */
+export const reviewsQuery = z.object({
+  challengeId: z.coerce.number().int().positive().optional(),
+  roomId: z.coerce.number().int().positive().optional(),
+  status: z.enum(["draft", "submitted", "none"]).optional(),
+});
+
 export const tvModeBody = z.object({
   mode: z.enum(["rooms", "schedule", "sponsors", "announcement", "wifi", "timer"]),
   payload: z.unknown().optional(),
