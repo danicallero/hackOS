@@ -12,12 +12,12 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { ContextualError } from "@/components/common/contextual-error";
 import { type Column, DataTable } from "@/components/common/data-table";
+import { DateTimeInput } from "@/components/common/datetime-input";
 import { DevpostTagsField } from "@/components/common/devpost-tags-field";
 import { DurationInput } from "@/components/common/duration-input";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
-import { ScheduledDateTimeField } from "@/components/common/scheduled-datetime-field";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
@@ -532,13 +532,12 @@ function CreateChallengeModal({
                 <FormItem>
                   <FormLabel>{t("publishDate")}</FormLabel>
                   <FormControl>
-                    <ScheduledDateTimeField
+                    <DateTimeInput
                       value={field.value}
                       onChange={(value) =>
                         form.setValue("availableFrom", value, { shouldDirty: true })
                       }
-                      addLabel={t("addPublishDate")}
-                      inputLabel={t("publishDateTime")}
+                      nullOption={{ label: t("immediate") }}
                     />
                   </FormControl>
                   <FormMessage />

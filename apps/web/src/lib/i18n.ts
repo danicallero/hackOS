@@ -653,16 +653,8 @@ const dict: Record<string, I18nText> = {
   },
 
   // ---- Date/time picker controls ----
-  noDateTime: { es: "Sin fecha ni hora", gl: "Sen data nin hora", en: "No date/time set" },
-  addRevealTime: {
-    es: "Añadir hora de publicación",
-    gl: "Engadir hora de publicación",
-    en: "Add reveal time",
-  },
   edit: { es: "Editar", gl: "Editar", en: "Edit" },
   clear: { es: "Borrar", gl: "Borrar", en: "Clear" },
-  dateAndTime: { es: "Fecha y hora", gl: "Data e hora", en: "Date and time" },
-  confirm: { es: "Confirmar", gl: "Confirmar", en: "Confirm" },
 
   // ---- Dialog close button ----
   close: { es: "Cerrar", gl: "Pechar", en: "Close" },
@@ -2604,15 +2596,8 @@ const dict: Record<string, I18nText> = {
     en: " (meals are always registrable)",
   },
   endsLabel: { es: "Termina", gl: "Remata", en: "Ends" },
-  addStartTime: { es: "Añadir hora de inicio", gl: "Engadir hora de inicio", en: "Add start time" },
-  addEndTime: { es: "Añadir hora de fin", gl: "Engadir hora de fin", en: "Add end time" },
   publishAtLabel: { es: "Publicar el", gl: "Publicar o", en: "Publish at" },
   immediate: { es: "Inmediato", gl: "Inmediato", en: "Immediate" },
-  schedulePublication: {
-    es: "Programar publicación",
-    gl: "Programar publicación",
-    en: "Schedule publication",
-  },
   mainHallPlaceholder: { es: "Sala principal", gl: "Sala principal", en: "Main hall" },
   descriptionLabel: { es: "Descripción", gl: "Descrición", en: "Description" },
   visibleInPublicAgenda: {
@@ -2721,10 +2706,8 @@ const dict: Record<string, I18nText> = {
   },
   visibleFrom: { es: "Visible desde", gl: "Visible desde", en: "Visible from" },
   immediatelyLabel: { es: "Inmediatamente", gl: "Inmediatamente", en: "Immediately" },
-  scheduleStart: { es: "Programar inicio", gl: "Programar inicio", en: "Schedule start" },
   visibleUntil: { es: "Visible hasta", gl: "Visible ata", en: "Visible until" },
   noEndDate: { es: "Sin fecha de fin", gl: "Sen data de fin", en: "No end date" },
-  scheduleEnd: { es: "Programar fin", gl: "Programar fin", en: "Schedule end" },
   endTimeAfterStart: {
     es: "La hora de fin debe ser posterior a la de inicio.",
     gl: "A hora de fin debe ser posterior á de inicio.",
@@ -4701,16 +4684,6 @@ const dict: Record<string, I18nText> = {
     en: "Waiting room capacity",
   },
   publishDate: { es: "Fecha de publicación", gl: "Data de publicación", en: "Publish date" },
-  addPublishDate: {
-    es: "Añadir fecha de publicación",
-    gl: "Engadir data de publicación",
-    en: "Add publish date",
-  },
-  publishDateTime: {
-    es: "Fecha y hora de publicación",
-    gl: "Data e hora de publicación",
-    en: "Publish date and time",
-  },
   couldNotLoadChallenge: {
     es: "No se ha podido cargar este reto.",
     gl: "Non se puido cargar este reto.",
@@ -4865,16 +4838,6 @@ const dict: Record<string, I18nText> = {
     en: "Lower shows first in the reveal.",
   },
   revealFromLabel: { es: "Se revela desde", gl: "Revélase desde", en: "Reveal from" },
-  addRevealTimeField: {
-    es: "Añadir hora de revelación",
-    gl: "Engadir hora de revelación",
-    en: "Add reveal time",
-  },
-  revealDateTime: {
-    es: "Fecha y hora de revelación",
-    gl: "Data e hora de revelación",
-    en: "Reveal date and time",
-  },
   enterpriseNotFoundTitle: {
     es: "Empresa no encontrada",
     gl: "Empresa non atopada",

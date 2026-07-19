@@ -46,11 +46,15 @@ export function DateTimeInput({
       {nullOption && (
         <label
           htmlFor={checkboxId}
-          className="text-muted-foreground flex items-center gap-2 text-sm"
+          className={cn(
+            "text-muted-foreground flex items-center gap-2 text-sm",
+            disabled && "opacity-50",
+          )}
         >
           <Checkbox
             id={checkboxId}
             checked={isBlank}
+            disabled={disabled}
             onCheckedChange={(checked) => {
               if (checked === true) onChange("");
               else

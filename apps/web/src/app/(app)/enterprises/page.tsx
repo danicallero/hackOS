@@ -15,10 +15,10 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 import { type Column, DataTable } from "@/components/common/data-table";
+import { DateTimeInput } from "@/components/common/datetime-input";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
-import { ScheduledDateTimeField } from "@/components/common/scheduled-datetime-field";
 import { SponsorLogo } from "@/components/common/sponsor-logo";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
@@ -563,13 +563,12 @@ function CreateEnterpriseModal({
               <FormItem>
                 <FormLabel>{t("revealFromLabel")}</FormLabel>
                 <FormControl>
-                  <ScheduledDateTimeField
+                  <DateTimeInput
                     value={field.value}
                     onChange={(value) =>
                       form.setValue("availableFrom", value, { shouldDirty: true })
                     }
-                    addLabel={t("addRevealTimeField")}
-                    inputLabel={t("revealDateTime")}
+                    nullOption={{ label: t("immediate") }}
                   />
                 </FormControl>
                 <FormMessage />
