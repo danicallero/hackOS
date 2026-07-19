@@ -14,6 +14,7 @@ export default function appConfig({ config }: ConfigContext): ExpoConfig {
       bundleIdentifier: isDevelopmentBuild
         ? `${config.ios?.bundleIdentifier}.debug`
         : config.ios?.bundleIdentifier,
+      icon: isDevelopmentBuild ? "./assets/icon-ios-debug.icon" : config.ios?.icon,
       associatedDomains: [`webcredentials:${eventWebsiteHost}`],
     },
     android: {

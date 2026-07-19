@@ -461,6 +461,20 @@ APP_VARIANT=development pnpm android                   # running Android emulato
 APP_VARIANT=development pnpm exec expo run:android --device
 ```
 
+`expo run:*` only re-resolves `app.config.ts` (and therefore `APP_VARIANT`)
+when it generates the native project. If `ios/`/`android/` already exist from
+a previous run — with or without `APP_VARIANT` set — it reuses them as-is and
+the identifier/name baked into that native project wins, regardless of the
+env var on your current command. After changing `APP_VARIANT` (switching
+between a debug and a production-identifier local build), force a clean
+prebuild first:
+
+```sh
+cd apps/mobile
+APP_VARIANT=development pnpm exec expo prebuild --clean --platform ios --pnpm
+APP_VARIANT=development pnpm exec expo run:ios --device
+```
+
 ### Debug build on an emulator/simulator or device
 
 ```sh
@@ -483,6 +497,109 @@ parallel framework signing for local iOS builds. On Xcode 26, parallel
 build but installs an app containing unsigned prebuilt frameworks. Keep the
 pnpm patch until an Expo CLI update fixes the issue, then remove it only after
 a clean physical-device build and installation succeeds.
+
+### `expo start` exits silently with no error (EMFILE)
+
+Symptom: `pnpm exec expo start` (or `npx expo start`) prints the Metro banner
+and then returns straight to the shell prompt — no QR code, no dev menu, no
+visible error, even with `EXPO_DEBUG=true`. Re-running with the raw `debug`
+namespace open shows the actual cause was there all along, just past what a
+plain terminal paste usually captures:
+
+```sh
+DEBUG='Metro:*,expo:*' npx expo start
+```
+
+```
+Watchman is installed but was likely not enabled when starting Metro, try starting your project again.
+Error: EMFILE: too many open files, watch
+    at FSWatcher._handle.onchange (node:internal/fs/watchers:214:21)
+```
+
+Metro's file watcher covers every workspace root, including the monorepo's
+top-level `node_modules` (see the "Watch Folders" list Metro prints on
+startup) — that's inherent to how pnpm workspaces resolve symlinked packages,
+not something to fix by narrowing the watch set. macOS's default per-process
+file descriptor limit (256) isn't enough headroom for that many live watches,
+and once a few crashed attempts have piled up dangling watcher handles, even
+a raised limit in the *current* shell may not be enough until the accumulation
+clears.
+
+Fix:
+
+```sh
+ulimit -n 10240          # raise the fd ceiling for this shell
+echo 'ulimit -n 10240' >> ~/.zshrc   # make it permanent
+npx expo start
+```
+
+If it still exits silently right after raising the limit, the crashed
+attempts before the fix likely left descriptors open — close the terminal tab
+entirely (a fresh shell starts with a clean fd table) or just retry a couple
+of times; it clears on its own once nothing is holding stale watches.
+
+### Installing the debug build on every iOS Simulator
+
+`expo run:ios` (no `--device`) builds for the simulator, then auto-installs
+and launches on whichever simulator is currently booted:
+
+```sh
+cd apps/mobile
+APP_VARIANT=development pnpm exec expo run:ios
+```
+
+To spot-check something like the debug app icon (H55-adjacent) across every
+booted simulator instead of just one, reuse that same build with `simctl`
+rather than rebuilding per simulator. The build lands in Xcode's
+`DerivedData`, not a local `ios/build` folder — find it, then fan the install
+out:
+
+```sh
+find ~/Library/Developer/Xcode/DerivedData/hackOSDebug-*/Build/Products/Debug-iphonesimulator -maxdepth 1 -iname "*.app"
+# e.g. .../hackOSDebug-<hash>/Build/Products/Debug-iphonesimulator/hackOSDebug.app
+```
+
+```sh
+APP="$(find ~/Library/Developer/Xcode/DerivedData/hackOSDebug-*/Build/Products/Debug-iphonesimulator -maxdepth 1 -iname "*.app" | head -1)"
+BUNDLE_ID="com.hackudc.os.debug"   # APP_VARIANT=development appends .debug
+
+for udid in $(xcrun simctl list devices booted | grep -Eo '\(([A-F0-9-]{36})\)' | tr -d '()'); do
+  xcrun simctl install "$udid" "$APP"
+  xcrun simctl launch "$udid" "$BUNDLE_ID"
+done
+```
+
+Only simulators already booted are targeted here — booting every *available*
+simulator at once is heavy on RAM, so boot the specific ones you need first
+(`xcrun simctl boot <udid>` / `open -a Simulator`) rather than booting all of
+them.
+
+### Installing the debug build on a physical iPhone by UDID
+
+`expo run:ios --device` normally prompts you to pick a connected device
+interactively, and matching by the device's display name can fail (quoting/
+apostrophe issues with names like `Dani Callero's iPhone`). Passing the exact
+UDID instead is more reliable:
+
+```sh
+xcrun xctrace list devices    # find the UDID under "== Devices =="
+```
+
+```sh
+cd apps/mobile
+APP_VARIANT=development pnpm exec expo run:ios --device <device-udid>
+```
+
+This builds a separate arm64 device-signed binary (distinct from the
+simulator build above — the two are not interchangeable) and installs it,
+then tries to launch it automatically. If the device is locked at that point,
+the launch step fails with `Cannot launch ... because the device is locked`
+even though the install itself succeeded — unlock the phone and either tap
+the app icon manually or retry the launch alone:
+
+```sh
+xcrun devicectl device process launch --device <device-udid> com.hackudc.os.debug
+```
 
 ### Native release-like compilation
 
@@ -511,9 +628,54 @@ upload keystore. Expo's
 [local production build guide](https://docs.expo.dev/guides/local-app-production/)
 contains the current Gradle signing steps.
 
-For iOS, prebuild, open `ios/*.xcworkspace`, select the generic iOS device,
-choose Product > Archive, then validate/distribute the archive from Xcode
-Organizer. Use the Release configuration and the production Apple team/profile.
+### iOS: TestFlight / App Store archive (local Xcode, no EAS)
+
+Mirrors the debug flow in "Debug app distribution policy" above, but without
+`APP_VARIANT` (so the app keeps its real `com.hackudc.os` identity) and
+archived/uploaded through Xcode instead of `run:ios`:
+
+```sh
+cd apps/mobile
+pnpm exec expo prebuild --clean --platform ios --pnpm
+open ios/*.xcworkspace
+```
+
+Before archiving, bump `ios.buildNumber` in `app.json`. Local archives are not
+routed through EAS, so nothing increments it automatically — App Store Connect
+rejects a re-upload of a build number it has already seen for this version.
+
+In Xcode:
+
+1. Scheme destination: **Any iOS Device (arm64)** — not a simulator or a
+   specific paired device.
+2. Target → **Signing & Capabilities** → confirm **Team** is the hackOS org
+   team (`P88YRBYY9T`) and the profile in use is the production one (the
+   Distribution-signed profile, not the Development-signed debug profile —
+   see the credentials table under Section 9).
+3. **Product → Archive**. This always builds the Release configuration
+   regardless of the scheme's default.
+4. When the Organizer opens on the finished archive, **Distribute App → App
+   Store Connect → Upload**, keeping automatic signing/distribution
+   certificate management if prompted.
+
+Apple then processes the upload (usually minutes, occasionally longer). Once
+processed it appears under **TestFlight** in App Store Connect automatically —
+uploading is not the same action as submitting to App Review:
+
+- **Internal testing**: add the build to an internal testing group already
+  containing App Store Connect users with access to this app; no additional
+  review is required, and they can install immediately from the TestFlight
+  app once notified.
+- **External testing**: requires adding the build to an external group and,
+  for a group's first build, Apple Beta App Review before testers can install
+  it.
+- **App Store release**: from the app's version page, attach the processed
+  build, complete the remaining store metadata (Section 14), and submit for
+  App Review — a separate, explicit action from uploading.
+
+Confirm `EXPO_PUBLIC_API_URL` resolved to the real production API before
+archiving (the default in `lib/env.ts` already does, unless something in your
+shell environment overrode it for a prior local build).
 
 ### Run the EAS build pipeline on the local machine
 
