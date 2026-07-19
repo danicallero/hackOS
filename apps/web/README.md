@@ -100,50 +100,18 @@ variant, wrap it in `components/common/`.
 ### 2. Shared widgets — `components/common/*`
 
 App-level building blocks used across every screen. Reuse these instead of
-re-implementing:
+re-implementing. Each is a **single canonical component configured by props**
+— never fork a second version. Full inventory with variations:
+`/components` in the running app.
 
-Each is a **single canonical component configured by props** (fields, layout,
-tone/colors, slots) — never fork a second version. See `/components` in the
-running app for a live gallery of every one with variations.
-
-| Component | Use for |
-|---|---|
-| `Brand` | The hackOS wordmark/lockup. |
-| `Spinner` | Any loading indicator. |
-| `SubmitButton` | Form submit with built-in pending state. |
-| `PasswordInput` | Password field with show/hide. |
-| `PageHeader` | Title + description + actions on authed pages. |
-| `ThemeToggle` | Light / dark / system switch. |
-| `CapabilityGate` | Render children only if the user holds a capability. |
-| `SectionCard` | Bordered section: icon + title + description, divider, body, footer. **The** form/detail container. |
-| `StatCard` | Metric tile: value, label, hint, icon, delta, footer slot (meter/sparkline). |
-| `StatusBadge` | Status pill; `tone` prop picks the color (see `lib/tones.ts`). |
-| `EmptyState` | Zero/empty states: icon + title + description + action. |
-| `UsageMeter` | Labeled progress meter (`value`/`max`/`tone`). |
-| `DataTable<T>` | Generic table: declarative `columns`, search, sort, pagination, row actions, loading/empty. |
-| `Modal` | Reusable dialog: `title`/`icon`/`size`/`footer`, controlled or with a `trigger`. |
-| `TrendChart` | Area/line time-series, one or many tone-colored series. |
-| `DonutChart` | Distribution donut with optional centered label/value. |
-| `TimezonePicker` | Searchable IANA timezone combobox (built on `components/ui/command`). |
-| `AlertModal` | Confirm/destructive-action dialog (the "are you sure" pattern). |
-| `ContextualError` | Inline error block for failed loads/submits — not a toast. |
-| `SaveStatus` | Saving/saved/error indicator next to autosaving forms (`lib/save-state.ts`). |
-| `DatetimeInput` / `DurationInput` | Date/time entry (with an explicit "leave blank" checkbox via `nullOption`, never an implicit clear-to-mean-X), and duration fields. |
-| `MultiSelect` / `LanguageSelect` / `UniversityPicker` | Multi-value combobox and the two domain pickers built on it. |
-| `TemplateFieldControl` | Renders one application-template field (any kind) — the single renderer both the applicant form and staff review use. |
-| `FileUploadField` / `FileLink` | Upload control + presigned-download link for stored files. |
-| `QrCode` | QR rendering (tickets, badges, wallet). |
-| `StatusBadge` variants | `QueueStatusBadge` wraps `StatusBadge` for queue states; prefer wrapping over forking. |
-| `SponsorLogo` / `DevpostTagsField` | Sponsor branding image + prize-tag editor. |
-
-This table is the quick map, not the contract — the live gallery at
-`/components` in the running app is canonical, and new shared widgets belong
-in this table when added.
+Key components: `PageHeader`, `SectionCard`, `StatCard`, `StatusBadge`,
+`EmptyState`, `DataTable`, `Modal`, `AlertModal`, `ContextualError`,
+`CapabilityGate`, `Spinner`, `SubmitButton`, `PasswordInput`, `QrCode`,
+`TemplateFieldControl`, `FileUploadField`.
 
 **Tones & colors.** `lib/tones.ts` maps semantic tones
 (`success`/`warning`/`danger`/`info`/`brand`/`neutral`) to theme-token classes.
-Badges, meters and charts all take a `tone` — so a color means the same thing
-everywhere. Never hardcode a hex; pick a tone (or pass `className`).
+Badges, meters and charts all take a `tone`. Never hardcode a hex.
 
 ### 3. Layout — `components/layout/*`
 
