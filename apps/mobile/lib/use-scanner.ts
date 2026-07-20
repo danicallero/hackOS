@@ -1,11 +1,21 @@
 import { useCallback, useEffect, useState } from "react";
 import { AppState } from "react-native";
 import { getClockSkewMs } from "./api";
+import { useMeContext } from "./me-context";
 import { deleteScan, getScannerMeta, pendingScans, retryFailedScans } from "./scanner-db";
 import { synchronizeScanner } from "./scanner-sync";
 import type { PendingScan } from "./scanner-types";
 
+/**
+ * Every read/replay here is scoped to the currently signed-in staff member
+ * (`me.id`) — the offline scan queue is encrypted and partitioned per user
+ * (scanner-db.ts), so this hook only ever sees this operator's own pending
+ * scans, never a predecessor's still-unsynced work on a shared device.
+ */
 export function useScannerSync() {
+  const { me } = useMeContext();
+  const ownerUserId = me?.id ?? null;
+
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState<string | null>(null);
   const [queue, setQueue] = useState<PendingScan[]>([]);
@@ -13,16 +23,21 @@ export function useScannerSync() {
   const [clockSkewMs, setClockSkewMs] = useState<number | null>(null);
 
   const refreshLocal = useCallback(async () => {
-    const [meta, scans] = await Promise.all([getScannerMeta(), pendingScans()]);
+    if (ownerUserId === null) return;
+    const [meta, scans] = await Promise.all([
+      getScannerMeta(ownerUserId),
+      pendingScans(ownerUserId),
+    ]);
     setLastSync(meta.lastSync);
     setQueue(scans);
-  }, []);
+  }, [ownerUserId]);
 
   const sync = useCallback(async () => {
+    if (ownerUserId === null) return;
     setSyncing(true);
     setError(null);
     try {
-      await synchronizeScanner();
+      await synchronizeScanner(ownerUserId);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Sync failed");
     } finally {
@@ -30,12 +45,13 @@ export function useScannerSync() {
       setClockSkewMs(getClockSkewMs());
       setSyncing(false);
     }
-  }, [refreshLocal]);
+  }, [ownerUserId, refreshLocal]);
 
   const retryFailed = useCallback(async () => {
-    await retryFailedScans();
+    if (ownerUserId === null) return;
+    await retryFailedScans(ownerUserId);
     await sync();
-  }, [sync]);
+  }, [ownerUserId, sync]);
 
   /**
    * Manual, one-at-a-time discard for a scan the operator has given up
@@ -53,6 +69,7 @@ export function useScannerSync() {
   );
 
   useEffect(() => {
+    if (ownerUserId === null) return;
     void refreshLocal().then(sync);
     const interval = setInterval(() => void sync(), 15_000);
     const subscription = AppState.addEventListener("change", (state) => {
@@ -62,7 +79,7 @@ export function useScannerSync() {
       clearInterval(interval);
       subscription.remove();
     };
-  }, [refreshLocal, sync]);
+  }, [ownerUserId, refreshLocal, sync]);
 
   return {
     syncing,

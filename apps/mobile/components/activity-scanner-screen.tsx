@@ -18,6 +18,7 @@ import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { subscribeToManualActivityScan } from "@/lib/manual-activity-scan";
+import { useMeContext } from "@/lib/me-context";
 import {
   enqueueLocalScan,
   findPersonByBadge,
@@ -48,6 +49,8 @@ export function ActivityScannerScreen() {
   const router = useRouter();
   const { language, t } = useLocale();
   const insets = useSafeAreaInsets();
+  const { me } = useMeContext();
+  const ownerUserId = me?.id;
   const syncState = useScannerSync();
   const { sync: runSync, lastSync } = syncState;
   const [activity, setActivity] = useState<ScannerActivity | null>(null);
@@ -83,16 +86,20 @@ export function ActivityScannerScreen() {
 
   const store = useCallback(
     async (person: ScannerPerson, badgeId: string, allowRepeat: boolean, count: number) => {
+      if (ownerUserId === undefined) return;
       setRegistering(true);
       setError(null);
       try {
-        const scanId = await enqueueLocalScan({
-          kind: "activity",
-          activityId,
-          badgeId,
-          allowRepeat,
-          scannedAt: new Date().toISOString(),
-        });
+        const scanId = await enqueueLocalScan(
+          {
+            kind: "activity",
+            activityId,
+            badgeId,
+            allowRepeat,
+            scannedAt: new Date().toISOString(),
+          },
+          ownerUserId,
+        );
         setResult({
           badgeId,
           count: count + 1,
@@ -103,7 +110,7 @@ export function ActivityScannerScreen() {
         await runSync();
         // A business rejection fails the queued scan permanently — surface it
         // here instead of leaving the operator believing it was registered.
-        const stored = (await pendingScans()).find((scan) => scan.id === scanId);
+        const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
         if (stored?.status === "failed") {
           setResult((current) =>
             current
@@ -122,7 +129,7 @@ export function ActivityScannerScreen() {
         setRegistering(false);
       }
     },
-    [activityId, loadStats, runSync, t],
+    [activityId, loadStats, ownerUserId, runSync, t],
   );
 
   const scanned = useCallback(

@@ -44,6 +44,7 @@ const mockNoteRetryable = noteRetryableError as jest.Mock;
 const mockGetClockSkewMs = getClockSkewMs as jest.Mock;
 const mockCorrectScanTimestamp = correctScanTimestamp as jest.Mock;
 const mockAcknowledgeScan = acknowledgeScan as jest.Mock;
+const OWNER_USER_ID = 42;
 // The mocked ApiError constructor is (status, code, message).
 const apiError = (status: number, message: string) =>
   new (ApiError as unknown as new (status: number, code: string, message: string) => Error)(
@@ -107,11 +108,11 @@ describe("synchronizeScanner", () => {
       return { generatedAt: "t0", people: [], activities: [], activityStates: [] };
     });
 
-    const firstSync = synchronizeScanner();
+    const firstSync = synchronizeScanner(OWNER_USER_ID);
 
     // Caller enqueues a mutation and asks to sync while the first run's
     // snapshot fetch is still pending.
-    const secondSync = synchronizeScanner();
+    const secondSync = synchronizeScanner(OWNER_USER_ID);
 
     releaseFirstSnapshot();
     // The replay for scan-1 (POST /api/accreditation/remove), then a second
@@ -143,7 +144,7 @@ describe("synchronizeScanner", () => {
       // snapshot fetch after the replay loop breaks
       .mockResolvedValueOnce({ generatedAt: "t0", people: [], activities: [], activityStates: [] });
 
-    await synchronizeScanner();
+    await synchronizeScanner(OWNER_USER_ID);
 
     expect(mockFailScan).not.toHaveBeenCalled();
     expect(mockNoteRetryable).toHaveBeenCalledWith("scan-1", "Unauthorized");
@@ -161,7 +162,7 @@ describe("synchronizeScanner", () => {
       .mockResolvedValueOnce({}) // scan-2 replay succeeds
       .mockResolvedValueOnce({ generatedAt: "t0", people: [], activities: [], activityStates: [] });
 
-    await synchronizeScanner();
+    await synchronizeScanner(OWNER_USER_ID);
 
     expect(mockFailScan).toHaveBeenCalledWith("scan-1", "No badge to remove");
     expect(mockApiFetch).toHaveBeenCalledTimes(3);
@@ -177,10 +178,11 @@ describe("synchronizeScanner", () => {
       .mockResolvedValueOnce({}) // corrected retry succeeds
       .mockResolvedValueOnce({ generatedAt: "t0", people: [], activities: [], activityStates: [] });
 
-    await synchronizeScanner();
+    await synchronizeScanner(OWNER_USER_ID);
 
     expect(mockCorrectScanTimestamp).toHaveBeenCalledWith(
       "scan-1",
+      OWNER_USER_ID,
       expect.objectContaining({ scannedAt: "2026-01-01T00:00:00.000Z" }),
     );
     expect(mockFailScan).not.toHaveBeenCalled();
@@ -195,7 +197,7 @@ describe("synchronizeScanner", () => {
       .mockRejectedValueOnce(apiError(400, "Offline scan timestamp must be in the past"))
       .mockResolvedValueOnce({ generatedAt: "t0", people: [], activities: [], activityStates: [] });
 
-    await synchronizeScanner();
+    await synchronizeScanner(OWNER_USER_ID);
 
     expect(mockCorrectScanTimestamp).not.toHaveBeenCalled();
     expect(mockFailScan).toHaveBeenCalledWith(
@@ -211,7 +213,7 @@ describe("synchronizeScanner", () => {
     mockPendingScans.mockResolvedValue([]);
     mockApiFetch.mockRejectedValueOnce(new Error("Network error"));
 
-    await expect(synchronizeScanner()).rejects.toThrow("Network error");
+    await expect(synchronizeScanner(OWNER_USER_ID)).rejects.toThrow("Network error");
 
     mockApiFetch.mockResolvedValueOnce({
       generatedAt: "t0",
@@ -220,7 +222,7 @@ describe("synchronizeScanner", () => {
       activityStates: [],
     });
 
-    await synchronizeScanner();
+    await synchronizeScanner(OWNER_USER_ID);
 
     expect(mockApiFetch).toHaveBeenCalledTimes(2);
   });

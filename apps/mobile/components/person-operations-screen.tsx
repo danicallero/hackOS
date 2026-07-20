@@ -44,6 +44,7 @@ export function PersonOperationsScreen() {
   const { language, t } = useLocale();
   const insets = useSafeAreaInsets();
   const { me } = useMeContext();
+  const ownerUserId = me?.id;
   const sync = useScannerSync();
   const capabilities = new Set(me?.capabilities ?? []);
   const admin = capabilities.has("*");
@@ -93,7 +94,7 @@ export function PersonOperationsScreen() {
   }, [load, sync.lastSync]);
 
   async function saveBadge(nextBadge: string) {
-    if (!person) return;
+    if (!person || ownerUserId === undefined) return;
     if (await findPersonByTicket(nextBadge)) {
       Alert.alert(t("personBadgeIsTicketTitle"), t("personBadgeIsTicketBody"));
       return;
@@ -114,11 +115,12 @@ export function PersonOperationsScreen() {
             badgeId: nextBadge,
             method: "manual",
           },
+      ownerUserId,
     );
     setCameraAction(null);
-    setLastOperation((await pendingScans()).find((scan) => scan.id === scanId) ?? null);
+    setLastOperation((await pendingScans(ownerUserId)).find((scan) => scan.id === scanId) ?? null);
     await sync.sync();
-    setLastOperation((await pendingScans()).find((scan) => scan.id === scanId) ?? null);
+    setLastOperation((await pendingScans(ownerUserId)).find((scan) => scan.id === scanId) ?? null);
     await load();
   }
 
@@ -144,7 +146,7 @@ export function PersonOperationsScreen() {
   }
 
   function confirmRemoveBadge() {
-    if (!person?.badgeId) return;
+    if (!person?.badgeId || ownerUserId === undefined) return;
     Alert.alert(t("personDeleteBadge"), t("personDeleteBadgeBody", { badge: person.badgeId }), [
       { text: t("cancel"), style: "cancel" },
       {
@@ -152,15 +154,22 @@ export function PersonOperationsScreen() {
         style: "destructive",
         onPress: () =>
           void (async () => {
-            const scanId = await enqueueLocalScan({
-              kind: "badge_removal",
-              userId,
-              currentBadgeId: person.badgeId!,
-              reason: t("badgeRemovalReason"),
-            });
-            setLastOperation((await pendingScans()).find((scan) => scan.id === scanId) ?? null);
+            const scanId = await enqueueLocalScan(
+              {
+                kind: "badge_removal",
+                userId,
+                currentBadgeId: person.badgeId!,
+                reason: t("badgeRemovalReason"),
+              },
+              ownerUserId,
+            );
+            setLastOperation(
+              (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId) ?? null,
+            );
             await sync.sync();
-            setLastOperation((await pendingScans()).find((scan) => scan.id === scanId) ?? null);
+            setLastOperation(
+              (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId) ?? null,
+            );
             await load();
           })(),
       },
@@ -168,21 +177,26 @@ export function PersonOperationsScreen() {
   }
 
   async function registerPresence(direction: "in" | "out") {
-    if (!person?.badgeId) return;
+    if (!person?.badgeId || ownerUserId === undefined) return;
     setBusy(true);
     try {
-      const scanId = await enqueueLocalScan({
-        kind: "presence",
-        badgeId: person.badgeId,
-        direction,
-        scannedAt: scannedAt.toISOString(),
-      });
-      setLastOperation((await pendingScans()).find((scan) => scan.id === scanId) ?? null);
+      const scanId = await enqueueLocalScan(
+        {
+          kind: "presence",
+          badgeId: person.badgeId,
+          direction,
+          scannedAt: scannedAt.toISOString(),
+        },
+        ownerUserId,
+      );
+      setLastOperation(
+        (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId) ?? null,
+      );
       await sync.sync();
       // The offline queue fails 4xx replays permanently (e.g. an entry while
       // a session is already open) — without this check the rejection is
       // invisible and the log just never appears.
-      const stored = (await pendingScans()).find((scan) => scan.id === scanId);
+      const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
       setLastOperation(stored ?? null);
       if (stored?.status === "failed") {
         Alert.alert(

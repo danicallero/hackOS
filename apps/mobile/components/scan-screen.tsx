@@ -193,6 +193,8 @@ function PersonCard({ person }: { person: ScannerPerson }) {
 
 function AccreditationForm({ setCameraSetter, afterSubmit }: FormProps) {
   const { t } = useLocale();
+  const { me } = useMeContext();
+  const ownerUserId = me?.id;
   const [ticket, setTicket] = useState("");
   const [badge, setBadge] = useState("");
   const [person, setPerson] = useState<ScannerPerson | null>(null);
@@ -204,17 +206,20 @@ function AccreditationForm({ setCameraSetter, afterSubmit }: FormProps) {
     setError(found ? null : t("scannerUnknownTicket"));
   };
   const submit = async () => {
-    if (!person || !ticket.trim() || !badge.trim()) return;
-    const id = await enqueueLocalScan({
-      kind: "accreditation",
-      ticketToken: ticket.trim(),
-      badgeId: badge.trim(),
-      method: "qr",
-    });
+    if (!person || !ticket.trim() || !badge.trim() || ownerUserId === undefined) return;
+    const id = await enqueueLocalScan(
+      {
+        kind: "accreditation",
+        ticketToken: ticket.trim(),
+        badgeId: badge.trim(),
+        method: "qr",
+      },
+      ownerUserId,
+    );
     await afterSubmit(t("scannerAccreditationPending"));
     // Live retry: this flow deliberately waits for a real server OK before
     // displaying success, while SQLite keeps the mutation across restarts.
-    const stored = (await pendingScans()).find((scan) => scan.id === id);
+    const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === id);
     await afterSubmit(
       stored?.status === "acknowledged"
         ? t("scannerAcknowledged")
@@ -256,6 +261,8 @@ function AccreditationForm({ setCameraSetter, afterSubmit }: FormProps) {
 
 function BadgeRotationForm({ setCameraSetter, afterSubmit }: FormProps) {
   const { t } = useLocale();
+  const { me } = useMeContext();
+  const ownerUserId = me?.id;
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [reason, setReason] = useState("");
@@ -270,14 +277,18 @@ function BadgeRotationForm({ setCameraSetter, afterSubmit }: FormProps) {
     );
   };
   const submit = async () => {
-    if (!person || !current.trim() || !next.trim() || !reason.trim()) return;
-    await enqueueLocalScan({
-      kind: "badge_rotation",
-      userId: person.userId,
-      currentBadgeId: current.trim(),
-      newBadgeId: next.trim(),
-      reason: reason.trim(),
-    });
+    if (!person || !current.trim() || !next.trim() || !reason.trim() || ownerUserId === undefined)
+      return;
+    await enqueueLocalScan(
+      {
+        kind: "badge_rotation",
+        userId: person.userId,
+        currentBadgeId: current.trim(),
+        newBadgeId: next.trim(),
+        reason: reason.trim(),
+      },
+      ownerUserId,
+    );
     await afterSubmit(t("scannerPendingAck"));
   };
   return (
@@ -319,6 +330,8 @@ function BadgeRotationForm({ setCameraSetter, afterSubmit }: FormProps) {
 
 function PresenceForm({ setCameraSetter, afterSubmit }: FormProps) {
   const { t } = useLocale();
+  const { me } = useMeContext();
+  const ownerUserId = me?.id;
   const [badge, setBadge] = useState("");
   const [direction, setDirection] = useState<"in" | "out">("in");
   const [backdated, setBackdated] = useState("");
@@ -333,18 +346,21 @@ function PresenceForm({ setCameraSetter, afterSubmit }: FormProps) {
   };
   const submit = async () => {
     const parsed = backdated.trim() ? new Date(backdated.trim()) : new Date();
-    if (!person || Number.isNaN(parsed.getTime())) return;
-    const id = await enqueueLocalScan({
-      kind: "presence",
-      badgeId: badge.trim(),
-      direction,
-      scannedAt: parsed.toISOString(),
-    });
+    if (!person || Number.isNaN(parsed.getTime()) || ownerUserId === undefined) return;
+    const id = await enqueueLocalScan(
+      {
+        kind: "presence",
+        badgeId: badge.trim(),
+        direction,
+        scannedAt: parsed.toISOString(),
+      },
+      ownerUserId,
+    );
     await afterSubmit(t("scannerPendingAck"));
     // A 4xx replay (entry with a session already open, exit with none) fails
     // the queued scan permanently — surface the server's reason instead of
     // leaving the rejection buried in the queue panel.
-    const stored = (await pendingScans()).find((scan) => scan.id === id);
+    const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === id);
     await afterSubmit(
       stored?.status === "failed"
         ? (stored.lastError ?? t("presenceScanRejectedBody"))
@@ -393,6 +409,8 @@ function PresenceForm({ setCameraSetter, afterSubmit }: FormProps) {
 
 function ActivityForm({ setCameraSetter, afterSubmit }: FormProps) {
   const { t } = useLocale();
+  const { me } = useMeContext();
+  const ownerUserId = me?.id;
   const [activities, setActivities] = useState<ScannerActivity[]>([]);
   const [selected, setSelected] = useState<ScannerActivity | null>(null);
   const [badge, setBadge] = useState("");
@@ -413,14 +431,17 @@ function ActivityForm({ setCameraSetter, afterSubmit }: FormProps) {
     setError(null);
   };
   const submitWithRepeat = async (allowRepeat: boolean) => {
-    if (!person || !selected || error) return;
-    await enqueueLocalScan({
-      kind: "activity",
-      activityId: selected.id,
-      badgeId: badge.trim(),
-      allowRepeat,
-      scannedAt: new Date().toISOString(),
-    });
+    if (!person || !selected || error || ownerUserId === undefined) return;
+    await enqueueLocalScan(
+      {
+        kind: "activity",
+        activityId: selected.id,
+        badgeId: badge.trim(),
+        allowRepeat,
+        scannedAt: new Date().toISOString(),
+      },
+      ownerUserId,
+    );
     setCount((value) => value + 1);
     await afterSubmit(t("scannerPendingAck"));
   };
