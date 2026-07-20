@@ -35,7 +35,10 @@ async function replay(scan: PendingScan): Promise<void> {
  * still fails after that correction is a genuine business rejection (e.g. a
  * deliberately backdated entry) and is failed permanently as before.
  */
-async function attemptClockSkewCorrection(scan: PendingScan): Promise<boolean> {
+async function attemptClockSkewCorrection(
+  scan: PendingScan,
+  ownerUserId: number,
+): Promise<boolean> {
   if (scan.clockCorrected || !("scannedAt" in scan.payload)) return false;
   const skewMs = getClockSkewMs();
   if (skewMs === null || Math.abs(skewMs) <= CLOCK_SKEW_TOLERANCE_MS) return false;
@@ -43,7 +46,7 @@ async function attemptClockSkewCorrection(scan: PendingScan): Promise<boolean> {
     ...scan.payload,
     scannedAt: new Date(Date.parse(scan.payload.scannedAt) + skewMs).toISOString(),
   };
-  await correctScanTimestamp(scan.id, corrected);
+  await correctScanTimestamp(scan.id, ownerUserId, corrected);
   try {
     await replay({ ...scan, payload: corrected });
     await acknowledgeScan(scan.id, corrected);
@@ -54,9 +57,15 @@ async function attemptClockSkewCorrection(scan: PendingScan): Promise<boolean> {
   return true;
 }
 
-/** Replays in original device order and stops after the first network error. */
-export async function replayPendingScans(): Promise<void> {
-  for (const scan of await pendingScans(true)) {
+/**
+ * Replays in original device order and stops after the first network error.
+ * Scoped to a single owner (the currently signed-in staff member): a
+ * predecessor's still-unsynced scans on this device are never replayed (and
+ * would be replayed under the wrong session's authentication if they were —
+ * see scanner-db.ts's per-user queue encryption/isolation).
+ */
+export async function replayPendingScans(ownerUserId: number): Promise<void> {
+  for (const scan of await pendingScans(ownerUserId, true)) {
     await markScanAttempt(scan.id);
     try {
       await replay(scan);
@@ -78,7 +87,7 @@ export async function replayPendingScans(): Promise<void> {
         error instanceof ApiError &&
         error.status === 400 &&
         error.message.includes(TIMESTAMP_FUTURE_ERROR) &&
-        (await attemptClockSkewCorrection(scan))
+        (await attemptClockSkewCorrection(scan, ownerUserId))
       ) {
         continue;
       }
@@ -92,11 +101,11 @@ export async function replayPendingScans(): Promise<void> {
   }
 }
 
-async function doSync(): Promise<void> {
+async function doSync(ownerUserId: number): Promise<void> {
   // Mutations go first so the replace-all snapshot reflects acknowledged
   // writes and naturally rolls back any local optimistic state rejected by
   // the server.
-  await replayPendingScans();
+  await replayPendingScans(ownerUserId);
   const snapshot = await apiFetch<ScannerSnapshot>("/api/scanner/snapshot");
   await applyScannerSnapshot(snapshot);
 }
@@ -110,20 +119,20 @@ async function doSync(): Promise<void> {
  * shared promise only resolves once a run that started after the request has
  * completed.
  */
-export function synchronizeScanner(): Promise<void> {
+export function synchronizeScanner(ownerUserId: number): Promise<void> {
   if (activeSync) {
     rerunRequested = true;
     return activeSync;
   }
-  activeSync = runUntilSettled();
+  activeSync = runUntilSettled(ownerUserId);
   return activeSync;
 }
 
-async function runUntilSettled(): Promise<void> {
+async function runUntilSettled(ownerUserId: number): Promise<void> {
   try {
     do {
       rerunRequested = false;
-      await doSync();
+      await doSync(ownerUserId);
     } while (rerunRequested);
   } finally {
     activeSync = null;

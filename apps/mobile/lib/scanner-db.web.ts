@@ -10,17 +10,23 @@ import type {
 // Web is a preview surface, not an operational offline scanner. Keeping a
 // small in-memory adapter preserves route rendering without pretending to
 // offer restart-safe storage; native builds resolve scanner-db.native.ts and
-// use SQLite WAL durability.
+// use encrypted SQLite (roster + per-user queue) durability. The signatures
+// here still mirror the native module's owner-scoping so both platforms
+// share callers unchanged.
 let snapshot: ScannerSnapshot = {
   generatedAt: "",
   people: [],
   activities: [],
   activityStates: [],
 };
-let scans: PendingScan[] = [];
+let scans: (PendingScan & { ownerUserId: number })[] = [];
 
 export async function applyScannerSnapshot(next: ScannerSnapshot): Promise<void> {
   snapshot = next;
+}
+
+export async function wipeAttendanceRoster(): Promise<void> {
+  snapshot = { generatedAt: "", people: [], activities: [], activityStates: [] };
 }
 
 export async function findPersonByTicket(ticketToken: string): Promise<ScannerPerson | null> {
@@ -82,7 +88,7 @@ export async function getActivityState(
   );
 }
 
-export async function enqueueLocalScan(payload: ScanPayload): Promise<string> {
+export async function enqueueLocalScan(payload: ScanPayload, ownerUserId: number): Promise<string> {
   const id = globalThis.crypto.randomUUID();
   scans.push({
     id,
@@ -94,12 +100,18 @@ export async function enqueueLocalScan(payload: ScanPayload): Promise<string> {
     createdAt: new Date().toISOString(),
     acknowledgedAt: null,
     clockCorrected: false,
+    ownerUserId,
   });
   return id;
 }
 
-export async function pendingScans(onlyPending = false): Promise<PendingScan[]> {
-  return scans.filter((scan) => !onlyPending || scan.status === "pending");
+export async function pendingScans(
+  ownerUserId: number,
+  onlyPending = false,
+): Promise<PendingScan[]> {
+  return scans.filter(
+    (scan) => scan.ownerUserId === ownerUserId && (!onlyPending || scan.status === "pending"),
+  );
 }
 
 export async function markScanAttempt(id: string): Promise<void> {
@@ -126,15 +138,21 @@ export async function noteRetryableError(id: string, message: string): Promise<v
   scans = scans.map((scan) => (scan.id === id ? { ...scan, lastError: message } : scan));
 }
 
-export async function correctScanTimestamp(id: string, payload: ScanPayload): Promise<void> {
+export async function correctScanTimestamp(
+  id: string,
+  _ownerUserId: number,
+  payload: ScanPayload,
+): Promise<void> {
   scans = scans.map((scan) =>
     scan.id === id ? { ...scan, payload, clockCorrected: true, lastError: null } : scan,
   );
 }
 
-export async function retryFailedScans(): Promise<void> {
+export async function retryFailedScans(ownerUserId: number): Promise<void> {
   scans = scans.map((scan) =>
-    scan.status === "failed" ? { ...scan, status: "pending", lastError: null } : scan,
+    scan.ownerUserId === ownerUserId && scan.status === "failed"
+      ? { ...scan, status: "pending", lastError: null }
+      : scan,
   );
 }
 
@@ -142,9 +160,12 @@ export async function deleteScan(id: string): Promise<void> {
   scans = scans.filter((scan) => scan.id !== id);
 }
 
-export async function getScannerMeta(): Promise<{ lastSync: string | null; pending: number }> {
+export async function getScannerMeta(
+  ownerUserId: number,
+): Promise<{ lastSync: string | null; pending: number }> {
   return {
     lastSync: snapshot.generatedAt || null,
-    pending: scans.filter((scan) => scan.status === "pending").length,
+    pending: scans.filter((scan) => scan.ownerUserId === ownerUserId && scan.status === "pending")
+      .length,
   };
 }

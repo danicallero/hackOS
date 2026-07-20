@@ -171,9 +171,11 @@ route below. No migration needed.
   accreditation, badge replacement, door presence, meals, and activities),
   a dedicated primary tab for operators (see `docs/navigation.md`). Its
   person/people drill-down routes live under `app/(tabs)/scan/*`.
-  `lib/scanner-db.ts` owns the WAL-mode SQLite schema and durable device queue;
-  `lib/scanner-sync.ts` replays in creation order with the persisted scan id as
-  `Idempotency-Key`, then installs the latest server snapshot/revocation set.
+  `lib/scanner-db.ts` (native: `scanner-db.native.ts`) owns two WAL-mode
+  SQLite files — see "Scanner cache encryption & isolation" below — and
+  `lib/scanner-sync.ts` replays in creation order with the persisted scan id
+  as `Idempotency-Key`, then installs the latest server snapshot/revocation
+  set.
   A scan rejected as "timestamp must be in the past" (device clock running
   ahead of the server's) is corrected once by the measured clock skew — read
   from the API's `Date` response header in `lib/api.ts` — and retried before
@@ -190,6 +192,50 @@ route below. No migration needed.
   `app/_layout.tsx`) reveals a delete action that discards it (`deleteScan`
   in `lib/scanner-db.ts`) on the follow-up tap — always a manual, per-scan
   gesture, never automatic or triggered by attempt count alone.
+
+**Scanner cache encryption & isolation.** Staff/scanner devices carry two
+distinct local caches, split into separate SQLite files with different
+lifetimes, encryption keys, and OS backup treatment (`lib/scanner-crypto.ts`,
+`lib/scanner-db.native.ts`):
+
+- **Attendance roster** (`hackos-scanner-roster.db`, `scanner_people` +
+  badges/activities/scan-count tables) — every field beyond the plaintext
+  `ticket_token`/`badge_id` lookup keys (name, email, role,
+  `food_intolerance_notes`, `notes`, presence state) is AES-256-GCM encrypted
+  as one JSON blob per person under a single roster key
+  (`expo-crypto`'s `AESEncryptionKey`, persisted in `expo-secure-store`).
+  The database file itself lives in the OS cache directory
+  (`Paths.cache` from `expo-file-system`), which iOS/Android exclude from
+  iCloud/Google auto-backups by default — no config plugin or native code
+  needed. The whole roster is disposable: `wipeAttendanceRoster()` deletes
+  every table and retires the roster key, called from
+  `components/account-screen.tsx`'s sign-out handler, and a fresh
+  `GET /api/scanner/snapshot` fully reconstructs it on next sign-in. Since
+  encrypting `name`/`surname`/`email` rules out pushing search into SQL,
+  `listScannerPeople` decrypts the (event-sized) roster once per call and
+  filters/sorts in JS instead.
+- **Offline scan queue** (`hackos-scanner-queue.db`, `pending_scans`) — the
+  only record of a not-yet-synced transaction, so it stays in the default
+  (non-cache, backed-up) document directory and is **never** wiped on
+  sign-out. Every row is encrypted with its own `created_by_user_id`'s key
+  (a distinct `expo-crypto` key per staff member, also in `expo-secure-store`,
+  marked `WHEN_UNLOCKED_THIS_DEVICE_ONLY` on iOS so a restored backup can't
+  carry a usable key to a different device). `pendingScans`,
+  `replayPendingScans`, and `retryFailedScans` are always scoped to the
+  currently signed-in user's own rows: a different staff member signing in
+  on the same device cannot list, decrypt, or replay a predecessor's still-
+  queued scans (replaying under the wrong session would also misattribute
+  the action server-side). The same user signing back in later recovers
+  their own queue, conflicts included, exactly as they left it — the queue
+  is keyed by owner, not by session. Devices upgrading from the pre-split
+  single-file schema have their legacy `pending_scans` rows migrated once
+  (attributed to a sentinel "unknown owner", `userId 0`) rather than
+  silently dropped; the old file is then deleted.
+
+Both caches' actual on-device behavior (SecureStore-backed native AES,
+cache-directory backup exclusion, the legacy-file migration) needs a real
+device/EAS build to verify — see "What's left" below.
+
 - `lib/push.ts` — best-effort Expo push token registration, called once after
   sign-in from `app/_layout.tsx`.
 - `lib/notifications-setup.ts` — the actual delivery handling: configures
@@ -235,3 +281,10 @@ them to server truth.
 - Full i18n parity with the much larger web dictionary. All new scanner and
   participant controls have en/es/gl copy, but the mobile dictionary remains
   intentionally smaller than the web app's.
+- **Scanner cache encryption device QA.** Confirm on real iOS/Android
+  hardware: `expo-crypto`'s native AES-GCM round-trips correctly, the roster
+  database placed under `Paths.cache` is actually excluded from an
+  iCloud/Google Drive device backup, `expo-secure-store`'s
+  `WHEN_UNLOCKED_THIS_DEVICE_ONLY` keys survive app restarts but not a
+  restore-to-new-device, and the one-time legacy `hackos-scanner.db`
+  migration correctly carries forward any pre-upgrade queued scans.

@@ -10,6 +10,7 @@ import { signOut } from "@/lib/auth-client";
 import { type Lang, useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { fetchMyScanStats, type MyScanStats } from "@/lib/scan-log";
+import { wipeAttendanceRoster } from "@/lib/scanner-db";
 import { isOperator } from "@/lib/tabs";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { colors } from "@/theme/colors";
@@ -82,6 +83,12 @@ export default function AccountScreen() {
     try {
       const { error: authError } = await signOut();
       if (authError) throw new Error(authError.message || "Sign out failed");
+      // The roster is shared, event-wide data with no reason to survive a
+      // session boundary — wipe it (and its encryption key) now rather than
+      // leaving it cached until the next signed-in device sync. The offline
+      // scan queue is deliberately left alone: it's per-user encrypted and
+      // reappears, still decryptable, if this same person signs back in.
+      await wipeAttendanceRoster();
     } catch (cause) {
       setSignOutError(cause instanceof Error ? cause : new Error("Sign out failed"));
       setSigningOut(false);
