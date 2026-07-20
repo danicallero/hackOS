@@ -1,9 +1,11 @@
 import { useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FlatList,
+  Pressable,
   RefreshControl,
   Text,
+  TextInput,
   useColorScheme,
   useWindowDimensions,
   View,
@@ -15,6 +17,7 @@ import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
+import { createIdempotencyKey } from "@/lib/idempotency-key";
 import { useMeContext } from "@/lib/me-context";
 import { canOperateQueues } from "@/lib/tabs";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
@@ -24,8 +27,15 @@ import { colors } from "@/theme/colors";
 interface QueueEntry {
   id: number;
   repo_name?: string;
+  repo_members?: QueueMember[];
   position: number | null;
   status: string;
+}
+
+interface QueueMember {
+  email: string;
+  name: string | null;
+  surname: string | null;
 }
 
 interface RoomView {
@@ -54,6 +64,7 @@ export function QueueOperationsScreen() {
   const [notifyingEntryId, setNotifyingEntryId] = useState<number | null>(null);
   const [notifiedEntryId, setNotifiedEntryId] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
   const columns = width >= 1_100 ? 3 : width >= 680 ? 2 : 1;
 
   const fetchRooms = useCallback(async () => {
@@ -67,6 +78,7 @@ export function QueueOperationsScreen() {
     fetchRooms,
   );
   const rooms = data ?? [];
+  const searchResults = useMemo(() => findQueueEntries(rooms, query), [query, rooms]);
 
   useEffect(() => {
     void load();
@@ -93,7 +105,7 @@ export function QueueOperationsScreen() {
       try {
         await apiFetch(`/api/queue/entries/${entryId}/notify-enter`, {
           method: "POST",
-          headers: { "Idempotency-Key": globalThis.crypto.randomUUID() },
+          headers: { "Idempotency-Key": createIdempotencyKey() },
         });
         setNotifiedEntryId(entryId);
         await load();
@@ -142,6 +154,7 @@ export function QueueOperationsScreen() {
             </Text>
           </View>
           <StaleDataBanner updatedAt={staleSince} />
+          <QueueSearch query={query} results={searchResults} onChangeQuery={setQuery} />
           {actionError ? (
             <View
               accessibilityRole="alert"
@@ -183,6 +196,179 @@ export function QueueOperationsScreen() {
       )}
     />
   );
+}
+
+interface QueueSearchResult {
+  entry: QueueEntry;
+  room: RoomView["room"];
+}
+
+function findQueueEntries(rooms: RoomView[], query: string): QueueSearchResult[] {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  if (!normalizedQuery) return [];
+
+  return rooms
+    .flatMap((room) =>
+      [room.active, ...room.called, ...room.next]
+        .filter((entry): entry is QueueEntry => entry !== null)
+        .map((entry) => ({ entry, room: room.room })),
+    )
+    .filter(({ entry }) => queueEntrySearchText(entry).includes(normalizedQuery))
+    .slice(0, 12);
+}
+
+function queueEntrySearchText(entry: QueueEntry): string {
+  return [
+    entry.repo_name,
+    ...(entry.repo_members ?? []).flatMap((member) => [member.name, member.surname, member.email]),
+  ]
+    .filter((value): value is string => Boolean(value))
+    .join(" ")
+    .toLocaleLowerCase();
+}
+
+function QueueSearch({
+  query,
+  results,
+  onChangeQuery,
+}: {
+  query: string;
+  results: QueueSearchResult[];
+  onChangeQuery: (query: string) => void;
+}) {
+  const { t } = useLocale();
+  const activeSearch = query.trim().length > 0;
+
+  return (
+    <View style={{ gap: 8 }}>
+      <Text selectable style={{ color: colors.label, fontSize: 16, fontWeight: "700" }}>
+        {t("queueOpsSearchTitle")}
+      </Text>
+      <View
+        style={{
+          alignItems: "center",
+          backgroundColor: colors.surface,
+          borderColor: colors.separator,
+          borderCurve: "continuous",
+          borderRadius: 12,
+          borderWidth: 1,
+          flexDirection: "row",
+          gap: 8,
+          minHeight: 44,
+          paddingHorizontal: 12,
+        }}
+      >
+        <SymbolView
+          name="person.crop.badge.magnifyingglass"
+          tintColor={colors.secondaryLabel}
+          size={18}
+          accessible={false}
+        />
+        <TextInput
+          accessibilityLabel={t("queueOpsSearchLabel")}
+          autoCapitalize="none"
+          autoCorrect={false}
+          onChangeText={onChangeQuery}
+          placeholder={t("queueOpsSearchPlaceholder")}
+          placeholderTextColor={colors.tertiaryLabel}
+          style={{ color: colors.label, flex: 1, fontSize: 16, paddingVertical: 10 }}
+          value={query}
+        />
+        {activeSearch ? (
+          <Pressable
+            accessibilityLabel={t("queueOpsClearSearch")}
+            accessibilityRole="button"
+            hitSlop={8}
+            onPress={() => onChangeQuery("")}
+          >
+            <SymbolView
+              name="xmark.circle.fill"
+              tintColor={colors.tertiaryLabel}
+              size={20}
+              accessible={false}
+            />
+          </Pressable>
+        ) : null}
+      </View>
+      {activeSearch ? (
+        <View
+          accessibilityLiveRegion="polite"
+          style={{
+            backgroundColor: colors.surface,
+            borderColor: colors.separator,
+            borderCurve: "continuous",
+            borderRadius: 12,
+            borderWidth: 1,
+            gap: 1,
+            overflow: "hidden",
+          }}
+        >
+          <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13, padding: 12 }}>
+            {t("queueOpsSearchCount", { count: String(results.length) })}
+          </Text>
+          {results.length ? (
+            results.map(({ entry, room }) => (
+              <View
+                key={`${room.id}-${entry.id}`}
+                style={{ gap: 3, paddingHorizontal: 12, paddingVertical: 10 }}
+              >
+                <Text
+                  selectable
+                  numberOfLines={1}
+                  style={{ color: colors.label, fontSize: 15, fontWeight: "700" }}
+                >
+                  {entry.repo_name ?? t("queueOpsUnnamedTeam")}
+                </Text>
+                <Text
+                  selectable
+                  numberOfLines={1}
+                  style={{ color: colors.secondaryLabel, fontSize: 13 }}
+                >
+                  {t("queueOpsSearchResult", {
+                    room: room.name,
+                    status: queueStatusLabel(entry.status, t),
+                  })}
+                </Text>
+                {entry.position != null ? (
+                  <Text
+                    selectable
+                    style={{
+                      color: colors.secondaryLabel,
+                      fontSize: 13,
+                      fontVariant: ["tabular-nums"],
+                    }}
+                  >
+                    {t("queueOpsPosition", { position: String(entry.position) })}
+                  </Text>
+                ) : null}
+              </View>
+            ))
+          ) : (
+            <Text selectable style={{ color: colors.secondaryLabel, fontSize: 14, padding: 12 }}>
+              {t("queueOpsNoSearchResults")}
+            </Text>
+          )}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function queueStatusLabel(status: string, t: ReturnType<typeof useLocale>["t"]): string {
+  switch (status) {
+    case "called":
+      return t("queueStatusCalled");
+    case "in_room":
+      return t("queueStatusInRoom");
+    case "presenting":
+      return t("queueStatusPresenting");
+    case "completed":
+      return t("queueStatusCompleted");
+    case "disqualified":
+      return t("queueStatusDisqualified");
+    default:
+      return t("queueStatusWaiting");
+  }
 }
 
 function RoomCard({
