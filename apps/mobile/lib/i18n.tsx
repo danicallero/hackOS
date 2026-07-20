@@ -144,7 +144,11 @@ const dict = {
   tabAccount: { en: "Account", es: "Cuenta", gl: "Conta" },
   tabScan: { en: "Scanner", es: "Escáner", gl: "Escáner" },
   tabActivities: { en: "Activities", es: "Actividades", gl: "Actividades" },
-  tabQueueOperations: { en: "Q Operations", es: "Q Operations", gl: "Q Operations" },
+  tabQueueOperations: {
+    en: "Queue operations",
+    es: "Operaciones de cola",
+    gl: "Operacións de cola",
+  },
   tabOthers: { en: "Others", es: "Otros", gl: "Outros" },
   loading: { en: "Loading…", es: "Cargando…", gl: "Cargando…" },
   back: { en: "Back", es: "Volver", gl: "Volver" },
@@ -297,11 +301,46 @@ const dict = {
     gl: "Tócache pronto — prepárate",
   },
   queuePosition: { en: "Position {n}", es: "Posición {n}", gl: "Posición {n}" },
-  queueOpsTitle: { en: "Q Operations", es: "Q Operations", gl: "Q Operations" },
+  queueOpsTitle: {
+    en: "Queue operations",
+    es: "Operaciones de cola",
+    gl: "Operacións de cola",
+  },
   queueOpsSubtitle: {
     en: "Rooms, teams at the door, and the next team in line.",
     es: "Salas, equipos en la puerta y el primero en cola.",
     gl: "Salas, equipos na porta e o primeiro da cola.",
+  },
+  queueOpsSearchTitle: {
+    en: "Find a team or person",
+    es: "Buscar equipo o persona",
+    gl: "Buscar equipo ou persoa",
+  },
+  queueOpsSearchLabel: {
+    en: "Search teams and people",
+    es: "Buscar equipos y personas",
+    gl: "Buscar equipos e persoas",
+  },
+  queueOpsSearchPlaceholder: {
+    en: "Team or person name",
+    es: "Nombre de equipo o persona",
+    gl: "Nome de equipo ou persoa",
+  },
+  queueOpsClearSearch: { en: "Clear search", es: "Borrar búsqueda", gl: "Borrar busca" },
+  queueOpsSearchCount: {
+    en: "{count} result(s)",
+    es: "{count} resultado(s)",
+    gl: "{count} resultado(s)",
+  },
+  queueOpsNoSearchResults: {
+    en: "No teams or people match this search.",
+    es: "No hay equipos ni personas que coincidan con la búsqueda.",
+    gl: "Non hai equipos nin persoas que coincidan coa busca.",
+  },
+  queueOpsSearchResult: {
+    en: "{room} · {status}",
+    es: "{room} · {status}",
+    gl: "{room} · {status}",
   },
   queueOpsAccessTitle: {
     en: "Queue operations unavailable",

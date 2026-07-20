@@ -37,7 +37,7 @@ export function canOperateQueues(capabilities: string[]): boolean {
   );
 }
 
-/** Queue-only operators get Q Operations in the bar; scanner operators use Others. */
+/** Queue-only operators get Queue operations in the bar; scanner operators use Others. */
 export function queueOperationsInPrimaryBar(capabilities: string[]): boolean {
   return canOperateQueues(capabilities) && !isOperator(capabilities);
 }

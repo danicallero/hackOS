@@ -16,7 +16,7 @@ store assets, submission, and the release checklist, see
 | H4 | Login/logout, session persists via Better Auth Expo + `expo-secure-store` | ✅ Done | `lib/auth-client.ts`, `app/(auth)/sign-in.tsx`. Server-side logout (session revocation) reuses the existing Better Auth endpoint — no mobile-specific work needed. |
 | H55 | One app, capability-driven tabs, permission changes apply without reinstall | ✅ Done | `lib/tabs.ts` + `app/(tabs)/_layout.tsx`. Five-item native bar (`UITabBarController` collapses a sixth item into iOS's own "More" screen). Participants: schedule/queue/wallet/notifications + Account. Operators: schedule/**Scanner**/Activities (`activity:scan` only)/notifications + the "Others" dropdown selector, behind which Queue, Wallet, and Account live as pseudo-tabs — see `docs/navigation.md`. |
 | H38 | Participant sees queue status/position/ETA, pre-alert, call notice | 🟡 Device QA | Push receipt/tap and the authenticated `GET /api/queue/me/stream` native fetch stream both refetch queue state immediately; 15s focused polling is the recovery path. Code/tests are complete, but APNs/FCM delivery still needs real-device verification. |
-| H29–H31 | Q Operations: room overview, called teams, queue head and re-notification | ✅ Done | `components/queue-operations-screen.tsx` reads capability-protected room views, refreshes while focused, and posts the existing idempotent `notify-enter` transition. |
+| H29–H31 | Queue operations: room overview, called teams, queue head and re-notification | ✅ Done | `components/queue-operations-screen.tsx` reads capability-protected room views, refreshes while focused, and posts the existing idempotent `notify-enter` transition. |
 | H51 | Notification channel preferences per category; queue calls non-optional | ✅ Done | Static category preferences and mandatory queue notices are available on mobile. `schedule:<id>` per-activity reminder opt-in is available via the calendar bell (`lib/use-activity-reminders.ts`) and the preferences tab. The tab also exposes the shared `schedule` reminder channels and `schedule:type:<kind>` kind opt-ins. Reminder removals use a visible serial queue, so several can be tapped without racing full preference responses. |
 | H28 | Ticket/badge in Apple & Google Wallet; old pass auto-invalidates on badge rotation | 🟡 Device QA | QR wallet, authenticated Apple `.pkpass` download/share, Google save URL, server-side pass invalidation/push, and foreground wallet refetch on `LOGISTICS_WALLET_PASS_UPDATED` are wired. Real Wallet apps/credentials still need device QA. |
 | H22 | Accreditation scanner: local SQLite lookup, badge assignment, server-confirmed | 🟡 Device QA | Ticket/person cards live in SQLite. The assignment is persisted/retried but is explicitly shown as **not accredited** until the API acknowledges the idempotent request. |
@@ -102,7 +102,7 @@ route below. No migration needed.
   the "Others" selector: a `role="search"` tab trigger (the separated
   capsule on iOS 18+) overlaid with a native `MenuView` dropdown listing
   Queue, Wallet, and Account as pseudo-tabs. Queue-only operators instead get
-  Q Operations in the primary bar; scanner operators with queue access find it
+  Queue operations in the primary bar; scanner operators with queue access find it
   in this selector, preserving Scanner's direct placement.
 - `app/(tabs)/_layout.tsx` — reads capabilities from a shared `/api/me` fetch
   (`lib/me-context.tsx`, `lib/use-me.ts`) and hides tabs via Expo Router's
@@ -112,7 +112,7 @@ route below. No migration needed.
   (H55's explicit acceptance bar).
 
   The entries inside the native "Others" dropdown (Queue, Wallet, Account, and
-  Q Operations when a scanner operator has queue access —
+  Queue operations when a scanner operator has queue access —
   routes under `app/(tabs)/others/`) are intentionally pseudo-tabs
   (`lib/operations-navigation.ts`):
 
@@ -157,13 +157,15 @@ route below. No migration needed.
   fallback. `notifications.tsx` pages past the initial 20 inbox messages on
   demand, allows an expanded message to be deleted after native confirmation,
   and mirrors the web activity/kind reminder preferences.
-- `components/queue-operations-screen.tsx` — Q Operations is available to
+- `components/queue-operations-screen.tsx` — Queue operations is available to
   `queue:operate`, `queue:admin`, and `*`. It first lists only the caller's
   authorized rooms, then loads each protected room view. Each card keeps the
   presenting team, teams called to the door, and the first waiting team easy
-  to scan; re-notification uses the existing idempotent `notify-enter`
-  transition. The layout is one column on phones, two from 680 px, and three
-  from 1100 px.
+  to scan. It can also filter the loaded authorized queues by team name or
+  member name/email and shows that entry's room and live state. Re-notification
+  uses the existing idempotent `notify-enter` transition with a React
+  Native-safe generated key. The layout is one column on phones, two from
+  680 px, and three from 1100 px.
 - `app/(tabs)/scan/index.tsx` — thin wrapper around the shared
   `GeneralScannerScreen` (camera/manual scanners selected by capability:
   accreditation, badge replacement, door presence, meals, and activities),

@@ -81,7 +81,7 @@ describe("overflowTabs / shouldUseOverflowMenu", () => {
     expect(shouldUseOverflowMenu([CAPABILITIES.SCHEDULE_MANAGE])).toBe(false);
   });
 
-  it("gives queue-only operators a direct Q Operations tab and keeps personal tabs in Others", () => {
+  it("gives queue-only operators a direct Queue operations tab and keeps personal tabs in Others", () => {
     expect(primaryTabs([CAPABILITIES.QUEUE_OPERATE])).toEqual([
       "schedule",
       "operations",
@@ -91,7 +91,7 @@ describe("overflowTabs / shouldUseOverflowMenu", () => {
     expect(queueOperationsInPrimaryBar([CAPABILITIES.QUEUE_OPERATE])).toBe(true);
   });
 
-  it("puts Q Operations in Others when scanner tools already fill the bar", () => {
+  it("puts Queue operations in Others when scanner tools already fill the bar", () => {
     const capabilities = [CAPABILITIES.ACCREDIT_SCAN, CAPABILITIES.QUEUE_OPERATE];
     expect(primaryTabs(capabilities)).toEqual(["schedule", "scan", "notifications"]);
     expect(overflowTabs(capabilities)).toEqual(["queue", "wallet", "account", "operations"]);
