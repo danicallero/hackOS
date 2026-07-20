@@ -366,6 +366,16 @@ function NotificationRow({
   const body = payloadField(item.payload, "body");
   const details = payloadDetails(item.payload);
   const unread = !item.read_at;
+  // The swipe gesture and the row's own tap-to-expand Pressable both listen
+  // on the same touch: without this guard, releasing a swipe (even one that
+  // snaps back without opening) can also register as a tap and toggle the
+  // row's expanded state. Suppress presses for the duration of any drag.
+  const swiping = useRef(false);
+  const stopSwiping = useCallback(() => {
+    setTimeout(() => {
+      swiping.current = false;
+    }, 50);
+  }, []);
 
   return (
     <Swipeable
@@ -374,11 +384,22 @@ function NotificationRow({
         <DeleteRevealAction progress={progress} onDelete={onDelete} />
       )}
       rightThreshold={40}
+      onSwipeableOpenStartDrag={() => {
+        swiping.current = true;
+      }}
+      onSwipeableCloseStartDrag={() => {
+        swiping.current = true;
+      }}
+      onSwipeableWillOpen={stopSwiping}
+      onSwipeableWillClose={stopSwiping}
     >
       <Pressable
         accessibilityRole="button"
         accessibilityState={{ expanded }}
-        onPress={onPress}
+        onPress={() => {
+          if (swiping.current) return;
+          onPress();
+        }}
         style={({ pressed }) => ({
           backgroundColor: pressed ? colors.elevatedSurface : colors.surface,
           gap: 9,
