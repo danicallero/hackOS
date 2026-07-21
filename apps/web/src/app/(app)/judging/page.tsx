@@ -68,7 +68,13 @@ import { useEventSource, useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError, api } from "@/lib/api";
 import { API_URL } from "@/lib/env";
 import { type Translate, useLocale } from "@/lib/i18n";
-import { collaborationState, hasWaitedTooLong, workspaceAccess } from "@/lib/judging-workspace";
+import { freezeTotalMinutes, presentationTimerState } from "@/lib/judging-timer";
+import {
+  calledEntryAffordances,
+  collaborationState,
+  hasWaitedTooLong,
+  workspaceAccess,
+} from "@/lib/judging-workspace";
 import {
   type AttemptReviewVersion,
   type ChallengeProgress,
@@ -770,6 +776,7 @@ function QueuePanel({
           empty={t("noTeamsWaitingDoor")}
           compact
           desiredMinutesPerTeam={pace?.desiredMinutesPerTeam ?? null}
+          calledTooLongMinutes={pace?.calledTooLongThresholdMinutes ?? null}
           renderActions={(entry) => (
             <CalledEntryActions
               entry={entry}
@@ -834,6 +841,7 @@ function QueuePanel({
             empty={t("noTeamsChallengeQueue")}
             scroll
             desiredMinutesPerTeam={pace?.desiredMinutesPerTeam ?? null}
+            calledTooLongMinutes={pace?.calledTooLongThresholdMinutes ?? null}
             renderActions={(entry) => {
               const blocked = blockedByEntry.get(entry.id);
               return (
@@ -1056,14 +1064,19 @@ function CalledEntryActions({
 }) {
   const { t } = useLocale();
   const [confirming, setConfirming] = useState<"no-show" | "disqualify" | null>(null);
-  const canModerate = !canJudge && !canOperate;
+  const { canNotifyEnter, canBringIn, canOpenMore, canDisqualify } = calledEntryAffordances({
+    busy: busy != null,
+    canJudge,
+    canOperate,
+    canAdmin,
+  });
 
   return (
     <div className="grid grid-cols-2 gap-2">
       <Button
         size="sm"
         variant="outline"
-        disabled={busy != null || canModerate}
+        disabled={!canNotifyEnter}
         onClick={() => onEntryAction(entry, "notify-enter", undefined, t("entranceNoticeSent"))}
       >
         <SendIcon className="size-4" />
@@ -1071,7 +1084,7 @@ function CalledEntryActions({
       </Button>
       <Button
         size="sm"
-        disabled={busy != null || !canJudge}
+        disabled={!canBringIn}
         onClick={() => onEntryAction(entry, "bring-in", undefined, t("teamBroughtInShort"))}
       >
         <DoorOpenIcon className="size-4" />
@@ -1079,12 +1092,7 @@ function CalledEntryActions({
       </Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button
-            size="sm"
-            variant="outline"
-            className="col-span-2"
-            disabled={busy != null || canModerate}
-          >
+          <Button size="sm" variant="outline" className="col-span-2" disabled={!canOpenMore}>
             <MoreHorizontalIcon className="size-4" />
             {t("moreActions")}
           </Button>
@@ -1121,7 +1129,7 @@ function CalledEntryActions({
             <AlertTriangleIcon className="size-4" />
             {t("noShow")}
           </DropdownMenuItem>
-          {canAdmin && (
+          {canDisqualify && (
             <DropdownMenuItem variant="destructive" onClick={() => setConfirming("disqualify")}>
               {t("disqualify")}
             </DropdownMenuItem>
@@ -1139,7 +1147,7 @@ function CalledEntryActions({
           onEntryAction(entry, "no-show", { reason: "No show" }, t("noShowRecorded"))
         }
       />
-      {canAdmin && (
+      {canDisqualify && (
         <ConfirmAction
           open={confirming === "disqualify"}
           onOpenChange={(open) => !open && setConfirming(null)}
@@ -1168,6 +1176,7 @@ function QueueList({
   compact,
   scroll,
   desiredMinutesPerTeam,
+  calledTooLongMinutes,
   renderActions,
 }: {
   title: string;
@@ -1176,6 +1185,8 @@ function QueueList({
   compact?: boolean;
   scroll?: boolean;
   desiredMinutesPerTeam?: number | null;
+  /** H34/H203 operator-configured called-too-long threshold; null falls back. */
+  calledTooLongMinutes?: number | null;
   renderActions: (entry: QueueEntry) => React.ReactNode;
 }) {
   const { t } = useLocale();
@@ -1211,8 +1222,11 @@ function QueueList({
                       <span
                         className={cn(
                           "text-muted-foreground text-xs tabular-nums",
-                          hasWaitedTooLong(entry.called_at, desiredMinutesPerTeam ?? null) &&
-                            "text-amber-700 dark:text-amber-400",
+                          hasWaitedTooLong(
+                            entry.called_at,
+                            desiredMinutesPerTeam ?? null,
+                            calledTooLongMinutes ?? null,
+                          ) && "text-amber-700 dark:text-amber-400",
                         )}
                       >
                         {t("calledAt", {
@@ -1221,8 +1235,11 @@ function QueueList({
                             minute: "2-digit",
                           }),
                         })}
-                        {hasWaitedTooLong(entry.called_at, desiredMinutesPerTeam ?? null) &&
-                          ` · ${t("calledTooLong")}`}
+                        {hasWaitedTooLong(
+                          entry.called_at,
+                          desiredMinutesPerTeam ?? null,
+                          calledTooLongMinutes ?? null,
+                        ) && ` · ${t("calledTooLong")}`}
                       </span>
                     )}
                   </div>
@@ -1503,40 +1520,21 @@ function PresentationTimer({
   const { t } = useLocale();
   const [now, setNow] = useState(Date.now());
 
-  // The pace (and its cap/squeeze) is a live value that keeps recomputing as
-  // the schedule and pending count change — refetching it mid-presentation
-  // must not shift the total this timer counts against, or the remaining/
-  // overtime figure would jump around instead of counting smoothly. Freeze it
-  // per presentation (keyed by startedAt), capturing it once if it wasn't
-  // ready yet when the presentation began.
+  // Stopwatch, not a countdown, counted against a total frozen per
+  // presentation — both rules live (and are tested) in `lib/judging-timer.ts`.
   const frozen = useRef<{ key: string | null; minutes: number | null }>({
     key: null,
     minutes: null,
   });
-  if (frozen.current.key !== startedAt) {
-    frozen.current = { key: startedAt, minutes: totalMinutes };
-  } else if (frozen.current.minutes == null && totalMinutes != null) {
-    frozen.current.minutes = totalMinutes;
-  }
-  const totalSeconds =
-    frozen.current.minutes != null ? Math.round(frozen.current.minutes * 60) : null;
-  const startedMs = startedAt ? new Date(startedAt).getTime() : null;
-  const elapsedSeconds =
-    startedMs && Number.isFinite(startedMs) ? Math.max(0, Math.floor((now - startedMs) / 1000)) : 0;
-  // Stopwatch, not a countdown: always counts up from 0. Only the color
-  // cues (last-minute amber, over-max red) change as elapsed crosses
-  // thresholds — the displayed number itself never resets or jumps.
-  const remainingSeconds = totalSeconds != null ? totalSeconds - elapsedSeconds : null;
-  const progressValue =
-    totalSeconds && totalSeconds > 0 ? Math.min(100, (elapsedSeconds / totalSeconds) * 100) : 0;
-  const isOverTime = remainingSeconds != null && remainingSeconds < 0;
-  const isWrappingUp =
-    !isOverTime &&
-    remainingSeconds != null &&
-    totalSeconds != null &&
-    totalSeconds > 0 &&
-    remainingSeconds <= Math.max(60, Math.ceil(totalSeconds * 0.1));
-  const timerTone = isOverTime ? "danger" : isWrappingUp ? "warning" : "default";
+  frozen.current = freezeTotalMinutes(frozen.current, startedAt, totalMinutes);
+  const {
+    totalSeconds,
+    elapsedSeconds,
+    progressValue,
+    isOverTime,
+    isWrappingUp,
+    tone: timerTone,
+  } = presentationTimerState({ startedAt, totalMinutes: frozen.current.minutes, now });
   const cueText = isOverTime ? t("timeLimitExceeded") : isWrappingUp ? t("wrapUp") : t("onTime");
 
   useEffect(() => {
