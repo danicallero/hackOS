@@ -40,6 +40,7 @@ queue no matter how many times scheduling runs (idempotent scheduling).
 | `announcements-publisher` | `notifications/announcements-publisher.ts` | **15 s** | announcements whose `publish_at` has passed → reveals them |
 | `spot-confirmation expirer` | `applications/expirer.ts` | **60 s** | accepted responses whose confirmation window elapsed → `expired` (`expireDueConfirmations`) |
 | `queue-pump` | `queue/pump.ts` | repeatable | for each active room, tops up the live judging queue (`callNextForRoom`) |
+| `tv-scheduler` | `queue/tv-scheduler.ts` | **5 s** | resolves what the venue screens should show (operator override → covering `tv_slots` window → default `rooms`), drops an override whose `expiresAt` passed, and broadcasts `tv.mode.changed` **only when the resolved state changed** — so a slot boundary reaches the fleet unattended without waking every screen every tick (H42) |
 | `presence-event-end-closer` | `logistics/presence-closer.ts` | **60 s** | once `event_config.event_ends_at` passes, force-closes every still-open door session with an audited `out` at that instant (`scanned_by NULL` = system actor, migration 0708). H24 product override of the original "the system never closes a session itself" rule; an `out` outside the certainty window credits no hours, so it only restores the in/out invariant. |
 
 (The table lists the workers relevant to the flows documented here; other
@@ -122,6 +123,7 @@ controllers. This is the honest map:
 | **Spot-confirmation expiry** (H15) | **Async** | `spot-confirmation expirer` tick every 60 s |
 | **Scheduled announcement reveals** | **Async** | `announcements-publisher` tick every 15 s |
 | **Judging queue top-up** (H29+) | **Async** | `queue-pump` tick |
+| **TV slot boundaries / override expiry** (H42) | **Async** | `tv-scheduler` tick every 5 s |
 
 **Takeaway for future work:** if you want something processed in the background,
 write it to a durable table with a `status` + `next_attempt_at`, and either

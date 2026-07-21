@@ -56,6 +56,10 @@ const eventConfigBody = z
     venueName: z.string().nullable().optional(),
     venueLatitude: z.number().min(-90).max(90).nullable().optional(),
     venueLongitude: z.number().min(-180).max(180).nullable().optional(),
+    // H42: shown on the venue screens (GET /api/tv/config), never on the
+    // public website feed.
+    wifiSsid: z.string().max(64).nullable().optional(),
+    wifiPassword: z.string().max(128).nullable().optional(),
     passBackFields: z.array(backFieldSchema).max(20).optional(),
     passFieldLabels: passFieldLabelsSchema.optional(),
     passFieldVisibility: passFieldVisibilitySchema.optional(),
@@ -77,6 +81,8 @@ const DEFAULTS = {
   venue_name: null,
   venue_latitude: null,
   venue_longitude: null,
+  wifi_ssid: null,
+  wifi_password: null,
   pass_back_fields: [],
   pass_field_labels: {},
   pass_field_visibility: {},
@@ -97,6 +103,8 @@ interface EventConfigRow {
   venue_name: string | null;
   venue_latitude: number | null;
   venue_longitude: number | null;
+  wifi_ssid: string | null;
+  wifi_password: string | null;
   pass_back_fields: { label: string; value: string }[];
   pass_field_labels: PassFieldLabels;
   pass_field_visibility: PassFieldVisibility;
@@ -109,6 +117,7 @@ async function readConfig(): Promise<EventConfigRow> {
             show_start_countdown, participants_can_create_projects,
             presence_auto_entry_at, presence_certainty_window_minutes,
             venue_name, venue_latitude, venue_longitude,
+            wifi_ssid, wifi_password,
             pass_back_fields, pass_field_labels, pass_field_visibility
        FROM event_config WHERE id = 1`,
   );
@@ -166,6 +175,23 @@ function toPublic(
   };
 }
 
+/**
+ * Everything toPublic returns plus the venue Wi-Fi credentials (H42). These
+ * are deliberately absent from /api/public/event, which backs the public
+ * website; the screens standing in the venue read them from /api/tv/config
+ * instead, and the settings page from /api/event.
+ */
+function toAdmin(
+  row: EventConfigRow,
+  judging: { judging_starts_at: string | null; judging_ends_at: string | null },
+) {
+  return {
+    ...toPublic(row, judging),
+    wifiSsid: row.wifi_ssid,
+    wifiPassword: row.wifi_password,
+  };
+}
+
 export function registerEventRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
 
@@ -181,10 +207,11 @@ export function registerEventRoutes(app: FastifyInstance): void {
     {
       preHandler: requireCapability(CAPABILITIES.SCHEDULE_MANAGE),
       schema: {
-        summary: "Read the full event config, including venue and Wallet pass back fields.",
+        summary:
+          "Read the full event config, including venue, Wi-Fi credentials and Wallet pass back fields.",
       },
     },
-    async () => toPublic(await readConfig(), await readJudgingWindow()),
+    async () => toAdmin(await readConfig(), await readJudgingWindow()),
   );
 
   r.put(
@@ -225,6 +252,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
         venue_latitude: b.venueLatitude === undefined ? current.venue_latitude : b.venueLatitude,
         venue_longitude:
           b.venueLongitude === undefined ? current.venue_longitude : b.venueLongitude,
+        wifi_ssid: b.wifiSsid === undefined ? current.wifi_ssid : b.wifiSsid,
+        wifi_password: b.wifiPassword === undefined ? current.wifi_password : b.wifiPassword,
         pass_back_fields:
           b.passBackFields === undefined ? current.pass_back_fields : b.passBackFields,
         pass_field_labels:
@@ -260,8 +289,9 @@ export function registerEventRoutes(app: FastifyInstance): void {
              show_start_countdown, participants_can_create_projects,
              presence_auto_entry_at, presence_certainty_window_minutes,
              venue_name, venue_latitude, venue_longitude,
+             wifi_ssid, wifi_password,
              pass_back_fields, pass_field_labels, pass_field_visibility)
-         VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, $16::jsonb, $17::jsonb)
+         VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb, $18::jsonb, $19::jsonb)
          ON CONFLICT (id) DO UPDATE
             SET name = EXCLUDED.name, tagline = EXCLUDED.tagline, timezone = EXCLUDED.timezone,
                 event_starts_at = EXCLUDED.event_starts_at,
@@ -275,6 +305,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
                 venue_name = EXCLUDED.venue_name,
                 venue_latitude = EXCLUDED.venue_latitude,
                 venue_longitude = EXCLUDED.venue_longitude,
+                wifi_ssid = EXCLUDED.wifi_ssid,
+                wifi_password = EXCLUDED.wifi_password,
                 pass_back_fields = EXCLUDED.pass_back_fields,
                 pass_field_labels = EXCLUDED.pass_field_labels,
                 pass_field_visibility = EXCLUDED.pass_field_visibility
@@ -283,6 +315,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
                    show_start_countdown, participants_can_create_projects,
                    presence_auto_entry_at, presence_certainty_window_minutes,
                    venue_name, venue_latitude, venue_longitude,
+                   wifi_ssid, wifi_password,
                    pass_back_fields, pass_field_labels, pass_field_visibility`,
         [
           next.name,
@@ -299,6 +332,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
           next.venue_name,
           next.venue_latitude,
           next.venue_longitude,
+          next.wifi_ssid,
+          next.wifi_password,
           JSON.stringify(next.pass_back_fields),
           JSON.stringify(next.pass_field_labels),
           JSON.stringify(next.pass_field_visibility),
@@ -310,7 +345,9 @@ export function registerEventRoutes(app: FastifyInstance): void {
         entityType: "event_config",
         entityId: 1,
         action: "updated",
-        after: toPublic(rows[0], judging),
+        // The Wi-Fi password is a credential: audit that it changed, never
+        // what it changed to.
+        after: { ...toAdmin(rows[0], judging), wifiPassword: rows[0].wifi_password ? "***" : null },
       });
 
       // Apple Wallet passes render event name/venue/back fields fresh from
@@ -323,7 +360,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
         await enqueueWalletSync(passIds);
       }
 
-      return toPublic(rows[0], judging);
+      return toAdmin(rows[0], judging);
     },
   );
 }

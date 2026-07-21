@@ -27,6 +27,10 @@ Architecture & modules:
 - [Event config & the Apple Wallet pass](./event-config-wallet.md) — the
   `event_config` singleton (identity, doors-open vs hacking window, venue) and
   how the Wallet pass renders from it (field visibility, captions, back fields).
+- [TV screens](./tv-screens.md) — what the venue's screens show and why: the
+  override / timetable / default precedence, the combined live screen and its
+  payload, slot rotation, venue Wi-Fi, and how each mode adapts to any screen
+  size or aspect ratio.
 
 Frontend (web & mobile):
 

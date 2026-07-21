@@ -5,11 +5,12 @@
 // is caught before saving instead of at the venue.
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ExternalLinkIcon, type LucideIcon, MapPinIcon } from "lucide-react";
+import { ExternalLinkIcon, type LucideIcon, MapPinIcon, WifiIcon } from "lucide-react";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { PasswordInput } from "@/components/common/password-input";
 import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
 import { SubmitButton } from "@/components/common/submit-button";
@@ -35,6 +36,10 @@ const schema = z.object({
   // Strings so an empty input is representable; parsed to number | null on submit.
   venueLatitude: z.string(),
   venueLongitude: z.string(),
+  // H42: shown on the venue TV screens, so a scheduled Wi-Fi slot needs
+  // nobody at the control page.
+  wifiSsid: z.string().max(64),
+  wifiPassword: z.string().max(128),
 });
 
 type Values = z.infer<typeof schema>;
@@ -44,6 +49,8 @@ function fromConfig(cfg: EventConfig): Values {
     venueName: cfg.venueName ?? "",
     venueLatitude: cfg.venueLatitude === null ? "" : String(cfg.venueLatitude),
     venueLongitude: cfg.venueLongitude === null ? "" : String(cfg.venueLongitude),
+    wifiSsid: cfg.wifiSsid ?? "",
+    wifiPassword: cfg.wifiPassword ?? "",
   };
 }
 
@@ -101,7 +108,13 @@ export function VenueTab({
   const { config, status, applyConfig } = useEventConfig();
   const form = useForm<Values>({
     resolver: zodResolver(schema),
-    defaultValues: { venueName: "", venueLatitude: "", venueLongitude: "" },
+    defaultValues: {
+      venueName: "",
+      venueLatitude: "",
+      venueLongitude: "",
+      wifiSsid: "",
+      wifiPassword: "",
+    },
   });
   const { reset, formState, watch } = form;
   const [saveState, setSaveState] = useCategorySaveState(formState.isDirty, onDirtyChange);
@@ -150,6 +163,8 @@ export function VenueTab({
         venueName: values.venueName.trim() || null,
         venueLatitude,
         venueLongitude,
+        wifiSsid: values.wifiSsid.trim() || null,
+        wifiPassword: values.wifiPassword.trim() || null,
       });
       applyConfig(next);
       reset(fromConfig(next));
@@ -236,6 +251,44 @@ export function VenueTab({
             />
           </div>
           <VenuePreview name={values.venueName.trim()} lat={previewLat} lon={previewLon} />
+        </SectionCard>
+        <SectionCard
+          className="mt-6"
+          icon={WifiIcon}
+          title={t("venueWifiSectionTitle")}
+          description={t("venueWifiSectionDesc")}
+          state={<SaveStatus state={saveState} />}
+          footer={<SubmitButton pending={formState.isSubmitting}>{t("saveChanges")}</SubmitButton>}
+        >
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField
+              control={form.control}
+              name="wifiSsid"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("networkNameLabel")}</FormLabel>
+                  <FormControl>
+                    <Input {...field} placeholder={t("hackathonWifiPlaceholder")} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="wifiPassword"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("password")}</FormLabel>
+                  <FormControl>
+                    <PasswordInput {...field} />
+                  </FormControl>
+                  <FormDescription>{t("venueWifiVisibilityWarning")}</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
         </SectionCard>
       </form>
     </Form>

@@ -2723,6 +2723,202 @@ const dict: Record<string, I18nText> = {
     gl: "Conta atrás do evento, opcionalmente cunha hora de fin personalizada.",
     en: "Event countdown, optionally with a custom end time.",
   },
+  modeLive: { es: "En directo", gl: "En directo", en: "Live" },
+  modeLiveDetail: {
+    es: "Cuenta atrás, programa, patrocinadores y Wi-Fi en una sola pantalla.",
+    gl: "Conta atrás, programa, patrocinadores e Wi-Fi nunha soa pantalla.",
+    en: "Countdown, schedule, sponsors and Wi-Fi on one screen.",
+  },
+
+  // Live-screen blocks
+  liveBlockTimer: { es: "Cuenta atrás", gl: "Conta atrás", en: "Countdown" },
+  liveBlockSchedule: { es: "Programa", gl: "Programa", en: "Schedule" },
+  liveBlockSponsors: { es: "Patrocinadores", gl: "Patrocinadores", en: "Sponsors" },
+  liveBlockWifi: { es: "Wi-Fi", gl: "Wi-Fi", en: "Wi-Fi" },
+  liveScheduleRowsLabel: {
+    es: "Actividades visibles",
+    gl: "Actividades visibles",
+    en: "Visible activities",
+  },
+  liveScheduleRowsHint: {
+    es: "La lista se desplaza sola para que lo próximo siempre quede arriba.",
+    gl: "A lista despráza­se soa para que o próximo sempre quede arriba.",
+    en: "The list scrolls itself so what's next always sits at the top.",
+  },
+  liveWifiShowPassword: {
+    es: "Mostrar la contraseña",
+    gl: "Amosar o contrasinal",
+    en: "Show the password",
+  },
+  liveWifiShowQr: {
+    es: "Mostrar código QR",
+    gl: "Amosar código QR",
+    en: "Show QR code",
+  },
+  wifiQrTitle: {
+    es: "Código QR para conectarse a la red",
+    gl: "Código QR para conectarse á rede",
+    en: "QR code to join the network",
+  },
+  wifiScanToJoin: {
+    es: "Escanea para conectarte",
+    gl: "Escanea para conectarte",
+    en: "Scan to connect",
+  },
+  liveWifiSourceHint: {
+    es: "Se toma de Ajustes › Evento › Sede.",
+    gl: "Tómase de Axustes › Evento › Sede.",
+    en: "Taken from Settings › Event › Venue.",
+  },
+  timerTargetLabel: { es: "Cuenta hasta", gl: "Conta ata", en: "Counts down to" },
+  timerTargetAuto: {
+    es: "Automático (fase del evento)",
+    gl: "Automático (fase do evento)",
+    en: "Automatic (event phase)",
+  },
+  timerTargetHackingStart: {
+    es: "Inicio del hackeo",
+    gl: "Inicio do hackeo",
+    en: "Hacking start",
+  },
+  timerTargetHackingEnd: { es: "Fin del hackeo", gl: "Fin do hackeo", en: "Hacking end" },
+  timerTargetJudgingStart: {
+    es: "Inicio de la evaluación",
+    gl: "Inicio da avaliación",
+    en: "Judging start",
+  },
+  timerTargetJudgingEnd: {
+    es: "Fin de la evaluación",
+    gl: "Fin da avaliación",
+    en: "Judging end",
+  },
+  timerTargetCustom: {
+    es: "Fecha personalizada",
+    gl: "Data personalizada",
+    en: "Custom date",
+  },
+
+  // What the screens are showing, and why
+  sourceOverride: { es: "Envío manual", gl: "Envío manual", en: "Manual broadcast" },
+  sourceSlot: {
+    es: "Según la programación",
+    gl: "Segundo a programación",
+    en: "From the timetable",
+  },
+  sourceSlotNamed: {
+    es: "Programación · {label}",
+    gl: "Programación · {label}",
+    en: "Timetable · {label}",
+  },
+  sourceDefault: { es: "Vista por defecto", gl: "Vista por defecto", en: "Default view" },
+  backToSchedule: {
+    es: "Volver a la programación",
+    gl: "Volver á programación",
+    en: "Back to schedule",
+  },
+  backOnTimetable: {
+    es: "Las pantallas siguen otra vez la programación",
+    gl: "As pantallas seguen outra vez a programación",
+    en: "The screens follow the timetable again",
+  },
+  slotEndsAt: { es: "Termina a las {time}", gl: "Remata ás {time}", en: "Ends at {time}" },
+  wifiOverridesVenueHint: {
+    es: "Sustituye a la red guardada en Ajustes › Evento › Sede mientras esté en pantalla.",
+    gl: "Substitúe á rede gardada en Axustes › Evento › Sede mentres estea en pantalla.",
+    en: "Replaces the network saved in Settings › Event › Venue while it is on screen.",
+  },
+
+  // TV timetable
+  tvTimetable: {
+    es: "Programación de pantallas",
+    gl: "Programación de pantallas",
+    en: "Screen timetable",
+  },
+  tvTimetableDesc: {
+    es: "Define qué se ve y cuándo, sin que nadie tenga que cambiarlo a mano.",
+    gl: "Define que se ve e cando, sen que ninguén teña que cambialo a man.",
+    en: "Set what shows when, with nobody having to change it by hand.",
+  },
+  tvTimetableEmptyTitle: {
+    es: "Sin franjas programadas",
+    gl: "Sen franxas programadas",
+    en: "No slots scheduled",
+  },
+  tvTimetableEmptyDesc: {
+    es: "Mientras no haya ninguna franja activa, las pantallas muestran las salas.",
+    gl: "Mentres non haxa ningunha franxa activa, as pantallas amosan as salas.",
+    en: "With no slot running, the screens show the judging rooms.",
+  },
+  addSlot: { es: "Añadir franja", gl: "Engadir franxa", en: "Add slot" },
+  editSlot: { es: "Editar franja", gl: "Editar franxa", en: "Edit slot" },
+  deleteSlot: { es: "Eliminar franja", gl: "Eliminar franxa", en: "Delete slot" },
+  slotLabel: { es: "Nombre", gl: "Nome", en: "Name" },
+  slotLabelPlaceholder: {
+    es: "Noche de hackeo",
+    gl: "Noite de hackeo",
+    en: "Hacking night",
+  },
+  slotContent: { es: "Qué se muestra", gl: "Que se amosa", en: "What it shows" },
+  slotRotationHint: {
+    es: "Con más de una vista, la pantalla las alterna según los segundos indicados.",
+    gl: "Con máis dunha vista, a pantalla alternaas segundo os segundos indicados.",
+    en: "With more than one view, the screen alternates them on the seconds given.",
+  },
+  slotOverlapHint: {
+    es: "Las franjas pueden solaparse: gana la que empiece más tarde.",
+    gl: "As franxas poden solaparse: gaña a que empece máis tarde.",
+    en: "Slots may overlap: the one that starts latest wins.",
+  },
+  slotRunningNow: { es: "En pantalla", gl: "En pantalla", en: "On screen" },
+  slotRotating: {
+    es: "{count} vistas alternas",
+    gl: "{count} vistas alternas",
+    en: "{count} rotating views",
+  },
+  slotWindow: { es: "{start} — {end}", gl: "{start} — {end}", en: "{start} — {end}" },
+  slotWindowRequired: {
+    es: "Indica cuándo empieza y cuándo termina la franja.",
+    gl: "Indica cando empeza e cando remata a franxa.",
+    en: "Set when the slot starts and ends.",
+  },
+  dwellSeconds: { es: "Segundos", gl: "Segundos", en: "Seconds" },
+  addToRotation: { es: "Añadir vista", gl: "Engadir vista", en: "Add view" },
+  removeFromRotation: { es: "Quitar vista", gl: "Quitar vista", en: "Remove view" },
+  tvTimetableSaved: {
+    es: "Programación guardada",
+    gl: "Programación gardada",
+    en: "Timetable saved",
+  },
+  tvSlotDeleted: { es: "Franja eliminada", gl: "Franxa eliminada", en: "Slot deleted" },
+  couldNotLoadTvTimetable: {
+    es: "No se pudo cargar la programación de pantallas",
+    gl: "Non se puido cargar a programación de pantallas",
+    en: "Could not load the screen timetable",
+  },
+  couldNotSaveTvSlot: {
+    es: "No se pudo guardar la franja",
+    gl: "Non se puido gardar a franxa",
+    en: "Could not save the slot",
+  },
+  couldNotDeleteTvSlot: {
+    es: "No se pudo eliminar la franja",
+    gl: "Non se puido eliminar a franxa",
+    en: "Could not delete the slot",
+  },
+
+  // Venue Wi-Fi (settings)
+  venueWifiSectionTitle: { es: "Wi-Fi de la sede", gl: "Wi-Fi da sede", en: "Venue Wi-Fi" },
+  venueWifiSectionDesc: {
+    es: "Lo que las pantallas de la sede muestran cuando toca enseñar la red.",
+    gl: "O que as pantallas da sede amosan cando toca amosar a rede.",
+    en: "What the venue screens show when it's time to display the network.",
+  },
+  venueWifiVisibilityWarning: {
+    es: "Cualquiera que vea una pantalla de la sede puede leerla.",
+    gl: "Calquera que vexa unha pantalla da sede pode lela.",
+    en: "Anyone who can see a venue screen can read it.",
+  },
+
   leaveBlankShowActive: {
     es: "Déjalo en blanco para mostrar el aviso activo",
     gl: "Déixao en branco para amosar o aviso activo",

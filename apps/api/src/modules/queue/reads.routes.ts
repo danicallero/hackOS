@@ -19,8 +19,17 @@ import {
   roomPace,
   roomView,
 } from "./reads.js";
-import { challengeIdParam, repoIdParam, roomIdParam, tvModeBody } from "./schemas.js";
-import { getTvMode, setTvMode } from "./tv.js";
+import {
+  challengeIdParam,
+  idParam,
+  repoIdParam,
+  roomIdParam,
+  tvModeBody,
+  tvSlotBody,
+  tvSlotPatchBody,
+} from "./schemas.js";
+import { clearTvOverride, listTvSlots, resolveTvState, setTvMode, tvVenueConfig } from "./tv.js";
+import { createTvSlot, deleteTvSlot, updateTvSlot } from "./tv-slots.js";
 
 /** Read APIs (H38-H42): progress, room views, participant status, pace, SSE streams, TV mode. */
 export function registerReadsRoutes(app: FastifyInstance): void {
@@ -144,12 +153,118 @@ export function registerReadsRoutes(app: FastifyInstance): void {
     await subscribe(`user:${req.userId}`, reply);
   });
 
-  // H42: TV mode state in Valkey.
-  typed.get("/api/tv/mode", async () => getTvMode());
+  // H42: what the screens should show right now — an operator override if one
+  // is live, otherwise the covering timetable slot, otherwise the default.
+  typed.get(
+    "/api/tv/mode",
+    {
+      schema: {
+        summary: "What the venue screens are currently showing.",
+        description:
+          "Public feed for the TV wall. Returns the resolved display state: an operator override if one is live and unexpired, otherwise the timetable slot covering now (latest-starting slot wins on overlap), otherwise the default rooms view. `source` says which of the three applied, and `slot.items` carries the rotation entries a slot cycles through.",
+      },
+    },
+    async () => resolveTvState(),
+  );
 
   typed.patch(
     "/api/tv/mode",
-    { preHandler: requireCapability(CAPABILITIES.TV_CONTROL), schema: { body: tvModeBody } },
+    {
+      preHandler: requireCapability(CAPABILITIES.TV_CONTROL),
+      schema: {
+        summary: "Broadcast a mode to every screen, overriding the timetable.",
+        description:
+          "Sets the operator override, which wins over any running timetable slot until it is cleared or its optional expiresAt passes (the tv-scheduler worker drops it and the timetable takes back over). Returns the newly resolved display state.",
+        body: tvModeBody,
+      },
+    },
     async (req) => setTvMode(req.body.mode, req.body.payload, req.body.expiresAt ?? null),
+  );
+
+  typed.delete(
+    "/api/tv/mode",
+    {
+      preHandler: requireCapability(CAPABILITIES.TV_CONTROL),
+      schema: {
+        summary: "Clear the operator override and go back to the timetable.",
+        description:
+          "Drops the manual broadcast so the screens follow the tv_slots timetable again, landing on whichever slot is running at that moment (or the default rooms view if none covers now).",
+      },
+    },
+    async () => clearTvOverride(),
+  );
+
+  // H42: venue details every screen may need regardless of mode. Public, like
+  // the rest of the TV feed — these are credentials printed on the venue wall.
+  typed.get(
+    "/api/tv/config",
+    {
+      schema: {
+        summary: "Venue details the screens render (Wi-Fi credentials).",
+        description:
+          "Public TV feed companion to /api/tv/mode. Serves the venue Wi-Fi network name, password and note from the event config, so the combined live screen and the full-screen Wi-Fi mode can show them unattended. Returns null when no network is configured.",
+      },
+    },
+    async () => tvVenueConfig(),
+  );
+
+  // H42 timetable: absolute time windows saying what the fleet shows when.
+  typed.get(
+    "/api/tv/slots",
+    {
+      preHandler: requireCapability(CAPABILITIES.TV_CONTROL),
+      schema: {
+        summary: "List the TV timetable.",
+        description:
+          "Every scheduled slot in start order. Slots may overlap; the one covering now with the latest start is the one that ends up on screen.",
+      },
+    },
+    async () => ({ items: await listTvSlots() }),
+  );
+
+  typed.post(
+    "/api/tv/slots",
+    {
+      preHandler: requireCapability(CAPABILITIES.TV_CONTROL),
+      schema: {
+        summary: "Add a slot to the TV timetable.",
+        description:
+          "Schedules what the screens show during an absolute time window. One item renders statically; several make the display rotate through them on each item's `seconds` dwell. Rejected when the window ends before it starts.",
+        body: tvSlotBody,
+      },
+    },
+    async (req) => createTvSlot(req.body, req.userId),
+  );
+
+  typed.patch(
+    "/api/tv/slots/:id",
+    {
+      preHandler: requireCapability(CAPABILITIES.TV_CONTROL),
+      schema: {
+        summary: "Edit a TV timetable slot.",
+        description:
+          "Updates the window, label or items of an existing slot. Editing the slot that is currently running takes effect on the screens immediately. Fields omitted from the body are left unchanged.",
+        params: idParam,
+        body: tvSlotPatchBody,
+      },
+    },
+    async (req) => updateTvSlot(req.params.id, req.body, req.userId),
+  );
+
+  typed.delete(
+    "/api/tv/slots/:id",
+    {
+      preHandler: requireCapability(CAPABILITIES.TV_CONTROL),
+      schema: {
+        summary: "Remove a TV timetable slot.",
+        description:
+          "Deletes the slot. If it was the one running, the screens fall through to whatever other slot covers now, or to the default rooms view.",
+        params: idParam,
+      },
+    },
+    async (req) => {
+      await deleteTvSlot(req.params.id, req.userId);
+      return { ok: true };
+    },
   );
 }

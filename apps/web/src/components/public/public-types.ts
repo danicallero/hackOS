@@ -11,13 +11,14 @@ export interface PublicEvent {
   judgingEndsAt: string | null;
 }
 
+/** GET /api/public/sponsors item. Keyed by `enterpriseId` — the feed has no `id`. */
 export interface PublicSponsor {
-  id: number;
+  enterpriseId: number;
   name: string;
   logoUrl: string | null;
   logoNegativeUrl: string | null;
   website: string | null;
-  tier?: string | null;
+  priority?: number;
 }
 
 export interface PublicChallenge {
