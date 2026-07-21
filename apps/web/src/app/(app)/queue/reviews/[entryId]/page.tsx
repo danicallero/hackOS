@@ -22,12 +22,7 @@ import { toast } from "sonner";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
-import {
-  type Answers,
-  answerHasValue,
-  normalizeAnswers,
-  QuestionField,
-} from "@/components/common/question-field";
+import { type Answers, normalizeAnswers, QuestionField } from "@/components/common/question-field";
 import { QueueStatusBadge } from "@/components/common/queue-status-badge";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
@@ -36,6 +31,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api";
+import { changedFieldsLabel, requiredUnanswered, reviewStatusBadge } from "@/lib/attempt-review";
 import { useLocale } from "@/lib/i18n";
 import {
   getReviewDetail,
@@ -87,9 +83,10 @@ export default function ReviewDetailPage() {
   }, [load]);
 
   const panel = detail?.challenge.criteria ?? [];
-  const requiredUnanswered = useMemo(
-    () => panel.filter((q) => q.required && !answerHasValue(answers[q.key])).length,
-    [panel, answers],
+  const unanswered = useMemo(() => requiredUnanswered(panel, answers), [panel, answers]);
+  const fieldCopy = useMemo(
+    () => ({ notes: t("notesLabel"), status: t("evaluationStateLabel"), scores: t("scoring") }),
+    [t],
   );
 
   const save = useCallback(
@@ -154,6 +151,7 @@ export default function ReviewDetailPage() {
   }
 
   const { project, review, room, challenge } = detail;
+  const statusBadge = reviewStatusBadge(review.status);
   const links: Array<[string, string | null]> = [
     [t("devpostUrlLabel"), project.devpostUrl],
     [t("githubUrlLabel"), project.githubUrl],
@@ -177,13 +175,7 @@ export default function ReviewDetailPage() {
         state={
           <div className="flex flex-wrap items-center gap-2">
             <QueueStatusBadge status={detail.status} />
-            {review.status === "submitted" ? (
-              <StatusBadge tone="success">{t("challengeReviewSubmitted")}</StatusBadge>
-            ) : review.status === "draft" ? (
-              <StatusBadge tone="info">{t("challengeReviewDraft")}</StatusBadge>
-            ) : (
-              <StatusBadge tone="neutral">{t("challengeReviewNotStarted")}</StatusBadge>
-            )}
+            <StatusBadge tone={statusBadge.tone}>{t(statusBadge.labelKey)}</StatusBadge>
           </div>
         }
         primaryAction={
@@ -256,7 +248,7 @@ export default function ReviewDetailPage() {
                 {review.status === "submitted" ? t("saveCorrection") : t("saveDraft")}
               </Button>
               {review.status !== "submitted" && (
-                <Button disabled={saving || requiredUnanswered > 0} onClick={() => save(true)}>
+                <Button disabled={saving || unanswered > 0} onClick={() => save(true)}>
                   {t("submitReview")}
                 </Button>
               )}
@@ -268,11 +260,11 @@ export default function ReviewDetailPage() {
           <p className="text-muted-foreground text-sm">{t("noJudgingCriteria")}</p>
         ) : (
           <div className="space-y-5">
-            {requiredUnanswered > 0 && (
+            {unanswered > 0 && (
               <p className="text-muted-foreground text-sm">
-                {requiredUnanswered === 1
-                  ? t("requiredFieldUnansweredOne", { count: requiredUnanswered })
-                  : t("requiredFieldUnansweredOther", { count: requiredUnanswered })}
+                {unanswered === 1
+                  ? t("requiredFieldUnansweredOne", { count: unanswered })
+                  : t("requiredFieldUnansweredOther", { count: unanswered })}
               </p>
             )}
             {panel.map((question) => (
@@ -313,7 +305,7 @@ export default function ReviewDetailPage() {
                   {version.authorName || t("judgeFallback")}
                 </span>{" "}
                 · {new Date(version.createdAt).toLocaleString()} ·{" "}
-                {version.changedFields.join(", ")}
+                {changedFieldsLabel(version.changedFields, panel, fieldCopy)}
               </li>
             ))}
           </ol>

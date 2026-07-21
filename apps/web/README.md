@@ -167,7 +167,8 @@ app/(app)/<route>/
 - **Where the logic module lives.** Next to the route it serves
   (`applications/workflow.ts`). A sibling route may import it by relative path.
   Promote to `src/lib/` only once it's genuinely cross-workspace
-  (`lib/judging-workspace.ts`, `lib/queue.ts`).
+  (`lib/judging-workspace.ts`, `lib/queue.ts`, `lib/attempt-review.ts` — the
+  latter is shared by the judging panel and the queue reviews surfaces).
 - **Plain file names, no `_` prefix.** Next.js treats both as non-routes inside
   `(app)`; the codebase has zero underscore-prefixed files and that's the
   choice. Only `page.tsx`, `layout.tsx` and `[param]/` directories carry

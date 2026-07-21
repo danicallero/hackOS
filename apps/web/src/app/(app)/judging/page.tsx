@@ -32,12 +32,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
-import {
-  type Answers,
-  answerHasValue,
-  normalizeAnswers,
-  QuestionField,
-} from "@/components/common/question-field";
+import { type Answers, normalizeAnswers, QuestionField } from "@/components/common/question-field";
 import { QueueStatusBadge } from "@/components/common/queue-status-badge";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
@@ -66,6 +61,7 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { useEventSource, useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError, api } from "@/lib/api";
+import { changedFieldsLabel, requiredUnanswered, reviewStatusBadge } from "@/lib/attempt-review";
 import { API_URL } from "@/lib/env";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { collaborationState, hasWaitedTooLong, workspaceAccess } from "@/lib/judging-workspace";
@@ -1610,18 +1606,15 @@ function ReviewForm({
   const [online, setOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [externalUpdate, setExternalUpdate] = useState<string | null>(null);
-  const requiredUnanswered = panel.filter(
-    (question) => question.required && !answerHasValue(scores[question.key]),
-  ).length;
-  const changedFieldLabel = useCallback(
-    (field: string) => {
-      if (field === "notes") return t("notesLabel");
-      if (field === "status") return t("evaluationStateLabel");
-      const key = field.startsWith("scores.") ? field.slice("scores.".length) : field;
-      const criterion = panel.find((question) => question.key === key);
-      return criterion ? textForDisplay(criterion.label) : t("scoring");
-    },
-    [panel, t],
+  const unanswered = requiredUnanswered(panel, scores);
+  const statusBadge = reviewStatusBadge(status);
+  const fieldCopy = useMemo(
+    () => ({ notes: t("notesLabel"), status: t("evaluationStateLabel"), scores: t("scoring") }),
+    [t],
+  );
+  const describeFields = useCallback(
+    (fields: readonly string[]) => changedFieldsLabel(fields, panel, fieldCopy),
+    [panel, fieldCopy],
   );
 
   useEffect(() => {
@@ -1661,11 +1654,11 @@ function ReviewForm({
       if (external) {
         const last = reviewVersions.at(-1);
         setExternalUpdate(
-          last?.changed_fields.map(changedFieldLabel).join(", ") ?? t("evaluationUpdatedElsewhere"),
+          last ? describeFields(last.changed_fields) : t("evaluationUpdatedElsewhere"),
         );
       }
     },
-    [changedFieldLabel, entry, panel, t],
+    [describeFields, entry, panel, t],
   );
 
   useEffect(() => {
@@ -1756,9 +1749,7 @@ function ReviewForm({
             {syncState === "offline" && <WifiOffIcon className="mr-1 inline size-4" />}
             {syncLabel}
           </span>
-          <StatusBadge tone={status === "submitted" ? "success" : "warning"}>
-            {status === "submitted" ? t("evaluationSubmitted") : t("evaluationDraft")}
-          </StatusBadge>
+          <StatusBadge tone={statusBadge.tone}>{t(statusBadge.shortLabelKey)}</StatusBadge>
           {onCloseExisting && (
             <Button size="sm" variant="outline" onClick={onCloseExisting}>
               {t("closeExistingEvaluation")}
@@ -1777,7 +1768,7 @@ function ReviewForm({
           </Button>
           {status !== "submitted" && (
             <Button
-              disabled={!canJudge || saving || loading || requiredUnanswered > 0}
+              disabled={!canJudge || saving || loading || unanswered > 0}
               onClick={() => save(true)}
             >
               <CheckCircle2Icon className="size-4" />
@@ -1830,12 +1821,12 @@ function ReviewForm({
               {t("criterionUpdatedElsewhere", { fields: externalUpdate })}
             </p>
           )}
-          {requiredUnanswered > 0 && (
+          {unanswered > 0 && (
             <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
               <AlertTriangleIcon className="size-4 shrink-0" />
-              {requiredUnanswered === 1
-                ? t("requiredFieldUnansweredOne", { count: requiredUnanswered })
-                : t("requiredFieldUnansweredOther", { count: requiredUnanswered })}
+              {unanswered === 1
+                ? t("requiredFieldUnansweredOne", { count: unanswered })
+                : t("requiredFieldUnansweredOther", { count: unanswered })}
             </div>
           )}
           {sessions.length > 0 && (
@@ -1890,7 +1881,7 @@ function ReviewForm({
                       {`${version.name ?? t("judgeFallback")} ${version.surname ?? ""}`.trim()}
                     </span>{" "}
                     · {new Date(version.created_at).toLocaleString()} ·{" "}
-                    {version.changed_fields.map(changedFieldLabel).join(", ")}
+                    {describeFields(version.changed_fields)}
                   </li>
                 ))}
               </ol>

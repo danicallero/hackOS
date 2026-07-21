@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ApiError, api } from "@/lib/api";
+import { reviewStatusBadge } from "@/lib/attempt-review";
 import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
 
@@ -130,14 +131,10 @@ export default function ReviewsOverviewPage() {
         id: "status",
         header: t("colStatus"),
         sortValue: (r) => r.status ?? "",
-        cell: (r) =>
-          r.status === "submitted" ? (
-            <StatusBadge tone="success">{t("challengeReviewSubmitted")}</StatusBadge>
-          ) : r.status === "draft" ? (
-            <StatusBadge tone="info">{t("challengeReviewDraft")}</StatusBadge>
-          ) : (
-            <StatusBadge tone="neutral">{t("challengeReviewNotStarted")}</StatusBadge>
-          ),
+        cell: (r) => {
+          const badge = reviewStatusBadge(r.status);
+          return <StatusBadge tone={badge.tone}>{t(badge.labelKey)}</StatusBadge>;
+        },
       },
       {
         id: "nota",
