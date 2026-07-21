@@ -118,6 +118,83 @@ Badges, meters and charts all take a `tone`. Never hardcode a hex.
 `AppSidebar`, `UserMenu`, `AuthGuard`, `VerificationBanner`, `HeaderTitle` — the
 authed shell.
 
+## Page structure — when a page becomes a directory
+
+Most routes are a single `page.tsx`. Some grow into a directory of colocated
+files. The rule below exists so that when that happens, every page grows the
+*same* shape — three differently-organised directories are worse than three
+large files.
+
+### When to split
+
+**The trigger is meaning, not length.** Split when the page contains parts that
+are independently meaningful — a tab with its own state and save cycle, a modal
+with its own form, a decision rule you'd want to test without rendering
+anything. A route whose sections only make sense together stays in one file
+however long it is.
+
+Line count is a **prompt to look, not a mandate to act**. Past roughly 600
+lines, open the file and ask whether the meaning test above is met; if it
+isn't, leave it alone. Mechanically shredding a cohesive 700-line page into
+eight files that each need six props threaded in makes it harder to read, not
+easier. `settings/event/` (10 files) is split because each tab is a real,
+separable unit — not because it crossed a number.
+
+### What goes where
+
+```
+app/(app)/<route>/
+  page.tsx            the route itself: data loading, top-level state,
+                      capability gates, composition. Nothing else.
+  <thing>-tab.tsx     colocated presentational pieces — kebab-case, one
+  <thing>-card.tsx    component per file above ~150 lines. Private to the
+  <thing>-modal.tsx   directory: not re-exported, not imported from another
+                      workspace.
+  <domain>.ts         pure decision logic + colocated <domain>.test.ts.
+  <domain>.test.ts    No JSX, no fetching — input → decision.
+```
+
+- **`page.tsx` stays the route.** If something in it isn't loading data,
+  holding top-level state, gating on a capability, or composing children, it's
+  a candidate to move out.
+- **Logic modules are the part that pays.** `judging-workspace.ts`
+  (`workspaceAccess`, `collaborationState`, `hasWaitedTooLong`),
+  `applications/workflow.ts`, `logistics/stats/model.ts`,
+  `challenges/[id]/version-history.ts` — each is a sibling module with a real
+  test, extracted because the rule was worth asserting, not because the file
+  was long. Do this one first; it's the only part of a split that adds
+  coverage.
+- **Where the logic module lives.** Next to the route it serves
+  (`applications/workflow.ts`). A sibling route may import it by relative path.
+  Promote to `src/lib/` only once it's genuinely cross-workspace
+  (`lib/judging-workspace.ts`, `lib/queue.ts`).
+- **Plain file names, no `_` prefix.** Next.js treats both as non-routes inside
+  `(app)`; the codebase has zero underscore-prefixed files and that's the
+  choice. Only `page.tsx`, `layout.tsx` and `[param]/` directories carry
+  routing meaning.
+- **`components/common/*` requires a second consumer that exists today.**
+  Reuse is demonstrated, not anticipated. One-surface components stay in the
+  route directory.
+
+### What must not be extracted
+
+Two smells, both of which make the codebase worse while looking like progress:
+
+1. **The single-use 20-line helper.** A small presentational fragment used once
+   in the same file is not a component — moving it just adds an import and a
+   file to open. Inline it.
+2. **Prop-drilling to survive the move.** If pulling a piece out means
+   threading six props (or lifting local state up so it can be passed back
+   down), the piece isn't separable — its state and its markup belong together.
+   Leave it.
+
+### Splitting an existing page
+
+Splits are **behavior-neutral moves**: no prop-shape changes, no logic edits,
+no styling tweaks in the same commit. If you find a bug mid-move, file it and
+fix it separately. Keep hunks contiguous so `git diff -M/-C` reads them as
+relocations, and do one page per PR.
+
 ## Conventions (match the backend's discipline)
 
 - **Trace stories.** Reference the story id (`H7`) in commit messages and
