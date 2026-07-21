@@ -545,18 +545,12 @@ const dict: Record<string, I18nText> = {
   yourCapabilities: { es: "Tus permisos", gl: "Os teus permisos", en: "Your capabilities" },
   welcome: { es: "Bienvenido", gl: "Benvida", en: "Welcome" },
   loadingDashboard: { es: "Cargando inicio", gl: "Cargando inicio", en: "Loading dashboard" },
-  eventStatus: { es: "Estado del evento", gl: "Estado do evento", en: "Event status" },
   eventTimingPending: {
     es: "El horario del evento se publicará próximamente.",
     gl: "O horario do evento publicarase proximamente.",
     en: "Event timing will be published soon.",
   },
   nextUp: { es: "Lo próximo", gl: "O seguinte", en: "Next up" },
-  nextUpDescription: {
-    es: "La siguiente actividad del programa.",
-    gl: "A seguinte actividade do programa.",
-    en: "The next activity on the schedule.",
-  },
   noUpcomingSchedule: {
     es: "No hay más actividades programadas.",
     gl: "Non hai máis actividades programadas.",
