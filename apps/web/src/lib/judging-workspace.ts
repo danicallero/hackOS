@@ -38,20 +38,33 @@ export function canTransition(status: QueueStatus | string, action: JudgingActio
   return LEGAL_ACTIONS[status]?.includes(action) ?? false;
 }
 
-/** Temporary UX warning rule approved for #190; backend follow-up will make it configurable. */
-export function calledTooLongThresholdMinutes(desiredMinutesPerTeam: number | null): number {
+/**
+ * How long a team may sit in `called` before the operator is warned (H34/H203).
+ *
+ * The operator-configured value (`queue_settings.called_too_long_threshold_minutes`,
+ * served on `GET /api/queue/rooms/:id/pace`) wins. The `max(10, 2x desired)`
+ * expression is only the fallback for a room view that carries no setting —
+ * it used to be the whole rule, before the setting existed.
+ */
+export function calledTooLongThresholdMinutes(
+  desiredMinutesPerTeam: number | null,
+  configuredMinutes?: number | null,
+): number {
+  if (configuredMinutes != null && configuredMinutes > 0) return configuredMinutes;
   return Math.max(10, (desiredMinutesPerTeam ?? 0) * 2);
 }
 
 export function hasWaitedTooLong(
   calledAt: string | null,
   desiredMinutesPerTeam: number | null,
+  configuredMinutes?: number | null,
   now = Date.now(),
 ): boolean {
   if (!calledAt) return false;
   const calledMs = new Date(calledAt).getTime();
   if (!Number.isFinite(calledMs)) return false;
-  return now - calledMs >= calledTooLongThresholdMinutes(desiredMinutesPerTeam) * 60_000;
+  const threshold = calledTooLongThresholdMinutes(desiredMinutesPerTeam, configuredMinutes);
+  return now - calledMs >= threshold * 60_000;
 }
 
 export type CollaborationState = "saving" | "saved" | "offline" | "conflict" | "unsaved";
@@ -100,4 +113,53 @@ export function collaborationState({
   if (saving) return "saving";
   if (dirty) return "unsaved";
   return "saved";
+}
+
+// ── presentation timer (H39) ────────────────────────────────────────────────
+
+export type TimerTone = "default" | "warning" | "danger";
+
+export interface PresentationTimerState {
+  elapsedSeconds: number;
+  /** Null when the presentation has no capped total to count against. */
+  totalSeconds: number | null;
+  /** Negative once over time; null without a total. */
+  remainingSeconds: number | null;
+  /** 0-100, clamped. 0 without a usable total. */
+  progressValue: number;
+  tone: TimerTone;
+}
+
+/**
+ * The stopwatch is not a countdown: elapsed always counts up from 0 and never
+ * resets or jumps. Only the tone changes as it crosses thresholds — amber for
+ * the last stretch (the greater of 60s and 10% of the total, so short slots
+ * still get a usable warning), red once over.
+ */
+export function presentationTimerState(
+  startedAt: string | null,
+  totalMinutes: number | null,
+  now = Date.now(),
+): PresentationTimerState {
+  const totalSeconds = totalMinutes != null ? Math.round(totalMinutes * 60) : null;
+  const startedMs = startedAt ? new Date(startedAt).getTime() : null;
+  const elapsedSeconds =
+    startedMs && Number.isFinite(startedMs) ? Math.max(0, Math.floor((now - startedMs) / 1000)) : 0;
+  const remainingSeconds = totalSeconds != null ? totalSeconds - elapsedSeconds : null;
+  const progressValue =
+    totalSeconds && totalSeconds > 0 ? Math.min(100, (elapsedSeconds / totalSeconds) * 100) : 0;
+  const isOverTime = remainingSeconds != null && remainingSeconds < 0;
+  const isWrappingUp =
+    !isOverTime &&
+    remainingSeconds != null &&
+    totalSeconds != null &&
+    totalSeconds > 0 &&
+    remainingSeconds <= Math.max(60, Math.ceil(totalSeconds * 0.1));
+  return {
+    elapsedSeconds,
+    totalSeconds,
+    remainingSeconds,
+    progressValue,
+    tone: isOverTime ? "danger" : isWrappingUp ? "warning" : "default",
+  };
 }

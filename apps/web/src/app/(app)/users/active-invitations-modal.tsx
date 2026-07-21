@@ -209,7 +209,6 @@ export function ActiveInvitationsModal() {
         empty={{
           icon: MailIcon,
           title: t("noActiveInvitations"),
-          description: t("inviteSomeone"),
         }}
       />
     </Modal>

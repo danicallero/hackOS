@@ -155,11 +155,7 @@ export default function PermissionsPage() {
         />
       </SectionCard>
 
-      <SectionCard
-        icon={LayersIcon}
-        title={t("capabilitiesCatalogueTitle")}
-        description={t("capabilitiesCatalogueDesc")}
-      >
+      <SectionCard icon={LayersIcon} title={t("capabilitiesCatalogueTitle")}>
         <div className="space-y-5">
           {catalogue.map((group) => (
             <div key={group.domain} className="space-y-2">

@@ -162,6 +162,185 @@ describe("GET /api/queue/reviews (confidentiality)", () => {
     expect(res.statusCode).toBe(403);
   });
 
+  it("opens the detail with the panel questions, the answers and the team", async () => {
+    const server = await getApp();
+    const owner = await createUser();
+    const challengeId = await createOwnedChallenge(owner, "Challenge A");
+    const roomId = await createRoom("Room A");
+    const entryId = await createEntry(challengeId, roomId, "Team A1", "draft", 7);
+    const member = await createUser();
+    const { rows: repoRows } = await pool.query(`SELECT repo_id FROM queue_entries WHERE id = $1`, [
+      entryId,
+    ]);
+    await pool.query(`INSERT INTO submissions (repo_id, user_id) VALUES ($1, $2)`, [
+      repoRows[0].repo_id,
+      member,
+    ]);
+
+    const res = await server.inject({
+      method: "GET",
+      url: `/api/queue/reviews/${entryId}`,
+      headers: asUser(owner),
+    });
+    expect(res.statusCode).toBe(200);
+    const detail = res.json();
+    expect(detail.challenge.criteria).toHaveLength(1);
+    expect(detail.challenge.criteria[0].key).toBe("score");
+    expect(detail.review).toMatchObject({ status: "draft", scores: { score: 7 } });
+    expect(detail.project.name).toBe("Team A1");
+    expect(detail.project.members.map((m: { id: number }) => m.id)).toContain(member);
+    expect(detail.room.name).toBe("Room A");
+  });
+
+  it("403s the detail of another sponsor's challenge", async () => {
+    const server = await getApp();
+    const ownerA = await createUser();
+    const ownerB = await createUser();
+    await createOwnedChallenge(ownerA, "Challenge A");
+    const challengeB = await createOwnedChallenge(ownerB, "Challenge B");
+    const entryB = await createEntry(challengeB, null, "Team B1", "submitted", 5);
+
+    const res = await server.inject({
+      method: "GET",
+      url: `/api/queue/reviews/${entryB}`,
+      headers: asUser(ownerA),
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("lets an in-scope caller correct an evaluation, versioned and audited", async () => {
+    const server = await getApp();
+    const owner = await createUser();
+    const challengeId = await createOwnedChallenge(owner, "Challenge A");
+    const entryId = await createEntry(challengeId, null, "Team A1", "submitted", 6);
+
+    const res = await server.inject({
+      method: "PATCH",
+      url: `/api/queue/reviews/${entryId}`,
+      headers: asUser(owner),
+      payload: { scores: { score: 9 }, notes: "recount" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().scores).toEqual({ score: 9 });
+
+    const versions = await pool.query(
+      `SELECT changed_fields FROM attempt_review_versions WHERE attempt_id = $1`,
+      [entryId],
+    );
+    expect(versions.rows[0].changed_fields).toEqual(
+      expect.arrayContaining(["scores.score", "notes"]),
+    );
+    const auditRows = await pool.query(
+      `SELECT action FROM audit_log WHERE entity_type = 'attempt_review' AND entity_id = $1`,
+      [String(entryId)],
+    );
+    expect(auditRows.rows.map((r: { action: string }) => r.action)).toContain("review.update");
+
+    // An answer outside the panel's type/range is rejected, same as in the room.
+    const invalid = await server.inject({
+      method: "PATCH",
+      url: `/api/queue/reviews/${entryId}`,
+      headers: asUser(owner),
+      payload: { scores: { score: 99 } },
+    });
+    expect(invalid.statusCode).toBe(400);
+  });
+
+  it("403s a correction on another sponsor's challenge", async () => {
+    const server = await getApp();
+    const ownerA = await createUser();
+    const ownerB = await createUser();
+    await createOwnedChallenge(ownerA, "Challenge A");
+    const challengeB = await createOwnedChallenge(ownerB, "Challenge B");
+    const entryB = await createEntry(challengeB, null, "Team B1", "draft", 5);
+
+    const res = await server.inject({
+      method: "PATCH",
+      url: `/api/queue/reviews/${entryB}`,
+      headers: asUser(ownerA),
+      payload: { scores: { score: 1 } },
+    });
+    expect(res.statusCode).toBe(403);
+    const untouched = await pool.query(`SELECT scores FROM attempt_review WHERE attempt_id = $1`, [
+      entryB,
+    ]);
+    expect(untouched.rows[0].scores).toEqual({ score: 5 });
+  });
+});
+
+describe("POST /api/queue/reviews/:entryId/message", () => {
+  it("reaches every team member over the mandatory queue category and audits it", async () => {
+    const server = await getApp();
+    const owner = await createUserWithCapabilities([
+      CAPABILITIES.QUEUE_ADMIN,
+      CAPABILITIES.NOTIFICATIONS_SEND,
+    ]);
+    const challengeId = await createOwnedChallenge(await createUser(), "Challenge A");
+    const entryId = await createEntry(challengeId, null, "Team A1", "draft", 4);
+    const { rows: repoRows } = await pool.query(`SELECT repo_id FROM queue_entries WHERE id = $1`, [
+      entryId,
+    ]);
+    const member = await createUser();
+    await pool.query(`INSERT INTO submissions (repo_id, user_id) VALUES ($1, $2)`, [
+      repoRows[0].repo_id,
+      member,
+    ]);
+    // Opting out of queue notifications must NOT silence an operational call-back.
+    await pool.query(
+      `INSERT INTO notification_preferences (user_id, category, channel, enabled)
+       VALUES ($1, 'queue', 'push', false)`,
+      [member],
+    );
+
+    const res = await server.inject({
+      method: "POST",
+      url: `/api/queue/reviews/${entryId}/message`,
+      headers: asUser(owner),
+      payload: { message: "Come back to room 2, we have a question." },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ recipients: 1 });
+
+    const outbox = await pool.query(
+      `SELECT channel, payload FROM notification_outbox WHERE user_id = $1 AND category = 'queue'`,
+      [member],
+    );
+    expect(outbox.rows.map((r: { channel: string }) => r.channel).sort()).toEqual([
+      "email",
+      "in_app",
+      "push",
+    ]);
+    const inApp = outbox.rows.find((r: { channel: string }) => r.channel === "in_app");
+    expect(inApp.payload.body).toContain("Come back to room 2");
+
+    const auditRows = await pool.query(
+      `SELECT action FROM audit_log WHERE entity_type = 'queue_entry' AND entity_id = $1`,
+      [String(entryId)],
+    );
+    expect(auditRows.rows.map((r: { action: string }) => r.action)).toContain(
+      "review.message_team",
+    );
+  });
+
+  it("403s a caller without the comms capability, even one who can see the review", async () => {
+    const server = await getApp();
+    const owner = await createUser();
+    const challengeId = await createOwnedChallenge(owner, "Challenge A");
+    const entryId = await createEntry(challengeId, null, "Team A1", "draft", 4);
+
+    const res = await server.inject({
+      method: "POST",
+      url: `/api/queue/reviews/${entryId}/message`,
+      headers: asUser(owner),
+      payload: { message: "hello" },
+    });
+    expect(res.statusCode).toBe(403);
+    const outbox = await pool.query(`SELECT count(*)::int AS n FROM notification_outbox`);
+    expect(outbox.rows[0].n).toBe(0);
+  });
+});
+
+describe("GET /api/queue/reviews (confidentiality, exports)", () => {
   it("exports a CSV honoring the same scoping", async () => {
     const server = await getApp();
     const owner = await createUser();

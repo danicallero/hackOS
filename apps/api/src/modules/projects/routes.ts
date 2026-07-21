@@ -352,7 +352,7 @@ export function registerProjectRoutes(app: FastifyInstance): void {
       schema: {
         summary: "My projects (H20): team roster, challenges and queue status. Read-only.",
         description:
-          "Projects the caller belongs to, with team members, challenge lineup and live queue positions. `canCreate` reflects the event's H19 policy AND whether the caller may still create one (they don't belong to a project yet).",
+          "Projects the caller belongs to, with team members, challenge lineup and live queue positions. Teammate emails come back as null — only the caller's own address is included. `canCreate` reflects the event's H19 policy AND whether the caller may still create one (they don't belong to a project yet).",
       },
     },
     async (req) => {

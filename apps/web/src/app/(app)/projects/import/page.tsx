@@ -467,7 +467,6 @@ export default function ImportProjectsPage() {
     <div className="space-y-6">
       <PageHeader
         title={t("importFromDevpost")}
-        description={t("devpostImportDesc")}
         actions={
           <Button variant="outline" asChild>
             <Link href="/projects">

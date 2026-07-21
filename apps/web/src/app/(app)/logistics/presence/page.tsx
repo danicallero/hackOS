@@ -96,7 +96,7 @@ export default function PresencePage() {
 
   return (
     <div className="space-y-6" data-wide>
-      <PageHeader title={t("presence")} description={t("presenceDescription")} />
+      <PageHeader title={t("presence")} />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label={t("presentNow")}

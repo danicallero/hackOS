@@ -659,7 +659,6 @@ function EditCard({
         <SectionCard
           icon={Building2Icon}
           title={t("profileTitle")}
-          description={t("editSponsorDetailsDesc")}
           footer={
             <SubmitButton pending={form.formState.isSubmitting}>{t("saveChanges")}</SubmitButton>
           }

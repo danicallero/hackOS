@@ -205,6 +205,68 @@ export async function notifyChallengeQueueChanged(
   );
 }
 
+/**
+ * H46: free-text message from staff / a sponsor rep to one team, sent over the
+ * same mandatory `queue` category the calls use — the point is to be able to
+ * reach a team back (e.g. "come back to room 2, we have a question about your
+ * demo"), so it must not be silenceable by notification preferences.
+ * Returns how many recipients it reached.
+ */
+export async function notifyTeamMessage(
+  client: Queryable,
+  params: {
+    entryId: number;
+    challengeId: number;
+    repoId: number;
+    senderName: string;
+    message: string;
+  },
+): Promise<number> {
+  const memberIds = await repoMemberIds(client, params.repoId);
+  if (memberIds.length === 0) return 0;
+
+  const { rows: ctxRows } = await client.query(
+    `SELECT c.title AS challenge_name, r.name AS team_name FROM challenges c, repos r
+      WHERE c.id = $1 AND r.id = $2`,
+    [params.challengeId, params.repoId],
+  );
+  const challengeName: string = ctxRows[0]?.challenge_name ?? "";
+  const teamName: string = ctxRows[0]?.team_name ?? "";
+
+  const { rows: userRows } = await client.query(`SELECT id, name FROM users WHERE id = ANY($1)`, [
+    memberIds,
+  ]);
+  const nameById = new Map<number, string | null>(
+    userRows.map((u: { id: number; name: string | null }) => [u.id, u.name]),
+  );
+
+  const payload = {
+    entryId: params.entryId,
+    challengeId: params.challengeId,
+    message: params.message,
+    senderName: params.senderName,
+  };
+  for (const userId of memberIds) {
+    await notify(client, {
+      userId,
+      category: "queue",
+      payload: {
+        ...payload,
+        template: "queue.message",
+        vars: {
+          name: nameById.get(userId) ?? "",
+          teamName,
+          challengeName,
+          senderName: params.senderName,
+          message: params.message,
+        },
+      },
+    });
+    await broadcast(`${SSE_TOPICS.USER_PREFIX}${userId}`, EVENTS.USER_QUEUE_MESSAGE, payload);
+  }
+  return memberIds.length;
+}
+
 /** Notify participants whose queues are affected by a room-level change. */
 export async function notifyRoomQueueChanged(client: Queryable, roomId: number): Promise<void> {
   const { rows } = await client.query(

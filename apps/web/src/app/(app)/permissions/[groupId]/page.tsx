@@ -282,10 +282,7 @@ export default function PermissionGroupDetailPage() {
         >
           <ArrowLeftIcon /> {t("permissions")}
         </Button>
-        <PageHeader
-          title={group.name}
-          description={group.description ?? t("noDescriptionPeriod")}
-        />
+        <PageHeader title={group.name} description={group.description ?? undefined} />
       </div>
 
       <Form {...form}>

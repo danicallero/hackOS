@@ -313,16 +313,18 @@ export default function ProjectDetailPage() {
                           onRemoved={load}
                         />
                       )}
-                      {member.userId === null && (canEdit || canImport) && (
-                        <DevpostParticipantActions
-                          repoId={repo.id}
-                          email={member.email}
-                          users={users}
-                          canDelete={canEdit}
-                          canLink={canImport}
-                          onChanged={load}
-                        />
-                      )}
+                      {member.userId === null &&
+                        member.email !== null &&
+                        (canEdit || canImport) && (
+                          <DevpostParticipantActions
+                            repoId={repo.id}
+                            email={member.email}
+                            users={users}
+                            canDelete={canEdit}
+                            canLink={canImport}
+                            onChanged={load}
+                          />
+                        )}
                     </div>
                   </div>
                 </li>

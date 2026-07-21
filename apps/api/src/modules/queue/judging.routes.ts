@@ -1,7 +1,9 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
+import { requireCapability } from "../../lib/capabilities.js";
 import { UnauthorizedError } from "../../lib/errors.js";
+import { idempotencyGuard } from "../../lib/idempotency.js";
 import { assertCanExportChallenge } from "./access.js";
 import {
   requireChallengeJudgeOrCapability,
@@ -17,10 +19,18 @@ import {
   searchChallengeQueue,
   upsertAttemptReview,
 } from "./judging.js";
-import { exportReviewsCsv, listReviews, resolveReviewScope } from "./reviews.js";
+import {
+  assertEntryInScope,
+  exportReviewsCsv,
+  getReviewDetail,
+  listReviews,
+  resolveReviewScope,
+  sendReviewMessage,
+} from "./reviews.js";
 import {
   challengeIdParam,
   entryIdParam,
+  reviewMessageBody,
   reviewPatchBody,
   reviewsQuery,
   searchQuery,
@@ -140,6 +150,64 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
     const scope = await resolveReviewScope(req.userId);
     return { reviews: await listReviews(scope, req.query) };
   });
+
+  // The ficha behind a reviews-overview row: project + team, the challenge's
+  // judging panel questions, the answers given, and the edit history. Same
+  // scoping as the list (admin: any entry; sponsor: own challenges only).
+  typed.get(
+    "/api/queue/reviews/:entryId",
+    {
+      schema: {
+        params: entryIdParam,
+        summary: "Review detail",
+        description:
+          "Project details, the challenge's judging panel questions with the answers recorded for this entry, and the evaluation's edit history. Admins reach any entry; a sponsor rep only entries of their own enterprise's challenges (403 otherwise).",
+      },
+    },
+    async (req) => getReviewDetail(await resolveReviewScope(req.userId), req.params.entryId),
+  );
+
+  // Correcting an evaluation from the overview: same validation and versioning
+  // as the judging panel's own save, plus an audit_log row (H53) because this
+  // happens outside the room, after the fact.
+  typed.patch(
+    "/api/queue/reviews/:entryId",
+    {
+      preHandler: idempotencyGuard,
+      schema: {
+        params: entryIdParam,
+        body: reviewPatchBody,
+        summary: "Update a review from the overview",
+        description:
+          "Edits an evaluation's answers, notes or submitted state out of band. Answers are validated against the challenge's judging panel; submitting requires every required question answered. Every save is versioned and audited.",
+      },
+    },
+    async (req) => {
+      const scope = await resolveReviewScope(req.userId);
+      await assertEntryInScope(scope, req.params.entryId);
+      return upsertAttemptReview(req.params.entryId, actor(req.userId), req.body, { audit: true });
+    },
+  );
+
+  // H46: reach the team behind an evaluation (e.g. call them back for a
+  // question). Needs the comms capability on top of review visibility.
+  typed.post(
+    "/api/queue/reviews/:entryId/message",
+    {
+      preHandler: [requireCapability(CAPABILITIES.NOTIFICATIONS_SEND), idempotencyGuard],
+      schema: {
+        params: entryIdParam,
+        body: reviewMessageBody,
+        summary: "Message the team of a review",
+        description:
+          "Sends a free-text message to every member of the evaluated team through the mandatory queue notification category (inbox, email and push), so it cannot be silenced by notification preferences. Audited. Returns the number of recipients reached.",
+      },
+    },
+    async (req) => {
+      const scope = await resolveReviewScope(req.userId);
+      return sendReviewMessage(scope, req.params.entryId, actor(req.userId), req.body.message);
+    },
+  );
 
   typed.get(
     "/api/queue/reviews/export.csv",
