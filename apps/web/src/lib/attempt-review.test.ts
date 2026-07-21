@@ -88,6 +88,28 @@ describe("reviewStatusBadge", () => {
       shortLabelKey: "challengeReviewNotStarted",
     });
   });
+
+  // The judging panel opts into both of its pre-existing behaviors rather than
+  // inheriting the reviews surfaces' defaults.
+  it("honours the judging panel's draftTone override", () => {
+    expect(reviewStatusBadge("draft", { draftTone: "warning" }).tone).toBe("warning");
+    // Only a draft is re-toned; submitted and none keep theirs.
+    expect(reviewStatusBadge("submitted", { draftTone: "warning" }).tone).toBe("success");
+    expect(reviewStatusBadge(null, { draftTone: "warning" }).tone).toBe("neutral");
+  });
+
+  it("honours an `unknown: draft` fallback for surfaces that always have a review", () => {
+    expect(reviewStatusKind(null, { unknown: "draft" })).toBe("draft");
+    expect(reviewStatusKind("weird-value", { unknown: "draft" })).toBe("draft");
+    expect(reviewStatusKind("submitted", { unknown: "draft" })).toBe("submitted");
+
+    const badge = reviewStatusBadge(null, { draftTone: "warning", unknown: "draft" });
+    expect(badge).toMatchObject({
+      kind: "draft",
+      tone: "warning",
+      shortLabelKey: "evaluationDraft",
+    });
+  });
 });
 
 describe("changedFieldLabel", () => {

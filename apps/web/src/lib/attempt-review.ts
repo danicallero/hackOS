@@ -41,11 +41,22 @@ export function requiredUnanswered(
 
 export type ReviewStatusKind = "submitted" | "draft" | "none";
 
-/** Normalizes the API's review status (absent = the judge never opened it). */
-export function reviewStatusKind(status: string | null | undefined): ReviewStatusKind {
+/**
+ * Normalizes the API's review status. `unknown` decides where an absent or
+ * unrecognised value lands: the list/detail surfaces read a nullable
+ * `review_status` column where null genuinely means "never evaluated"
+ * (default `"none"`), while the judging panel always has a review object —
+ * `getAttemptReview` synthesizes `status: "draft"` when no row exists and the
+ * column is NOT NULL DEFAULT 'draft' — and treats anything non-submitted as a
+ * draft, which is what it did before this mapping was shared.
+ */
+export function reviewStatusKind(
+  status: string | null | undefined,
+  { unknown = "none" }: { unknown?: ReviewStatusKind } = {},
+): ReviewStatusKind {
   if (status === "submitted") return "submitted";
   if (status === "draft") return "draft";
-  return "none";
+  return unknown;
 }
 
 export interface ReviewStatusBadge {
@@ -78,9 +89,27 @@ const REVIEW_STATUS_BADGES: Record<ReviewStatusKind, ReviewStatusBadge> = {
   },
 };
 
+export interface ReviewStatusBadgeOptions {
+  /**
+   * Tone for a draft. The judging panel passes `"warning"`: there, a draft is
+   * an evaluation a judge is actively editing and the amber badge nudges them
+   * to submit. The read/correct surfaces keep the default `"info"`. Whether
+   * that divergence should stay is a UX call, not something this module
+   * decides — see the follow-up issue linked from PR #306.
+   */
+  draftTone?: Tone;
+  /** Where an absent/unrecognised status lands — see `reviewStatusKind`. */
+  unknown?: ReviewStatusKind;
+}
+
 /** Single source for the three-way review badge (tone + copy key). */
-export function reviewStatusBadge(status: string | null | undefined): ReviewStatusBadge {
-  return REVIEW_STATUS_BADGES[reviewStatusKind(status)];
+export function reviewStatusBadge(
+  status: string | null | undefined,
+  { draftTone, unknown }: ReviewStatusBadgeOptions = {},
+): ReviewStatusBadge {
+  const badge = REVIEW_STATUS_BADGES[reviewStatusKind(status, { unknown })];
+  if (draftTone && badge.kind === "draft") return { ...badge, tone: draftTone };
+  return badge;
 }
 
 /** Translated names for the non-question fields a review version can touch. */

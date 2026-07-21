@@ -1607,7 +1607,10 @@ function ReviewForm({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [externalUpdate, setExternalUpdate] = useState<string | null>(null);
   const unanswered = requiredUnanswered(panel, scores);
-  const statusBadge = reviewStatusBadge(status);
+  // Same badge mapping as the reviews surfaces, but this panel keeps its two
+  // pre-existing behaviors: amber for a draft being actively edited, and
+  // "anything not submitted is a draft" (this surface always has a review).
+  const statusBadge = reviewStatusBadge(status, { draftTone: "warning", unknown: "draft" });
   const fieldCopy = useMemo(
     () => ({ notes: t("notesLabel"), status: t("evaluationStateLabel"), scores: t("scoring") }),
     [t],
