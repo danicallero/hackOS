@@ -2,7 +2,7 @@
 
 // H53 global audit log: searchable, paginated read view over audit_log,
 // filterable by actor/entity/action/date. The per-user audit tab
-// (users/[id]/page.tsx AuditLogSection) stays as a scoped drill-down; this
+// (users/[id]/audit-log-section.tsx) stays as a scoped drill-down; this
 // page is the full, unscoped query surface referenced there.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";

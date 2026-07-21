@@ -1,0 +1,105 @@
+"use client";
+
+import { ClipboardListIcon } from "lucide-react";
+import { useEffect, useState } from "react";
+import { type Column, DataTable } from "@/components/common/data-table";
+import { EmptyState } from "@/components/common/empty-state";
+import { SectionCard } from "@/components/common/section-card";
+import { Spinner } from "@/components/common/spinner";
+import { StatusBadge } from "@/components/common/status-badge";
+import { api } from "@/lib/api";
+import { useLocale } from "@/lib/i18n";
+import { timeFmt } from "./datetime-format";
+
+interface ActivityPass {
+  id: number;
+  activityName: string;
+  category: string;
+  loggedAt: string;
+}
+interface UserActivity {
+  passes: ActivityPass[];
+}
+
+export function PhysicalActivity({ userId }: { userId: number }) {
+  const { t } = useLocale();
+  const [data, setData] = useState<UserActivity | null>(null);
+  const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+
+  useEffect(() => {
+    let cancelled = false;
+    setState("loading");
+    api
+      .get<UserActivity>(`/api/users/${userId}/activity`)
+      .then((r) => {
+        if (cancelled) return;
+        setData(r);
+        setState("ready");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setState("error");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  if (state === "loading") {
+    return (
+      <div className="flex justify-center py-12">
+        <Spinner className="size-5" />
+      </div>
+    );
+  }
+  if (state === "error" || !data) {
+    return (
+      <EmptyState
+        icon={ClipboardListIcon}
+        title={t("couldNotLoadActivityTitle")}
+        description={t("passesUnavailable")}
+      />
+    );
+  }
+
+  const passColumns: Column<ActivityPass>[] = [
+    {
+      id: "activity",
+      header: t("columnActivity"),
+      cell: (p) => <span className="text-sm">{p.activityName}</span>,
+    },
+    {
+      id: "type",
+      header: t("colType"),
+      cell: (p) => (
+        <StatusBadge tone={p.category === "meal" ? "success" : "info"} dot={false}>
+          {p.category === "meal" ? t("typeMeal") : t("typeWorkshop")}
+        </StatusBadge>
+      ),
+    },
+    {
+      id: "when",
+      header: t("colWhen"),
+      sortValue: (p) => p.loggedAt,
+      cell: (p) => <span className="text-sm">{timeFmt.format(new Date(p.loggedAt))}</span>,
+    },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <SectionCard icon={ClipboardListIcon} title={t("activityPasses")} bodyClassName="p-0">
+        <DataTable
+          columns={passColumns}
+          data={data.passes}
+          getRowId={(p) => String(p.id)}
+          pageSize={10}
+          empty={{
+            icon: ClipboardListIcon,
+            title: t("noPassesYet"),
+            description: t("passesWillAppear"),
+          }}
+        />
+      </SectionCard>
+    </div>
+  );
+}
