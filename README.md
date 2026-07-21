@@ -54,8 +54,9 @@ Useful scripts:
 pnpm --filter @hackos/api test   # vitest, wipes + remigrates hackos_test, runs serially
 pnpm --filter @hackos/web test   # vitest, colocated unit tests
 pnpm --filter @hackos/mobile test  # jest
-pnpm lint                        # biome + copy/localization check, whole repo
+pnpm lint                        # biome + copy/localization + page-size checks, whole repo
 pnpm check:copy                  # just the copy/localization check (scripts/check-copy.mjs)
+pnpm check:page-size             # just the web page.tsx size ratchet (scripts/check-page-size.mjs)
 pnpm --filter @hackos/api superadmin:create   # bootstrap the first admin
 ```
 
