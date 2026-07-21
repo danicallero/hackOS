@@ -195,6 +195,23 @@ no styling tweaks in the same commit. If you find a bug mid-move, file it and
 fix it separately. Keep hunks contiguous so `git diff -M/-C` reads them as
 relocations, and do one page per PR.
 
+### The size guard
+
+`pnpm check:pages` (in `pnpm lint`) measures every `page.tsx` and reports two
+tiers:
+
+- **Past 600 lines** — listed, does not fail. This is the "open it and apply
+  the meaning test above" prompt, not a verdict. Plenty of pages live here
+  legitimately.
+- **Past 950 lines** — fails. A **ratchet**, not a target: it sits just above
+  the largest page that existed when the guard landed, so nothing can get
+  worse than the worst thing already in the tree. Lower the number as pages
+  shrink.
+
+There is deliberately **no allowlist**. A file that "needs" an exemption means
+the limit is wrong — change the number, don't special-case the file, or the
+list turns into a dumping ground and the guard stops meaning anything.
+
 ## Conventions (match the backend's discipline)
 
 - **Trace stories.** Reference the story id (`H7`) in commit messages and
