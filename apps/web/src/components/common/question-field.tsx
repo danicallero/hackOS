@@ -22,6 +22,11 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useLocale } from "@/lib/i18n";
 
+// `answerHasValue` is form-level logic, so it lives with the rest of it in
+// lib/attempt-review.ts; re-exported here because every renderer already
+// imports it from this module.
+export { answerHasValue } from "@/lib/attempt-review";
+
 export type Answers = Record<string, AnswerValue>;
 
 const SCORE_SCALE = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
@@ -40,12 +45,6 @@ export function defaultValue(question: Question): AnswerValue {
     default:
       return "";
   }
-}
-
-export function answerHasValue(value: AnswerValue | undefined): boolean {
-  if (value === undefined || value === null || value === "") return false;
-  if (Array.isArray(value)) return value.length > 0;
-  return true;
 }
 
 /** Coerce stored answers to the shape each question kind's control expects. */
