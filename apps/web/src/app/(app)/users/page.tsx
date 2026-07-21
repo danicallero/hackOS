@@ -66,7 +66,7 @@ function roleLabel(t: Translate): Record<DerivedRole, string> {
 }
 
 /** Distinct tone per role so Admin/Judge/Sponsor/Staff never share a color.
- * Kept in sync with the profile header (users/[id]/page.tsx). */
+ * Kept in sync with the profile header (users/[id]/profile-header.tsx). */
 const ROLE_TONE: Record<DerivedRole, Tone> = {
   admin: "brand",
   judge: "info",
