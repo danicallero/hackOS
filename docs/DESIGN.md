@@ -102,7 +102,12 @@ elevated `Overlay` — replacing the overloaded generic "card".**
 | `Overlay` | Dialog, popover, menu — interaction-owned, Radix-rendered, focus-managed; consumes `overlayVariants` | Inline content (never overlay shadows on the page) |
 
 `Card` remains only as a compatibility wrapper over `Surface`; new domain
-sections use `Section`/`SectionCard` so their responsibility is explicit.
+sections use `Section`/`SectionCard` so their responsibility is explicit. In
+`app/(app)` the only remaining raw `Card`s are deliberately *not* page
+sections — the centered confirmation/auth card and the my-queue ticket stub.
+Every dashboard-style panel is a `SectionCard` (#300); a panel that re-builds
+title/description/action out of `CardHeader` also re-invents the spacing and
+re-introduces the description-restates-the-title pattern.
 Public marketing cards may use more whitespace but keep the same radius and
 colour tokens.
 
