@@ -22,12 +22,7 @@ import { toast } from "sonner";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
-import {
-  type Answers,
-  answerHasValue,
-  normalizeAnswers,
-  QuestionField,
-} from "@/components/common/question-field";
+import { type Answers, normalizeAnswers, QuestionField } from "@/components/common/question-field";
 import { QueueStatusBadge } from "@/components/common/queue-status-badge";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
@@ -36,6 +31,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api";
+import { changedFieldLabel, requiredUnanswered } from "@/lib/attempt-review";
 import { useLocale } from "@/lib/i18n";
 import {
   getReviewDetail,
@@ -87,8 +83,8 @@ export default function ReviewDetailPage() {
   }, [load]);
 
   const panel = detail?.challenge.criteria ?? [];
-  const requiredUnanswered = useMemo(
-    () => panel.filter((q) => q.required && !answerHasValue(answers[q.key])).length,
+  const requiredUnansweredCount = useMemo(
+    () => requiredUnanswered(panel, answers),
     [panel, answers],
   );
 
@@ -256,7 +252,7 @@ export default function ReviewDetailPage() {
                 {review.status === "submitted" ? t("saveCorrection") : t("saveDraft")}
               </Button>
               {review.status !== "submitted" && (
-                <Button disabled={saving || requiredUnanswered > 0} onClick={() => save(true)}>
+                <Button disabled={saving || requiredUnansweredCount > 0} onClick={() => save(true)}>
                   {t("submitReview")}
                 </Button>
               )}
@@ -268,11 +264,11 @@ export default function ReviewDetailPage() {
           <p className="text-muted-foreground text-sm">{t("noJudgingCriteria")}</p>
         ) : (
           <div className="space-y-5">
-            {requiredUnanswered > 0 && (
+            {requiredUnansweredCount > 0 && (
               <p className="text-muted-foreground text-sm">
-                {requiredUnanswered === 1
-                  ? t("requiredFieldUnansweredOne", { count: requiredUnanswered })
-                  : t("requiredFieldUnansweredOther", { count: requiredUnanswered })}
+                {requiredUnansweredCount === 1
+                  ? t("requiredFieldUnansweredOne", { count: requiredUnansweredCount })
+                  : t("requiredFieldUnansweredOther", { count: requiredUnansweredCount })}
               </p>
             )}
             {panel.map((question) => (
@@ -313,7 +309,7 @@ export default function ReviewDetailPage() {
                   {version.authorName || t("judgeFallback")}
                 </span>{" "}
                 · {new Date(version.createdAt).toLocaleString()} ·{" "}
-                {version.changedFields.join(", ")}
+                {version.changedFields.map((f) => changedFieldLabel(f, panel, t)).join(", ")}
               </li>
             ))}
           </ol>
