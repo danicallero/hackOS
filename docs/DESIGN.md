@@ -192,6 +192,8 @@ Tables and lists:
   and a result count — placeholders are not labels.
 - An empty dataset and zero filter results are different states; the filtered
   one offers "Clear filters".
+- No two columns in one table share a header: a repeated header makes sorting
+  do two different things depending on which one is clicked (#299).
 - Bulk actions appear only after selection and state what set they affect.
 - Batch operations that can partially fail report a durable result panel
   (skipped rows + reasons), not only a toast.
@@ -219,6 +221,8 @@ Loading / empty / error:
 - Loading uses structural skeletons matching the layout they replace.
 - A failed region keeps its error and retry in that region; toasts are never
   the only channel for a critical failure.
+- An empty state adds an action only when the page has no other way out — if a
+  persistent back/escape control is already on screen, don't repeat it (#299).
 - **Capability-denied pages render `<AccessDenied ask={t("…")} />` and nothing
   else** (`components/common/access-denied.tsx`, issue #298). The heading is
   the same everywhere because the fact is the same everywhere; the only

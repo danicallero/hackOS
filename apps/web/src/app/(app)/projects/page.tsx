@@ -79,8 +79,10 @@ function buildColumns(t: Translate): Column<ProjectRepo>[] {
         ),
     },
     {
+      // Whether imported Devpost members resolved to hackOS accounts — not the
+      // team size next to it, which is why it needs its own header (#299).
       id: "matched",
-      header: t("colTeam"),
+      header: t("colLinking"),
       align: "center",
       sortValue: (r) => manualCount(r),
       cell: (r) => {

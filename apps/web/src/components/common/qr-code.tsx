@@ -18,7 +18,7 @@ export function QrCode({
   if (!value) {
     return (
       <div className={cn("rounded-lg border p-4 text-center", className)}>
-        <p className="text-muted-foreground text-sm">No {label.toLowerCase()} available.</p>
+        <p className="text-muted-foreground text-sm">{t("qrNotAvailable", { item: label })}</p>
       </div>
     );
   }

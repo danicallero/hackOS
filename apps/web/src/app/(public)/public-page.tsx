@@ -138,7 +138,10 @@ export function PublicPage() {
         {content && <PublicPageContent content={content} language={language} t={t} />}
 
         <footer className="text-muted-foreground border-t py-8 text-center text-xs">
-          <nav aria-label="Legal" className="flex flex-wrap justify-center gap-x-4 gap-y-2">
+          <nav
+            aria-label={t("legalLinksLabel")}
+            className="flex flex-wrap justify-center gap-x-4 gap-y-2"
+          >
             <Link className="underline underline-offset-4 hover:text-foreground" href="/terms">
               {t("termsAndConditions")}
             </Link>
