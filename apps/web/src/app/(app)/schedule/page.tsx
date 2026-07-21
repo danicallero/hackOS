@@ -241,7 +241,7 @@ export default function SchedulePage() {
   if (!canManage) {
     return (
       <div className="space-y-6">
-        <PageHeader title={t("schedule")} />
+        <PageHeader title={t("manageSchedule")} />
         <EmptyState
           icon={LockIcon}
           title={t("noAccessSchedule")}
@@ -323,7 +323,7 @@ export default function SchedulePage() {
   return (
     <div className="space-y-6" data-wide>
       <PageHeader
-        title={t("schedule")}
+        title={t("manageSchedule")}
         actions={
           <Button onClick={() => setCreateOpen(true)}>
             <PlusIcon className="size-4" />

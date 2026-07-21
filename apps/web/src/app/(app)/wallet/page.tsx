@@ -108,7 +108,6 @@ function roleLabel(t: Translate): Record<Me["role"], string> {
 function WalletPurposePanel({ purpose, value }: { purpose: Purpose; value?: string | null }) {
   const { t } = useLocale();
   const icon = purpose === "ticket" ? TicketIcon : IdCardIcon;
-  const label = purpose === "ticket" ? t("entranceTicket") : t("badge");
 
   if (!value) {
     return (
@@ -125,10 +124,8 @@ function WalletPurposePanel({ purpose, value }: { purpose: Purpose; value?: stri
     <>
       <div className="flex flex-col items-center gap-4 rounded-xl border bg-card py-10 text-center">
         <Icon className="text-muted-foreground size-7" />
-        <div className="space-y-1">
-          <p className="text-xl font-semibold">{label}</p>
-          <p className="text-muted-foreground text-sm">{t("walletScanHint")}</p>
-        </div>
+        {/* The tab and the QR caption already name the pass (issue #297). */}
+        <p className="text-muted-foreground text-sm">{t("walletScanHint")}</p>
         <QrCode
           value={value}
           label={purpose === "ticket" ? t("entranceTicket") : t("currentBadge")}

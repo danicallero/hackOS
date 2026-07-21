@@ -10,9 +10,9 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 
 /**
  * Authenticated app shell (Dokploy-style): capability-filtered sidebar + a
- * compact top bar with the current location, and a centered content column.
- * The top bar shows the nav location; each page composes <SectionCard>s that
- * carry their own titles.
+ * compact top bar with the current workspace, and a centered content column.
+ * The top bar carries the workspace, never the leaf — each page renders its
+ * own name in its <PageHeader> h1 (issue #297).
  */
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (

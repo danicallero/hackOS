@@ -125,6 +125,14 @@ descriptions only for risk/policy, disabled actions explain themselves.**
 title → `state` (nearby count/status when useful) → one `primaryAction` +
 optional `secondaryActions`.
 
+- **The top bar carries the workspace, the page carries its own name.** The
+  sticky app-shell bar names the containing workspace; the `h1` names the
+  destination. Never render the same string in both, and never give one
+  destination two names — `nav.ts` and the page `h1` reference the same
+  message key (issue #297).
+- **`context` is the parent crumb, not a second back button.** On detail
+  routes it links to the list the record came from; don't repeat that link as
+  a header action.
 - **Descriptions are exceptional.** Add one only for a policy, risk,
   consequence, or unfamiliar state — never to restate the title or enumerate
   the content visible below.

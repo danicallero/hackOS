@@ -6,6 +6,7 @@ import {
   PERSONAL_NAV,
   readLastWorkspace,
   WORKSPACES,
+  workspaceForPath,
   writeLastWorkspace,
 } from "./nav";
 
@@ -175,5 +176,40 @@ describe("last-workspace persistence per device (audit §3.3, issue #187)", () =
     writeLastWorkspace("sponsors");
     writeLastWorkspace("liveJudging");
     expect(readLastWorkspace()).toBe("liveJudging");
+  });
+});
+
+describe("workspace resolution for the top bar (issue #297)", () => {
+  it("resolves a workspace route to its workspace", () => {
+    expect(workspaceForPath("/queue/rooms")?.id).toBe("liveJudging");
+    expect(workspaceForPath("/logistics/presence")?.id).toBe("logistics");
+  });
+
+  it("resolves a child route to the workspace of its longest matching parent", () => {
+    expect(workspaceForPath("/projects/import")?.id).toBe("projects");
+    expect(workspaceForPath("/challenges/12")?.id).toBe("sponsors");
+  });
+
+  it("resolves personal-area routes to no workspace, so the top bar stays empty", () => {
+    for (const item of PERSONAL_NAV) {
+      expect(workspaceForPath(item.href)).toBeNull();
+    }
+  });
+
+  it("resolves an unknown route to no workspace", () => {
+    expect(workspaceForPath("/nowhere")).toBeNull();
+  });
+});
+
+describe("one name per destination (issue #297)", () => {
+  it("gives every sidebar destination a distinct label key", () => {
+    const keys = [...PERSONAL_NAV, ...WORKSPACES.flatMap((w) => w.items)].map((i) => i.title);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it("never labels a multi-destination workspace with one of its own destinations", () => {
+    for (const workspace of WORKSPACES.filter((w) => w.items.length > 1)) {
+      expect(workspace.items.map((i) => i.title)).not.toContain(workspace.label);
+    }
   });
 });

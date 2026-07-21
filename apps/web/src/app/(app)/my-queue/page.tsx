@@ -24,9 +24,9 @@ import { toast } from "sonner";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { QueueStatusBadge } from "@/components/common/queue-status-badge";
-import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Section } from "@/components/ui/surface";
 import { type SseEnvelope, useEventSource, useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
@@ -165,17 +165,19 @@ export default function MyQueuePage() {
         <PrecallNotice key={`precall-${e.repoId}-${e.challengeId}`} entry={e} />
       ))}
 
-      <SectionCard
-        icon={TicketIcon}
-        title={t("yourQueues")}
-        bodyClassName={list.length === 0 ? "p-0" : "space-y-3"}
-      >
-        {list.length === 0 ? (
+      {/* The page h1 already names this list; a section title here said it
+          twice (issue #297). */}
+      {list.length === 0 ? (
+        <Section padding="none">
           <EmptyState icon={TicketIcon} title={t("noJudgingQueue")} />
-        ) : (
-          projects.map((project) => <ProjectQueueCard key={project.repoId} {...project} />)
-        )}
-      </SectionCard>
+        </Section>
+      ) : (
+        <div className="space-y-3">
+          {projects.map((project) => (
+            <ProjectQueueCard key={project.repoId} {...project} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
