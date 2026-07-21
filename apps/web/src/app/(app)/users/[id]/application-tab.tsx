@@ -10,7 +10,7 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
-import { ReviewModal } from "../../applications/[id]/page";
+import { ReviewModal } from "../../applications/[id]/review-modal";
 import type { ApplicationForm, ResponseRow, TemplateField } from "../../applications/lib";
 
 interface UserApplicationRow {

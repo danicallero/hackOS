@@ -68,9 +68,10 @@ confirmed|declined|expired`).
 `POST /api/responses/batch/re-accept`, `POST /api/responses/batch/revoke-spot`
 (all `APPLICATIONS_DECIDE`).
 
-**UI.** `(app)/applications/[id]/page.tsx` — individual **Revoke spot** action
-(accepted-sent / confirmed), batch **Re-accept** and **Revoke spot** buttons, and
-the batch toast now surfaces the skipped count + first reason.
+**UI.** `(app)/applications/[id]/review-modal.tsx` — individual **Revoke spot**
+action (accepted-sent / confirmed); `(app)/applications/[id]/responses-tab.tsx` —
+batch **Re-accept** and **Revoke spot** buttons, and the batch toast now surfaces
+the skipped count + first reason.
 
 ---
 
