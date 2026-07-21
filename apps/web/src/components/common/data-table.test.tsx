@@ -7,6 +7,22 @@ import { type Column, DataTable } from "./data-table";
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
 
+// DataTable calls useRouter() to navigate on a row click. jsdom mounts no App
+// Router, so without this every render throws "invariant expected app router to
+// be mounted" before any assertion runs. Exposing push as a spy also makes the
+// row-click navigation path assertable instead of merely unblocked.
+const routerPush = vi.hoisted(() => vi.fn());
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: routerPush,
+    replace: vi.fn(),
+    prefetch: vi.fn(),
+    back: vi.fn(),
+    forward: vi.fn(),
+    refresh: vi.fn(),
+  }),
+}));
+
 vi.mock("@/lib/i18n", () => ({
   useLocale: () => ({
     t: (key: string, values: Record<string, string | number> = {}) => {
@@ -62,6 +78,7 @@ describe("DataTable accessibility and interactions", () => {
   let root: Root;
 
   beforeEach(() => {
+    routerPush.mockClear();
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
@@ -107,6 +124,47 @@ describe("DataTable accessibility and interactions", () => {
       await userEvent.keyboard("{Enter}");
     });
     expect(activated).toHaveBeenCalledOnce();
+  });
+
+  it("navigates via the router when a row with an href is clicked", async () => {
+    const onRowClick = vi.fn();
+    render(
+      <DataTable
+        columns={columns}
+        data={rows}
+        getRowId={(row) => row.id}
+        getRowHref={(row) => `/people/${row.id}`}
+        getRowLabel={(row) => `Open ${row.name}`}
+        onRowClick={onRowClick}
+      />,
+    );
+
+    const cell = container.querySelectorAll("tbody tr")[1]?.querySelector("td");
+    await act(async () => {
+      await userEvent.click(cell as Element);
+    });
+    // getRowHref wins over onRowClick when both are supplied.
+    expect(routerPush).toHaveBeenCalledExactlyOnceWith("/people/2");
+    expect(onRowClick).not.toHaveBeenCalled();
+  });
+
+  it("falls back to onRowClick when the row has no href", async () => {
+    const onRowClick = vi.fn();
+    render(
+      <DataTable
+        columns={columns}
+        data={rows}
+        getRowId={(row) => row.id}
+        onRowClick={onRowClick}
+      />,
+    );
+
+    const cell = container.querySelector("tbody tr td");
+    await act(async () => {
+      await userEvent.click(cell as Element);
+    });
+    expect(onRowClick).toHaveBeenCalledExactlyOnceWith(rows[0]);
+    expect(routerPush).not.toHaveBeenCalled();
   });
 
   it("uses a native Space-activated button and isolates nested controls", async () => {
