@@ -316,7 +316,7 @@ export default function ImportProjectsPage() {
             </Button>
             {hasConflicts && (
               <Button asChild variant="outline">
-                <Link href="/projects/unmatched">{t("resolveUnmatched")}</Link>
+                <Link href="/projects/unmatched">{t("resolveImports")}</Link>
               </Button>
             )}
             <Button variant="ghost" onClick={reset}>

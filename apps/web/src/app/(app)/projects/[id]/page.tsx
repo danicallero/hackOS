@@ -204,24 +204,24 @@ export default function ProjectDetailPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        // The parent crumb is the way back; a second "Projects" button next to
+        // it said the same thing twice (issue #297).
+        context={
+          <Link href="/projects" className="hover:text-foreground inline-flex items-center gap-1">
+            <ArrowLeftIcon className="size-3" />
+            {t("projects")}
+          </Link>
+        }
         title={repo.name}
         actions={
-          <div className="flex flex-wrap gap-2">
-            {/* H18: metadata edit (name, description, links). */}
-            {canEdit && (
-              <ProjectFormDialog
-                key={`${repo.id}-${repo.name}`}
-                mode={{ kind: "edit", repo }}
-                onSaved={load}
-              />
-            )}
-            <Button variant="outline" asChild>
-              <Link href="/projects">
-                <ArrowLeftIcon className="size-4" />
-                {t("projects")}
-              </Link>
-            </Button>
-          </div>
+          /* H18: metadata edit (name, description, links). */
+          canEdit ? (
+            <ProjectFormDialog
+              key={`${repo.id}-${repo.name}`}
+              mode={{ kind: "edit", repo }}
+              onSaved={load}
+            />
+          ) : undefined
         }
       />
 

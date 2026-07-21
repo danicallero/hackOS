@@ -273,17 +273,21 @@ export default function PermissionGroupDetailPage() {
 
   return (
     <div className="space-y-8">
-      <div className="space-y-4">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="-ml-2 text-muted-foreground"
-          onClick={() => router.push("/permissions")}
-        >
-          <ArrowLeftIcon /> {t("permissions")}
-        </Button>
-        <PageHeader title={group.name} description={group.description ?? undefined} />
-      </div>
+      {/* The parent crumb lives in the header's context slot (issue #297). */}
+      <PageHeader
+        context={
+          <button
+            type="button"
+            className="hover:text-foreground inline-flex items-center gap-1"
+            onClick={() => router.push("/permissions")}
+          >
+            <ArrowLeftIcon className="size-3" />
+            {t("permissions")}
+          </button>
+        }
+        title={group.name}
+        description={group.description ?? undefined}
+      />
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSaveDetails)}>

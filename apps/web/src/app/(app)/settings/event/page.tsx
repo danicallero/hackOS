@@ -74,7 +74,7 @@ export default function EventSettingsPage() {
   return (
     <EventConfigProvider>
       <div className="space-y-6">
-        <PageHeader title={t("eventSettingsPageTitle")} />
+        <PageHeader title={t("eventSettings")} />
 
         <Tabs value={tab} onValueChange={changeTab}>
           <div className="max-w-full overflow-x-auto">

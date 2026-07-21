@@ -172,7 +172,7 @@ export default function ReviewsOverviewPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={t("reviewsOverviewTitle")}
+        title={t("reviewsOverview")}
         description={t("reviewsOverviewDesc")}
         actions={
           <Button asChild variant="outline">

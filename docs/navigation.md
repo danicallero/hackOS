@@ -44,13 +44,13 @@ workspace never over-grants access.
 | Workspace | Items | Visible when |
 | --- | --- | --- |
 | Applications | Applications | `applications:review` or `applications:manage` |
-| Projects | Projects | `projects:read`, `projects:import`, `judge:panel`, or an assigned-judge/sponsor-rep association |
-| Live judging | Queue operations, Judging, Rooms | `queue:operate`, `queue:admin`, `judge:panel`, an assigned-judge association (Judging), or a sponsor-rep association (Rooms) |
+| Projects and imports | Projects, Resolve import | `projects:read`, `projects:import`, `judge:panel`, or an assigned-judge/sponsor-rep association |
+| Live judging | Queue operations, Judging, Rooms, Reviews | `queue:operate`, `queue:admin`, `judge:panel`, an assigned-judge association (Judging), or a sponsor-rep association (Rooms) |
 | Logistics | Accreditation, Meals, Activities, Presence, Logistics stats | `accredit:scan`, `activity:scan`, `presence:scan`, `logistics:stats` (each item its own capability — H22-H27 per-station gating) |
 | Programme | Manage schedule, TV control | `schedule:manage` (also judge-visible), `tv:control` |
 | Sponsors | Enterprises, Challenges | `sponsors:manage`, `queue:admin`, or a sponsor-rep association |
 | Communications | Announcements | `announcements:manage` |
-| Event setup | Event settings, Libraries | `schedule:manage`, `intolerances:manage` |
+| Event setup (`Configuración` in es/gl) | Event settings, Libraries | `schedule:manage`, `intolerances:manage` |
 | Access and audit | Users, Permissions, Audit log | `users:read`, `permissions:manage`, `audit:read` |
 
 The admin wildcard (`*`) passes every capability check and therefore sees
@@ -66,6 +66,16 @@ every workspace and every item (`apps/web/src/lib/session.tsx`).
   Collapsed to the icon rail (`Sidebar collapsible="icon"`) or on the mobile
   sheet, the accordion is bypassed and every item stays directly reachable —
   matching the pre-#187 icon-rail behaviour exactly.
+- The sticky top bar carries the **workspace**, never the leaf
+  (`components/layout/header-title.tsx`, resolved by `workspaceForPath`): the
+  page already renders its own name in the `h1`, so naming the nav item there
+  printed the same string twice (issue #297). Personal-area routes and
+  single-destination workspaces render nothing — the sidebar draws no group
+  header for the latter either, so their label names the leaf.
+- One name per destination: `nav.ts` and the page `h1` reference the same
+  message key. `/timetable` is **Schedule** (the read-only programme every
+  participant uses) and `/schedule` is **Manage schedule** (the editor); no
+  multi-destination workspace is labelled with one of its own items.
 - No routes moved: every href in `nav.ts` matches the previously published
   URL, so existing deep links and bookmarks keep working without a redirect.
 

@@ -235,7 +235,7 @@ export default function QueueRoomsPage() {
   if (!canManageRooms) {
     return (
       <div className="space-y-6">
-        <PageHeader title={t("queueRooms")} />
+        <PageHeader title={t("rooms")} />
         <EmptyState
           icon={LockIcon}
           title={t("noAccessRoomAdmin")}
@@ -292,7 +292,7 @@ export default function QueueRoomsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={t("queueRooms")}
+        title={t("rooms")}
         actions={
           canAdmin && (
             <Button onClick={openCreateModal}>

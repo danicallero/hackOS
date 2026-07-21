@@ -125,7 +125,10 @@ Badges, meters and charts all take a `tone`. Never hardcode a hex.
 ### 3. Layout — `components/layout/*`
 
 `AppSidebar`, `UserMenu`, `AuthGuard`, `VerificationBanner`, `HeaderTitle` — the
-authed shell.
+authed shell. `HeaderTitle` shows the *workspace* the route belongs to
+(`workspaceForPath` in `lib/nav.ts`), never the nav leaf: the page renders its
+own name in its `PageHeader` `h1`, and one destination gets one name, so
+`nav.ts` and the page `h1` share a message key.
 
 ## Page structure — when a page becomes a directory
 

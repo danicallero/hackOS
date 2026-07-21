@@ -50,15 +50,19 @@ const dict: Record<string, I18nText> = {
   myQueue: { es: "Mi cola", gl: "A miña cola", en: "My queue" },
   // ---- Workspaces (issue #187: capability-based work areas, audit §3.2) ----
   workspaceApplications: { es: "Solicitudes", gl: "Solicitudes", en: "Applications" },
-  workspaceProjects: { es: "Proyectos", gl: "Proxectos", en: "Projects" },
+  workspaceProjects: {
+    es: "Proyectos e importación",
+    gl: "Proxectos e importación",
+    en: "Projects and imports",
+  },
   workspaceLiveJudging: { es: "Evaluación en vivo", gl: "Avaliación en vivo", en: "Live judging" },
   workspaceLogistics: { es: "Logística", gl: "Loxística", en: "Logistics" },
   workspaceProgramme: { es: "Programa", gl: "Programa", en: "Programme" },
   workspaceSponsors: { es: "Patrocinadores", gl: "Patrocinadores", en: "Sponsors" },
   workspaceCommunications: { es: "Comunicaciones", gl: "Comunicacións", en: "Communications" },
   workspaceEventSetup: {
-    es: "Configuración del evento",
-    gl: "Configuración do evento",
+    es: "Configuración",
+    gl: "Configuración",
     en: "Event setup",
   },
   workspaceAccessAudit: {
@@ -736,7 +740,6 @@ const dict: Record<string, I18nText> = {
   },
 
   // ---- Participant: my queues ----
-  yourQueues: { es: "Tus colas", gl: "As túas colas", en: "Your queues" },
   noJudgingQueue: {
     es: "No estás en ninguna cola de evaluación",
     gl: "Non estás en ningunha cola de avaliación",
@@ -1320,7 +1323,6 @@ const dict: Record<string, I18nText> = {
   },
 
   // ---- Staff: room administration ----
-  queueRooms: { es: "Salas de cola", gl: "Salas de cola", en: "Queue rooms" },
   noAccessRoomAdmin: {
     es: "No puedes acceder a la administración de salas",
     gl: "Non podes acceder á administración de salas",
@@ -4118,11 +4120,6 @@ const dict: Record<string, I18nText> = {
     en: "{count} participants didn't match an account. Resolve them on the unmatched page.",
   },
   viewProjects: { es: "Ver proyectos", gl: "Ver proxectos", en: "View projects" },
-  resolveUnmatched: {
-    es: "Resolver sin emparejar",
-    gl: "Resolver sen emparellar",
-    en: "Resolve unmatched",
-  },
   importAnother: { es: "Importar otro", gl: "Importar outro", en: "Import another" },
   reviewImport: { es: "Revisar importación", gl: "Revisar importación", en: "Review import" },
   reviewImportDesc: {
@@ -4781,11 +4778,6 @@ const dict: Record<string, I18nText> = {
     en: "Could not load winners.",
   },
   reviewsOverview: { es: "Evaluaciones", gl: "Avaliacións", en: "Reviews" },
-  reviewsOverviewTitle: {
-    es: "Todas las evaluaciones",
-    gl: "Todas as avaliacións",
-    en: "All reviews",
-  },
   reviewsOverviewDesc: {
     es: "Una empresa patrocinadora solo ve las evaluaciones de sus propios retos.",
     gl: "Unha empresa patrocinadora só ve as avaliacións dos seus propios retos.",
@@ -5606,11 +5598,6 @@ const dict: Record<string, I18nText> = {
   judgingEndsLabel: { es: "Termina la evaluación", gl: "Remata a avaliación", en: "Judging ends" },
 
   // ---- Event settings: local navigation, previews, save state (H195) ----
-  eventSettingsPageTitle: {
-    es: "Ajustes del evento",
-    gl: "Axustes do evento",
-    en: "Event settings",
-  },
   unsavedChangesConfirm: {
     es: "Hay cambios sin guardar en esta sección. ¿Salir de todos modos?",
     gl: "Hai cambios sen gardar nesta sección. ¿Saír de todos os xeitos?",

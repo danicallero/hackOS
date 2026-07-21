@@ -152,7 +152,7 @@ export default function UnmatchedProjectsPage() {
   if (!canImport) {
     return (
       <div className="space-y-6">
-        <PageHeader title={t("resolveUnmatched")} />
+        <PageHeader title={t("resolveImports")} />
         <EmptyState
           icon={LockIcon}
           title={t("noAccessResolveImports")}
@@ -165,7 +165,7 @@ export default function UnmatchedProjectsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={t("resolveUnmatched")}
+        title={t("resolveImports")}
         actions={
           <Button variant="outline" asChild>
             <Link href="/projects">

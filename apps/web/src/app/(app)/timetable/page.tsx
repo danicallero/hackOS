@@ -26,7 +26,7 @@ export default function TimetablePage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader title={t("publicSchedule")} description={event?.name ?? "hackOS"} />
+      <PageHeader title={t("schedule")} description={event?.name ?? "hackOS"} />
       {items === null || event === null ? (
         <div className="flex justify-center py-20" role="status" aria-busy="true">
           <Spinner className="size-6" />

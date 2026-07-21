@@ -59,6 +59,22 @@ export interface Workspace {
   items: NavItem[];
 }
 
+/**
+ * Workspace containing the route, resolved by longest matching item href so a
+ * child route (`/projects/import`) lands in its parent's workspace (issue
+ * #297). Personal-area routes belong to no workspace and resolve to null.
+ */
+export function workspaceForPath(pathname: string): Workspace | null {
+  let best: { workspace: Workspace; length: number } | null = null;
+  for (const workspace of WORKSPACES) {
+    for (const item of workspace.items) {
+      if (pathname !== item.href && !pathname.startsWith(`${item.href}/`)) continue;
+      if (!best || item.href.length > best.length) best = { workspace, length: item.href.length };
+    }
+  }
+  return best?.workspace ?? null;
+}
+
 const LAST_WORKSPACE_KEY = "hackos-last-workspace";
 
 /** Per-device last-open workspace (audit §3.3: "keep the last workspace ... per device"). */
