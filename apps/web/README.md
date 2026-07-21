@@ -140,6 +140,12 @@ eight files that each need six props threaded in makes it harder to read, not
 easier. `settings/event/` (10 files) is split because each tab is a real,
 separable unit — not because it crossed a number.
 
+`pnpm check:page-size` (part of `pnpm lint`) hard-fails only past **950** lines.
+That limit is a floor against rot, not a target — it exists because three pages
+reached 1900–2500 lines with nobody measuring. The ~600 figure above is where
+*you* should stop and look; nothing enforces it, deliberately, because a
+dogmatic check just produces five files of 599 lines.
+
 ### What goes where
 
 ```
