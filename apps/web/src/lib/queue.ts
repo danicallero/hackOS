@@ -3,6 +3,8 @@
  * mirroring the read shapes in `apps/api/src/modules/queue/{reads,types}.ts`.
  * Keep these in sync with the backend; when a shape is unclear, read the module.
  */
+import type { Question } from "@hackos/shared/questions";
+import type { TranslatedText } from "@/app/(app)/challenges/shared";
 import { api } from "./api";
 
 /** Physical stages a team moves through (plan §5; queue_entries.status). */
@@ -345,6 +347,41 @@ export const getSessions = (entryId: number) =>
   api.get<JudgingSession[]>(`/api/queue/entries/${entryId}/sessions`);
 export const searchTeams = (challengeId: number, q: string) =>
   api.get<QueueSearchResult[]>(`/api/queue/challenges/${challengeId}/search`, { query: { q } });
+
+// ── reviews overview detail (H46) ──────────────────────────────────────────
+/** The ficha behind a reviews-overview row: project, panel questions, answers. */
+export interface ReviewDetail {
+  entryId: number;
+  status: string;
+  calledAt: string | null;
+  presentationStartedAt: string | null;
+  completedAt: string | null;
+  challenge: { id: number; title: TranslatedText; criteria: Question[] };
+  room: { id: number; name: string; location: string | null } | null;
+  project: {
+    id: number;
+    name: string;
+    description: string;
+    githubUrl: string | null;
+    devpostUrl: string | null;
+    demoUrl: string | null;
+    members: Array<{ id: number | null; name: string; email: string | null }>;
+  };
+  review: {
+    status: "draft" | "submitted" | null;
+    scores: Record<string, unknown>;
+    notes: string | null;
+    updatedAt: string | null;
+  };
+  versions: Array<{ id: number; authorName: string; changedFields: string[]; createdAt: string }>;
+}
+
+export const getReviewDetail = (entryId: number) =>
+  api.get<ReviewDetail>(`/api/queue/reviews/${entryId}`);
+export const saveReviewFromOverview = (entryId: number, body: Record<string, unknown>) =>
+  api.patch<AttemptReview>(`/api/queue/reviews/${entryId}`, body);
+export const messageReviewTeam = (entryId: number, message: string) =>
+  api.post<{ recipients: number }>(`/api/queue/reviews/${entryId}/message`, { message });
 
 /** CSV export URLs (open directly — credentialed download) (H40). */
 export const exportUrls = (challengeId: number) => ({

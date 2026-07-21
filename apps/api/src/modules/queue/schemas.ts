@@ -89,6 +89,11 @@ export const reviewsQuery = z.object({
   status: z.enum(["draft", "submitted", "none"]).optional(),
 });
 
+/** POST /api/queue/reviews/:entryId/message — free-text call-back to a team (H46). */
+export const reviewMessageBody = z.object({
+  message: z.string().min(1).max(1000),
+});
+
 export const tvModeBody = z.object({
   mode: z.enum(["rooms", "schedule", "sponsors", "announcement", "wifi", "timer"]),
   payload: z.unknown().optional(),

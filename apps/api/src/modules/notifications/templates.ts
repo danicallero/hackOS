@@ -174,6 +174,20 @@ const TEMPLATES: Record<string, TemplateDefinition> = {
       body: "Ola {{name}},\n\nÉ a quenda do teu equipo para {{challengeName}}. Entra xa á sala {{roomName}}.",
     },
   },
+  "queue.message": {
+    en: {
+      subject: "Message about {{challengeName}}",
+      body: "Hi {{name}},\n\n{{senderName}} sent your team {{teamName}} a message about {{challengeName}}:\n\n{{message}}",
+    },
+    es: {
+      subject: "Mensaje sobre {{challengeName}}",
+      body: "Hola {{name}},\n\n{{senderName}} ha enviado un mensaje a tu equipo {{teamName}} sobre {{challengeName}}:\n\n{{message}}",
+    },
+    gl: {
+      subject: "Mensaxe sobre {{challengeName}}",
+      body: "Ola {{name}},\n\n{{senderName}} enviou unha mensaxe ao teu equipo {{teamName}} sobre {{challengeName}}:\n\n{{message}}",
+    },
+  },
   "queue.staff.enter": {
     en: {
       subject: "Team entering {{roomName}}",
@@ -256,6 +270,11 @@ const PUSH_TEMPLATES: Record<string, PushTemplateDefinition> = {
       title: "{{teamName}} chamado a {{roomName}}",
       body: "Agardando na porta para {{challengeName}}.",
     },
+  },
+  "queue.message": {
+    en: { title: "Message about {{challengeName}}", body: "{{message}}" },
+    es: { title: "Mensaje sobre {{challengeName}}", body: "{{message}}" },
+    gl: { title: "Mensaxe sobre {{challengeName}}", body: "{{message}}" },
   },
   "queue.called": {
     en: {

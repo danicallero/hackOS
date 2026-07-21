@@ -1,6 +1,7 @@
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { type Question, validateAnswers } from "@hackos/shared/questions";
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
+import { audit } from "../../lib/audit.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
 import { writeQueueHistory } from "./history.js";
@@ -72,6 +73,13 @@ export async function upsertAttemptReview(
   entryId: number,
   actorId: number,
   patch: AttemptReviewPatch,
+  /**
+   * Out-of-band corrections (the reviews overview, H46) are a sensitive
+   * mutation and get an audit_log row in the same transaction (H53). The
+   * judging panel itself doesn't: it autosaves every 800ms while a judge
+   * types, and attempt_review_versions is already its operational trail.
+   */
+  opts: { audit?: boolean } = {},
 ) {
   const { review, completedEntry } = await withTransaction(async (client) => {
     // Lock the entry row: a submit may complete the presentation (below), so
@@ -174,6 +182,17 @@ export async function upsertAttemptReview(
        VALUES ($1, $2, $3, $4, $5)`,
       [entryId, actorId, changedFields, JSON.stringify(previous), JSON.stringify(next)],
     );
+
+    if (opts.audit) {
+      await audit(client, {
+        actorId,
+        entityType: "attempt_review",
+        entityId: entryId,
+        action: patch.submit ? "review.submit" : "review.update",
+        before: previous,
+        after: next,
+      });
+    }
 
     // H37: submitting the final review closes the presentation. Only a team
     // actually in the room / presenting is completed — submitting a review for
