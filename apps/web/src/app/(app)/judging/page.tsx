@@ -1785,7 +1785,6 @@ function ReviewForm({
   return (
     <SectionCard
       title={t("scoring")}
-      description={t("scoringSaveDesc")}
       icon={CheckCircle2Icon}
       action={
         <div className="flex flex-wrap items-center gap-2">

@@ -885,7 +885,6 @@ function StaffEditForm({
         <SectionCard
           icon={UserIcon}
           title={t("profileDetails")}
-          description={t("editThisUsersDetails")}
           footer={
             <SubmitButton pending={form.formState.isSubmitting}>{t("saveChanges")}</SubmitButton>
           }
@@ -1936,11 +1935,7 @@ function ApplicationTab({ userId }: { userId: number }) {
     );
   }
   return (
-    <SectionCard
-      icon={ClipboardListIcon}
-      title={t("applications")}
-      description={t("everyFormResponded")}
-    >
+    <SectionCard icon={ClipboardListIcon} title={t("applications")}>
       <ul className="divide-border divide-y">
         {rows.map((r) => (
           <li key={r.id} className="flex items-center gap-3 py-3">
