@@ -21,7 +21,8 @@ import type { Tone } from "@/lib/tones";
 
 export interface RepoMember {
   userId: number | null;
-  email: string;
+  /** null on the participant self-view — teammates' addresses are redacted. */
+  email: string | null;
   name: string | null;
   surname: string | null;
   importedFrom: string;
@@ -168,17 +169,22 @@ export interface ConfirmResult {
 
 // ── display helpers ──────────────────────────────────────────────────────────
 
-/** Human name for a Devpost member, falling back to the email local-part. */
+/**
+ * Human name for a project member, falling back to the Devpost handle and then
+ * to the email local-part. Returns "" when nothing is available — the self-view
+ * redacts teammates' emails, so a nameless teammate has no label to show.
+ */
 export function memberName(m: {
   name?: string | null;
   surname?: string | null;
   firstName?: string | null;
   lastName?: string | null;
-  email: string;
+  devpostUsername?: string | null;
+  email: string | null;
 }): string {
   const parts = [m.name ?? m.firstName, m.surname ?? m.lastName].filter(Boolean);
   const full = parts.join(" ").trim();
-  return full || m.email.split("@")[0];
+  return full || m.devpostUsername || m.email?.split("@")[0] || "";
 }
 
 const MATCH_TONE: Record<MemberMatchType, Tone> = {

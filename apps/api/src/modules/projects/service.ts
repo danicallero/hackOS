@@ -547,7 +547,8 @@ interface RepoRow {
 
 interface RepoMember {
   userId: number | null;
-  email: string;
+  /** null when the caller is not entitled to a teammate's address (H20). */
+  email: string | null;
   name: string | null;
   surname: string | null;
   mergeStatus: string;
@@ -936,7 +937,13 @@ export async function myProjects(userId: number): Promise<RepoWithExtras[]> {
     [userId],
   );
   // H20 is read-only self-view — participants never see judging internals.
-  return attachMembersAndPrizes(rows, []);
+  const repos = await attachMembersAndPrizes(rows, []);
+  // A teammate's address is not the participant's to read: only the caller's
+  // own email survives the self-view (H20).
+  return repos.map((repo) => ({
+    ...repo,
+    members: repo.members.map((m) => (m.userId === userId ? m : { ...m, email: null })),
+  }));
 }
 
 export async function addRepoMember(actorId: number, repoId: number, userId: number) {

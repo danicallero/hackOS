@@ -337,4 +337,45 @@ describe("GET /api/me/projects canCreate (H19/H20)", () => {
     });
     expect(on.json()).toMatchObject({ projects: [], canCreate: true });
   });
+
+  it("redacts teammates' emails from the participant self-view (H20)", async () => {
+    const server = await getApp();
+    const editor = await createUserWithCapabilities([CAPABILITIES.PROJECTS_EDIT]);
+    const me = await createUser({ email: "me@test.local" });
+    const teammate = await createUser({ email: "teammate@test.local" });
+
+    const created = await server.inject({
+      method: "POST",
+      url: "/api/repos",
+      headers: asUser(editor),
+      payload: { name: "Redaction Rockets", memberUserIds: [me, teammate] },
+    });
+    expect(created.statusCode).toBe(200);
+
+    const selfView = await server.inject({
+      method: "GET",
+      url: "/api/me/projects",
+      headers: asUser(me),
+    });
+    expect(selfView.statusCode).toBe(200);
+    const members = selfView.json().projects[0].members as Array<{
+      userId: number;
+      email: string | null;
+    }>;
+    expect(members.find((m) => m.userId === me)?.email).toBe("me@test.local");
+    expect(members.find((m) => m.userId === teammate)?.email).toBeNull();
+
+    // Staff reads are unaffected — the roster keeps every address.
+    const reader = await createUserWithCapabilities([CAPABILITIES.PROJECTS_READ]);
+    const staffView = await server.inject({
+      method: "GET",
+      url: `/api/repos/${created.json().repo.id}`,
+      headers: asUser(reader),
+    });
+    const staffMembers = staffView.json().members as Array<{ email: string | null }>;
+    expect(staffMembers.map((m) => m.email).sort()).toEqual([
+      "me@test.local",
+      "teammate@test.local",
+    ]);
+  });
 });

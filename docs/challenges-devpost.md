@@ -119,7 +119,7 @@ public/general fields (`title`, `description`, `criteria`, `prizes`,
 | `PATCH /api/repos/:id` | `projects:edit` | H18 | metadata edit (name, description, links), audited before/after |
 | `POST /api/repos/:id/members` / `DELETE …/members/:userId` | `projects:edit` | H21 | hot-edit team membership |
 | `POST /api/repos/:id/challenges` / `DELETE …/challenges/:challengeId` | `projects:edit` | H21 | enqueue at queue bottom / remove + compact positions |
-| `GET /api/me/projects` | authenticated | H20 | participant self-view: team roster, challenges, live queue status, plus `canCreate` (H19 policy ∧ no project yet) |
+| `GET /api/me/projects` | authenticated | H20 | participant self-view: team roster (teammate emails redacted to `null`), challenges, live queue status, plus `canCreate` (H19 policy ∧ no project yet) |
 | `POST /api/me/projects` | authenticated + idempotency | H19 | participant self-creation, only while the event policy allows it |
 
 **Native lifecycle (H18-H19).** `repos.source` distinguishes `'devpost'` from
@@ -138,7 +138,11 @@ concurrency), and only accepts publicly visible challenges.
 project, team and challenges (web: `/my-project`) but cannot mutate an existing
 project — corrections go through queue-management/admin (H21). The only
 participant-side write is the H19 creation itself, and only while the event
-policy is on.
+policy is on. The self-view is also the only read that redacts the roster:
+`myProjects()` nulls every member `email` except the caller's own, so teammates
+are listed by name alone and a participant never learns another participant's
+address. Staff reads (`GET /api/repos`, `GET /api/repos/:id`) keep the full
+roster — they need it for linking and accreditation.
 
 ---
 
