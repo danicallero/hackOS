@@ -398,12 +398,50 @@ describe("notify_enter (H31)", () => {
 
     const alerts = await pool.query(
       `SELECT user_id, payload FROM notification_outbox
-        WHERE category = 'queue.staff' AND channel = 'push' ORDER BY user_id`,
+        WHERE category = 'queue.staff' AND channel = 'push'
+          AND payload->>'template' = 'queue.staff.enter'
+        ORDER BY user_id`,
     );
     expect(alerts.rows).toHaveLength(1);
     expect(alerts.rows[0].user_id).toBe(subscribedStaff);
     expect(alerts.rows[0].payload.template).toBe("queue.staff.enter");
     expect(alerts.rows[0].payload.vars.teamName).toBe("Equipo Colaborador");
+    expect(alerts.rows.some((row: { user_id: number }) => row.user_id === unsubscribedStaff)).toBe(
+      false,
+    );
+  });
+
+  it("pushes an opt-in staff alert when a team is called (H29)", async () => {
+    const { challengeId, roomId } = await setup();
+    const subscribedStaff = await createUserWithCapabilities([CAPABILITIES.QUEUE_OPERATE]);
+    const unsubscribedStaff = await createUserWithCapabilities([CAPABILITIES.QUEUE_OPERATE]);
+    const member = await createUser();
+    const { repoId } = await createRepoWithTeam([member], "Equipo Llamado");
+    await enqueueRepo(challengeId, repoId, 1);
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `INSERT INTO notification_preferences (user_id, category, channel, enabled)
+       VALUES ($1, 'queue.staff', 'push', true)`,
+      [subscribedStaff],
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/queue/rooms/${roomId}/call-next`,
+      headers: asUser(operatorId),
+      payload: {},
+    });
+    expect(response.statusCode).toBe(200);
+
+    const alerts = await pool.query(
+      `SELECT user_id, payload FROM notification_outbox
+        WHERE category = 'queue.staff' AND channel = 'push'
+          AND payload->>'template' = 'queue.staff.called'
+        ORDER BY user_id`,
+    );
+    expect(alerts.rows).toHaveLength(1);
+    expect(alerts.rows[0].user_id).toBe(subscribedStaff);
+    expect(alerts.rows[0].payload.vars.teamName).toBe("Equipo Llamado");
     expect(alerts.rows.some((row: { user_id: number }) => row.user_id === unsubscribedStaff)).toBe(
       false,
     );

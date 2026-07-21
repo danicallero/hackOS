@@ -161,10 +161,28 @@ route below. No migration needed.
   `queue:operate`, `queue:admin`, and `*`. It first lists only the caller's
   authorized rooms, then loads each protected room view. Each card keeps the
   presenting team, teams called to the door, and the first waiting team easy
-  to scan. It can also filter the loaded authorized queues by team name or
-  member name/email and shows that entry's room and live state. Re-notification
-  uses the existing idempotent `notify-enter` transition with a React
-  Native-safe generated key. The layout is one column on phones, two from
+  to scan. `operations/_layout.tsx` and `others/operations/_layout.tsx` wrap
+  it in its own `Stack` so it can use the same native
+  `headerLargeTitle`/`headerSearchBarOptions` search bar as
+  `people-directory-screen.tsx`; typing a query swaps the room grid for a
+  flat, sorted list of every matching queue entry (by team name or member
+  name/email) across every challenge that team is in, each rendered as the
+  participant's own My Queue card. Tapping a result — or any team already
+  shown on a room card — pushes `components/team-operations-screen.tsx`
+  (`/(tabs)/others/team/[entryId]`), a detail view built on the same layout as
+  the participant's own queue card but with the extra context only an
+  operator needs: full member emails, repo/Devpost/demo links, and the
+  entry's `queue_history` timeline. Re-notification uses the existing
+  idempotent `notify-enter` transition with a React Native-safe generated
+  key. On top of the existing 10s poll, the screen opens
+  `lib/server-events.ts`'s `startQueueEventStream()` (the public
+  `GET /api/queue/stream` topic) while focused, so `QUEUE_TEAM_CALLED` /
+  `QUEUE_ENTRY_CHANGED` / `QUEUE_ROOM_CHANGED` refresh the board immediately
+  and mark the newly-called room/entry with an accent border and a "Just
+  called" badge for ~12s. `notifyTeamCalled` (apps/api) also pushes the
+  existing opt-in `queue.staff` push category (same mechanism as
+  `notify-enter`'s staff alert) so an operator with a backgrounded app still
+  gets a device notification. The layout is one column on phones, two from
   680 px, and three from 1100 px.
 - `app/(tabs)/scan/index.tsx` — thin wrapper around the shared
   `GeneralScannerScreen` (camera/manual scanners selected by capability:

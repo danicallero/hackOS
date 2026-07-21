@@ -1,7 +1,7 @@
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import type { Queryable } from "../../db/pool.js";
 import { broadcast } from "../../lib/sse.js";
-import { notify } from "../notifications/service.js";
+import { notify, QUEUE_STAFF_CATEGORY } from "../notifications/service.js";
 
 /**
  * Team members for a repo. `submissions` is the normal source, while the
@@ -95,6 +95,28 @@ export async function notifyTeamCalled(
   // Operator-facing echo on the shared queue topic, carrying the team name so
   // the queue-ops screen can hint "team X should arrive at room Y" (opt-in).
   await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_TEAM_CALLED, { ...payload, teamName });
+  // H29: same opt-in staff push used by notify-enter (queue.staff), so
+  // operators with a backgrounded app still get a device notification the
+  // moment a team is called, not just the live SSE echo above.
+  const { rows: staffRows } = await client.query(
+    `SELECT DISTINCT user_id
+       FROM notification_preferences
+      WHERE category = $1 AND channel = 'push' AND enabled = true`,
+    [QUEUE_STAFF_CATEGORY],
+  );
+  for (const row of staffRows as { user_id: number }[]) {
+    await notify(client, {
+      userId: row.user_id,
+      category: QUEUE_STAFF_CATEGORY,
+      channels: ["push"],
+      payload: {
+        entryId: params.entryId,
+        roomId: params.roomId,
+        template: "queue.staff.called",
+        vars: { teamName, challengeName, roomName: params.roomName },
+      },
+    });
+  }
 }
 
 /** H38 pre-aviso: estimated wait <= queue_settings.pre_call_notification_eta_minutes. */
