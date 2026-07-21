@@ -6,7 +6,6 @@ import {
   AlertTriangleIcon,
   ClockIcon,
   DoorOpenIcon,
-  LockIcon,
   LogInIcon,
   LogOutIcon,
   ScanLineIcon,
@@ -15,9 +14,9 @@ import {
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
+import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { DateTimeInput } from "@/components/common/datetime-input";
-import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
 import { StatCard } from "@/components/common/stat-card";
@@ -82,16 +81,7 @@ export default function PresencePage() {
   );
 
   if (!canPresence) {
-    return (
-      <div className="space-y-6">
-        <PageHeader title={t("presence")} />
-        <EmptyState
-          icon={LockIcon}
-          title={t("presenceDeniedTitle")}
-          description={t("presenceDeniedDesc")}
-        />
-      </div>
-    );
+    return <AccessDenied ask={t("presenceDeniedDesc")} />;
   }
 
   return (

@@ -812,11 +812,6 @@ const dict: Record<string, I18nText> = {
   },
 
   // ---- Staff: queue operations ----
-  noAccessQueueOps: {
-    es: "No tienes acceso a operaciones de cola",
-    gl: "Non tes acceso a operacións de cola",
-    en: "You can't access queue operations",
-  },
   queueOpsAccessDeniedDesc: {
     es: "Necesitas acceso a colas o evaluación.",
     gl: "Necesitas acceso a colas ou avaliación.",
@@ -950,11 +945,6 @@ const dict: Record<string, I18nText> = {
   },
 
   // ---- Staff: accreditation scanning ----
-  accreditationDeniedTitle: {
-    es: "No puedes acreditar",
-    gl: "Non podes acreditar",
-    en: "You can't accredit",
-  },
   accreditationDeniedDesc: {
     es: "Pide a un administrador acceso al escaneo de acreditación.",
     gl: "Pide a un administrador acceso ao escaneo de acreditación.",
@@ -1071,11 +1061,6 @@ const dict: Record<string, I18nText> = {
   rotateBadge: { es: "Cambiar acreditación", gl: "Cambiar acreditación", en: "Rotate badge" },
 
   // ---- Staff: presence scanning ----
-  presenceDeniedTitle: {
-    es: "No puedes escanear presencia",
-    gl: "Non podes escanear presenza",
-    en: "You can't scan presence",
-  },
   presenceDeniedDesc: {
     es: "Pide a un administrador acceso al escaneo de presencia.",
     gl: "Pide a un administrador acceso ao escaneo de presenza.",
@@ -1236,11 +1221,6 @@ const dict: Record<string, I18nText> = {
   fresh: { es: "Reciente", gl: "Recente", en: "Fresh" },
 
   // ---- Staff: meals, activities & logistics stats overview ----
-  mealsDeniedTitle: {
-    es: "No puedes escanear comidas",
-    gl: "Non podes escanear comidas",
-    en: "You can't scan meals",
-  },
   mealsDeniedDesc: {
     es: "Pide a un administrador acceso al escaneo de comidas.",
     gl: "Pide a un administrador acceso ao escaneo de comidas.",
@@ -1255,31 +1235,16 @@ const dict: Record<string, I18nText> = {
     gl: "{count} seleccionadas",
     en: "{count} selected",
   },
-  activitiesDeniedTitle: {
-    es: "No puedes escanear actividades",
-    gl: "Non podes escanear actividades",
-    en: "You can't scan activities",
-  },
   activitiesDeniedDesc: {
     es: "Pide a un administrador acceso al escaneo de actividades.",
     gl: "Pide a un administrador acceso ao escaneo de actividades.",
     en: "Ask an administrator for activity-scan access.",
   },
   logistics: { es: "Logística", gl: "Loxística", en: "Logistics" },
-  logisticsDeniedTitle: {
-    es: "No puedes acceder a logística",
-    gl: "Non podes acceder a loxística",
-    en: "You can't access logistics",
-  },
   logisticsDeniedDesc: {
     es: "Pide a un administrador acceso a acreditación, escaneo de comidas o actividades, presencia o estadísticas de logística.",
     gl: "Pide a un administrador acceso a acreditación, escaneo de comidas ou actividades, presenza ou estatísticas de loxística.",
     en: "Ask an administrator for accreditation, meal/activity-scan, presence, or logistics-stats access.",
-  },
-  logisticsStatsDeniedTitle: {
-    es: "No puedes ver las estadísticas de logística",
-    gl: "Non podes ver as estatísticas de loxística",
-    en: "You can't view logistics stats",
   },
   logisticsStatsDeniedDesc: {
     es: "Pide a un administrador acceso a las estadísticas de logística.",
@@ -1323,11 +1288,6 @@ const dict: Record<string, I18nText> = {
   },
 
   // ---- Staff: room administration ----
-  noAccessRoomAdmin: {
-    es: "No puedes acceder a la administración de salas",
-    gl: "Non podes acceder á administración de salas",
-    en: "You can't access room admin",
-  },
   roomAdminDeniedDesc: {
     es: "Pide a un administrador acceso a la administración de salas.",
     gl: "Pide a un administrador acceso á administración de salas.",
@@ -1662,11 +1622,6 @@ const dict: Record<string, I18nText> = {
   },
   calledAt: { es: "Llamado a las {time}", gl: "Chamado ás {time}", en: "Called {time}" },
   challengeFallbackNumber: { es: "Reto #{id}", gl: "Reto #{id}", en: "Challenge #{id}" },
-  noAccessJudgingPanel: {
-    es: "No puedes acceder al panel de evaluación",
-    gl: "Non podes acceder ao panel de avaliación",
-    en: "You can't access the judging panel",
-  },
   judgingAccessDeniedDesc: {
     es: "Pide a un administrador acceso como operador, administrador o juez.",
     gl: "Pide a un administrador acceso como operador, administrador ou xuíz.",
@@ -2417,11 +2372,6 @@ const dict: Record<string, I18nText> = {
     gl: "Non se puido eliminar o elemento do programa.",
     en: "Could not delete schedule item.",
   },
-  noAccessSchedule: {
-    es: "No puedes gestionar el programa",
-    gl: "Non podes xestionar o programa",
-    en: "You can't manage the schedule",
-  },
   scheduleDeniedDesc: {
     es: "Pide a un administrador acceso a la gestión del programa.",
     gl: "Pide a un administrador acceso á xestión do programa.",
@@ -2547,11 +2497,6 @@ const dict: Record<string, I18nText> = {
     gl: "Non se puido eliminar o aviso.",
     en: "Could not delete announcement.",
   },
-  noAccessAnnouncements: {
-    es: "No puedes gestionar los avisos",
-    gl: "Non podes xestionar os avisos",
-    en: "You can't manage announcements",
-  },
   announcementsDeniedDesc: {
     es: "Pide a un administrador acceso a avisos.",
     gl: "Pide a un administrador acceso a avisos.",
@@ -2661,11 +2606,6 @@ const dict: Record<string, I18nText> = {
     es: "No se han podido actualizar las pantallas de TV.",
     gl: "Non se puideron actualizar as pantallas de TV.",
     en: "Could not update the TV displays.",
-  },
-  noAccessTvControl: {
-    es: "No puedes controlar las pantallas de TV",
-    gl: "Non podes controlar as pantallas de TV",
-    en: "You can't control the TV displays",
   },
   tvControlDeniedDesc: {
     es: "Pide a un administrador acceso al control de pantallas de TV.",
@@ -3747,10 +3687,12 @@ const dict: Record<string, I18nText> = {
     gl: "Non se puideron cargar os proxectos.",
     en: "Could not load projects.",
   },
-  noAccessProjects: {
-    es: "No puedes acceder a proyectos",
-    gl: "Non podes acceder a proxectos",
-    en: "You can't access projects",
+  // One title for every capability-denied page (issue #298); the per-page
+  // "*DeniedDesc" ask below it names the access to request.
+  noAccessTitle: {
+    es: "No tienes acceso a esto",
+    gl: "Non tes acceso a isto",
+    en: "You don't have access to this",
   },
   projectAccessDeniedDesc: {
     es: "Pide a un administrador acceso a proyectos.",
@@ -4066,11 +4008,6 @@ const dict: Record<string, I18nText> = {
     gl: "Non se puido aplicar a importación.",
     en: "Could not apply the import.",
   },
-  noAccessImportProjects: {
-    es: "No puedes importar proyectos",
-    gl: "Non podes importar proxectos",
-    en: "You can't import projects",
-  },
   importDeniedDesc: {
     es: "Pide a un administrador acceso a la importación de proyectos.",
     gl: "Pide a un administrador acceso á importación de proxectos.",
@@ -4212,11 +4149,6 @@ const dict: Record<string, I18nText> = {
     es: "La acción ha fallado.",
     gl: "A acción fallou.",
     en: "Action failed.",
-  },
-  noAccessResolveImports: {
-    es: "No puedes resolver importaciones",
-    gl: "Non podes resolver importacións",
-    en: "You can't resolve imports",
   },
   resolveImportsDeniedDesc: {
     es: "Pide a un administrador acceso a la importación de proyectos.",
@@ -4498,11 +4430,6 @@ const dict: Record<string, I18nText> = {
     es: "Se han ocultado {count} retos.",
     gl: "Ocultáronse {count} retos.",
     en: "Hid {count} challenges.",
-  },
-  noAccessChallenges: {
-    es: "No puedes acceder a los retos",
-    gl: "Non podes acceder aos retos",
-    en: "You can't access challenges",
   },
   challengesAccessDeniedDesc: {
     es: "El acceso a los retos está disponible para administradores y representantes de patrocinadores vinculados.",
@@ -4953,11 +4880,6 @@ const dict: Record<string, I18nText> = {
   priorityLabel: { es: "Prioridad", gl: "Prioridade", en: "Priority" },
   myEnterprise: { es: "Mi empresa", gl: "A miña empresa", en: "My enterprise" },
   loadingEnterprise: { es: "Cargando empresa", gl: "Cargando empresa", en: "Loading enterprise" },
-  noAccessSponsors: {
-    es: "No puedes gestionar patrocinadores",
-    gl: "Non podes xestionar patrocinadores",
-    en: "You can't manage sponsors",
-  },
   sponsorsAccessDeniedDesc: {
     es: "Pide a un administrador acceso a patrocinadores para ver y gestionar empresas.",
     gl: "Pide a un administrador acceso a patrocinadores para ver e xestionar empresas.",
@@ -6065,11 +5987,6 @@ const dict: Record<string, I18nText> = {
   queueStatusDisqualified: { es: "Descalificado", gl: "Descualificado", en: "Disqualified" },
 
   // ---- Admin: audit log ----
-  noAccessAuditLog: {
-    es: "No puedes ver el registro de auditoría",
-    gl: "Non podes ver o rexistro de auditoría",
-    en: "You can't view the audit log",
-  },
   auditLogAccessDeniedDesc: {
     es: "Pide a un administrador acceso al registro de auditoría.",
     gl: "Pide a un administrador acceso ao rexistro de auditoría.",

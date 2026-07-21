@@ -9,7 +9,6 @@ import {
   ExternalLinkIcon,
   FolderGitIcon,
   LinkIcon,
-  LockIcon,
   SearchIcon,
   Trash2Icon,
   TrophyIcon,
@@ -20,6 +19,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { AccessDenied } from "@/components/common/access-denied";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { QueueStatusBadge } from "@/components/common/queue-status-badge";
@@ -162,16 +162,7 @@ export default function ProjectDetailPage() {
   );
 
   if (!canRead) {
-    return (
-      <div className="space-y-6">
-        <PageHeader title={t("colProject")} />
-        <EmptyState
-          icon={LockIcon}
-          title={t("noAccessProjects")}
-          description={t("projectAccessDeniedDesc")}
-        />
-      </div>
-    );
+    return <AccessDenied ask={t("projectAccessDeniedDesc")} />;
   }
 
   if (loading) {

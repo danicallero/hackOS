@@ -7,7 +7,6 @@ import {
   BadgeCheckIcon,
   ClipboardListIcon,
   DownloadIcon,
-  LockIcon,
   RefreshCwIcon,
   ShieldCheckIcon,
   SoupIcon,
@@ -16,8 +15,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
-import { EmptyState } from "@/components/common/empty-state";
 import { SectionCard } from "@/components/common/section-card";
 import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -209,15 +208,7 @@ export default function LogisticsStatsPage() {
   }, [loadAfter]);
 
   if (!canStats) {
-    return (
-      <div className="space-y-6">
-        <EmptyState
-          icon={LockIcon}
-          title={t("logisticsStatsDeniedTitle")}
-          description={t("logisticsStatsDeniedDesc")}
-        />
-      </div>
-    );
+    return <AccessDenied ask={t("logisticsStatsDeniedDesc")} />;
   }
 
   const selectPhase = (value: string) => {

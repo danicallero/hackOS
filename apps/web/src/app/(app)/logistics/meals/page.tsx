@@ -1,8 +1,7 @@
 "use client";
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { LockIcon } from "lucide-react";
-import { EmptyState } from "@/components/common/empty-state";
+import { AccessDenied } from "@/components/common/access-denied";
 import { PageHeader } from "@/components/common/page-header";
 import { ActivityScannerCard } from "@/components/logistics/activity-scanner";
 import { useLocale } from "@/lib/i18n";
@@ -13,16 +12,7 @@ export default function MealsPage() {
   const canScan = useCan(CAPABILITIES.ACTIVITY_SCAN);
 
   if (!canScan) {
-    return (
-      <div className="space-y-6">
-        <PageHeader title={t("meals")} />
-        <EmptyState
-          icon={LockIcon}
-          title={t("mealsDeniedTitle")}
-          description={t("mealsDeniedDesc")}
-        />
-      </div>
-    );
+    return <AccessDenied ask={t("mealsDeniedDesc")} />;
   }
 
   return (

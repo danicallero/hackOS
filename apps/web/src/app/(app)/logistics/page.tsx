@@ -1,11 +1,9 @@
 "use client";
 
 import { CAPABILITIES, type Capability } from "@hackos/shared/capabilities";
-import { LockIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { EmptyState } from "@/components/common/empty-state";
-import { PageHeader } from "@/components/common/page-header";
+import { AccessDenied } from "@/components/common/access-denied";
 import { Spinner } from "@/components/common/spinner";
 import { useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
@@ -34,16 +32,7 @@ export default function LogisticsIndexPage() {
   }, [status, target, router]);
 
   if (status !== "loading" && !target) {
-    return (
-      <div className="space-y-6">
-        <PageHeader title={t("logistics")} />
-        <EmptyState
-          icon={LockIcon}
-          title={t("logisticsDeniedTitle")}
-          description={t("logisticsDeniedDesc")}
-        />
-      </div>
-    );
+    return <AccessDenied ask={t("logisticsDeniedDesc")} />;
   }
 
   return (

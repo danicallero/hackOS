@@ -7,13 +7,13 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { LockIcon, ScrollTextIcon } from "lucide-react";
+import { ScrollTextIcon } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { DateTimeInput } from "@/components/common/datetime-input";
-import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -124,16 +124,7 @@ export default function AuditPage() {
   }, [canRead, debounced, offset, liveRefresh, retryNonce, t]);
 
   if (!canRead) {
-    return (
-      <div className="space-y-6">
-        <PageHeader title={t("auditLog")} />
-        <EmptyState
-          icon={LockIcon}
-          title={t("noAccessAuditLog")}
-          description={t("auditLogAccessDeniedDesc")}
-        />
-      </div>
-    );
+    return <AccessDenied ask={t("auditLogAccessDeniedDesc")} />;
   }
 
   const hasFilters = Object.values(filters).some((v) => v.trim() !== "");

@@ -110,8 +110,12 @@ re-implementing. Each is a **single canonical component configured by props**
 
 Key components: `PageHeader`, `SectionCard`, `StatCard`, `StatusBadge`,
 `EmptyState`, `DataTable`, `Modal`, `AlertModal`, `ContextualError`,
-`CapabilityGate`, `Spinner`, `SubmitButton`, `PasswordInput`, `QrCode`,
-`TemplateFieldControl`, `FileUploadField`.
+`CapabilityGate`, `AccessDenied`, `Spinner`, `SubmitButton`, `PasswordInput`,
+`QrCode`, `TemplateFieldControl`, `FileUploadField`.
+
+A capability-denied page is `<AccessDenied ask={t("…")} />` and nothing else —
+one heading for every page, one per-page ask naming the access to request. It
+renders; it does not gate. The page keeps its own capability check.
 
 **TV surfaces** (`app/(public)/tv/*`) are their own layer with their own rules —
 one screenful, `em` sizing off a measured scale, nothing that needs hover or

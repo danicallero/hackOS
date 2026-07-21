@@ -17,8 +17,8 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { AccessDenied } from "@/components/common/access-denied";
 import { EmptyState } from "@/components/common/empty-state";
-import { PageHeader } from "@/components/common/page-header";
 import { Spinner } from "@/components/common/spinner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -231,16 +231,7 @@ export default function QueuePage() {
   }, [effectiveChallengeId, roomView.data, search, t]);
 
   if (!canUse) {
-    return (
-      <div className="space-y-6">
-        <PageHeader title={t("judging")} />
-        <EmptyState
-          icon={LockIcon}
-          title={t("noAccessJudgingPanel")}
-          description={t("judgingAccessDeniedDesc")}
-        />
-      </div>
-    );
+    return <AccessDenied ask={t("judgingAccessDeniedDesc")} />;
   }
 
   const view = roomView.data;

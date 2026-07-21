@@ -219,6 +219,15 @@ Loading / empty / error:
 - Loading uses structural skeletons matching the layout they replace.
 - A failed region keeps its error and retry in that region; toasts are never
   the only channel for a critical failure.
+- **Capability-denied pages render `<AccessDenied ask={t("…")} />` and nothing
+  else** (`components/common/access-denied.tsx`, issue #298). The heading is
+  the same everywhere because the fact is the same everywhere; the only
+  per-page string is the ask, which names the access to request ("Ask an
+  administrator for project access."). Never hand-roll a lock `EmptyState`, and
+  never name a capability key in it. It is a rendering component, not a gate —
+  the page keeps its own capability check and the API still enforces it.
+- Non-capability empty states (no results, nothing yet, failed load) stay
+  bespoke `EmptyState`s; `AccessDenied` is only for "you may not see this".
 
 ## 7. Information architecture
 

@@ -8,7 +8,6 @@ import {
   ArrowLeftIcon,
   CheckCircle2Icon,
   LinkIcon,
-  LockIcon,
   MailIcon,
   TrophyIcon,
   UserPlusIcon,
@@ -16,6 +15,7 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { AccessDenied } from "@/components/common/access-denied";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
@@ -150,16 +150,7 @@ export default function UnmatchedProjectsPage() {
   );
 
   if (!canImport) {
-    return (
-      <div className="space-y-6">
-        <PageHeader title={t("resolveImports")} />
-        <EmptyState
-          icon={LockIcon}
-          title={t("noAccessResolveImports")}
-          description={t("resolveImportsDeniedDesc")}
-        />
-      </div>
-    );
+    return <AccessDenied ask={t("resolveImportsDeniedDesc")} />;
   }
 
   return (
