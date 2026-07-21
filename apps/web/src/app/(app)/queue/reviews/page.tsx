@@ -230,6 +230,7 @@ export default function ReviewsOverviewPage() {
         columns={columns}
         data={reviews}
         getRowId={(r) => String(r.entryId)}
+        getRowHref={(r) => `/queue/reviews/${r.entryId}`}
         loading={loading}
         error={loadError ? { message: loadError, onRetry: load } : undefined}
         searchable={(r) => `${r.challengeTitle} ${r.repoName} ${r.roomName ?? ""}`}
