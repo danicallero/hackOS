@@ -7,6 +7,23 @@ import { type Column, DataTable } from "./data-table";
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
 
+// #287: vitest mounts no App Router, so `useRouter()` inside DataTable would throw
+// "invariant expected app router to be mounted" before any assertion runs.
+const routerPush = vi.fn();
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: routerPush,
+    replace: vi.fn(),
+    back: vi.fn(),
+    forward: vi.fn(),
+    refresh: vi.fn(),
+    prefetch: vi.fn(),
+  }),
+  usePathname: () => "/",
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 vi.mock("@/lib/i18n", () => ({
   useLocale: () => ({
     t: (key: string, values: Record<string, string | number> = {}) => {
@@ -62,6 +79,7 @@ describe("DataTable accessibility and interactions", () => {
   let root: Root;
 
   beforeEach(() => {
+    routerPush.mockClear();
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
@@ -107,6 +125,13 @@ describe("DataTable accessibility and interactions", () => {
       await userEvent.keyboard("{Enter}");
     });
     expect(activated).toHaveBeenCalledOnce();
+    expect(routerPush).not.toHaveBeenCalled();
+
+    // Clicking anywhere else in the row navigates to the same destination.
+    await act(async () => {
+      await userEvent.click(row?.querySelector("td") as HTMLElement);
+    });
+    expect(routerPush).toHaveBeenCalledExactlyOnceWith("/people/1");
   });
 
   it("uses a native Space-activated button and isolates nested controls", async () => {
