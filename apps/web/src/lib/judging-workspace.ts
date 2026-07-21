@@ -131,6 +131,28 @@ export interface PresentationTimerState {
 }
 
 /**
+ * H39: the pace (and its cap/squeeze) is a live value that keeps recomputing as
+ * the schedule and pending count change — refetching it mid-presentation must
+ * not shift the total the timer counts against, or the remaining/overtime
+ * figure would jump around instead of counting smoothly. The total is frozen
+ * per presentation (keyed by `startedAt`) and captured once if the pace wasn't
+ * ready yet when the presentation began.
+ *
+ * Pure so the freeze rule is assertable without rendering: the caller holds the
+ * previous value in a ref and assigns the result back.
+ */
+export function freezeTotalMinutes(
+  previous: { key: string | null; minutes: number | null },
+  startedAt: string | null,
+  totalMinutes: number | null,
+): { key: string | null; minutes: number | null } {
+  if (previous.key !== startedAt) return { key: startedAt, minutes: totalMinutes };
+  if (previous.minutes == null && totalMinutes != null)
+    return { key: previous.key, minutes: totalMinutes };
+  return previous;
+}
+
+/**
  * The stopwatch is not a countdown: elapsed always counts up from 0 and never
  * resets or jumps. Only the tone changes as it crosses thresholds — amber for
  * the last stretch (the greater of 60s and 10% of the total, so short slots
