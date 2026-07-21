@@ -310,6 +310,9 @@ Calibration examples:
 workspaces with per-device persistence; conventions in
 [`apps/web/README.md`](../apps/web/README.md).**
 
+- File organisation: when a route outgrows a single `page.tsx`, follow the
+  "Page structure" rule in `apps/web/README.md` — split by independently
+  meaningful parts (tabs, modals, decision logic), never by line count alone.
 - Dark-first, Dokploy-family visual identity; light and dark both fully
   supported via `next-themes` — every screen must read correctly in both.
 - Navigation: `lib/nav.ts` (`PERSONAL_NAV` + `WORKSPACES`) rendered by
