@@ -131,15 +131,17 @@ export async function roomView(roomId: number, opts: { includeCrossRoomSkips?: b
   // team, not just the head (the waiting-area top-up is bounded separately by
   // max_in_waiting_area in the pump).
   const next = challengeIds.length
-    ? (
-        await pool.query(
-          `SELECT ${QUEUE_ENTRY_SELECT}
-             FROM queue_entries qe JOIN repos r ON r.id = qe.repo_id
-            WHERE qe.challenge_id = ANY($1) AND qe.status = 'waiting'
-            ORDER BY qe.position ASC NULLS LAST, qe.id ASC`,
-          [challengeIds],
-        )
-      ).rows
+    ? await withEtaMinutes(
+        (
+          await pool.query(
+            `SELECT ${QUEUE_ENTRY_SELECT}
+               FROM queue_entries qe JOIN repos r ON r.id = qe.repo_id
+              WHERE qe.challenge_id = ANY($1) AND qe.status = 'waiting'
+              ORDER BY qe.position ASC NULLS LAST, qe.id ASC`,
+            [challengeIds],
+          )
+        ).rows,
+      )
     : [];
 
   // H30/H203: read-only projection of the same cross-room busy-member guard
@@ -274,6 +276,28 @@ async function challengeEtaMinutesPerSlot(challengeId: number): Promise<number> 
   const avg = Number(rows[0].avg);
   const roomCount = Math.max(1, Number(rows[0].rooms));
   return avg / roomCount;
+}
+
+/** Same ETA formula as myQueueStatus (H38), applied to an arbitrary set of waiting entries. */
+async function withEtaMinutes<T extends { challenge_id: number; position: number | null }>(
+  entries: T[],
+): Promise<(T & { eta_minutes: number | null })[]> {
+  const perSlotByChallengeId = new Map<number, number>();
+  for (const entry of entries) {
+    if (!perSlotByChallengeId.has(entry.challenge_id)) {
+      perSlotByChallengeId.set(
+        entry.challenge_id,
+        await challengeEtaMinutesPerSlot(entry.challenge_id),
+      );
+    }
+  }
+  return entries.map((entry) => ({
+    ...entry,
+    eta_minutes:
+      entry.position != null
+        ? Math.round(entry.position * (perSlotByChallengeId.get(entry.challenge_id) ?? 8))
+        : null,
+  }));
 }
 
 /** H38: for each repo the user is in, their status/position/ETA in that challenge's queue. */

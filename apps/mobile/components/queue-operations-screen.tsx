@@ -1,11 +1,11 @@
-import { useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { EVENTS, type SseEnvelope } from "@hackos/shared/events";
+import { useFocusEffect, useNavigation, useRouter } from "expo-router";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import {
   FlatList,
   Pressable,
   RefreshControl,
   Text,
-  TextInput,
   useColorScheme,
   useWindowDimensions,
   View,
@@ -19,10 +19,13 @@ import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { createIdempotencyKey } from "@/lib/idempotency-key";
 import { useMeContext } from "@/lib/me-context";
+import { startQueueEventStream, subscribeToServerEvent } from "@/lib/server-events";
 import { canOperateQueues } from "@/lib/tabs";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { colors } from "@/theme/colors";
+
+const JUST_CALLED_HIGHLIGHT_MS = 12_000;
 
 interface QueueEntry {
   id: number;
@@ -58,6 +61,8 @@ export function QueueOperationsScreen() {
   useColorScheme();
   const { t } = useLocale();
   const { me } = useMeContext();
+  const router = useRouter();
+  const navigation = useNavigation();
   const androidTopInset = useAndroidTopInset();
   const { width } = useWindowDimensions();
   const [refreshing, setRefreshing] = useState(false);
@@ -65,11 +70,23 @@ export function QueueOperationsScreen() {
   const [notifiedEntryId, setNotifiedEntryId] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [justCalledEntryIds, setJustCalledEntryIds] = useState<Set<number>>(new Set());
   const columns = width >= 1_100 ? 3 : width >= 680 ? 2 : 1;
 
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      title: t("tabQueueOperations"),
+      headerLargeTitle: true,
+      headerSearchBarOptions: {
+        placeholder: t("queueOpsSearchPlaceholder"),
+        autoCapitalize: "none",
+        onChangeText: (event: { nativeEvent: { text: string } }) =>
+          setQuery(event.nativeEvent.text),
+      },
+    });
+  }, [navigation, t]);
+
   const fetchRooms = useCallback(async () => {
-    // Listing first keeps this screen capability-gated at the API boundary;
-    // the public TV aggregate intentionally has a less detailed contract.
     const rooms = await apiFetch<RoomListItem[]>("/api/queue/rooms");
     return Promise.all(rooms.map(({ id }) => apiFetch<RoomView>(`/api/queue/rooms/${id}/view`)));
   }, []);
@@ -78,7 +95,11 @@ export function QueueOperationsScreen() {
     fetchRooms,
   );
   const rooms = data ?? [];
-  const searchResults = useMemo(() => findQueueEntries(rooms, query), [query, rooms]);
+  const searchActive = query.trim().length > 0;
+  const searchResults = useMemo(
+    () => (searchActive ? findQueueEntries(rooms, query) : []),
+    [searchActive, query, rooms],
+  );
 
   useEffect(() => {
     void load();
@@ -91,11 +112,62 @@ export function QueueOperationsScreen() {
     }, [load]),
   );
 
+  // H29/H31: mark a just-called entry so it stands out on the board without
+  // waiting for the next poll.
+  useFocusEffect(
+    useCallback(() => {
+      const stopStream = startQueueEventStream();
+      const timers = new Map<number, ReturnType<typeof setTimeout>>();
+      const markCalled = (entryId: number) => {
+        setJustCalledEntryIds((current) => new Set(current).add(entryId));
+        const existing = timers.get(entryId);
+        if (existing) clearTimeout(existing);
+        timers.set(
+          entryId,
+          setTimeout(() => {
+            setJustCalledEntryIds((current) => {
+              const next = new Set(current);
+              next.delete(entryId);
+              return next;
+            });
+            timers.delete(entryId);
+          }, JUST_CALLED_HIGHLIGHT_MS),
+        );
+      };
+      const onTeamCalled = (event: SseEnvelope) => {
+        const entryId = (event.data as { entryId?: number }).entryId;
+        if (entryId != null) markCalled(entryId);
+        void load();
+      };
+      const onEntryChanged = () => void load();
+      const unsubscribeCalled = subscribeToServerEvent(EVENTS.QUEUE_TEAM_CALLED, onTeamCalled);
+      const unsubscribeChanged = subscribeToServerEvent(EVENTS.QUEUE_ENTRY_CHANGED, onEntryChanged);
+      const unsubscribeRoom = subscribeToServerEvent(EVENTS.QUEUE_ROOM_CHANGED, onEntryChanged);
+      return () => {
+        stopStream();
+        unsubscribeCalled();
+        unsubscribeChanged();
+        unsubscribeRoom();
+        for (const timer of timers.values()) clearTimeout(timer);
+      };
+    }, [load]),
+  );
+
   const refresh = useCallback(async () => {
     setRefreshing(true);
     await load();
     setRefreshing(false);
   }, [load]);
+
+  const openTeam = useCallback(
+    (entryId: number, roomId: number) => {
+      router.push({
+        pathname: "/(tabs)/others/team/[entryId]",
+        params: { entryId: String(entryId), roomId: String(roomId) },
+      });
+    },
+    [router],
+  );
 
   const notifyTeam = useCallback(
     async (entryId: number) => {
@@ -128,6 +200,53 @@ export function QueueOperationsScreen() {
     );
   }
 
+  const actionErrorBanner = actionError ? (
+    <View
+      accessibilityRole="alert"
+      style={{
+        backgroundColor: colors.destructiveSurface,
+        borderCurve: "continuous",
+        borderRadius: 12,
+        padding: 12,
+      }}
+    >
+      <Text selectable style={{ color: colors.destructive, fontSize: 14 }}>
+        {actionError}
+      </Text>
+    </View>
+  ) : null;
+
+  if (searchActive) {
+    return (
+      <FlatList
+        data={searchResults}
+        keyExtractor={(item) => `${item.room.id}-${item.entry.id}`}
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={{
+          flexGrow: 1,
+          gap: 12,
+          padding: 16,
+          paddingTop: 16 + androidTopInset,
+        }}
+        ListHeaderComponent={actionErrorBanner}
+        ListEmptyComponent={
+          <EmptyState
+            icon="person.crop.badge.magnifyingglass"
+            title={t("scannerNoResults")}
+            description={t("queueOpsNoSearchResults")}
+          />
+        }
+        renderItem={({ item }) => (
+          <TeamQueueCard
+            result={item}
+            highlighted={justCalledEntryIds.has(item.entry.id)}
+            onPress={() => openTeam(item.entry.id, item.room.id)}
+          />
+        )}
+      />
+    );
+  }
+
   return (
     <FlatList
       key={columns}
@@ -145,31 +264,8 @@ export function QueueOperationsScreen() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} />}
       ListHeaderComponent={
         <View style={{ gap: 12 }}>
-          <View style={{ gap: 4 }}>
-            <Text selectable style={{ color: colors.label, fontSize: 25, fontWeight: "700" }}>
-              {t("queueOpsTitle")}
-            </Text>
-            <Text selectable style={{ color: colors.secondaryLabel, fontSize: 14 }}>
-              {t("queueOpsSubtitle")}
-            </Text>
-          </View>
           <StaleDataBanner updatedAt={staleSince} />
-          <QueueSearch query={query} results={searchResults} onChangeQuery={setQuery} />
-          {actionError ? (
-            <View
-              accessibilityRole="alert"
-              style={{
-                backgroundColor: colors.destructiveSurface,
-                borderCurve: "continuous",
-                borderRadius: 12,
-                padding: 12,
-              }}
-            >
-              <Text selectable style={{ color: colors.destructive, fontSize: 14 }}>
-                {actionError}
-              </Text>
-            </View>
-          ) : null}
+          {actionErrorBanner}
         </View>
       }
       ListEmptyComponent={
@@ -190,8 +286,10 @@ export function QueueOperationsScreen() {
           room={item}
           busyEntryId={notifyingEntryId}
           notifiedEntryId={notifiedEntryId}
+          justCalledEntryIds={justCalledEntryIds}
           columns={columns}
           onNotify={notifyTeam}
+          onOpenTeam={openTeam}
         />
       )}
     />
@@ -201,8 +299,10 @@ export function QueueOperationsScreen() {
 interface QueueSearchResult {
   entry: QueueEntry;
   room: RoomView["room"];
+  challengeTitle: string | null;
 }
 
+/** Every matching entry across every room, so a team or person turns up in all of its queues. */
 function findQueueEntries(rooms: RoomView[], query: string): QueueSearchResult[] {
   const normalizedQuery = query.trim().toLocaleLowerCase();
   if (!normalizedQuery) return [];
@@ -211,10 +311,18 @@ function findQueueEntries(rooms: RoomView[], query: string): QueueSearchResult[]
     .flatMap((room) =>
       [room.active, ...room.called, ...room.next]
         .filter((entry): entry is QueueEntry => entry !== null)
-        .map((entry) => ({ entry, room: room.room })),
+        .map((entry) => ({
+          entry,
+          room: room.room,
+          challengeTitle: room.challenge?.title ?? null,
+        })),
     )
     .filter(({ entry }) => queueEntrySearchText(entry).includes(normalizedQuery))
-    .slice(0, 12);
+    .sort(
+      (a, b) =>
+        (a.entry.repo_name ?? "").localeCompare(b.entry.repo_name ?? "") ||
+        (a.challengeTitle ?? "").localeCompare(b.challengeTitle ?? ""),
+    );
 }
 
 function queueEntrySearchText(entry: QueueEntry): string {
@@ -225,133 +333,6 @@ function queueEntrySearchText(entry: QueueEntry): string {
     .filter((value): value is string => Boolean(value))
     .join(" ")
     .toLocaleLowerCase();
-}
-
-function QueueSearch({
-  query,
-  results,
-  onChangeQuery,
-}: {
-  query: string;
-  results: QueueSearchResult[];
-  onChangeQuery: (query: string) => void;
-}) {
-  const { t } = useLocale();
-  const activeSearch = query.trim().length > 0;
-
-  return (
-    <View style={{ gap: 8 }}>
-      <Text selectable style={{ color: colors.label, fontSize: 16, fontWeight: "700" }}>
-        {t("queueOpsSearchTitle")}
-      </Text>
-      <View
-        style={{
-          alignItems: "center",
-          backgroundColor: colors.surface,
-          borderColor: colors.separator,
-          borderCurve: "continuous",
-          borderRadius: 12,
-          borderWidth: 1,
-          flexDirection: "row",
-          gap: 8,
-          minHeight: 44,
-          paddingHorizontal: 12,
-        }}
-      >
-        <SymbolView
-          name="person.crop.badge.magnifyingglass"
-          tintColor={colors.secondaryLabel}
-          size={18}
-          accessible={false}
-        />
-        <TextInput
-          accessibilityLabel={t("queueOpsSearchLabel")}
-          autoCapitalize="none"
-          autoCorrect={false}
-          onChangeText={onChangeQuery}
-          placeholder={t("queueOpsSearchPlaceholder")}
-          placeholderTextColor={colors.tertiaryLabel}
-          style={{ color: colors.label, flex: 1, fontSize: 16, paddingVertical: 10 }}
-          value={query}
-        />
-        {activeSearch ? (
-          <Pressable
-            accessibilityLabel={t("queueOpsClearSearch")}
-            accessibilityRole="button"
-            hitSlop={8}
-            onPress={() => onChangeQuery("")}
-          >
-            <SymbolView
-              name="xmark.circle.fill"
-              tintColor={colors.tertiaryLabel}
-              size={20}
-              accessible={false}
-            />
-          </Pressable>
-        ) : null}
-      </View>
-      {activeSearch ? (
-        <View
-          accessibilityLiveRegion="polite"
-          style={{
-            backgroundColor: colors.surface,
-            borderColor: colors.separator,
-            borderCurve: "continuous",
-            borderRadius: 12,
-            borderWidth: 1,
-            gap: 1,
-            overflow: "hidden",
-          }}
-        >
-          <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13, padding: 12 }}>
-            {t("queueOpsSearchCount", { count: String(results.length) })}
-          </Text>
-          {results.length ? (
-            results.map(({ entry, room }) => (
-              <View
-                key={`${room.id}-${entry.id}`}
-                style={{ gap: 3, paddingHorizontal: 12, paddingVertical: 10 }}
-              >
-                <Text
-                  selectable
-                  numberOfLines={1}
-                  style={{ color: colors.label, fontSize: 15, fontWeight: "700" }}
-                >
-                  {entry.repo_name ?? t("queueOpsUnnamedTeam")}
-                </Text>
-                <Text
-                  selectable
-                  numberOfLines={1}
-                  style={{ color: colors.secondaryLabel, fontSize: 13 }}
-                >
-                  {t("queueOpsSearchResult", {
-                    room: room.name,
-                    status: queueStatusLabel(entry.status, t),
-                  })}
-                </Text>
-                {entry.position != null ? (
-                  <Text
-                    selectable
-                    style={{
-                      color: colors.secondaryLabel,
-                      fontSize: 13,
-                      fontVariant: ["tabular-nums"],
-                    }}
-                  >
-                    {t("queueOpsPosition", { position: String(entry.position) })}
-                  </Text>
-                ) : null}
-              </View>
-            ))
-          ) : (
-            <Text selectable style={{ color: colors.secondaryLabel, fontSize: 14, padding: 12 }}>
-              {t("queueOpsNoSearchResults")}
-            </Text>
-          )}
-        </View>
-      ) : null}
-    </View>
-  );
 }
 
 function queueStatusLabel(status: string, t: ReturnType<typeof useLocale>["t"]): string {
@@ -371,31 +352,168 @@ function queueStatusLabel(status: string, t: ReturnType<typeof useLocale>["t"]):
   }
 }
 
+function statusTone(status: string): "neutral" | "accent" | "success" | "warning" | "destructive" {
+  if (status === "called") return "success";
+  if (status === "waiting") return "accent";
+  if (status === "disqualified") return "destructive";
+  if (status === "completed") return "neutral";
+  return "warning";
+}
+
+/** Same card the participant sees on their own My Queue screen, plus the room and a tap-through to more detail. */
+function TeamQueueCard({
+  result,
+  highlighted,
+  onPress,
+}: {
+  result: QueueSearchResult;
+  highlighted: boolean;
+  onPress: () => void;
+}) {
+  const { t } = useLocale();
+  const { entry, room, challengeTitle } = result;
+  const called = entry.status === "called";
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityHint={t("queueOpsViewTeamHint")}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        backgroundColor: colors.surface,
+        borderColor: highlighted ? colors.accent : "transparent",
+        borderCurve: "continuous",
+        borderRadius: 16,
+        borderWidth: 2,
+        gap: 12,
+        opacity: pressed ? 0.8 : 1,
+        padding: 16,
+      })}
+    >
+      <View style={{ alignItems: "flex-start", flexDirection: "row", gap: 10 }}>
+        <View style={{ flex: 1, gap: 3 }}>
+          <Text
+            selectable
+            numberOfLines={1}
+            style={{ color: colors.label, fontSize: 17, fontWeight: "700" }}
+          >
+            {challengeTitle ?? t("queueOpsNoChallenge")}
+          </Text>
+          <Text selectable style={{ color: colors.secondaryLabel, fontSize: 14 }}>
+            {entry.repo_name ?? t("queueOpsUnnamedTeam")}
+          </Text>
+        </View>
+        <StatusPill tone={statusTone(entry.status)}>{queueStatusLabel(entry.status, t)}</StatusPill>
+      </View>
+
+      {called ? (
+        <View
+          style={{
+            alignItems: "center",
+            backgroundColor: colors.successSurface,
+            borderCurve: "continuous",
+            borderRadius: 12,
+            flexDirection: "row",
+            gap: 8,
+            padding: 12,
+          }}
+        >
+          <SymbolView
+            name="door.left.hand.open"
+            tintColor={colors.success}
+            size={19}
+            accessible={false}
+          />
+          <Text style={{ color: colors.success, flex: 1, fontSize: 15, fontWeight: "700" }}>
+            {room.name}
+            {room.location ? ` · ${room.location}` : ""}
+          </Text>
+        </View>
+      ) : (
+        <View style={{ flexDirection: "row", gap: 10 }}>
+          {entry.position != null ? (
+            <QueueMetric
+              icon="number.circle"
+              label={t("queuePositionLabel")}
+              value={String(entry.position)}
+            />
+          ) : null}
+          <QueueMetric icon="door.left.hand.closed" label={t("teamDetailRoom")} value={room.name} />
+        </View>
+      )}
+    </Pressable>
+  );
+}
+
+function QueueMetric({
+  icon,
+  label,
+  value,
+}: {
+  icon: "number.circle" | "door.left.hand.closed";
+  label: string;
+  value: string;
+}) {
+  return (
+    <View
+      style={{
+        backgroundColor: colors.background,
+        borderCurve: "continuous",
+        borderRadius: 12,
+        flex: 1,
+        gap: 5,
+        padding: 12,
+      }}
+    >
+      <View style={{ alignItems: "center", flexDirection: "row", gap: 6 }}>
+        <SymbolView name={icon} tintColor={colors.secondaryLabel} size={15} accessible={false} />
+        <Text selectable style={{ color: colors.secondaryLabel, fontSize: 12, fontWeight: "600" }}>
+          {label}
+        </Text>
+      </View>
+      <Text
+        selectable
+        numberOfLines={1}
+        style={{ color: colors.label, fontSize: 18, fontWeight: "700" }}
+      >
+        {value}
+      </Text>
+    </View>
+  );
+}
+
 function RoomCard({
   room,
   columns,
   busyEntryId,
   notifiedEntryId,
+  justCalledEntryIds,
   onNotify,
+  onOpenTeam,
 }: {
   room: RoomView;
   columns: number;
   busyEntryId: number | null;
   notifiedEntryId: number | null;
+  justCalledEntryIds: Set<number>;
   onNotify: (entryId: number) => void;
+  onOpenTeam: (entryId: number, roomId: number) => void;
 }) {
   const { t } = useLocale();
   const next = room.next[0] ?? null;
   const paused = room.state?.is_paused ?? true;
+  const roomJustCalled = [room.active, ...room.called, ...room.next].some(
+    (entry) => entry != null && justCalledEntryIds.has(entry.id),
+  );
 
   return (
     <View
       style={{
         backgroundColor: colors.surface,
-        borderColor: colors.separator,
+        borderColor: roomJustCalled ? colors.accent : colors.separator,
         borderCurve: "continuous",
         borderRadius: 16,
-        borderWidth: 1,
+        borderWidth: roomJustCalled ? 2 : 1,
         flex: 1,
         gap: 14,
         padding: 16,
@@ -415,6 +533,31 @@ function RoomCard({
             {room.room.location ?? t("queueOpsNoLocation")}
           </Text>
         </View>
+        {roomJustCalled ? (
+          <View
+            accessibilityLiveRegion="polite"
+            style={{
+              alignItems: "center",
+              backgroundColor: colors.accentSurface,
+              borderCurve: "continuous",
+              borderRadius: 999,
+              flexDirection: "row",
+              gap: 4,
+              paddingHorizontal: 9,
+              paddingVertical: 5,
+            }}
+          >
+            <SymbolView
+              name="bell.badge.fill"
+              tintColor={colors.accent}
+              size={12}
+              accessible={false}
+            />
+            <Text style={{ color: colors.accent, fontSize: 12, fontWeight: "700" }}>
+              {t("queueOpsJustCalled")}
+            </Text>
+          </View>
+        ) : null}
         <StatusPill tone={paused ? "warning" : "success"}>
           {paused ? t("queueOpsPaused") : t("queueOpsLive")}
         </StatusPill>
@@ -438,6 +581,8 @@ function RoomCard({
         label={t("queueOpsPresenting")}
         entry={room.active}
         empty={t("queueOpsNoTeamPresenting")}
+        highlighted={room.active != null && justCalledEntryIds.has(room.active.id)}
+        onPress={room.active ? () => onOpenTeam(room.active!.id, room.room.id) : undefined}
       />
 
       <View style={{ gap: 8 }}>
@@ -456,42 +601,68 @@ function RoomCard({
           </Text>
         </View>
         {room.called.length ? (
-          room.called.map((entry) => (
-            <View
-              key={entry.id}
-              style={{
-                backgroundColor: colors.accentSurface,
-                borderCurve: "continuous",
-                borderRadius: 12,
-                gap: 4,
-                padding: 12,
-              }}
-            >
-              <Text
-                selectable
-                numberOfLines={1}
-                style={{ color: colors.label, fontSize: 15, fontWeight: "700" }}
+          room.called.map((entry) => {
+            const justCalled = justCalledEntryIds.has(entry.id);
+            return (
+              <View
+                key={entry.id}
+                style={{
+                  backgroundColor: colors.accentSurface,
+                  borderColor: justCalled ? colors.accent : "transparent",
+                  borderCurve: "continuous",
+                  borderRadius: 12,
+                  borderWidth: 2,
+                  gap: 4,
+                  padding: 12,
+                }}
               >
-                {entry.repo_name ?? t("queueOpsUnnamedTeam")}
-              </Text>
-              <ActionButton
-                busy={busyEntryId === entry.id}
-                icon="bell.badge.fill"
-                label={t("queueOpsNotifyTeam")}
-                onPress={() => onNotify(entry.id)}
-                style={{ alignSelf: "flex-start", minHeight: 40, paddingHorizontal: 0 }}
-              />
-              {notifiedEntryId === entry.id ? (
-                <Text
-                  accessibilityLiveRegion="polite"
-                  selectable
-                  style={{ color: colors.success, fontSize: 13 }}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityHint={t("queueOpsViewTeamHint")}
+                  onPress={() => onOpenTeam(entry.id, room.room.id)}
+                  style={({ pressed }) => ({
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 6,
+                    opacity: pressed ? 0.7 : 1,
+                  })}
                 >
-                  {t("queueOpsTeamNotified")}
-                </Text>
-              ) : null}
-            </View>
-          ))
+                  <Text
+                    selectable
+                    numberOfLines={1}
+                    style={{ color: colors.label, flex: 1, fontSize: 15, fontWeight: "700" }}
+                  >
+                    {entry.repo_name ?? t("queueOpsUnnamedTeam")}
+                  </Text>
+                  {justCalled ? (
+                    <SymbolView
+                      name="bell.badge.fill"
+                      tintColor={colors.accent}
+                      size={14}
+                      accessible={false}
+                    />
+                  ) : null}
+                  <SymbolView name="chevron.right" tintColor={colors.tertiaryLabel} size={13} />
+                </Pressable>
+                <ActionButton
+                  busy={busyEntryId === entry.id}
+                  icon="bell.badge.fill"
+                  label={t("queueOpsNotifyTeam")}
+                  onPress={() => onNotify(entry.id)}
+                  style={{ alignSelf: "flex-start", minHeight: 40, paddingHorizontal: 0 }}
+                />
+                {notifiedEntryId === entry.id ? (
+                  <Text
+                    accessibilityLiveRegion="polite"
+                    selectable
+                    style={{ color: colors.success, fontSize: 13 }}
+                  >
+                    {t("queueOpsTeamNotified")}
+                  </Text>
+                ) : null}
+              </View>
+            );
+          })
         ) : (
           <Text selectable style={{ color: colors.secondaryLabel, fontSize: 14 }}>
             {t("queueOpsNoTeamsAtDoor")}
@@ -505,6 +676,7 @@ function RoomCard({
         entry={next}
         empty={t("queueOpsNoTeamWaiting")}
         showPosition
+        onPress={next ? () => onOpenTeam(next.id, room.room.id) : undefined}
       />
     </View>
   );
@@ -516,29 +688,36 @@ function QueueSlot({
   entry,
   empty,
   showPosition = false,
+  highlighted = false,
+  onPress,
 }: {
   icon: "person.2.fill" | "number.circle";
   label: string;
   entry: QueueEntry | null;
   empty: string;
   showPosition?: boolean;
+  highlighted?: boolean;
+  onPress?: () => void;
 }) {
   const { t } = useLocale();
-  return (
-    <View
-      style={{
-        backgroundColor: colors.background,
-        borderCurve: "continuous",
-        borderRadius: 12,
-        gap: 5,
-        padding: 12,
-      }}
-    >
+  const content = (
+    <>
       <View style={{ alignItems: "center", flexDirection: "row", gap: 6 }}>
         <SymbolView name={icon} tintColor={colors.secondaryLabel} size={16} accessible={false} />
-        <Text selectable style={{ color: colors.secondaryLabel, fontSize: 12, fontWeight: "600" }}>
+        <Text
+          selectable
+          style={{ color: colors.secondaryLabel, flex: 1, fontSize: 12, fontWeight: "600" }}
+        >
           {label}
         </Text>
+        {highlighted ? (
+          <SymbolView
+            name="bell.badge.fill"
+            tintColor={colors.accent}
+            size={14}
+            accessible={false}
+          />
+        ) : null}
       </View>
       <Text
         selectable
@@ -555,6 +734,44 @@ function QueueSlot({
           {t("queueOpsPosition", { position: String(entry.position) })}
         </Text>
       ) : null}
+    </>
+  );
+
+  if (onPress) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityHint={t("queueOpsViewTeamHint")}
+        onPress={onPress}
+        style={({ pressed }) => ({
+          backgroundColor: colors.background,
+          borderColor: highlighted ? colors.accent : "transparent",
+          borderCurve: "continuous",
+          borderRadius: 12,
+          borderWidth: 2,
+          gap: 5,
+          opacity: pressed ? 0.7 : 1,
+          padding: 12,
+        })}
+      >
+        {content}
+      </Pressable>
+    );
+  }
+
+  return (
+    <View
+      style={{
+        backgroundColor: colors.background,
+        borderColor: highlighted ? colors.accent : "transparent",
+        borderCurve: "continuous",
+        borderRadius: 12,
+        borderWidth: 2,
+        gap: 5,
+        padding: 12,
+      }}
+    >
+      {content}
     </View>
   );
 }

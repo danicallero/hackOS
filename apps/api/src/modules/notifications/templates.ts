@@ -188,6 +188,20 @@ const TEMPLATES: Record<string, TemplateDefinition> = {
       body: "Indicóuselle a {{teamName}} que entre na sala {{roomName}} para {{challengeName}}.",
     },
   },
+  "queue.staff.called": {
+    en: {
+      subject: "Team called for {{roomName}}",
+      body: "{{teamName}} was called to wait at the door of room {{roomName}} for {{challengeName}}.",
+    },
+    es: {
+      subject: "Equipo llamado para {{roomName}}",
+      body: "Se ha llamado a {{teamName}} para esperar en la puerta de la sala {{roomName}} para {{challengeName}}.",
+    },
+    gl: {
+      subject: "Equipo chamado para {{roomName}}",
+      body: "Chamouse a {{teamName}} para esperar na porta da sala {{roomName}} para {{challengeName}}.",
+    },
+  },
   "application.decision": {
     en: {
       subject: "A decision on your application",
@@ -228,6 +242,20 @@ const PUSH_TEMPLATES: Record<string, PushTemplateDefinition> = {
     en: { title: "{{teamName}} enters {{roomName}}", body: "Called in for {{challengeName}}." },
     es: { title: "{{teamName}} entra en {{roomName}}", body: "Llamado para {{challengeName}}." },
     gl: { title: "{{teamName}} entra en {{roomName}}", body: "Chamado para {{challengeName}}." },
+  },
+  "queue.staff.called": {
+    en: {
+      title: "{{teamName}} called to {{roomName}}",
+      body: "Waiting at the door for {{challengeName}}.",
+    },
+    es: {
+      title: "{{teamName}} llamado a {{roomName}}",
+      body: "Esperando en la puerta para {{challengeName}}.",
+    },
+    gl: {
+      title: "{{teamName}} chamado a {{roomName}}",
+      body: "Agardando na porta para {{challengeName}}.",
+    },
   },
   "queue.called": {
     en: {

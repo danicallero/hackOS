@@ -33,33 +33,33 @@ function consumeBlock(block: string): void {
   }
 }
 
+function retryAfter(response: Response): number | null {
+  const value = response.headers.get("retry-after");
+  if (!value) return null;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1_000);
+  const date = Date.parse(value);
+  return Number.isNaN(date) ? null : Math.max(0, date - Date.now());
+}
+
 /**
- * Native authenticated SSE loop for the personal user topic (H28/H38). The
- * Better Auth Expo plugin exposes the restored Cookie header, which avoids a
- * browser cookie jar dependency. RN's fetch response body is a readable
- * stream, so no EventSource polyfill is required.
+ * Native authenticated SSE loop for a single server-sent-events endpoint.
+ * The Better Auth Expo plugin exposes the restored Cookie header, which
+ * avoids a browser cookie jar dependency. RN's fetch response body is a
+ * readable stream, so no EventSource polyfill is required.
  */
-export function startPersonalEventStream(): () => void {
+function startEventStream(path: string): () => void {
   if (Platform.OS === "web") return () => undefined;
   let stopped = false;
   let controller: AbortController | null = null;
   let reconnect: ReturnType<typeof setTimeout> | null = null;
   let failedConnections = 0;
 
-  const retryAfter = (response: Response): number | null => {
-    const value = response.headers.get("retry-after");
-    if (!value) return null;
-    const seconds = Number(value);
-    if (Number.isFinite(seconds)) return Math.max(0, seconds * 1_000);
-    const date = Date.parse(value);
-    return Number.isNaN(date) ? null : Math.max(0, date - Date.now());
-  };
-
   const connect = async () => {
     controller = new AbortController();
     let serverDelay: number | null = null;
     try {
-      const response = await fetch(`${API_URL}/api/queue/me/stream`, {
+      const response = await fetch(`${API_URL}${path}`, {
         headers: { cookie: authClient.getCookie(), accept: "text/event-stream" },
         signal: controller.signal,
       });
@@ -102,4 +102,19 @@ export function startPersonalEventStream(): () => void {
     controller?.abort();
     if (reconnect) clearTimeout(reconnect);
   };
+}
+
+/** Native authenticated SSE loop for the personal user topic (H28/H38). */
+export function startPersonalEventStream(): () => void {
+  return startEventStream("/api/queue/me/stream");
+}
+
+/**
+ * Native SSE loop for the shared "queue" topic (H29/H31), which carries
+ * operator-facing events like QUEUE_TEAM_CALLED and QUEUE_ENTRY_CHANGED.
+ * Unlike the personal stream this is only opened while an operator has the
+ * queue-operations screen mounted, not app-wide.
+ */
+export function startQueueEventStream(): () => void {
+  return startEventStream("/api/queue/stream");
 }
