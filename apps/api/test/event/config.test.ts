@@ -144,6 +144,50 @@ describe("event config (H45/H47)", () => {
     expect(pub.json().venueName).toBe("Facultade de Informática, UDC");
   });
 
+  it("round-trips the venue Wi-Fi without leaking it to the public feed (H42)", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const put = await a.inject({
+      method: "PUT",
+      url: "/api/event",
+      headers: asUser(manager),
+      payload: {
+        wifiSsid: "hackos-guest",
+        wifiPassword: "s3cr3t",
+      },
+    });
+    expect(put.statusCode).toBe(200);
+    expect(put.json()).toMatchObject({ wifiSsid: "hackos-guest", wifiPassword: "s3cr3t" });
+
+    // The settings page reads them back; the public website's feed must not.
+    const admin = await a.inject({ method: "GET", url: "/api/event", headers: asUser(manager) });
+    expect(admin.json().wifiPassword).toBe("s3cr3t");
+    const pub = await a.inject({ method: "GET", url: "/api/public/event" });
+    expect(JSON.stringify(pub.json())).not.toContain("s3cr3t");
+
+    // …but the screens standing in the venue do, via the TV feed.
+    const tv = await a.inject({ method: "GET", url: "/api/tv/config" });
+    expect(tv.json()).toEqual({ wifi: { ssid: "hackos-guest", password: "s3cr3t" } });
+  });
+
+  it("audits a Wi-Fi password change without recording the password (H53)", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    await a.inject({
+      method: "PUT",
+      url: "/api/event",
+      headers: asUser(manager),
+      payload: { wifiSsid: "hackos-guest", wifiPassword: "s3cr3t" },
+    });
+
+    const { rows } = await pool.query(
+      `SELECT after FROM audit_log WHERE entity_type = 'event_config' ORDER BY id DESC LIMIT 1`,
+    );
+    expect(rows[0].after.wifiSsid).toBe("hackos-guest");
+    expect(rows[0].after.wifiPassword).toBe("***");
+  });
+
   it("upserts Wallet pass field-label overrides", async () => {
     const a = await getApp();
     const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);

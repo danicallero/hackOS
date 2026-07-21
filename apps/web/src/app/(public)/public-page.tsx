@@ -333,7 +333,7 @@ function PublicPageContent({
           <ul className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {sponsors.map((sponsor) => (
               <li
-                key={sponsor.id}
+                key={sponsor.enterpriseId}
                 className="hover:border-primary/30 flex min-h-28 items-center justify-center rounded-xl border p-5 text-center shadow-sm transition-colors hover:shadow-md"
               >
                 {sponsor.logoUrl ? (

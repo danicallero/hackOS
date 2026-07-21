@@ -89,9 +89,41 @@ export const reviewsQuery = z.object({
   status: z.enum(["draft", "submitted", "none"]).optional(),
 });
 
+/** Every view a screen can show (H42). "live" combines countdown + schedule + sponsors + Wi-Fi. */
+export const tvModeName = z.enum([
+  "rooms",
+  "schedule",
+  "sponsors",
+  "announcement",
+  "wifi",
+  "timer",
+  "live",
+]);
+
 export const tvModeBody = z.object({
-  mode: z.enum(["rooms", "schedule", "sponsors", "announcement", "wifi", "timer"]),
+  mode: tvModeName,
   payload: z.unknown().optional(),
-  // H42 automatic expiry: past this point tv-expiry.ts reverts the fleet to "rooms".
+  // H42 automatic expiry: past this point tv-scheduler.ts drops the override
+  // and the timetable takes back over.
   expiresAt: z.iso.datetime({ offset: true }).nullable().optional(),
 });
+
+/**
+ * One thing a timetable slot shows. `seconds` is the dwell time and only
+ * applies when a slot carries several items (the display rotates through
+ * them); a single-item slot ignores it.
+ */
+export const tvSlotItem = z.object({
+  mode: tvModeName,
+  payload: z.unknown().optional(),
+  seconds: z.coerce.number().int().min(5).max(3600).nullable().optional(),
+});
+
+export const tvSlotBody = z.object({
+  label: z.string().max(120).nullable().optional(),
+  startsAt: z.iso.datetime({ offset: true }),
+  endsAt: z.iso.datetime({ offset: true }),
+  items: z.array(tvSlotItem).min(1).max(10),
+});
+
+export const tvSlotPatchBody = tvSlotBody.partial();

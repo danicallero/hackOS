@@ -7,6 +7,22 @@ import { type Column, DataTable } from "./data-table";
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
 
+// DataTable calls useRouter to make a whole row clickable (commit 426c5bc);
+// outside an app-router tree that throws "expected app router to be mounted",
+// so the test stands one in. Row navigation itself is asserted through the
+// native link, not through this spy.
+const routerPush = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: routerPush,
+    replace: vi.fn(),
+    prefetch: vi.fn(),
+    back: vi.fn(),
+    forward: vi.fn(),
+    refresh: vi.fn(),
+  }),
+}));
+
 vi.mock("@/lib/i18n", () => ({
   useLocale: () => ({
     t: (key: string, values: Record<string, string | number> = {}) => {

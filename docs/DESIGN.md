@@ -35,6 +35,7 @@ capabilities add tools, they never switch identities.
 | [9. Accessibility](#9-accessibility) | The non-negotiable keyboard/label/announce/colour rules |
 | [10. Copy & localization](#10-copy-and-localization) | Trilingual dictionary rules + writing style, machine-enforced |
 | [11. Web specifics](#11-web-specifics) | Next.js/shadcn layer: what's vendored, gated, persisted |
+| [11b. TV / kiosk surfaces](#11b-tv--kiosk-surfaces) | Venue screens: one screenful, `em` sizing, nothing that needs hover or scroll |
 | [12. Mobile specifics](#12-mobile-specifics) | Expo/native constraints: tabs, scanners, wallet, touch |
 | [13. Definition of done](#13-definition-of-done-for-ui-work) | The checklist every UI change must pass |
 | [14. Implementation hotspots](#14-implementation-hotspots) | File map for every concern above |
@@ -328,6 +329,36 @@ workspaces with per-device persistence; conventions in
 - Domain models/pure logic live in `lib/<domain>.ts` with colocated
   `*.test.ts(x)` (vitest) — visual behaviour that encodes state machines
   (workflow tabs, judging access, nav gating) is unit-tested, not just eyeballed.
+
+## 11b. TV / kiosk surfaces
+
+**Summary: one screenful, no scroll, no hover; sized in `em` off a measured
+scale so the same view fills a 1080p panel, a 4K wall and a portrait totem.**
+
+Venue screens (`apps/web/src/app/(public)/tv/`) are read-only, unattended, and
+viewed from across a room. Full behaviour in [`tv-screens.md`](./tv-screens.md);
+the rules that bind UI work:
+
+- **Never scroll the page.** `TvScreen` is `h-dvh` with `overflow-hidden`.
+  Content that doesn't fit must shrink, window, or marquee — never rely on a
+  scrollbar nobody can reach.
+- **Size in `em`, not rem steps.** `TvScreen` sets the root font size from
+  `useTvScale()`; a `text-3xl` inside it stays pinned to the browser root and
+  ignores the screen entirely. Use `text-[1.75em]`, `p-[2em]`, `gap-[1em]`.
+- **Nothing may require hover, focus, click, or scroll to be read.** Overflowing
+  text uses `MarqueeText`, never a truncating ellipsis or a tooltip.
+- **Assume portrait exists.** `TvScreen` reports `portrait`; stack rather than
+  squeeze.
+- **Set leading explicitly on anything that wraps.** `globals.css` puts a fixed
+  `line-height: 1.25rem` on `body`; an `em`-sized TV paragraph inherits that
+  20px line box and prints its lines on top of each other. `TvScreen` resets to
+  a unitless leading — don't re-introduce a rem line-height underneath it.
+- **QR codes are functional, not decorative.** Dark-on-light with a quiet zone
+  (`WifiQr` carries its own white plate), generated locally — never through an
+  external QR service, which both breaks on a venue with no uplink and hands the
+  venue Wi-Fi password to a third party.
+- Semantic tokens and both colour schemes apply as everywhere else — venues run
+  screens in both.
 
 ## 12. Mobile specifics
 

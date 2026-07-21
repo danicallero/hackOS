@@ -17,7 +17,11 @@ backend, one workstream at a time.
 - **Better Auth** browser client (`better-auth/react`) against the API's
   `/api/auth/*`.
 - **react-hook-form + zod** for forms, **sonner** for toasts,
-  **next-themes** for light/dark, **lucide-react** for icons.
+  **next-themes** for light/dark, **lucide-react** for icons,
+  **qrcode.react** for locally-rendered QR codes (the TV Wi-Fi join code must
+  not depend on a network round-trip or hand a venue password to a QR service —
+  note `components/common/QrCode` still uses an external image API and is only
+  fit for authenticated admin screens).
 - `@hackos/shared` for the capability catalogue and SSE event contract — the
   same single source the API uses.
 
@@ -108,6 +112,11 @@ Key components: `PageHeader`, `SectionCard`, `StatCard`, `StatusBadge`,
 `EmptyState`, `DataTable`, `Modal`, `AlertModal`, `ContextualError`,
 `CapabilityGate`, `Spinner`, `SubmitButton`, `PasswordInput`, `QrCode`,
 `TemplateFieldControl`, `FileUploadField`.
+
+**TV surfaces** (`app/(public)/tv/*`) are their own layer with their own rules —
+one screenful, `em` sizing off a measured scale, nothing that needs hover or
+scroll. See [`docs/tv-screens.md`](../../docs/tv-screens.md) and §11b of
+[`docs/DESIGN.md`](../../docs/DESIGN.md) before touching them.
 
 **Tones & colors.** `lib/tones.ts` maps semantic tones
 (`success`/`warning`/`danger`/`info`/`brand`/`neutral`) to theme-token classes.

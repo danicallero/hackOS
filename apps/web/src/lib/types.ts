@@ -105,6 +105,12 @@ export interface EventConfig {
   venueName: string | null;
   venueLatitude: number | null;
   venueLongitude: number | null;
+  /**
+   * Venue Wi-Fi shown on the TV screens (H42). Absent from /api/public/event —
+   * only the settings page and the TV feed (/api/tv/config) serve it.
+   */
+  wifiSsid: string | null;
+  wifiPassword: string | null;
   passBackFields: PassBackField[];
   passFieldLabels: PassFieldLabels;
   passFieldVisibility: PassFieldVisibility;

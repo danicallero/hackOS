@@ -184,19 +184,7 @@ export interface MyQueueEntry {
 // ── reads ────────────────────────────────────────────────────────────────
 export const getRoomView = (roomId: number) => api.get<RoomView>(`/api/queue/rooms/${roomId}/view`);
 export const getAllRoomViews = () => api.get<RoomView[]>("/api/tv/rooms");
-export type TvModeName = "rooms" | "schedule" | "sponsors" | "announcement" | "wifi" | "timer";
-export interface TvMode {
-  mode: TvModeName;
-  payload: unknown;
-  expiresAt: string | null;
-  broadcastAt: string | null;
-}
-export const getTvMode = () => api.get<TvMode>("/api/tv/mode");
-export const setTvMode = (
-  mode: TvModeName,
-  payload: unknown = null,
-  expiresAt: string | null = null,
-) => api.patch<TvMode>("/api/tv/mode", { mode, payload, expiresAt });
+// TV display state, the timetable and the live-screen config live in lib/tv.ts.
 export const getChallengeProgress = (challengeId: number) =>
   api.get<ChallengeProgress>(`/api/queue/challenges/${challengeId}/progress`);
 export const getRoomPace = (roomId: number) => api.get<RoomPace>(`/api/queue/rooms/${roomId}/pace`);

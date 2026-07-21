@@ -25,6 +25,7 @@ the body are left unchanged; sending `null` clears a nullable field.
 | `show_start_countdown` | Live "hacking starts in" countdown before the start, vs a frozen duration. |
 | `participants_can_create_projects` | H19 policy switch: while `true`, a participant with no project may create their own (`POST /api/me/projects`); see `docs/challenges-devpost.md` §1.3. Default `false`. |
 | `venue_name`, `venue_latitude`, `venue_longitude` | Venue; coordinates are all-or-nothing (`CHECK`) and drive the pass's lock-screen `locations` relevance. |
+| `wifi_ssid`, `wifi_password` | Venue Wi-Fi shown on the TV screens (H42). Served by `GET /api/tv/config`, **never** by `/api/public/event`; an audit entry records that the password changed, not its value. See [TV screens](./tv-screens.md). |
 | `pass_back_fields` | jsonb array of admin-defined `{label, value}` pairs appended to the pass back (schedule links, rules…). |
 | `pass_field_labels` | jsonb map of caption overrides for the pass's fixed fields. Catalogue and defaults: `packages/shared/src/wallet-pass-labels.ts` (`PASS_FIELD_LABEL_KEYS`). Missing/blank keys fall back to the default. |
 | `pass_field_visibility` | jsonb map of show/hide toggles for the pass's auto-filled front fields (`PASS_FIELD_VISIBILITY_KEYS`: participant, role, passType, university, email). Missing keys default to **visible**. |

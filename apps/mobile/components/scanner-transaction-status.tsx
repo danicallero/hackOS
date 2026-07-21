@@ -339,12 +339,12 @@ export function ScannerTransactionStatus({
           {presentation.label}
         </Text>
         {scan?.lastError ? (
-          <Text 
+          <Text
             selectable
             style={{
               color: colors.secondaryLabel,
               fontSize: 13,
-              paddingBottom: state === "attention" ? 10 : 0, 
+              paddingBottom: state === "attention" ? 10 : 0,
             }}
           >
             {scan.status === "failed" ? t("scannerBusinessRejected") : t("scannerOfflineWaiting")}

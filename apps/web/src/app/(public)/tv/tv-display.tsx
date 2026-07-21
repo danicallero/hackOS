@@ -8,29 +8,38 @@ import {
   UsersRoundIcon,
   WifiIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Brand } from "@/components/common/brand";
 import { Spinner } from "@/components/common/spinner";
-import { SponsorLogo } from "@/components/common/sponsor-logo";
 import type {
   PublicAnnouncement,
   PublicEvent,
   PublicSponsor,
 } from "@/components/public/public-types";
 import { EventPhaseDisplay, EventTimer, useEventPhase } from "@/components/public/timer";
+import { useElementSize } from "@/hooks/use-element-size";
 import { type SseEnvelope, useEventSource } from "@/hooks/use-event-source";
 import { useFitToViewport } from "@/hooks/use-fit-to-viewport";
 import { api } from "@/lib/api";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem } from "@/lib/logistics";
+import { getAllRoomViews, type QueueEntry, type RoomView } from "@/lib/queue";
 import {
-  getAllRoomViews,
-  getTvMode,
-  type QueueEntry,
-  type RoomView,
-  type TvMode,
-} from "@/lib/queue";
+  bestSponsorColumns,
+  getTvState,
+  getTvVenueConfig,
+  liveConfigFrom,
+  msUntilNextRotation,
+  rotationIndexAt,
+  type TvState,
+  type TvVenueConfig,
+} from "@/lib/tv";
 import { cn } from "@/lib/utils";
+import { LiveScreen } from "./live-screen";
+import { MarqueeText } from "./marquee-text";
+import { SponsorMark } from "./sponsor-mark";
+import { TvBody, TvClock, TvEmpty, TvHeader, TvScreen } from "./tv-screen";
+import { WifiQr } from "./wifi-qr";
 
 /** Room-card sizing used to derive the outer grid's column count from the
  * TV's actual measured width, so a portrait screen gets a portrait-shaped
@@ -42,6 +51,9 @@ const GRID_GAP = 24;
  * tracks actually exist, so a challenge shared by many rooms wraps
  * internally instead of forcing the grid wider than the screen. */
 const MAX_GROUP_SPAN = 4;
+
+/** Matches the `gap-[1.25em]` on the sponsor wall at the 1x scale it is measured against. */
+const SPONSOR_WALL_GAP_PX = 20;
 
 function columnsForWidth(width: number) {
   if (!width) return 4;
@@ -64,12 +76,13 @@ function waitingRoomRowSize(count: number): string {
 }
 
 type TvData = {
-  mode: TvMode;
+  state: TvState;
   event: PublicEvent;
   rooms: RoomView[];
   schedule: PublicScheduleItem[];
   sponsors: PublicSponsor[];
   announcements: PublicAnnouncement[];
+  venue: TvVenueConfig | null;
 };
 
 function textPayload(payload: unknown, key: string): string | null {
@@ -78,149 +91,6 @@ function textPayload(payload: unknown, key: string): string | null {
     typeof (payload as Record<string, unknown>)[key] === "string"
     ? String((payload as Record<string, unknown>)[key])
     : null;
-}
-
-const MARQUEE_PAUSE_MS = 1600;
-const MARQUEE_PIXELS_PER_SECOND = 45;
-
-/** Shared clock so every marquee on the page moves in lockstep instead of
- * each finishing its own trip whenever: all wait together, all set off
- * together (each at its own natural speed), the shorter ones hold at the end
- * until the longest one catches up, all wait together again, then all
- * return together the same way. One coordinator per page is exactly what we
- * want here — there is only ever one TV screen mounted per tab. */
-class MarqueeCoordinator {
-  private overflows = new Map<symbol, number>();
-  private listeners = new Set<() => void>();
-  private maxOverflow = 0;
-
-  report(key: symbol, overflow: number) {
-    if (overflow > 0) this.overflows.set(key, overflow);
-    else this.overflows.delete(key);
-    this.recompute();
-  }
-
-  remove(key: symbol) {
-    this.overflows.delete(key);
-    this.recompute();
-  }
-
-  private recompute() {
-    let max = 0;
-    for (const value of this.overflows.values()) max = Math.max(max, value);
-    if (max !== this.maxOverflow) {
-      this.maxOverflow = max;
-      for (const listener of this.listeners) listener();
-    }
-  }
-
-  subscribe(listener: () => void) {
-    this.listeners.add(listener);
-    return () => {
-      this.listeners.delete(listener);
-    };
-  }
-
-  get maxTravelMs() {
-    return (this.maxOverflow / MARQUEE_PIXELS_PER_SECOND) * 1000;
-  }
-}
-
-const marqueeCoordinator = new MarqueeCoordinator();
-
-/** Kiosk-only alternative to a static `truncate` ellipsis (H41: nobody can
- * hover, click, or scroll to read the rest). Only when the text actually
- * overflows its box, scroll it into view on a loop: pause at the start,
- * scroll to reveal the clipped tail, pause there, scroll back, repeat. Text
- * that already fits never animates. Every overflowing text on the page moves
- * on the same shared clock (see MarqueeCoordinator) rather than each running
- * its own independent, out-of-phase loop. */
-function MarqueeText({ text, className }: { text: string; className?: string }) {
-  const containerRef = useRef<HTMLSpanElement>(null);
-  const textRef = useRef<HTMLSpanElement>(null);
-  const animationRef = useRef<Animation | null>(null);
-  const registrationKey = useRef<symbol | null>(null);
-  if (!registrationKey.current) registrationKey.current = Symbol("marquee");
-
-  // `text` isn't read in the effect body, but a same-size container swapping
-  // to different-length content (e.g. a new presenting team) must still
-  // retrigger measurement.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: see above
-  useLayoutEffect(() => {
-    const container = containerRef.current;
-    const el = textRef.current;
-    const key = registrationKey.current;
-    if (!container || !el || !key) return;
-
-    let ownOverflow = 0;
-
-    const applyAnimation = () => {
-      animationRef.current?.cancel();
-      el.style.transform = "translateX(0)";
-      if (ownOverflow <= 1) return;
-      const ownTravel = (ownOverflow / MARQUEE_PIXELS_PER_SECOND) * 1000;
-      // A marquee is always part of the coordinator's maximum, but retain
-      // its own travel as a floor while measurements settle.
-      const maxTravel = Math.max(ownTravel, marqueeCoordinator.maxTravelMs);
-      const total = MARQUEE_PAUSE_MS * 2 + maxTravel * 2;
-      // Own forward travel ends at o2; shorter texts then hold at full
-      // offset until o3 (when the longest text arrives). Both pauses (o1-o0,
-      // o4-o3) are shared by every instance. The return trip mirrors this.
-      // Firefox validates offsets strictly. The longest marquee's o5 is
-      // mathematically 1, but floating-point division can produce a value
-      // just above 1, which makes Element.animate() throw and prevents the
-      // TV screen from loading.
-      const boundedOffset = (value: number) => Math.min(1, Math.max(0, value));
-      const o1 = boundedOffset(MARQUEE_PAUSE_MS / total);
-      const o2 = boundedOffset((MARQUEE_PAUSE_MS + ownTravel) / total);
-      const o3 = boundedOffset((MARQUEE_PAUSE_MS + maxTravel) / total);
-      const o4 = boundedOffset((MARQUEE_PAUSE_MS + maxTravel + MARQUEE_PAUSE_MS) / total);
-      const o5 = boundedOffset(
-        (MARQUEE_PAUSE_MS + maxTravel + MARQUEE_PAUSE_MS + ownTravel) / total,
-      );
-      const offset = `translateX(-${ownOverflow}px)`;
-      animationRef.current = el.animate(
-        [
-          { transform: "translateX(0)", offset: 0 },
-          { transform: "translateX(0)", offset: o1 },
-          { transform: offset, offset: o2 },
-          { transform: offset, offset: o3 },
-          { transform: offset, offset: o4 },
-          { transform: offset, offset: o5 },
-          { transform: "translateX(0)", offset: 1 },
-        ],
-        { duration: total, iterations: Number.POSITIVE_INFINITY, easing: "ease-in-out" },
-      );
-    };
-
-    const measure = () => {
-      ownOverflow = el.scrollWidth - container.clientWidth;
-      marqueeCoordinator.report(key, ownOverflow);
-      applyAnimation();
-    };
-
-    measure();
-    // Re-applies with the new shared pace whenever the page-wide longest
-    // overflow changes (a longer/shorter name appears elsewhere).
-    const unsubscribe = marqueeCoordinator.subscribe(applyAnimation);
-    const observer = new ResizeObserver(measure);
-    observer.observe(container);
-    observer.observe(el);
-    return () => {
-      animationRef.current?.cancel();
-      observer.disconnect();
-      unsubscribe();
-      marqueeCoordinator.remove(key);
-    };
-  }, [text]);
-
-  return (
-    <span ref={containerRef} className={cn("block overflow-hidden whitespace-nowrap", className)}>
-      <span ref={textRef} className="inline-block whitespace-nowrap will-change-transform">
-        {text}
-      </span>
-    </span>
-  );
 }
 
 /** A room considered "ready" (not paused) vs. paused — mirrors the room's own
@@ -371,7 +241,7 @@ function NextInQueueFooter({
 function StandaloneRoomCard({ room, t }: { room: RoomView; t: Translate }) {
   const pill = <RoomStatusPill paused={Boolean(room.state?.is_paused)} t={t} />;
   return (
-    <article className="flex min-w-0 flex-col rounded-2xl border bg-card p-5 shadow-sm">
+    <article className="bg-card flex min-w-0 flex-col rounded-2xl border p-5 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         {room.challenge ? (
           <ChallengeHeading challenge={room.challenge} />
@@ -424,7 +294,7 @@ function JointGroupCard({
         style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}
       >
         {group.rooms.map((room) => (
-          <div key={room.room.id} className="min-w-0 rounded-xl border bg-card p-4">
+          <div key={room.room.id} className="bg-card min-w-0 rounded-xl border p-4">
             <div className="flex items-start justify-between gap-3">
               <RoomHeader room={room} />
               <RoomStatusPill paused={Boolean(room.state?.is_paused)} t={t} />
@@ -463,19 +333,18 @@ function groupRoomsByChallenge(rooms: RoomView[]): RoomGroup[] {
   return order.map((key) => groups.get(key) as RoomGroup);
 }
 
-const clockFormatter = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" });
-
+/**
+ * The rooms grid keeps its own fitting strategy rather than the font-scale
+ * frame the other modes use: its cards are all single-line MarqueeText, which
+ * is exactly the case `useFitToViewport` is safe for, and it additionally
+ * needs the measured width to choose a column count.
+ */
 function RoomsView({ rooms }: { rooms: RoomView[] }) {
   const { t } = useLocale();
   const groups = useMemo(() => groupRoomsByChallenge(rooms), [rooms]);
   const { containerRef, contentRef, scale, containerWidth, contentWidthPercent } =
     useFitToViewport();
   const columns = columnsForWidth(containerWidth);
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 30_000);
-    return () => clearInterval(id);
-  }, []);
   return (
     <div ref={containerRef} className="bg-background text-foreground h-dvh w-dvw overflow-hidden">
       <div
@@ -499,12 +368,7 @@ function RoomsView({ rooms }: { rooms: RoomView[] }) {
               {t("judgingRoomsTitle")}
             </div>
           </div>
-          <time
-            className="font-mono text-2xl font-semibold tabular-nums"
-            dateTime={now.toISOString()}
-          >
-            {clockFormatter.format(now)}
-          </time>
+          <TvClock className="text-2xl font-semibold" />
         </header>
         <div className="mt-8">
           {groups.length ? (
@@ -529,7 +393,9 @@ function RoomsView({ rooms }: { rooms: RoomView[] }) {
               )}
             </div>
           ) : (
-            <TvEmpty text={t("judgingRoomsEmptyDesc")} />
+            <div className="grid min-h-80 place-items-center rounded-2xl border text-center text-2xl text-muted-foreground">
+              {t("judgingRoomsEmptyDesc")}
+            </div>
           )}
         </div>
       </div>
@@ -537,147 +403,193 @@ function RoomsView({ rooms }: { rooms: RoomView[] }) {
   );
 }
 
-function TvFrame({
-  title,
-  icon: Icon,
-  children,
-}: {
-  title: string;
-  icon: typeof UsersRoundIcon;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="min-h-dvh bg-background p-8 text-foreground lg:p-12">
-      <header className="flex items-center justify-between gap-6 border-b pb-6">
-        <Brand className="text-xl" />
-        <div className="flex items-center gap-3">
-          <Icon className="size-6" aria-hidden="true" />
-          <h1 className="text-balance text-3xl font-semibold">{title}</h1>
-        </div>
-      </header>
-      <div className="mx-auto max-w-[110rem] py-9">{children}</div>
-    </div>
-  );
-}
-function TvEmpty({ text }: { text: string }) {
-  return (
-    <div className="grid min-h-80 place-items-center rounded-2xl border text-center text-2xl text-muted-foreground">
-      {text}
-    </div>
-  );
-}
-
-function ScheduleView({
-  schedule,
-  timezone,
-}: {
-  schedule: PublicScheduleItem[];
-  timezone: string;
-}) {
+function ScheduleView({ schedule, event }: { schedule: PublicScheduleItem[]; event: PublicEvent }) {
   const { t } = useLocale();
   const format = (date: string) =>
     new Intl.DateTimeFormat(undefined, {
       weekday: "short",
       hour: "2-digit",
       minute: "2-digit",
-      timeZone: timezone,
+      timeZone: event.timezone,
     }).format(new Date(date));
   return (
-    <TvFrame title={t("schedule")} icon={CalendarDaysIcon}>
-      {schedule.length ? (
-        <ol className="divide-y rounded-2xl border px-6">
-          {schedule.map((item) => (
-            <li key={item.id} className="grid gap-3 py-6 md:grid-cols-[14rem_1fr_auto]">
-              <time className="text-xl tabular-nums text-muted-foreground">
-                {format(item.startsAt)}
-              </time>
-              <div>
-                <h2 className="text-balance text-3xl font-semibold">{item.title}</h2>
-                {item.description && (
-                  <p className="text-pretty mt-2 text-lg text-muted-foreground">
-                    {item.description}
+    <TvScreen>
+      <TvHeader title={t("schedule")} icon={CalendarDaysIcon} eventName={event.name} />
+      <TvBody>
+        {schedule.length ? (
+          <ol className="min-h-0 flex-1 divide-y overflow-hidden rounded-[0.75em] border px-[1.5em]">
+            {schedule.map((item) => (
+              <li
+                key={item.id}
+                className="grid grid-cols-[max-content_minmax(0,1fr)_max-content] gap-[1em] py-[1.25em]"
+              >
+                <time className="text-muted-foreground text-[1.4em] whitespace-nowrap tabular-nums">
+                  {format(item.startsAt)}
+                </time>
+                <div className="min-w-0">
+                  <h2 className="text-[1.75em] font-semibold">
+                    <MarqueeText text={item.title} />
+                  </h2>
+                  {item.description && (
+                    <p className="text-muted-foreground mt-[0.35em] text-[1.15em]">
+                      <MarqueeText text={item.description} />
+                    </p>
+                  )}
+                </div>
+                {item.location && (
+                  <p className="max-w-[14em] text-[1.4em]">
+                    <MarqueeText text={item.location} />
                   </p>
                 )}
-              </div>
-              <p className="text-xl">{item.location}</p>
-            </li>
-          ))}
-        </ol>
-      ) : (
-        <TvEmpty text={t("scheduleEmptyDesc")} />
-      )}
-    </TvFrame>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <TvEmpty text={t("scheduleEmptyDesc")} />
+        )}
+      </TvBody>
+    </TvScreen>
   );
 }
-function SponsorsView({ sponsors }: { sponsors: PublicSponsor[] }) {
+
+function SponsorsView({ sponsors, event }: { sponsors: PublicSponsor[]; event: PublicEvent }) {
   const { t } = useLocale();
+  const { ref, width, height } = useElementSize<HTMLUListElement>();
+  const columns = bestSponsorColumns({
+    count: sponsors.length,
+    width,
+    height,
+    gap: SPONSOR_WALL_GAP_PX,
+    maxColumns: 6,
+  });
   return (
-    <TvFrame title={t("sponsors")} icon={UsersRoundIcon}>
-      {sponsors.length ? (
-        <ul className="grid grid-cols-2 gap-5 md:grid-cols-3 xl:grid-cols-4">
-          {sponsors.map((sponsor) => (
-            <li
-              key={sponsor.id}
-              className="flex min-h-52 items-center justify-center rounded-2xl border bg-card p-8 shadow-sm"
-            >
-              {sponsor.logoUrl ? (
-                <SponsorLogo
-                  logoUrl={sponsor.logoUrl}
-                  logoNegativeUrl={sponsor.logoNegativeUrl}
-                  alt={sponsor.name}
-                  className="max-h-28 max-w-full object-contain"
-                />
-              ) : (
-                <span className="text-center text-2xl font-semibold">{sponsor.name}</span>
-              )}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <TvEmpty text={t("sponsorsEmptyDesc")} />
-      )}
-    </TvFrame>
+    <TvScreen>
+      <TvHeader title={t("sponsors")} icon={UsersRoundIcon} eventName={event.name} />
+      <TvBody>
+        {sponsors.length ? (
+          // The whole screen belongs to the logos here: tiles split it evenly
+          // and each logo fills its tile, so few sponsors read as large marks
+          // instead of small ones stranded in the middle of a 4K wall.
+          <ul
+            ref={ref}
+            className="grid min-h-0 flex-1 content-center gap-[1.25em]"
+            style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+          >
+            {sponsors.map((sponsor) => (
+              <li
+                key={sponsor.enterpriseId}
+                className="bg-card flex aspect-3/2 items-center justify-center overflow-hidden rounded-[0.75em] border p-[2em] shadow-sm"
+              >
+                <SponsorMark sponsor={sponsor} className="max-h-full max-w-full object-contain" />
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <TvEmpty text={t("sponsorsEmptyDesc")} />
+        )}
+      </TvBody>
+    </TvScreen>
   );
 }
-function WifiView({ payload }: { payload: unknown }) {
+
+/**
+ * Full-screen Wi-Fi. Reads the venue's configured credentials first so a
+ * scheduled slot can show this with nobody at the control page, falling back
+ * to whatever an operator typed into the broadcast payload.
+ *
+ * Two ways in, side by side and given equal weight: scan the code, or read
+ * the credentials. The password is the largest thing on the screen because
+ * typing it from across a room is the job this screen exists for — mono,
+ * letter-spaced, on its own plate so it never blends into the prose around it.
+ */
+function WifiView({
+  payload,
+  venue,
+  event,
+}: {
+  payload: unknown;
+  venue: TvVenueConfig | null;
+  event: PublicEvent;
+}) {
   const { t } = useLocale();
-  const ssid = textPayload(payload, "ssid") ?? t("wifiDetailsFallback");
-  const password = textPayload(payload, "password");
+  const ssid = venue?.wifi?.ssid ?? textPayload(payload, "ssid") ?? t("wifiDetailsFallback");
+  const password = venue?.wifi?.password ?? textPayload(payload, "password");
   const instructions = textPayload(payload, "instructions");
   return (
-    <TvFrame title={t("modeWifi")} icon={WifiIcon}>
-      <div className="mx-auto max-w-4xl rounded-2xl border bg-card p-10 text-center shadow-sm">
-        <p className="text-muted-foreground text-xl">{t("networkLabel")}</p>
-        <p className="mt-2 break-words text-5xl font-semibold">{ssid}</p>
-        {password && (
-          <>
-            <p className="text-muted-foreground mt-10 text-xl">{t("password")}</p>
-            <p className="mt-2 break-all font-mono text-4xl font-semibold tabular-nums">
-              {password}
-            </p>
-          </>
-        )}
-        {instructions && (
-          <p className="text-pretty mt-10 text-xl text-muted-foreground">{instructions}</p>
-        )}
-      </div>
-    </TvFrame>
+    <TvScreen>
+      {({ portrait }) => (
+        <>
+          <TvHeader title={t("modeWifi")} icon={WifiIcon} eventName={event.name} />
+          <TvBody className="items-center justify-center">
+            {/* Two equal ways in — scan it, or read it — set side by side and
+                centred as one block, rather than a small card adrift in a
+                large screen. The QR's white plate is the only "card" here;
+                a second frame around everything would just add noise. */}
+            <div
+              className={cn(
+                "mx-auto grid w-full max-w-[78em] items-center gap-[4em]",
+                portrait
+                  ? "grid-cols-1 justify-items-center text-center"
+                  : "grid-cols-[minmax(0,1fr)_auto]",
+              )}
+            >
+              <div className="flex min-w-0 flex-col gap-[2.5em]">
+                <div>
+                  <p className="text-muted-foreground text-[1.25em] font-medium tracking-[0.18em] uppercase">
+                    {t("networkLabel")}
+                  </p>
+                  <p className="mt-[0.15em] text-[4.5em] leading-[1.05] font-semibold tracking-[-0.01em] break-words">
+                    {ssid}
+                  </p>
+                </div>
+                {password && (
+                  <div>
+                    <p className="text-muted-foreground text-[1.25em] font-medium tracking-[0.18em] uppercase">
+                      {t("password")}
+                    </p>
+                    <p className="bg-muted mt-[0.35em] inline-block rounded-[0.4em] px-[0.5em] py-[0.2em] font-mono text-[3.25em] leading-[1.25] font-semibold tracking-[0.02em] break-all">
+                      {password}
+                    </p>
+                  </div>
+                )}
+                {instructions && (
+                  <p className="text-muted-foreground text-[1.5em] text-pretty">{instructions}</p>
+                )}
+              </div>
+              {/* Only when the credentials came from venue config: a QR built
+                  from a half-typed operator payload would fail to connect
+                  anyone. */}
+              {venue?.wifi && (
+                <div className="flex flex-col items-center gap-[1.25em]">
+                  <WifiQr wifi={venue.wifi} size="17em" />
+                  <p className="text-muted-foreground text-[1.35em] font-medium tracking-[0.06em]">
+                    {t("wifiScanToJoin")}
+                  </p>
+                </div>
+              )}
+            </div>
+          </TvBody>
+        </>
+      )}
+    </TvScreen>
   );
 }
+
 function TimerView({ event, payload }: { event: PublicEvent; payload: unknown }) {
   const { t } = useLocale();
   // An operator's manual override (H42) always wins; otherwise fall back to
   // the same hacking/judging phase logic as the public landing page.
   const override = textPayload(payload, "endsAt") ?? textPayload(payload, "label");
   const phase = useEventPhase(event);
-  const timerClassName = "mt-5 block font-mono text-7xl font-semibold tabular-nums sm:text-9xl";
+  const timerClassName = "mt-[0.15em] block font-mono text-[8em] font-semibold tabular-nums";
   return (
-    <TvFrame title={t("eventTimerTitle")} icon={Clock3Icon}>
-      <div className="grid min-h-[60dvh] place-items-center text-center">
-        <div>
+    <TvScreen>
+      <TvHeader title={t("eventTimerTitle")} icon={Clock3Icon} eventName={event.name} />
+      <TvBody className="items-center justify-center">
+        <div className="text-center">
           {override ? (
             <>
-              <p className="text-3xl text-muted-foreground">
+              <p className="text-muted-foreground text-[1.75em]">
                 {textPayload(payload, "label") ?? t("timeRemaining")}
               </p>
               <EventTimer
@@ -689,20 +601,23 @@ function TimerView({ event, payload }: { event: PublicEvent; payload: unknown })
             <EventPhaseDisplay
               phase={phase}
               className={timerClassName}
-              labelClassName="text-3xl text-muted-foreground"
+              labelClassName="text-[1.75em] text-muted-foreground"
             />
           )}
         </div>
-      </div>
-    </TvFrame>
+      </TvBody>
+    </TvScreen>
   );
 }
+
 function AnnouncementView({
   announcements,
   payload,
+  event,
 }: {
   announcements: PublicAnnouncement[];
   payload: unknown;
+  event: PublicEvent;
 }) {
   const { t } = useLocale();
   const title = textPayload(payload, "title");
@@ -710,21 +625,56 @@ function AnnouncementView({
   const item =
     title || body ? { title: title ?? t("modeAnnouncement"), body: body ?? "" } : announcements[0];
   return (
-    <TvFrame title={t("modeAnnouncement")} icon={AlertCircleIcon}>
-      {item ? (
-        <div className="grid min-h-[60dvh] place-items-center text-center">
-          <article className="max-w-5xl">
-            <h2 className="text-balance text-6xl font-semibold">{item.title}</h2>
-            <p className="text-pretty mt-8 whitespace-pre-wrap text-3xl text-muted-foreground">
+    <TvScreen>
+      <TvHeader title={t("modeAnnouncement")} icon={AlertCircleIcon} eventName={event.name} />
+      <TvBody className="items-center justify-center">
+        {item ? (
+          <article className="max-w-[55em] text-center">
+            <h2 className="text-[4em] leading-tight font-semibold text-balance">{item.title}</h2>
+            <p className="text-muted-foreground mt-[0.75em] text-[1.9em] whitespace-pre-wrap">
               {item.body}
             </p>
           </article>
-        </div>
-      ) : (
-        <TvEmpty text={t("announcementEmptyDesc")} />
-      )}
-    </TvFrame>
+        ) : (
+          <TvEmpty text={t("announcementEmptyDesc")} />
+        )}
+      </TvBody>
+    </TvScreen>
   );
+}
+
+/**
+ * What a rotating slot is showing right now. Driven off the slot's own start
+ * time so every screen in the venue flips together, whenever each was
+ * switched on, and re-armed for the exact moment of the next flip instead of
+ * polling.
+ */
+function useRotatedState(state: TvState): { mode: TvState["mode"]; payload: unknown } {
+  const items = state.slot?.items ?? [];
+  const startedAt = state.slot ? new Date(state.slot.startsAt).getTime() : 0;
+  const [index, setIndex] = useState(() => rotationIndexAt(items, Date.now() - startedAt));
+
+  const slotKey = `${state.slot?.id ?? "none"}:${items.length}`;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: slotKey stands in for the slot identity; `items` is a fresh array each render.
+  useEffect(() => {
+    if (items.length <= 1) {
+      setIndex(0);
+      return;
+    }
+    let timeout: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      const elapsed = Date.now() - startedAt;
+      setIndex(rotationIndexAt(items, elapsed));
+      const wait = msUntilNextRotation(items, elapsed);
+      timeout = setTimeout(tick, Number.isFinite(wait) ? Math.max(250, wait) : 60_000);
+    };
+    tick();
+    return () => clearTimeout(timeout);
+  }, [slotKey, startedAt]);
+
+  const active = items[index];
+  if (items.length <= 1 || !active) return { mode: state.mode, payload: state.payload };
+  return { mode: active.mode, payload: active.payload };
 }
 
 export function TvDisplay() {
@@ -740,24 +690,27 @@ export function TvDisplay() {
   const load = useCallback(async () => {
     const currentRequest = ++requestId.current;
     try {
-      const [mode, event, rooms, schedule, sponsorResult, announcementResult] = await Promise.all([
-        getTvMode(),
-        api.get<PublicEvent>("/api/public/event"),
-        getAllRoomViews(),
-        logisticsApi.publicSchedule(),
-        api.get<{ items: PublicSponsor[] }>("/api/public/sponsors"),
-        api.get<{ items: PublicAnnouncement[] }>("/api/announcements/public"),
-      ]);
+      const [state, event, rooms, schedule, sponsorResult, announcementResult, venue] =
+        await Promise.all([
+          getTvState(),
+          api.get<PublicEvent>("/api/public/event"),
+          getAllRoomViews(),
+          logisticsApi.publicSchedule(),
+          api.get<{ items: PublicSponsor[] }>("/api/public/sponsors"),
+          api.get<{ items: PublicAnnouncement[] }>("/api/announcements/public"),
+          getTvVenueConfig(),
+        ]);
       // A slower older response must never overwrite the state obtained after
       // an SSE event (for example, a mode change followed by a queue update).
       if (currentRequest !== requestId.current) return;
       setData({
-        mode,
+        state,
         event,
         rooms,
         schedule: schedule.items,
         sponsors: sponsorResult.items,
         announcements: announcementResult.items,
+        venue,
       });
       setError(null);
     } catch {
@@ -770,10 +723,12 @@ export function TvDisplay() {
     void load();
   }, [load]);
 
+  // The mode and the venue details travel together: a scheduled Wi-Fi slot is
+  // useless if the credentials it shows are the ones cached at boot.
   const refreshMode = useCallback(async () => {
     try {
-      const mode = await getTvMode();
-      setData((current) => (current ? { ...current, mode } : current));
+      const [state, venue] = await Promise.all([getTvState(), getTvVenueConfig()]);
+      setData((current) => (current ? { ...current, state, venue } : current));
       setError(null);
     } catch {
       setError(t("tvReconnecting"));
@@ -834,6 +789,27 @@ export function TvDisplay() {
     events: [EVENTS.CONTENT_ANNOUNCEMENT, EVENTS.CONTENT_SCHEDULE_CHANGED],
     onEvent: refreshContent,
   });
+
+  return <TvView data={data} error={error} />;
+}
+
+/**
+ * Split from the data-loading shell so the rotation hook can run against a
+ * resolved state without every loading branch having to satisfy the rules of
+ * hooks.
+ */
+function TvView({ data, error }: { data: TvData | null; error: string | null }) {
+  const { t } = useLocale();
+  const fallbackState: TvState = {
+    mode: "rooms",
+    payload: null,
+    expiresAt: null,
+    broadcastAt: null,
+    source: "default",
+    slot: null,
+  };
+  const { mode, payload } = useRotatedState(data?.state ?? fallbackState);
+
   if (!data && !error)
     return (
       <div className="grid min-h-dvh place-items-center" role="status" aria-busy="true">
@@ -843,17 +819,28 @@ export function TvDisplay() {
     );
   if (!data)
     return (
-      <div className="grid min-h-dvh place-items-center p-8 text-center text-2xl text-muted-foreground">
+      <div className="text-muted-foreground grid min-h-dvh place-items-center p-8 text-center text-2xl">
         {error}
       </div>
     );
-  if (data.mode.mode === "schedule")
-    return <ScheduleView schedule={data.schedule} timezone={data.event.timezone} />;
-  if (data.mode.mode === "sponsors") return <SponsorsView sponsors={data.sponsors} />;
-  if (data.mode.mode === "announcement")
-    return <AnnouncementView announcements={data.announcements} payload={data.mode.payload} />;
-  if (data.mode.mode === "wifi") return <WifiView payload={data.mode.payload} />;
-  if (data.mode.mode === "timer")
-    return <TimerView event={data.event} payload={data.mode.payload} />;
+
+  if (mode === "live")
+    return (
+      <LiveScreen
+        config={liveConfigFrom(payload)}
+        event={data.event}
+        schedule={data.schedule}
+        sponsors={data.sponsors}
+        venue={data.venue}
+      />
+    );
+  if (mode === "schedule") return <ScheduleView schedule={data.schedule} event={data.event} />;
+  if (mode === "sponsors") return <SponsorsView sponsors={data.sponsors} event={data.event} />;
+  if (mode === "announcement")
+    return (
+      <AnnouncementView announcements={data.announcements} payload={payload} event={data.event} />
+    );
+  if (mode === "wifi") return <WifiView payload={payload} venue={data.venue} event={data.event} />;
+  if (mode === "timer") return <TimerView event={data.event} payload={payload} />;
   return <RoomsView rooms={data.rooms} />;
 }
