@@ -7,19 +7,12 @@
 // H18-H21 (create/edit projects in hackOS) are not backed by the API.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import {
-  ArrowLeftIcon,
-  CheckCircle2Icon,
-  FileTextIcon,
-  LockIcon,
-  UploadIcon,
-  UsersIcon,
-} from "lucide-react";
+import { ArrowLeftIcon, CheckCircle2Icon, FileTextIcon, UploadIcon, UsersIcon } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
-import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
@@ -258,16 +251,7 @@ export default function ImportProjectsPage() {
   }
 
   if (!canImport) {
-    return (
-      <div className="space-y-6">
-        <PageHeader title={t("importFromDevpost")} />
-        <EmptyState
-          icon={LockIcon}
-          title={t("noAccessImportProjects")}
-          description={t("importDeniedDesc")}
-        />
-      </div>
-    );
+    return <AccessDenied ask={t("importDeniedDesc")} />;
   }
 
   // ── phase 3: confirmed ─────────────────────────────────────────────────────

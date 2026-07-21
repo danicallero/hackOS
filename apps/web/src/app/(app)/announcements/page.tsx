@@ -10,7 +10,6 @@ import {
   CheckCircle2Icon,
   ClockIcon,
   InboxIcon,
-  LockIcon,
   MegaphoneIcon,
   PencilIcon,
   PlusIcon,
@@ -19,10 +18,10 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { AccessDenied } from "@/components/common/access-denied";
 import { ContextualError } from "@/components/common/contextual-error";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { DateTimeInput } from "@/components/common/datetime-input";
-import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -180,16 +179,7 @@ export default function AnnouncementsPage() {
   }
 
   if (!canManage) {
-    return (
-      <div className="space-y-6">
-        <PageHeader title={t("announcements")} />
-        <EmptyState
-          icon={LockIcon}
-          title={t("noAccessAnnouncements")}
-          description={t("announcementsDeniedDesc")}
-        />
-      </div>
-    );
+    return <AccessDenied ask={t("announcementsDeniedDesc")} />;
   }
 
   const columns: Column<Announcement>[] = [

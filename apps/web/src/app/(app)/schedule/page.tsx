@@ -8,7 +8,6 @@ import {
   CopyIcon,
   EyeIcon,
   EyeOffIcon,
-  LockIcon,
   MicIcon,
   PartyPopperIcon,
   PencilIcon,
@@ -20,9 +19,9 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { DateTimeInput } from "@/components/common/datetime-input";
-import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -239,16 +238,7 @@ export default function SchedulePage() {
   }
 
   if (!canManage) {
-    return (
-      <div className="space-y-6">
-        <PageHeader title={t("manageSchedule")} />
-        <EmptyState
-          icon={LockIcon}
-          title={t("noAccessSchedule")}
-          description={t("scheduleDeniedDesc")}
-        />
-      </div>
-    );
+    return <AccessDenied ask={t("scheduleDeniedDesc")} />;
   }
 
   const columns: Column<PublicScheduleItem>[] = [

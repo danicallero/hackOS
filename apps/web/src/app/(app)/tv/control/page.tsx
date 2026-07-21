@@ -5,8 +5,8 @@ import { EVENTS } from "@hackos/shared/events";
 import { AlertTriangleIcon, MonitorUpIcon, RadioIcon, WifiIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { AccessDenied } from "@/components/common/access-denied";
 import { DateTimeInput } from "@/components/common/datetime-input";
-import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
 import { PasswordInput } from "@/components/common/password-input";
@@ -168,17 +168,7 @@ export default function TvControlPage() {
     }
   }
 
-  if (!canControl)
-    return (
-      <div className="space-y-6">
-        <PageHeader title={t("tvControl")} />
-        <EmptyState
-          icon={MonitorUpIcon}
-          title={t("noAccessTvControl")}
-          description={t("tvControlDeniedDesc")}
-        />
-      </div>
-    );
+  if (!canControl) return <AccessDenied ask={t("tvControlDeniedDesc")} />;
 
   const currentModeLabel = current
     ? (MODES.find((item) => item.value === current.mode)?.label ?? current.mode)

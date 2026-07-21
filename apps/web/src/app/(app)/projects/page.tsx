@@ -5,12 +5,12 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { FolderGitIcon, LockIcon, UploadIcon, UsersIcon } from "lucide-react";
+import { FolderGitIcon, UploadIcon, UsersIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
-import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
@@ -148,16 +148,7 @@ export default function ProjectsPage() {
   }, [load, liveRefresh]);
 
   if (!canView) {
-    return (
-      <div className="space-y-6">
-        <PageHeader title={t("projects")} />
-        <EmptyState
-          icon={LockIcon}
-          title={t("noAccessProjects")}
-          description={t("projectAccessDeniedDesc")}
-        />
-      </div>
-    );
+    return <AccessDenied ask={t("projectAccessDeniedDesc")} />;
   }
 
   return (

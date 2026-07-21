@@ -15,6 +15,7 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { AccessDenied } from "@/components/common/access-denied";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
@@ -147,16 +148,7 @@ export default function QueueOperationsPage() {
   }, [loadAdminData, roomViews, t]);
 
   if (!canUse) {
-    return (
-      <div className="space-y-6">
-        <PageHeader title={t("queueOperations")} />
-        <EmptyState
-          icon={TicketIcon}
-          title={t("noAccessQueueOps")}
-          description={t("queueOpsAccessDeniedDesc")}
-        />
-      </div>
-    );
+    return <AccessDenied ask={t("queueOpsAccessDeniedDesc")} />;
   }
 
   if (roomViews.loading) {

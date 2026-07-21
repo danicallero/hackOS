@@ -8,15 +8,15 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Building2Icon, EyeIcon, EyeOffIcon, LockIcon, PlusIcon } from "lucide-react";
+import { Building2Icon, EyeIcon, EyeOffIcon, PlusIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { DateTimeInput } from "@/components/common/datetime-input";
-import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
 import { SponsorLogo } from "@/components/common/sponsor-logo";
@@ -280,16 +280,7 @@ export default function EnterprisesPage() {
   }
 
   if (!canManage) {
-    return (
-      <div className="space-y-6">
-        <PageHeader title={t("enterprises")} />
-        <EmptyState
-          icon={LockIcon}
-          title={t("noAccessSponsors")}
-          description={t("sponsorsAccessDeniedDesc")}
-        />
-      </div>
-    );
+    return <AccessDenied ask={t("sponsorsAccessDeniedDesc")} />;
   }
 
   return (

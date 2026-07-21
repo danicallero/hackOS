@@ -4,9 +4,10 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { Building2Icon, LockIcon, PlusIcon } from "lucide-react";
+import { Building2Icon, PlusIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
@@ -233,16 +234,7 @@ export default function QueueRoomsPage() {
   ];
 
   if (!canManageRooms) {
-    return (
-      <div className="space-y-6">
-        <PageHeader title={t("rooms")} />
-        <EmptyState
-          icon={LockIcon}
-          title={t("noAccessRoomAdmin")}
-          description={t("roomAdminDeniedDesc")}
-        />
-      </div>
-    );
+    return <AccessDenied ask={t("roomAdminDeniedDesc")} />;
   }
 
   const saveCreate = async () => {

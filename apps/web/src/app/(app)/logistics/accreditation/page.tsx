@@ -1,18 +1,11 @@
 "use client";
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import {
-  BadgeCheckIcon,
-  CheckIcon,
-  LockIcon,
-  RotateCcwIcon,
-  ScanLineIcon,
-  SearchIcon,
-} from "lucide-react";
+import { BadgeCheckIcon, CheckIcon, RotateCcwIcon, ScanLineIcon, SearchIcon } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { EmptyState } from "@/components/common/empty-state";
+import { AccessDenied } from "@/components/common/access-denied";
 import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
@@ -56,16 +49,7 @@ export default function AccreditationPage() {
   }, [canAccredit, loadCounts]);
 
   if (!canAccredit) {
-    return (
-      <div className="space-y-6">
-        <PageHeader title={t("accreditation")} />
-        <EmptyState
-          icon={LockIcon}
-          title={t("accreditationDeniedTitle")}
-          description={t("accreditationDeniedDesc")}
-        />
-      </div>
-    );
+    return <AccessDenied ask={t("accreditationDeniedDesc")} />;
   }
 
   return (
