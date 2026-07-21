@@ -38,20 +38,62 @@ export function canTransition(status: QueueStatus | string, action: JudgingActio
   return LEGAL_ACTIONS[status]?.includes(action) ?? false;
 }
 
-/** Temporary UX warning rule approved for #190; backend follow-up will make it configurable. */
-export function calledTooLongThresholdMinutes(desiredMinutesPerTeam: number | null): number {
+/**
+ * H34/H203: the operator-configured `calledTooLongThresholdMinutes` (room queue
+ * settings, served on the pace read) wins whenever it is present. The
+ * `max(10, 2x desired)` expression is only the fallback for rooms whose
+ * settings predate the column, or reads that don't carry it.
+ */
+export function calledTooLongThresholdMinutes(
+  desiredMinutesPerTeam: number | null,
+  configuredMinutes: number | null = null,
+): number {
+  if (configuredMinutes != null && Number.isFinite(configuredMinutes) && configuredMinutes > 0) {
+    return configuredMinutes;
+  }
   return Math.max(10, (desiredMinutesPerTeam ?? 0) * 2);
 }
 
 export function hasWaitedTooLong(
   calledAt: string | null,
   desiredMinutesPerTeam: number | null,
+  configuredMinutes: number | null = null,
   now = Date.now(),
 ): boolean {
   if (!calledAt) return false;
   const calledMs = new Date(calledAt).getTime();
   if (!Number.isFinite(calledMs)) return false;
-  return now - calledMs >= calledTooLongThresholdMinutes(desiredMinutesPerTeam) * 60_000;
+  return (
+    now - calledMs >=
+    calledTooLongThresholdMinutes(desiredMinutesPerTeam, configuredMinutes) * 60_000
+  );
+}
+
+/**
+ * H34/H35 no-show ladder affordances for a team at the door. Extracted from
+ * `CalledEntryActions` so the rules sit next to `LEGAL_ACTIONS`/`canTransition`:
+ * a viewer who is neither judge nor operator (a moderator/admin looking on)
+ * may not touch the door at all, only a judge can physically bring a team in,
+ * and disqualification — the end of the ladder — stays admin-only.
+ */
+export function calledEntryAffordances({
+  busy,
+  canJudge,
+  canOperate,
+  canAdmin,
+}: {
+  busy: boolean;
+  canJudge: boolean;
+  canOperate: boolean;
+  canAdmin: boolean;
+}) {
+  const canAct = canJudge || canOperate;
+  return {
+    canNotifyEnter: !busy && canAct,
+    canBringIn: !busy && canJudge,
+    canOpenMore: !busy && canAct,
+    canDisqualify: canAdmin,
+  };
 }
 
 export type CollaborationState = "saving" | "saved" | "offline" | "conflict" | "unsaved";

@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  calledEntryAffordances,
   calledTooLongThresholdMinutes,
   canTransition,
   collaborationState,
+  hasWaitedTooLong,
   LEGAL_ACTIONS,
   workspaceAccess,
 } from "./judging-workspace";
@@ -30,10 +32,70 @@ describe("judging workspace H29-H40", () => {
     expect(canTransition("presenting", "disqualify")).toBe(true);
   });
 
-  it("H34 warns using the approved temporary called-too-long rule", () => {
+  it("H34 prefers the operator-configured called-too-long threshold", () => {
+    expect(calledTooLongThresholdMinutes(null, 3)).toBe(3);
+    expect(calledTooLongThresholdMinutes(8, 25)).toBe(25);
+    // Precedence: the configured value wins even when it is *shorter* than the
+    // fallback would have been — that is the point of configuring it.
+    expect(calledTooLongThresholdMinutes(8, 2)).toBe(2);
+  });
+
+  it("H34 falls back to max(10, 2x desired) when the room has no configured threshold", () => {
     expect(calledTooLongThresholdMinutes(null)).toBe(10);
     expect(calledTooLongThresholdMinutes(4)).toBe(10);
     expect(calledTooLongThresholdMinutes(8)).toBe(16);
+    expect(calledTooLongThresholdMinutes(8, null)).toBe(16);
+    // Non-positive / non-finite settings are ignored rather than trusted.
+    expect(calledTooLongThresholdMinutes(8, 0)).toBe(16);
+    expect(calledTooLongThresholdMinutes(8, Number.NaN)).toBe(16);
+  });
+
+  it("H34 warns only once the effective threshold has elapsed since the call", () => {
+    const now = Date.parse("2026-05-01T12:00:00.000Z");
+    const calledAt = "2026-05-01T11:55:00.000Z"; // 5 minutes ago
+    // Fallback (10 min) has not elapsed yet; a 5-minute configured one has.
+    expect(hasWaitedTooLong(calledAt, 4, null, now)).toBe(false);
+    expect(hasWaitedTooLong(calledAt, 4, 5, now)).toBe(true);
+    // A longer configured threshold suppresses a warning the fallback would show.
+    expect(hasWaitedTooLong("2026-05-01T11:45:00.000Z", 4, null, now)).toBe(true);
+    expect(hasWaitedTooLong("2026-05-01T11:45:00.000Z", 4, 30, now)).toBe(false);
+    expect(hasWaitedTooLong(null, 4, 5, now)).toBe(false);
+    expect(hasWaitedTooLong("not-a-date", 4, 5, now)).toBe(false);
+  });
+
+  it("H34-H35 gates the no-show ladder by role and in-flight action", () => {
+    const judge = { busy: false, canJudge: true, canOperate: false, canAdmin: false };
+    expect(calledEntryAffordances(judge)).toEqual({
+      canNotifyEnter: true,
+      canBringIn: true,
+      canOpenMore: true,
+      canDisqualify: false,
+    });
+    // An operator may notify and use the ladder, but not physically bring in.
+    expect(
+      calledEntryAffordances({ busy: false, canJudge: false, canOperate: true, canAdmin: false }),
+    ).toEqual({
+      canNotifyEnter: true,
+      canBringIn: false,
+      canOpenMore: true,
+      canDisqualify: false,
+    });
+    // Neither judge nor operator: read-only at the door.
+    expect(
+      calledEntryAffordances({ busy: false, canJudge: false, canOperate: false, canAdmin: true }),
+    ).toEqual({
+      canNotifyEnter: false,
+      canBringIn: false,
+      canOpenMore: false,
+      canDisqualify: true,
+    });
+    // An in-flight action disables every button but leaves disqualify visible.
+    expect(calledEntryAffordances({ ...judge, busy: true, canAdmin: true })).toEqual({
+      canNotifyEnter: false,
+      canBringIn: false,
+      canOpenMore: false,
+      canDisqualify: true,
+    });
   });
 
   it("H36 distinguishes acknowledged save, offline work, and conflicts", () => {
