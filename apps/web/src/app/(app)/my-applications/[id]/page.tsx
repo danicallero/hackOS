@@ -429,7 +429,7 @@ export default function MyApplicationDetailPage() {
       <SectionCard
         icon={ClipboardListIcon}
         title={editable ? t("yourAnswers") : t("yourSubmittedAnswers")}
-        description={editable ? t("fillFormBelowDesc") : t("applicationLockedDesc")}
+        description={editable ? undefined : t("applicationLockedDesc")}
         footer={
           editable ? (
             <>

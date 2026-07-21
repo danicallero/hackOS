@@ -377,7 +377,7 @@ const dict: Record<string, I18nText> = {
   verificationInstructions: {
     es: "Sigue el enlace que te enviamos por correo. Si no lo encuentras, puedes reenviarlo.",
     gl: "Segue a ligazón que che enviamos por correo. Se non a atopas, podes reenviala.",
-    en: "Follow the link we emailed you. Didn't get it? Resend below.",
+    en: "Follow the link we emailed you. Didn't get it? Send it again.",
   },
   verifyLinkExpiredTitle: {
     es: "El enlace ha caducado",
@@ -385,9 +385,9 @@ const dict: Record<string, I18nText> = {
     en: "That link expired",
   },
   verifyLinkExpiredDesc: {
-    es: "Pide un enlace nuevo con el formulario de abajo.",
-    gl: "Pide unha ligazón nova co formulario de abaixo.",
-    en: "Request a new one with the form below.",
+    es: "Pide un enlace nuevo.",
+    gl: "Pide unha ligazón nova.",
+    en: "Request a new one.",
   },
   verifyLinkInvalidTitle: {
     es: "Ese enlace no es válido",
@@ -395,9 +395,9 @@ const dict: Record<string, I18nText> = {
     en: "That link isn't valid",
   },
   verifyLinkInvalidDesc: {
-    es: "Comprueba que copiaste el enlace completo, o pide uno nuevo abajo.",
-    gl: "Comproba que copiaches a ligazón completa, ou pide unha nova abaixo.",
-    en: "Check you copied the full link, or request a new one below.",
+    es: "Comprueba que copiaste el enlace completo, o pide uno nuevo.",
+    gl: "Comproba que copiaches a ligazón completa, ou pide unha nova.",
+    en: "Check you copied the full link, or request a new one.",
   },
   resendVerificationEmail: {
     es: "Reenviar correo de verificación",
@@ -591,11 +591,6 @@ const dict: Record<string, I18nText> = {
   viewTicket: { es: "Ver mi entrada", gl: "Ver a miña entrada", en: "View my ticket" },
   badge: { es: "Acreditación", gl: "Acreditación", en: "Badge" },
   qrCodes: { es: "Códigos QR", gl: "Códigos QR", en: "QR codes" },
-  availableAfterConfirmation: {
-    es: "Disponible tras confirmar",
-    gl: "Dispoñible tras confirmar",
-    en: "Available after confirmation",
-  },
   badgeNotAssigned: {
     es: "Acreditación sin asignar",
     gl: "Acreditación sen asignar",
@@ -853,11 +848,6 @@ const dict: Record<string, I18nText> = {
   },
   tryAgain: { es: "Inténtalo de nuevo.", gl: "Téntao de novo.", en: "Try again." },
   roomQueues: { es: "Colas de sala", gl: "Colas de sala", en: "Room queues" },
-  roomQueuesDescription: {
-    es: "Equipos presentando, equipos llamados, siguiente en la cola y acciones rápidas.",
-    gl: "Equipos presentando, equipos chamados, seguinte na cola e accións rápidas.",
-    en: "Presenting teams, called teams, next queue head, and fast operator actions.",
-  },
   noRoomsYet: { es: "Aún no hay salas", gl: "Aínda non hai salas", en: "No rooms yet" },
   noRoomsYetDescription: {
     es: "Crea salas en Administración para empezar a construir las vistas de cola.",
@@ -1061,11 +1051,6 @@ const dict: Record<string, I18nText> = {
   manual: { es: "Manual", gl: "Manual", en: "Manual" },
   checkIn: { es: "Registrar entrada", gl: "Rexistrar entrada", en: "Check in" },
   lostBadge: { es: "Acreditación perdida", gl: "Acreditación perdida", en: "Lost badge" },
-  lostBadgeDesc: {
-    es: "Cambia una acreditación y anula los pases de wallet activos.",
-    gl: "Cambia unha acreditación e anula os pases de wallet activos.",
-    en: "Rotate a badge and void active badge wallet passes.",
-  },
   userIdLabel: { es: "ID de usuario", gl: "ID de usuario", en: "User ID" },
   currentBadgeLabel: { es: "Acreditación actual", gl: "Acreditación actual", en: "Current badge" },
   currentBadgePlaceholder: {
@@ -1092,11 +1077,6 @@ const dict: Record<string, I18nText> = {
     es: "Pide a un administrador acceso al escaneo de presencia.",
     gl: "Pide a un administrador acceso ao escaneo de presenza.",
     en: "Ask an administrator for presence-scan access.",
-  },
-  presenceDescription: {
-    es: "Escanea una acreditación en la puerta para registrar una entrada o salida; las horas de asistencia se estiman a partir de todas las señales.",
-    gl: "Escanea unha acreditación na porta para rexistrar unha entrada ou saída; as horas de asistencia estímanse a partir de todas as sinais.",
-    en: "Scan a badge at the door to register an entry or exit; attendance hours are estimated from all signals.",
   },
   presencePolicyTitle: {
     es: "Verificación de presencia continuada",
@@ -1263,11 +1243,6 @@ const dict: Record<string, I18nText> = {
     gl: "Pide a un administrador acceso ao escaneo de comidas.",
     en: "Ask an administrator for meal-scan access.",
   },
-  mealsDescription: {
-    es: "Sirve comidas escaneando acreditaciones; las repeticiones se marcan y las confirma el equipo.",
-    gl: "Serve comidas escaneando acreditacións; as repeticións márcanse e confírmaas o equipo.",
-    en: "Serve meals by scanning badges; repeats are flagged and confirmed by staff.",
-  },
   columnMeal: { es: "Comida", gl: "Comida", en: "Meal" },
   columnServed: { es: "Servidas", gl: "Servidas", en: "Served" },
   columnPeople: { es: "Personas", gl: "Persoas", en: "People" },
@@ -1308,11 +1283,6 @@ const dict: Record<string, I18nText> = {
     gl: "Pide a un administrador acceso ás estatísticas de loxística.",
     en: "Ask an administrator for logistics-stats access.",
   },
-  logisticsStatsDescription: {
-    es: "Paneles operativos en directo de acreditación, presencia, comidas y actividades.",
-    gl: "Paneis operativos en directo de acreditación, presenza, comidas e actividades.",
-    en: "Live operational panels for accreditation, presence, meals and activities.",
-  },
   columnCategory: { es: "Categoría", gl: "Categoría", en: "Category" },
   columnScans: { es: "Escaneos", gl: "Escaneos", en: "Scans" },
   accredited: { es: "Acreditados", gl: "Acreditados", en: "Accredited" },
@@ -1326,27 +1296,7 @@ const dict: Record<string, I18nText> = {
   sponsor: { es: "Sponsor", gl: "Sponsor", en: "Sponsor" },
   staff: { es: "Staff", gl: "Staff", en: "Staff" },
   participant: { es: "Participante", gl: "Participante", en: "Participant" },
-  noAccreditationsYet: {
-    es: "Todavía no hay acreditaciones.",
-    gl: "Aínda non hai acreditacións.",
-    en: "There are no accreditations yet.",
-  },
-  accreditedHint: {
-    es: "Acreditaciones asignadas actualmente",
-    gl: "Acreditacións asignadas actualmente",
-    en: "Current badge assignments",
-  },
-  presentNowHint: {
-    es: "Estimado a partir de escaneos",
-    gl: "Estimado a partir de escaneos",
-    en: "Estimated from scans",
-  },
   mealsServed: { es: "Comidas servidas", gl: "Comidas servidas", en: "Meals served" },
-  mealsServedHint: {
-    es: "Incluye repeticiones",
-    gl: "Inclúe repeticións",
-    en: "Includes repeat servings",
-  },
   activityScans: {
     es: "Escaneos de actividad",
     gl: "Escaneos de actividade",
@@ -1524,11 +1474,6 @@ const dict: Record<string, I18nText> = {
     gl: "amosando as primeiras {shown}, afina a busca",
     en: "showing first {shown}, refine your search",
   },
-  browseEveryone: {
-    es: "Explora a todas las personas registradas en hackOS.",
-    gl: "Explora todas as persoas rexistradas en hackOS.",
-    en: "Browse everyone registered in hackOS.",
-  },
   searchUsersPlaceholder: {
     es: "Buscar por nombre, apellidos o correo…",
     gl: "Buscar por nome, apelidos ou correo…",
@@ -1567,11 +1512,6 @@ const dict: Record<string, I18nText> = {
   roleParticipant: { es: "Participante", gl: "Participante", en: "Participant" },
   noMatchingUsers: { es: "Sin coincidencias", gl: "Sen coincidencias", en: "No matching users" },
   noUsersYet: { es: "Aún no hay usuarios", gl: "Aínda non hai usuarios", en: "No users yet" },
-  tryDifferentNameEmail: {
-    es: "Prueba con otro nombre o correo.",
-    gl: "Proba con outro nome ou correo.",
-    en: "Try a different name or email.",
-  },
   usersAppearHere: {
     es: "Los usuarios aparecerán aquí en cuanto se registren.",
     gl: "Os usuarios aparecerán aquí en canto se rexistren.",
@@ -1710,11 +1650,6 @@ const dict: Record<string, I18nText> = {
     gl: "Non hai convites activos",
     en: "No active invitations",
   },
-  inviteSomeone: {
-    es: "Invita a alguien para empezar.",
-    gl: "Convida a alguén para comezar.",
-    en: "Invite someone to get started.",
-  },
 
   // ---- Judging panel: queue, room & scoring ----
   pastCalls: { es: "Llamadas previas:", gl: "Chamadas previas:", en: "Past calls:" },
@@ -1784,11 +1719,6 @@ const dict: Record<string, I18nText> = {
   teamCalled: { es: "Equipo llamado.", gl: "Equipo chamado.", en: "Team called." },
   teamBroughtInShort: { es: "Equipo hecho pasar.", gl: "Equipo pasou.", en: "Team brought in." },
   queueHeading: { es: "Cola", gl: "Cola", en: "Queue" },
-  waitingRoomQueueDesc: {
-    es: "Sala de espera y cola del reto.",
-    gl: "Sala de espera e cola do reto.",
-    en: "Waiting room and challenge queue.",
-  },
   callNext: { es: "Llamar siguiente", gl: "Chamar seguinte", en: "Call next" },
   waitingRoomCount: {
     es: "Sala de espera ({count})",
@@ -2051,11 +1981,6 @@ const dict: Record<string, I18nText> = {
     gl: "Ningunha entrada activa seleccionada.",
     en: "No active entry selected.",
   },
-  scoringSaveDesc: {
-    es: "Guarda respuestas mientras evalúas y luego envía la evaluación final.",
-    gl: "Garda respostas mentres avalías e despois envía a avaliación final.",
-    en: "Save draft answers while judging, then submit the final review.",
-  },
   saveDraft: { es: "Guardar borrador", gl: "Gardar borrador", en: "Save draft" },
   saveCorrection: { es: "Guardar corrección", gl: "Gardar corrección", en: "Save correction" },
   evaluationDraft: { es: "Borrador", gl: "Borrador", en: "Draft" },
@@ -2250,11 +2175,6 @@ const dict: Record<string, I18nText> = {
     es: "Direcciones de correo",
     gl: "Enderezos de correo",
     en: "Email addresses",
-  },
-  emailAddressesDesc: {
-    es: "Tu correo de acceso y una dirección secundaria opcional.",
-    gl: "O teu correo de acceso e un enderezo secundario opcional.",
-    en: "Your sign-in email and an optional secondary address.",
   },
   primaryEmailLabel: { es: "Correo principal", gl: "Correo principal", en: "Primary email" },
   secondaryEmailLabel: { es: "Correo secundario", gl: "Correo secundario", en: "Secondary email" },
@@ -3007,11 +2927,6 @@ const dict: Record<string, I18nText> = {
   profileDetails: { es: "Datos del perfil", gl: "Datos do perfil", en: "Profile details" },
   pendingShort: { es: "Pendiente", gl: "Pendente", en: "Pending" },
   dietaryNotesLabel: { es: "Notas dietéticas", gl: "Notas dietéticas", en: "Dietary notes" },
-  editThisUsersDetails: {
-    es: "Edita los datos de este usuario. Los cambios quedan registrados en el registro de auditoría.",
-    gl: "Edita os datos deste usuario. Os cambios quedan rexistrados no rexistro de auditoría.",
-    en: "Edit this user's details. Changes are recorded in the audit log.",
-  },
   staffNotesLabel: { es: "Notas del equipo", gl: "Notas do equipo", en: "Staff notes" },
   internalNotesPlaceholder: {
     es: "Notas internas sobre este usuario…",
@@ -3255,20 +3170,10 @@ const dict: Record<string, I18nText> = {
     gl: "Escaneos de porta sen procesar",
     en: "Raw door scans",
   },
-  rawDoorScansDesc: {
-    es: "Cada escaneo individual de entrada/salida detrás de la estimación anterior. Corrige uno erróneo directamente aquí.",
-    gl: "Cada escaneo individual de entrada/saída detrás da estimación anterior. Corrixe un erróneo directamente aquí.",
-    en: "Every individual entry/exit scan behind the estimate above. Fix a wrong one directly here.",
-  },
   noDoorScansYet: {
     es: "Aún no hay escaneos de puerta",
     gl: "Aínda non hai escaneos de porta",
     en: "No door scans yet",
-  },
-  doorScansAppearHere: {
-    es: "Los escaneos de puerta de este usuario aparecerán aquí.",
-    gl: "Os escaneos de porta deste usuario aparecerán aquí.",
-    en: "Door scans for this user will appear here.",
   },
   editDoorScan: {
     es: "Editar escaneo de puerta",
@@ -3333,11 +3238,6 @@ const dict: Record<string, I18nText> = {
     es: "Este usuario no ha empezado ningún formulario de solicitud.",
     gl: "Este usuario non comezou ningún formulario de solicitude.",
     en: "This user hasn't started any application form.",
-  },
-  everyFormResponded: {
-    es: "Todos los formularios que este usuario ha respondido. Abre uno para revisarlo o editarlo.",
-    gl: "Todos os formularios que este usuario respondeu. Abre un para revisalo ou editalo.",
-    en: "Every form this user has responded to. Open one to review or edit it.",
   },
   submittedOnInline: {
     es: " · enviado el {date}",
@@ -3430,17 +3330,7 @@ const dict: Record<string, I18nText> = {
     gl: "Non se puideron cargar as túas solicitudes.",
     en: "Could not load your applications.",
   },
-  myApplicationsDesc: {
-    es: "Sigue los formularios a los que te has presentado, termina cualquier borrador y confirma tu plaza en cuanto te acepten.",
-    gl: "Segue os formularios aos que te presentaches, remata calquera borrador e confirma a túa praza en canto te acepten.",
-    en: "Track the forms you've applied to, finish any drafts, and confirm your place once you're accepted.",
-  },
   myResponses: { es: "Mis respuestas", gl: "As miñas respostas", en: "My responses" },
-  myResponsesDesc: {
-    es: "Todo lo que has empezado o enviado, con su estado actual.",
-    gl: "Todo o que comezaches ou enviaches, co seu estado actual.",
-    en: "Everything you've started or submitted, with its current status.",
-  },
   notAppliedYetTitle: {
     es: "Aún no te has presentado a nada",
     gl: "Aínda non te presentaches a nada",
@@ -3449,11 +3339,6 @@ const dict: Record<string, I18nText> = {
   submittedOnPrefix: { es: "Enviado el {date}", gl: "Enviado o {date}", en: "Submitted {date}" },
   notSubmittedYet: { es: "Aún sin enviar", gl: "Aínda sen enviar", en: "Not submitted yet" },
   openToApply: { es: "Abiertos para solicitar", gl: "Abertos para solicitar", en: "Open to apply" },
-  openToApplyDesc: {
-    es: "Formularios que aceptan solicitudes actualmente.",
-    gl: "Formularios que aceptan solicitudes actualmente.",
-    en: "Forms currently accepting new applications.",
-  },
   noOpenFormsTitle: {
     es: "No hay formularios abiertos ahora mismo",
     gl: "Non hai formularios abertos agora mesmo",
@@ -3631,11 +3516,6 @@ const dict: Record<string, I18nText> = {
     gl: "As túas respostas enviadas",
     en: "Your submitted answers",
   },
-  fillFormBelowDesc: {
-    es: "Rellena el formulario de abajo. Guarda un borrador cuando quieras; envíalo cuando estés listo.",
-    gl: "Cobre o formulario de abaixo. Garda un borrador cando queiras; envíao cando esteas listo.",
-    en: "Fill in the form below. Save a draft anytime; submit when you're ready.",
-  },
   applicationLockedDesc: {
     es: "Esta solicitud está bloqueada y ya no se puede editar.",
     gl: "Esta solicitude está bloqueada e xa non se pode editar.",
@@ -3678,11 +3558,6 @@ const dict: Record<string, I18nText> = {
     es: "Pide a un administrador acceso a proyectos.",
     gl: "Pide a un administrador acceso a proxectos.",
     en: "Ask an administrator for project access.",
-  },
-  projectsDesc: {
-    es: "Envíos de Devpost importados a hackOS, con equipos, retos y premios.",
-    gl: "Envíos de Devpost importados a hackOS, con equipos, retos e premios.",
-    en: "Devpost submissions imported into hackOS, with teams, challenges and prizes.",
   },
   importFromDevpost: {
     es: "Importar desde Devpost",
@@ -3746,10 +3621,10 @@ const dict: Record<string, I18nText> = {
     en: "Could not save the project.",
   },
   myProject: { es: "Mi proyecto", gl: "O meu proxecto", en: "My project" },
-  myProjectDesc: {
-    es: "Tu proyecto, su equipo y a qué retos se presenta. Solo lectura: cualquier corrección la hace la gestión de colas.",
-    gl: "O teu proxecto, o seu equipo e a que retos se presenta. Só lectura: calquera corrección faina a xestión de colas.",
-    en: "Your project, its team and the challenges it enters. Read-only: corrections go through queue management.",
+  unnamedTeamMember: {
+    es: "Miembro sin nombre",
+    gl: "Membro sen nome",
+    en: "Unnamed member",
   },
   createMyProjectCta: {
     es: "Crear mi proyecto",
@@ -3776,11 +3651,6 @@ const dict: Record<string, I18nText> = {
     gl: "Os participantes poden crear proxectos",
     en: "Participants can create projects",
   },
-  participantsCanCreateProjectsDesc: {
-    es: "Cada participante puede crear su propio proyecto sin depender de Devpost.",
-    gl: "Cada participante pode crear o seu propio proxecto sen depender de Devpost.",
-    en: "Each participant can create their own project without relying on Devpost.",
-  },
   couldNotLoadProject: {
     es: "No se ha podido cargar el proyecto.",
     gl: "Non se puido cargar o proxecto.",
@@ -3800,9 +3670,9 @@ const dict: Record<string, I18nText> = {
   },
   teamSectionTitle: { es: "Equipo", gl: "Equipo", en: "Team" },
   teamSectionDesc: {
-    es: "Miembros actuales del equipo. Los usuarios añadidos aparecen de inmediato en la cola.",
-    gl: "Membros actuais do equipo. Os usuarios engadidos aparecen de inmediato na cola.",
-    en: "Current team membership. Added users are live in the queue surface immediately.",
+    es: "Quien se añada aquí entra al instante en la cola.",
+    gl: "Quen se engada aquí entra ao instante na cola.",
+    en: "Anyone added here enters the queue instantly.",
   },
   noTeamMembersTitle: {
     es: "Sin miembros de equipo",
@@ -4232,11 +4102,6 @@ const dict: Record<string, I18nText> = {
     gl: "Conflitos por resolver",
     en: "Unresolved conflicts",
   },
-  unresolvedConflictsDesc: {
-    es: "Todo lo que la última importación de Devpost dejó pendiente: participantes sin cuenta y premios sin reto asociado.",
-    gl: "Todo o que a última importación de Devpost deixou pendente: participantes sen conta e premios sen reto asociado.",
-    en: "Everything the last Devpost import left unresolved: participants without an account and prizes without a mapped challenge.",
-  },
   noConflictsTitle: {
     es: "Sin conflictos pendientes",
     gl: "Sen conflitos pendentes",
@@ -4261,11 +4126,6 @@ const dict: Record<string, I18nText> = {
     es: "Sin premios por asociar",
     gl: "Sen premios por asociar",
     en: "No unmapped prizes",
-  },
-  allPrizesMappedDesc: {
-    es: "Todos los premios de Devpost importados están asociados a un reto.",
-    gl: "Todos os premios de Devpost importados están asociados a un reto.",
-    en: "All imported Devpost prizes are mapped to a challenge.",
   },
   colPrizesUnmapped: {
     es: "Premios sin asociar",
@@ -4690,9 +4550,9 @@ const dict: Record<string, I18nText> = {
   winnersTabLabel: { es: "Ganadores", gl: "Gañadores", en: "Winners" },
   winnersTitle: { es: "Ranking de ganadores", gl: "Ranking de gañadores", en: "Winner ranking" },
   winnersDesc: {
-    es: "Uso interno: solo lo ven administradores y el personal de esta empresa. Añade tantos puestos como quieras (1º, 2º, premios extraordinarios...).",
-    gl: "Uso interno: só o ven administradores e o persoal desta empresa. Engade tantos postos como queiras (1º, 2º, premios extraordinarios...).",
-    en: "Internal only — visible to admins and this company's own staff. Add as many placements as you like (1st, 2nd, special prizes...).",
+    es: "Uso interno: solo lo ven administradores y el personal de esta empresa.",
+    gl: "Uso interno: só o ven administradores e o persoal desta empresa.",
+    en: "Internal only: visible to admins and this company's own staff.",
   },
   noWinnersSetTitle: {
     es: "Aún no hay ningún ganador marcado",
@@ -4731,9 +4591,9 @@ const dict: Record<string, I18nText> = {
     en: "All reviews",
   },
   reviewsOverviewDesc: {
-    es: "Visibilidad según tu rol: el personal ve todas las evaluaciones; una empresa patrocinadora solo ve las de sus propios retos.",
-    gl: "Visibilidade segundo o teu rol: o persoal ve todas as avaliacións; unha empresa patrocinadora só ve as dos seus propios retos.",
-    en: "Visibility depends on your role: staff sees every review; a sponsor company only sees its own challenges'.",
+    es: "Una empresa patrocinadora solo ve las evaluaciones de sus propios retos.",
+    gl: "Unha empresa patrocinadora só ve as avaliacións dos seus propios retos.",
+    en: "A sponsor company only sees the reviews of its own challenges.",
   },
   couldNotLoadReviews: {
     es: "No se han podido cargar las evaluaciones.",
@@ -4891,21 +4751,11 @@ const dict: Record<string, I18nText> = {
   },
   backToChallenges: { es: "Volver a retos", gl: "Volver a retos", en: "Back to challenges" },
   challengeUpdated: { es: "Reto actualizado.", gl: "Reto actualizado.", en: "Challenge updated." },
-  editPublicContentDesc: {
-    es: "Edita el contenido público, los premios y la configuración del panel de jueces.",
-    gl: "Edita o contido público, os premios e a configuración do panel de xuíces.",
-    en: "Edit public content, prizes and the judging panel configuration.",
-  },
   visibleLabel: { es: "Visible", gl: "Visible", en: "Visible" },
   importedDevpostPrizesTitle: {
     es: "Premios de DevPost importados",
     gl: "Premios de DevPost importados",
     en: "Imported DevPost prizes",
-  },
-  importedDevpostPrizesDesc: {
-    es: "Datos de referencia del último lote de importación. Las etiquetas seleccionadas en este reto deciden quién entra en la cola.",
-    gl: "Datos de referencia do último lote de importación. As etiquetas seleccionadas neste reto deciden quen entra na cola.",
-    en: "Reference data from the latest import batch. Selected tags on this challenge decide who enters the queue.",
   },
   mappedToInline: { es: "Asociado a {title}", gl: "Asociado a {title}", en: "Mapped to {title}" },
 
@@ -4956,9 +4806,9 @@ const dict: Record<string, I18nText> = {
     en: "Could not load your enterprise.",
   },
   enterprisesDesc: {
-    es: "Organizaciones patrocinadoras. Crea una antes de invitar a sus representantes — se vincularán automáticamente al aceptar.",
-    gl: "Organizacións patrocinadoras. Crea unha antes de convidar aos seus representantes — vincularanse automaticamente ao aceptar.",
-    en: "Sponsor organisations. Create one before inviting its representatives — they auto-link on acceptance.",
+    es: "Crea la empresa antes de invitar a sus representantes: se vinculan solos al aceptar.",
+    gl: "Crea a empresa antes de convidar aos seus representantes: vincúlanse sós ao aceptar.",
+    en: "Create the company before inviting its representatives: they link themselves on acceptance.",
   },
   newEnterprise: { es: "Nueva empresa", gl: "Nova empresa", en: "New enterprise" },
   searchEnterprisesPlaceholder: {
@@ -5124,11 +4974,6 @@ const dict: Record<string, I18nText> = {
     en: "Replace dark-background logo",
   },
   profileTitle: { es: "Perfil", gl: "Perfil", en: "Profile" },
-  editSponsorDetailsDesc: {
-    es: "Edita los datos de este patrocinador. Los cambios quedan registrados en el registro de auditoría.",
-    gl: "Edita os datos deste patrocinador. Os cambios quedan rexistrados no rexistro de auditoría.",
-    en: "Edit this sponsor's details. Changes are recorded in the audit log.",
-  },
   contactStaffToChangeName: {
     es: "Contacta con el equipo para cambiar el nombre legal.",
     gl: "Contacta co equipo para cambiar o nome legal.",
@@ -5163,17 +5008,7 @@ const dict: Record<string, I18nText> = {
     en: "Could not create the group.",
   },
   noDescriptionItalic: { es: "Sin descripción", gl: "Sen descrición", en: "No description" },
-  permissionsDesc: {
-    es: "Los grupos otorgan conjuntos de permisos y pueden incluir otros grupos.",
-    gl: "Os grupos outorgan conxuntos de permisos e poden incluír outros grupos.",
-    en: "Groups grant sets of capabilities and can include other groups.",
-  },
   newGroup: { es: "Nuevo grupo", gl: "Novo grupo", en: "New group" },
-  clickGroupToEditDesc: {
-    es: "Haz clic en un grupo para editar sus permisos, miembros y grupos anidados.",
-    gl: "Fai clic nun grupo para editar os seus permisos, membros e grupos aniñados.",
-    en: "Click a group to edit its capabilities, members and nested groups.",
-  },
   filterGroupsPlaceholder: { es: "Filtrar grupos…", gl: "Filtrar grupos…", en: "Filter groups…" },
   noPermissionGroupsYetTitle: {
     es: "Aún no hay grupos de permisos",
@@ -5189,11 +5024,6 @@ const dict: Record<string, I18nText> = {
     es: "Catálogo de permisos",
     gl: "Catálogo de permisos",
     en: "Capabilities catalogue",
-  },
-  capabilitiesCatalogueDesc: {
-    es: "Todos los tipos de permiso que existen, agrupados por dominio. Referencia de solo lectura.",
-    gl: "Todos os tipos de permiso que existen, agrupados por dominio. Referencia de só lectura.",
-    en: "Every capability kind there is, grouped by domain. Read-only reference.",
   },
   newPermissionGroupTitle: {
     es: "Nuevo grupo de permisos",
@@ -5287,7 +5117,6 @@ const dict: Record<string, I18nText> = {
     gl: "Volver a permisos",
     en: "Back to permissions",
   },
-  noDescriptionPeriod: { es: "Sin descripción.", gl: "Sen descrición.", en: "No description." },
   groupDetailsTitle: { es: "Datos del grupo", gl: "Datos do grupo", en: "Group details" },
   saveCapabilities: { es: "Guardar permisos", gl: "Gardar permisos", en: "Save capabilities" },
   membersTitle: { es: "Miembros", gl: "Membros", en: "Members" },
@@ -5411,11 +5240,6 @@ const dict: Record<string, I18nText> = {
     es: "Empieza el hacking",
     gl: "Comeza o hacking",
     en: "Hacking starts",
-  },
-  hackingStartsDesc: {
-    es: "Cuándo arranca el reloj del hackathon (la cuenta atrás pública).",
-    gl: "Cando arrinca o reloxo do hackathon (a conta atrás pública).",
-    en: "When the hackathon clock starts (the public countdown).",
   },
   hackingEndsLabel: { es: "Termina el hacking", gl: "Remata o hacking", en: "Hacking ends" },
   mustBeAfterStartTime: {
@@ -5780,11 +5604,6 @@ const dict: Record<string, I18nText> = {
     es: "Confirmar eliminación",
     gl: "Confirmar eliminación",
     en: "Confirm deletion",
-  },
-  fillEveryLocaleOrBlank: {
-    es: "Rellena todos los idiomas o deja la descripción en blanco",
-    gl: "Cobre todos os idiomas ou deixa a descrición en branco",
-    en: "Fill every locale or leave the description blank",
   },
   couldNotLoadDirectory: {
     es: "No se ha podido cargar el directorio.",
@@ -6360,11 +6179,6 @@ const dict: Record<string, I18nText> = {
     en: '"{key}" has an option with no value.',
   },
   preview: { es: "Vista previa", gl: "Vista previa", en: "Preview" },
-  previewIntro: {
-    es: "Así es como los solicitantes ven el formulario (se muestran las etiquetas en español). El nombre, correo y logística se recogen aparte.",
-    gl: "Así é como os solicitantes ven o formulario (móstranse as etiquetas en castelán). O nome, correo e loxística recóllense á parte.",
-    en: "This is how applicants see the form (Spanish labels shown). Name, email and logistics are collected separately.",
-  },
   previewTitle: {
     es: "Vista previa — {name}",
     gl: "Vista previa — {name}",
@@ -6416,11 +6230,6 @@ const dict: Record<string, I18nText> = {
   },
   reviewsWord: { es: "evaluaciones", gl: "avaliacións", en: "reviews" },
   reviewWord: { es: "evaluación", gl: "avaliación", en: "review" },
-  reviewWriteOnlyHint: {
-    es: "Solo escritura: la API no tiene lectura por evaluador, así que empieza en blanco y sobrescribe tu puntuación anterior al guardar.",
-    gl: "Só escritura: a API non ten lectura por avaliador, así que comeza en branco e sobrescribe a túa puntuación anterior ao gardar.",
-    en: "Write-only: the API has no per-reviewer read, so this starts blank and overwrites your previous score on save.",
-  },
   revokeSpot: { es: "Revocar plaza", gl: "Revogar praza", en: "Revoke spot" },
   revokeSpotWarning: {
     es: "La persona perderá la plaza y recibirá la comunicación. Si ya había confirmado, sus datos dietéticos se eliminarán.",
@@ -6769,11 +6578,6 @@ const dict: Record<string, I18nText> = {
     es: "Empresa actualizada.",
     gl: "Empresa actualizada.",
     en: "Enterprise updated.",
-  },
-  devpostImportDesc: {
-    es: "Sube o pega las dos exportaciones CSV de Devpost. La vista previa es de solo lectura — no se escribe nada hasta que confirmes.",
-    gl: "Sube ou pega as dúas exportacións CSV de Devpost. A vista previa é de só lectura — non se escribe nada ata que confirmes.",
-    en: "Upload or paste the two Devpost CSV exports. Preview is read-only — nothing is written until you confirm.",
   },
   viewFileLabel: { es: "Ver archivo", gl: "Ver ficheiro", en: "View file" },
   // ---- Phase statistics and privacy data lifecycle (#194) ----

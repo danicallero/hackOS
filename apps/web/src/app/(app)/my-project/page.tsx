@@ -65,7 +65,6 @@ export default function MyProjectPage() {
     <div className="space-y-6">
       <PageHeader
         title={t("myProject")}
-        description={t("myProjectDesc")}
         actions={
           canCreate ? <ProjectFormDialog mode={{ kind: "self" }} onSaved={load} /> : undefined
         }
@@ -122,13 +121,16 @@ function MyProjectCard({ repo }: { repo: ProjectRepo }) {
             <p className="text-muted-foreground text-sm">{t("noMembers")}</p>
           ) : (
             <ul className="space-y-3">
-              {repo.members.map((member) => (
+              {/* Teammates are listed by name only — the API redacts their
+                  emails and this view never asks for contact details. */}
+              {repo.members.map((member, i) => (
                 <li
-                  key={`${member.userId ?? "devpost"}:${member.email}`}
+                  key={`${member.userId ?? "devpost"}:${member.email ?? i}`}
                   className="rounded-md border p-3"
                 >
-                  <p className="truncate font-medium">{memberName(member)}</p>
-                  <p className="text-muted-foreground truncate text-sm">{member.email}</p>
+                  <p className="truncate font-medium">
+                    {memberName(member) || t("unnamedTeamMember")}
+                  </p>
                 </li>
               ))}
             </ul>

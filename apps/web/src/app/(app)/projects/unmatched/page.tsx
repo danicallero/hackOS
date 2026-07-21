@@ -177,10 +177,7 @@ export default function UnmatchedProjectsPage() {
       />
 
       {!loading && (
-        <SectionCard
-          title={t("unresolvedConflictsTitle")}
-          description={t("unresolvedConflictsDesc")}
-        >
+        <SectionCard title={t("unresolvedConflictsTitle")}>
           {rows.length === 0 && unmappedPrizes.length === 0 ? (
             <EmptyState
               icon={CheckCircle2Icon}

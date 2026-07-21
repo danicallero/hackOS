@@ -438,19 +438,16 @@ export default function UsersPage() {
     <div className="space-y-6">
       <PageHeader
         title={t("users")}
-        description={
-          total > 0
-            ? (() => {
-                const base =
-                  total === 1
-                    ? t("peopleCountOne", { count: total })
-                    : t("peopleCountOther", { count: total });
-                const suffix =
-                  total > users.length ? ` — ${t("showingFirst", { shown: users.length })}` : "";
-                return `${base}${suffix}`;
-              })()
-            : t("browseEveryone")
+        state={
+          total > 0 ? (
+            <StatusBadge tone="neutral" dot={false}>
+              {total === 1
+                ? t("peopleCountOne", { count: total })
+                : t("peopleCountOther", { count: total })}
+            </StatusBadge>
+          ) : undefined
         }
+        description={total > users.length ? t("showingFirst", { shown: users.length }) : undefined}
         actions={
           <CapabilityGate capability={CAPABILITIES.INVITES_MANAGE}>
             <ActiveInvitationsModal />

@@ -164,7 +164,6 @@ export default function ProjectsPage() {
     <div className="space-y-6">
       <PageHeader
         title={t("projects")}
-        description={t("projectsDesc")}
         actions={
           canImport || canEdit ? (
             <div className="flex flex-wrap gap-2">
@@ -199,7 +198,7 @@ export default function ProjectsPage() {
         getRowLabel={(r) => r.name}
         searchable={(r) =>
           `${r.name} ${r.prizes.join(" ")} ${r.challenges.map((c) => c.title).join(" ")} ${r.members
-            .map((m) => `${m.name ?? ""} ${m.surname ?? ""} ${m.email}`)
+            .map((m) => `${m.name ?? ""} ${m.surname ?? ""} ${m.email ?? ""}`)
             .join(" ")}`
         }
         searchPlaceholder={t("searchProjectsPlaceholder")}
