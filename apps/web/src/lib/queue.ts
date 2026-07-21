@@ -126,6 +126,8 @@ export interface RoomPace {
   suggestedMinutesPerTeam: number | null;
   autoAdjusted: boolean;
   effectiveMinutesPerTeam: number;
+  /** H34/H203: operator-configured called-too-long warning threshold. */
+  calledTooLongThresholdMinutes: number;
 }
 
 export interface RoomChallengeAssignment {

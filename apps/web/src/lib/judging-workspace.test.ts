@@ -3,7 +3,9 @@ import {
   calledTooLongThresholdMinutes,
   canTransition,
   collaborationState,
+  hasWaitedTooLong,
   LEGAL_ACTIONS,
+  presentationTimerState,
   workspaceAccess,
 } from "./judging-workspace";
 
@@ -30,10 +32,33 @@ describe("judging workspace H29-H40", () => {
     expect(canTransition("presenting", "disqualify")).toBe(true);
   });
 
-  it("H34 warns using the approved temporary called-too-long rule", () => {
+  it("H34/H203 prefers the operator-configured called-too-long threshold", () => {
+    // Configured value wins over the derived fallback, in both directions.
+    expect(calledTooLongThresholdMinutes(8, 5)).toBe(5);
+    expect(calledTooLongThresholdMinutes(4, 45)).toBe(45);
+    // Absent or nonsensical settings fall back to max(10, 2x desired).
     expect(calledTooLongThresholdMinutes(null)).toBe(10);
     expect(calledTooLongThresholdMinutes(4)).toBe(10);
     expect(calledTooLongThresholdMinutes(8)).toBe(16);
+    expect(calledTooLongThresholdMinutes(8, null)).toBe(16);
+    expect(calledTooLongThresholdMinutes(8, 0)).toBe(16);
+  });
+
+  it("H34 flags a team called longer ago than the effective threshold", () => {
+    const now = new Date("2026-07-22T12:00:00Z").getTime();
+    const calledAt = new Date("2026-07-22T11:48:00Z").toISOString(); // 12 minutes ago
+
+    // Fallback rule: 10-minute threshold, so 12 minutes is too long.
+    expect(hasWaitedTooLong(calledAt, null, null, now)).toBe(true);
+    // A configured 20-minute threshold means the same wait is still fine —
+    // this is the case that silently did nothing before the setting was wired.
+    expect(hasWaitedTooLong(calledAt, null, 20, now)).toBe(false);
+    // A configured 5-minute threshold flags a wait the fallback would allow.
+    expect(hasWaitedTooLong(calledAt, 30, 5, now)).toBe(true);
+
+    // Never warns without a called_at, or on an unparseable one.
+    expect(hasWaitedTooLong(null, null, 1, now)).toBe(false);
+    expect(hasWaitedTooLong("not-a-date", null, 1, now)).toBe(false);
   });
 
   it("H36 distinguishes acknowledged save, offline work, and conflicts", () => {
@@ -95,5 +120,48 @@ describe("judging workspace H29-H40", () => {
       canAdmin: false,
       canExport: false,
     });
+  });
+
+  it("H39 counts the presentation up and tones it at the wrap-up and over-time marks", () => {
+    const startedAt = "2026-07-22T12:00:00Z";
+    const at = (seconds: number) => new Date("2026-07-22T12:00:00Z").getTime() + seconds * 1000;
+
+    // 10-minute slot: counts up, on time, progress tracks elapsed.
+    const early = presentationTimerState(startedAt, 10, at(120));
+    expect(early).toMatchObject({
+      elapsedSeconds: 120,
+      totalSeconds: 600,
+      remainingSeconds: 480,
+      tone: "default",
+    });
+    expect(early.progressValue).toBeCloseTo(20);
+
+    // Wrap-up starts at max(60s, 10% of total) = 60s remaining, inclusive.
+    expect(presentationTimerState(startedAt, 10, at(539)).tone).toBe("default");
+    expect(presentationTimerState(startedAt, 10, at(540)).tone).toBe("warning");
+
+    // A long slot uses the 10% arm instead of the 60s floor: 30min -> 180s.
+    expect(presentationTimerState(startedAt, 30, at(1619)).tone).toBe("default");
+    expect(presentationTimerState(startedAt, 30, at(1620)).tone).toBe("warning");
+
+    // Over time is red, keeps counting up, and progress clamps at 100.
+    const over = presentationTimerState(startedAt, 10, at(700));
+    expect(over).toMatchObject({ elapsedSeconds: 700, remainingSeconds: -100, tone: "danger" });
+    expect(over.progressValue).toBe(100);
+
+    // No total to count against: still counts up, never tones, no progress.
+    expect(presentationTimerState(startedAt, null, at(90))).toEqual({
+      elapsedSeconds: 90,
+      totalSeconds: null,
+      remainingSeconds: null,
+      progressValue: 0,
+      tone: "default",
+    });
+
+    // Not started, or an unparseable start, reads as zero rather than NaN.
+    expect(presentationTimerState(null, 10, at(90)).elapsedSeconds).toBe(0);
+    expect(presentationTimerState("not-a-date", 10, at(90)).elapsedSeconds).toBe(0);
+    // A clock skewed behind the start never shows negative elapsed.
+    expect(presentationTimerState(startedAt, 10, at(-30)).elapsedSeconds).toBe(0);
   });
 });

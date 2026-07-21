@@ -68,7 +68,12 @@ import { useEventSource, useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError, api } from "@/lib/api";
 import { API_URL } from "@/lib/env";
 import { type Translate, useLocale } from "@/lib/i18n";
-import { collaborationState, hasWaitedTooLong, workspaceAccess } from "@/lib/judging-workspace";
+import {
+  collaborationState,
+  hasWaitedTooLong,
+  presentationTimerState,
+  workspaceAccess,
+} from "@/lib/judging-workspace";
 import {
   type AttemptReviewVersion,
   type ChallengeProgress,
@@ -770,6 +775,7 @@ function QueuePanel({
           empty={t("noTeamsWaitingDoor")}
           compact
           desiredMinutesPerTeam={pace?.desiredMinutesPerTeam ?? null}
+          calledTooLongThresholdMinutes={pace?.calledTooLongThresholdMinutes ?? null}
           renderActions={(entry) => (
             <CalledEntryActions
               entry={entry}
@@ -834,6 +840,7 @@ function QueuePanel({
             empty={t("noTeamsChallengeQueue")}
             scroll
             desiredMinutesPerTeam={pace?.desiredMinutesPerTeam ?? null}
+            calledTooLongThresholdMinutes={pace?.calledTooLongThresholdMinutes ?? null}
             renderActions={(entry) => {
               const blocked = blockedByEntry.get(entry.id);
               return (
@@ -1168,6 +1175,7 @@ function QueueList({
   compact,
   scroll,
   desiredMinutesPerTeam,
+  calledTooLongThresholdMinutes,
   renderActions,
 }: {
   title: string;
@@ -1176,6 +1184,7 @@ function QueueList({
   compact?: boolean;
   scroll?: boolean;
   desiredMinutesPerTeam?: number | null;
+  calledTooLongThresholdMinutes?: number | null;
   renderActions: (entry: QueueEntry) => React.ReactNode;
 }) {
   const { t } = useLocale();
@@ -1211,8 +1220,11 @@ function QueueList({
                       <span
                         className={cn(
                           "text-muted-foreground text-xs tabular-nums",
-                          hasWaitedTooLong(entry.called_at, desiredMinutesPerTeam ?? null) &&
-                            "text-amber-700 dark:text-amber-400",
+                          hasWaitedTooLong(
+                            entry.called_at,
+                            desiredMinutesPerTeam ?? null,
+                            calledTooLongThresholdMinutes ?? null,
+                          ) && "text-amber-700 dark:text-amber-400",
                         )}
                       >
                         {t("calledAt", {
@@ -1221,8 +1233,11 @@ function QueueList({
                             minute: "2-digit",
                           }),
                         })}
-                        {hasWaitedTooLong(entry.called_at, desiredMinutesPerTeam ?? null) &&
-                          ` · ${t("calledTooLong")}`}
+                        {hasWaitedTooLong(
+                          entry.called_at,
+                          desiredMinutesPerTeam ?? null,
+                          calledTooLongThresholdMinutes ?? null,
+                        ) && ` · ${t("calledTooLong")}`}
                       </span>
                     )}
                   </div>
@@ -1518,26 +1533,21 @@ function PresentationTimer({
   } else if (frozen.current.minutes == null && totalMinutes != null) {
     frozen.current.minutes = totalMinutes;
   }
-  const totalSeconds =
-    frozen.current.minutes != null ? Math.round(frozen.current.minutes * 60) : null;
-  const startedMs = startedAt ? new Date(startedAt).getTime() : null;
-  const elapsedSeconds =
-    startedMs && Number.isFinite(startedMs) ? Math.max(0, Math.floor((now - startedMs) / 1000)) : 0;
-  // Stopwatch, not a countdown: always counts up from 0. Only the color
-  // cues (last-minute amber, over-max red) change as elapsed crosses
-  // thresholds — the displayed number itself never resets or jumps.
-  const remainingSeconds = totalSeconds != null ? totalSeconds - elapsedSeconds : null;
-  const progressValue =
-    totalSeconds && totalSeconds > 0 ? Math.min(100, (elapsedSeconds / totalSeconds) * 100) : 0;
-  const isOverTime = remainingSeconds != null && remainingSeconds < 0;
-  const isWrappingUp =
-    !isOverTime &&
-    remainingSeconds != null &&
-    totalSeconds != null &&
-    totalSeconds > 0 &&
-    remainingSeconds <= Math.max(60, Math.ceil(totalSeconds * 0.1));
-  const timerTone = isOverTime ? "danger" : isWrappingUp ? "warning" : "default";
-  const cueText = isOverTime ? t("timeLimitExceeded") : isWrappingUp ? t("wrapUp") : t("onTime");
+  // Pure arithmetic (elapsed/remaining/progress/tone) lives in
+  // judging-workspace.ts so the threshold boundaries are unit-testable; only
+  // the per-presentation freeze above and the ticking clock stay here.
+  const {
+    elapsedSeconds,
+    totalSeconds,
+    progressValue,
+    tone: timerTone,
+  } = presentationTimerState(startedAt, frozen.current.minutes, now);
+  const cueText =
+    timerTone === "danger"
+      ? t("timeLimitExceeded")
+      : timerTone === "warning"
+        ? t("wrapUp")
+        : t("onTime");
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
