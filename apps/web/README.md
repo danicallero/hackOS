@@ -69,6 +69,10 @@ src/
     ui/                shadcn primitives — GENERATED, do not hand-edit
     common/            reusable app widgets (the shared library, below)
     layout/            app shell pieces (sidebar, user menu, guards, banners)
+    public/            surfaces rendered outside the authed shell (schedule
+                       timeline, countdown, PublicScheduleView) — when a page
+                       exists in both an authed and a public shell, the module
+                       lives here and each route keeps only its shell
     providers.tsx      theme + session + tooltip + toaster
   lib/
     api.ts             credentialed fetch wrapper → ApiError
