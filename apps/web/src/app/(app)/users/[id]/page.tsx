@@ -27,6 +27,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { ReviewModal } from "@/components/applications/review-modal";
 import { AlertModal } from "@/components/common/alert-modal";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { DateTimeInput } from "@/components/common/datetime-input";
@@ -86,7 +87,6 @@ import type {
   PermissionGroupSummary,
   UserDetail,
 } from "@/lib/types";
-import { ReviewModal } from "../../applications/[id]/page";
 import type { ApplicationForm, ResponseRow, TemplateField } from "../../applications/lib";
 
 const SHIRT_SIZES = ["XS", "S", "M", "L", "XL", "XXL"] as const;
