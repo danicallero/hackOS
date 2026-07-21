@@ -164,14 +164,14 @@ export function statusTone(status: string): Tone {
 
 export function statusLabel(status: string, t: Translate): string {
   const map: Record<string, string> = {
-    draft: t("statusDraft"),
-    submitted: t("statusSubmitted"),
-    review: t("statusInReview"),
+    draft: t("dataStatusDraft"),
+    submitted: t("dataStatusSubmitted"),
+    review: t("dataStatusReview"),
     accepted: t("statusAccepted"),
     confirmed: t("confirmed"),
     rejected: t("statusNotSelected"),
     declined: t("declined"),
-    expired: t("applicationStatusExpired"),
+    expired: t("dataStatusExpired"),
   };
   return map[status] ?? status;
 }

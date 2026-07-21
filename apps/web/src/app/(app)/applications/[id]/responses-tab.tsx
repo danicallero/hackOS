@@ -170,7 +170,7 @@ export function ResponsesTab({
     },
     {
       id: "submitted",
-      header: t("submittedColumn"),
+      header: t("dataStatusSubmitted"),
       align: "right",
       sortValue: (r) => r.submitted_at ?? "",
       cell: (r) => (

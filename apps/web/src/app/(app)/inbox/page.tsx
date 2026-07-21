@@ -336,7 +336,7 @@ function MessagesTab() {
                       aria-label={t("deleteNotificationAria")}
                     >
                       <Trash2Icon className="size-4" />
-                      {t("deleteNotification")}
+                      {t("deleteAction")}
                     </Button>
                   </div>
                 )}

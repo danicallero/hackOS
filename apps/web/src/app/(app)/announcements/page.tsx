@@ -82,7 +82,7 @@ const STATUS_TONE: Record<AnnouncementStatus, Tone> = {
 
 function statusLabel(status: AnnouncementStatus, t: Translate): string {
   const map: Record<AnnouncementStatus, string> = {
-    scheduled: t("statusScheduled"),
+    scheduled: t("dataStatusScheduled"),
     live: t("statusLive"),
     expired: t("statusExpired"),
   };
@@ -202,7 +202,7 @@ export default function AnnouncementsPage() {
     },
     {
       id: "status",
-      header: t("columnStatus"),
+      header: t("statusColumn"),
       sortValue: (a) => announcementStatus(a),
       cell: (a) => {
         const status = announcementStatus(a);

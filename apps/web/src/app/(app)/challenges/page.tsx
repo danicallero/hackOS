@@ -112,7 +112,7 @@ function buildColumns(t: Translate): Column<Challenge>[] {
         if (c.visibility === "hidden" && isScheduled(c.available_from)) {
           return (
             <div className="flex items-center gap-2">
-              <StatusBadge tone="warning">{t("statusScheduled")}</StatusBadge>
+              <StatusBadge tone="warning">{t("dataStatusScheduled")}</StatusBadge>
               <span className="text-muted-foreground text-sm">
                 {new Date(c.available_from as string).toLocaleString("es-ES", {
                   day: "2-digit",

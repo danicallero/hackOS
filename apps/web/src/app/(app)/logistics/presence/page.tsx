@@ -235,7 +235,7 @@ function PresencePanel({
         bodyClassName="space-y-4"
       >
         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_140px]">
-          <Field label={t("badgeLabel")}>
+          <Field label={t("badge")}>
             <Input
               value={badgeId}
               onChange={(e) => setBadgeId(e.target.value)}
@@ -419,7 +419,7 @@ function getOpenSessionColumns(t: Translate): Column<OpenPresenceSession>[] {
     },
     {
       id: "stale",
-      header: t("columnStatus"),
+      header: t("statusColumn"),
       cell: (row) => (
         <StatusBadge tone={row.stale ? "warning" : "neutral"} dot={false}>
           {row.stale ? t("staleCheck") : t("fresh")}

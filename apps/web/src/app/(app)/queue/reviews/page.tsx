@@ -128,7 +128,7 @@ export default function ReviewsOverviewPage() {
       },
       {
         id: "status",
-        header: t("colStatus"),
+        header: t("statusColumn"),
         sortValue: (r) => r.status ?? "",
         cell: (r) =>
           r.status === "submitted" ? (

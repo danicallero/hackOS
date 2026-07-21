@@ -53,11 +53,15 @@ function buildQuestionTypes(
     { kind: "scale", label: t("typeNumeric010"), description: t("typeNumeric010Desc") },
     { kind: "integer", label: t("typeInteger"), description: t("typeIntegerDesc") },
     { kind: "float", label: t("typeFloat"), description: t("typeFloatDesc") },
-    { kind: "short_text", label: t("typeShortText"), description: t("typeShortTextDesc") },
-    { kind: "long_text", label: t("typeLongTextQ"), description: t("typeLongTextDesc") },
+    { kind: "short_text", label: t("fieldKindText"), description: t("typeShortTextDesc") },
+    { kind: "long_text", label: t("fieldKindTextarea"), description: t("typeLongTextDesc") },
     { kind: "boolean", label: t("typeBoolean"), description: t("typeBooleanDesc") },
-    { kind: "single_choice", label: t("typeSingleChoice"), description: t("typeSingleChoiceDesc") },
-    { kind: "multi_choice", label: t("typeMultiChoice"), description: t("typeMultiChoiceDesc") },
+    { kind: "single_choice", label: t("fieldKindSelect"), description: t("typeSingleChoiceDesc") },
+    {
+      kind: "multi_choice",
+      label: t("fieldKindMultiselect"),
+      description: t("typeMultiChoiceDesc"),
+    },
   ];
 }
 

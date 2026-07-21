@@ -150,8 +150,8 @@ const STATUS_TONE: Record<ScheduleStatus, Tone> = {
 
 function scheduleStatusLabel(status: ScheduleStatus, t: Translate): string {
   const map: Record<ScheduleStatus, string> = {
-    draft: t("statusDraft"),
-    scheduled: t("statusScheduled"),
+    draft: t("dataStatusDraft"),
+    scheduled: t("dataStatusScheduled"),
     public: t("statusPublic"),
     active: t("statusLive"),
     ended: t("statusEnded"),
@@ -291,7 +291,7 @@ export default function SchedulePage() {
     },
     {
       id: "status",
-      header: t("colStatus"),
+      header: t("statusColumn"),
       sortValue: (item) => scheduleStatus(item),
       cell: (item) => {
         const status = scheduleStatus(item);

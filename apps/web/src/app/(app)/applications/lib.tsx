@@ -180,7 +180,7 @@ export function windowState(
 ): { label: string; tone: Tone } {
   if (!form.active) return { label: t("windowInactive"), tone: "neutral" };
   if (form.open_at && new Date(form.open_at) > now)
-    return { label: t("windowScheduled"), tone: "info" };
+    return { label: t("dataStatusScheduled"), tone: "info" };
   if (form.close_at && new Date(form.close_at) <= now)
     return { label: t("windowClosed"), tone: "neutral" };
   return { label: t("windowOpen"), tone: "success" };

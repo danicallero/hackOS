@@ -209,7 +209,7 @@ function CompletenessCard({ enterprise }: { enterprise: Enterprise }) {
         <div className="flex items-center justify-between gap-3">
           <p className="text-sm">{t(ENTERPRISE_ACTION_COPY[nextAction])}</p>
           <Button asChild size="sm" variant="outline">
-            <a href="#profile-edit">{t("completeAction")}</a>
+            <a href="#profile-edit">{t("complete")}</a>
           </Button>
         </div>
       ) : (

@@ -58,7 +58,7 @@ const FRONT_FIELDS: { key: PassFieldVisibilityKey; titleKey: string; fillKey: st
   { key: "participant", titleKey: "passFieldParticipantTitle", fillKey: "passFillParticipant" },
   { key: "role", titleKey: "passFieldRoleTitle", fillKey: "passFillRole" },
   { key: "passType", titleKey: "passFieldPassTypeTitle", fillKey: "passFillPassType" },
-  { key: "university", titleKey: "passFieldUniversityTitle", fillKey: "passFillUniversity" },
+  { key: "university", titleKey: "fieldKindUniversity", fillKey: "passFillUniversity" },
   { key: "email", titleKey: "passFieldEmailTitle", fillKey: "passFillEmail" },
 ];
 

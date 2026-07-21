@@ -44,16 +44,16 @@ export function statusesForWorkspace(workspace: ApplicationWorkspace): string[] 
 
 export function applicationStatusLabel(status: string, t: Translate): string {
   const labels: Record<string, string> = {
-    draft: t("statusDraft"),
-    submitted: t("statusSubmitted"),
-    review: t("statusInReview"),
+    draft: t("dataStatusDraft"),
+    submitted: t("dataStatusSubmitted"),
+    review: t("dataStatusReview"),
     accepted_internal: t("acceptedInternalOnly"),
     rejected_internal: t("rejectedInternalOnly"),
     accepted: t("acceptanceSent"),
     rejected: t("rejectionSent"),
     confirmed: t("confirmed"),
     declined: t("declined"),
-    expired: t("applicationStatusExpired"),
+    expired: t("dataStatusExpired"),
   };
   return labels[status] ?? t("unknownStatus");
 }

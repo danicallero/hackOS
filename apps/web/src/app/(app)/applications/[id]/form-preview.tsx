@@ -108,7 +108,7 @@ export function FormPreviewPanel({
                   f.kind === "file-url"
                     ? t("linkPlaceholder")
                     : f.kind === "file"
-                      ? t("fileUploadPlaceholder")
+                      ? t("fieldKindFile")
                       : f.kind === "university"
                         ? t("universityPickerPlaceholder")
                         : t("applicantsAnswerPlaceholder")
