@@ -348,7 +348,7 @@ export function FieldEditor({
             onClick={onRemove}
           >
             <Trash2Icon className="size-4" />
-            <span className="sr-only">{t("removeAction")}</span>
+            <span className="sr-only">{t("remove")}</span>
           </Button>
         </div>
       </div>

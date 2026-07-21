@@ -330,7 +330,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
                   </SelectContent>
                 </Select>
               </Field>
-              <Field label={t("badgeLabel")}>
+              <Field label={t("badge")}>
                 <div className="flex gap-2">
                   <Input
                     value={badgeId}

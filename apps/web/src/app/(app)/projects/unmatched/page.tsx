@@ -150,7 +150,7 @@ export default function UnmatchedProjectsPage() {
   );
 
   if (!canImport) {
-    return <AccessDenied ask={t("resolveImportsDeniedDesc")} />;
+    return <AccessDenied ask={t("importDeniedDesc")} />;
   }
 
   return (

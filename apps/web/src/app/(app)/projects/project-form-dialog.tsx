@@ -130,7 +130,7 @@ export function ProjectFormDialog({
       description={isEdit ? t("editProjectDesc") : t("newProjectDesc")}
       footer={
         <SubmitButton pending={pending} disabled={!name.trim()} onClick={submit}>
-          {isEdit ? t("save") : t("createAction")}
+          {isEdit ? t("save") : t("create")}
         </SubmitButton>
       }
     >
@@ -145,7 +145,7 @@ export function ProjectFormDialog({
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="project-description">{t("projectDescriptionLabel")}</Label>
+          <Label htmlFor="project-description">{t("descriptionLabel")}</Label>
           <Textarea
             id="project-description"
             value={description}

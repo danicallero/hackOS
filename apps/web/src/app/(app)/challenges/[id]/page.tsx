@@ -203,7 +203,7 @@ export default function ChallengeDetailPage() {
           {challenge.visibility}
         </StatusBadge>
         {challenge.visibility === "hidden" && isScheduled(challenge.available_from) && (
-          <StatusBadge tone="warning">{t("statusScheduled")}</StatusBadge>
+          <StatusBadge tone="warning">{t("dataStatusScheduled")}</StatusBadge>
         )}
       </div>
 
@@ -900,7 +900,7 @@ function WinnersCard({ challengeId }: { challengeId: number }) {
               onClick={addWinner}
             >
               <PlusIcon className="size-4" />
-              {t("saveWinner")}
+              {t("save")}
             </Button>
           </div>
         </div>

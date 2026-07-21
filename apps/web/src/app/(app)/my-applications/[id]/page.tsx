@@ -521,7 +521,7 @@ function ApplicationTimeline({ response }: { response: MyResponseDetail | null }
   const timeline = applicantTimelineState(status, response?.submitted_at ?? null);
   const steps = [
     { label: t("timelineApplication"), reached: timeline.application },
-    { label: t("timelineSubmitted"), reached: timeline.submitted },
+    { label: t("dataStatusSubmitted"), reached: timeline.submitted },
     { label: t("timelineReview"), reached: timeline.review },
     { label: t("timelineDecision"), reached: timeline.decision },
     { label: t("timelinePlace"), reached: timeline.place },

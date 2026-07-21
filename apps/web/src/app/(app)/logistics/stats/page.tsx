@@ -273,7 +273,7 @@ function BeforePanel({
   const statusColumns: Column<(typeof statusRows)[number]>[] = [
     {
       id: "status",
-      header: t("columnStatus"),
+      header: t("statusColumn"),
       cell: (row) => applicationStatusLabel(row.status, t),
       sortValue: (row) => row.status,
     },

@@ -212,7 +212,7 @@ export default function QueueRoomsPage() {
     },
     {
       id: "location",
-      header: t("columnLocation"),
+      header: t("locationLabel"),
       sortValue: (room) => (room.location ?? "").toLowerCase(),
       cell: (room) =>
         room.location ? (
@@ -223,7 +223,7 @@ export default function QueueRoomsPage() {
     },
     {
       id: "status",
-      header: t("columnRoomStatus"),
+      header: t("statusColumn"),
       sortValue: (room) => room.status,
       cell: (room) => (
         <StatusBadge tone={room.status === "active" ? "success" : "warning"}>

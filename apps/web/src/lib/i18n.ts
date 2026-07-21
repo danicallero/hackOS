@@ -473,7 +473,6 @@ const dict: Record<string, I18nText> = {
   showPassword: { es: "Mostrar contraseña", gl: "Mostrar contrasinal", en: "Show password" },
   hidePassword: { es: "Ocultar contraseña", gl: "Ocultar contrasinal", en: "Hide password" },
   clearDate: { es: "Borrar fecha", gl: "Borrar data", en: "Clear date" },
-  languageLabel: { es: "Idioma", gl: "Idioma", en: "Language" },
 
   // ---- File uploads & Devpost tag picker ----
   devpostTags: { es: "Etiquetas de Devpost", gl: "Etiquetas de Devpost", en: "Devpost tags" },
@@ -1150,7 +1149,6 @@ const dict: Record<string, I18nText> = {
     gl: "Escanea unha acreditación para cargar a persoa e rexistrar unha entrada ou saída.",
     en: "Scan a badge to load the person, then register an entry or exit.",
   },
-  badgeLabel: { es: "Acreditación", gl: "Acreditación", en: "Badge" },
   badgePlaceholder: { es: "escanear acreditación", gl: "escanear acreditación", en: "scan badge" },
   alreadyOpenSession: {
     es: "Ya tiene una sesión abierta desde las {time} ({hours}). Registra una salida antes de una nueva entrada.",
@@ -1212,7 +1210,6 @@ const dict: Record<string, I18nText> = {
   },
   columnEntered: { es: "Entrada", gl: "Entrada", en: "Entered" },
   columnLastSignal: { es: "Última señal", gl: "Última sinal", en: "Last signal" },
-  columnStatus: { es: "Estado", gl: "Estado", en: "Status" },
   staleCheck: {
     es: "No computa",
     gl: "Non computa",
@@ -1335,8 +1332,6 @@ const dict: Record<string, I18nText> = {
   manage: { es: "Gestionar", gl: "Xestionar", en: "Manage" },
   roomFallback: { es: "Sala", gl: "Sala", en: "Room" },
   columnRoom: { es: "Sala", gl: "Sala", en: "Room" },
-  columnLocation: { es: "Ubicación", gl: "Localización", en: "Location" },
-  columnRoomStatus: { es: "Estado", gl: "Estado", en: "Status" },
   filterRoomsPlaceholder: {
     es: "Buscar por nombre, slug o ubicación…",
     gl: "Buscar por nome, slug ou localización…",
@@ -1941,8 +1936,6 @@ const dict: Record<string, I18nText> = {
   },
   saveDraft: { es: "Guardar borrador", gl: "Gardar borrador", en: "Save draft" },
   saveCorrection: { es: "Guardar corrección", gl: "Gardar corrección", en: "Save correction" },
-  evaluationDraft: { es: "Borrador", gl: "Borrador", en: "Draft" },
-  evaluationSubmitted: { es: "Enviada", gl: "Enviada", en: "Submitted" },
   evaluationStateLabel: {
     es: "Estado de la evaluación",
     gl: "Estado da avaliación",
@@ -2262,11 +2255,6 @@ const dict: Record<string, I18nText> = {
     gl: "{start}–{end} de {total}",
     en: "{start}–{end} of {total}",
   },
-  deleteNotification: {
-    es: "Eliminar",
-    gl: "Eliminar",
-    en: "Delete",
-  },
   deleteNotificationAria: {
     es: "Eliminar este mensaje",
     gl: "Eliminar esta mensaxe",
@@ -2388,7 +2376,6 @@ const dict: Record<string, I18nText> = {
   colStarts: { es: "Empieza", gl: "Comeza", en: "Starts" },
   colVisibility: { es: "Visibilidad", gl: "Visibilidade", en: "Visibility" },
   visibilityPublicDefault: { es: "Público", gl: "Público", en: "Public" },
-  colStatus: { es: "Estado", gl: "Estado", en: "Status" },
   statusPublic: { es: "Público", gl: "Público", en: "Public" },
   statusEnded: { es: "Terminado", gl: "Rematado", en: "Ended" },
   publishDestinationsHint: {
@@ -2507,7 +2494,6 @@ const dict: Record<string, I18nText> = {
   colAudience: { es: "Audiencia", gl: "Audiencia", en: "Audience" },
   participantsAudience: { es: "Participantes", gl: "Participantes", en: "Participants" },
   everyoneAudience: { es: "Todos", gl: "Todos", en: "Everyone" },
-  statusScheduled: { es: "Programado", gl: "Programado", en: "Scheduled" },
   statusLive: { es: "En directo", gl: "En directo", en: "Live" },
   statusExpired: { es: "Caducado", gl: "Caducado", en: "Expired" },
   noEnd: { es: "Sin fin", gl: "Sen fin", en: "No end" },
@@ -3721,7 +3707,6 @@ const dict: Record<string, I18nText> = {
     en: "Projects appear here once an organizer imports the Devpost export.",
   },
   // ── native project lifecycle (H18-H20) ────────────────────────────────────
-  createAction: { es: "Crear", gl: "Crear", en: "Create" },
   newProject: { es: "Nuevo proyecto", gl: "Novo proxecto", en: "New project" },
   newProjectDesc: {
     es: "Crea un proyecto directamente en hackOS, sin depender de Devpost.",
@@ -3735,7 +3720,6 @@ const dict: Record<string, I18nText> = {
     en: "Title, description and links. Team and challenges are edited on the detail page.",
   },
   projectNameLabel: { es: "Nombre", gl: "Nome", en: "Name" },
-  projectDescriptionLabel: { es: "Descripción", gl: "Descrición", en: "Description" },
   projectRepoUrlLabel: {
     es: "Repositorio (URL)",
     gl: "Repositorio (URL)",
@@ -4152,11 +4136,6 @@ const dict: Record<string, I18nText> = {
     gl: "A acción fallou.",
     en: "Action failed.",
   },
-  resolveImportsDeniedDesc: {
-    es: "Pide a un administrador acceso a la importación de proyectos.",
-    gl: "Pide a un administrador acceso á importación de proxectos.",
-    en: "Ask an administrator for project-import access.",
-  },
   prizeMappingTitle: { es: "Mapeo de premios", gl: "Mapeo de premios", en: "Prize mapping" },
   prizeMappingDesc: {
     es: "Asocia un premio/etiqueta de Devpost a un reto de hackOS para que los proyectos importados aparezcan en las vistas de retos.",
@@ -4289,13 +4268,11 @@ const dict: Record<string, I18nText> = {
     gl: "Entrada de número decimal",
     en: "Decimal number input",
   },
-  typeShortText: { es: "Texto corto", gl: "Texto curto", en: "Short text" },
   typeShortTextDesc: {
     es: "Respuesta de una línea",
     gl: "Resposta dunha liña",
     en: "One-line text answer",
   },
-  typeLongTextQ: { es: "Texto largo", gl: "Texto longo", en: "Long text" },
   typeLongTextDesc: {
     es: "Respuesta larga escrita",
     gl: "Resposta longa escrita",
@@ -4303,9 +4280,7 @@ const dict: Record<string, I18nText> = {
   },
   typeBoolean: { es: "Booleano", gl: "Booleano", en: "Boolean" },
   typeBooleanDesc: { es: "Respuesta sí o no", gl: "Resposta si ou non", en: "Yes or no answer" },
-  typeSingleChoice: { es: "Opción única", gl: "Opción única", en: "Single choice" },
   typeSingleChoiceDesc: { es: "Solo una opción", gl: "Só unha opción", en: "One option only" },
-  typeMultiChoice: { es: "Opción múltiple", gl: "Opción múltiple", en: "Multiple choice" },
   typeMultiChoiceDesc: {
     es: "Una o más casillas",
     gl: "Unha ou máis casas de verificación",
@@ -4491,7 +4466,6 @@ const dict: Record<string, I18nText> = {
     gl: "Engade unha descrición da túa empresa.",
     en: "Add a company description.",
   },
-  completeAction: { es: "Completar", gl: "Completar", en: "Complete" },
   profileCompleteMessage: { es: "Completo.", gl: "Completo.", en: "Complete." },
   challengeStatusTitle: {
     es: "Estado de tus retos",
@@ -4688,7 +4662,6 @@ const dict: Record<string, I18nText> = {
     gl: "Selecciona un proxecto",
     en: "Select a project",
   },
-  saveWinner: { es: "Guardar", gl: "Gardar", en: "Save" },
   winnerSaved: { es: "Ganador guardado.", gl: "Gañador gardado.", en: "Winner saved." },
   couldNotSaveWinner: {
     es: "No se ha podido guardar el ganador.",
@@ -4878,7 +4851,6 @@ const dict: Record<string, I18nText> = {
 
   // ---- Admin: sponsors & enterprises ----
   colWebsite: { es: "Sitio web", gl: "Sitio web", en: "Website" },
-  scheduled: { es: "Programado", gl: "Programado", en: "Scheduled" },
   priorityLabel: { es: "Prioridad", gl: "Prioridade", en: "Priority" },
   myEnterprise: { es: "Mi empresa", gl: "A miña empresa", en: "My enterprise" },
   loadingEnterprise: { es: "Cargando empresa", gl: "Cargando empresa", en: "Loading enterprise" },
@@ -5413,7 +5385,6 @@ const dict: Record<string, I18nText> = {
   },
   passFieldRoleTitle: { es: "Rol", gl: "Rol", en: "Role" },
   passFieldPassTypeTitle: { es: "Tipo de pase", gl: "Tipo de pase", en: "Pass type" },
-  passFieldUniversityTitle: { es: "Universidad", gl: "Universidade", en: "University" },
   passFieldEmailTitle: { es: "Email", gl: "Email", en: "Email" },
   captionOnPassLabel: {
     es: "Etiqueta en el pase",
@@ -6168,7 +6139,6 @@ const dict: Record<string, I18nText> = {
   fieldKindUniversity: { es: "Universidad", gl: "Universidade", en: "University" },
   fieldLabelLabel: { es: "Etiqueta", gl: "Etiqueta", en: "Label" },
   fieldKeyLabel: { es: "Clave", gl: "Clave", en: "Key" },
-  fileUploadPlaceholder: { es: "Subida de archivo", gl: "Subida de ficheiro", en: "File upload" },
   fileRestrictions: {
     es: "Restricciones del archivo",
     gl: "Restricións do ficheiro",
@@ -6310,7 +6280,6 @@ const dict: Record<string, I18nText> = {
     gl: "Rexeitada (sen enviar).",
     en: "Rejected (unsent).",
   },
-  removeAction: { es: "Quitar", gl: "Quitar", en: "Remove" },
   removeOption: { es: "Quitar opción", gl: "Quitar opción", en: "Remove option" },
   responsesLabel: { es: "Respuestas", gl: "Respostas", en: "Responses" },
   responsesTabLabel: { es: "Respuestas", gl: "Respostas", en: "Responses" },
@@ -6407,7 +6376,6 @@ const dict: Record<string, I18nText> = {
     gl: "As solicitudes aparecerán aquí en canto os solicitantes completen o formulario.",
     en: "Submissions appear here once applicants complete the form.",
   },
-  submittedColumn: { es: "Enviada", gl: "Enviada", en: "Submitted" },
   toAcceptedUnsend: {
     es: "A aceptada (deshacer envío)",
     gl: "A aceptada (desfacer envío)",
@@ -6531,7 +6499,6 @@ const dict: Record<string, I18nText> = {
     en: "Application progress",
   },
   timelineApplication: { es: "Solicitud", gl: "Solicitude", en: "Application" },
-  timelineSubmitted: { es: "Enviada", gl: "Enviada", en: "Submitted" },
   timelineReview: { es: "Revisión", gl: "Revisión", en: "Review" },
   timelineDecision: { es: "Decisión", gl: "Decisión", en: "Decision" },
   timelinePlace: { es: "Plaza", gl: "Praza", en: "Place" },
@@ -6622,7 +6589,6 @@ const dict: Record<string, I18nText> = {
   },
   teamFallback: { es: "Equipo", gl: "Equipo", en: "Team" },
   windowInactive: { es: "Inactivo", gl: "Inactivo", en: "Inactive" },
-  windowScheduled: { es: "Programado", gl: "Programado", en: "Scheduled" },
   windowClosed: { es: "Cerrado", gl: "Pechado", en: "Closed" },
   windowOpen: { es: "Abierto", gl: "Aberto", en: "Open" },
   matchedLabel: { es: "Emparejado", gl: "Emparellado", en: "Matched" },
@@ -6632,12 +6598,8 @@ const dict: Record<string, I18nText> = {
     en: "Matched (secondary)",
   },
   allPermissionsLabel: { es: "Todos los permisos", gl: "Todos os permisos", en: "All permissions" },
-  statusDraft: { es: "Borrador", gl: "Borrador", en: "Draft" },
-  statusSubmitted: { es: "Enviada", gl: "Enviada", en: "Submitted" },
-  statusInReview: { es: "En revisión", gl: "En revisión", en: "In review" },
   statusAccepted: { es: "Aceptada", gl: "Aceptada", en: "Accepted" },
   statusNotSelected: { es: "No seleccionada", gl: "Non seleccionada", en: "Not selected" },
-  applicationStatusExpired: { es: "Caducada", gl: "Caducada", en: "Expired" },
   firstScanLabel: { es: "Primer escaneo", gl: "Primeiro escaneo", en: "First scan" },
   repeatScanTotal: {
     es: "Escaneo repetido · {count} en total",
@@ -6855,6 +6817,7 @@ const dict: Record<string, I18nText> = {
   dataStatusDraft: { es: "Borrador", gl: "Borrador", en: "Draft" },
   dataStatusSubmitted: { es: "Enviada", gl: "Enviada", en: "Submitted" },
   dataStatusReview: { es: "En revisión", gl: "En revisión", en: "In review" },
+  dataStatusScheduled: { es: "Programado", gl: "Programado", en: "Scheduled" },
   dataStatusAccepted: {
     es: "Aceptada y enviada",
     gl: "Aceptada e enviada",

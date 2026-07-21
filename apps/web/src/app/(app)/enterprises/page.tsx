@@ -123,7 +123,7 @@ function buildColumns(t: Translate): Column<Enterprise>[] {
         if (isScheduled(e.available_from)) {
           return (
             <div className="flex items-center gap-2">
-              <StatusBadge tone="warning">{t("statusScheduled")}</StatusBadge>
+              <StatusBadge tone="warning">{t("dataStatusScheduled")}</StatusBadge>
               <span className="text-muted-foreground text-sm">
                 {new Date(e.available_from as string).toLocaleString()}
               </span>

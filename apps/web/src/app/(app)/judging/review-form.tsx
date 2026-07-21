@@ -198,7 +198,7 @@ export function ReviewForm({
             {syncLabel}
           </span>
           <StatusBadge tone={status === "submitted" ? "success" : "warning"}>
-            {status === "submitted" ? t("evaluationSubmitted") : t("evaluationDraft")}
+            {status === "submitted" ? t("dataStatusSubmitted") : t("dataStatusDraft")}
           </StatusBadge>
           {onCloseExisting && (
             <Button size="sm" variant="outline" onClick={onCloseExisting}>

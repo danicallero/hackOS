@@ -270,7 +270,7 @@ export default function TvControlPage() {
         description={isDraftUnbroadcast ? t("draftNotYetBroadcastDesc") : t("draftMatchesLiveDesc")}
         footer={
           <div className="flex items-center gap-3">
-            {isDraftUnbroadcast && <StatusBadge tone="warning">{t("statusDraft")}</StatusBadge>}
+            {isDraftUnbroadcast && <StatusBadge tone="warning">{t("dataStatusDraft")}</StatusBadge>}
             <SubmitButton pending={busy} onClick={requestBroadcast}>
               {t("showOnTvs")}
             </SubmitButton>
