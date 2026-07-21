@@ -93,15 +93,12 @@ export default function PublicChallengePage() {
       )}
 
       {challenge === null && (
+        // The persistent "Back to event" button above is the page's stable
+        // escape hatch; a second one here said it twice (#299).
         <EmptyState
           icon={TrophyIcon}
           title={t("challengeNotFoundTitle")}
           description={t("challengeUnpublishedDesc")}
-          action={
-            <Button asChild>
-              <Link href="/">{t("backToEvent")}</Link>
-            </Button>
-          }
         />
       )}
 

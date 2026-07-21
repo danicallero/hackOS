@@ -32,7 +32,10 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         <div className="w-full max-w-sm">{children}</div>
       </main>
       <footer className="text-muted-foreground px-6 py-4 text-center text-xs">
-        <nav aria-label="Legal" className="flex flex-wrap justify-center gap-x-4 gap-y-2">
+        <nav
+          aria-label={t("legalLinksLabel")}
+          className="flex flex-wrap justify-center gap-x-4 gap-y-2"
+        >
           <Link className="underline underline-offset-4 hover:text-foreground" href="/terms">
             {t("termsAndConditions")}
           </Link>

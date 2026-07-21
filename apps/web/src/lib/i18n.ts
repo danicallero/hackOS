@@ -616,6 +616,13 @@ const dict: Record<string, I18nText> = {
     en: "Couldn't generate the Google Wallet link",
   },
   currentBadge: { es: "Acreditación actual", gl: "Acreditación actual", en: "Current badge" },
+  // Parameterized: {item} is the pass name, so es/gl keep their own word order
+  // instead of the sentence being concatenated in English shape (#299).
+  qrNotAvailable: {
+    es: "{item} no disponible.",
+    gl: "{item} non dispoñible.",
+    en: "{item} not available.",
+  },
   walletScanHint: {
     es: "Muestra este código al personal cuando te lo pidan.",
     gl: "Amosa este código ao persoal cando cho pidan.",
@@ -3705,6 +3712,7 @@ const dict: Record<string, I18nText> = {
     en: "Import from Devpost",
   },
   colTeam: { es: "Equipo", gl: "Equipo", en: "Team" },
+  colLinking: { es: "Vinculación", gl: "Vinculación", en: "Linking" },
   noMembers: { es: "Sin miembros", gl: "Sen membros", en: "No members" },
   allLinked: { es: "Todo vinculado", gl: "Todo vinculado", en: "All linked" },
   manualCountBadge: { es: "{count} manual", gl: "{count} manual", en: "{count} manual" },
