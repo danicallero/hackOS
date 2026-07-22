@@ -1,6 +1,7 @@
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
+import { issueTicket } from "../logistics/tickets.js";
 import type { CreateEnterpriseBody, UpdateEnterpriseBody } from "./schemas.js";
 
 const COLUMNS = `id, name, website, logo_url,
@@ -231,24 +232,30 @@ export async function addEnterpriseMember(
       userId,
     });
   }
-  const { rows } = await pool.query(
-    `INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2) RETURNING id, joined_at`,
-    [enterpriseId, userId],
-  );
-  await audit(pool, {
-    actorId,
-    entityType: "enterprise",
-    entityId: enterpriseId,
-    action: "member_added",
-    after: { userId },
+  const { member, user } = await withTransaction(async (client) => {
+    const { rows } = await client.query(
+      `INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2) RETURNING id, joined_at`,
+      [enterpriseId, userId],
+    );
+    await issueTicket(client, userId);
+    await audit(client, {
+      actorId,
+      entityType: "enterprise",
+      entityId: enterpriseId,
+      action: "member_added",
+      after: { userId },
+    });
+    const { rows: users } = await client.query(`SELECT name, email FROM users WHERE id = $1`, [
+      userId,
+    ]);
+    return { member: rows[0], user: users[0] };
   });
-  const { rows: u } = await pool.query(`SELECT name, email FROM users WHERE id = $1`, [userId]);
   return {
-    sponsorId: Number(rows[0].id),
+    sponsorId: Number(member.id),
     userId,
-    name: (u[0].name as string | null) ?? null,
-    email: String(u[0].email),
-    joinedAt: rows[0].joined_at as Date,
+    name: (user.name as string | null) ?? null,
+    email: String(user.email),
+    joinedAt: member.joined_at as Date,
   };
 }
 

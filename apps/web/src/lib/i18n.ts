@@ -1467,7 +1467,9 @@ const dict: Record<string, I18nText> = {
   roleJudge: { es: "Juez", gl: "Xuíz", en: "Judge" },
   roleSponsor: { es: "Patrocinador", gl: "Patrocinador", en: "Sponsor" },
   roleStaff: { es: "Equipo", gl: "Equipo", en: "Staff" },
+  roleMentor: { es: "Mentor", gl: "Mentor", en: "Mentor" },
   roleParticipant: { es: "Participante", gl: "Participante", en: "Participant" },
+  roleUnassigned: { es: "Sin asignar", gl: "Sen asignar", en: "Unassigned" },
   noMatchingUsers: { es: "Sin coincidencias", gl: "Sen coincidencias", en: "No matching users" },
   noUsersYet: { es: "Aún no hay usuarios", gl: "Aínda non hai usuarios", en: "No users yet" },
   usersAppearHere: {

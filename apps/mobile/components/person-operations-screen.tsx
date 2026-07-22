@@ -52,6 +52,7 @@ export function PersonOperationsScreen() {
   const canPresence = admin || capabilities.has(CAPABILITIES.PRESENCE_SCAN);
   const [person, setPerson] = useState<PersonDetails | null>(null);
   const [cameraAction, setCameraAction] = useState<"assign" | "replace" | null>(null);
+  const [attendeeRole, setAttendeeRole] = useState<"participant" | "mentor" | null>(null);
   const [scannedAt, setScannedAt] = useState(new Date());
   const [busy, setBusy] = useState(false);
   const [lastOperation, setLastOperation] = useState<PendingScan | null>(null);
@@ -93,7 +94,7 @@ export function PersonOperationsScreen() {
     void load();
   }, [load, sync.lastSync]);
 
-  async function saveBadge(nextBadge: string) {
+  async function saveBadge(nextBadge: string, attendeeRole?: "participant" | "mentor") {
     if (!person || ownerUserId === undefined) return;
     if (await findPersonByTicket(nextBadge)) {
       Alert.alert(t("personBadgeIsTicketTitle"), t("personBadgeIsTicketBody"));
@@ -114,10 +115,12 @@ export function PersonOperationsScreen() {
             userId,
             badgeId: nextBadge,
             method: "manual",
+            attendeeRole,
           },
       ownerUserId,
     );
     setCameraAction(null);
+    setAttendeeRole(null);
     setLastOperation((await pendingScans(ownerUserId)).find((scan) => scan.id === scanId) ?? null);
     await sync.sync();
     setLastOperation((await pendingScans(ownerUserId)).find((scan) => scan.id === scanId) ?? null);
@@ -127,6 +130,26 @@ export function PersonOperationsScreen() {
   function beginBadgeAction() {
     if (!person) return;
     const nextAction = person.badgeId ? "replace" : "assign";
+    if (!person.badgeId && person.role === "unassigned") {
+      Alert.alert(t("accreditationChooseRole"), t("accreditationChooseRoleBody"), [
+        { text: t("cancel"), style: "cancel" },
+        {
+          text: t("roleParticipant"),
+          onPress: () => {
+            setAttendeeRole("participant");
+            setCameraAction(nextAction);
+          },
+        },
+        {
+          text: t("roleMentor"),
+          onPress: () => {
+            setAttendeeRole("mentor");
+            setCameraAction(nextAction);
+          },
+        },
+      ]);
+      return;
+    }
     if (person.role === "participant" && !person.confirmed) {
       Alert.alert(
         person.accepted ? t("scannerPlaceUnconfirmed") : t("scannerNoAcceptedPlace"),
@@ -221,7 +244,7 @@ export function PersonOperationsScreen() {
       <QrCamera
         hint={cameraAction === "assign" ? t("personScanNewBadge") : t("personScanReplacementBadge")}
         onClose={() => setCameraAction(null)}
-        onValue={(value) => void saveBadge(value.trim())}
+        onValue={(value) => void saveBadge(value.trim(), attendeeRole ?? undefined)}
       />
     );
   }

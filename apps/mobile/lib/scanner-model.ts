@@ -34,7 +34,12 @@ export function requestForPendingScan(scan: PendingScan): {
     return {
       path: "/api/accreditation/check-in-user",
       headers,
-      body: { userId: payload.userId, badgeId: payload.badgeId, method: payload.method },
+      body: {
+        userId: payload.userId,
+        badgeId: payload.badgeId,
+        method: payload.method,
+        attendeeRole: payload.attendeeRole,
+      },
     };
   }
   if (payload.kind === "badge_rotation") {

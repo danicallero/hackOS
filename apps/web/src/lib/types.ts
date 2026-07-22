@@ -21,7 +21,7 @@ export interface Me {
   universityId: number | null;
   notes: string | null;
   createdAt: string;
-  role: "admin" | "judge" | "sponsor" | "staff" | "participant";
+  role: "admin" | "judge" | "sponsor" | "staff" | "mentor" | "participant" | "unassigned";
   capabilities: Capability[];
   /** Association facts underlying `role` (H55) — a sponsor rep who also judges needs both workspaces. */
   isRoomJudge: boolean;
@@ -29,7 +29,14 @@ export interface Me {
 }
 
 export type Language = "en" | "es" | "gl";
-export type DerivedRole = "admin" | "judge" | "sponsor" | "staff" | "participant";
+export type DerivedRole =
+  | "admin"
+  | "judge"
+  | "sponsor"
+  | "staff"
+  | "mentor"
+  | "participant"
+  | "unassigned";
 
 export interface UserListItem {
   id: number;

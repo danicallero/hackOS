@@ -234,7 +234,7 @@ describe("H28 Apple Wallet PassKit", () => {
     expect(pass.eventTicket.secondaryFields).toContainEqual({
       key: "role",
       label: "Role",
-      value: "Participant",
+      value: "Unassigned",
     });
     expect(pass.eventTicket.auxiliaryFields).toContainEqual({
       key: "purpose",
@@ -317,7 +317,7 @@ describe("H28 Apple Wallet PassKit", () => {
     expect(pass.eventTicket.secondaryFields).toContainEqual({
       key: "role",
       label: "Role",
-      value: "Participant",
+      value: "Unassigned",
     });
     expect(pass.eventTicket.auxiliaryFields).toContainEqual({
       key: "purpose",

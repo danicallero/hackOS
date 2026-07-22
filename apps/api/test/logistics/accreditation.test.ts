@@ -122,6 +122,25 @@ describe("H22 accreditation lookup + check-in", () => {
     expect(audits.rows).toHaveLength(1);
   });
 
+  it("classifies an unassigned person and issues their ticket before accreditation", async () => {
+    const uid = await createUser({ name: "Manual mentor" });
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/accreditation/check-in-user",
+      headers: { ...asUser(staff), "idempotency-key": "manual-mentor-checkin" },
+      payload: { userId: uid, badgeId: "B-MENTOR", attendeeRole: "mentor" },
+    });
+    expect(res.statusCode).toBe(200);
+    const { pool } = await import("../../src/db/pool.js");
+    expect(
+      (await pool.query(`SELECT role FROM manual_attendee_roles WHERE user_id = $1`, [uid])).rows[0]
+        .role,
+    ).toBe("mentor");
+    expect(
+      (await pool.query(`SELECT token FROM tickets WHERE user_id = $1`, [uid])).rows,
+    ).toHaveLength(1);
+  });
+
   it("idempotency-key replays check-in without a second badge assignment", async () => {
     const uid = await createUser();
     const token = await issueTicket(uid);

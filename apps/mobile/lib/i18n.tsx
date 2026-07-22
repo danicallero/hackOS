@@ -973,7 +973,19 @@ const dict = {
   roleJudge: { en: "Judge", es: "Jurado", gl: "Xurado" },
   roleSponsor: { en: "Sponsor", es: "Patrocinio", gl: "Patrocinio" },
   roleStaff: { en: "Staff", es: "Staff", gl: "Staff" },
+  roleMentor: { en: "Mentor", es: "Mentor", gl: "Mentor" },
   roleParticipant: { en: "Participant", es: "Participante", gl: "Participante" },
+  roleUnassigned: { en: "Unassigned", es: "Sin asignar", gl: "Sen asignar" },
+  accreditationChooseRole: {
+    en: "Choose attendee type",
+    es: "Elige tipo de asistente",
+    gl: "Escolle tipo de asistente",
+  },
+  accreditationChooseRoleBody: {
+    en: "Set the attendee type before assigning the badge.",
+    es: "Define el tipo de asistente antes de asignar la acreditación.",
+    gl: "Define o tipo de asistente antes de asignar a acreditación.",
+  },
   roleParticipants: { en: "Participants", es: "Participantes", gl: "Participantes" },
   scannerNoAcceptedPlace: {
     en: "No accepted place",

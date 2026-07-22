@@ -34,8 +34,17 @@ status enum.
   (open-redirect guarded via `safeNext`), so the invited participant lands on
   the application form right after signing in.
 
-**State transitions.** None changed; adds the name-lock guard keyed on
-application status.
+**State transitions.** Role is derived from relationships, never stored:
+new accounts are `unassigned`; submitting a participant or mentor application
+makes the illustrative role `participant` or `mentor`; an enterprise link makes
+it `sponsor`; and an effective capability makes it `staff` (or `admin`).
+Confirmed participants, accepted mentors, sponsor representatives, and
+capability holders each receive the same permanent ticket credential, so all
+attendee types can be accredited. Ticket issuance is idempotent and does not
+revoke a ticket if a relationship later changes (plan/07 invariant 10).
+Staff with `users:write` can manually set an attendee relationship to
+participant or mentor; during accreditation, a scanner can make that same
+choice for an otherwise unassigned person before assigning their badge.
 
 ---
 

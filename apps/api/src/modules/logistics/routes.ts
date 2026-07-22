@@ -252,7 +252,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       schema: {
         body: checkInUserBody,
         description:
-          "Same as /api/accreditation/check-in but keyed by user id instead of ticket token (H22) — the person-centric flow after a search hit. Same conflict rules.",
+          "Same as /api/accreditation/check-in but keyed by user id instead of ticket token (H22). For an unassigned person, attendeeRole atomically creates the participant/mentor relationship and ticket before badge assignment.",
       },
     },
     async (req) =>

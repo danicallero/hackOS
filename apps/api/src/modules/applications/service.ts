@@ -5,6 +5,7 @@ import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import { issueTicket } from "../logistics/tickets.js";
 import { type ApplicationType, SHIRT_TYPES, type TemplateField } from "./schemas.js";
 
 /**
@@ -257,20 +258,6 @@ function formatRemainingTime(expiresAt: Date): string {
 }
 
 // ── tokens / tickets / emails ─────────────────────────────────────────────────
-
-async function issueTicket(client: pg.PoolClient, userId: number): Promise<string> {
-  const token = randomBytes(32).toString("base64url");
-  // One ticket per user, permanent, never voided (plan/07 invariant 10).
-  const { rows } = await client.query(
-    `INSERT INTO tickets (user_id, token) VALUES ($1, $2)
-     ON CONFLICT (user_id) DO NOTHING
-     RETURNING token`,
-    [userId, token],
-  );
-  if (rows[0]) return rows[0].token;
-  const existing = await client.query(`SELECT token FROM tickets WHERE user_id = $1`, [userId]);
-  return existing.rows[0].token;
-}
 
 /**
  * Issue a fresh spot_confirmation token (email_verification_tokens) whose
@@ -767,6 +754,9 @@ async function sendOne(
   const sentStatus = isAccepted ? "accepted" : "rejected";
   if (isAccepted) {
     token = await issueConfirmationToken(client, resp, app, user.email);
+    // Accepted mentors attend without a separate spot-confirmation step, so
+    // their decision is the ticket-issuing transition.
+    if (app.type === "mentor") await issueTicket(client, resp.user_id);
   }
   await client.query(
     `UPDATE application_responses SET status = $2, decision_sent_at = now() WHERE id = $1`,
@@ -943,6 +933,7 @@ export async function reAccept(
        WHERE id = $1`,
       [resp.id],
     );
+    if (app.type === "mentor") await issueTicket(client, resp.user_id);
 
     await enqueueDecisionEmailRow(client, resp.user_id, user, app, "accepted", token);
 

@@ -7,9 +7,16 @@ import { getEffectiveCapabilities } from "../../lib/capabilities.js";
  * derivado de relaciones, no se guarda como verdad de permisos"). Display
  * only — never used for a permission check, which always goes through
  * requireCapability(). Priority: admin > judge > sponsor > staff >
- * participant.
+ * mentor > participant > unassigned.
  */
-export type DerivedRole = "admin" | "judge" | "sponsor" | "staff" | "participant";
+export type DerivedRole =
+  | "admin"
+  | "judge"
+  | "sponsor"
+  | "staff"
+  | "mentor"
+  | "participant"
+  | "unassigned";
 
 export async function computeDerivedRole(db: Queryable, userId: number): Promise<DerivedRole> {
   const capabilities = await getEffectiveCapabilities(userId);
@@ -23,7 +30,25 @@ export async function computeDerivedRole(db: Queryable, userId: number): Promise
   // *something* operational beyond being a plain participant.
   if (capabilities.size > 0) return "staff";
 
-  return "participant";
+  const manual = await db.query(`SELECT role FROM manual_attendee_roles WHERE user_id = $1`, [
+    userId,
+  ]);
+  if (manual.rows[0]?.role === "mentor") return "mentor";
+  if (manual.rows[0]?.role === "participant") return "participant";
+
+  const { rows } = await db.query(
+    `SELECT a.type
+       FROM application_responses ar
+       JOIN applications a ON a.id = ar.application_id
+      WHERE ar.user_id = $1 AND ar.status <> 'draft'
+        AND a.type IN ('mentor', 'participant')
+      ORDER BY CASE a.type WHEN 'mentor' THEN 0 ELSE 1 END
+      LIMIT 1`,
+    [userId],
+  );
+  if (rows[0]?.type === "mentor") return "mentor";
+  if (rows[0]?.type === "participant") return "participant";
+  return "unassigned";
 }
 
 /**
