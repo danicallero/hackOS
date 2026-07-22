@@ -1,5 +1,6 @@
 import { CAPABILITIES, type Capability } from "@hackos/shared/capabilities";
 import { beforeEach, describe, expect, it } from "vitest";
+import { LANGS, translateMessage } from "./i18n";
 import {
   isNavItemVisible,
   type NavVisibilityContext,
@@ -35,6 +36,12 @@ function visibleHrefs(ctx: NavVisibilityContext): string[] {
   return WORKSPACES.flatMap((w) => w.items)
     .filter((item) => isNavItemVisible(item, ctx))
     .map((item) => item.href);
+}
+
+function visibleDestinationLabels(ctx: NavVisibilityContext, language: (typeof LANGS)[number]) {
+  return [...PERSONAL_NAV, ...WORKSPACES.flatMap((workspace) => workspace.items)]
+    .filter((item) => isNavItemVisible(item, ctx))
+    .map((item) => translateMessage(language, item.title));
 }
 
 describe("stable personal area (audit §3.1)", () => {
@@ -211,5 +218,28 @@ describe("one name per destination (issue #297)", () => {
     for (const workspace of WORKSPACES.filter((w) => w.items.length > 1)) {
       expect(workspace.items.map((i) => i.title)).not.toContain(workspace.label);
     }
+  });
+});
+
+describe("cross-capability navigation in every locale (issue #303)", () => {
+  const accounts = [
+    ["participant + judge", contextFor([], { isRoomJudge: true })],
+    ["sponsor + judge", contextFor([], { isRoomJudge: true, isSponsorRep: true })],
+    ["admin", contextFor([CAPABILITIES.ADMIN_ALL])],
+  ] as const;
+  const checks: Array<[string, NavVisibilityContext, (typeof LANGS)[number]]> = accounts.flatMap(
+    ([account, context]) =>
+      LANGS.map((language): [string, NavVisibilityContext, (typeof LANGS)[number]] => [
+        account,
+        context,
+        language,
+      ]),
+  );
+
+  it.each(checks)("shows %s every destination once in %s", (_account, context, language) => {
+    const labels = visibleDestinationLabels(context, language);
+
+    expect(labels).not.toContain("");
+    expect(new Set(labels).size).toBe(labels.length);
   });
 });
