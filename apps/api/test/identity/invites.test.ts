@@ -605,6 +605,10 @@ describe("H9 invite regeneration", () => {
       accept.json().userId,
     ]);
     expect(rows[0].enterprise_id).toBe(entId);
+    const { rows: tickets } = await pool.query(`SELECT token FROM tickets WHERE user_id = $1`, [
+      accept.json().userId,
+    ]);
+    expect(tickets).toHaveLength(1);
   });
 
   it("cannot regenerate an already-accepted invite", async () => {

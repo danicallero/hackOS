@@ -11,6 +11,7 @@ import {
   requireCapability,
 } from "../../../lib/capabilities.js";
 import { ConflictError, NotFoundError } from "../../../lib/errors.js";
+import { issueTicket } from "../../logistics/tickets.js";
 
 /**
  * Permission-group management (H8): groups of capabilities, groups of groups
@@ -84,6 +85,38 @@ async function wouldCreateCycle(
     [childId, parentId],
   );
   return rows.length > 0;
+}
+
+/** Ticket every existing member who becomes a capability holder through this group. */
+async function issueTicketsForGroupMembers(client: pg.PoolClient, groupId: number): Promise<void> {
+  const { rows } = await client.query(
+    `WITH RECURSIVE ancestor_groups(group_id) AS (
+       SELECT $1::integer
+       UNION
+       SELECT pgi.parent_group_id
+         FROM permission_group_includes pgi
+         JOIN ancestor_groups ag ON ag.group_id = pgi.child_group_id
+     ), affected_users AS (
+       SELECT DISTINCT pgm.user_id
+         FROM permission_group_members pgm
+         JOIN ancestor_groups ag ON ag.group_id = pgm.group_id
+     ), effective_groups(user_id, group_id) AS (
+       SELECT user_id, group_id FROM permission_group_members
+       UNION
+       SELECT eg.user_id, pgi.child_group_id
+         FROM effective_groups eg
+         JOIN permission_group_includes pgi ON pgi.parent_group_id = eg.group_id
+     )
+     SELECT au.user_id
+       FROM affected_users au
+      WHERE EXISTS (
+        SELECT 1 FROM effective_groups eg
+        JOIN group_capabilities gc ON gc.group_id = eg.group_id
+        WHERE eg.user_id = au.user_id
+      )`,
+    [groupId],
+  );
+  for (const row of rows) await issueTicket(client, row.user_id as number);
 }
 
 export function registerPermissionGroupRoutes(app: FastifyInstance): void {
@@ -248,6 +281,7 @@ export function registerPermissionGroupRoutes(app: FastifyInstance): void {
             [groupId, capability],
           );
         }
+        await issueTicketsForGroupMembers(client, groupId);
         await audit(client, {
           actorId: req.userId,
           entityType: "permission_group",
@@ -293,6 +327,7 @@ export function registerPermissionGroupRoutes(app: FastifyInstance): void {
            VALUES ($1, $2) ON CONFLICT DO NOTHING`,
           [groupId, childGroupId],
         );
+        await issueTicketsForGroupMembers(client, groupId);
         await audit(client, {
           actorId: req.userId,
           entityType: "permission_group",
@@ -369,6 +404,22 @@ export function registerPermissionGroupRoutes(app: FastifyInstance): void {
            VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
           [userId, groupId, req.userId],
         );
+        // A capability holder is staff (H8); issue their permanent entrance
+        // ticket in the same transaction as the role-producing assignment.
+        const { rows: capabilities } = await client.query(
+          `WITH RECURSIVE effective_groups(group_id) AS (
+             SELECT group_id FROM permission_group_members WHERE user_id = $1
+             UNION
+             SELECT pgi.child_group_id
+               FROM effective_groups eg
+               JOIN permission_group_includes pgi ON pgi.parent_group_id = eg.group_id
+           )
+           SELECT 1 FROM effective_groups eg
+            JOIN group_capabilities gc ON gc.group_id = eg.group_id
+           LIMIT 1`,
+          [userId],
+        );
+        if (capabilities.length > 0) await issueTicket(client, userId);
         await audit(client, {
           actorId: req.userId,
           entityType: "permission_group",

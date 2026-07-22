@@ -61,7 +61,9 @@ function roleLabel(t: Translate): Record<DerivedRole, string> {
     judge: t("roleJudge"),
     sponsor: t("roleSponsor"),
     staff: t("roleStaff"),
+    mentor: t("roleMentor"),
     participant: t("roleParticipant"),
+    unassigned: t("roleUnassigned"),
   };
 }
 
@@ -72,7 +74,9 @@ const ROLE_TONE: Record<DerivedRole, Tone> = {
   judge: "info",
   sponsor: "warning",
   staff: "success",
+  mentor: "info",
   participant: "neutral",
+  unassigned: "neutral",
 };
 
 const COLUMN_OPTIONS = [

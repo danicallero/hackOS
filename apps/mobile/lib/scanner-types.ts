@@ -9,7 +9,7 @@ export type ScanKind =
 export interface ScannerPerson {
   userId: number;
   email: string;
-  role: "admin" | "judge" | "sponsor" | "staff" | "participant";
+  role: "admin" | "judge" | "sponsor" | "staff" | "mentor" | "participant" | "unassigned";
   ticketToken: string | null;
   badgeId: string | null;
   revokedBadgeIds: string[];
@@ -52,6 +52,7 @@ export type ScanPayload =
       userId: number;
       badgeId: string;
       method: "qr" | "manual";
+      attendeeRole?: "participant" | "mentor";
     }
   | {
       kind: "badge_rotation";

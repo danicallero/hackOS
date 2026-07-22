@@ -5,6 +5,7 @@ import { audit } from "../../lib/audit.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
 import { loadPersonCard } from "./cards.js";
+import { issueTicket } from "./tickets.js";
 import { enqueueWalletSync } from "./wallet-sync.js";
 
 /** Postgres unique_violation — thrown by the unique `users.badge_id` index. */
@@ -92,7 +93,12 @@ async function assertNotTicketToken(client: pg.PoolClient, badgeId: string): Pro
 
 export async function checkInUser(
   actorId: number,
-  input: { userId: number; badgeId: string; method: CheckInMethod },
+  input: {
+    userId: number;
+    badgeId: string;
+    method: CheckInMethod;
+    attendeeRole?: "participant" | "mentor";
+  },
 ) {
   const result = await withTransaction(async (client) => {
     const u = await client.query(
@@ -101,6 +107,44 @@ export async function checkInUser(
     );
     const user = u.rows[0];
     if (!user) throw new NotFoundError("User not found");
+    if (input.attendeeRole) {
+      const { rows: existingRole } = await client.query(
+        `WITH RECURSIVE effective_groups(group_id) AS (
+           SELECT group_id FROM permission_group_members WHERE user_id = $1
+           UNION
+           SELECT pgi.child_group_id
+             FROM effective_groups eg
+             JOIN permission_group_includes pgi ON pgi.parent_group_id = eg.group_id
+         )
+         SELECT 1 FROM manual_attendee_roles WHERE user_id = $1
+         UNION ALL SELECT 1 FROM application_responses WHERE user_id = $1 AND status <> 'draft'
+         UNION ALL SELECT 1 FROM sponsors WHERE user_id = $1
+         UNION ALL SELECT 1 FROM room_judges WHERE user_id = $1
+         UNION ALL
+         SELECT 1
+           FROM effective_groups eg
+           JOIN group_capabilities gc ON gc.group_id = eg.group_id
+         LIMIT 1`,
+        [input.userId],
+      );
+      if (existingRole.length > 0) {
+        throw new ConflictError("Only an unassigned user can be classified during accreditation", {
+          userId: input.userId,
+        });
+      }
+      await client.query(
+        `INSERT INTO manual_attendee_roles (user_id, role, assigned_by) VALUES ($1, $2, $3)`,
+        [input.userId, input.attendeeRole, actorId],
+      );
+      await issueTicket(client, input.userId);
+      await audit(client, {
+        actorId,
+        entityType: "user",
+        entityId: input.userId,
+        action: "attendee_role_set",
+        after: { role: input.attendeeRole, source: "accreditation" },
+      });
+    }
     if (user.badge_id) {
       throw new ConflictError("User already accredited", {
         userId: input.userId,

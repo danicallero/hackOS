@@ -27,7 +27,9 @@ const ROLE_LABELS: Record<DerivedRole, string> = {
   judge: "Judge",
   sponsor: "Sponsor",
   staff: "Staff",
+  mentor: "Mentor",
   participant: "Participant",
+  unassigned: "Unassigned",
 };
 
 // users.language is 'en' | 'es' | 'gl' (0001_initial) — the pass header's

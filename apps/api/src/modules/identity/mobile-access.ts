@@ -11,7 +11,9 @@ export async function hasMobileAccess(
   userId: number,
   role: DerivedRole,
 ): Promise<boolean> {
-  if (role !== "participant") return true;
+  // Operational and sponsor relationships are event attendees immediately.
+  // Applicant-derived roles still require an accepted/confirmed response.
+  if (["admin", "judge", "sponsor", "staff"].includes(role)) return true;
 
   const { rows } = await db.query(
     `SELECT 1

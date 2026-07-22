@@ -8,6 +8,7 @@ import { pool, withTransaction } from "../../../db/pool.js";
 import { audit } from "../../../lib/audit.js";
 import { requireCapability } from "../../../lib/capabilities.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../../lib/errors.js";
+import { issueTicket } from "../../logistics/tickets.js";
 import { auth } from "../auth.js";
 
 /**
@@ -581,6 +582,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
             invite.enterprise_id,
             userId,
           ]);
+          await issueTicket(client, userId);
         }
 
         // H8/H10: pre-assigned capability groups. Skip ids for groups deleted
@@ -593,6 +595,25 @@ export function registerInviteRoutes(app: FastifyInstance): void {
              ON CONFLICT DO NOTHING`,
             [userId, groupId],
           );
+        }
+
+        // Staff status starts only once an effective capability is assigned.
+        // Sponsors are already ticketed above regardless of capability grants.
+        if (kind === "staff") {
+          const { rows: staffRows } = await client.query(
+            `WITH RECURSIVE effective_groups(group_id) AS (
+               SELECT group_id FROM permission_group_members WHERE user_id = $1
+               UNION
+               SELECT pgi.child_group_id
+                 FROM effective_groups eg
+                 JOIN permission_group_includes pgi ON pgi.parent_group_id = eg.group_id
+             )
+             SELECT 1 FROM effective_groups eg
+              JOIN group_capabilities gc ON gc.group_id = eg.group_id
+             LIMIT 1`,
+            [userId],
+          );
+          if (staffRows.length > 0) await issueTicket(client, userId);
         }
 
         await audit(client, {

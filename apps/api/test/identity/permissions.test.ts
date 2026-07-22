@@ -140,6 +140,11 @@ describe("H8 permission groups", () => {
     });
     expect(add.statusCode).toBe(200);
     expect(add.json().members).toContain(user);
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows: tickets } = await pool.query(`SELECT token FROM tickets WHERE user_id = $1`, [
+      user,
+    ]);
+    expect(tickets).toHaveLength(1);
     // If invalidateCapabilities() hadn't run, the primed cache would still say false.
     expect(await userHasCapability(user, CAPABILITIES.USERS_READ)).toBe(true);
 

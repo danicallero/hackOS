@@ -100,7 +100,9 @@ function roleLabel(t: Translate): Record<Me["role"], string> {
     judge: t("roleJudge"),
     sponsor: t("roleSponsor"),
     staff: t("roleStaff"),
+    mentor: t("roleMentor"),
     participant: t("roleParticipant"),
+    unassigned: t("roleUnassigned"),
   };
 }
 

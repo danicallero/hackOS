@@ -36,6 +36,23 @@ async function getApp(): Promise<App> {
 }
 
 describe("GET /api/me (H7)", () => {
+  it("lets staff manually classify a user as participant or mentor and issues a ticket", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.USERS_WRITE]);
+    const user = await createUser();
+    const res = await a.inject({
+      method: "PUT",
+      url: `/api/users/${user}/attendee-role`,
+      headers: asUser(manager),
+      payload: { role: "mentor" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ role: "mentor", ticketIssued: true });
+    expect(
+      (await a.inject({ method: "GET", url: "/api/me", headers: asUser(user) })).json().role,
+    ).toBe("mentor");
+  });
+
   it("returns own data and 401 anonymously", async () => {
     const a = await getApp();
     const anon = await a.inject({ method: "GET", url: "/api/me" });
@@ -45,7 +62,7 @@ describe("GET /api/me (H7)", () => {
     const res = await a.inject({ method: "GET", url: "/api/me", headers: asUser(userId) });
     expect(res.statusCode).toBe(200);
     expect(res.json().name).toBe("Grace");
-    expect(res.json().role).toBe("participant");
+    expect(res.json().role).toBe("unassigned");
     expect(res.json().mobileAccess).toBe(false);
     // H8/H55: /api/me carries the effective capabilities for UI gating.
     expect(res.json().capabilities).toEqual([]);
@@ -94,13 +111,26 @@ describe("GET /api/me (H7)", () => {
     expect(res.json().capabilities).toContain("*");
   });
 
-  it("derives the illustrative role: admin > judge > sponsor > staff > participant", async () => {
+  it("derives the illustrative role: admin > judge > sponsor > staff > mentor > participant > unassigned", async () => {
     const a = await getApp();
     const { pool } = await import("../../src/db/pool.js");
 
     const admin = await createUserWithCapabilities(["*"]);
     const staff = await createUserWithCapabilities([CAPABILITIES.ACCREDIT_SCAN]);
     const plain = await createUser();
+    const participant = await createUser();
+    const mentor = await createUser();
+    const { rows: participantApp } = await pool.query(
+      `INSERT INTO applications (name, type, template) VALUES ('Hackers', 'participant', '[]') RETURNING id`,
+    );
+    const { rows: mentorApp } = await pool.query(
+      `INSERT INTO applications (name, type, template) VALUES ('Mentors', 'mentor', '[]') RETURNING id`,
+    );
+    await pool.query(
+      `INSERT INTO application_responses (user_id, application_id, status)
+       VALUES ($1, $2, 'review'), ($3, $4, 'review')`,
+      [participant, participantApp[0].id, mentor, mentorApp[0].id],
+    );
 
     // judge: a room_judges row (needs the enterprise->sponsor->challenge chain)
     const judge = await createUser();
@@ -141,7 +171,9 @@ describe("GET /api/me (H7)", () => {
     expect(await roleOf(judge)).toBe("judge");
     expect(await roleOf(sponsorUser)).toBe("sponsor");
     expect(await roleOf(staff)).toBe("staff");
-    expect(await roleOf(plain)).toBe("participant");
+    expect(await roleOf(mentor)).toBe("mentor");
+    expect(await roleOf(participant)).toBe("participant");
+    expect(await roleOf(plain)).toBe("unassigned");
   });
 
   it("exposes isRoomJudge/isSponsorRep independently so a sponsor rep who also judges keeps both (H8/H55, issue #187)", async () => {

@@ -22,6 +22,7 @@ export const checkInUserBody = z.object({
   userId: z.coerce.number().int().positive(),
   badgeId: z.string().min(1),
   method: z.enum(["qr", "manual", "nfc"]).default("manual"),
+  attendeeRole: z.enum(["participant", "mentor"]).optional(),
 });
 
 export const rotateBody = z
@@ -123,7 +124,7 @@ export const staffScanRankingResponse = z.object({
 const scannerPersonCard = z.object({
   userId: z.number().int().positive(),
   email: z.string().email(),
-  role: z.enum(["admin", "judge", "sponsor", "staff", "participant"]),
+  role: z.enum(["admin", "judge", "sponsor", "staff", "mentor", "participant", "unassigned"]),
   ticketToken: z.string().nullable(),
   badgeId: z.string().nullable(),
   revokedBadgeIds: z.array(z.string()),

@@ -11,6 +11,7 @@ import {
   requireCapability,
 } from "../../../lib/capabilities.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../../lib/errors.js";
+import { issueTicket } from "../../logistics/tickets.js";
 import { reconcileDevpostParticipantsForUser } from "../../projects/reconciliation.js";
 import { myProjects } from "../../projects/service.js";
 import { anonymizeUser } from "../anonymize.js";
@@ -54,6 +55,8 @@ const staffPatchSchema = selfPatchSchema
     notes: z.string().max(4000).nullable().optional(),
   })
   .strict();
+
+const attendeeRoleBody = z.object({ role: z.enum(["participant", "mentor"]) }).strict();
 
 const COLUMN_BY_FIELD: Record<string, string> = {
   name: "name",
@@ -248,7 +251,15 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         summary: "Get my profile",
         response: {
           200: userResponseSchema.extend({
-            role: z.enum(["admin", "judge", "sponsor", "staff", "participant"]),
+            role: z.enum([
+              "admin",
+              "judge",
+              "sponsor",
+              "staff",
+              "mentor",
+              "participant",
+              "unassigned",
+            ]),
             mobileAccess: z.boolean(),
             // Effective capabilities (H8) so the web/mobile UI can gate by
             // capability, never by the illustrative role (H55). Authoritative
@@ -347,7 +358,15 @@ export function registerProfileRoutes(app: FastifyInstance): void {
                 name: z.string().nullable(),
                 surname: z.string().nullable(),
                 badgeId: z.string().nullable(),
-                role: z.enum(["admin", "judge", "sponsor", "staff", "participant"]),
+                role: z.enum([
+                  "admin",
+                  "judge",
+                  "sponsor",
+                  "staff",
+                  "mentor",
+                  "participant",
+                  "unassigned",
+                ]),
                 phone: z.string().nullable(),
                 language: z.string(),
                 shirtSize: z.string().nullable(),
@@ -438,7 +457,15 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         params: z.object({ id: z.coerce.number().int() }),
         response: {
           200: userResponseSchema.extend({
-            role: z.enum(["admin", "judge", "sponsor", "staff", "participant"]),
+            role: z.enum([
+              "admin",
+              "judge",
+              "sponsor",
+              "staff",
+              "mentor",
+              "participant",
+              "unassigned",
+            ]),
             capabilities: z.array(z.string()),
             groups: z.array(z.object({ id: z.number(), name: z.string() })),
           }),
@@ -492,6 +519,47 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       const after = await applyUserPatch(req.params.id, req.userId as number, req.body, "admin");
       return serializeUser(after);
     },
+  );
+
+  api.put(
+    "/api/users/:id/attendee-role",
+    {
+      preHandler: requireCapability(CAPABILITIES.USERS_WRITE),
+      schema: {
+        params: z.object({ id: z.coerce.number().int() }),
+        body: attendeeRoleBody,
+        summary: "Set an attendee type manually",
+        description:
+          "Classify an attendee as participant or mentor through an auditable relationship, never a permission role. The permanent ticket is issued in the same transaction.",
+        response: {
+          200: z.object({ role: z.enum(["participant", "mentor"]), ticketIssued: z.literal(true) }),
+        },
+      },
+    },
+    async (req) =>
+      withTransaction(async (client) => {
+        const { rows } = await client.query(`SELECT id FROM users WHERE id = $1 FOR UPDATE`, [
+          req.params.id,
+        ]);
+        if (!rows[0]) throw new NotFoundError("User not found", { userId: req.params.id });
+        await client.query(
+          `INSERT INTO manual_attendee_roles (user_id, role, assigned_by)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (user_id) DO UPDATE
+             SET role = EXCLUDED.role, assigned_by = EXCLUDED.assigned_by, assigned_at = now()`,
+          [req.params.id, req.body.role, req.userId],
+        );
+        await issueTicket(client, req.params.id);
+        await audit(client, {
+          actorId: req.userId,
+          entityType: "user",
+          entityId: req.params.id,
+          action: "attendee_role_set",
+          source: "admin",
+          after: { role: req.body.role },
+        });
+        return { role: req.body.role, ticketIssued: true as const };
+      }),
   );
 
   api.get(

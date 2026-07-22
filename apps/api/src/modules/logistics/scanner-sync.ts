@@ -35,7 +35,19 @@ export async function scannerSnapshot() {
                 WHEN EXISTS (SELECT 1 FROM room_judges rj WHERE rj.user_id = u.id) THEN 'judge'
                 WHEN EXISTS (SELECT 1 FROM sponsors s WHERE s.user_id = u.id) THEN 'sponsor'
                 WHEN COALESCE(uc.has_capability, false) THEN 'staff'
-                ELSE 'participant'
+                WHEN EXISTS (SELECT 1 FROM manual_attendee_roles mar WHERE mar.user_id = u.id AND mar.role = 'mentor') THEN 'mentor'
+                WHEN EXISTS (SELECT 1 FROM manual_attendee_roles mar WHERE mar.user_id = u.id AND mar.role = 'participant') THEN 'participant'
+                WHEN EXISTS (
+                  SELECT 1 FROM application_responses ar
+                  JOIN applications a ON a.id = ar.application_id
+                 WHERE ar.user_id = u.id AND ar.status <> 'draft' AND a.type = 'mentor'
+                ) THEN 'mentor'
+                WHEN EXISTS (
+                  SELECT 1 FROM application_responses ar
+                  JOIN applications a ON a.id = ar.application_id
+                 WHERE ar.user_id = u.id AND ar.status <> 'draft' AND a.type = 'participant'
+                ) THEN 'participant'
+                ELSE 'unassigned'
               END AS role,
               EXISTS (
                 SELECT 1 FROM application_responses ar
@@ -88,7 +100,14 @@ export async function scannerSnapshot() {
     people: peopleResult.rows.map((row) => ({
       userId: row.id as number,
       email: row.email as string,
-      role: row.role as "admin" | "judge" | "sponsor" | "staff" | "participant",
+      role: row.role as
+        | "admin"
+        | "judge"
+        | "sponsor"
+        | "staff"
+        | "mentor"
+        | "participant"
+        | "unassigned",
       ticketToken: (row.ticket_token as string | null) ?? null,
       badgeId: (row.badge_id as string | null) ?? null,
       revokedBadgeIds: (row.badge_id_history as string[]) ?? [],

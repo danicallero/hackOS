@@ -86,8 +86,22 @@ export async function accreditationCountsByRole() {
                 ) THEN 'staff'
                 WHEN EXISTS (SELECT 1 FROM room_judges rj WHERE rj.user_id = u.id) THEN 'judge'
                 WHEN EXISTS (SELECT 1 FROM sponsors s WHERE s.user_id = u.id) THEN 'sponsor'
-                WHEN EXISTS (SELECT 1 FROM effective_groups eg WHERE eg.user_id = u.id) THEN 'staff'
-                ELSE 'participant'
+                WHEN EXISTS (
+                  SELECT 1 FROM effective_groups eg
+                  JOIN group_capabilities gc ON gc.group_id = eg.group_id
+                 WHERE eg.user_id = u.id
+                ) THEN 'staff'
+                WHEN EXISTS (SELECT 1 FROM manual_attendee_roles mar WHERE mar.user_id = u.id AND mar.role = 'mentor') THEN 'mentor'
+                WHEN EXISTS (SELECT 1 FROM manual_attendee_roles mar WHERE mar.user_id = u.id AND mar.role = 'participant') THEN 'participant'
+                WHEN EXISTS (
+                  SELECT 1 FROM application_responses ar JOIN applications a ON a.id = ar.application_id
+                 WHERE ar.user_id = u.id AND ar.status <> 'draft' AND a.type = 'mentor'
+                ) THEN 'mentor'
+                WHEN EXISTS (
+                  SELECT 1 FROM application_responses ar JOIN applications a ON a.id = ar.application_id
+                 WHERE ar.user_id = u.id AND ar.status <> 'draft' AND a.type = 'participant'
+                ) THEN 'participant'
+                ELSE 'unassigned'
               END AS role
          FROM users u
         WHERE u.badge_id IS NOT NULL AND u.anonymized_at IS NULL

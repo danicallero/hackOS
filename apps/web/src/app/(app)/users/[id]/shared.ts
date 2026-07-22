@@ -13,7 +13,9 @@ export const ROLE_TONE: Record<DerivedRole, Tone> = {
   judge: "info",
   sponsor: "warning",
   staff: "success",
+  mentor: "info",
   participant: "neutral",
+  unassigned: "neutral",
 };
 
 export function fullName(u: Pick<UserDetail, "name" | "surname" | "email">): string {

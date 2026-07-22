@@ -318,6 +318,13 @@ describe("review + decide (H13, H14)", () => {
 });
 
 describe("confirm / decline (H15)", () => {
+  it("issues a ticket when a mentor acceptance is sent, without waiting for confirmation", async () => {
+    const mentorAppId = await createApplication({ type: "mentor" });
+    const { userId } = await toAcceptedSent(mentorAppId);
+    const { rows } = await pool.query(`SELECT token FROM tickets WHERE user_id = $1`, [userId]);
+    expect(rows).toHaveLength(1);
+  });
+
   it("confirms via the public token, issues a permanent ticket, double-confirm is idempotent", async () => {
     const a = await getApp();
     const appId = await createApplication();
