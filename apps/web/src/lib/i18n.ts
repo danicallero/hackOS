@@ -6867,6 +6867,18 @@ for (const [key, text] of Object.entries(dict)) {
   messages.en[key] = text.en;
 }
 
+/** Resolve one dictionary entry outside React, for navigation and copy checks. */
+export function translateMessage(
+  language: Language,
+  key: MessageKey,
+  values?: Record<string, string | number>,
+): string {
+  let text = messages[language][key] ?? key;
+  for (const [name, value] of Object.entries(values ?? {}))
+    text = text.replace(`{${name}}`, String(value));
+  return text;
+}
+
 interface LocaleContextValue {
   language: Language;
   setLanguage: (language: Language) => void;
@@ -6914,12 +6926,7 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
     () => ({
       language,
       setLanguage,
-      t: (key, values) => {
-        let text: string = messages[language][key] ?? key;
-        for (const [name, value] of Object.entries(values ?? {}))
-          text = text.replace(`{${name}}`, String(value));
-        return text;
-      },
+      t: (key, values) => translateMessage(language, key, values),
     }),
     [language],
   );
