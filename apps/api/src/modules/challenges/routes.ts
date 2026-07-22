@@ -83,7 +83,15 @@ export function registerChallengeRoutes(app: FastifyInstance): void {
 
   r.patch(
     "/api/challenges/:id",
-    { schema: { params: challengeIdParam, body: updateChallengeBody } },
+    {
+      schema: {
+        params: challengeIdParam,
+        body: updateChallengeBody,
+        summary: "Update a challenge",
+        description:
+          "Partially updates challenge content, prizes, judging configuration, timing and visibility. Organization admins with sponsors:manage, queue:admin or the admin wildcard may update any editable field; a sponsor representative may edit only their own challenge, and public content is locked after reveal. Judging panel criteria remain locked once judging starts. Every successful edit is versioned and audited (H44, H45, H53).",
+      },
+    },
     async (req) => {
       const access = await assertCanEditChallenge(req.userId, req.params.id);
       return updateChallenge(req.params.id, actor(req.userId), req.body, access);

@@ -32,6 +32,7 @@ function snapshotOf(row: Record<string, unknown>) {
     judging_panel_criteria: row.judging_panel_criteria,
     max_presentation_seconds: row.max_presentation_seconds,
     max_in_waiting_area: row.max_in_waiting_area,
+    visibility: row.visibility,
     available_from: row.available_from,
   };
 }

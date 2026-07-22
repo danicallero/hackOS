@@ -257,14 +257,74 @@ describe("challenge lifecycle (H43-H45)", () => {
     });
     expect(sponsorPanelEdit.statusCode).toBe(200);
 
+    const sponsorTimingEdit = await server.inject({
+      method: "PATCH",
+      url: `/api/challenges/${challengeId}`,
+      headers: asUser(owner),
+      payload: { maxPresentationSeconds: 120 },
+    });
+    expect(sponsorTimingEdit.statusCode).toBe(200);
+    expect(sponsorTimingEdit.json().max_presentation_seconds).toBe(120);
+
     const adminEdit = await server.inject({
       method: "PATCH",
       url: `/api/challenges/${challengeId}`,
       headers: asUser(admin),
-      payload: { description: "Admin correction" },
+      payload: {
+        title: "Admin title",
+        description: "Admin correction",
+        criteria: "Admin criteria",
+        prizes: [{ name: "Admin prize", link: null }],
+        devpostTags: ["Admin tag"],
+        judgingPanelCriteria: [],
+        maxPresentationSeconds: 120,
+        maxInWaitingArea: 3,
+        visibility: "hidden",
+        availableFrom: null,
+      },
     });
     expect(adminEdit.statusCode).toBe(200);
     expect(adminEdit.json().description).toBe("Admin correction");
+    expect(adminEdit.json().title).toBe("Admin title");
+    expect(adminEdit.json().visibility).toBe("hidden");
+    expect(adminEdit.json().max_presentation_seconds).toBe(120);
+    expect(adminEdit.json().max_in_waiting_area).toBe(3);
+    const { rows: versions } = await pool.query(
+      `SELECT snapshot FROM challenge_versions WHERE challenge_id = $1 ORDER BY id DESC LIMIT 1`,
+      [challengeId],
+    );
+    expect(versions[0].snapshot).toMatchObject({
+      title: "Admin title",
+      visibility: "hidden",
+      available_from: null,
+    });
+
+    const adminVisibilityEdit = await server.inject({
+      method: "PATCH",
+      url: `/api/challenges/${challengeId}`,
+      headers: asUser(admin),
+      payload: { visibility: "visible" },
+    });
+    expect(adminVisibilityEdit.statusCode).toBe(200);
+    expect(adminVisibilityEdit.json().visibility).toBe("visible");
+  });
+
+  it("treats the wildcard capability as an admin for challenge edits", async () => {
+    const server = await getApp();
+    const admin = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
+    const challengeId = await createOwnedChallenge(await createUser(), "visible");
+
+    const edit = await server.inject({
+      method: "PATCH",
+      url: `/api/challenges/${challengeId}`,
+      headers: asUser(admin),
+      payload: { visibility: "hidden", title: "Superadmin correction" },
+    });
+    expect(edit.statusCode).toBe(200);
+    expect(edit.json()).toMatchObject({
+      title: "Superadmin correction",
+      visibility: "hidden",
+    });
   });
 
   it("bulk-reveals and hides challenges from the list (H45)", async () => {
