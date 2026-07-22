@@ -5,6 +5,13 @@ import { SponsorLogo } from "@/components/common/sponsor-logo";
 import type { PublicSponsor } from "@/components/public/public-types";
 import { cn } from "@/lib/utils";
 
+/** Sponsor files are commonly exported with a small transparent vertical pad. */
+const SQUARE_ASPECT_TOLERANCE = 0.12;
+
+function isSquareMark(width: number, height: number) {
+  return Math.abs(width / height - 1) <= SQUARE_ASPECT_TOLERANCE;
+}
+
 /**
  * A sponsor's mark on a venue screen, with the one thing an unattended kiosk
  * needs that an admin page doesn't: if the logo fails to load — a dead URL, a
@@ -37,7 +44,7 @@ export function SponsorMark({
       onError={() => setFailed(true)}
       onLoad={(event) => {
         const { naturalHeight, naturalWidth } = event.currentTarget;
-        setIsSquare(naturalWidth === naturalHeight);
+        setIsSquare(isSquareMark(naturalWidth, naturalHeight));
       }}
     />
   );
