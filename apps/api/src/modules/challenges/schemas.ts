@@ -37,10 +37,10 @@ export const updateChallengeBody = z
 export type UpdateChallengeBody = z.infer<typeof updateChallengeBody>;
 
 /**
- * Fields on the "public" surface of a challenge — everything except the judging
- * panel. Once a challenge is published these are frozen for sponsor owners (only
- * admins keep editing them); the judging panel stays owner-editable regardless,
- * until judging starts. See updateChallenge().
+ * Public/general fields that are frozen for sponsor owners after reveal. The
+ * presentation duration is judging timing configuration and intentionally stays
+ * sponsor-editable, as does the judging panel until judging starts. See
+ * updateChallenge().
  */
 export const CHALLENGE_GENERAL_FIELDS = [
   "title",

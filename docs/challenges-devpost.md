@@ -98,9 +98,9 @@ is frozen once judging starts**: `panelIsLocked()` compares now against
 criteria once paired with judging" rule from the brief — realised through the
 judging clock, which is the deadline the stories actually name, not through a
 "has submissions" heuristic. Once a challenge is published or archived, sponsor
-owners can still update the judging panel until that judging deadline, but the
-public/general fields (`title`, `description`, `criteria`, `prizes`,
-`max_presentation_seconds`) are admin-only.
+owners can still update the judging panel and presentation duration until that
+judging deadline, but the public/general fields (`title`, `description`,
+`criteria`, `prizes`) are admin-only.
 
 ### 1.3 Projects module (`apps/api/src/modules/projects/`)
 
