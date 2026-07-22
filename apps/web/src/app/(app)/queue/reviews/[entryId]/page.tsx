@@ -7,14 +7,7 @@
 // back. Visibility is scoped server-side exactly like the overview list.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import {
-  ArrowLeftIcon,
-  ClipboardListIcon,
-  ExternalLinkIcon,
-  LockIcon,
-  SendIcon,
-  UsersIcon,
-} from "lucide-react";
+import { ArrowLeftIcon, ClipboardListIcon, LockIcon, SendIcon, UsersIcon } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -24,9 +17,10 @@ import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
 import { type Answers, normalizeAnswers, QuestionField } from "@/components/common/question-field";
 import { QueueStatusBadge } from "@/components/common/queue-status-badge";
+import { ReviewStatusBadge } from "@/components/common/review-status-badge";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
-import { StatusBadge } from "@/components/common/status-badge";
+import { ProjectDescriptionLinks } from "@/components/projects/project-description-links";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -150,12 +144,6 @@ export default function ReviewDetailPage() {
   }
 
   const { project, review, room, challenge } = detail;
-  const links: Array<[string, string | null]> = [
-    [t("devpostUrlLabel"), project.devpostUrl],
-    [t("githubUrlLabel"), project.githubUrl],
-    [t("demoUrlLabel"), project.demoUrl],
-  ];
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -173,13 +161,7 @@ export default function ReviewDetailPage() {
         state={
           <div className="flex flex-wrap items-center gap-2">
             <QueueStatusBadge status={detail.status} />
-            {review.status === "submitted" ? (
-              <StatusBadge tone="success">{t("challengeReviewSubmitted")}</StatusBadge>
-            ) : review.status === "draft" ? (
-              <StatusBadge tone="info">{t("challengeReviewDraft")}</StatusBadge>
-            ) : (
-              <StatusBadge tone="neutral">{t("challengeReviewNotStarted")}</StatusBadge>
-            )}
+            <ReviewStatusBadge status={review.status} />
           </div>
         }
         primaryAction={
@@ -199,9 +181,14 @@ export default function ReviewDetailPage() {
 
       <SectionCard title={t("projectDetailsTitle")} icon={ClipboardListIcon}>
         <div className="space-y-4">
-          {project.description && (
-            <p className="text-sm text-pretty whitespace-pre-line">{project.description}</p>
-          )}
+          <ProjectDescriptionLinks
+            description={project.description}
+            links={{
+              devpostUrl: project.devpostUrl,
+              demoUrl: project.demoUrl,
+              githubUrl: project.githubUrl,
+            }}
+          />
           <dl className="grid gap-3 sm:grid-cols-2">
             <div>
               <dt className="text-muted-foreground text-sm">{t("colRoom")}</dt>
@@ -216,18 +203,6 @@ export default function ReviewDetailPage() {
               </dd>
             </div>
           </dl>
-          <div className="flex flex-wrap gap-2">
-            {links.map(([label, href]) =>
-              href ? (
-                <Button key={label} asChild variant="outline" size="sm">
-                  <a href={href} target="_blank" rel="noreferrer">
-                    <ExternalLinkIcon className="size-4" />
-                    {label}
-                  </a>
-                </Button>
-              ) : null,
-            )}
-          </div>
           <div>
             <p className="flex items-center gap-2 text-sm font-medium">
               <UsersIcon className="text-muted-foreground size-4" />
