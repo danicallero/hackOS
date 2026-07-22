@@ -17,10 +17,10 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { ArrowLeftIcon, ClipboardListIcon, LockIcon, UsersIcon } from "lucide-react";
-import Link from "next/link";
+import { ClipboardListIcon, LockIcon, UsersIcon } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { BackLink } from "@/components/common/back-link";
 import { EmptyState } from "@/components/common/empty-state";
 import { Spinner } from "@/components/common/spinner";
 import { StatCard } from "@/components/common/stat-card";
@@ -103,7 +103,7 @@ export default function ApplicationDetailPage() {
   if (state === "error") {
     return (
       <div className="space-y-6">
-        <BackLink />
+        <BackLink href="/applications" label={t("backToApplications")} />
         <EmptyState
           icon={ClipboardListIcon}
           title={t("formNotFound")}
@@ -118,7 +118,7 @@ export default function ApplicationDetailPage() {
 
   return (
     <div className="space-y-6">
-      <BackLink />
+      <BackLink href="/applications" label={t("backToApplications")} />
 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-2">
@@ -191,19 +191,6 @@ export default function ApplicationDetailPage() {
         )}
       </Tabs>
     </div>
-  );
-}
-
-function BackLink() {
-  const { t } = useLocale();
-  return (
-    <Link
-      href="/applications"
-      className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition-colors"
-    >
-      <ArrowLeftIcon className="size-4" />
-      {t("backToApplications")}
-    </Link>
   );
 }
 

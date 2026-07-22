@@ -5,7 +5,6 @@ import { EVENTS } from "@hackos/shared/events";
 import type { I18nText, Question } from "@hackos/shared/questions";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
-  ArrowLeftIcon,
   DownloadIcon,
   HistoryIcon,
   PlusIcon,
@@ -13,12 +12,12 @@ import {
   TriangleAlertIcon,
   TrophyIcon,
 } from "lucide-react";
-import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { BackLink } from "@/components/common/back-link";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { DevpostTagsField } from "@/components/common/devpost-tags-field";
 import { DurationInput } from "@/components/common/duration-input";
@@ -184,7 +183,7 @@ export default function ChallengeDetailPage() {
   if (status === "error" || !challenge) {
     return (
       <div className="space-y-6">
-        <BackLink />
+        <BackLink href="/challenges" label={t("backToChallenges")} />
         <EmptyState
           icon={TrophyIcon}
           title={t("challengeNotFoundTitle")}
@@ -196,7 +195,7 @@ export default function ChallengeDetailPage() {
 
   return (
     <div className="space-y-6">
-      <BackLink />
+      <BackLink href="/challenges" label={t("backToChallenges")} />
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-semibold">{textForDisplay(challenge.title)}</h1>
         <StatusBadge tone={visibilityTone(challenge.visibility)} className="capitalize">
@@ -217,19 +216,6 @@ export default function ChallengeDetailPage() {
         onSaved={load}
       />
     </div>
-  );
-}
-
-function BackLink() {
-  const { t } = useLocale();
-  return (
-    <Link
-      href="/challenges"
-      className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition-colors"
-    >
-      <ArrowLeftIcon className="size-4" />
-      {t("backToChallenges")}
-    </Link>
   );
 }
 

@@ -1,10 +1,10 @@
 "use client";
 
 import { EVENTS } from "@hackos/shared/events";
-import { ArrowLeftIcon, UsersIcon } from "lucide-react";
-import Link from "next/link";
+import { UsersIcon } from "lucide-react";
 import { useParams, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { BackLink } from "@/components/common/back-link";
 import { EmptyState } from "@/components/common/empty-state";
 import { Spinner } from "@/components/common/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -80,7 +80,7 @@ export default function UserProfilePage() {
   if (status === "error" || !user) {
     return (
       <div className="space-y-6">
-        <BackLink />
+        <BackLink href="/users" label={t("backToUsers")} />
         <EmptyState
           icon={UsersIcon}
           title={t("userNotFoundTitle")}
@@ -92,7 +92,7 @@ export default function UserProfilePage() {
 
   return (
     <div className="space-y-6">
-      <BackLink />
+      <BackLink href="/users" label={t("backToUsers")} />
       <ProfileHeader user={user} />
 
       <Tabs defaultValue={initialTab}>
@@ -132,18 +132,5 @@ export default function UserProfilePage() {
         </TabsContent>
       </Tabs>
     </div>
-  );
-}
-
-export function BackLink() {
-  const { t } = useLocale();
-  return (
-    <Link
-      href="/users"
-      className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition-colors"
-    >
-      <ArrowLeftIcon className="size-4" />
-      {t("backToUsers")}
-    </Link>
   );
 }
