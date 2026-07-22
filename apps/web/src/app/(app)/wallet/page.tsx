@@ -18,8 +18,7 @@ import type { Me } from "@/lib/types";
  * Apple only ships this badge for "es" and "en_US/en_GB" locales; "gl" falls
  * back to the Spanish artwork since there's no Galician variant and the two
  * languages share readers. Per Apple's Add to Apple Wallet guidelines, this
- * must be the unmodified official artwork (no recoloring, no custom button)
- * shown on a light background.
+ * must be the unmodified official artwork (no recoloring, no custom button).
  */
 const APPLE_WALLET_BADGE_BY_LOCALE: Record<string, string> = {
   es: "/wallet-badges/apple-wallet-badge-es.svg",
@@ -163,12 +162,12 @@ function WalletButtons({ purpose }: { purpose: Purpose }) {
     <div className="flex flex-wrap items-center gap-3">
       {/*
         Apple's Add to Apple Wallet guidelines require the unmodified
-        official badge artwork (no custom button, no recoloring) shown on a
-        light background, kept secondary to the surrounding content.
+        official badge artwork (no custom button, no recoloring), kept
+        secondary to the surrounding content.
       */}
       <button
         type="button"
-        className="inline-flex w-fit rounded-md bg-white p-1.5"
+        className="inline-flex w-fit"
         onClick={() => window.open(`${API_URL}/api/me/wallet/apple/${purpose}.pkpass`, "_blank")}
       >
         {/* eslint-disable-next-line @next/next/no-img-element -- official Apple badge, must not be re-processed by next/image */}
