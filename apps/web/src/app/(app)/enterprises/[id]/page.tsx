@@ -9,7 +9,6 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
-  ArrowLeftIcon,
   Building2Icon,
   CheckCircle2Icon,
   CircleDashedIcon,
@@ -23,6 +22,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { BackLink } from "@/components/common/back-link";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { EmptyState } from "@/components/common/empty-state";
 import { SectionCard } from "@/components/common/section-card";
@@ -148,7 +148,7 @@ export default function EnterpriseDetailPage() {
   if (status === "error" || !enterprise) {
     return (
       <div className="space-y-6">
-        <BackLink />
+        <BackLink href="/enterprises" label={t("backToEnterprises")} />
         <EmptyState
           icon={Building2Icon}
           title={t("enterpriseNotFoundTitle")}
@@ -160,7 +160,7 @@ export default function EnterpriseDetailPage() {
 
   return (
     <div className="space-y-6">
-      <BackLink />
+      <BackLink href="/enterprises" label={t("backToEnterprises")} />
       <div className="flex flex-wrap items-center gap-4">
         <Avatar size="lg">
           {enterprise.logo_url ? (
@@ -474,19 +474,6 @@ function MembersCard({ enterpriseId }: { enterpriseId: number }) {
         )}
       </div>
     </SectionCard>
-  );
-}
-
-function BackLink() {
-  const { t } = useLocale();
-  return (
-    <Link
-      href="/enterprises"
-      className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition-colors"
-    >
-      <ArrowLeftIcon className="size-4" />
-      {t("backToEnterprises")}
-    </Link>
   );
 }
 
