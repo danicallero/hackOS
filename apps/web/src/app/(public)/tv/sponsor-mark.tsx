@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { SponsorLogo } from "@/components/common/sponsor-logo";
 import type { PublicSponsor } from "@/components/public/public-types";
+import { cn } from "@/lib/utils";
 
 /**
  * A sponsor's mark on a venue screen, with the one thing an unattended kiosk
@@ -18,6 +19,7 @@ export function SponsorMark({
   className?: string;
 }) {
   const [failed, setFailed] = useState(false);
+  const [isSquare, setIsSquare] = useState(false);
 
   if (!sponsor.logoUrl || failed) {
     return (
@@ -31,8 +33,12 @@ export function SponsorMark({
       logoUrl={sponsor.logoUrl}
       logoNegativeUrl={sponsor.logoNegativeUrl}
       alt={sponsor.name}
-      className={className}
+      className={cn(className, isSquare && "scale-75")}
       onError={() => setFailed(true)}
+      onLoad={(event) => {
+        const { naturalHeight, naturalWidth } = event.currentTarget;
+        setIsSquare(naturalWidth === naturalHeight);
+      }}
     />
   );
 }
