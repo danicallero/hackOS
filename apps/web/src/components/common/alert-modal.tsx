@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertDialog } from "radix-ui";
+import { useState } from "react";
 import { Spinner } from "@/components/common/spinner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -16,20 +17,31 @@ export function AlertModal({
   onOpenChange,
   onConfirm,
   children,
+  trigger,
+  autoClose = false,
 }: {
-  open: boolean;
+  open?: boolean;
   title: string;
   description: string;
   cancelLabel: string;
   confirmLabel: string;
   pending?: boolean;
   destructive?: boolean;
-  onOpenChange: (open: boolean) => void;
+  onOpenChange?: (open: boolean) => void;
   onConfirm: () => void;
   children?: React.ReactNode;
+  /** Optional trigger for a self-managed confirmation dialog. */
+  trigger?: React.ReactNode;
+  /** Close immediately after confirmation; async callers normally stay open while pending. */
+  autoClose?: boolean;
 }) {
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const isOpen = open ?? uncontrolledOpen;
+  const setOpen = onOpenChange ?? setUncontrolledOpen;
+
   return (
-    <AlertDialog.Root open={open} onOpenChange={onOpenChange}>
+    <AlertDialog.Root open={isOpen} onOpenChange={setOpen}>
+      {trigger && <AlertDialog.Trigger asChild>{trigger}</AlertDialog.Trigger>}
       <AlertDialog.Portal>
         <AlertDialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
         <AlertDialog.Content
@@ -57,7 +69,7 @@ export function AlertModal({
                 variant={destructive ? "destructive" : "default"}
                 disabled={pending}
                 onClick={(event) => {
-                  event.preventDefault();
+                  if (!autoClose || pending) event.preventDefault();
                   onConfirm();
                 }}
               >

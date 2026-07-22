@@ -5,7 +5,7 @@
 // participant without a project can create one here.
 
 import { EVENTS } from "@hackos/shared/events";
-import { ExternalLinkIcon, FolderGitIcon, TrophyIcon, UsersIcon } from "lucide-react";
+import { FolderGitIcon, TrophyIcon, UsersIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/common/empty-state";
@@ -14,8 +14,7 @@ import { QueueStatusBadge } from "@/components/common/queue-status-badge";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
-import { ProjectDescription } from "@/components/projects/project-description";
-import { Button } from "@/components/ui/button";
+import { ProjectDescriptionLinks } from "@/components/projects/project-description-links";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
@@ -85,34 +84,18 @@ export default function MyProjectPage() {
 
 function MyProjectCard({ repo }: { repo: ProjectRepo }) {
   const { t } = useLocale();
-  const links = [
-    { label: "Devpost", href: repo.devpost_url },
-    { label: "Demo", href: repo.demo_url },
-    { label: "Repository", href: repo.github_url },
-  ].filter((l): l is { label: string; href: string } => Boolean(l.href));
 
   return (
     <div className="space-y-5">
       <SectionCard title={repo.name} icon={FolderGitIcon} bodyClassName="space-y-3">
-        {repo.description && (
-          <div className="max-w-prose">
-            <ProjectDescription text={repo.description} />
-          </div>
-        )}
-        {links.length > 0 ? (
-          <div className="flex flex-wrap gap-2">
-            {links.map((link) => (
-              <Button key={link.label} variant="outline" size="sm" asChild>
-                <a href={link.href} target="_blank" rel="noreferrer">
-                  <ExternalLinkIcon className="size-4" />
-                  {link.label}
-                </a>
-              </Button>
-            ))}
-          </div>
-        ) : (
-          <p className="text-muted-foreground text-sm">{t("noLinksProject")}</p>
-        )}
+        <ProjectDescriptionLinks
+          description={repo.description}
+          links={{
+            devpostUrl: repo.devpost_url,
+            demoUrl: repo.demo_url,
+            githubUrl: repo.github_url,
+          }}
+        />
       </SectionCard>
 
       <div className="grid gap-5 xl:grid-cols-2">

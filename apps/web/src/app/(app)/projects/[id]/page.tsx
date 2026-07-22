@@ -23,6 +23,7 @@ import { AccessDenied } from "@/components/common/access-denied";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { QueueStatusBadge } from "@/components/common/queue-status-badge";
+import { ReviewStatusBadge } from "@/components/common/review-status-badge";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { StatCard } from "@/components/common/stat-card";
@@ -372,7 +373,12 @@ export default function ProjectDetailPage() {
                         ) : (
                           <StatusBadge tone="info">{t("prizeBadge")}</StatusBadge>
                         )}
-                        <ReviewStatusBadge challenge={entry.challenge} />
+                        {entry.challenge.status && (
+                          <ReviewStatusBadge
+                            status={entry.challenge.reviewStatus}
+                            score={entry.challenge.nota}
+                          />
+                        )}
                         {canEdit && entry.challenge.status && (
                           <Button
                             variant="outline"
@@ -447,31 +453,6 @@ export default function ProjectDetailPage() {
       </div>
     </div>
   );
-}
-
-/**
- * H36 evaluation status badge. Only rendered for actual queue entries (a
- * prize-only pseudo row has no evaluation to show). `reviewStatus === null`
- * covers both "not evaluated yet" and "you don't own this challenge" — the
- * backend deliberately makes those indistinguishable so a sponsor can't tell
- * whether another company's challenge has started judging.
- */
-function ReviewStatusBadge({ challenge }: { challenge: ProjectRepo["challenges"][number] }) {
-  const { t } = useLocale();
-  if (!challenge.status) return null;
-  if (challenge.reviewStatus === "submitted") {
-    return (
-      <StatusBadge tone="success">
-        {challenge.nota !== null
-          ? t("challengeReviewSubmittedWithNota", { nota: challenge.nota })
-          : t("challengeReviewSubmitted")}
-      </StatusBadge>
-    );
-  }
-  if (challenge.reviewStatus === "draft") {
-    return <StatusBadge tone="info">{t("challengeReviewDraft")}</StatusBadge>;
-  }
-  return <StatusBadge tone="neutral">{t("challengeReviewNotStarted")}</StatusBadge>;
 }
 
 function MemberRemoveButton({

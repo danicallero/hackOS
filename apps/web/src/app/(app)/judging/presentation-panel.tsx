@@ -12,6 +12,7 @@ import {
   UsersIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { AlertModal } from "@/components/common/alert-modal";
 import { QueueStatusBadge } from "@/components/common/queue-status-badge";
 import { StatusBadge } from "@/components/common/status-badge";
 import { ProjectDescription } from "@/components/projects/project-description";
@@ -24,7 +25,6 @@ import { presentationTimerState } from "@/lib/judging-workspace";
 import { getRepoChallenges, type QueueEntry, type RepoChallenge, type RoomPace } from "@/lib/queue";
 import { cn } from "@/lib/utils";
 import type { Challenge } from "../challenges/shared";
-import { ConfirmAction } from "./confirm-action";
 import { challengeName, entryLabel, secondsLabel } from "./helpers";
 
 export function PresentationPanel({
@@ -150,10 +150,12 @@ export function PresentationPanel({
                 {t("start")}
               </Button>
               {canSendBack && (
-                <ConfirmAction
+                <AlertModal
                   title={t("confirmSendBackTitle")}
                   description={t("confirmSendBackDescription")}
+                  cancelLabel={t("cancel")}
                   confirmLabel={t("requeueWaitingRoom")}
+                  autoClose
                   onConfirm={() =>
                     onEntryAction(
                       entry,

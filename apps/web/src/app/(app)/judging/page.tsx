@@ -18,6 +18,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AccessDenied } from "@/components/common/access-denied";
+import { AlertModal } from "@/components/common/alert-modal";
 import { EmptyState } from "@/components/common/empty-state";
 import { Spinner } from "@/components/common/spinner";
 import { Button } from "@/components/ui/button";
@@ -60,7 +61,6 @@ import {
 import { useSessionContext } from "@/lib/session";
 import type { Challenge } from "../challenges/shared";
 
-import { ConfirmAction } from "./confirm-action";
 import { challengeName, errorMessage, exportHref } from "./helpers";
 import { PresentationPanel } from "./presentation-panel";
 import { QueuePanel } from "./queue-panel";
@@ -303,10 +303,12 @@ export default function QueuePage() {
                 {t("resume")}
               </Button>
             ) : (
-              <ConfirmAction
+              <AlertModal
                 title={t("pauseRoomTitle")}
                 description={t("pauseRoomDescription")}
+                cancelLabel={t("cancel")}
                 confirmLabel={t("pause")}
+                autoClose
                 onConfirm={() =>
                   activeRoomId &&
                   mutate(

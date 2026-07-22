@@ -15,6 +15,7 @@ import {
   SkipForwardIcon,
 } from "lucide-react";
 import { useState } from "react";
+import { AlertModal } from "@/components/common/alert-modal";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -35,7 +36,6 @@ import type {
   RoomView,
 } from "@/lib/queue";
 import { cn } from "@/lib/utils";
-import { ConfirmAction } from "./confirm-action";
 import { entryLabel } from "./helpers";
 import { TeamSearch } from "./team-search";
 
@@ -396,25 +396,29 @@ export function CalledEntryActions({
           )}
         </DropdownMenuContent>
       </DropdownMenu>
-      <ConfirmAction
+      <AlertModal
         open={confirming === "no-show"}
         onOpenChange={(open) => !open && setConfirming(null)}
         title={t("confirmNoShowTitle")}
         description={t("confirmNoShowDescription")}
+        cancelLabel={t("cancel")}
         confirmLabel={t("noShow")}
         destructive
+        autoClose
         onConfirm={() =>
           onEntryAction(entry, "no-show", { reason: "No show" }, t("noShowRecorded"))
         }
       />
       {canAdmin && (
-        <ConfirmAction
+        <AlertModal
           open={confirming === "disqualify"}
           onOpenChange={(open) => !open && setConfirming(null)}
           title={t("confirmDisqualifyTitle")}
           description={t("confirmDisqualifyDescription")}
+          cancelLabel={t("cancel")}
           confirmLabel={t("disqualify")}
           destructive
+          autoClose
           onConfirm={() =>
             onEntryAction(
               entry,

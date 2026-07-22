@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { PageHeader } from "@/components/common/page-header";
-import { StatusBadge } from "@/components/common/status-badge";
+import { ReviewStatusBadge } from "@/components/common/review-status-badge";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -130,14 +130,7 @@ export default function ReviewsOverviewPage() {
         id: "status",
         header: t("statusColumn"),
         sortValue: (r) => r.status ?? "",
-        cell: (r) =>
-          r.status === "submitted" ? (
-            <StatusBadge tone="success">{t("challengeReviewSubmitted")}</StatusBadge>
-          ) : r.status === "draft" ? (
-            <StatusBadge tone="info">{t("challengeReviewDraft")}</StatusBadge>
-          ) : (
-            <StatusBadge tone="neutral">{t("challengeReviewNotStarted")}</StatusBadge>
-          ),
+        cell: (r) => <ReviewStatusBadge status={r.status} />,
       },
       {
         id: "nota",
