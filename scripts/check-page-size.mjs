@@ -27,7 +27,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 const ROOT = "apps/web/src/app";
-const HARD_LIMIT = 950;
+const HARD_LIMIT = 680;
 const SOFT_LIMIT = 600;
 
 /** Every `page.tsx` under the app router, depth-first. */
