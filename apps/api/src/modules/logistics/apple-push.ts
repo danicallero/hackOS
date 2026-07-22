@@ -46,6 +46,12 @@ export async function sendApplePush(pushToken: string, passTypeIdentifier: strin
         "apns-topic": passTypeIdentifier,
         "apns-push-type": "alert",
       });
+      // Network and DNS failures are emitted by the individual HTTP/2
+      // request stream, not necessarily by the session. Without this
+      // listener a transient APNs resolver failure (for example EAI_AGAIN)
+      // becomes an uncaught EventEmitter error and terminates the whole
+      // worker process instead of allowing BullMQ to retry this job.
+      req.once("error", reject);
       req.setEncoding("utf8");
       let status = 0;
       req.on("response", (headers) => {

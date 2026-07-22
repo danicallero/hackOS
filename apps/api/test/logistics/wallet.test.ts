@@ -28,6 +28,7 @@ import { assignBadge, createBadgePass, issueTicket } from "./fixtures.js";
 const pushState = vi.hoisted(() => ({
   lastRequest: null as { path: string; topic: string; pushType: string } | null,
   status: 200,
+  requestError: null as Error | null,
 }));
 
 vi.mock("node:http2", () => {
@@ -44,6 +45,11 @@ vi.mock("node:http2", () => {
         const stream = new EventEmitter() as EventEmitter & Record<string, unknown>;
         stream.setEncoding = () => {};
         stream.end = () => {
+          if (pushState.requestError) {
+            const error = pushState.requestError;
+            queueMicrotask(() => stream.emit("error", error));
+            return;
+          }
           queueMicrotask(() => {
             stream.emit("response", { ":status": pushState.status });
             stream.emit("end");
@@ -65,6 +71,7 @@ beforeEach(async () => {
   app ??= await buildTestApp();
   pushState.lastRequest = null;
   pushState.status = 200;
+  pushState.requestError = null;
 });
 
 afterEach(() => {
@@ -682,5 +689,24 @@ describe("H28 badge rotation syncs both platforms", () => {
       passId,
     ]);
     expect(devices.rows).toHaveLength(0);
+  });
+
+  it("propagates request-level APNs errors without crashing the worker process", async () => {
+    const uid = await createUser();
+    await assignBadge(uid, "BADGE-DNS-ERROR");
+    const { pool } = await import("../../src/db/pool.js");
+    const passId = await createBadgePass(uid, "apple");
+    await pool.query(
+      `INSERT INTO wallet_pass_devices (pass_id, device_library_identifier, push_token)
+       VALUES ($1, 'device-dns-error', 'push-dns-error')`,
+      [passId],
+    );
+
+    pushState.requestError = new Error("getaddrinfo EAI_AGAIN api.push.apple.com");
+    const { processWalletSync } = await import("../../src/modules/logistics/wallet-sync.js");
+
+    await expect(processWalletSync({ data: { passIds: [passId] } } as never)).rejects.toThrow(
+      "EAI_AGAIN",
+    );
   });
 });
