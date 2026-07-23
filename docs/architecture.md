@@ -132,13 +132,20 @@ is the source of truth for each.
 
 ### minio — object storage
 - **Stack:** MinIO (S3-compatible) + a one-shot `mc` sidecar that creates the
-  bucket idempotently and sets prefix policy: **`enterprises/` is public**
-  (sponsor logos, H44), **`uploads/` is private** (application files, H12,
-  served only through the API's owner-or-staff presigned-download route).
+  bucket idempotently and sets prefix policy: **`enterprises/` is anonymously
+  readable** (sponsor logos, H44), **`uploads/` is private** (application files,
+  H12, served only through the API's owner-or-staff proxied-download route).
 - **Networks:** `instance` only, no host ports, `minio:9000`. Console off by
   default (`MINIO_BROWSER=off`).
+- **Public read path:** the browser loads sponsor logos directly from
+  `S3_PUBLIC_URL` — a **Cloudflare-fronted hostname that proxies to the
+  `enterprises/` prefix**. This is the single narrow public read into object
+  storage; the admin API and the private `uploads/` prefix are never exposed
+  (see §3). Without `S3_PUBLIC_URL` set, logo URLs fall back to the internal
+  `http://minio:9000` host the browser can't reach, so they silently fail to
+  load even though the upload succeeded.
 - **State:** the `miniodata` volume — the second stateful piece. Swappable for a
-  managed S3/R2 by repointing `S3_ENDPOINT` (§8).
+  managed S3/R2 by repointing `S3_ENDPOINT` + `S3_PUBLIC_URL` (§7).
 
 ### mailpit — dev only
 - Local `pnpm infra:up` catches all outbound mail at `localhost:8025`. Not part
@@ -161,8 +168,17 @@ There are exactly two networks, and the split is the entire perimeter:
 **Why two.** Datastores publish no host ports and live only on `instance`, so
 they are unreachable from the host or the internet — only named services on the
 same private network can talk to them. Only the api (both networks) and the web
-(edge only) are ever public. This is why `postgres`, `valkey`, and `minio` need
-no firewall of their own: there is simply no route to them from outside.
+(edge only) are ever public. This is why `postgres` and `valkey` need no
+firewall of their own: there is simply no route to them from outside.
+
+**The one exception — MinIO's public prefix.** MinIO is on `instance` and its
+admin API / S3 port are *not* exposed, but the `enterprises/` prefix carries an
+anonymous-download policy (§4) and is served to browsers as public logos. That
+read path is exposed through a **Cloudflare-fronted hostname** set as
+`S3_PUBLIC_URL`, which proxies to MinIO's `enterprises/` prefix only — no host
+port, no admin access, and the private `uploads/` prefix stays unreachable. So
+the accurate statement is: MinIO has exactly one narrow public *read* path (its
+public prefix), and nothing else about the datastores is reachable from outside.
 
 **Egress.** The `instance` network is a *normal* bridge (not `internal`), so api
 and worker reach the internet for mail and Expo push through its NAT. Datastores
@@ -291,39 +307,18 @@ when object durability/scale matters more than self-hosting.
 
 **Multi-event = multi-instance, not multi-node.** A second hackathon is a second
 fully-isolated stack (unique `STACK_NAME` + `INSTANCE_NETWORK` + Dokploy
-project) on the same host — separate networks, volumes, secrets, and Traefik
-routers, zero shared state. This is the horizontal story for *tenancy*; it needs
-no orchestration change.
+project) — separate networks, volumes, secrets, and Traefik routers, zero shared
+state. This is the horizontal story for *tenancy*; it needs no orchestration
+change.
 
-### When (and how) to move to Kubernetes
-
-The app is already k8s-shaped — stateless api/worker/web, all state externalized,
-env-driven config, real health endpoints — so the port is mechanical, not a
-rewrite:
-
-| Compose today | Kubernetes equivalent |
-|---|---|
-| api / worker / web services | `Deployment`s (worker: no Service/Ingress) |
-| postgres / valkey / minio | `StatefulSet`s + PVCs, or managed offerings (RDS/ElastiCache/S3) |
-| instance vs edge networks | `NetworkPolicy` (default-deny; only api↔stores, only api/web ingress) |
-| Traefik + Cloudflare Tunnel | `Ingress`/Gateway API (+ cloudflared as a Deployment) |
-| Dokploy env store | `Secret` / `ConfigMap` |
-| `restart: unless-stopped` | pod restartPolicy + liveness/readiness probes on `/healthz` |
-| more worker replicas | `HPA` — **but** see caveat |
-
-**Reach for k8s when** you need multi-node HA, autoscaling under genuinely
-unpredictable load, or you're already running a cluster. **Don't** for a single
-event — Dokploy plus a couple of worker replicas is less to operate and fails in
-fewer ways.
-
-**k8s caveats specific to this design:**
-- The worker is a *tick drainer*, not a queue consumer, so CPU-based HPA is a
-  poor signal. Scale it on a custom metric — outbox depth
-  (`count(*) where status='queued' and next_attempt_at<=now()`) — or just run a
-  small fixed replica count. `SKIP LOCKED` already makes any replica count safe.
-- Keep exactly one Postgres primary; don't "scale" it with naive replicas.
-- SSE needs sticky-free routing to work (it does, via Valkey) but the Ingress
-  must not buffer responses — mirror the Traefik `flushinterval=-1` setting.
+**One thing to preserve if you ever change the topology.** The worker is a
+*tick drainer*, not a per-job queue consumer, so its safety comes entirely from
+`FOR UPDATE SKIP LOCKED` — any replica count is safe, but naive autoscaling on
+CPU is a poor signal (a tick that finds an empty queue costs almost nothing).
+Scale it on outbox depth
+(`count(*) where status='queued' and next_attempt_at<=now()`) or just run a
+small fixed replica count. And keep exactly one Postgres primary — don't "scale"
+it with naive writable replicas.
 
 ---
 
@@ -394,7 +389,10 @@ Full detail in [`deploy/README.md`](../deploy/README.md#security-posture); the
 load-bearing points:
 
 - **Only the api is publicly routable** to datastores; web is public but
-  store-less; postgres/valkey/minio have no public route at all.
+  store-less; postgres and valkey have no public route at all. MinIO's sole
+  public surface is the anonymous-read `enterprises/` prefix, served via a
+  Cloudflare-fronted `S3_PUBLIC_URL` — its admin API and private `uploads/`
+  prefix are never exposed.
 - **Containers run unprivileged** (`USER node`, `no-new-privileges:true`) under
   `tini`.
 - **CORS locked** to `CORS_ORIGINS` in production; credentialed cross-origin
