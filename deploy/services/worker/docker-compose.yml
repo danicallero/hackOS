@@ -3,6 +3,14 @@
 # No HTTP, no ingress. Joins ONLY the per-instance private network — that
 # network is a normal bridge, so the worker still has internet egress for mail
 # providers and Expo push. Scale its replicas independently of the API.
+#
+# DNS: pinned to public resolvers (see the `dns:` key below). Internal service
+# names (postgres/valkey/minio) still resolve via Docker's embedded resolver
+# (127.0.0.11); only EXTERNAL lookups (Expo exp.host, mail, APNs) use these.
+# Without pinning, Docker snapshots the host's /etc/resolv.conf upstreams at
+# container-create time — if the host DNS is transiently wrong then (e.g. a
+# reboot or Tailscale reconnect mid-deploy), the worker inherits dead upstreams
+# and every outbound fetch dies with "fetch failed" until it's recreated (H51).
 
 x-app-env: &app-env
   NODE_ENV: production
@@ -53,6 +61,9 @@ services:
       - no-new-privileges:true
     restart: unless-stopped
     environment: *app-env
+    # Deterministic external DNS — do not inherit the host's resolv.conf, which
+    # can be transiently wrong at deploy time and poison every outbound fetch.
+    dns: ["1.1.1.1", "8.8.8.8"]
     networks: [instance]
     # The image bakes an HTTP /healthz probe for the API; the worker serves no
     # HTTP, so disable it. Liveness is process-based: on crash, restart kicks in.
