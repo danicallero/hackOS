@@ -73,6 +73,10 @@ services:
       - no-new-privileges:true
     restart: unless-stopped
     environment: *app-env
+    # Deterministic external DNS — don't inherit the host's resolv.conf, which
+    # can be transiently wrong at deploy time and poison outbound fetches (mail,
+    # APNs, Google Wallet). Internal names still resolve via 127.0.0.11.
+    dns: ["1.1.1.1", "8.8.8.8"]
     depends_on:
       migrate:
         condition: service_completed_successfully

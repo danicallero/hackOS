@@ -62,10 +62,19 @@ export async function dispatchPush(
     ...timeSensitive,
   }));
 
+  // undici surfaces network/DNS failures as a bare `TypeError: fetch failed`
+  // whose real reason (EAI_AGAIN, ECONNRESET, timeout, …) lives on `.cause`.
+  // Unwrap it so the outbox `last_error` names the actual failure instead of
+  // an opaque "fetch failed" that hides e.g. a container DNS misconfiguration.
   const res = await fetch(EXPO_PUSH_URL, {
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json" },
     body: JSON.stringify(messages),
+  }).catch((err: unknown) => {
+    const cause = err instanceof Error ? err.cause : undefined;
+    const detail =
+      cause instanceof Error ? cause.message : cause ? String(cause) : (err as Error)?.message;
+    throw new Error(`Expo push request failed: ${detail ?? "unknown network error"}`);
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
