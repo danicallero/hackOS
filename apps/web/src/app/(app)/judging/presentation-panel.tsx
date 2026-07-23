@@ -21,7 +21,7 @@ import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { useLocale } from "@/lib/i18n";
-import { presentationTimerState } from "@/lib/judging-workspace";
+import { freezeTotalMinutes, presentationTimerState } from "@/lib/judging-workspace";
 import { getRepoChallenges, type QueueEntry, type RepoChallenge, type RoomPace } from "@/lib/queue";
 import { cn } from "@/lib/utils";
 import type { Challenge } from "../challenges/shared";
@@ -301,21 +301,14 @@ export function PresentationTimer({
   const { t } = useLocale();
   const [now, setNow] = useState(Date.now());
 
-  // The pace (and its cap/squeeze) is a live value that keeps recomputing as
-  // the schedule and pending count change — refetching it mid-presentation
-  // must not shift the total this timer counts against, or the remaining/
-  // overtime figure would jump around instead of counting smoothly. Freeze it
-  // per presentation (keyed by startedAt), capturing it once if it wasn't
-  // ready yet when the presentation began.
+  // The total is frozen per presentation so a mid-presentation pace refetch
+  // can't shift it; the rule itself lives (and is tested) in
+  // judging-workspace.ts.
   const frozen = useRef<{ key: string | null; minutes: number | null }>({
     key: null,
     minutes: null,
   });
-  if (frozen.current.key !== startedAt) {
-    frozen.current = { key: startedAt, minutes: totalMinutes };
-  } else if (frozen.current.minutes == null && totalMinutes != null) {
-    frozen.current.minutes = totalMinutes;
-  }
+  frozen.current = freezeTotalMinutes(frozen.current, startedAt, totalMinutes);
   // Pure arithmetic (elapsed/remaining/progress/tone) lives in
   // judging-workspace.ts so the threshold boundaries are unit-testable; only
   // the per-presentation freeze above and the ticking clock stay here.
