@@ -2,8 +2,8 @@
 
 import { ArrowUpToLineIcon, DoorOpenIcon, SearchIcon } from "lucide-react";
 import { QueueStatusBadge } from "@/components/common/queue-status-badge";
+import { ReviewStatusBadge } from "@/components/common/review-status-badge";
 import { Spinner } from "@/components/common/spinner";
-import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -77,9 +77,9 @@ export function TeamSearch({
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 <QueueStatusBadge status={entry.status} />
                 {entry.has_review && (
-                  <StatusBadge tone={entry.review_status === "submitted" ? "success" : "warning"}>
-                    {entry.review_status ?? t("reviewFallback")}
-                  </StatusBadge>
+                  <ReviewStatusBadge
+                    status={entry.review_status === "submitted" ? "submitted" : "draft"}
+                  />
                 )}
               </div>
               {entry.blocked_by_room_name ? (

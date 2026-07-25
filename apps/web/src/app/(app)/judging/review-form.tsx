@@ -9,9 +9,9 @@ import { AlertTriangleIcon, CheckCircle2Icon, WifiOffIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { type Answers, normalizeAnswers, QuestionField } from "@/components/common/question-field";
+import { ReviewStatusBadge } from "@/components/common/review-status-badge";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
-import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -197,9 +197,7 @@ export function ReviewForm({
             {syncState === "offline" && <WifiOffIcon className="mr-1 inline size-4" />}
             {syncLabel}
           </span>
-          <StatusBadge tone={status === "submitted" ? "success" : "warning"}>
-            {status === "submitted" ? t("dataStatusSubmitted") : t("dataStatusDraft")}
-          </StatusBadge>
+          <ReviewStatusBadge status={status === "submitted" ? "submitted" : "draft"} />
           {onCloseExisting && (
             <Button size="sm" variant="outline" onClick={onCloseExisting}>
               {t("closeExistingEvaluation")}

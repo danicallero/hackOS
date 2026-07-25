@@ -1,7 +1,11 @@
 import { StatusBadge } from "@/components/common/status-badge";
 import { useLocale } from "@/lib/i18n";
 
-/** Canonical evaluation status display across project and review workspaces (H36). */
+/**
+ * Canonical evaluation status display across judging, project and review
+ * workspaces (H36, H46). Drafts intentionally use info so the state reads
+ * consistently on editing and read/correction surfaces.
+ */
 export function ReviewStatusBadge({
   status,
   score,
