@@ -1808,7 +1808,6 @@ const dict: Record<string, I18nText> = {
     gl: "Facer pasar directamente",
     en: "Bring in directly",
   },
-  reviewFallback: { es: "evaluación", gl: "avaliación", en: "review" },
   openExistingEvaluation: {
     es: "Abrir evaluación existente",
     gl: "Abrir avaliación existente",
