@@ -15,6 +15,13 @@ orientation** below → whichever module doc matches your task.
 
 Architecture & modules:
 
+- [Architecture & infrastructure](./architecture.md) — the system view: the six
+  services and their stacks, the two-network security boundary, state ownership
+  (Postgres truth vs. ephemeral Valkey), realtime SSE fan-out, the one-image
+  model, scalability (more workers, the Postgres ceiling, multi-instance
+  tenancy), the reasoning behind the big decisions, and the small-vs-real
+  deployment profiles. Start here for the whole-system picture;
+  `deploy/README.md` is the operational runbook.
 - [Module summaries (M1–M5)](./modules-1-5.md) — schemas, hooks, UI layouts and
   state transitions touched by each module, with the corrections made where the
   original brief assumed something the schema contradicts.
