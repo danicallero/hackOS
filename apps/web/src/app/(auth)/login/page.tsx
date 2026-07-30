@@ -25,12 +25,7 @@ import { useLocale } from "@/lib/i18n";
 import { safeReturnPath, withReturnPath } from "@/lib/return-path";
 import { useSessionContext } from "@/lib/session";
 
-const schema = z.object({
-  email: z.string().email("Enter a valid email"),
-  password: z.string().min(1, "Required"),
-});
-
-type Values = z.infer<typeof schema>;
+type Values = { email: string; password: string };
 
 function LoginInner() {
   const router = useRouter();

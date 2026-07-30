@@ -6,8 +6,7 @@ import { type TvVenueConfig, wifiJoinCode } from "@/lib/tv";
 import { cn } from "@/lib/utils";
 
 /**
- * "Point your camera at the screen to join" (H42). Rendered locally as an SVG
- * rather than through the QR web service `components/common/qr-code.tsx` uses:
+ * "Point your camera at the screen to join" (H42). Rendered locally as an SVG:
  * a venue screen may have no internet — the Wi-Fi it is advertising is often
  * exactly what isn't working yet — and the password must not travel to a third
  * party to be turned into pixels.

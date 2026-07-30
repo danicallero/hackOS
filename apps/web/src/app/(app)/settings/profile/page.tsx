@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { UserIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -35,17 +35,19 @@ import { EmailCard } from "./email-card";
 const SHIRT_SIZES = ["XS", "S", "M", "L", "XL", "XXL"] as const;
 const LANGS: Language[] = ["es", "gl", "en"];
 
-const schema = z.object({
-  name: z.string().min(1, "Required").max(200),
-  surname: z.string().min(1, "Required").max(200),
-  phone: z.string().max(50),
-  language: z.enum(["en", "es", "gl"]),
-  shirtSize: z.string(),
-  foodIntolerances: z.array(z.string()),
-  foodIntoleranceNotes: z.string().max(2000),
-});
+function profileSchema(t: (key: string) => string) {
+  return z.object({
+    name: z.string().min(1, t("required")).max(200),
+    surname: z.string().min(1, t("required")).max(200),
+    phone: z.string().max(50),
+    language: z.enum(["en", "es", "gl"]),
+    shirtSize: z.string(),
+    foodIntolerances: z.array(z.string()),
+    foodIntoleranceNotes: z.string().max(2000),
+  });
+}
 
-type Values = z.infer<typeof schema>;
+type Values = z.infer<ReturnType<typeof profileSchema>>;
 
 const NONE = "__none__";
 
@@ -88,6 +90,7 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
   const { refresh } = useSessionContext();
   const { t } = useLocale();
   const lang = (me.language as Language) ?? "es";
+  const schema = useMemo(() => profileSchema(t), [t]);
 
   const form = useForm<Values>({
     resolver: zodResolver(schema),

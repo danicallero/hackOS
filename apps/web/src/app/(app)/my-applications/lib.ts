@@ -6,8 +6,10 @@
 // but only ever hits the applicant endpoints (me.routes.ts / confirm.routes.ts /
 // the public read of open forms). Types are declared locally per module rules.
 
-import type { I18nText, Translate } from "@/lib/i18n";
+import { ApiError } from "@/lib/api";
+import { type I18nText, LOCALE_CODES, type Translate } from "@/lib/i18n";
 import type { Tone } from "@/lib/tones";
+import type { Language } from "@/lib/types";
 
 export const FIELD_KINDS = [
   "text",
@@ -84,6 +86,44 @@ export interface MyResponseDetail {
 
 /** A single response value, keyed by field.key in the responses object. */
 export type FieldValue = string | number | boolean | string[] | null | undefined;
+
+/** Extract the per-field errors the API returns on failed template validation. */
+export function fieldErrorsFromApi(err: unknown, t: Translate): Record<string, string> {
+  if (err instanceof ApiError && err.details && typeof err.details === "object") {
+    const fields = (err.details as { fields?: unknown }).fields;
+    if (fields && typeof fields === "object") {
+      return Object.fromEntries(
+        Object.entries(fields).map(([key, value]) => {
+          const message = String(value);
+          if (message === "required") return [key, t("fieldRequired")];
+          if (message === "invalid option") return [key, t("fieldInvalidOption")];
+          if (message === "must be a number") return [key, t("fieldMustBeNumber")];
+          return [key, t("fieldInvalid")];
+        }),
+      );
+    }
+  }
+  return {};
+}
+
+export function isNotFoundError(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 404;
+}
+
+export function isConfirmationExpiredError(error: unknown): boolean {
+  if (!(error instanceof ApiError) || !error.details || typeof error.details !== "object") {
+    return false;
+  }
+  const details = error.details as { code?: unknown; expired?: unknown };
+  return details.code === "confirmation_expired" || details.expired === true;
+}
+
+export type ActionError = {
+  message: string;
+  action: "save" | "submit" | "confirm" | "decline";
+};
+
+export type MutationKey = { responseId: number; status: string; key: string };
 
 // ── client mirror of the API's enrichTemplate (service.ts) ────────────────────
 //
@@ -173,21 +213,30 @@ export function statusLabel(status: string, t: Translate): string {
     declined: t("declined"),
     expired: t("dataStatusExpired"),
   };
-  return map[status] ?? status;
+  return map[status] ?? t("unknownStatus");
+}
+
+export function formTypeLabel(type: string, t: Translate): string {
+  const map: Record<string, string> = {
+    participant: t("applicationTypeParticipant"),
+    mentor: t("applicationTypeMentor"),
+    sponsor: t("applicationTypeSponsor"),
+    volunteer: t("applicationTypeVolunteer"),
+  };
+  return map[type] ?? t("applicationTypeOther");
 }
 
 // ── datetime ──────────────────────────────────────────────────────────────────
 
-const dateTimeFmt = new Intl.DateTimeFormat("en-GB", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-});
-
-export function fmtDateTime(iso: string | null | undefined): string {
+export function fmtDateTime(iso: string | null | undefined, language: Language = "en"): string {
   if (!iso) return "—";
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "—" : dateTimeFmt.format(d);
+  if (Number.isNaN(d.getTime())) return "—";
+  return new Intl.DateTimeFormat(LOCALE_CODES[language], {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(d);
 }

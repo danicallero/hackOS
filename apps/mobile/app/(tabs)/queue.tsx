@@ -118,7 +118,9 @@ export default function QueueScreen() {
         paddingTop: 16 + androidTopInset,
       }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      ListHeaderComponent={<StaleDataBanner updatedAt={staleSince} />}
+      ListHeaderComponent={
+        <StaleDataBanner updatedAt={staleSince} onRetry={() => void load()} retrying={loading} />
+      }
       ListEmptyComponent={
         loading ? (
           <RequestFeedback loading />
@@ -146,7 +148,7 @@ function combineCleanups(cleanups: Array<() => void>) {
 function QueueCard({ item, precalled }: { item: QueueEntry; precalled: boolean }) {
   const { t } = useLocale();
   const calledRoom = item.status === "called" ? item.room : null;
-  const eta = formatEta(item.etaMinutes, t("queueAnyMoment"));
+  const eta = formatEta(item.etaMinutes, t);
 
   return (
     <View
@@ -333,13 +335,15 @@ function RoomChip({ room }: { room: QueueRoom }) {
   );
 }
 
-function formatEta(minutes: number | null, anyMoment: string) {
+function formatEta(minutes: number | null, t: ReturnType<typeof useLocale>["t"]) {
   if (minutes == null) return null;
-  if (minutes <= 0) return anyMoment;
-  if (minutes < 60) return `~${minutes} min`;
+  if (minutes <= 0) return t("queueAnyMoment");
+  if (minutes < 60) return t("queueEtaMinutes", { minutes: String(minutes) });
   const hours = Math.floor(minutes / 60);
   const remainder = minutes % 60;
-  return remainder ? `~${hours}h ${remainder}m` : `~${hours}h`;
+  return remainder
+    ? t("queueEtaHoursMinutes", { hours: String(hours), minutes: String(remainder) })
+    : t("queueEtaHours", { hours: String(hours) });
 }
 
 function statusTone(status: string): "neutral" | "accent" | "success" | "warning" | "destructive" {

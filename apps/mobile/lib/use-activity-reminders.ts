@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { apiFetch } from "./api";
 import { useMeContext } from "./me-context";
@@ -38,8 +38,11 @@ export function useActivityReminders() {
     data: prefs,
     load,
     setData,
+    error: loadError,
   } = useCachedApi(`user:${me?.id ?? "unknown"}:notification-preferences`, fetchPreferences);
   const [savingId, setSavingId] = useState<number | null>(null);
+  const [actionError, setActionError] = useState<Error | null>(null);
+  const retryAction = useRef<(() => Promise<void>) | null>(null);
 
   // useCachedApi's state is local to each call site (schedule list, activity
   // detail, the notifications preferences tab each mount their own instance),
@@ -61,12 +64,16 @@ export function useActivityReminders() {
   const toggle = useCallback(
     async (activityId: number, enabled: boolean) => {
       if (!prefs) return;
+      retryAction.current = () => toggle(activityId, enabled);
       const category = `schedule:${activityId}`;
       setSavingId(activityId);
+      setActionError(null);
       try {
         const next = await savePreferences([{ category, channel: "push", enabled }]);
         setData(next);
         emitNotificationChange();
+      } catch (cause) {
+        setActionError(cause instanceof Error ? cause : new Error("Reminder update failed"));
       } finally {
         setSavingId(null);
       }
@@ -74,5 +81,18 @@ export function useActivityReminders() {
     [prefs, setData],
   );
 
-  return { ready: Boolean(prefs), load, isEnabled, toggle, savingId };
+  const retry = useCallback(() => {
+    if (retryAction.current) void retryAction.current();
+    else void load();
+  }, [load]);
+
+  return {
+    ready: Boolean(prefs),
+    load,
+    isEnabled,
+    toggle,
+    savingId,
+    error: loadError ?? actionError,
+    retry,
+  };
 }

@@ -45,6 +45,19 @@ const dateTime = (value: string, timezone: string, language: "es" | "gl" | "en")
     timeZone: timezone,
   }).format(new Date(value));
 
+function applicationTypeLabel(type: string, t: Translate): string {
+  return (
+    (
+      {
+        participant: t("applicationTypeParticipant"),
+        mentor: t("applicationTypeMentor"),
+        sponsor: t("applicationTypeSponsor"),
+        volunteer: t("applicationTypeVolunteer"),
+      } as Record<string, string>
+    )[type] ?? t("applicationTypeOther")
+  );
+}
+
 export function PublicPage() {
   const { language, t } = useLocale();
   const [content, setContent] = useState<Content | null>(null);
@@ -165,6 +178,9 @@ function PublicPageContent({
   t: Translate;
 }) {
   const { event, schedule, sponsors, challenges, announcements, openApplications } = content;
+  const upcomingSchedule = schedule
+    .filter((item) => Date.parse(item.endsAt) >= Date.now())
+    .slice(0, 4);
   const eventPhase = useEventPhase(event);
   return (
     <>
@@ -209,12 +225,12 @@ function PublicPageContent({
             {openApplications.map((form) => (
               <div
                 key={form.id}
-                className="hover:border-primary/30 flex items-center justify-between gap-4 rounded-xl border p-5 shadow-sm transition-colors hover:shadow-md"
+                className="hover:border-primary/30 flex items-center justify-between gap-4 rounded-xl border p-5 transition-colors"
               >
                 <div className="min-w-0">
                   <h3 className="font-medium">{form.name}</h3>
                   <p className="text-muted-foreground mt-1 text-sm">
-                    <span className="capitalize">{form.type}</span>
+                    <span>{applicationTypeLabel(form.type, t)}</span>
                     {form.close_at
                       ? ` · ${t("closes")} ${dateTime(form.close_at, event.timezone, language)}`
                       : ""}
@@ -258,35 +274,32 @@ function PublicPageContent({
         <SectionHeading icon={CalendarDaysIcon} id="schedule-title">
           {t("publicSchedule")}
         </SectionHeading>
-        {schedule.length ? (
+        {upcomingSchedule.length ? (
           <ol className="mt-6 divide-y overflow-hidden rounded-xl border">
-            {schedule
-              .filter((item) => Date.parse(item.endsAt) >= Date.now())
-              .slice(0, 4)
-              .map((item) => (
-                <li
-                  key={item.id}
-                  className="hover:bg-accent/50 grid gap-1 p-4 transition-colors sm:grid-cols-[12rem_1fr_auto] sm:gap-4"
-                >
-                  <time className="text-muted-foreground text-sm tabular-nums">
-                    {dateTime(item.startsAt, event.timezone, language)}
-                  </time>
-                  <div>
-                    <h3 className="font-medium">{item.title}</h3>
-                    {item.description && (
-                      <p className="text-muted-foreground text-pretty mt-1 text-sm">
-                        {item.description}
-                      </p>
-                    )}
-                  </div>
-                  {item.location && (
-                    <p className="text-muted-foreground text-sm">{item.location}</p>
+            {upcomingSchedule.map((item) => (
+              <li
+                key={item.id}
+                className="hover:bg-accent/50 grid gap-1 p-4 transition-colors sm:grid-cols-[12rem_1fr_auto] sm:gap-4"
+              >
+                <time className="text-muted-foreground text-sm tabular-nums">
+                  {dateTime(item.startsAt, event.timezone, language)}
+                </time>
+                <div>
+                  <h3 className="font-medium">{item.title}</h3>
+                  {item.description && (
+                    <p className="text-muted-foreground text-pretty mt-1 text-sm">
+                      {item.description}
+                    </p>
                   )}
-                </li>
-              ))}
+                </div>
+                {item.location && <p className="text-muted-foreground text-sm">{item.location}</p>}
+              </li>
+            ))}
           </ol>
         ) : (
-          <EmptyNotice>{t("schedulePending")}</EmptyNotice>
+          <EmptyNotice>
+            {schedule.length ? t("scheduleNoUpcoming") : t("schedulePending")}
+          </EmptyNotice>
         )}
         {schedule.length > 0 && (
           <Button asChild variant="outline" className="mt-4">

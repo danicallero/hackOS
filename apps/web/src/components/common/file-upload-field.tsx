@@ -23,6 +23,11 @@ export function FileUploadField({
   allowedTypes,
   maxSizeMb,
   disabled,
+  id,
+  "aria-label": ariaLabel,
+  "aria-labelledby": ariaLabelledBy,
+  "aria-describedby": ariaDescribedBy,
+  "aria-invalid": ariaInvalid,
 }: {
   applicationId: number;
   fieldKey: string;
@@ -32,23 +37,34 @@ export function FileUploadField({
   allowedTypes?: string[];
   maxSizeMb?: number;
   disabled?: boolean;
+  id?: string;
+  "aria-label"?: string;
+  "aria-labelledby"?: string;
+  "aria-describedby"?: string;
+  "aria-invalid"?: React.AriaAttributes["aria-invalid"];
 }) {
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const { t } = useLocale();
 
   const accept = allowedTypes?.length ? allowedTypes.join(",") : undefined;
   const maxMb = maxSizeMb ?? 10;
 
   async function upload(file: File) {
+    setUploadError(null);
     const ext = `.${(file.name.split(".").pop() ?? "").toLowerCase()}`;
     if (allowedTypes?.length && !allowedTypes.includes(ext)) {
-      toast.error(t("fileTypeNotAllowed", { ext, allowed: allowedTypes.join(", ") }));
+      const message = t("fileTypeNotAllowed", { ext, allowed: allowedTypes.join(", ") });
+      setUploadError(message);
+      toast.error(message);
       return;
     }
     if (file.size > maxMb * 1024 * 1024) {
-      toast.error(t("fileTooLarge", { maxMb }));
+      const message = t("fileTooLarge", { maxMb });
+      setUploadError(message);
+      toast.error(message);
       return;
     }
     setUploading(true);
@@ -68,9 +84,12 @@ export function FileUploadField({
       }
       // Store the private object key; reads resolve to a presigned URL on demand.
       onChange((payload as { key: string }).key);
+      setUploadError(null);
       toast.success(t("fileUploaded"));
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("uploadFailed"));
+    } catch {
+      const message = t("uploadFailed");
+      setUploadError(message);
+      toast.error(message);
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = "";
@@ -78,16 +97,25 @@ export function FileUploadField({
   }
 
   const fileName = value ? decodeURIComponent(value.split("/").pop() ?? value) : null;
+  const uploadErrorId = `${id ?? inputId}-upload-error`;
+  const describedBy = [ariaDescribedBy, uploadError ? uploadErrorId : null]
+    .filter(Boolean)
+    .join(" ");
+  const invalid = ariaInvalid ?? (uploadError ? true : undefined);
 
   return (
     <div className="space-y-2">
       <input
         ref={inputRef}
-        id={inputId}
+        id={id ? `${id}-input` : inputId}
         type="file"
         accept={accept}
         className="sr-only"
         disabled={disabled || uploading}
+        aria-labelledby={ariaLabelledBy}
+        aria-label={ariaLabel}
+        aria-describedby={describedBy || undefined}
+        aria-invalid={invalid}
         onChange={(e) => {
           const file = e.target.files?.[0];
           if (file) void upload(file);
@@ -95,7 +123,7 @@ export function FileUploadField({
       />
       {value ? (
         <div className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-          <FileIcon className="text-muted-foreground size-4 shrink-0" />
+          <FileIcon aria-hidden="true" className="text-muted-foreground size-4 shrink-0" />
           <FileLink value={value} className="min-w-0 flex-1 truncate">
             <span className="truncate">{fileName}</span>
           </FileLink>
@@ -107,24 +135,34 @@ export function FileUploadField({
               className="size-7"
               onClick={() => onChange("")}
             >
-              <XIcon className="size-4" />
+              <XIcon aria-hidden="true" className="size-4" />
               <span className="sr-only">{t("removeFile")}</span>
             </Button>
           )}
         </div>
       ) : (
         <Button
+          id={id}
           type="button"
           variant="outline"
           disabled={disabled || uploading}
+          aria-labelledby={ariaLabelledBy}
+          aria-label={ariaLabel}
+          aria-describedby={describedBy || undefined}
+          aria-invalid={invalid}
           onClick={() => inputRef.current?.click()}
         >
-          {uploading ? <Spinner /> : <UploadIcon />}
+          {uploading ? <Spinner /> : <UploadIcon aria-hidden="true" />}
           {uploading ? t("uploading") : t("chooseFile")}
         </Button>
       )}
+      {uploadError && (
+        <p id={uploadErrorId} role="alert" className="text-destructive text-sm">
+          {uploadError}
+        </p>
+      )}
       <p className="text-muted-foreground flex items-center gap-1 text-xs">
-        <PaperclipIcon className="size-3" />
+        <PaperclipIcon aria-hidden="true" className="size-3" />
         {allowedTypes?.length ? allowedTypes.join(", ") : t("anyFile")} · {maxMb} MB
       </p>
     </div>

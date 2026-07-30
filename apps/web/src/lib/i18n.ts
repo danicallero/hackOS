@@ -186,6 +186,11 @@ const dict: Record<string, I18nText> = {
     gl: "Non se puido crear a conta.",
     en: "Could not create the account.",
   },
+  couldNotSendResetEmail: {
+    es: "No se ha podido enviar el correo. Inténtalo de nuevo.",
+    gl: "Non se puido enviar o correo. Téntao de novo.",
+    en: "We couldn't send the reset email. Try again.",
+  },
   atLeastEight: {
     es: "Al menos 8 caracteres",
     gl: "Polo menos 8 caracteres",
@@ -290,6 +295,11 @@ const dict: Record<string, I18nText> = {
     es: "El programa se publicará próximamente.",
     gl: "O programa publicarase proximamente.",
     en: "The schedule will be published soon.",
+  },
+  scheduleNoUpcoming: {
+    es: "No hay actividades próximas programadas.",
+    gl: "Non hai actividades próximas programadas.",
+    en: "There are no upcoming activities scheduled.",
   },
   challengesAndPrizes: {
     es: "Retos y premios",
@@ -454,6 +464,21 @@ const dict: Record<string, I18nText> = {
     gl: "Xa confirmaches a túa praza",
     en: "You're already confirmed",
   },
+  confirmationLinkInvalidTitle: {
+    es: "Este enlace no es válido",
+    gl: "Esta ligazón non é válida",
+    en: "This confirmation link isn't valid",
+  },
+  confirmationLinkInvalidDesc: {
+    es: "Pide a la organización que te envíe un enlace nuevo.",
+    gl: "Pide á organización que che envíe unha ligazón nova.",
+    en: "Ask the organization to send you a new link.",
+  },
+  ticketReadyDesc: {
+    es: "Tu entrada ya está lista. Puedes usar este código en el evento o iniciar sesión para gestionarla.",
+    gl: "A túa entrada xa está lista. Podes usar este código no evento ou iniciar sesión para xestionala.",
+    en: "Your ticket is ready. Use this code at the event or sign in to manage it.",
+  },
   declineFailed: {
     es: "No se ha podido procesar el enlace",
     gl: "Non se puido procesar a ligazón",
@@ -464,6 +489,11 @@ const dict: Record<string, I18nText> = {
     es: "Tu plaza ya estaba liberada",
     gl: "A túa praza xa estaba liberada",
     en: "Your spot was already released",
+  },
+  placeReleasedDesc: {
+    es: "La organización podrá ofrecer tu plaza a otra persona.",
+    gl: "A organización poderá ofrecer a túa praza a outra persoa.",
+    en: "The organization can now offer your spot to someone else.",
   },
   linkMissingToken: {
     es: "A este enlace le falta el token.",
@@ -494,6 +524,11 @@ const dict: Record<string, I18nText> = {
   copied: { es: "Copiado.", gl: "Copiado.", en: "Copied." },
   copy: { es: "Copiar", gl: "Copiar", en: "Copy" },
   chooseFile: { es: "Elegir archivo", gl: "Escoller ficheiro", en: "Choose file" },
+  chooseFileForField: {
+    es: "{field}: elegir archivo",
+    gl: "{field}: escoller ficheiro",
+    en: "{field}: choose file",
+  },
   uploading: { es: "Subiendo…", gl: "Subindo…", en: "Uploading…" },
   removeFile: { es: "Quitar archivo", gl: "Quitar ficheiro", en: "Remove file" },
   anyFile: { es: "Cualquier archivo", gl: "Calquera ficheiro", en: "Any file" },
@@ -3462,6 +3497,11 @@ const dict: Record<string, I18nText> = {
     gl: "Aínda non te presentaches a nada",
     en: "You haven't applied to anything yet",
   },
+  notAppliedYetDesc: {
+    es: "Elige un formulario abierto para iniciar una solicitud.",
+    gl: "Escolle un formulario aberto para comezar unha solicitude.",
+    en: "Choose an open form to start an application.",
+  },
   submittedOnPrefix: { es: "Enviado el {date}", gl: "Enviado o {date}", en: "Submitted {date}" },
   notSubmittedYet: { es: "Aún sin enviar", gl: "Aínda sen enviar", en: "Not submitted yet" },
   openToApply: { es: "Abiertos para solicitar", gl: "Abertos para solicitar", en: "Open to apply" },
@@ -3469,6 +3509,25 @@ const dict: Record<string, I18nText> = {
     es: "No hay formularios abiertos ahora mismo",
     gl: "Non hai formularios abertos agora mesmo",
     en: "No open forms right now",
+  },
+  noOpenFormsDesc: {
+    es: "Vuelve a consultar cuando se abra una solicitud nueva.",
+    gl: "Volta consultar cando se abra unha nova solicitude.",
+    en: "Check back when a new application opens.",
+  },
+  applicationTypeParticipant: {
+    es: "Participante",
+    gl: "Participante",
+    en: "Participant",
+  },
+  applicationTypeMentor: { es: "Mentor", gl: "Mentor", en: "Mentor" },
+  applicationTypeSponsor: { es: "Patrocinador", gl: "Patrocinador", en: "Sponsor" },
+  applicationTypeVolunteer: { es: "Voluntariado", gl: "Voluntariado", en: "Volunteer" },
+  applicationTypeOther: { es: "Otro tipo", gl: "Outro tipo", en: "Other type" },
+  couldNotLoadApplication: {
+    es: "No se ha podido cargar esta solicitud. Comprueba tu conexión e inténtalo de nuevo.",
+    gl: "Non se puido cargar esta solicitude. Comproba a conexión e téntao de novo.",
+    en: "Could not load this application. Check your connection and try again.",
   },
   closesInline: { es: " · cierra el {date}", gl: " · pecha o {date}", en: " · closes {date}" },
   couldNotVerifyLink: {
@@ -3495,6 +3554,26 @@ const dict: Record<string, I18nText> = {
     es: "Este campo es obligatorio",
     gl: "Este campo é obrigatorio",
     en: "This field is required",
+  },
+  fieldInvalid: {
+    es: "Revisa este campo.",
+    gl: "Revisa este campo.",
+    en: "Check this field.",
+  },
+  fieldInvalidOption: {
+    es: "Selecciona una opción válida.",
+    gl: "Selecciona unha opción válida.",
+    en: "Select a valid option.",
+  },
+  fieldMustBeNumber: {
+    es: "Introduce un número válido.",
+    gl: "Introduce un número válido.",
+    en: "Enter a valid number.",
+  },
+  savedAnswerLabel: {
+    es: "Respuesta {number}",
+    gl: "Resposta {number}",
+    en: "Answer {number}",
   },
   couldNotSaveDraft: {
     es: "No se ha podido guardar tu borrador.",
@@ -3565,9 +3644,9 @@ const dict: Record<string, I18nText> = {
   },
   headsUp: { es: "Atención", gl: "Atención", en: "Heads up" },
   dietaryDataDeletedWarn: {
-    es: "Si rechazas la plaza (o no confirmas a tiempo), se eliminan los datos dietéticos que hayas compartido.",
-    gl: "Se rexeitas a praza (ou non confirmas a tempo), elimínanse os datos dietéticos que compartiches.",
-    en: "If you decline (or don't confirm in time), any dietary data you shared is deleted.",
+    es: "Tus datos dietéticos se conservan en tu cuenta, pero solo se usan para planificar comidas si confirmas tu plaza.",
+    gl: "Os teus datos dietéticos consérvanse na túa conta, pero só se usan para planificar comidas se confirmas a praza.",
+    en: "Your dietary data stays on your account, but it is used to plan meals only if you confirm your place.",
   },
   confirmPlace: { es: "Confirmar plaza", gl: "Confirmar praza", en: "Confirm place" },
   placeConfirmedTitle: {
@@ -3607,9 +3686,9 @@ const dict: Record<string, I18nText> = {
     en: "Yes, release my place",
   },
   releaseCantBeUndone: {
-    es: "Esto no se puede deshacer desde aquí — necesitarías que los organizadores te volvieran a invitar. Los datos dietéticos que compartiste se eliminan al liberar tu plaza.",
-    gl: "Isto non se pode desfacer desde aquí — precisarías que os organizadores te volvesen convidar. Os datos dietéticos que compartiches elimínanse ao liberar a túa praza.",
-    en: "This can't be undone from here — you'd need the organizers to re-invite you. Any dietary data you shared is deleted when you release your place.",
+    es: "Esto no se puede deshacer desde aquí — necesitarías que la organización te volviera a aceptar. Tus datos dietéticos se conservan en tu cuenta, pero dejan de contar en la planificación de asistentes confirmados.",
+    gl: "Isto non se pode desfacer desde aquí — precisarías que a organización te volvese aceptar. Os teus datos dietéticos consérvanse na túa conta, pero deixan de contar na planificación de asistentes confirmados.",
+    en: "This can't be undone here — the organization would need to accept you again. Your dietary data stays on your account, but it is no longer used for confirmed-attendee planning.",
   },
   declinedThisPlaceTitle: {
     es: "Has rechazado esta plaza",
@@ -5782,6 +5861,11 @@ const dict: Record<string, I18nText> = {
     gl: "Non se puido engadir esa universidade.",
     en: "Could not add that university.",
   },
+  couldNotLoadUniversities: {
+    es: "No se han podido cargar las universidades. Prueba de nuevo.",
+    gl: "Non se puideron cargar as universidades. Téntao de novo.",
+    en: "Could not load universities. Try again.",
+  },
   searchUniversitiesShortPlaceholder: {
     es: "Buscar universidades…",
     gl: "Buscar universidades…",
@@ -6304,9 +6388,9 @@ const dict: Record<string, I18nText> = {
   reviewWord: { es: "evaluación", gl: "avaliación", en: "review" },
   revokeSpot: { es: "Revocar plaza", gl: "Revogar praza", en: "Revoke spot" },
   revokeSpotWarning: {
-    es: "La persona perderá la plaza y recibirá la comunicación. Si ya había confirmado, sus datos dietéticos se eliminarán.",
-    gl: "A persoa perderá a praza e recibirá a comunicación. Se xa confirmara, os seus datos dietéticos eliminaranse.",
-    en: "The applicant will lose the place and be notified. If they had confirmed, their dietary data will be deleted.",
+    es: "La persona perderá la plaza y recibirá la comunicación. Sus datos dietéticos se conservan, pero dejan de contar en la planificación de asistentes confirmados.",
+    gl: "A persoa perderá a praza e recibirá a comunicación. Os seus datos dietéticos consérvanse, pero deixan de contar na planificación de asistentes confirmados.",
+    en: "The applicant will lose the place and be notified. Their dietary data stays on the account, but is no longer used for confirmed-attendee planning.",
   },
   saveAnswers: { es: "Guardar respuestas", gl: "Gardar respostas", en: "Save answers" },
   saveMyReview: {
@@ -6519,9 +6603,9 @@ const dict: Record<string, I18nText> = {
     en: "Kept while your application is decided. Included in statistics only after you confirm your place.",
   },
   sensitiveDataLifecycleDeleted: {
-    es: "Se eliminaron al rechazar, caducar o revocar la plaza y ya no cuentan en estadísticas.",
-    gl: "Elimináronse ao rexeitar, caducar ou revogar a praza e xa non contan nas estatísticas.",
-    en: "Deleted after the place was declined, expired, or revoked and no longer included in statistics.",
+    es: "Se conservan en tu cuenta, pero no se usan para las estadísticas de asistentes confirmados mientras la plaza no esté confirmada.",
+    gl: "Consérvanse na túa conta, pero non se usan para as estatísticas de asistentes confirmados mentres a praza non estea confirmada.",
+    en: "Kept on your account, but not used for confirmed-attendee statistics while the place is unconfirmed.",
   },
   sensitiveDataLifecycleConfirmed: {
     es: "Se conservan para la logística del evento y cuentan en las estadísticas de asistentes confirmados.",

@@ -18,17 +18,26 @@ export function RequestFeedback({
   error,
   loading = false,
   onRetry,
+  message,
+  retrying = false,
 }: {
   error?: Error | null;
   loading?: boolean;
   onRetry?: () => void;
+  message?: string;
+  retrying?: boolean;
 }) {
   const { t } = useLocale();
 
   if (loading) {
     return (
-      <View style={styles.container} accessibilityRole="progressbar">
-        <ActivityIndicator />
+      <View
+        accessibilityLiveRegion="polite"
+        accessibilityLabel={t("loading")}
+        accessibilityRole="progressbar"
+        style={styles.container}
+      >
+        <ActivityIndicator color={colors.accent} />
         <Text selectable style={[styles.message, { color: colors.secondaryLabel }]}>
           {t("loading")}
         </Text>
@@ -40,6 +49,7 @@ export function RequestFeedback({
 
   return (
     <View
+      accessibilityLiveRegion="assertive"
       style={[
         styles.container,
         styles.errorContainer,
@@ -48,14 +58,21 @@ export function RequestFeedback({
       accessibilityRole="alert"
     >
       <Text selectable style={[styles.error, { color: colors.destructive }]}>
-        {t(errorKey(error))}
+        {message ?? t(errorKey(error))}
       </Text>
       {onRetry ? (
         <Pressable
+          accessibilityLabel={t("retry")}
           accessibilityRole="button"
+          accessibilityState={{ busy: retrying, disabled: retrying }}
+          disabled={retrying}
           onPress={onRetry}
-          style={({ pressed }) => [styles.button, { opacity: pressed ? 0.65 : 1 }]}
+          style={({ pressed }) => [
+            styles.button,
+            { opacity: retrying ? 0.45 : pressed ? 0.65 : 1 },
+          ]}
         >
+          {retrying ? <ActivityIndicator color={colors.accent} size="small" /> : null}
           <Text style={[styles.buttonText, { color: colors.accent }]}>{t("retry")}</Text>
         </Pressable>
       ) : null}
@@ -69,6 +86,9 @@ const styles = StyleSheet.create({
   message: { opacity: 0.7, textAlign: "center" },
   error: { textAlign: "center" },
   button: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
     minHeight: 44,
     justifyContent: "center",
     borderCurve: "continuous",

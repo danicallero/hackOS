@@ -34,7 +34,7 @@ export default function SignInScreen() {
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(
-    accessDenied === "1" ? t("mobileAccessDenied") : null,
+    accessDenied === "1" ? t("mobileAccessDenied", { website: EVENT_WEBSITE_DISPLAY }) : null,
   );
   const [event, setEvent] = useState<PublicEvent | null>(null);
 
@@ -67,12 +67,16 @@ export default function SignInScreen() {
       const me = await apiFetch<Me>("/api/me");
       if (!me.mobileAccess) {
         await signOut();
-        setError(t("mobileAccessDenied"));
+        setError(t("mobileAccessDenied", { website: EVENT_WEBSITE_DISPLAY }));
         return;
       }
       router.replace("/");
     } catch {
       setError(t("signInError"));
+      // If Better Auth has already restored the H4 session, its root session
+      // boundary will replace this form with a retry/sign-out state. Keeping
+      // the form here for a sign-in transport failure avoids navigating to a
+      // protected route before the session store has settled.
     } finally {
       setSubmitting(false);
     }
@@ -80,13 +84,10 @@ export default function SignInScreen() {
 
   return (
     <AuthScreen
-      scrollable={false}
       footer={
         <View
           style={{
-            borderTopColor: colors.separator,
-            borderTopWidth: 1,
-            paddingTop: 14,
+            gap: 4,
           }}
         >
           <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13, lineHeight: 18 }}>
@@ -139,7 +140,13 @@ export default function SignInScreen() {
           onPress={() =>
             router.push({ pathname: "/(auth)/forgot-password", params: { email: email.trim() } })
           }
-          style={({ pressed }) => ({ alignSelf: "flex-start", opacity: pressed ? 0.6 : 1 })}
+          style={({ pressed }) => ({
+            alignSelf: "flex-start",
+            justifyContent: "center",
+            minHeight: 44,
+            opacity: pressed ? 0.6 : 1,
+            paddingHorizontal: 4,
+          })}
         >
           <Text style={{ color: colors.accent, fontSize: 15, fontWeight: "600" }}>
             {t("forgotPassword")}

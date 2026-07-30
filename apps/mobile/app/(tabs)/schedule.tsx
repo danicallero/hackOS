@@ -2,12 +2,10 @@ import { useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   type GestureResponderEvent,
-  type NativeSyntheticEvent,
   Pressable,
   RefreshControl,
   SectionList,
   Text,
-  type TextLayoutEventData,
   useColorScheme,
   View,
 } from "react-native";
@@ -16,7 +14,7 @@ import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
-import { fetchPublicSchedule, type ScheduleItem } from "@/lib/schedule";
+import { fetchPublicSchedule, type ScheduleItem, scheduleTypeLabel } from "@/lib/schedule";
 import { useActivityReminders } from "@/lib/use-activity-reminders";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
@@ -140,7 +138,19 @@ export default function ScheduleScreen() {
         // Rows above collapse/expand height changes; a silent retry-free
         // failure is better than a crash — the user can just scroll manually.
       }}
-      ListHeaderComponent={<StaleDataBanner updatedAt={staleSince} />}
+      ListHeaderComponent={
+        <View style={{ gap: 8 }}>
+          <StaleDataBanner updatedAt={staleSince} onRetry={() => void load()} retrying={loading} />
+          {reminders.error ? (
+            <RequestFeedback
+              error={reminders.error}
+              message={t("scheduleReminderError")}
+              onRetry={reminders.retry}
+              retrying={reminders.savingId !== null}
+            />
+          ) : null}
+        </View>
+      }
       ListHeaderComponentStyle={{ paddingHorizontal: 16, paddingTop: staleSince ? 16 : 0 }}
       ListEmptyComponent={
         loading ? (
@@ -158,6 +168,7 @@ export default function ScheduleScreen() {
       renderSectionHeader={({ section }) => (
         <Text
           selectable
+          accessibilityRole="header"
           style={{
             color: colors.label,
             fontSize: 22,
@@ -165,14 +176,21 @@ export default function ScheduleScreen() {
             paddingBottom: 10,
             paddingHorizontal: 16,
             paddingTop: 22,
-            textTransform: "capitalize",
           }}
         >
           {section.title}
         </Text>
       )}
       renderItem={({ item, index, section }) =>
-        item.kind === "now" ? null : (
+        item.kind === "now" ? (
+          <View style={{ alignItems: "center", flexDirection: "row", gap: 8, padding: 16 }}>
+            <View style={{ backgroundColor: colors.accent, flex: 1, height: 2 }} />
+            <Text style={{ color: colors.accent, fontSize: 13, fontWeight: "700" }}>
+              {t("scheduleNow")}
+            </Text>
+            <View style={{ backgroundColor: colors.accent, flex: 1, height: 2 }} />
+          </View>
+        ) : (
           <ScheduleCard
             item={item}
             language={language}
@@ -213,19 +231,10 @@ function ScheduleCard({
   const endsAt = new Date(item.endsAt);
   const time = startsAt.toLocaleTimeString(language, { hour: "2-digit", minute: "2-digit" });
   const end = endsAt.toLocaleTimeString(language, { hour: "2-digit", minute: "2-digit" });
-  const [truncated, setTruncated] = useState(false);
 
   function toggleReminder(event: GestureResponderEvent) {
     event.stopPropagation();
     onToggleReminder(!reminderOn);
-  }
-
-  // Cards stay compact with a fixed line count per field; this flags when any
-  // field actually got clipped so we can hint that the full text is one tap away.
-  function noteIfClipped(maxLines: number) {
-    return (event: NativeSyntheticEvent<TextLayoutEventData>) => {
-      if (event.nativeEvent.lines.length >= maxLines) setTruncated(true);
-    };
   }
 
   return (
@@ -233,7 +242,6 @@ function ScheduleCard({
       <View style={{ alignItems: "center", width: 70 }}>
         <Text
           selectable
-          numberOfLines={1}
           style={{
             color: colors.label,
             fontSize: 15,
@@ -248,7 +256,19 @@ function ScheduleCard({
         ) : null}
       </View>
       <Pressable
-        accessibilityLabel={item.title}
+        accessibilityLabel={[
+          item.title,
+          time,
+          end,
+          item.location,
+          reminderOn === null
+            ? null
+            : t(reminderOn ? "scheduleReminderOn" : "scheduleReminderOff", {
+                name: item.title,
+              }),
+        ]
+          .filter(Boolean)
+          .join(", ")}
         accessibilityRole="button"
         onPress={() => router.push({ pathname: "/schedule/[id]", params: { id: String(item.id) } })}
         style={{
@@ -265,13 +285,11 @@ function ScheduleCard({
         <View style={{ alignItems: "flex-start", flexDirection: "row", gap: 8 }}>
           <Text
             selectable
-            numberOfLines={1}
-            onTextLayout={noteIfClipped(1)}
             style={{ color: colors.label, flex: 1, fontSize: 17, fontWeight: "700" }}
           >
             {item.title}
           </Text>
-          {item.type ? <StatusPill>{item.type}</StatusPill> : null}
+          {item.type ? <StatusPill>{scheduleTypeLabel(item.type, t)}</StatusPill> : null}
           {reminderOn !== null ? (
             <Pressable
               accessibilityLabel={t(reminderOn ? "scheduleReminderOn" : "scheduleReminderOff", {
@@ -280,9 +298,14 @@ function ScheduleCard({
               accessibilityRole="button"
               accessibilityState={{ selected: reminderOn, busy: reminderBusy }}
               disabled={reminderBusy}
-              hitSlop={8}
               onPress={toggleReminder}
-              style={{ opacity: reminderBusy ? 0.4 : 1 }}
+              style={({ pressed }) => ({
+                alignItems: "center",
+                justifyContent: "center",
+                minHeight: 44,
+                minWidth: 44,
+                opacity: reminderBusy ? 0.4 : pressed ? 0.65 : 1,
+              })}
             >
               <SymbolView
                 name={reminderOn ? "bell.fill" : "bell"}
@@ -309,47 +332,16 @@ function ScheduleCard({
                 size={14}
                 accessible={false}
               />
-              <Text
-                selectable
-                numberOfLines={1}
-                onTextLayout={noteIfClipped(1)}
-                style={{ color: colors.secondaryLabel, flex: 1, fontSize: 14 }}
-              >
+              <Text selectable style={{ color: colors.secondaryLabel, flex: 1, fontSize: 14 }}>
                 {item.location}
               </Text>
             </>
           ) : null}
         </View>
         {item.description ? (
-          <Text
-            selectable
-            numberOfLines={2}
-            onTextLayout={noteIfClipped(2)}
-            style={{ color: colors.secondaryLabel, fontSize: 15, lineHeight: 21 }}
-          >
+          <Text selectable style={{ color: colors.secondaryLabel, fontSize: 15, lineHeight: 21 }}>
             {item.description}
           </Text>
-        ) : null}
-        {truncated ? (
-          <View
-            accessible={false}
-            style={{
-              alignItems: "center",
-              flexDirection: "row",
-              gap: 3,
-              justifyContent: "flex-end",
-            }}
-          >
-            <Text style={{ color: colors.accent, fontSize: 12, fontWeight: "600" }}>
-              {t("scheduleShowMore")}
-            </Text>
-            <SymbolView
-              name="chevron.right"
-              tintColor={colors.accent}
-              size={11}
-              accessible={false}
-            />
-          </View>
         ) : null}
       </Pressable>
     </View>

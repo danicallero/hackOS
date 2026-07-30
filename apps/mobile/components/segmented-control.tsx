@@ -34,8 +34,14 @@ export function SegmentedControl({
         return (
           <Pressable
             key={value}
+            accessibilityLabel={value}
             accessibilityRole="tab"
             accessibilityState={{ selected }}
+            accessibilityValue={{
+              max: values.length,
+              min: 1,
+              now: selectedIndex + 1,
+            }}
             onPress={() => onChange(index)}
             style={({ pressed }) => ({
               alignItems: "center",
@@ -45,7 +51,7 @@ export function SegmentedControl({
               boxShadow: selected ? colors.controlShadow : undefined,
               flex: 1,
               justifyContent: "center",
-              minHeight: 32,
+              minHeight: 44,
               opacity: pressed ? 0.65 : 1,
               paddingHorizontal: 8,
             })}
@@ -55,6 +61,7 @@ export function SegmentedControl({
                 color: colors.label,
                 fontSize: 13,
                 fontWeight: selected ? "600" : "500",
+                flexShrink: 1,
                 textAlign: "center",
               }}
             >

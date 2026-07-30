@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -22,17 +22,19 @@ import { authClient } from "@/lib/auth-client";
 import { useLocale } from "@/lib/i18n";
 import { withReturnPath } from "@/lib/return-path";
 
-const schema = z
-  .object({
-    password: z.string().min(8, "At least 8 characters"),
-    confirm: z.string(),
-  })
-  .refine((v) => v.password === v.confirm, {
-    message: "Passwords don't match",
-    path: ["confirm"],
-  });
+function resetPasswordSchema(t: (key: string) => string) {
+  return z
+    .object({
+      password: z.string().min(8, t("atLeastEight")),
+      confirm: z.string(),
+    })
+    .refine((v) => v.password === v.confirm, {
+      message: t("passwordsDontMatch"),
+      path: ["confirm"],
+    });
+}
 
-type Values = z.infer<typeof schema>;
+type Values = z.infer<ReturnType<typeof resetPasswordSchema>>;
 
 function ResetPasswordForm() {
   const router = useRouter();
@@ -40,6 +42,7 @@ function ResetPasswordForm() {
   const token = params.get("token");
   const rawNext = params.get("next");
   const { t } = useLocale();
+  const schema = useMemo(() => resetPasswordSchema(t), [t]);
   const form = useForm<Values>({
     resolver: zodResolver(schema),
     defaultValues: { password: "", confirm: "" },
@@ -110,7 +113,9 @@ function ResetPasswordForm() {
                 )}
               />
               {form.formState.errors.root && (
-                <p className="text-destructive text-sm">{form.formState.errors.root.message}</p>
+                <p role="alert" className="text-destructive text-sm">
+                  {form.formState.errors.root.message}
+                </p>
               )}
               <SubmitButton className="w-full" pending={form.formState.isSubmitting}>
                 {t("updatePassword")}

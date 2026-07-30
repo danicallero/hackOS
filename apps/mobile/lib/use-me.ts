@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, type AppStateStatus } from "react-native";
-import { apiFetch } from "./api";
+import { ApiError, apiFetch } from "./api";
 import type { Me } from "./types";
 
 /**
@@ -15,24 +15,35 @@ export function useMe(enabled: boolean) {
   const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<Error | null>(null);
   const appState = useRef(AppState.currentState);
+  const requestId = useRef(0);
 
   const refetch = useCallback(async () => {
     if (!enabled) return;
+    const currentRequest = ++requestId.current;
+    setLoading(true);
     try {
       setError(null);
       const data = await apiFetch<Me>("/api/me");
+      if (currentRequest !== requestId.current) return;
       setMe(data);
     } catch (err) {
+      if (currentRequest !== requestId.current) return;
+      if (err instanceof ApiError && err.status === 401) setMe(null);
       setError(err instanceof Error ? err : new Error("Failed to load profile"));
     } finally {
-      setLoading(false);
+      if (currentRequest === requestId.current) setLoading(false);
     }
   }, [enabled]);
 
   useEffect(() => {
     if (enabled) void refetch();
     else {
+      // Invalidate a request started for the previous authenticated session
+      // before clearing its profile. Otherwise a late response can restore
+      // stale identity data after sign-out or session revocation.
+      requestId.current += 1;
       setMe(null);
+      setError(null);
       setLoading(false);
     }
   }, [enabled, refetch]);

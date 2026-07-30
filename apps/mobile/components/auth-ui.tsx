@@ -77,7 +77,20 @@ export function AuthScreen({
       keyboardShouldPersistTaps="handled"
       style={{ backgroundColor: colors.background }}
     >
-      <View style={{ alignSelf: "center", gap: 24, maxWidth: 440, width: "100%" }}>{children}</View>
+      <View style={{ alignSelf: "center", gap: 24, maxWidth: 440, width: "100%" }}>
+        {children}
+        {footer ? (
+          <View
+            style={{
+              borderTopColor: colors.separator,
+              borderTopWidth: 1,
+              paddingTop: 14,
+            }}
+          >
+            {footer}
+          </View>
+        ) : null}
+      </View>
     </ScrollView>
   );
 }
@@ -114,11 +127,11 @@ export function AuthHeader({
       <View style={{ alignItems: leading ? "flex-start" : "center", gap: 6 }}>
         <Text
           selectable
+          accessibilityRole="header"
           style={{
             color: colors.label,
             fontSize: leading ? 32 : 28,
             fontWeight: "800",
-            lineHeight: leading ? 38 : 34,
             textAlign: leading ? "left" : "center",
           }}
         >
@@ -158,7 +171,8 @@ export function AuthField({
       </Text>
       <TextInput
         ref={inputRef}
-        accessibilityLabel={label}
+        accessibilityLabel={error ? `${label}, ${error}` : label}
+        accessibilityHint={error ?? undefined}
         placeholderTextColor={colors.tertiaryLabel}
         selectionColor={colors.accent}
         style={[
@@ -231,16 +245,16 @@ export function AuthButton({
         backgroundColor: colors.accent,
         borderCurve: "continuous",
         borderRadius: 12,
+        flexDirection: "row",
+        gap: 8,
         justifyContent: "center",
         minHeight: 52,
         opacity: disabled || busy ? 0.45 : pressed ? 0.75 : 1,
+        paddingHorizontal: 16,
       })}
     >
-      {busy ? (
-        <ActivityIndicator color={colors.accentText} />
-      ) : (
-        <Text style={{ color: colors.accentText, fontSize: 17, fontWeight: "700" }}>{label}</Text>
-      )}
+      {busy ? <ActivityIndicator color={colors.accentText} /> : null}
+      <Text style={{ color: colors.accentText, fontSize: 17, fontWeight: "700" }}>{label}</Text>
     </Pressable>
   );
 }

@@ -82,7 +82,13 @@ export default function ForgotPasswordScreen() {
         <Pressable
           accessibilityRole="link"
           onPress={() => router.back()}
-          style={({ pressed }) => ({ alignSelf: "center", opacity: pressed ? 0.6 : 1 })}
+          style={({ pressed }) => ({
+            alignSelf: "center",
+            justifyContent: "center",
+            minHeight: 44,
+            opacity: pressed ? 0.6 : 1,
+            paddingHorizontal: 8,
+          })}
         >
           <Text style={{ color: colors.accent, fontSize: 15 }}>{t("backToSignIn")}</Text>
         </Pressable>

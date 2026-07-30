@@ -35,6 +35,11 @@ export function UniversityPicker({
   inDialog = false,
   className,
   allowPropose = true,
+  id,
+  "aria-labelledby": ariaLabelledBy,
+  "aria-describedby": ariaDescribedBy,
+  "aria-invalid": ariaInvalid,
+  "aria-required": ariaRequired,
 }: {
   /** Selected university id as a string, or "" when unset. */
   value: string;
@@ -43,21 +48,30 @@ export function UniversityPicker({
   inDialog?: boolean;
   className?: string;
   allowPropose?: boolean;
+  id?: string;
+  "aria-labelledby"?: string;
+  "aria-describedby"?: string;
+  "aria-invalid"?: React.AriaAttributes["aria-invalid"];
+  "aria-required"?: React.AriaAttributes["aria-required"];
 }) {
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [options, setOptions] = useState<University[]>([]);
   const [loading, setLoading] = useState(false);
+  const [searchError, setSearchError] = useState(false);
+  const [searchAttempt, setSearchAttempt] = useState(0);
   const [proposing, setProposing] = useState(false);
   // Remember the label for the currently-selected id so it renders even when
   // that id isn't in the latest search page (e.g. a reloaded draft).
   const [selectedLabel, setSelectedLabel] = useState<string | null>(null);
 
   // Debounced search against the public directory.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: searchAttempt intentionally retries the unchanged query.
   useEffect(() => {
     let active = true;
     setLoading(true);
+    setSearchError(false);
     const handle = setTimeout(async () => {
       try {
         const { universities } = await api.get<{ universities: University[] }>(
@@ -66,7 +80,10 @@ export function UniversityPicker({
         );
         if (active) setOptions(universities);
       } catch {
-        if (active) setOptions([]);
+        if (active) {
+          setOptions([]);
+          setSearchError(true);
+        }
       } finally {
         if (active) setLoading(false);
       }
@@ -75,7 +92,7 @@ export function UniversityPicker({
       active = false;
       clearTimeout(handle);
     };
-  }, [query]);
+  }, [query, searchAttempt]);
 
   // Resolve the label for a preset value on mount (draft reload).
   const resolvedFor = useRef<string | null>(null);
@@ -126,7 +143,8 @@ export function UniversityPicker({
   }
 
   const exactMatch = options.some((o) => o.name.toLowerCase() === query.trim().toLowerCase());
-  const canPropose = allowPropose && query.trim().length > 1 && !exactMatch && !loading;
+  const canPropose =
+    allowPropose && !searchError && query.trim().length > 1 && !exactMatch && !loading;
   const label = value ? (selectedLabel ?? t("universityNumberFallback", { id: value })) : null;
 
   const content = (
@@ -141,14 +159,34 @@ export function UniversityPicker({
           value={query}
           onValueChange={setQuery}
         />
-        <CommandList className="max-h-64">
-          {!loading && options.length === 0 && !canPropose && (
+        <CommandList aria-busy={loading || undefined} className="max-h-64">
+          {loading ? (
+            <div role="status" className="text-muted-foreground px-2 py-6 text-center text-sm">
+              {t("loading")}
+            </div>
+          ) : searchError ? (
+            <div
+              role="alert"
+              className="text-destructive flex flex-col items-center gap-2 px-2 py-6 text-center text-sm"
+            >
+              {t("couldNotLoadUniversities")}
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setSearchAttempt((attempt) => attempt + 1)}
+              >
+                {t("retry")}
+              </Button>
+            </div>
+          ) : options.length === 0 && !canPropose ? (
             <CommandEmpty>{t("typeToSearchUniversities")}</CommandEmpty>
-          )}
+          ) : null}
           <CommandGroup>
             {options.map((u) => (
               <CommandItem key={u.id} value={String(u.id)} onSelect={() => select(u)}>
                 <CheckIcon
+                  aria-hidden="true"
                   className={cn("size-4", String(u.id) === value ? "opacity-100" : "opacity-0")}
                 />
                 {u.name}
@@ -156,7 +194,7 @@ export function UniversityPicker({
             ))}
             {canPropose && (
               <CommandItem value={`propose-${query}`} onSelect={propose} disabled={proposing}>
-                <PlusIcon className="size-4" />
+                <PlusIcon aria-hidden="true" className="size-4" />
                 {t("addQuotedInline", { query: query.trim() })}
               </CommandItem>
             )}
@@ -170,15 +208,26 @@ export function UniversityPicker({
     <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
       <PopoverPrimitive.Trigger asChild>
         <Button
+          id={id}
           type="button"
           variant="outline"
           disabled={disabled}
+          role="combobox"
+          aria-expanded={open}
+          aria-haspopup="listbox"
+          aria-labelledby={ariaLabelledBy}
+          aria-describedby={ariaDescribedBy}
+          aria-invalid={ariaInvalid}
+          aria-required={ariaRequired}
           className={cn("h-auto min-h-10 w-full justify-between px-3 py-2 font-normal", className)}
         >
           <span className={cn("flex-1 truncate text-left", !label && "text-muted-foreground")}>
             {label ?? t("selectYourUniversityPlaceholder")}
           </span>
-          <ChevronsUpDownIcon className="text-muted-foreground size-4 shrink-0" />
+          <ChevronsUpDownIcon
+            aria-hidden="true"
+            className="text-muted-foreground size-4 shrink-0"
+          />
         </Button>
       </PopoverPrimitive.Trigger>
       {inDialog ? content : <PopoverPrimitive.Portal>{content}</PopoverPrimitive.Portal>}

@@ -44,6 +44,11 @@ export function MultiSelect({
   disabled,
   inDialog = false,
   className,
+  id,
+  name,
+  "aria-labelledby": ariaLabelledBy,
+  "aria-describedby": ariaDescribedBy,
+  "aria-invalid": ariaInvalid,
 }: {
   options: MultiSelectOption[];
   value: string[];
@@ -54,6 +59,11 @@ export function MultiSelect({
   disabled?: boolean;
   inDialog?: boolean;
   className?: string;
+  id?: string;
+  name?: string;
+  "aria-labelledby"?: string;
+  "aria-describedby"?: string;
+  "aria-invalid"?: React.AriaAttributes["aria-invalid"];
 }) {
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
@@ -81,7 +91,7 @@ export function MultiSelect({
                     selected.has(opt.value) ? "bg-primary text-primary-foreground" : "opacity-60",
                   )}
                 >
-                  {selected.has(opt.value) && <CheckIcon className="size-3" />}
+                  {selected.has(opt.value) && <CheckIcon aria-hidden="true" className="size-3" />}
                 </div>
                 <div className="flex flex-col">
                   <span>{opt.label}</span>
@@ -99,45 +109,61 @@ export function MultiSelect({
 
   return (
     <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
-      <PopoverPrimitive.Trigger asChild>
-        <div
-          role="combobox"
-          tabIndex={disabled ? -1 : 0}
-          aria-disabled={disabled}
-          aria-expanded={open}
-          className={cn(
-            buttonVariants({ variant: "outline" }),
-            "h-auto min-h-10 w-full justify-between px-3 py-2 font-normal",
-            disabled && "pointer-events-none opacity-50",
-            className,
-          )}
-        >
-          <span className="flex flex-1 flex-wrap gap-1">
-            {value.length === 0 ? (
-              <span className="text-muted-foreground">{placeholder ?? t("selectPlaceholder")}</span>
-            ) : (
-              value.map((v) => (
+      <div
+        className={cn(
+          "flex min-h-10 w-full items-center gap-2 rounded-control border bg-background px-3 py-2",
+          disabled && "opacity-50",
+          className,
+        )}
+      >
+        <span className="flex min-w-0 flex-1 flex-wrap gap-1">
+          {value.length === 0
+            ? null
+            : value.map((v) => (
                 <Badge key={v} variant="secondary" className="gap-1">
                   {labelOf(v)}
                   <button
                     type="button"
-                    tabIndex={-1}
+                    disabled={disabled}
                     aria-label={t("removeItemLabel", { name: labelOf(v) })}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggle(v);
-                    }}
-                    className="hover:text-foreground text-muted-foreground"
+                    onClick={() => toggle(v)}
+                    className="hover:text-foreground text-muted-foreground inline-flex size-6 items-center justify-center rounded-full focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                   >
-                    <XIcon className="size-3" />
+                    <XIcon aria-hidden="true" className="size-3" />
                   </button>
                 </Badge>
-              ))
+              ))}
+        </span>
+        <PopoverPrimitive.Trigger asChild>
+          <button
+            id={id}
+            name={name}
+            type="button"
+            disabled={disabled}
+            role="combobox"
+            aria-expanded={open}
+            aria-haspopup="listbox"
+            aria-labelledby={ariaLabelledBy}
+            aria-describedby={ariaDescribedBy}
+            aria-invalid={ariaInvalid}
+            className={cn(
+              buttonVariants({ variant: "ghost" }),
+              "min-w-0 flex-1 justify-between px-1 font-normal",
+              value.length > 0 && "flex-none",
             )}
-          </span>
-          <ChevronsUpDownIcon className="text-muted-foreground size-4 shrink-0" />
-        </div>
-      </PopoverPrimitive.Trigger>
+          >
+            <span className={cn(value.length > 0 && "sr-only", "truncate")}>
+              {value.length > 0
+                ? t("selectedCount", { count: value.length })
+                : (placeholder ?? t("selectPlaceholder"))}
+            </span>
+            <ChevronsUpDownIcon
+              aria-hidden="true"
+              className="text-muted-foreground size-4 shrink-0"
+            />
+          </button>
+        </PopoverPrimitive.Trigger>
+      </div>
       {inDialog ? content : <PopoverPrimitive.Portal>{content}</PopoverPrimitive.Portal>}
     </PopoverPrimitive.Root>
   );
