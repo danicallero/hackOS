@@ -19,6 +19,13 @@ import { ApiError, apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { createIdempotencyKey } from "@/lib/idempotency-key";
 import { useMeContext } from "@/lib/me-context";
+import {
+  findQueueEntries,
+  type QueueEntry,
+  type QueueRoom,
+  type QueueSearchResult,
+  type RoomView,
+} from "@/lib/queue-search";
 import { startQueueEventStream, subscribeToServerEvent } from "@/lib/server-events";
 import { canOperateQueues } from "@/lib/tabs";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
@@ -26,29 +33,6 @@ import { useCachedApi } from "@/lib/use-cached-api";
 import { colors } from "@/theme/colors";
 
 const JUST_CALLED_HIGHLIGHT_MS = 12_000;
-
-interface QueueEntry {
-  id: number;
-  repo_name?: string;
-  repo_members?: QueueMember[];
-  position: number | null;
-  status: string;
-}
-
-interface QueueMember {
-  email: string;
-  name: string | null;
-  surname: string | null;
-}
-
-interface RoomView {
-  room: { id: number; name: string; location: string | null };
-  state: { is_paused: boolean } | null;
-  challenge: { id: number; title: string; enterprise_name: string } | null;
-  active: QueueEntry | null;
-  called: QueueEntry[];
-  next: QueueEntry[];
-}
 
 interface RoomListItem {
   id: number;
@@ -233,7 +217,7 @@ export function QueueOperationsScreen() {
     return (
       <FlatList
         data={searchResults}
-        keyExtractor={(item) => `${item.room.id}-${item.entry.id}`}
+        keyExtractor={(item) => String(item.entry.id)}
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={{
           flexGrow: 1,
@@ -241,7 +225,12 @@ export function QueueOperationsScreen() {
           padding: 16,
           paddingTop: 16 + androidTopInset,
         }}
-        ListHeaderComponent={actionErrorBanner}
+        ListHeaderComponent={
+          <View style={{ gap: 12 }}>
+            <SearchResultCount count={searchResults.length} />
+            {actionErrorBanner}
+          </View>
+        }
         ListEmptyComponent={
           <EmptyState
             icon="person.crop.badge.magnifyingglass"
@@ -253,7 +242,7 @@ export function QueueOperationsScreen() {
           <TeamQueueCard
             result={item}
             highlighted={justCalledEntryIds.has(item.entry.id)}
-            onPress={() => openTeam(item.entry.id, item.room.id)}
+            onPress={() => openTeam(item.entry.id, item.rooms[0].id)}
           />
         )}
       />
@@ -309,45 +298,6 @@ export function QueueOperationsScreen() {
   );
 }
 
-interface QueueSearchResult {
-  entry: QueueEntry;
-  room: RoomView["room"];
-  challengeTitle: string | null;
-}
-
-/** Every matching entry across every room, so a team or person turns up in all of its queues. */
-function findQueueEntries(rooms: RoomView[], query: string): QueueSearchResult[] {
-  const normalizedQuery = query.trim().toLocaleLowerCase();
-  if (!normalizedQuery) return [];
-
-  return rooms
-    .flatMap((room) =>
-      [room.active, ...room.called, ...room.next]
-        .filter((entry): entry is QueueEntry => entry !== null)
-        .map((entry) => ({
-          entry,
-          room: room.room,
-          challengeTitle: room.challenge?.title ?? null,
-        })),
-    )
-    .filter(({ entry }) => queueEntrySearchText(entry).includes(normalizedQuery))
-    .sort(
-      (a, b) =>
-        (a.entry.repo_name ?? "").localeCompare(b.entry.repo_name ?? "") ||
-        (a.challengeTitle ?? "").localeCompare(b.challengeTitle ?? ""),
-    );
-}
-
-function queueEntrySearchText(entry: QueueEntry): string {
-  return [
-    entry.repo_name,
-    ...(entry.repo_members ?? []).flatMap((member) => [member.name, member.surname, member.email]),
-  ]
-    .filter((value): value is string => Boolean(value))
-    .join(" ")
-    .toLocaleLowerCase();
-}
-
 function queueStatusLabel(status: string, t: ReturnType<typeof useLocale>["t"]): string {
   switch (status) {
     case "called":
@@ -373,7 +323,25 @@ function statusTone(status: string): "neutral" | "accent" | "success" | "warning
   return "warning";
 }
 
-/** Same card the participant sees on their own My Queue screen, plus the room and a tap-through to more detail. */
+/** Result count under the search bar, so the operator knows the scope of what they are seeing. */
+function SearchResultCount({ count }: { count: number }) {
+  const { t } = useLocale();
+  return (
+    <Text
+      accessibilityLiveRegion="polite"
+      selectable
+      style={{ color: colors.secondaryLabel, fontSize: 13, fontWeight: "600" }}
+    >
+      {count === 0
+        ? t("queueOpsSearchNoResultsCount")
+        : count === 1
+          ? t("queueOpsSearchResultCountOne")
+          : t("queueOpsSearchResultCount", { count: String(count) })}
+    </Text>
+  );
+}
+
+/** Same card the participant sees on their own My Queue screen, plus the rooms and a tap-through to more detail. */
 function TeamQueueCard({
   result,
   highlighted,
@@ -384,8 +352,10 @@ function TeamQueueCard({
   onPress: () => void;
 }) {
   const { t } = useLocale();
-  const { entry, room, challengeTitle } = result;
-  const called = entry.status === "called";
+  const { entry, rooms, challengeTitle } = result;
+  // A called team is at one specific door; a waiting one may be judged in any
+  // of the rooms that share its challenge, so list them all in this one card.
+  const calledRoom = entry.status === "called" ? (rooms[0] ?? null) : null;
 
   return (
     <Pressable
@@ -419,7 +389,7 @@ function TeamQueueCard({
         <StatusPill tone={statusTone(entry.status)}>{queueStatusLabel(entry.status, t)}</StatusPill>
       </View>
 
-      {called ? (
+      {calledRoom ? (
         <View
           style={{
             alignItems: "center",
@@ -438,21 +408,45 @@ function TeamQueueCard({
             accessible={false}
           />
           <Text style={{ color: colors.success, flex: 1, fontSize: 15, fontWeight: "700" }}>
-            {room.name}
-            {room.location ? ` · ${room.location}` : ""}
+            {calledRoom.name}
+            {calledRoom.location ? ` · ${calledRoom.location}` : ""}
           </Text>
         </View>
       ) : (
-        <View style={{ flexDirection: "row", gap: 10 }}>
+        <>
           {entry.position != null ? (
-            <QueueMetric
-              icon="number.circle"
-              label={t("queuePositionLabel")}
-              value={String(entry.position)}
-            />
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <QueueMetric
+                icon="number.circle"
+                label={t("queuePositionLabel")}
+                value={String(entry.position)}
+              />
+            </View>
           ) : null}
-          <QueueMetric icon="door.left.hand.closed" label={t("teamDetailRoom")} value={room.name} />
-        </View>
+          {rooms.length ? (
+            <View style={{ gap: 8 }}>
+              <View style={{ alignItems: "center", flexDirection: "row", gap: 6 }}>
+                <SymbolView
+                  name="door.left.hand.closed"
+                  tintColor={colors.secondaryLabel}
+                  size={15}
+                  accessible={false}
+                />
+                <Text
+                  selectable
+                  style={{ color: colors.secondaryLabel, fontSize: 13, fontWeight: "600" }}
+                >
+                  {t("queuePossibleRoomsLabel")}
+                </Text>
+              </View>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}>
+                {rooms.map((room) => (
+                  <RoomChip key={room.id} room={room} />
+                ))}
+              </View>
+            </View>
+          ) : null}
+        </>
       )}
     </Pressable>
   );
@@ -491,6 +485,33 @@ function QueueMetric({
       >
         {value}
       </Text>
+    </View>
+  );
+}
+
+/** Mirrors the participant My Queue room chip (app/(tabs)/queue.tsx). */
+function RoomChip({ room }: { room: QueueRoom }) {
+  return (
+    <View
+      style={{
+        alignItems: "baseline",
+        backgroundColor: colors.background,
+        borderCurve: "continuous",
+        borderRadius: 9,
+        flexDirection: "row",
+        gap: 5,
+        paddingHorizontal: 10,
+        paddingVertical: 7,
+      }}
+    >
+      <Text selectable style={{ color: colors.label, fontSize: 13, fontWeight: "600" }}>
+        {room.name}
+      </Text>
+      {room.location ? (
+        <Text selectable style={{ color: colors.secondaryLabel, fontSize: 12 }}>
+          {room.location}
+        </Text>
+      ) : null}
     </View>
   );
 }
