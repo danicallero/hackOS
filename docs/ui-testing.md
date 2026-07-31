@@ -56,8 +56,9 @@ pnpm --filter @hackos/mobile test:ui
 ```
 
 Device-level tests use Detox. They require a local Expo development build,
-Xcode/iOS Simulator or an Android SDK/emulator, and a reachable API when a
-flow goes past the sign-in screen:
+Xcode/iOS Simulator or an Android SDK/emulator, `applesimutils`
+(`brew tap wix/brew && brew install applesimutils`) for iOS, and a reachable
+API when a flow goes past the sign-in screen:
 
 ```sh
 pnpm test:ui:native:build
@@ -69,7 +70,8 @@ DETOX_CONFIGURATION=android.emu.debug pnpm test:ui:native
 
 Generated `apps/mobile/ios` and `apps/mobile/android` directories stay ignored
 by CNG. Override the default simulator/device with `DETOX_IOS_DEVICE` or
-`DETOX_ANDROID_AVD`. Native-device acceptance remains separate from the
+`DETOX_ANDROID_AVD` — the `iPhone 15` default no longer exists on recent Xcode
+installs, so pass e.g. `DETOX_IOS_DEVICE="iPhone 17 Pro"`. Native-device acceptance remains separate from the
 default UI command because it needs host-specific hardware and can take much
 longer than the deterministic component suite.
 

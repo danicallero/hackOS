@@ -10,11 +10,13 @@ module.exports = {
     },
   },
   apps: {
+    // APP_VARIANT=development renames the app to "hackOS (Debug)" (app.config.ts),
+    // so prebuild emits hackOSDebug.xcworkspace / hackOSDebug.app — not hackOS.*.
     "ios.debug": {
       type: "ios.app",
-      binaryPath: "apps/mobile/ios/build/Build/Products/Debug-iphonesimulator/hackOS.app",
+      binaryPath: "apps/mobile/ios/build/Build/Products/Debug-iphonesimulator/hackOSDebug.app",
       build:
-        "APP_VARIANT=development pnpm --filter @hackos/mobile exec expo prebuild && xcodebuild -workspace apps/mobile/ios/hackOS.xcworkspace -scheme hackOS -configuration Debug -sdk iphonesimulator -derivedDataPath apps/mobile/ios/build CODE_SIGNING_ALLOWED=NO",
+        "APP_VARIANT=development pnpm --filter @hackos/mobile exec expo prebuild && xcodebuild -workspace apps/mobile/ios/hackOSDebug.xcworkspace -scheme hackOSDebug -configuration Debug -sdk iphonesimulator -derivedDataPath apps/mobile/ios/build CODE_SIGNING_ALLOWED=NO",
     },
     "android.debug": {
       type: "android.apk",
