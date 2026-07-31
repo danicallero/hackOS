@@ -3,6 +3,7 @@ import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
 import { EmptyState, Separator } from "@/components/native-ui";
+import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
 import { emitManualActivityScan } from "@/lib/manual-activity-scan";
@@ -20,9 +21,21 @@ export function PeopleDirectoryScreen() {
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<"all" | ScannerPerson["role"]>("all");
   const [people, setPeople] = useState<ScannerPerson[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(async () => setPeople(await listScannerPeople()), []);
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setPeople(await listScannerPeople());
+      setError(null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause : new Error());
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     void load();
@@ -40,11 +53,18 @@ export function PeopleDirectoryScreen() {
     }, [load]),
   );
 
+  const loadError = error ?? (sync.error ? new Error(sync.error) : null);
+
   async function onRefresh() {
     setRefreshing(true);
-    await sync.sync();
-    await load();
-    setRefreshing(false);
+    try {
+      await sync.sync();
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause : new Error());
+    } finally {
+      setRefreshing(false);
+    }
   }
 
   useLayoutEffect(() => {
@@ -120,12 +140,33 @@ export function PeopleDirectoryScreen() {
       keyExtractor={(person) => String(person.userId)}
       ItemSeparatorComponent={() => <Separator inset={72} />}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
+      ListHeaderComponent={
+        loadError && people.length > 0 ? (
+          <RequestFeedback
+            error={loadError}
+            message={t("requestError")}
+            onRetry={() => void onRefresh()}
+            retrying={loading || refreshing || sync.syncing}
+          />
+        ) : null
+      }
       ListEmptyComponent={
-        <EmptyState
-          icon="person.2"
-          title={query ? t("scannerNoResults") : t("scannerNoSyncedUsers")}
-          description={query ? t("scannerTryAnotherSearch") : t("scannerRefreshDirectory")}
-        />
+        loading ? (
+          <RequestFeedback loading />
+        ) : loadError && people.length === 0 ? (
+          <RequestFeedback
+            error={loadError}
+            message={t("requestError")}
+            onRetry={() => void onRefresh()}
+            retrying={loading || refreshing || sync.syncing}
+          />
+        ) : (
+          <EmptyState
+            icon="person.2"
+            title={query ? t("scannerNoResults") : t("scannerNoSyncedUsers")}
+            description={query ? t("scannerTryAnotherSearch") : t("scannerRefreshDirectory")}
+          />
+        )
       }
       renderItem={({ item }) => <PersonRow person={item} onPress={() => openPerson(item)} />}
     />
