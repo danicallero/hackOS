@@ -5334,6 +5334,308 @@ const dict: Record<string, I18nText> = {
     en: "New permission group",
   },
   createGroup: { es: "Crear grupo", gl: "Crear grupo", en: "Create group" },
+  permissionTemplatesTitle: {
+    es: "Plantillas de permisos",
+    gl: "Modelos de permisos",
+    en: "Permission templates",
+  },
+  permissionTemplatesDescription: {
+    es: "Crea un grupo editable a partir de una configuración habitual.",
+    gl: "Crea un grupo editable a partir dunha configuración habitual.",
+    en: "Create an editable group from a common setup.",
+  },
+  noPermissionTemplates: {
+    es: "No hay plantillas de permisos disponibles.",
+    gl: "Non hai modelos de permisos dispoñibles.",
+    en: "No permission templates are available.",
+  },
+  loadingPermissionTemplates: {
+    es: "Cargando plantillas de permisos…",
+    gl: "Cargando modelos de permisos…",
+    en: "Loading permission templates…",
+  },
+  permissionTemplate: {
+    es: "Plantilla de permisos",
+    gl: "Modelo de permisos",
+    en: "Permission template",
+  },
+  permissionTemplateDescription: {
+    es: "Configuración de permisos reutilizable.",
+    gl: "Configuración de permisos reutilizable.",
+    en: "Reusable permission setup.",
+  },
+  usePermissionTemplate: { es: "Usar plantilla", gl: "Usar modelo", en: "Use template" },
+  createFromPermissionTemplate: {
+    es: "Crear grupo con «{template}»",
+    gl: "Crear grupo con «{template}»",
+    en: "Create group with “{template}”",
+  },
+  createFromPermissionTemplateDescription: {
+    es: "Elige un nombre único y, si lo necesitas, una descripción. Podrás editar los permisos después.",
+    gl: "Escolle un nome único e, se o precisas, unha descrición. Poderás editar os permisos despois.",
+    en: "Choose a unique name and, if useful, a description. You can edit capabilities afterwards.",
+  },
+  createTemplateGroup: { es: "Crear grupo", gl: "Crear grupo", en: "Create group" },
+  templateGroupNameExample: {
+    es: "Ej. Operaciones de colas",
+    gl: "Ex. Operacións de colas",
+    en: "e.g. Queue operations",
+  },
+  templateGroupCreated: {
+    es: "Grupo creado a partir de la plantilla.",
+    gl: "Grupo creado a partir do modelo.",
+    en: "Group created from the template.",
+  },
+  couldNotLoadPermissionTemplates: {
+    es: "No se han podido cargar las plantillas de permisos. Comprueba la conexión e inténtalo de nuevo.",
+    gl: "Non se puideron cargar os modelos de permisos. Comproba a conexión e téntao de novo.",
+    en: "Unable to load permission templates. Check the connection and try again.",
+  },
+  couldNotCreateTemplateGroup: {
+    es: "No se ha podido crear el grupo con esta plantilla. Comprueba los datos e inténtalo de nuevo.",
+    gl: "Non se puido crear o grupo con este modelo. Comproba os datos e téntao de novo.",
+    en: "Unable to create the group from this template. Check the details and try again.",
+  },
+  basedOnPermissionTemplate: {
+    es: "Basado en: {template}",
+    gl: "Baseado en: {template}",
+    en: "Based on: {template}",
+  },
+  permissionTemplateCurrent: {
+    es: "Plantilla actual",
+    gl: "Modelo actualizado",
+    en: "Template current",
+  },
+  permissionTemplateDrifted: {
+    es: "Plantilla modificada",
+    gl: "Modelo modificado",
+    en: "Template changed",
+  },
+  resetPermissionTemplate: {
+    es: "Restablecer plantilla",
+    gl: "Restablecer modelo",
+    en: "Reset template",
+  },
+  resetPermissionTemplateTitle: {
+    es: "¿Restablecer «{template}»?",
+    gl: "Restablecer «{template}»?",
+    en: "Reset “{template}”?",
+  },
+  resetPermissionTemplateDescription: {
+    es: "Restaurará los permisos de la plantilla y quitará los grupos incluidos personalizados.",
+    gl: "Restaurará os permisos do modelo e retirará os grupos incluídos personalizados.",
+    en: "This restores the template capabilities and removes custom included groups.",
+  },
+  resetPermissionTemplatePreserves: {
+    es: "Se conservarán el nombre, la descripción y los miembros del grupo.",
+    gl: "Conservaranse o nome, a descrición e os membros do grupo.",
+    en: "The group name, description, and members stay unchanged.",
+  },
+  resetPermissionTemplateUnavailable: {
+    es: "La plantilla ya está aplicada.",
+    gl: "O modelo xa está aplicado.",
+    en: "The template is already applied.",
+  },
+  permissionTemplateReset: {
+    es: "Plantilla restablecida.",
+    gl: "Modelo restablecido.",
+    en: "Template reset.",
+  },
+  couldNotResetPermissionTemplate: {
+    es: "No se ha podido restablecer la plantilla. Comprueba la conexión e inténtalo de nuevo.",
+    gl: "Non se puido restablecer o modelo. Comproba a conexión e téntao de novo.",
+    en: "Unable to reset the template. Check the connection and try again.",
+  },
+  permissionTemplatePlatformAdministrator: {
+    es: "Administrador de plataforma",
+    gl: "Administrador da plataforma",
+    en: "Platform administrator",
+  },
+  permissionTemplatePlatformAdministratorDescription: {
+    es: "Gestiona todo el evento.",
+    gl: "Xestiona todo o evento.",
+    en: "Manage the whole event.",
+  },
+  permissionTemplateAccessAdministrator: {
+    es: "Administrador de acceso",
+    gl: "Administrador de acceso",
+    en: "Access administrator",
+  },
+  permissionTemplateAccessAdministratorDescription: {
+    es: "Gestiona cuentas, acceso e invitaciones.",
+    gl: "Xestiona contas, acceso e invitacións.",
+    en: "Manage accounts, access, and invitations.",
+  },
+  permissionTemplateApplicationBuilder: {
+    es: "Diseñador de solicitudes",
+    gl: "Deseñador de solicitudes",
+    en: "Application builder",
+  },
+  permissionTemplateApplicationBuilderDescription: {
+    es: "Configura los formularios de solicitud.",
+    gl: "Configura os formularios de solicitude.",
+    en: "Configure application forms.",
+  },
+  permissionTemplateApplicationReviewer: {
+    es: "Revisor de solicitudes",
+    gl: "Revisor de solicitudes",
+    en: "Application reviewer",
+  },
+  permissionTemplateApplicationReviewerDescription: {
+    es: "Revisa solicitudes enviadas.",
+    gl: "Revisa solicitudes enviadas.",
+    en: "Review submitted applications.",
+  },
+  permissionTemplateApplicationDecisions: {
+    es: "Decisiones de solicitudes",
+    gl: "Decisións de solicitudes",
+    en: "Application decisions",
+  },
+  permissionTemplateApplicationDecisionsDescription: {
+    es: "Revisa y decide solicitudes.",
+    gl: "Revisa e decide solicitudes.",
+    en: "Review and decide applications.",
+  },
+  permissionTemplateApplicationSupervisor: {
+    es: "Supervisor de solicitudes",
+    gl: "Supervisor de solicitudes",
+    en: "Application supervisor",
+  },
+  permissionTemplateApplicationSupervisorDescription: {
+    es: "Supervisa la configuración, revisión y decisión de solicitudes.",
+    gl: "Supervisa a configuración, revisión e decisión de solicitudes.",
+    en: "Oversee application setup, review, and decisions.",
+  },
+  permissionTemplateProjectOperator: {
+    es: "Operador de proyectos",
+    gl: "Operador de proxectos",
+    en: "Project operator",
+  },
+  permissionTemplateProjectOperatorDescription: {
+    es: "Gestiona proyectos e importaciones.",
+    gl: "Xestiona proxectos e importacións.",
+    en: "Manage projects and imports.",
+  },
+  permissionTemplateQueueOperator: {
+    es: "Operador de colas",
+    gl: "Operador de colas",
+    en: "Queue operator",
+  },
+  permissionTemplateQueueOperatorDescription: {
+    es: "Coordina colas y exporta evaluaciones.",
+    gl: "Coordina colas e exporta avaliacións.",
+    en: "Coordinate queues and export judging.",
+  },
+  permissionTemplateJudgingAdministrator: {
+    es: "Administrador de evaluación",
+    gl: "Administrador de avaliación",
+    en: "Judging administrator",
+  },
+  permissionTemplateJudgingAdministratorDescription: {
+    es: "Administra las colas y la evaluación.",
+    gl: "Administra as colas e a avaliación.",
+    en: "Administer queues and judging.",
+  },
+  permissionTemplateAccreditationStation: {
+    es: "Puesto de acreditación",
+    gl: "Posto de acreditación",
+    en: "Accreditation station",
+  },
+  permissionTemplateAccreditationStationDescription: {
+    es: "Acredita a las personas asistentes.",
+    gl: "Acredita as persoas asistentes.",
+    en: "Accredit attendees.",
+  },
+  permissionTemplatePresenceStation: {
+    es: "Puesto de presencia",
+    gl: "Posto de presenza",
+    en: "Presence station",
+  },
+  permissionTemplatePresenceStationDescription: {
+    es: "Registra entradas y salidas.",
+    gl: "Rexistra entradas e saídas.",
+    en: "Record arrivals and departures.",
+  },
+  permissionTemplateActivityAndMealStation: {
+    es: "Puesto de actividades y comidas",
+    gl: "Posto de actividades e comidas",
+    en: "Activity and meal station",
+  },
+  permissionTemplateActivityAndMealStationDescription: {
+    es: "Registra asistencia a actividades y comidas.",
+    gl: "Rexistra asistencia a actividades e comidas.",
+    en: "Record activity and meal attendance.",
+  },
+  permissionTemplateLogisticsSupervisor: {
+    es: "Supervisor de logística",
+    gl: "Supervisor de loxística",
+    en: "Logistics supervisor",
+  },
+  permissionTemplateLogisticsSupervisorDescription: {
+    es: "Supervisa acreditación, presencia, actividades y estadísticas.",
+    gl: "Supervisa acreditación, presenza, actividades e estatísticas.",
+    en: "Oversee accreditation, presence, activities, and statistics.",
+  },
+  permissionTemplateProgrammeManager: {
+    es: "Responsable de programa",
+    gl: "Responsable de programa",
+    en: "Programme manager",
+  },
+  permissionTemplateProgrammeManagerDescription: {
+    es: "Gestiona el programa del evento.",
+    gl: "Xestiona o programa do evento.",
+    en: "Manage the event schedule.",
+  },
+  permissionTemplateTvOperator: {
+    es: "Operador de TV",
+    gl: "Operador de TV",
+    en: "TV operator",
+  },
+  permissionTemplateTvOperatorDescription: {
+    es: "Controla las pantallas públicas.",
+    gl: "Controla as pantallas públicas.",
+    en: "Control public screens.",
+  },
+  permissionTemplateSponsorAdministrator: {
+    es: "Administrador de patrocinadores",
+    gl: "Administrador de patrocinadores",
+    en: "Sponsor administrator",
+  },
+  permissionTemplateSponsorAdministratorDescription: {
+    es: "Gestiona empresas patrocinadoras y sus invitaciones.",
+    gl: "Xestiona empresas patrocinadoras e as súas invitacións.",
+    en: "Manage sponsor companies and their invitations.",
+  },
+  permissionTemplateCommunicationsManager: {
+    es: "Responsable de comunicaciones",
+    gl: "Responsable de comunicacións",
+    en: "Communications manager",
+  },
+  permissionTemplateCommunicationsManagerDescription: {
+    es: "Publica avisos y envía comunicaciones.",
+    gl: "Publica avisos e envía comunicacións.",
+    en: "Publish announcements and send communications.",
+  },
+  permissionTemplateDataAuditor: {
+    es: "Auditor de datos",
+    gl: "Auditor de datos",
+    en: "Data auditor",
+  },
+  permissionTemplateDataAuditorDescription: {
+    es: "Consulta la auditoría y prepara exportaciones.",
+    gl: "Consulta a auditoría e prepara exportacións.",
+    en: "View audit records and prepare exports.",
+  },
+  permissionTemplateContentLibraryManager: {
+    es: "Responsable de catálogos",
+    gl: "Responsable de catálogos",
+    en: "Content-library manager",
+  },
+  permissionTemplateContentLibraryManagerDescription: {
+    es: "Gestiona los catálogos de contenido.",
+    gl: "Xestiona os catálogos de contido.",
+    en: "Manage content libraries.",
+  },
   whatGroupForPlaceholder: {
     es: "Para qué sirve este grupo…",
     gl: "Para que serve este grupo…",

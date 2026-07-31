@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { ContextualError } from "@/components/common/contextual-error";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { Modal } from "@/components/common/modal";
 import { MultiSelect } from "@/components/common/multi-select";
@@ -29,47 +30,88 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
-import { useLocale } from "@/lib/i18n";
-import type { PermissionGroupDetail, PermissionGroupSummary } from "@/lib/types";
-import { capabilitiesByDomain, capabilityOptions, prettifyCapability } from "./helpers";
+import { type Translate, useLocale } from "@/lib/i18n";
+import { useMe } from "@/lib/session";
+import type {
+  PermissionGroupDetail,
+  PermissionGroupSummary,
+  PermissionGroupTemplate,
+} from "@/lib/types";
+import {
+  capabilitiesByDomain,
+  capabilityOptions,
+  permissionTemplateDescription,
+  permissionTemplateName,
+  prettifyCapability,
+  templateRequiresWildcardAuthority,
+} from "./helpers";
 
 // H8: admins manage capability groups. This page lists groups, offers a
 // create-group modal and shows the read-only catalogue of every capability kind.
 
-const createSchema = z.object({
-  name: z.string().min(1, "Required").max(200),
-  description: z.string().max(2000),
-  capabilities: z.array(z.string()),
-});
+const createSchema = (t: Translate) =>
+  z.object({
+    name: z.string().min(1, t("required")).max(200),
+    description: z.string().max(2000),
+    capabilities: z.array(z.string()),
+  });
 
-type CreateValues = z.infer<typeof createSchema>;
+type CreateValues = z.infer<ReturnType<typeof createSchema>>;
+type TemplateValues = Pick<CreateValues, "name" | "description">;
 
 export default function PermissionsPage() {
   const { t } = useLocale();
+  const me = useMe();
   const router = useRouter();
   const [groups, setGroups] = useState<PermissionGroupSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [templates, setTemplates] = useState<PermissionGroupTemplate[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(true);
+  const [templatesError, setTemplatesError] = useState<string | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<PermissionGroupTemplate | null>(null);
+  const [instantiateError, setInstantiateError] = useState<string | null>(null);
 
+  const schema = createSchema(t);
   const form = useForm<CreateValues>({
-    resolver: zodResolver(createSchema),
+    resolver: zodResolver(schema),
     defaultValues: { name: "", description: "", capabilities: [] },
+  });
+  const templateForm = useForm<TemplateValues>({
+    resolver: zodResolver(schema.pick({ name: true, description: true })),
+    defaultValues: { name: "", description: "" },
   });
 
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
-    try {
-      const rows = await api.get<PermissionGroupSummary[]>("/api/permission-groups");
-      setGroups(rows);
-    } catch (err) {
-      const message = err instanceof ApiError ? err.message : t("couldNotLoadPermissionGroups");
-      setLoadError(message);
-      toast.error(message);
-    } finally {
-      setLoading(false);
+    setTemplatesLoading(true);
+    setTemplatesError(null);
+    const [groupsResult, templatesResult] = await Promise.allSettled([
+      api.get<PermissionGroupSummary[]>("/api/permission-groups"),
+      api.get<PermissionGroupTemplate[]>("/api/permission-group-templates"),
+    ]);
+    if (groupsResult.status === "fulfilled") {
+      setGroups(groupsResult.value);
+    } else {
+      setLoadError(
+        groupsResult.reason instanceof ApiError
+          ? groupsResult.reason.message
+          : t("couldNotLoadPermissionGroups"),
+      );
     }
+    if (templatesResult.status === "fulfilled") {
+      setTemplates(templatesResult.value);
+    } else {
+      setTemplatesError(
+        templatesResult.reason instanceof ApiError
+          ? templatesResult.reason.message
+          : t("couldNotLoadPermissionTemplates"),
+      );
+    }
+    setLoading(false);
+    setTemplatesLoading(false);
   }, [t]);
 
   // Soft, in-place refresh instead of a hard reload when another admin
@@ -94,6 +136,23 @@ export default function PermissionsPage() {
       router.push(`/permissions/${group.id}`);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("couldNotCreateGroup"));
+    }
+  }
+
+  async function onInstantiate(values: TemplateValues) {
+    if (!selectedTemplate) return;
+    setInstantiateError(null);
+    try {
+      const group = await api.post<PermissionGroupDetail>(
+        `/api/permission-group-templates/${encodeURIComponent(selectedTemplate.key)}/instantiate`,
+        { name: values.name, description: values.description || undefined },
+      );
+      toast.success(t("templateGroupCreated"));
+      setSelectedTemplate(null);
+      templateForm.reset({ name: "", description: "" });
+      router.push(`/permissions/${group.id}`);
+    } catch (err) {
+      setInstantiateError(err instanceof ApiError ? err.message : t("couldNotCreateTemplateGroup"));
     }
   }
 
@@ -153,6 +212,58 @@ export default function PermissionsPage() {
             ),
           }}
         />
+      </SectionCard>
+
+      <SectionCard
+        icon={KeyRoundIcon}
+        title={t("permissionTemplatesTitle")}
+        description={t("permissionTemplatesDescription")}
+      >
+        {templatesLoading ? (
+          <div className="grid gap-3 sm:grid-cols-2" aria-busy="true">
+            <p className="sr-only" role="status">
+              {t("loadingPermissionTemplates")}
+            </p>
+            {["one", "two", "three", "four"].map((skeleton) => (
+              <div key={skeleton} className="space-y-3 rounded-md border p-4" aria-hidden="true">
+                <div className="bg-muted h-5 w-2/3 rounded-md" />
+                <div className="bg-muted h-4 w-full rounded-md" />
+                <div className="bg-muted h-9 w-28 rounded-md" />
+              </div>
+            ))}
+          </div>
+        ) : templatesError ? (
+          <ContextualError message={templatesError} onRetry={() => void load()} />
+        ) : templates.length === 0 ? (
+          <p className="text-muted-foreground text-pretty text-sm">{t("noPermissionTemplates")}</p>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {templates.map((template) => (
+              <div key={template.key} className="flex min-w-0 flex-col gap-4 rounded-md border p-4">
+                <div className="min-w-0 space-y-1">
+                  <h2 className="type-label text-balance">{permissionTemplateName(template, t)}</h2>
+                  <p className="text-muted-foreground text-pretty text-sm">
+                    {permissionTemplateDescription(template, t)}
+                  </p>
+                </div>
+                {(!templateRequiresWildcardAuthority(template) ||
+                  me?.capabilities.includes("*")) && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="self-start"
+                    onClick={() => {
+                      setInstantiateError(null);
+                      setSelectedTemplate(template);
+                    }}
+                  >
+                    {t("usePermissionTemplate")}
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </SectionCard>
 
       <SectionCard icon={LayersIcon} title={t("capabilitiesCatalogueTitle")}>
@@ -235,6 +346,80 @@ export default function PermissionsPage() {
                     />
                   </FormControl>
                   <FormDescription>{t("canChangeLaterDesc")}</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </form>
+        </Form>
+      </Modal>
+
+      <Modal
+        open={selectedTemplate !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedTemplate(null);
+            setInstantiateError(null);
+            templateForm.reset({ name: "", description: "" });
+          }
+        }}
+        icon={KeyRoundIcon}
+        title={
+          selectedTemplate
+            ? t("createFromPermissionTemplate", {
+                template: permissionTemplateName(selectedTemplate, t),
+              })
+            : t("permissionTemplate")
+        }
+        description={t("createFromPermissionTemplateDescription")}
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setSelectedTemplate(null)}
+              disabled={templateForm.formState.isSubmitting}
+            >
+              {t("cancel")}
+            </Button>
+            <SubmitButton
+              form="instantiate-template-form"
+              pending={templateForm.formState.isSubmitting}
+            >
+              {t("createTemplateGroup")}
+            </SubmitButton>
+          </>
+        }
+      >
+        <Form {...templateForm}>
+          <form
+            id="instantiate-template-form"
+            onSubmit={templateForm.handleSubmit(onInstantiate)}
+            className="space-y-5"
+          >
+            {instantiateError && <ContextualError message={instantiateError} />}
+            <FormField
+              control={templateForm.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("name")}</FormLabel>
+                  <FormControl>
+                    <Input placeholder={t("templateGroupNameExample")} {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={templateForm.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("descriptionLabel")}</FormLabel>
+                  <FormControl>
+                    <Textarea rows={3} placeholder={t("whatGroupForPlaceholder")} {...field} />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
