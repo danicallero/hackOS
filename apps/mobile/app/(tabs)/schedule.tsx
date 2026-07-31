@@ -210,6 +210,19 @@ function safeTimestamp(value: string) {
   return Number.isFinite(timestamp) ? timestamp : Number.MAX_SAFE_INTEGER;
 }
 
+const COLLAPSED_TITLE_LINES = 2;
+const COLLAPSED_DESCRIPTION_LINES = 2;
+
+/**
+ * Whether a card is worth an expand affordance. `numberOfLines` clamps without
+ * telling us it did, and `onTextLayout` needs a real layout pass, so we go by
+ * length: short entries stay affordance-free, long ones collapse (H374).
+ */
+export function isScheduleCardExpandable(item: Pick<ScheduleItem, "title" | "description">) {
+  const description = item.description ?? "";
+  return description.includes("\n") || description.length > 90 || item.title.length > 60;
+}
+
 function ScheduleCard({
   item,
   language,
@@ -227,6 +240,9 @@ function ScheduleCard({
 }) {
   const { t } = useLocale();
   const router = useRouter();
+  const [expanded, setExpanded] = useState(false);
+  const expandable = isScheduleCardExpandable(item);
+  const collapsed = expandable && !expanded;
   const startsAt = new Date(item.startsAt);
   const endsAt = new Date(item.endsAt);
   const time = startsAt.toLocaleTimeString(language, { hour: "2-digit", minute: "2-digit" });
@@ -282,14 +298,21 @@ function ScheduleCard({
           padding: 16,
         }}
       >
-        <View style={{ alignItems: "flex-start", flexDirection: "row", gap: 8 }}>
+        <View style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
           <Text
             selectable
+            numberOfLines={collapsed ? COLLAPSED_TITLE_LINES : undefined}
             style={{ color: colors.label, flex: 1, fontSize: 17, fontWeight: "700" }}
           >
             {item.title}
           </Text>
-          {item.type ? <StatusPill>{scheduleTypeLabel(item.type, t)}</StatusPill> : null}
+          {item.type ? (
+            // Without alignSelf the pill keeps its flex-start default and
+            // drifts above the centered bell on multi-line titles (H374).
+            <StatusPill style={{ alignSelf: "center" }}>
+              {scheduleTypeLabel(item.type, t)}
+            </StatusPill>
+          ) : null}
           {reminderOn !== null ? (
             <Pressable
               accessibilityLabel={t(reminderOn ? "scheduleReminderOn" : "scheduleReminderOff", {
@@ -299,11 +322,14 @@ function ScheduleCard({
               accessibilityState={{ selected: reminderOn, busy: reminderBusy }}
               disabled={reminderBusy}
               onPress={toggleReminder}
+              // hitSlop instead of a 44pt box: the box stretched the header row
+              // and pushed the bell off the title's baseline (H374).
+              hitSlop={{ bottom: 14, left: 14, right: 14, top: 14 }}
               style={({ pressed }) => ({
                 alignItems: "center",
                 justifyContent: "center",
-                minHeight: 44,
-                minWidth: 44,
+                height: 22,
+                width: 22,
                 opacity: reminderBusy ? 0.4 : pressed ? 0.65 : 1,
               })}
             >
@@ -339,9 +365,42 @@ function ScheduleCard({
           ) : null}
         </View>
         {item.description ? (
-          <Text selectable style={{ color: colors.secondaryLabel, fontSize: 15, lineHeight: 21 }}>
+          <Text
+            selectable
+            numberOfLines={collapsed ? COLLAPSED_DESCRIPTION_LINES : undefined}
+            style={{ color: colors.secondaryLabel, fontSize: 15, lineHeight: 21 }}
+          >
             {item.description}
           </Text>
+        ) : null}
+        {expandable ? (
+          <Pressable
+            accessibilityLabel={t(expanded ? "scheduleShowLess" : "scheduleShowMore")}
+            accessibilityRole="button"
+            accessibilityState={{ expanded }}
+            hitSlop={{ bottom: 12, left: 12, right: 12, top: 12 }}
+            onPress={(event) => {
+              event.stopPropagation();
+              setExpanded((current) => !current);
+            }}
+            style={({ pressed }) => ({
+              alignItems: "center",
+              alignSelf: "flex-start",
+              flexDirection: "row",
+              gap: 4,
+              opacity: pressed ? 0.65 : 1,
+            })}
+          >
+            <Text style={{ color: colors.accent, fontSize: 13, fontWeight: "600" }}>
+              {t(expanded ? "scheduleShowLess" : "scheduleShowMore")}
+            </Text>
+            <SymbolView
+              name={expanded ? "chevron.up" : "chevron.down"}
+              tintColor={colors.accent}
+              size={11}
+              accessible={false}
+            />
+          </Pressable>
         ) : null}
       </Pressable>
     </View>
