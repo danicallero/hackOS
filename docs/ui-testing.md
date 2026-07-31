@@ -55,9 +55,16 @@ in the root `pnpm test:ui` command:
 pnpm --filter @hackos/mobile test:ui
 ```
 
-Device-level tests use Detox. They require a local Expo development build,
-Xcode/iOS Simulator or an Android SDK/emulator, and a reachable API when a
-flow goes past the sign-in screen:
+Device-level tests use Detox. One-time host setup for iOS:
+
+```sh
+brew tap wix/brew && brew trust --formula wix/brew/applesimutils
+brew install applesimutils
+npx detox build-framework-cache   # re-run after an Xcode upgrade
+```
+
+Then, with Metro running (`pnpm --filter @hackos/mobile start`) and the API
+reachable for anything past the sign-in screen:
 
 ```sh
 pnpm test:ui:native:build
@@ -67,9 +74,22 @@ pnpm test:ui:native
 DETOX_CONFIGURATION=android.emu.debug pnpm test:ui:native
 ```
 
+The iOS build is an expo-dev-client, which by default stops at the dev
+launcher's server list and floats a dev-menu button over the app — neither of
+which a spec can tap past. The Detox build therefore sets
+`DEV_CLIENT_DEFAULT_LAUNCHER_URL` (default `http://localhost:8081`, override
+with `DETOX_METRO_URL`), which `app.config.ts` turns into Info.plist keys that
+boot straight into Metro and suppress the dev menu. Those keys are only
+emitted when that variable is set, so ordinary `expo run:ios` builds keep the
+launcher. The build also does **not** pass `CODE_SIGNING_ALLOWED=NO`: without
+entitlements `expo-secure-store` throws
+`KeyChainException: A required entitlement isn't present` the moment the app
+reads its stored session.
+
 Generated `apps/mobile/ios` and `apps/mobile/android` directories stay ignored
 by CNG. Override the default simulator/device with `DETOX_IOS_DEVICE` or
-`DETOX_ANDROID_AVD`. Native-device acceptance remains separate from the
+`DETOX_ANDROID_AVD` — the `iPhone 15` default no longer exists on recent Xcode
+installs, so pass e.g. `DETOX_IOS_DEVICE="iPhone 17 Pro"`. Native-device acceptance remains separate from the
 default UI command because it needs host-specific hardware and can take much
 longer than the deterministic component suite.
 

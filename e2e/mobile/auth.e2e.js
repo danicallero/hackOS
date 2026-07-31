@@ -1,8 +1,14 @@
 const AUTH_IDS = require("../../packages/shared/src/ui-test-ids.json").auth;
 
+// The build under test is an expo-dev-client. It boots straight into Metro
+// because the Detox build bakes DEV_CLIENT_DEFAULT_LAUNCHER_URL into the
+// Info.plist; bundling still takes a while on the first launch.
 describe("native sign-in UI contract", () => {
   beforeEach(async () => {
     await device.launchApp({ delete: true, newInstance: true });
+    await waitFor(element(by.id(AUTH_IDS.email)))
+      .toBeVisible()
+      .withTimeout(90_000);
   });
 
   it("renders the shared controls", async () => {

@@ -350,6 +350,12 @@ const dict = {
     es: "Nombre de equipo o persona",
     gl: "Nome de equipo ou persoa",
   },
+  queueOpsSearchResultCount: {
+    en: "{count} results",
+    es: "{count} resultados",
+    gl: "{count} resultados",
+  },
+  queueOpsSearchResultCountOne: { en: "1 result", es: "1 resultado", gl: "1 resultado" },
   queueOpsNoSearchResults: {
     en: "No teams or people match this search.",
     es: "No hay equipos ni personas que coincidan con la búsqueda.",

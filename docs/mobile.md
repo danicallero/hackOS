@@ -169,7 +169,12 @@ route below. No migration needed.
   `people-directory-screen.tsx`; typing a query swaps the room grid for a
   flat, sorted list of every matching queue entry (by team name or member
   name/email) across every challenge that team is in, each rendered as the
-  participant's own My Queue card. Tapping a result — or any team already
+  participant's own My Queue card, under a result count ("3 results" / "No
+  results"). `lib/queue-search.ts`'s `findQueueEntries()` does the matching
+  and folds the repeats `roomView` returns — its `next` list is the whole
+  challenge queue, so every room sharing a challenge repeats the same waiting
+  entries — into **one card per queue entry** that lists all of its possible
+  rooms as chips, the same way the participant's My Queue card does. Tapping a result — or any team already
   shown on a room card — pushes `components/team-operations-screen.tsx`
   (`/(tabs)/others/team/[entryId]`), a detail view built on the same layout as
   the participant's own queue card but with the extra context only an
