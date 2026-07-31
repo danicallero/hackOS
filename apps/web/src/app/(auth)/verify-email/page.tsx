@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { CheckCircle2Icon, MailIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -22,12 +22,30 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { ApiError, api } from "@/lib/api";
-import { useLocale } from "@/lib/i18n";
+import { type Translate, useLocale } from "@/lib/i18n";
 import { safeReturnPath, withReturnPath } from "@/lib/return-path";
 import { useSessionContext } from "@/lib/session";
 
-const schema = z.object({ email: z.string().email("Enter a valid email") });
-type Values = z.infer<typeof schema>;
+function verifyEmailSchema(t: Translate) {
+  return z.object({ email: z.string().email(t("validEmail")) });
+}
+type Values = z.infer<ReturnType<typeof verifyEmailSchema>>;
+
+/** Keep API details in diagnostics while presenting stable H3 copy. */
+function localizedResendError(error: ApiError, t: Translate): string {
+  const code = error.code.toUpperCase();
+  console.error("[auth:resend-verification] request failed", {
+    code,
+    status: error.status,
+    error,
+  });
+
+  if (code === "INVALID_EMAIL") return t("validEmail");
+  if (code === "TOO_MANY_REQUESTS" || error.status === 429) {
+    return t("couldNotSendVerificationEmail");
+  }
+  return t("couldNotSendVerificationEmail");
+}
 
 /**
  * Maps Better Auth's verify-email error codes to distinct, actionable copy
@@ -54,6 +72,7 @@ function VerifyEmailInner() {
   const router = useRouter();
   const { t } = useLocale();
   const { refresh } = useSessionContext();
+  const schema = useMemo(() => verifyEmailSchema(t), [t]);
   // On failure Better Auth appends `error` to the same callback URL (which
   // already carries verified=1), so an error must take precedence.
   const errorInfo = messageForError(params.get("error"), t);
@@ -95,14 +114,13 @@ function VerifyEmailInner() {
       toast.success(t("verificationEmailSent"));
       setCooldown(60); // H3: 60s between attempts
     } catch (err) {
-      if (err instanceof ApiError && err.status === 429) {
-        setCooldown(err.retryAfter ?? 60);
-        form.setError("root", { message: err.message });
+      if (err instanceof ApiError) {
+        if (err.status === 429) setCooldown(err.retryAfter ?? 60);
+        form.setError("root", { message: localizedResendError(err, t) });
         return;
       }
-      form.setError("root", {
-        message: err instanceof ApiError ? err.message : t("couldNotSendEmail"),
-      });
+      console.error("[auth:resend-verification] request failed", err);
+      form.setError("root", { message: t("couldNotSendVerificationEmail") });
     }
   }
 
@@ -111,7 +129,7 @@ function VerifyEmailInner() {
       <Card>
         <CardHeader className="items-center justify-items-center text-center">
           <div className="bg-success/10 text-success mb-2 grid size-12 place-items-center rounded-full">
-            <CheckCircle2Icon className="size-6" />
+            <CheckCircle2Icon aria-hidden="true" className="size-6" />
           </div>
           <CardTitle>{t("emailVerified")}</CardTitle>
           <CardDescription>{t("emailVerifiedDescription")}</CardDescription>
@@ -135,7 +153,7 @@ function VerifyEmailInner() {
     <Card>
       <CardHeader className="items-center justify-items-center text-center">
         <div className="bg-muted text-muted-foreground mb-2 grid size-12 place-items-center rounded-full">
-          <MailIcon className="size-6" />
+          <MailIcon aria-hidden="true" className="size-6" />
         </div>
         <CardTitle>{t("verifyEmail")}</CardTitle>
         <CardDescription>{t("verificationInstructions")}</CardDescription>
@@ -163,7 +181,9 @@ function VerifyEmailInner() {
               )}
             />
             {form.formState.errors.root && (
-              <p className="text-destructive text-sm">{form.formState.errors.root.message}</p>
+              <Alert variant="destructive">
+                <AlertDescription>{form.formState.errors.root.message}</AlertDescription>
+              </Alert>
             )}
             <SubmitButton
               className="w-full"

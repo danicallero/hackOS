@@ -1,5 +1,5 @@
 import { CopyIcon } from "lucide-react";
-import Image from "next/image";
+import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useLocale } from "@/lib/i18n";
@@ -23,18 +23,18 @@ export function QrCode({
     );
   }
 
-  const src = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=12&data=${encodeURIComponent(value)}`;
-
   return (
     <div className={cn("rounded-lg border p-4", className)}>
       <div className="flex flex-col items-center gap-3">
-        <Image
-          src={src}
-          alt={`${label} QR`}
-          width={220}
-          height={220}
-          unoptimized
-          className="bg-white rounded-md border p-2"
+        <QRCodeSVG
+          value={value}
+          title={`${label} QR`}
+          level="Q"
+          marginSize={2}
+          bgColor="#ffffff"
+          fgColor="#000000"
+          size={220}
+          className="rounded-md border bg-white p-2"
         />
         <div className="w-full space-y-2">
           <p className="text-muted-foreground text-xs">{label}</p>

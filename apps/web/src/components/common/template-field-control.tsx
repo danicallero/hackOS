@@ -42,6 +42,13 @@ export interface TemplateFieldLike {
 
 const NONE = "__none__";
 
+/** Stable ids let labels, validation messages, and focus recovery share one contract. */
+export function templateFieldId(fieldKey: string, applicationId?: number): string {
+  const scope = applicationId == null ? "staff" : `application-${applicationId}`;
+  const safeKey = fieldKey.replace(/[^a-zA-Z0-9_-]/g, "-");
+  return `template-field-${scope}-${safeKey}`;
+}
+
 export function TemplateFieldControl({
   field,
   value,
@@ -72,16 +79,27 @@ export function TemplateFieldControl({
     value: o.value,
     label: pickText(o.label, lang),
   }));
+  const id = templateFieldId(field.key, applicationId);
+  const labelId = `${id}-label`;
+  const errorId = `${id}-error`;
+  const hasError = Boolean(error);
+  const describedBy = hasError ? errorId : undefined;
 
   let control: React.ReactNode;
   switch (field.kind) {
     case "textarea":
       control = (
         <Textarea
+          id={id}
+          name={field.key}
           rows={4}
           value={typeof value === "string" ? value : ""}
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
+          aria-labelledby={labelId}
+          aria-describedby={describedBy}
+          aria-invalid={hasError || undefined}
+          aria-required={field.required || undefined}
         />
       );
       break;
@@ -93,11 +111,18 @@ export function TemplateFieldControl({
           onValueChange={(v) => onChange(v === NONE ? "" : v)}
           disabled={disabled}
         >
-          <SelectTrigger className="w-full">
+          <SelectTrigger
+            id={id}
+            className="w-full"
+            aria-labelledby={labelId}
+            aria-describedby={describedBy}
+            aria-invalid={hasError || undefined}
+            aria-required={field.required || undefined}
+          >
             <SelectValue placeholder={t("selectPlaceholder")} />
           </SelectTrigger>
           <SelectContent>
-            {!field.required && <SelectItem value={NONE}>—</SelectItem>}
+            {!field.required && <SelectItem value={NONE}>{t("notSet")}</SelectItem>}
             {options.map((o) => (
               <SelectItem key={o.value} value={o.value}>
                 {o.label}
@@ -116,6 +141,10 @@ export function TemplateFieldControl({
           onChange={(v) => onChange(v)}
           disabled={disabled}
           inDialog={inDialog}
+          id={id}
+          aria-labelledby={labelId}
+          aria-describedby={describedBy}
+          aria-invalid={hasError || undefined}
         />
       );
       break;
@@ -123,14 +152,26 @@ export function TemplateFieldControl({
       control = (
         <div className="flex items-center gap-2">
           <Checkbox
-            id={`cb-${field.key}`}
+            id={id}
+            name={field.key}
             checked={value === true}
             onCheckedChange={(c) => onChange(c === true)}
             disabled={disabled}
+            aria-labelledby={labelId}
+            aria-describedby={describedBy}
+            aria-invalid={hasError || undefined}
+            aria-required={field.required || undefined}
           />
-          <Label htmlFor={`cb-${field.key}`} className="text-sm font-normal">
+          <Label id={labelId} htmlFor={id} className="text-sm font-normal">
             {label}
-            {field.required && <span className="text-destructive ml-0.5">*</span>}
+            {field.required && (
+              <>
+                <span aria-hidden="true" className="text-destructive ml-0.5">
+                  *
+                </span>
+                <span className="sr-only"> ({t("required")})</span>
+              </>
+            )}
           </Label>
         </div>
       );
@@ -141,30 +182,49 @@ export function TemplateFieldControl({
           type="date"
           // A native date input only shows a yyyy-MM-dd value; slice off any time
           // part so a stored ISO datetime still renders instead of going blank.
+          id={id}
+          name={field.key}
           value={typeof value === "string" ? value.slice(0, 10) : ""}
           onChange={(v) => onChange(v)}
           disabled={disabled}
+          aria-labelledby={labelId}
+          aria-describedby={describedBy}
+          aria-invalid={hasError || undefined}
+          aria-required={field.required || undefined}
         />
       );
       break;
     case "number":
       control = (
         <Input
+          id={id}
+          name={field.key}
           type="number"
+          inputMode="numeric"
           value={typeof value === "number" ? value : ""}
           onChange={(e) => onChange(e.target.value === "" ? "" : Number(e.target.value))}
           disabled={disabled}
+          aria-labelledby={labelId}
+          aria-describedby={describedBy}
+          aria-invalid={hasError || undefined}
+          aria-required={field.required || undefined}
         />
       );
       break;
     case "file-url":
       control = (
         <Input
+          id={id}
+          name={field.key}
           type="url"
-          placeholder="https://…"
+          placeholder={t("linkPlaceholder")}
           value={typeof value === "string" ? value : ""}
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
+          aria-labelledby={labelId}
+          aria-describedby={describedBy}
+          aria-invalid={hasError || undefined}
+          aria-required={field.required || undefined}
         />
       );
       break;
@@ -180,6 +240,11 @@ export function TemplateFieldControl({
             allowedTypes={field.allowed_file_types}
             maxSizeMb={field.max_file_size_mb}
             disabled={disabled}
+            id={id}
+            aria-label={t("chooseFileForField", { field: label })}
+            aria-labelledby={labelId}
+            aria-describedby={describedBy}
+            aria-invalid={hasError || undefined}
           />
         ) : value ? (
           <FileLink value={String(value)} />
@@ -196,16 +261,27 @@ export function TemplateFieldControl({
           onChange={(v) => onChange(v ? Number(v) : null)}
           disabled={disabled}
           inDialog={inDialog}
+          id={id}
+          aria-labelledby={labelId}
+          aria-describedby={describedBy}
+          aria-invalid={hasError || undefined}
+          aria-required={field.required || undefined}
         />
       );
       break;
     default:
       control = (
         <Input
+          id={id}
+          name={field.key}
           type="text"
           value={typeof value === "string" ? value : ""}
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
+          aria-labelledby={labelId}
+          aria-describedby={describedBy}
+          aria-invalid={hasError || undefined}
+          aria-required={field.required || undefined}
         />
       );
   }
@@ -214,13 +290,24 @@ export function TemplateFieldControl({
     <div className="space-y-2">
       {/* The checkbox kind renders its own inline label. */}
       {field.kind !== "checkbox" && (
-        <Label>
+        <Label id={labelId} htmlFor={id}>
           {label}
-          {field.required && <span className="text-destructive ml-0.5">*</span>}
+          {field.required && (
+            <>
+              <span aria-hidden="true" className="text-destructive ml-0.5">
+                *
+              </span>
+              <span className="sr-only"> ({t("required")})</span>
+            </>
+          )}
         </Label>
       )}
       {control}
-      {error && <p className="text-destructive text-sm">{error}</p>}
+      {error && (
+        <p id={errorId} role="alert" className="text-destructive text-sm">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

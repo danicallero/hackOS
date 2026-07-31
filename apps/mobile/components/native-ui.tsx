@@ -27,6 +27,7 @@ export function Section({
       {title ? (
         <Text
           selectable
+          accessibilityRole="header"
           style={{
             color: colors.secondaryLabel,
             fontSize: 13,
@@ -34,7 +35,7 @@ export function Section({
             paddingHorizontal: 16,
           }}
         >
-          {title.toLocaleUpperCase()}
+          {title}
         </Text>
       ) : null}
       <View
@@ -200,6 +201,7 @@ export function ActionButton({
   const foreground = destructive ? colors.destructive : colors.accent;
   return (
     <Pressable
+      accessibilityLabel={label}
       accessibilityRole="button"
       accessibilityState={{ disabled: disabled || busy, busy }}
       disabled={disabled || busy}
@@ -213,6 +215,7 @@ export function ActionButton({
           minHeight: 50,
           opacity: disabled || busy ? 0.45 : pressed ? 0.6 : 1,
           paddingHorizontal: 16,
+          transform: [{ scale: pressed ? 0.96 : 1 }],
         },
         style,
       ]}
@@ -320,6 +323,7 @@ export function EmptyState({
       </View>
       <Text
         selectable
+        accessibilityRole="header"
         style={{ color: colors.label, fontSize: 20, fontWeight: "700", textAlign: "center" }}
       >
         {title}

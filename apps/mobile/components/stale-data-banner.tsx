@@ -1,11 +1,19 @@
-import { Text, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { SymbolView } from "@/components/symbol";
 
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { colors } from "@/theme/colors";
 
-export function StaleDataBanner({ updatedAt }: { updatedAt: string | null }) {
+export function StaleDataBanner({
+  updatedAt,
+  onRetry,
+  retrying = false,
+}: {
+  updatedAt: string | null;
+  onRetry?: () => void;
+  retrying?: boolean;
+}) {
   const { language, t } = useLocale();
   const { me } = useMeContext();
   if (!updatedAt) return null;
@@ -26,7 +34,7 @@ export function StaleDataBanner({ updatedAt }: { updatedAt: string | null }) {
 
   return (
     <View
-      accessibilityRole="alert"
+      accessibilityLiveRegion="polite"
       style={{
         alignItems: "flex-start",
         backgroundColor: colors.warningSurface,
@@ -52,6 +60,30 @@ export function StaleDataBanner({ updatedAt }: { updatedAt: string | null }) {
         <Text selectable style={{ color: colors.warning, fontSize: 13, lineHeight: 18 }}>
           {t("offlineDataBody", { updatedAt: formatted })}
         </Text>
+        {onRetry ? (
+          <Pressable
+            accessibilityLabel={t("retry")}
+            accessibilityRole="button"
+            accessibilityState={{ busy: retrying, disabled: retrying }}
+            disabled={retrying}
+            onPress={onRetry}
+            style={({ pressed }) => ({
+              alignItems: "center",
+              alignSelf: "flex-start",
+              flexDirection: "row",
+              gap: 6,
+              justifyContent: "center",
+              minHeight: 44,
+              opacity: retrying ? 0.5 : pressed ? 0.7 : 1,
+              paddingHorizontal: 4,
+            })}
+          >
+            {retrying ? <ActivityIndicator color={colors.warning} size="small" /> : null}
+            <Text style={{ color: colors.warning, fontSize: 14, fontWeight: "700" }}>
+              {t("retry")}
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
     </View>
   );

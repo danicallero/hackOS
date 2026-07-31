@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 
+import { SessionState } from "@/components/session-state";
 import { useColorScheme } from "@/components/useColorScheme";
 import { authClient, signOut } from "@/lib/auth-client";
 import { isSupportedLanguage, LocaleProvider, useLocale } from "@/lib/i18n";
@@ -165,12 +166,20 @@ function MobileAccessGate({ authenticated }: { authenticated: boolean }) {
 
 function RootLayoutNav({ authenticated, pending }: { authenticated: boolean; pending: boolean }) {
   const colorScheme = useColorScheme();
+  const { me, loading: meLoading, error: meError, refetch } = useMeContext();
 
   // Keep one navigator in charge of session transitions. Protected screens
   // are removed from navigation history when their guard changes, so signing
   // out cannot leave a stale tabs route underneath (or add a second sign-in
   // route while a nested redirect is already running).
   if (pending) return null;
+
+  // Keep an authenticated H4 session recoverable when /api/me is temporarily
+  // unavailable or the server has revoked it, instead of leaving a blank tab
+  // navigator with no retry or sign-out path.
+  if (authenticated && !me) {
+    return <SessionState loading={meLoading} error={meError} onRetry={() => void refetch()} />;
+  }
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>

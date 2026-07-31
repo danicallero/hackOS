@@ -21,6 +21,7 @@ import { EVENTS } from "@hackos/shared/events";
 import { DoorOpenIcon, HourglassIcon, TicketIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { QueueStatusBadge } from "@/components/common/queue-status-badge";
@@ -29,7 +30,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Section } from "@/components/ui/surface";
 import { type SseEnvelope, useEventSource, useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError } from "@/lib/api";
-import { useLocale } from "@/lib/i18n";
+import { type Translate, useLocale } from "@/lib/i18n";
 import { getMyQueue, type MyQueueEntry, type MyQueueRoom } from "@/lib/queue";
 import { cn } from "@/lib/utils";
 import { type TranslatedText, textForDisplay } from "../challenges/shared";
@@ -68,13 +69,16 @@ const CALL_EVENTS = [
   EVENTS.USER_QUEUE_CHANGED,
 ] as const;
 
-function formatEta(minutes: number | null, anyMoment = "any moment now"): string | null {
+/** Keep ETA units localized with the existing queue duration dictionary entry (H38). */
+function formatEta(minutes: number | null, t: Translate): string | null {
   if (minutes == null) return null;
-  if (minutes <= 0) return anyMoment;
-  if (minutes < 60) return `~${minutes} min`;
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return m ? `~${h}h ${m}m` : `~${h}h`;
+  if (minutes <= 0) return t("anyMoment");
+  if (minutes < 60) return `~${t("queueStatsMinutes", { count: minutes })}`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes > 0
+    ? `~${t("durationHoursMinutes", { hours, minutes: remainingMinutes })}`
+    : `~${t("durationHours", { hours })}`;
 }
 
 export default function MyQueuePage() {
@@ -83,7 +87,29 @@ export default function MyQueuePage() {
     data: entries,
     error,
     loading,
+    refetch,
   } = useLiveQuery<MyQueueEntry[]>(getMyQueue, "/api/queue/me/stream", CALL_EVENTS);
+
+  // `useLiveQuery` keeps the last successful read model when a refresh fails.
+  // Keep retry disabled until that in-flight refresh publishes a new result.
+  const [retrying, setRetrying] = useState(false);
+  const retrySnapshot = useRef<{ data: MyQueueEntry[] | null; error: unknown }>({
+    data: null,
+    error: null,
+  });
+
+  const retry = useCallback(() => {
+    if (retrying) return;
+    retrySnapshot.current = { data: entries, error };
+    setRetrying(true);
+    refetch();
+  }, [entries, error, refetch, retrying]);
+
+  useEffect(() => {
+    if (!retrying) return;
+    const snapshot = retrySnapshot.current;
+    if (entries !== snapshot.data || error !== snapshot.error) setRetrying(false);
+  }, [entries, error, retrying]);
 
   // Queue entries that got a pre-call heads-up but haven't been called yet.
   const [precalled, setPrecalled] = useState<Set<number>>(new Set());
@@ -111,7 +137,7 @@ export default function MyQueuePage() {
       } else if (env.type === EVENTS.USER_QUEUE_PRECALL) {
         const p = env.data as PrecallPayload;
         setPrecalled((prev) => new Set(prev).add(p.entryId));
-        const eta = formatEta(p.etaMinutes, t("anyMoment"));
+        const eta = formatEta(p.etaMinutes, t);
         toast(`${t("getReady")}${eta ? ` (${eta})` : ""}`);
       }
     },
@@ -119,12 +145,6 @@ export default function MyQueuePage() {
   );
 
   useEventSource("/api/queue/me/stream", { events: CALL_EVENTS, onEvent: onStreamEvent });
-
-  useEffect(() => {
-    if (error) {
-      toast.error(error instanceof ApiError ? error.message : t("queueLoadError"));
-    }
-  }, [error, t]);
 
   const list = entries ?? [];
   const called = useMemo(() => list.filter((e) => e.status === "called"), [list]);
@@ -142,7 +162,7 @@ export default function MyQueuePage() {
     return [...grouped.entries()].map(([repoId, project]) => ({ repoId, ...project }));
   }, [list]);
 
-  if (loading && !entries) {
+  if (loading && entries === null) {
     return (
       <div className="space-y-6">
         <PageHeader title={t("myQueue")} />
@@ -156,6 +176,15 @@ export default function MyQueuePage() {
   return (
     <div className="space-y-6">
       <PageHeader title={t("myQueue")} />
+
+      {error !== null && (
+        <div aria-busy={retrying}>
+          <ContextualError
+            message={error instanceof ApiError ? error.message : t("queueLoadError")}
+            onRetry={retrying ? undefined : retry}
+          />
+        </div>
+      )}
 
       {called.map((e) => (
         <CalledNotice key={`called-${e.repoId}-${e.challengeId}`} entry={e} />
@@ -206,7 +235,7 @@ function ProjectQueueCard({ repoName, entries }: { repoName: string; entries: My
  * reads as a hole rather than a dot. */
 function QueueRow({ entry }: { entry: MyQueueEntry }) {
   const { t } = useLocale();
-  const eta = formatEta(entry.etaMinutes, t("anyMoment"));
+  const eta = formatEta(entry.etaMinutes, t);
   const rooms = entry.status === "waiting" ? entry.rooms : entry.room ? [entry.room] : [];
   const roomsSummary = rooms.length > 0 ? formatRoomsSummary(rooms) : null;
 
@@ -276,7 +305,8 @@ function CalledNotice({ entry }: { entry: MyQueueEntry }) {
 
 /** H38: gentle heads-up that a call is coming soon (pre-aviso). */
 function PrecallNotice({ entry }: { entry: MyQueueEntry }) {
-  const eta = formatEta(entry.etaMinutes);
+  const { t } = useLocale();
+  const eta = formatEta(entry.etaMinutes, t);
   return (
     <div
       className={cn(
@@ -288,7 +318,7 @@ function PrecallNotice({ entry }: { entry: MyQueueEntry }) {
         <HourglassIcon className="size-5" />
       </div>
       <div className="min-w-0 space-y-1">
-        <p className="text-base font-semibold">You're up soon — get ready</p>
+        <p className="text-base font-semibold">{t("getReady")}</p>
         <p className="text-warning/90 text-sm">
           {textForDisplay(entry.challengeTitle as TranslatedText)} · {entry.repoName}
           {eta ? ` · ${eta}` : ""}

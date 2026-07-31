@@ -1,6 +1,7 @@
 import { GlassView as ExpoGlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 import type { ComponentProps } from "react";
 import { Platform, useColorScheme, View } from "react-native";
+import { colors } from "@/theme/colors";
 
 export type GlassViewProps = ComponentProps<typeof ExpoGlassView>;
 
@@ -39,20 +40,15 @@ export function GlassView({
     );
   }
   const scheme = colorScheme === "auto" ? (systemScheme ?? "light") : colorScheme;
-  const background =
-    tintColor ?? (scheme === "dark" ? "rgba(30, 30, 32, 0.85)" : "rgba(255, 255, 255, 0.85)");
+  const background = tintColor ?? (scheme === "dark" ? colors.elevatedSurface : colors.surface);
   return (
     <View
       {...viewProps}
       style={[
         {
           backgroundColor: background,
-          elevation: 6,
+          boxShadow: colors.controlShadow,
           overflow: "hidden",
-          shadowColor: "#000",
-          shadowOffset: { height: 2, width: 0 },
-          shadowOpacity: 0.2,
-          shadowRadius: 6,
         },
         style,
       ]}

@@ -8,6 +8,7 @@ import { Building2Icon, PlusIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AccessDenied } from "@/components/common/access-denied";
+import { ContextualError } from "@/components/common/contextual-error";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
@@ -65,7 +66,9 @@ export default function QueueRoomsPage() {
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [users, setUsers] = useState<UserList["users"]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedRoomId, setSelectedRoomId] = useState<number | null>(null);
+  const [roomDetailsError, setRoomDetailsError] = useState<string | null>(null);
   const [modalMode, setModalMode] = useState<"create" | "edit" | null>(null);
   const [createDraft, setCreateDraft] = useState<RoomEditor>(emptyRoomEditor());
   const [roomDraft, setRoomDraft] = useState<RoomEditor>(emptyRoomEditor());
@@ -86,6 +89,7 @@ export default function QueueRoomsPage() {
       return;
     }
     setLoading(true);
+    setLoadError(null);
     try {
       const [roomRows, challengeRows, userRows] = await Promise.all([
         listRooms(),
@@ -99,7 +103,9 @@ export default function QueueRoomsPage() {
       setUsers(userRows.users);
       setCreateDraft((draft) => (draft.name ? draft : { ...emptyRoomEditor() }));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadRoomAdminData"));
+      const message = err instanceof ApiError ? err.message : t("couldNotLoadRoomAdminData");
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -107,17 +113,22 @@ export default function QueueRoomsPage() {
 
   const loadRoomDetails = useCallback(
     async (roomId: number) => {
+      setRoomDetailsError(null);
       try {
         const [roomAssignments, judgeCandidates] = await Promise.all([
           getRoomAssignments(roomId),
-          api.get<UserList>(`/api/queue/rooms/${roomId}/judge-candidates`).catch(() => ({
-            users: [],
-          })),
+          api.get<UserList>(`/api/queue/rooms/${roomId}/judge-candidates`).catch((err) => {
+            // H46: a room without an assigned challenge has no judge candidates yet.
+            if (err instanceof ApiError && err.status === 404) return { users: [] };
+            throw err;
+          }),
         ]);
         setAssignments((current) => ({ ...current, [roomId]: roomAssignments }));
         setUsers(judgeCandidates.users);
       } catch (err) {
-        toast.error(err instanceof ApiError ? err.message : t("couldNotLoadRoomDetails"));
+        const message = err instanceof ApiError ? err.message : t("couldNotLoadRoomDetails");
+        setRoomDetailsError(message);
+        toast.error(message);
       }
     },
     [t],
@@ -131,12 +142,14 @@ export default function QueueRoomsPage() {
 
   const openManageModal = (roomId: number) => {
     setSelectedRoomId(roomId);
+    setRoomDetailsError(null);
     setModalMode("edit");
   };
 
   const closeModal = () => {
     setModalMode(null);
     setSelectedRoomId(null);
+    setRoomDetailsError(null);
   };
 
   useEffect(() => {
@@ -295,14 +308,14 @@ export default function QueueRoomsPage() {
       <SectionCard
         title={t("rooms")}
         description={
-          !loading && rooms.length > 0
+          !loading && !loadError && rooms.length > 0
             ? t("roomsSummary", { active: activeCount, total: rooms.length })
             : undefined
         }
         icon={Building2Icon}
         bodyClassName="space-y-4"
       >
-        {!loading && rooms.length === 0 ? (
+        {!loading && !loadError && rooms.length === 0 ? (
           <EmptyState
             icon={Building2Icon}
             title={t("noRoomsConfigured")}
@@ -316,6 +329,7 @@ export default function QueueRoomsPage() {
             onRowClick={(room) => openManageModal(room.id)}
             getRowLabel={(room) => room.name}
             loading={loading}
+            error={loadError ? { message: loadError, onRetry: load } : undefined}
             searchable={(room) => `${room.name} ${room.slug} ${room.location ?? ""}`}
             searchPlaceholder={t("filterRoomsPlaceholder")}
             searchLabel={t("filterRooms")}
@@ -438,6 +452,12 @@ export default function QueueRoomsPage() {
         )}
         {modalMode === "edit" && selectedRoom && (
           <div className="space-y-5">
+            {roomDetailsError && (
+              <ContextualError
+                message={roomDetailsError}
+                onRetry={() => void loadRoomDetails(selectedRoom.id)}
+              />
+            )}
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="space-y-2">
                 <Label>{t("name")}</Label>

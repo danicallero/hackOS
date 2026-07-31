@@ -60,7 +60,7 @@ La información principal de hackOS —incluidas las cuentas, solicitudes, bases
 
 Conservaremos tus datos mientras tu cuenta o relación con GPUL permanezca activa y, después, durante los plazos necesarios para atender responsabilidades legales. Cuando finalicen, los datos serán eliminados o anonimizados.
 
-Las restricciones alimentarias se utilizan únicamente para planificar el catering y se eliminan cuando dejen de ser necesarias. Si no confirmas tu plaza o la rechazas, hackOS las elimina salvo que mantengas otra participación confirmada que todavía las requiera.
+Las restricciones alimentarias se conservan mientras tu cuenta exista. Se utilizan para planificar el catering de las personas con plaza confirmada y no se incluyen en las estadísticas hasta que confirmes una plaza. Si no confirmas o rechazas una plaza, no se eliminan automáticamente: se conservan por si recibes otra oportunidad de participación.
 
 ## 7. Cookies y almacenamiento local
 
@@ -140,7 +140,7 @@ A información principal de hackOS —incluídas as contas, solicitudes, bases d
 
 Conservaremos os teus datos mentres a túa conta ou relación con GPUL permaneza activa e, despois, durante os prazos necesarios para atender responsabilidades legais. Cando finalicen, os datos serán eliminados ou anonimizados.
 
-As restricións alimentarias utilízanse unicamente para planificar o catering e elimínanse cando deixen de ser necesarias. Se non confirmas a túa praza ou a rexeitas, hackOS elimínaas agás que manteñas outra participación confirmada que aínda as requira.
+As restricións alimentarias consérvanse mentres exista a túa conta. Utilízanse para planificar o catering das persoas cunha praza confirmada e non se inclúen nas estatísticas ata que confirmes unha praza. Se non confirmas ou rexeitas unha praza, non se eliminan automaticamente: consérvanse por se recibes outra oportunidade de participación.
 
 ## 7. Cookies e almacenamento local
 
@@ -220,7 +220,7 @@ Core hackOS information —including accounts, applications, databases and files
 
 We retain your data while your account or relationship with GPUL remains active and afterwards for the periods necessary to address legal liabilities. Once those periods end, the data is deleted or anonymised.
 
-Dietary restrictions are used only to plan catering and are deleted when no longer needed. If you do not confirm your place or decline it, hackOS deletes them unless you have another confirmed participation that still requires them.
+Dietary restrictions are kept while your account exists. They are used to plan catering for people with confirmed places and are not included in statistics until you confirm a place. If you do not confirm or decline a place, they are not deleted automatically; they are kept in case you receive another participation opportunity.
 
 ## 7. Cookies and local storage
 

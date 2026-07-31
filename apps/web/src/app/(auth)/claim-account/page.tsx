@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { CheckCircle2Icon } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { MultiSelect } from "@/components/common/multi-select";
@@ -31,29 +31,56 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
-import { languageName, pickText, useLocale } from "@/lib/i18n";
+import { languageName, pickText, type Translate, useLocale } from "@/lib/i18n";
 import { destinationForKind } from "@/lib/invite-destination";
 import { withReturnPath } from "@/lib/return-path";
 import type { Intolerance, InviteKind, Language } from "@/lib/types";
 
 const SHIRT_SIZES = ["XS", "S", "M", "L", "XL", "XXL"] as const;
 
-const schema = z.object({
-  name: z.string().min(1, "Required").max(200),
-  surname: z.string().min(1, "Required").max(200),
-  password: z.string().min(8, "At least 8 characters"),
-  phone: z.string().max(50),
-  language: z.enum(["en", "es", "gl"]),
-  shirtSize: z.string(),
-  foodIntolerances: z.array(z.string()),
-  // Optional free-text dietary notes (M1.3). Optional here and everywhere else.
-  foodIntoleranceNotes: z.string().max(2000),
-});
-type Values = z.infer<typeof schema>;
+function claimSchema(t: Translate) {
+  return z.object({
+    name: z.string().min(1, t("required")).max(200),
+    surname: z.string().min(1, t("required")).max(200),
+    password: z.string().min(8, t("atLeastEight")),
+    phone: z.string().max(50),
+    language: z.enum(["en", "es", "gl"]),
+    shirtSize: z.string(),
+    foodIntolerances: z.array(z.string()),
+    // Optional free-text dietary notes (M1.3). Optional here and everywhere else.
+    foodIntoleranceNotes: z.string().max(2000),
+  });
+}
+type Values = z.infer<ReturnType<typeof claimSchema>>;
 const NONE = "__none__";
+
+function detailsField(details: unknown): string | undefined {
+  if (typeof details !== "object" || details === null) return undefined;
+  const field = (details as { field?: unknown }).field;
+  return typeof field === "string" ? field : undefined;
+}
+
+/** Keep API details in diagnostics while preserving H9/H10 recovery copy. */
+function localizedClaimError(error: ApiError, t: Translate): string {
+  const code = error.code.toUpperCase();
+  console.error("[auth:claim-account] request failed", {
+    code,
+    status: error.status,
+    error,
+  });
+
+  if (code === "BAD_REQUEST" && detailsField(error.details) === "shirtSize") {
+    return t("shirtSizeRequiredDesc");
+  }
+  if (code === "NOT_FOUND" || code === "CONFLICT" || error.status === 404 || error.status === 409) {
+    return t("inviteUnavailable");
+  }
+  return t("couldNotCreateAccount");
+}
 
 function ClaimInner() {
   const { t } = useLocale();
+  const schema = useMemo(() => claimSchema(t), [t]);
   const token = useSearchParams().get("token");
   const router = useRouter();
   const [lookup, setLookup] = useState<
@@ -97,7 +124,7 @@ function ClaimInner() {
     if (!token) return;
     const kind = lookup && lookup !== "error" ? lookup.kind : "staff";
     if (kind === "participant" && values.shirtSize === NONE) {
-      form.setError("shirtSize", { message: "Participants must choose a shirt size" });
+      form.setError("shirtSize", { message: t("shirtSizeRequiredDesc") });
       return;
     }
     try {
@@ -117,8 +144,9 @@ function ClaimInner() {
       setDone(true);
     } catch (err) {
       form.setError("root", {
-        message: err instanceof ApiError ? err.message : t("couldNotCreateAccount"),
+        message: err instanceof ApiError ? localizedClaimError(err, t) : t("couldNotCreateAccount"),
       });
+      if (!(err instanceof ApiError)) console.error("[auth:claim-account] request failed", err);
     }
   }
 
@@ -152,7 +180,7 @@ function ClaimInner() {
       <Card>
         <CardHeader className="items-center justify-items-center text-center">
           <div className="bg-success/10 text-success mb-2 grid size-12 place-items-center rounded-full">
-            <CheckCircle2Icon className="size-6" />
+            <CheckCircle2Icon aria-hidden="true" className="size-6" />
           </div>
           <CardTitle>{t("accountCreated")}</CardTitle>
         </CardHeader>
@@ -189,7 +217,7 @@ function ClaimInner() {
                 <AlertDescription>{form.formState.errors.root.message}</AlertDescription>
               </Alert>
             )}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <FormField
                 control={form.control}
                 name="name"

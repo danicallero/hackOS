@@ -487,7 +487,7 @@ export function ScannerQueueStatus({
                 paddingHorizontal: 16,
               }}
             >
-              {t("scannerQueue").toLocaleUpperCase()}
+              {t("scannerQueue")}
             </Text>
 
             {queue.length === 0 ? (

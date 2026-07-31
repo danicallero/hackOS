@@ -96,7 +96,9 @@ function MessagesView() {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [actionError, setActionError] = useState<Error | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [readingId, setReadingId] = useState<number | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  const actionRetry = useRef<(() => Promise<void>) | null>(null);
 
   const fetchInbox = useCallback(async () => {
     const query = unreadOnly ? "&unread=true" : "";
@@ -116,6 +118,8 @@ function MessagesView() {
 
   async function markRead(item: InboxItem) {
     if (item.read_at) return;
+    actionRetry.current = () => markRead(item);
+    setReadingId(item.id);
     setActionError(null);
     try {
       const result = await apiFetch<{ id: number; read_at: string }>(
@@ -139,6 +143,8 @@ function MessagesView() {
       setActionError(
         cause instanceof Error ? cause : new Error("Failed to mark notification read"),
       );
+    } finally {
+      setReadingId(null);
     }
   }
 
@@ -164,6 +170,7 @@ function MessagesView() {
   }
 
   async function deleteNotification(item: InboxItem) {
+    actionRetry.current = () => deleteNotification(item);
     setDeletingId(item.id);
     setActionError(null);
     try {
@@ -194,6 +201,7 @@ function MessagesView() {
 
   async function loadMore() {
     if (!data || loadingMore || data.items.length >= data.total) return;
+    actionRetry.current = () => loadMore();
     setLoadingMore(true);
     setActionError(null);
     try {
@@ -219,10 +227,12 @@ function MessagesView() {
   }
 
   const items = data?.items ?? [];
+  const retryAction = actionRetry.current;
+  const actionRetrying = readingId !== null || deletingId !== null || loadingMore;
 
   return (
     <View style={{ gap: 16 }}>
-      <StaleDataBanner updatedAt={staleSince} />
+      <StaleDataBanner updatedAt={staleSince} onRetry={() => void load()} retrying={loading} />
       <Section footer={t("notificationsUnreadHint")}>
         <View
           style={{
@@ -245,7 +255,13 @@ function MessagesView() {
       </Section>
 
       {error ? <RequestFeedback error={error} onRetry={() => void load()} /> : null}
-      {actionError ? <RequestFeedback error={actionError} /> : null}
+      {actionError ? (
+        <RequestFeedback
+          error={actionError}
+          onRetry={retryAction ? () => void retryAction() : undefined}
+          retrying={actionRetrying}
+        />
+      ) : null}
       {loading && !data ? <RequestFeedback loading /> : null}
 
       {!loading && !error && items.length === 0 ? (
@@ -266,6 +282,7 @@ function MessagesView() {
                 expanded={expanded.has(item.id)}
                 language={language}
                 onPress={() => toggleExpanded(item)}
+                busy={readingId === item.id}
                 deleting={deletingId === item.id}
                 onDelete={() => confirmDelete(item)}
               />
@@ -299,6 +316,7 @@ function MessagesView() {
       <ActionButton
         label={t("refreshNotifications")}
         icon="arrow.clockwise"
+        busy={loading}
         onPress={() => void load()}
       />
     </View>
@@ -352,6 +370,7 @@ function NotificationRow({
   expanded,
   language,
   onPress,
+  busy,
   deleting,
   onDelete,
 }: {
@@ -359,12 +378,14 @@ function NotificationRow({
   expanded: boolean;
   language: string;
   onPress: () => void;
+  busy: boolean;
   deleting: boolean;
   onDelete: () => void;
 }) {
-  const subject = payloadField(item.payload, "subject") ?? item.category;
+  const { t } = useLocale();
+  const subject = payloadField(item.payload, "subject") ?? categoryLabel(item.category, t);
   const body = payloadField(item.payload, "body");
-  const details = payloadDetails(item.payload);
+  const details = payloadDetails(item.payload, t);
   const unread = !item.read_at;
   // The swipe gesture and the row's own tap-to-expand Pressable both listen
   // on the same touch: without this guard, releasing a swipe (even one that
@@ -379,7 +400,7 @@ function NotificationRow({
 
   return (
     <Swipeable
-      enabled={!deleting}
+      enabled={!deleting && !busy}
       renderRightActions={(progress) => (
         <DeleteRevealAction progress={progress} onDelete={onDelete} />
       )}
@@ -395,9 +416,9 @@ function NotificationRow({
     >
       <Pressable
         accessibilityRole="button"
-        accessibilityState={{ expanded }}
+        accessibilityState={{ busy: busy || deleting, expanded }}
         onPress={() => {
-          if (swiping.current) return;
+          if (swiping.current || busy || deleting) return;
           onPress();
         }}
         style={({ pressed }) => ({
@@ -464,7 +485,12 @@ function NotificationRow({
                   <View key={detail.key} style={{ flexDirection: "row", gap: 8 }}>
                     <Text
                       selectable
-                      style={{ color: colors.secondaryLabel, fontSize: 12, width: 90 }}
+                      style={{
+                        color: colors.secondaryLabel,
+                        flexBasis: 90,
+                        flexShrink: 1,
+                        fontSize: 12,
+                      }}
                     >
                       {detail.key}
                     </Text>
@@ -493,6 +519,7 @@ function PreferencesView() {
   const { me } = useMeContext();
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [actionError, setActionError] = useState<Error | null>(null);
+  const actionRetry = useRef<(() => Promise<void>) | null>(null);
   const [removalStates, setRemovalStates] = useState<
     Record<string, "queued" | "removing" | "failed">
   >({});
@@ -539,6 +566,7 @@ function PreferencesView() {
 
   async function toggle(category: string, channel: Channel, enabled: boolean) {
     const key = `${category}:${channel}`;
+    actionRetry.current = () => toggle(category, channel, enabled);
     setSavingKey(key);
     setActionError(null);
     try {
@@ -553,6 +581,7 @@ function PreferencesView() {
   }
 
   async function addReminder(category: string) {
+    actionRetry.current = () => addReminder(category);
     setSavingKey(category);
     setActionError(null);
     try {
@@ -606,6 +635,10 @@ function PreferencesView() {
 
   function enqueueReminderRemoval(category: string, channels: Channel[]) {
     if (queuedRemovalCategories.current.has(category)) return;
+    actionRetry.current = () => {
+      enqueueReminderRemoval(category, channels);
+      return Promise.resolve();
+    };
     queuedRemovalCategories.current.add(category);
     setRemovalStates((current) => ({ ...current, [category]: "queued" }));
     removalQueue.current.push({ category, channels });
@@ -652,11 +685,18 @@ function PreferencesView() {
   const pendingRemovalCount = Object.values(removalStates).filter(
     (state) => state === "queued" || state === "removing",
   ).length;
+  const retryAction = actionRetry.current;
 
   return (
     <View style={{ gap: 18 }}>
-      <StaleDataBanner updatedAt={staleSince} />
-      {actionError ? <RequestFeedback error={actionError} /> : null}
+      <StaleDataBanner updatedAt={staleSince} onRetry={() => void load()} retrying={loading} />
+      {actionError ? (
+        <RequestFeedback
+          error={actionError}
+          onRetry={retryAction ? () => void retryAction() : undefined}
+          retrying={savingKey !== null || pendingRemovalCount > 0}
+        />
+      ) : null}
       <Section title={t("notificationsRequired")} footer={t("notificationsMandatoryHint")}>
         <View style={{ alignItems: "center", flexDirection: "row", gap: 12, padding: 16 }}>
           <SymbolView
@@ -887,6 +927,7 @@ function PreferencesView() {
       <ActionButton
         label={t("refreshNotifications")}
         icon="arrow.clockwise"
+        busy={loading}
         onPress={() => void load()}
       />
     </View>
@@ -948,7 +989,7 @@ const HIDDEN_PAYLOAD_KEYS = new Set([
 // ugly, unexplained metadata rather than information a participant can use.
 const TECHNICAL_ID_KEY = /(^id$|Id$)/;
 
-function payloadDetails(payload: unknown) {
+function payloadDetails(payload: unknown, t: ReturnType<typeof useLocale>["t"]) {
   if (!payload || typeof payload !== "object") return [];
   return Object.entries(payload as Record<string, unknown>)
     .filter(
@@ -960,11 +1001,34 @@ function payloadDetails(payload: unknown) {
         typeof value !== "object",
     )
     .map(([key, value]) => ({
-      key: key
-        .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-        .replace(/^./, (letter) => letter.toUpperCase()),
+      key: payloadDetailLabel(key, t),
       value: String(value),
     }));
+}
+
+function payloadDetailLabel(key: string, t: ReturnType<typeof useLocale>["t"]): string {
+  const labels: Record<string, string> = {
+    activityTitle: t("notificationsDetailActivity"),
+    applicationName: t("notificationsDetailApplication"),
+    challengeName: t("notificationsDetailChallenge"),
+    challengeTitle: t("notificationsDetailChallenge"),
+    decision: t("notificationsDetailDecision"),
+    decisionDetails: t("notificationsDetailDecision"),
+    etaMinutes: t("notificationsDetailWait"),
+    locationLine: t("notificationsDetailLocation"),
+    locationSuffix: t("notificationsDetailLocation"),
+    message: t("notificationsDetailMessage"),
+    name: t("notificationsDetailName"),
+    roomName: t("notificationsDetailRoom"),
+    senderName: t("notificationsDetailSender"),
+    startsAtLabel: t("notificationsDetailStarts"),
+    teamName: t("notificationsDetailTeam"),
+    title: t("notificationsDetailActivity"),
+  };
+  return (
+    labels[key] ??
+    key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/^./, (letter) => letter.toUpperCase())
+  );
 }
 
 function categoryLabel(category: string, t: ReturnType<typeof useLocale>["t"]) {

@@ -26,7 +26,7 @@ import { Switch } from "@/components/ui/switch";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import type { EventConfig } from "@/lib/types";
-import { useEventConfig } from "./event-config-context";
+import { EventConfigLoadState, useEventConfig } from "./event-config-context";
 import { useCategorySaveState } from "./use-category-save-state";
 
 const schema = z.object({
@@ -90,7 +90,9 @@ export function IdentityTab({
     }
   }
 
-  if (status === "loading" || !config) return null;
+  if (status !== "ready" || !config) {
+    return <EventConfigLoadState icon={icon} title={t("eventTitle")} />;
+  }
 
   return (
     <Form {...form}>

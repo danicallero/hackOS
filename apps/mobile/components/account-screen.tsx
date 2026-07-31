@@ -33,6 +33,8 @@ export default function AccountScreen() {
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState<Error | null>(null);
   const [savingLanguage, setSavingLanguage] = useState(false);
+  const [languageError, setLanguageError] = useState<Error | null>(null);
+  const [languageRetry, setLanguageRetry] = useState<Lang | null>(null);
   const [myStats, setMyStats] = useState<MyScanStats | null>(null);
 
   const loadSupportingData = useCallback(async () => {
@@ -65,6 +67,8 @@ export default function AccountScreen() {
   async function changeLanguage(nextLanguage: Lang) {
     if (nextLanguage === me?.language || savingLanguage) return;
     setSavingLanguage(true);
+    setLanguageError(null);
+    setLanguageRetry(nextLanguage);
     try {
       await apiFetch("/api/me", {
         method: "PATCH",
@@ -72,6 +76,9 @@ export default function AccountScreen() {
         body: JSON.stringify({ language: nextLanguage }),
       });
       await refetch();
+      setLanguageRetry(null);
+    } catch (cause) {
+      setLanguageError(cause instanceof Error ? cause : new Error(t("accountLanguageError")));
     } finally {
       setSavingLanguage(false);
     }
@@ -82,7 +89,7 @@ export default function AccountScreen() {
     setSignOutError(null);
     try {
       const { error: authError } = await signOut();
-      if (authError) throw new Error(authError.message || "Sign out failed");
+      if (authError) throw new Error(authError.message || t("signOutError"));
       // The roster is shared, event-wide data with no reason to survive a
       // session boundary — wipe it (and its encryption key) now rather than
       // leaving it cached until the next signed-in device sync. The offline
@@ -90,7 +97,7 @@ export default function AccountScreen() {
       // reappears, still decryptable, if this same person signs back in.
       await wipeAttendanceRoster();
     } catch (cause) {
-      setSignOutError(cause instanceof Error ? cause : new Error("Sign out failed"));
+      setSignOutError(cause instanceof Error ? cause : new Error(t("signOutError")));
       setSigningOut(false);
     }
   }
@@ -128,7 +135,22 @@ export default function AccountScreen() {
       }}
     >
       {error ? <RequestFeedback error={error} onRetry={() => void refetch()} /> : null}
-      {signOutError ? <RequestFeedback error={signOutError} /> : null}
+      {signOutError ? (
+        <RequestFeedback
+          error={signOutError}
+          message={t("signOutError")}
+          onRetry={() => void endSession()}
+          retrying={signingOut}
+        />
+      ) : null}
+      {languageError ? (
+        <RequestFeedback
+          error={languageError}
+          message={t("accountLanguageError")}
+          onRetry={languageRetry ? () => void changeLanguage(languageRetry) : undefined}
+          retrying={savingLanguage}
+        />
+      ) : null}
 
       <View style={{ alignItems: "center", gap: 10, paddingVertical: 10 }}>
         <View
@@ -153,7 +175,7 @@ export default function AccountScreen() {
             {fullName}
           </Text>
           <Text selectable style={{ color: colors.secondaryLabel, fontSize: 15 }}>
-            {me.role}
+            {roleLabel(me.role, t)}
           </Text>
           <StatusPill tone={me.badgeId ? "success" : "neutral"} style={{ alignSelf: "center" }}>
             {me.badgeId ? t("accountAccredited") : t("accountNotAccredited")}
@@ -177,6 +199,7 @@ export default function AccountScreen() {
           onPressAction={({ nativeEvent }) => void changeLanguage(nativeEvent.event as Lang)}
         >
           <Pressable
+            accessibilityLabel={t("accountLanguage")}
             accessibilityRole="button"
             accessibilityState={{ disabled: savingLanguage, busy: savingLanguage }}
             disabled={savingLanguage}
@@ -318,4 +341,21 @@ function languageName(language: string) {
   return (
     ({ en: "English", es: "Español", gl: "Galego" } as Record<string, string>)[language] ?? language
   );
+}
+
+function roleLabel(
+  role: NonNullable<ReturnType<typeof useMeContext>["me"]>["role"],
+  t: ReturnType<typeof useLocale>["t"],
+) {
+  return (
+    {
+      admin: t("roleAdmin"),
+      judge: t("roleJudge"),
+      sponsor: t("roleSponsor"),
+      staff: t("roleStaff"),
+      mentor: t("roleMentor"),
+      participant: t("roleParticipant"),
+      unassigned: t("roleUnassigned"),
+    } as const
+  )[role];
 }

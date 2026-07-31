@@ -2,7 +2,7 @@ import { EVENTS } from "@hackos/shared/events";
 import { ButtonStyle, ButtonType, RNWalletView } from "@premieroctet/react-native-wallet";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Linking, Platform, ScrollView, Text, useColorScheme, View } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 import { ActionButton, EmptyState, InfoRow, Section, Separator } from "@/components/native-ui";
@@ -14,6 +14,7 @@ import { apiFetch } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
+import { createIdempotencyKey } from "@/lib/idempotency-key";
 import { useMeContext } from "@/lib/me-context";
 import { subscribeToServerEvent } from "@/lib/server-events";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
@@ -35,12 +36,15 @@ interface TicketPayload {
 /** Ticket and badge read model shared with web, with native Wallet handoff. */
 export default function WalletScreen() {
   useColorScheme();
-  const { t } = useLocale();
+  const { language, t } = useLocale();
   const androidTopInset = useAndroidTopInset();
   const { me, refetch: refetchMe } = useMeContext();
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [actionBusy, setActionBusy] = useState(false);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
   const [actionError, setActionError] = useState<Error | null>(null);
+  const [spotConfirmed, setSpotConfirmed] = useState(false);
+  const actionRetry = useRef<{ action: () => Promise<void>; key: string } | null>(null);
+  const confirmationKeys = useRef(new Map<number, string>());
 
   const fetchTicket = useCallback(() => apiFetch<TicketPayload>("/api/me/ticket"), []);
   const {
@@ -111,22 +115,27 @@ export default function WalletScreen() {
     });
   }
 
-  async function runAction(action: () => Promise<void>) {
-    setActionBusy(true);
+  async function runAction(action: () => Promise<void>, key = "wallet") {
+    actionRetry.current = { action, key };
+    setBusyAction(key);
     setActionError(null);
     try {
       await action();
     } catch (cause) {
-      setActionError(cause instanceof Error ? cause : new Error("Wallet action failed"));
+      setActionError(cause instanceof Error ? cause : new Error(t("walletActionError")));
     } finally {
-      setActionBusy(false);
+      setBusyAction(null);
     }
   }
 
   async function confirmSpot(responseId: number) {
+    const key = confirmationKeys.current.get(responseId) ?? createIdempotencyKey();
+    confirmationKeys.current.set(responseId, key);
     await apiFetch(`/api/me/responses/${responseId}/confirm`, {
       method: "POST",
+      headers: { "Idempotency-Key": key },
     });
+    setSpotConfirmed(true);
     await Promise.all([load(), refetchMe()]);
   }
 
@@ -136,6 +145,8 @@ export default function WalletScreen() {
   const purpose = selectedIndex === 0 ? "ticket" : "badge";
   const value = purpose === "ticket" ? ticket.ticketToken : ticket.badgeId;
   const label = purpose === "ticket" ? t("ticketLabel") : t("badgeLabel");
+  const retryAction = actionRetry.current;
+  const actionBusy = busyAction !== null;
 
   return (
     <ScrollView
@@ -147,9 +158,41 @@ export default function WalletScreen() {
         paddingTop: 16 + androidTopInset,
       }}
     >
-      <StaleDataBanner updatedAt={staleSince} />
+      <StaleDataBanner updatedAt={staleSince} onRetry={() => void load()} retrying={loading} />
       {error ? <RequestFeedback error={error} onRetry={() => void load()} /> : null}
-      {actionError ? <RequestFeedback error={actionError} /> : null}
+      {actionError ? (
+        <RequestFeedback
+          error={actionError}
+          message={t("walletActionError")}
+          onRetry={
+            retryAction ? () => void runAction(retryAction.action, retryAction.key) : undefined
+          }
+          retrying={actionBusy}
+        />
+      ) : null}
+      {spotConfirmed ? (
+        <View
+          accessibilityLiveRegion="polite"
+          style={{
+            backgroundColor: colors.successSurface,
+            borderCurve: "continuous",
+            borderRadius: 12,
+            flexDirection: "row",
+            gap: 9,
+            padding: 14,
+          }}
+        >
+          <SymbolView
+            name="checkmark.circle.fill"
+            tintColor={colors.success}
+            size={21}
+            accessible={false}
+          />
+          <Text selectable style={{ color: colors.success, flex: 1, fontSize: 15, lineHeight: 21 }}>
+            {t("walletSpotConfirmed")}
+          </Text>
+        </View>
+      ) : null}
 
       {ticket.acceptedSpots.map((spot) => (
         <Section
@@ -158,7 +201,7 @@ export default function WalletScreen() {
           footer={
             spot.expiresAt
               ? t("walletConfirmSpotDeadline", {
-                  date: new Date(spot.expiresAt).toLocaleString(),
+                  date: new Date(spot.expiresAt).toLocaleString(language),
                 })
               : undefined
           }
@@ -175,12 +218,30 @@ export default function WalletScreen() {
                 {t("walletConfirmSpotDescription")}
               </Text>
             </View>
-            <ActionButton
-              label={t("walletConfirmSpotAction")}
-              icon="checkmark.circle.fill"
-              busy={actionBusy}
-              onPress={() => void runAction(() => confirmSpot(spot.responseId))}
-            />
+            {isSpotExpired(spot.expiresAt) ? (
+              <View
+                accessibilityLiveRegion="polite"
+                style={{
+                  backgroundColor: colors.warningSurface,
+                  borderCurve: "continuous",
+                  borderRadius: 10,
+                  padding: 12,
+                }}
+              >
+                <Text selectable style={{ color: colors.warning, fontSize: 14, lineHeight: 20 }}>
+                  {t("walletSpotExpired")}
+                </Text>
+              </View>
+            ) : (
+              <ActionButton
+                label={t("walletConfirmSpotAction")}
+                icon="checkmark.circle.fill"
+                busy={busyAction === `spot:${spot.responseId}`}
+                onPress={() =>
+                  void runAction(() => confirmSpot(spot.responseId), `spot:${spot.responseId}`)
+                }
+              />
+            )}
           </View>
         </Section>
       ))}
@@ -221,11 +282,14 @@ export default function WalletScreen() {
             </Text>
           </View>
           <View
-            accessibilityLabel={`${label} QR code`}
+            accessibilityLabel={t("walletQrCode", { label })}
+            accessibilityRole="image"
+            accessible
             style={{
               backgroundColor: colors.qrBackground,
               borderCurve: "continuous",
               borderRadius: 16,
+              maxWidth: "100%",
               padding: 16,
             }}
           >
@@ -282,7 +346,8 @@ export default function WalletScreen() {
               <RNWalletView
                 buttonStyle={ButtonStyle.BLACK}
                 onPress={() => {
-                  if (!actionBusy) void runAction(() => addToAppleWallet(purpose));
+                  if (!actionBusy)
+                    void runAction(() => addToAppleWallet(purpose), `wallet:${purpose}`);
                 }}
                 style={{ height: 44, opacity: actionBusy ? 0.5 : 1, width: "100%" }}
               />
@@ -299,7 +364,8 @@ export default function WalletScreen() {
               <RNWalletView
                 buttonType={ButtonType.PRIMARY}
                 onPress={() => {
-                  if (!actionBusy) void runAction(() => addToGoogleWallet(purpose));
+                  if (!actionBusy)
+                    void runAction(() => addToGoogleWallet(purpose), `wallet:${purpose}`);
                 }}
                 style={{ opacity: actionBusy ? 0.5 : 1 }}
               />
@@ -311,8 +377,8 @@ export default function WalletScreen() {
               <ActionButton
                 label={t("walletDownloadPkpass")}
                 icon="arrow.down.circle"
-                busy={actionBusy}
-                onPress={() => void runAction(() => downloadPkpass(purpose))}
+                busy={busyAction === `wallet:${purpose}`}
+                onPress={() => void runAction(() => downloadPkpass(purpose), `wallet:${purpose}`)}
               />
               <Text
                 selectable
@@ -343,4 +409,10 @@ function roleLabel(
       unassigned: t("roleUnassigned"),
     } as const
   )[role];
+}
+
+function isSpotExpired(expiresAt: string | null): boolean {
+  if (!expiresAt) return false;
+  const timestamp = new Date(expiresAt).getTime();
+  return Number.isFinite(timestamp) && timestamp <= Date.now();
 }

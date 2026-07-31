@@ -15,6 +15,7 @@ export function useCachedApi<T>(cacheKey: string, fetcher: () => Promise<T>) {
   const [staleSince, setStaleSince] = useState<string | null>(null);
   const dataRef = useRef<T | null>(null);
   const updatedAtRef = useRef<string | null>(null);
+  const requestId = useRef(0);
 
   const setData = useCallback(
     (updater: Updater<T>, persist = true) => {
@@ -34,9 +35,12 @@ export function useCachedApi<T>(cacheKey: string, fetcher: () => Promise<T>) {
   );
 
   const load = useCallback(async () => {
+    const currentRequest = ++requestId.current;
+    setLoading(true);
     setError(null);
     try {
       const next = await fetcher();
+      if (currentRequest !== requestId.current) return;
       const updatedAt = new Date().toISOString();
       dataRef.current = next;
       updatedAtRef.current = updatedAt;
@@ -44,7 +48,9 @@ export function useCachedApi<T>(cacheKey: string, fetcher: () => Promise<T>) {
       setStaleSince(null);
       await writeCachedValue(cacheKey, next, updatedAt);
     } catch (cause) {
+      if (currentRequest !== requestId.current) return;
       const cached = await readCachedValue<T>(cacheKey);
+      if (currentRequest !== requestId.current) return;
       if (cached) {
         dataRef.current = cached.data;
         updatedAtRef.current = cached.updatedAt;
@@ -54,7 +60,7 @@ export function useCachedApi<T>(cacheKey: string, fetcher: () => Promise<T>) {
         setError(cause instanceof Error ? cause : new Error("Failed to load data"));
       }
     } finally {
-      setLoading(false);
+      if (currentRequest === requestId.current) setLoading(false);
     }
   }, [cacheKey, fetcher]);
 

@@ -1,7 +1,7 @@
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { Linking, Pressable, ScrollView, Text, useColorScheme, View } from "react-native";
-import { InfoRow, Section, Separator } from "@/components/native-ui";
+import { EmptyState, InfoRow, Section, Separator } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
@@ -48,6 +48,8 @@ interface HistoryRow {
   actor_surname: string | null;
 }
 
+type TeamLoadState = "loading" | "ready" | "missing" | "error";
+
 /** H29/H31 operator team detail: the participant's own queue card, with the extra context an operator needs. */
 export function TeamOperationsScreen() {
   useColorScheme();
@@ -60,9 +62,11 @@ export function TeamOperationsScreen() {
   const [challenge, setChallenge] = useState<RoomView["challenge"]>(null);
   const [history, setHistory] = useState<HistoryRow[] | null>(null);
   const [error, setError] = useState<Error | null>(null);
+  const [loadState, setLoadState] = useState<TeamLoadState>("loading");
 
   const load = useCallback(async () => {
     setError(null);
+    setLoadState((current) => (current === "ready" ? current : "loading"));
     try {
       const [view, historyRows] = await Promise.all([
         apiFetch<RoomView>(`/api/queue/rooms/${roomId}/view`),
@@ -71,12 +75,22 @@ export function TeamOperationsScreen() {
       const found = [view.active, ...view.called, ...view.next].find(
         (item) => item?.id === Number(entryId),
       );
+      if (!found || !view.room) {
+        setEntry(null);
+        setRoom(null);
+        setChallenge(view.challenge);
+        setHistory(historyRows);
+        setLoadState("missing");
+        return;
+      }
       setEntry(found ?? null);
       setRoom(view.room);
       setChallenge(view.challenge);
       setHistory(historyRows);
+      setLoadState("ready");
     } catch (cause) {
       setError(cause instanceof Error ? cause : new Error(t("queueOpsNotifyError")));
+      setLoadState("error");
     }
   }, [entryId, roomId, t]);
 
@@ -110,7 +124,21 @@ export function TeamOperationsScreen() {
     });
   }, [navigation, teamName, entry, router, t]);
 
-  if (error) {
+  if (loadState === "loading") {
+    return (
+      <View
+        style={{
+          backgroundColor: colors.background,
+          flex: 1,
+          justifyContent: "center",
+        }}
+      >
+        <RequestFeedback loading />
+      </View>
+    );
+  }
+
+  if (loadState === "error" && error) {
     return (
       <View style={{ backgroundColor: colors.background, flex: 1 }}>
         <RequestFeedback error={error} onRetry={() => void load()} />
@@ -118,7 +146,7 @@ export function TeamOperationsScreen() {
     );
   }
 
-  if (!entry || !room) {
+  if (loadState === "missing" || !entry || !room) {
     return (
       <View
         style={{
@@ -128,7 +156,11 @@ export function TeamOperationsScreen() {
           justifyContent: "center",
         }}
       >
-        <Text style={{ color: colors.secondaryLabel }}>{t("teamDetailLoading")}</Text>
+        <EmptyState
+          icon="person.2"
+          title={t("screenNotFoundTitle")}
+          description={t("requestUnavailable")}
+        />
       </View>
     );
   }

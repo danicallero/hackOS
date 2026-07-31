@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { ContextualError } from "@/components/common/contextual-error";
 import { Modal } from "@/components/common/modal";
 import { MultiSelect } from "@/components/common/multi-select";
 import { PageHeader } from "@/components/common/page-header";
@@ -71,6 +72,7 @@ export default function PermissionGroupDetailPage() {
   const [allGroups, setAllGroups] = useState<PermissionGroupSummary[]>([]);
   const [users, setUsers] = useState<Map<number, UserListItem>>(new Map());
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
 
   const [caps, setCaps] = useState<string[]>([]);
@@ -105,25 +107,54 @@ export default function PermissionGroupDetailPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    try {
-      const [g, list, directory] = await Promise.all([
-        api.get<PermissionGroupDetail>(`/api/permission-groups/${groupId}`),
-        api.get<PermissionGroupSummary[]>("/api/permission-groups"),
-        api.get<UserList>("/api/users", { query: { limit: 200 } }),
-      ]);
-      applyGroup(g);
-      setAllGroups(list);
-      mergeUsers(directory.users);
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 404) setNotFound(true);
-      else toast.error(err instanceof ApiError ? err.message : t("couldNotLoadGroup"));
-    } finally {
-      setLoading(false);
+    setLoadError(null);
+    setNotFound(false);
+
+    const [groupResult, groupsResult, directoryResult] = await Promise.allSettled([
+      api.get<PermissionGroupDetail>(`/api/permission-groups/${groupId}`),
+      api.get<PermissionGroupSummary[]>("/api/permission-groups"),
+      api.get<UserList>("/api/users", { query: { limit: 200 } }),
+    ]);
+
+    if (groupResult.status === "rejected") {
+      const err = groupResult.reason;
+      if (err instanceof ApiError && err.status === 404) {
+        setGroup(null);
+        setNotFound(true);
+      } else {
+        const message = err instanceof ApiError ? err.message : t("couldNotLoadGroup");
+        setLoadError(message);
+        toast.error(message);
+      }
+    } else {
+      applyGroup(groupResult.value);
+      if (groupsResult.status === "fulfilled") setAllGroups(groupsResult.value);
+      if (directoryResult.status === "fulfilled") mergeUsers(directoryResult.value.users);
+
+      const auxiliaryError =
+        groupsResult.status === "rejected"
+          ? groupsResult.reason
+          : directoryResult.status === "rejected"
+            ? directoryResult.reason
+            : null;
+      if (auxiliaryError) {
+        const message =
+          auxiliaryError instanceof ApiError ? auxiliaryError.message : t("couldNotLoadGroup");
+        setLoadError(message);
+        toast.error(message);
+      }
     }
+
+    setLoading(false);
   }, [groupId, applyGroup, mergeUsers, t]);
 
   useEffect(() => {
-    if (Number.isFinite(groupId)) load();
+    if (!Number.isFinite(groupId)) {
+      setLoading(false);
+      setNotFound(true);
+      return;
+    }
+    void load();
   }, [groupId, load]);
 
   // Soft, in-place refresh instead of a hard reload when another admin edits
@@ -257,13 +288,25 @@ export default function PermissionGroupDetailPage() {
     );
   }
 
-  if (notFound || !group) {
+  if (notFound) {
     return (
       <div className="space-y-6">
         <PageHeader title={t("groupNotFoundTitle")} description={t("groupNotFoundDesc")} />
         <Button variant="outline" onClick={() => router.push("/permissions")}>
           <ArrowLeftIcon /> {t("backToPermissions")}
         </Button>
+      </div>
+    );
+  }
+
+  if (!group) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title={t("permissions")} />
+        <ContextualError
+          message={loadError ?? t("couldNotLoadGroup")}
+          onRetry={() => void load()}
+        />
       </div>
     );
   }
@@ -288,6 +331,8 @@ export default function PermissionGroupDetailPage() {
         title={group.name}
         description={group.description ?? undefined}
       />
+
+      {loadError && <ContextualError message={loadError} onRetry={() => void load()} />}
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSaveDetails)}>

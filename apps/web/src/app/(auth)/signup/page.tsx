@@ -4,12 +4,13 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { MailCheckIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { PasswordInput } from "@/components/common/password-input";
 import { Spinner } from "@/components/common/spinner";
 import { SubmitButton } from "@/components/common/submit-button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Form,
@@ -28,19 +29,41 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { signUp } from "@/lib/auth-client";
-import { LANGS, languageName, useLocale } from "@/lib/i18n";
+import { LANGS, languageName, type Translate, useLocale } from "@/lib/i18n";
 import { safeReturnPath, withReturnPath } from "@/lib/return-path";
 import { useSessionContext } from "@/lib/session";
 
-const schema = z.object({
-  name: z.string().min(1, "Required"),
-  surname: z.string().min(1, "Required"),
-  email: z.string().email("Enter a valid email"),
-  password: z.string().min(8, "At least 8 characters"),
-  language: z.enum(["en", "es", "gl"]),
-});
+function signupSchema(t: Translate) {
+  return z.object({
+    name: z.string().min(1, t("required")),
+    surname: z.string().min(1, t("required")),
+    email: z.string().email(t("validEmail")),
+    password: z.string().min(8, t("atLeastEight")),
+    language: z.enum(["en", "es", "gl"]),
+  });
+}
 
-type Values = z.infer<typeof schema>;
+type Values = z.infer<ReturnType<typeof signupSchema>>;
+
+type AuthError = { code?: string; status?: number; message?: string };
+
+/** Keep Better Auth details in diagnostics while preserving H1's generic copy. */
+function localizedSignUpError(error: AuthError, t: Translate): string {
+  const code = error.code?.toUpperCase();
+  console.error("[auth:sign-up] request failed", {
+    code,
+    status: error.status,
+    error,
+  });
+
+  if (code === "INVALID_EMAIL") return t("validEmail");
+  if (code === "PASSWORD_TOO_SHORT") return t("atLeastEight");
+  if (code === "USER_ALREADY_EXISTS" || code === "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL") {
+    // Keep duplicate-account responses enumeration-safe (H1).
+    return t("couldNotCreateAccount");
+  }
+  return t("couldNotCreateAccount");
+}
 
 function SignUpInner() {
   const router = useRouter();
@@ -52,6 +75,7 @@ function SignUpInner() {
   const rawNext = useSearchParams().get("next");
   const next = safeReturnPath(rawNext, "");
   const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
+  const schema = useMemo(() => signupSchema(t), [t]);
   const form = useForm<Values>({
     resolver: zodResolver(schema),
     defaultValues: { name: "", surname: "", email: "", password: "", language },
@@ -84,7 +108,7 @@ function SignUpInner() {
       ...(next ? { callbackURL: `/verify-email?verified=1&next=${encodeURIComponent(next)}` } : {}),
     });
     if (error && error.status !== 200) {
-      form.setError("root", { message: error.message ?? t("couldNotCreateAccount") });
+      form.setError("root", { message: localizedSignUpError(error, t) });
       return;
     }
     setSubmittedEmail(values.email);
@@ -95,7 +119,7 @@ function SignUpInner() {
       <Card>
         <CardHeader className="items-center justify-items-center text-center">
           <div className="bg-success/10 text-success mb-2 grid size-12 place-items-center rounded-full">
-            <MailCheckIcon className="size-6" />
+            <MailCheckIcon aria-hidden="true" className="size-6" />
           </div>
           <CardTitle>{t("checkInbox")}</CardTitle>
           <CardDescription>{t("verificationSent", { email: submittedEmail })}</CardDescription>
@@ -128,7 +152,7 @@ function SignUpInner() {
       <CardContent>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <FormField
                 control={form.control}
                 name="name"
@@ -207,7 +231,9 @@ function SignUpInner() {
               )}
             />
             {form.formState.errors.root && (
-              <p className="text-destructive text-sm">{form.formState.errors.root.message}</p>
+              <Alert variant="destructive">
+                <AlertDescription>{form.formState.errors.root.message}</AlertDescription>
+              </Alert>
             )}
             <SubmitButton className="w-full" pending={form.formState.isSubmitting}>
               {t("createAccount")}

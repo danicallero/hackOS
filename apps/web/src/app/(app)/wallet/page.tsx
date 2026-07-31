@@ -1,13 +1,16 @@
 "use client";
 
 import { IdCardIcon, TicketIcon, UserIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { QrCode } from "@/components/common/qr-code";
 import { SectionCard } from "@/components/common/section-card";
+import { Spinner } from "@/components/common/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ApiError } from "@/lib/api";
 import { API_URL } from "@/lib/env";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { logisticsApi, type TicketQrPayload } from "@/lib/logistics";
@@ -45,13 +48,49 @@ export default function WalletPage() {
   const { t } = useLocale();
   const [payload, setPayload] = useState<TicketQrPayload | null>(null);
   const [purpose, setPurpose] = useState<Purpose>("ticket");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setPayload(await logisticsApi.myTicket());
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t("couldNotLoadYourApplications"));
+    } finally {
+      setLoading(false);
+    }
+  }, [t]);
 
   useEffect(() => {
-    logisticsApi
-      .myTicket()
-      .then(setPayload)
-      .catch(() => setPayload(null));
-  }, []);
+    void load();
+  }, [load]);
+
+  function retry() {
+    void load();
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title={t("wallet")} />
+        <div className="text-muted-foreground flex flex-col items-center gap-3 py-16" role="status">
+          <Spinner className="size-6" />
+          <span className="text-sm">{t("loading")}</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title={t("wallet")} />
+        <ContextualError message={error} onRetry={retry} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -152,7 +191,7 @@ function WalletButtons({ purpose }: { purpose: Purpose }) {
     setGoogleLoading(true);
     try {
       const { saveUrl } = await logisticsApi.googleWalletSaveUrl(purpose);
-      window.open(saveUrl, "_blank");
+      window.open(saveUrl, "_blank", "noopener,noreferrer");
     } catch {
       toast.error(t("walletGoogleSaveFailed"));
     } finally {
@@ -170,7 +209,13 @@ function WalletButtons({ purpose }: { purpose: Purpose }) {
       <button
         type="button"
         className="inline-flex w-fit"
-        onClick={() => window.open(`${API_URL}/api/me/wallet/apple/${purpose}.pkpass`, "_blank")}
+        onClick={() =>
+          window.open(
+            `${API_URL}/api/me/wallet/apple/${purpose}.pkpass`,
+            "_blank",
+            "noopener,noreferrer",
+          )
+        }
       >
         {/* eslint-disable-next-line @next/next/no-img-element -- official Apple badge, must not be re-processed by next/image */}
         {/* biome-ignore lint/performance/noImgElement: official Apple badge, must not be re-processed by next/image */}

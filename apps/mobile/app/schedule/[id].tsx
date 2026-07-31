@@ -7,7 +7,7 @@ import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
-import { fetchPublicSchedule } from "@/lib/schedule";
+import { fetchPublicSchedule, scheduleTypeLabel } from "@/lib/schedule";
 import { useActivityReminders } from "@/lib/use-activity-reminders";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { colors } from "@/theme/colors";
@@ -53,7 +53,15 @@ export default function ScheduleDetailScreen() {
         }}
         style={{ backgroundColor: colors.background }}
       >
-        <StaleDataBanner updatedAt={staleSince} />
+        <StaleDataBanner updatedAt={staleSince} onRetry={() => void load()} retrying={loading} />
+        {reminders.error ? (
+          <RequestFeedback
+            error={reminders.error}
+            message={t("scheduleReminderError")}
+            onRetry={reminders.retry}
+            retrying={reminders.savingId !== null}
+          />
+        ) : null}
         {loading && !data ? (
           <RequestFeedback loading />
         ) : error && !data ? (
@@ -76,11 +84,9 @@ export default function ScheduleDetailScreen() {
                     color: colors.secondaryLabel,
                     fontSize: 13,
                     fontWeight: "700",
-                    letterSpacing: 0.4,
-                    textTransform: "uppercase",
                   }}
                 >
-                  {item.type ?? t("scheduleDetails")}
+                  {scheduleTypeLabel(item.type, t)}
                 </Text>
                 {item.location ? (
                   <>
@@ -131,7 +137,6 @@ export default function ScheduleDetailScreen() {
                     fontSize: 12,
                     fontWeight: "700",
                     letterSpacing: 0.4,
-                    textTransform: "uppercase",
                   }}
                 >
                   {t("scheduleDescription")}

@@ -30,7 +30,7 @@ import { Switch } from "@/components/ui/switch";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import type { EventConfig, PassBackField } from "@/lib/types";
-import { useEventConfig } from "./event-config-context";
+import { EventConfigLoadState, useEventConfig } from "./event-config-context";
 import { useCategorySaveState } from "./use-category-save-state";
 
 /**
@@ -356,7 +356,9 @@ export function WalletTab({
     }
   }
 
-  if (status === "loading" || !config) return null;
+  if (status !== "ready" || !config) {
+    return <EventConfigLoadState icon={icon} title={t("walletPassSectionTitle")} />;
+  }
   const liveEventName = config.name?.trim() ?? "";
   const liveVenueName = config.venueName?.trim() ?? "";
 
