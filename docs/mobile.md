@@ -306,7 +306,12 @@ Cross-surface hooks come from `@hackos/shared/ui-test-ids` and are wired to
 web `data-testid` and native `testID` attributes. Detox scenarios in
 `e2e/mobile/` cover the same contract against a built simulator/emulator app;
 run them with the root `test:ui:native` commands described in
-[`docs/ui-testing.md`](./ui-testing.md).
+[`docs/ui-testing.md`](./ui-testing.md). Neither layer proves what a screen
+*looks* like, so a PR that changes a screen's appearance also carries
+screenshots from a running simulator — see
+[`docs/ui-testing.md`](./ui-testing.md) § Screenshots on UI PRs for the
+build/drive/capture recipe and the local-port, read-cache, and
+`mobileAccess` traps that eat time on the first attempt.
 
 **Scanner state transitions.** A scan is inserted in SQLite before any network
 request: `pending -> acknowledged` only after a 2xx response (including an

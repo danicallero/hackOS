@@ -68,8 +68,8 @@ Frontend (web & mobile):
   signing and push credentials, icons/store artwork, submission, privacy, and
   release checklists.
 - [UI testing](./ui-testing.md) — the shared browser/native selector contract,
-  Playwright browser projects, fast React Native screen tests, and optional
-  Detox simulator/device runs.
+  Playwright browser projects, fast React Native screen tests, optional
+  Detox simulator/device runs, and the screenshot-on-UI-PRs rule.
 
 Deployment:
 

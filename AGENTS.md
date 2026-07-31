@@ -43,4 +43,9 @@ pnpm --filter @hackos/web typecheck # web type check (if you changed web code)
 pnpm --filter @hackos/web test     # web unit tests (if you changed web code)
 ```
 
+If your change alters what a screen looks like (mobile or web), also run it and
+post screenshots of the changed states in a PR comment — reviewers must be able
+to see the change without building it. Recipe and gotchas:
+[`docs/ui-testing.md`](./docs/ui-testing.md) § Screenshots on UI PRs.
+
 
