@@ -15,7 +15,7 @@ import { ActionButton, EmptyState, StatusPill } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
-import { apiFetch } from "@/lib/api";
+import { ApiError, apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { createIdempotencyKey } from "@/lib/idempotency-key";
 import { useMeContext } from "@/lib/me-context";
@@ -55,6 +55,17 @@ interface RoomListItem {
 }
 
 const POLL_MS = 10_000;
+
+function actionErrorMessage(cause: unknown, t: ReturnType<typeof useLocale>["t"]): string {
+  if (!(cause instanceof Error)) return t("queueOpsNotifyError");
+  if (cause instanceof ApiError) {
+    if (cause.status === 401) return t("requestSessionExpired");
+    if (cause.status === 404) return t("requestUnavailable");
+    if (cause.status >= 500) return t("requestServerError");
+    return t("requestError");
+  }
+  return t("requestError");
+}
 
 /** H29-H35 mobile operator view: room state, door queue, queue head, and re-notification. */
 export function QueueOperationsScreen() {
@@ -182,7 +193,7 @@ export function QueueOperationsScreen() {
         setNotifiedEntryId(entryId);
         await load();
       } catch (cause) {
-        setActionError(cause instanceof Error ? cause.message : t("queueOpsNotifyError"));
+        setActionError(actionErrorMessage(cause, t));
       } finally {
         setNotifyingEntryId(null);
       }
