@@ -265,6 +265,48 @@ export async function allRoomViews() {
   return Promise.all(rooms.map((r: { id: number }) => roomView(r.id)));
 }
 
+/**
+ * Public TV snapshot (H41). The operational room projection intentionally
+ * includes team membership, project links and cross-room diagnostics; venue
+ * screens need only the room, challenge and visible team labels. Keep this
+ * separately mapped so a new operational field cannot leak by accident.
+ */
+export async function publicRoomViews() {
+  const views = await allRoomViews();
+  const entry = (value: Record<string, unknown> | null) =>
+    value
+      ? {
+          id: value.id,
+          status: value.status,
+          repo_id: value.repo_id,
+          repo_name: value.repo_name,
+          position: value.position,
+          called_at: value.called_at,
+          eta_minutes: value.eta_minutes,
+        }
+      : null;
+  return views.map((view) => ({
+    room: {
+      id: view.room.id,
+      name: view.room.name,
+      location: view.room.location ?? null,
+    },
+    state: { is_paused: view.state?.is_paused ?? true },
+    challenge: view.challenge
+      ? {
+          id: view.challenge.id,
+          title: view.challenge.title,
+          enterprise_name: view.challenge.enterprise_name,
+        }
+      : null,
+    active: entry(view.active),
+    called: view.called.map((value: Record<string, unknown>) => entry(value)),
+    next: view.next.map((value: Record<string, unknown>) => entry(value)),
+    // Preserve the public contract without exposing the operational reasons.
+    crossRoomSkips: [],
+  }));
+}
+
 async function challengeEtaMinutesPerSlot(challengeId: number): Promise<number> {
   const { rows } = await pool.query(
     `SELECT COALESCE(AVG(rqs.desired_minutes_per_team), 8) AS avg, COUNT(*)::int AS rooms

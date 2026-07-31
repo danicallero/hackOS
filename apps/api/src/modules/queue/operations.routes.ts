@@ -14,6 +14,12 @@ export function registerOperationsRoutes(app: FastifyInstance): void {
     "/api/queue/challenges/enqueue-all",
     {
       preHandler: [requireCapability(CAPABILITIES.QUEUE_ADMIN), idempotencyGuard],
+      config: { routeAccessPolicy: { kind: "capability", capability: CAPABILITIES.QUEUE_ADMIN } },
+      schema: {
+        summary: "Generate queue entries for all eligible challenges",
+        description:
+          "Administrative, idempotent queue generation for every challenge with Devpost tags. Existing queue entries are preserved and reported rather than duplicated.",
+      },
     },
     async (req) => {
       if (req.userId == null) {

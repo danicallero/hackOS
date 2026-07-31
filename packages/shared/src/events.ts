@@ -16,6 +16,10 @@ export const SSE_TOPICS = {
   TV: "tv",
   /** schedule + announcements changes (H47, H50) */
   CONTENT: "content",
+  /** payload-free public invalidations caused by queue or TV domain changes */
+  PUBLIC_TV: "public-tv",
+  /** payload-free public invalidations caused by public-content changes */
+  PUBLIC_CONTENT: "public-content",
   /** every successful write, for keeping independent browser windows in sync */
   GLOBAL: "global",
   /** accreditation, presence, meals and wallet updates (H22-H28) */
