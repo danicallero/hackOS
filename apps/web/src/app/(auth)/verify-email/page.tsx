@@ -31,6 +31,22 @@ function verifyEmailSchema(t: Translate) {
 }
 type Values = z.infer<ReturnType<typeof verifyEmailSchema>>;
 
+/** Keep API details in diagnostics while presenting stable H3 copy. */
+function localizedResendError(error: ApiError, t: Translate): string {
+  const code = error.code.toUpperCase();
+  console.error("[auth:resend-verification] request failed", {
+    code,
+    status: error.status,
+    error,
+  });
+
+  if (code === "INVALID_EMAIL") return t("validEmail");
+  if (code === "TOO_MANY_REQUESTS" || error.status === 429) {
+    return t("couldNotSendVerificationEmail");
+  }
+  return t("couldNotSendVerificationEmail");
+}
+
 /**
  * Maps Better Auth's verify-email error codes to distinct, actionable copy
  * (H2): an expired link and an outright invalid one are different situations
@@ -98,14 +114,13 @@ function VerifyEmailInner() {
       toast.success(t("verificationEmailSent"));
       setCooldown(60); // H3: 60s between attempts
     } catch (err) {
-      if (err instanceof ApiError && err.status === 429) {
-        setCooldown(err.retryAfter ?? 60);
-        form.setError("root", { message: err.message });
+      if (err instanceof ApiError) {
+        if (err.status === 429) setCooldown(err.retryAfter ?? 60);
+        form.setError("root", { message: localizedResendError(err, t) });
         return;
       }
-      form.setError("root", {
-        message: err instanceof ApiError ? err.message : t("couldNotSendEmail"),
-      });
+      console.error("[auth:resend-verification] request failed", err);
+      form.setError("root", { message: t("couldNotSendVerificationEmail") });
     }
   }
 

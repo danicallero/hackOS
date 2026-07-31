@@ -21,11 +21,30 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { signIn } from "@/lib/auth-client";
-import { useLocale } from "@/lib/i18n";
+import { type Translate, useLocale } from "@/lib/i18n";
 import { safeReturnPath, withReturnPath } from "@/lib/return-path";
 import { useSessionContext } from "@/lib/session";
 
 type Values = { email: string; password: string };
+
+type AuthError = { code?: string; status?: number; message?: string };
+
+/** Keep Better Auth details in diagnostics while presenting stable H4 copy. */
+function localizedSignInError(error: AuthError, t: Translate): string {
+  const code = error.code?.toUpperCase();
+  console.error("[auth:sign-in] request failed", {
+    code,
+    status: error.status,
+    error,
+  });
+
+  if (code === "INVALID_EMAIL_OR_PASSWORD" || error.status === 401) {
+    return t("incorrectCredentials");
+  }
+  if (code === "EMAIL_NOT_VERIFIED") return t("emailNotVerified");
+  if (code === "INVALID_EMAIL") return t("validEmail");
+  return t("couldNotSignIn");
+}
 
 function LoginInner() {
   const router = useRouter();
@@ -63,11 +82,7 @@ function LoginInner() {
       password: values.password,
     });
     if (error) {
-      const message =
-        error.code === "INVALID_EMAIL_OR_PASSWORD" || error.status === 401
-          ? t("incorrectCredentials")
-          : (error.message ?? t("couldNotSignIn"));
-      form.setError("root", { message });
+      form.setError("root", { message: localizedSignInError(error, t) });
       return;
     }
     await refresh();

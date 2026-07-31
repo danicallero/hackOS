@@ -54,6 +54,30 @@ function claimSchema(t: Translate) {
 type Values = z.infer<ReturnType<typeof claimSchema>>;
 const NONE = "__none__";
 
+function detailsField(details: unknown): string | undefined {
+  if (typeof details !== "object" || details === null) return undefined;
+  const field = (details as { field?: unknown }).field;
+  return typeof field === "string" ? field : undefined;
+}
+
+/** Keep API details in diagnostics while preserving H9/H10 recovery copy. */
+function localizedClaimError(error: ApiError, t: Translate): string {
+  const code = error.code.toUpperCase();
+  console.error("[auth:claim-account] request failed", {
+    code,
+    status: error.status,
+    error,
+  });
+
+  if (code === "BAD_REQUEST" && detailsField(error.details) === "shirtSize") {
+    return t("shirtSizeRequiredDesc");
+  }
+  if (code === "NOT_FOUND" || code === "CONFLICT" || error.status === 404 || error.status === 409) {
+    return t("inviteUnavailable");
+  }
+  return t("couldNotCreateAccount");
+}
+
 function ClaimInner() {
   const { t } = useLocale();
   const schema = useMemo(() => claimSchema(t), [t]);
@@ -120,8 +144,9 @@ function ClaimInner() {
       setDone(true);
     } catch (err) {
       form.setError("root", {
-        message: err instanceof ApiError ? err.message : t("couldNotCreateAccount"),
+        message: err instanceof ApiError ? localizedClaimError(err, t) : t("couldNotCreateAccount"),
       });
+      if (!(err instanceof ApiError)) console.error("[auth:claim-account] request failed", err);
     }
   }
 

@@ -19,10 +19,27 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { authClient } from "@/lib/auth-client";
-import { useLocale } from "@/lib/i18n";
+import { type Translate, useLocale } from "@/lib/i18n";
 import { withReturnPath } from "@/lib/return-path";
 
-function resetPasswordSchema(t: (key: string) => string) {
+type AuthError = { code?: string; status?: number; message?: string };
+
+/** Keep Better Auth details in diagnostics while preserving H5 recovery copy. */
+function localizedResetError(error: AuthError, t: Translate): string {
+  const code = error.code?.toUpperCase();
+  console.error("[auth:reset-password] request failed", {
+    code,
+    status: error.status,
+    error,
+  });
+
+  if (code === "PASSWORD_TOO_SHORT") return t("atLeastEight");
+  if (code === "INVALID_TOKEN" || code === "TOKEN_EXPIRED") return t("resetLinkInvalid");
+  // No reset-specific copy exists for other Better Auth statuses yet.
+  return t("resetLinkInvalid");
+}
+
+function resetPasswordSchema(t: Translate) {
   return z
     .object({
       password: z.string().min(8, t("atLeastEight")),
@@ -55,9 +72,7 @@ function ResetPasswordForm() {
     }
     const { error } = await authClient.resetPassword({ newPassword: values.password, token });
     if (error) {
-      form.setError("root", {
-        message: error.message ?? t("resetLinkInvalid"),
-      });
+      form.setError("root", { message: localizedResetError(error, t) });
       return;
     }
     // H5: resetting closes all old sessions server-side; send them to sign in,

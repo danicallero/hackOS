@@ -45,6 +45,26 @@ function signupSchema(t: Translate) {
 
 type Values = z.infer<ReturnType<typeof signupSchema>>;
 
+type AuthError = { code?: string; status?: number; message?: string };
+
+/** Keep Better Auth details in diagnostics while preserving H1's generic copy. */
+function localizedSignUpError(error: AuthError, t: Translate): string {
+  const code = error.code?.toUpperCase();
+  console.error("[auth:sign-up] request failed", {
+    code,
+    status: error.status,
+    error,
+  });
+
+  if (code === "INVALID_EMAIL") return t("validEmail");
+  if (code === "PASSWORD_TOO_SHORT") return t("atLeastEight");
+  if (code === "USER_ALREADY_EXISTS" || code === "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL") {
+    // Keep duplicate-account responses enumeration-safe (H1).
+    return t("couldNotCreateAccount");
+  }
+  return t("couldNotCreateAccount");
+}
+
 function SignUpInner() {
   const router = useRouter();
   const { status } = useSessionContext();
@@ -88,7 +108,7 @@ function SignUpInner() {
       ...(next ? { callbackURL: `/verify-email?verified=1&next=${encodeURIComponent(next)}` } : {}),
     });
     if (error && error.status !== 200) {
-      form.setError("root", { message: error.message ?? t("couldNotCreateAccount") });
+      form.setError("root", { message: localizedSignUpError(error, t) });
       return;
     }
     setSubmittedEmail(values.email);
