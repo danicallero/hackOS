@@ -81,6 +81,7 @@ import {
   timeLogIdParam,
   timeLogPatchBody,
   userIdParam,
+  walletAccessQuery,
   walletPurposeParam,
 } from "./schemas.js";
 import { accreditationCountsByRole, logisticsStats, scannableActivities } from "./stats.js";
@@ -91,6 +92,7 @@ import {
   registerAppleDevice,
   unregisterAppleDevice,
 } from "./wallet.js";
+import { resolveWalletAccessToken } from "./wallet-access.js";
 
 function actor(userId: number | null): number {
   if (userId == null) throw new UnauthorizedError();
@@ -650,6 +652,56 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
     "/api/me/wallet/google/:purpose",
     { schema: { params: walletPurposeParam } },
     async (req) => ({ saveUrl: await buildGoogleSaveUrl(actor(req.userId), req.params.purpose) }),
+  );
+
+  // ── scoped, session-less wallet access (issue #369) ──────────────────────
+  // Someone who just confirmed their spot from the acceptance email holds a
+  // scoped token, not a session. These two routes are the entire surface that
+  // token can reach: the pass it was minted for, for the user it names.
+  // `req.userId` is deliberately ignored — a signed-in visitor gets the
+  // token's pass, never their own.
+
+  typed.get(
+    "/api/wallet/scoped/apple/:purpose.pkpass",
+    {
+      schema: {
+        params: walletPurposeParam,
+        querystring: walletAccessQuery,
+        summary: "Apple Wallet pass via a scoped token",
+        description:
+          "Downloads the .pkpass for the user named by a scoped wallet token (issue #369) — the credential handed out when a spot is confirmed from the acceptance email (H28). No session is required, created or read: the token alone decides whose pass this is, must match `purpose`, and expires after an hour. 401 if it is unknown, expired, or minted for a different purpose.",
+      },
+    },
+    async (req, reply) => {
+      const { userId } = await resolveWalletAccessToken(req.query.token, req.params.purpose);
+      const { pkpass, passTypeIdentifier, serialNumber } = await buildApplePass(
+        userId,
+        req.params.purpose,
+      );
+      return reply
+        .type("application/vnd.apple.pkpass")
+        .header("content-disposition", `attachment; filename="${req.params.purpose}.pkpass"`)
+        .header("x-apple-pass-type-identifier", passTypeIdentifier)
+        .header("x-apple-pass-serial-number", serialNumber)
+        .send(pkpass);
+    },
+  );
+
+  typed.get(
+    "/api/wallet/scoped/google/:purpose",
+    {
+      schema: {
+        params: walletPurposeParam,
+        querystring: walletAccessQuery,
+        summary: "Google Wallet save URL via a scoped token",
+        description:
+          "Returns the 'Save to Google Wallet' URL for the user named by a scoped wallet token (issue #369), the session-less counterpart of /api/me/wallet/google/:purpose (H28). Same scoping rules as the Apple route: token decides the user, must match `purpose`, expires after an hour, 401 otherwise.",
+      },
+    },
+    async (req) => {
+      const { userId } = await resolveWalletAccessToken(req.query.token, req.params.purpose);
+      return { saveUrl: await buildGoogleSaveUrl(userId, req.params.purpose) };
+    },
   );
 }
 

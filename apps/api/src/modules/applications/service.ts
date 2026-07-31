@@ -6,6 +6,7 @@ import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { issueTicket } from "../logistics/tickets.js";
+import { issueWalletAccessToken } from "../logistics/wallet-access.js";
 import { type ApplicationType, SHIRT_TYPES, type TemplateField } from "./schemas.js";
 
 /**
@@ -1389,6 +1390,30 @@ export interface ConfirmResult {
   status: string;
   alreadyConfirmed: boolean;
   ticketToken: string;
+  /** Whose spot this is — the email link identifies a person, not a session. */
+  userId: number;
+}
+
+/**
+ * What the public email-link confirm returns (issue #369): the confirm result
+ * plus a scoped wallet credential and just enough identity for the landing
+ * page to say "this ticket belongs to m•••@example.com — sign in as them to
+ * use the app". Never a session.
+ */
+export interface EmailConfirmResult extends ConfirmResult {
+  walletToken: string;
+  walletTokenExpiresAt: string;
+  maskedEmail: string;
+}
+
+/**
+ * m•••@example.com — enough for the holder of the link to recognize their own
+ * account without printing a full address to whoever the mail was forwarded to.
+ */
+export function maskEmail(email: string): string {
+  const at = email.lastIndexOf("@");
+  if (at <= 0) return "•••";
+  return `${email[0]}•••${email.slice(at)}`;
 }
 
 async function doConfirm(
@@ -1406,6 +1431,7 @@ async function doConfirm(
       status: "confirmed",
       alreadyConfirmed: true,
       ticketToken: existing.rows[0]?.token ?? "",
+      userId: resp.user_id,
     };
   }
   if (resp.status !== "accepted") {
@@ -1443,7 +1469,7 @@ async function doConfirm(
     before: { status: "accepted" },
     after: { status: "confirmed" },
   });
-  return { status: "confirmed", alreadyConfirmed: false, ticketToken };
+  return { status: "confirmed", alreadyConfirmed: false, ticketToken, userId: resp.user_id };
 }
 
 async function doDecline(
@@ -1480,7 +1506,13 @@ async function doDecline(
   return { status: "declined", alreadyDeclined: false };
 }
 
-export async function confirmByToken(token: string): Promise<ConfirmResult> {
+/**
+ * Email-link confirm (H15). The token identifies the applicant for this one
+ * action; it never becomes a session. On success the caller also gets a scoped
+ * wallet credential (issue #369) so the landing page can offer "add to Apple /
+ * Google Wallet" to someone who is not — and need not become — signed in.
+ */
+export async function confirmByToken(token: string): Promise<EmailConfirmResult> {
   return withTransaction(async (client) => {
     const { rows } = await client.query(
       `SELECT r.* FROM email_verification_tokens t
@@ -1492,7 +1524,17 @@ export async function confirmByToken(token: string): Promise<ConfirmResult> {
     );
     const resp = rows[0] as ResponseRow | undefined;
     if (!resp) throw new NotFoundError("Invalid confirmation token");
-    return doConfirm(client, resp, "email_link", resp.user_id);
+    const result = await doConfirm(client, resp, "email_link", resp.user_id);
+    const grant = await issueWalletAccessToken(client, resp.user_id, "ticket");
+    const { rows: userRows } = await client.query(`SELECT email FROM users WHERE id = $1`, [
+      resp.user_id,
+    ]);
+    return {
+      ...result,
+      walletToken: grant.token,
+      walletTokenExpiresAt: grant.expiresAt.toISOString(),
+      maskedEmail: maskEmail((userRows[0]?.email as string | undefined) ?? ""),
+    };
   });
 }
 

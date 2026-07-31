@@ -479,6 +479,52 @@ const dict: Record<string, I18nText> = {
     gl: "A túa entrada xa está lista. Podes usar este código no evento ou iniciar sesión para xestionala.",
     en: "Your ticket is ready. Use this code at the event or sign in to manage it.",
   },
+  ticketWalletFirstDesc: {
+    es: "Guarda tu entrada en el móvil ahora: la necesitarás en la puerta.",
+    gl: "Garda a túa entrada no móbil agora: precisarala na porta.",
+    en: "Save your ticket to your phone now — you'll need it at the door.",
+  },
+  walletAddTicket: {
+    es: "Añade tu entrada al móvil",
+    gl: "Engade a túa entrada ao móbil",
+    en: "Add your ticket to your phone",
+  },
+  walletAddTicketHint: {
+    es: "El pase se actualiza solo si cambian tus credenciales. Este enlace caduca en una hora.",
+    gl: "O pase actualízase só se cambian as túas credenciais. Esta ligazón caduca nunha hora.",
+    en: "The pass updates itself if your credentials change. This link expires in an hour.",
+  },
+  showTicketCode: {
+    es: "Ver el código de la entrada",
+    gl: "Ver o código da entrada",
+    en: "Show ticket code",
+  },
+  hideTicketCode: {
+    es: "Ocultar el código de la entrada",
+    gl: "Agochar o código da entrada",
+    en: "Hide ticket code",
+  },
+  confirmSessionEndedTitle: {
+    es: "Hemos cerrado la sesión en este dispositivo",
+    gl: "Pechamos a sesión neste dispositivo",
+    en: "We signed this device out",
+  },
+  confirmSessionEndedDesc: {
+    es: "El enlace del correo solo sirve para confirmar tu plaza y guardar tu entrada, nunca para entrar en la aplicación.",
+    gl: "A ligazón do correo só serve para confirmar a túa praza e gardar a túa entrada, nunca para entrar na aplicación.",
+    en: "The email link only confirms your spot and saves your ticket — it never signs you into the app.",
+  },
+  confirmOtherAccountTitle: {
+    es: "Esta entrada es de otra cuenta",
+    gl: "Esta entrada é doutra conta",
+    en: "This ticket belongs to another account",
+  },
+  confirmOtherAccountDesc: {
+    es: "La entrada es de {email}. Hemos cerrado la sesión que había abierta; inicia sesión con esa cuenta para gestionarla.",
+    gl: "A entrada é de {email}. Pechamos a sesión que había aberta; inicia sesión con esa conta para xestionala.",
+    en: "The ticket belongs to {email}. We closed the session that was open here — sign in with that account to manage it.",
+  },
+  goToApp: { es: "Ir a la aplicación", gl: "Ir á aplicación", en: "Go to app" },
   declineFailed: {
     es: "No se ha podido procesar el enlace",
     gl: "Non se puido procesar a ligazón",

@@ -3,7 +3,11 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
-import { confirmTokenSchema, responseIdParamSchema } from "./schemas.js";
+import {
+  confirmByEmailResponseSchema,
+  confirmTokenSchema,
+  responseIdParamSchema,
+} from "./schemas.js";
 import {
   confirmByResponseId,
   confirmByToken,
@@ -27,13 +31,26 @@ export function registerConfirmRoutes(app: FastifyInstance): void {
   // ── public via email link ───────────────────────────────────────────────────
   r.post(
     "/api/applications/confirm",
-    { preHandler: idempotencyGuard, schema: { body: confirmTokenSchema } },
+    {
+      preHandler: idempotencyGuard,
+      schema: {
+        body: confirmTokenSchema,
+        summary: "Confirm a spot from the acceptance email",
+        description:
+          "Public confirm for the token in the acceptance email (H15). The token is a single-purpose identity assertion, NOT a session: this route ignores cookies, issues no session, and grants nothing beyond this action (issue #369). Alongside the ticket it returns `wallet_token` — a scoped credential, valid for one hour, whose only power is fetching THIS user's entrance-pass from /api/wallet/scoped/apple/ticket.pkpass and /api/wallet/scoped/google/ticket — plus `user_id` and `masked_email` so the landing page can tell the visitor which account the ticket belongs to and prompt them to sign in as that person. A second confirm is idempotent (`already_confirmed`) and still mints a fresh wallet token.",
+        response: { 200: confirmByEmailResponseSchema },
+      },
+    },
     async (req) => {
       const res = await confirmByToken(req.body.token);
       return {
         status: res.status,
         already_confirmed: res.alreadyConfirmed,
         ticket_token: res.ticketToken,
+        user_id: res.userId,
+        masked_email: res.maskedEmail,
+        wallet_token: res.walletToken,
+        wallet_token_expires_at: res.walletTokenExpiresAt,
       };
     },
   );

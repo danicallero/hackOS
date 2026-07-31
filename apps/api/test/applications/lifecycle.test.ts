@@ -358,6 +358,43 @@ describe("confirm / decline (H15)", () => {
     expect(second.json().ticket_token).toBe(first.json().ticket_token);
   });
 
+  it("hands the email-link confirm a scoped wallet credential, not a session (issue #369)", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { userId } = await toAcceptedSent(appId);
+    const token = await latestConfirmationToken(userId);
+
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/applications/confirm",
+      payload: { token },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.user_id).toBe(userId);
+    expect(body.masked_email).toMatch(/^.•••@/);
+    expect(body.wallet_token.length).toBeGreaterThan(20);
+    expect(new Date(body.wallet_token_expires_at).getTime()).toBeGreaterThan(Date.now());
+
+    // The confirm sets no session cookie: the reply is a plain JSON body.
+    expect(res.headers["set-cookie"]).toBeUndefined();
+
+    // The scoped token is bound to this user's ticket pass and nothing else.
+    const { rows } = await pool.query(
+      `SELECT user_id, purpose FROM wallet_access_tokens WHERE token = $1`,
+      [body.wallet_token],
+    );
+    expect(rows[0]).toMatchObject({ user_id: userId, purpose: "ticket" });
+
+    // A second click mints a fresh one rather than reviving the first.
+    const again = await a.inject({
+      method: "POST",
+      url: "/api/applications/confirm",
+      payload: { token },
+    });
+    expect(again.json().wallet_token).not.toBe(body.wallet_token);
+  });
+
   it("confirms via authenticated owner (web), and blocks confirming someone else's", async () => {
     const a = await getApp();
     const appId = await createApplication();
