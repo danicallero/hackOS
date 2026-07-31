@@ -33,7 +33,8 @@ Architecture & modules:
   and `projects` modules and the Devpost intake pipeline.
 - [Event config & the Apple Wallet pass](./event-config-wallet.md) — the
   `event_config` singleton (identity, doors-open vs hacking window, venue) and
-  how the Wallet pass renders from it (field visibility, captions, back fields).
+  how the Wallet pass renders from it (field visibility, captions, back fields),
+  plus the session-less scoped-token path from the acceptance email.
 - [TV screens](./tv-screens.md) — what the venue's screens show and why: the
   override / timetable / default precedence, the combined live screen and its
   payload, slot rotation, venue Wi-Fi, and how each mode adapts to any screen

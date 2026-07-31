@@ -185,6 +185,9 @@ export const mealScanBatchBody = z.object({
 
 export const walletPurposeParam = z.object({ purpose: z.enum(["ticket", "badge"]) });
 
+/** Scoped wallet credential from the confirmation email (issue #369). */
+export const walletAccessQuery = z.object({ token: z.string().min(1) });
+
 export const applePassParams = z.object({
   passTypeIdentifier: z.string().min(1),
   serialNumber: z.string().min(1),

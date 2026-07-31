@@ -2,46 +2,21 @@
 
 import { IdCardIcon, TicketIcon, UserIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { QrCode } from "@/components/common/qr-code";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
+import { WalletButtons, type WalletPurpose } from "@/components/common/wallet-buttons";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ApiError } from "@/lib/api";
-import { API_URL } from "@/lib/env";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { logisticsApi, type TicketQrPayload } from "@/lib/logistics";
 import { useMe } from "@/lib/session";
 import type { Me } from "@/lib/types";
 
-/**
- * Apple only ships this badge for "es" and "en_US/en_GB" locales; "gl" falls
- * back to the Spanish artwork since there's no Galician variant and the two
- * languages share readers. Per Apple's Add to Apple Wallet guidelines, this
- * must be the unmodified official artwork (no recoloring, no custom button).
- */
-const APPLE_WALLET_BADGE_BY_LOCALE: Record<string, string> = {
-  es: "/wallet-badges/apple-wallet-badge-es.svg",
-  gl: "/wallet-badges/apple-wallet-badge-es.svg",
-  en: "/wallet-badges/apple-wallet-badge-en.svg",
-};
-
-/**
- * Same fallback logic as the Apple badge above, using Google's official
- * es-ES/en-US "primary" button artwork. Per Google's Add to Google Wallet
- * brand guidelines, this must be the unmodified official asset (no
- * recoloring, no custom button, no free-scaling of the aspect ratio).
- */
-const GOOGLE_WALLET_BUTTON_BY_LOCALE: Record<string, string> = {
-  es: "/wallet-badges/google-wallet-button-es.svg",
-  gl: "/wallet-badges/google-wallet-button-es.svg",
-  en: "/wallet-badges/google-wallet-button-en.svg",
-};
-
-type Purpose = "ticket" | "badge";
+type Purpose = WalletPurpose;
 
 export default function WalletPage() {
   const me = useMe();
@@ -177,66 +152,5 @@ function WalletPurposePanel({ purpose, value }: { purpose: Purpose; value?: stri
         <WalletButtons purpose={purpose} />
       </SectionCard>
     </>
-  );
-}
-
-function WalletButtons({ purpose }: { purpose: Purpose }) {
-  const { t, language } = useLocale();
-  const appleBadgeSrc = APPLE_WALLET_BADGE_BY_LOCALE[language] ?? APPLE_WALLET_BADGE_BY_LOCALE.en;
-  const googleButtonSrc =
-    GOOGLE_WALLET_BUTTON_BY_LOCALE[language] ?? GOOGLE_WALLET_BUTTON_BY_LOCALE.en;
-  const [googleLoading, setGoogleLoading] = useState(false);
-
-  async function openGoogleWallet() {
-    setGoogleLoading(true);
-    try {
-      const { saveUrl } = await logisticsApi.googleWalletSaveUrl(purpose);
-      window.open(saveUrl, "_blank", "noopener,noreferrer");
-    } catch {
-      toast.error(t("walletGoogleSaveFailed"));
-    } finally {
-      setGoogleLoading(false);
-    }
-  }
-
-  return (
-    <div className="flex flex-wrap items-center gap-3">
-      {/*
-        Apple's Add to Apple Wallet guidelines require the unmodified
-        official badge artwork (no custom button, no recoloring), kept
-        secondary to the surrounding content.
-      */}
-      <button
-        type="button"
-        className="inline-flex w-fit"
-        onClick={() =>
-          window.open(
-            `${API_URL}/api/me/wallet/apple/${purpose}.pkpass`,
-            "_blank",
-            "noopener,noreferrer",
-          )
-        }
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element -- official Apple badge, must not be re-processed by next/image */}
-        {/* biome-ignore lint/performance/noImgElement: official Apple badge, must not be re-processed by next/image */}
-        <img src={appleBadgeSrc} alt={t("addToAppleWallet")} className="h-12 w-auto" />
-      </button>
-
-      {/*
-        Google's Add to Google Wallet brand guidelines require the
-        unmodified official button asset (min 48dp tall, no recoloring, no
-        custom button) and that it call a real Google Wallet save flow.
-      */}
-      <button
-        type="button"
-        className="inline-flex w-fit rounded-md disabled:cursor-not-allowed disabled:opacity-50"
-        disabled={googleLoading}
-        onClick={() => void openGoogleWallet()}
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element -- official Google button, must not be re-processed by next/image */}
-        {/* biome-ignore lint/performance/noImgElement: official Google button, must not be re-processed by next/image */}
-        <img src={googleButtonSrc} alt={t("addToGoogleWallet")} className="h-12 w-auto" />
-      </button>
-    </div>
   );
 }

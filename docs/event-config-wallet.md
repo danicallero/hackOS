@@ -116,3 +116,35 @@ capability `QUEUE_ADMIN`). Wallet-pass conventions the UI relies on:
   ("43°19′58″N", with `O` accepted for Spanish "Oeste"), and a full pair
   pasted into either box fills both — parsing lives in
   `apps/web/src/lib/coords.ts`; the API itself only speaks signed decimals.
+
+## 4. Getting a pass without a session — the confirmation flow (issue #369)
+
+The acceptance email's "Accept my spot" link (H15) lands on
+`apps/web/src/app/(auth)/applications/confirm/page.tsx`, which POSTs the token
+to the public `POST /api/applications/confirm`. That token is an **identity
+assertion for one action, never a session**, and the landing page is built
+around that rule:
+
+- The confirm response carries `wallet_token` (plus `user_id` and a masked
+  email). It is a row in `wallet_access_tokens`
+  (`logistics/wallet-access.ts`, migration `0510`): random, bound to one
+  `(user, purpose)`, valid for **one hour**, multi-use inside that window
+  (adding the pass to both wallets, or retrying, is normal). The
+  `applications-expirer` tick drops rows a day past expiry.
+- The only routes that accept it are
+  `GET /api/wallet/scoped/apple/:purpose.pkpass?token=…` and
+  `GET /api/wallet/scoped/google/:purpose?token=…`. They ignore `req.userId`
+  entirely: the pass belongs to the token's user even if a *different* account
+  is signed in on that browser. A ticket-scoped token cannot fetch a badge
+  pass. Anything else — `/api/me`, `/api/me/wallet/*` — still answers 401.
+- The page's **primary** action is Add to Apple/Google Wallet; the QR is behind
+  a "Show ticket code" toggle for anyone without a wallet app.
+- Opening the link **ends any session in that browser** (Better Auth sign-out
+  from the client), and says so. If the session belonged to another account,
+  the notice names the masked email the ticket belongs to. "Go to app" signs
+  out and routes to `/login`, so reaching the app is always a fresh sign-in.
+
+`WalletButtons` (`apps/web/src/components/common/wallet-buttons.tsx`) is shared
+by this page and the signed-in wallet page; passing `accessToken` switches it to
+the scoped routes and to `credentials: "omit"` fetches, so the request carries
+no cookie at all.

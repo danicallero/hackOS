@@ -128,6 +128,20 @@ export const sendDecisionsSchema = z.object({
 
 export const confirmTokenSchema = z.object({ token: z.string().min(1) });
 
+/**
+ * Email-link confirm response (H15, issue #369). `wallet_token` is scoped to
+ * this user's entrance pass and expires; it is never a session credential.
+ */
+export const confirmByEmailResponseSchema = z.object({
+  status: z.string(),
+  already_confirmed: z.boolean(),
+  ticket_token: z.string(),
+  user_id: z.number().int(),
+  masked_email: z.string(),
+  wallet_token: z.string(),
+  wallet_token_expires_at: z.string(),
+});
+
 export const listResponsesQuerySchema = z.object({
   status: z.string().optional(),
   search: z.string().optional(),
