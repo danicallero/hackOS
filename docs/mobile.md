@@ -159,6 +159,18 @@ route below. No migration needed.
   fallback. `notifications.tsx` pages past the initial 20 inbox messages on
   demand, allows an expanded message to be deleted after native confirmation,
   and mirrors the web activity/kind reminder preferences.
+- `app/(tabs)/schedule.tsx` — the participant agenda, grouped by day with a
+  "Now" divider the list auto-scrolls to on first load. Cards are **collapsed
+  by default** when their copy is long (`isScheduleCardExpandable`: a
+  multi-line description, >90 characters of it, or a >60-character title):
+  title and description clamp to two lines behind a "Show more"/"Show less"
+  chevron that expands the card **in place** instead of navigating. The card
+  body still pushes `app/schedule/[id].tsx`. The reminder bell sits in the
+  header row next to the title and type pill (`alignItems: "center"` plus
+  `hitSlop` — a 44pt touch box stretched the row and pulled the bell off the
+  title) and toggles `schedule:<id>` push reminders **straight from the list**
+  via `lib/use-activity-reminders.ts`; filled/accent means on, outline/grey
+  off. Covered by `test/ui/schedule-list.test.tsx`.
 - `components/queue-operations-screen.tsx` — Queue operations is available to
   `queue:operate`, `queue:admin`, and `*`. It first lists only the caller's
   authorized rooms, then loads each protected room view. Each card keeps the
