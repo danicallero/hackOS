@@ -33,7 +33,7 @@ import { ApiError, api } from "@/lib/api";
 import { fromLocalInputValue, toLocalInputValue } from "@/lib/event-datetime";
 import { useLocale } from "@/lib/i18n";
 import type { EventConfig } from "@/lib/types";
-import { useEventConfig } from "./event-config-context";
+import { EventConfigLoadState, useEventConfig } from "./event-config-context";
 import { useCategorySaveState } from "./use-category-save-state";
 import { ZonedTimePreview } from "./zoned-time-preview";
 
@@ -137,7 +137,9 @@ export function ScheduleTab({
     }
   }
 
-  if (status === "loading" || !config) return null;
+  if (status !== "ready" || !config) {
+    return <EventConfigLoadState icon={icon} title={t("scheduleSectionTitle")} />;
+  }
   const timezone = config.timezone;
   const values = watch();
 
