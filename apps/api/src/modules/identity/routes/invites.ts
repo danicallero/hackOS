@@ -7,9 +7,20 @@ import { config } from "../../../config.js";
 import { pool, withTransaction } from "../../../db/pool.js";
 import { audit } from "../../../lib/audit.js";
 import { requireCapability } from "../../../lib/capabilities.js";
-import { BadRequestError, ConflictError, NotFoundError } from "../../../lib/errors.js";
+import {
+  BadRequestError,
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+} from "../../../lib/errors.js";
+import type { RouteAccessPolicy } from "../../../lib/route-policy.js";
 import { issueTicket } from "../../logistics/tickets.js";
 import { auth } from "../auth.js";
+import {
+  groupContainsWildcard,
+  lockPermissionGraph,
+  requireWildcardGraphAuthority,
+} from "../permission-graph.js";
 
 /**
  * Invitations (H9, H10): admin creates an invite by email + kind
@@ -59,6 +70,7 @@ interface TokenRow {
   used_at: Date | null;
   kind: string | null;
   group_ids: number[];
+  wildcard_authorized: boolean;
   created_at: Date;
 }
 
@@ -66,6 +78,43 @@ function claimUrl(token: string): string {
   // Link to the WEB app's claim page (not the API host); it looks up the
   // invite and lets the person create their account.
   return `${config.WEB_URL}/claim-account?token=${token}`;
+}
+
+const routeAccess = (routeAccessPolicy: RouteAccessPolicy) => ({ routeAccessPolicy });
+
+/**
+ * Deferred group grants need a fresh closure check at every privileged token
+ * operation. Missing groups intentionally mean a deleted assignment (and no
+ * grant); initial creation is the one operation that rejects an unknown id.
+ */
+async function inviteContainsWildcardGroup(
+  client: Parameters<typeof groupContainsWildcard>[0],
+  groupIds: readonly number[],
+  { requireExisting = false }: { requireExisting?: boolean } = {},
+): Promise<boolean> {
+  let containsWildcard = false;
+  for (const groupId of groupIds) {
+    const { rows } = await client.query(`SELECT id FROM permission_groups WHERE id = $1`, [
+      groupId,
+    ]);
+    if (!rows[0]) {
+      if (requireExisting) throw new NotFoundError("Permission group not found", { groupId });
+      continue;
+    }
+    if (await groupContainsWildcard(client, groupId)) containsWildcard = true;
+  }
+  return containsWildcard;
+}
+
+async function requireWildcardInviteAuthority(
+  client: Parameters<typeof groupContainsWildcard>[0],
+  actorId: number,
+  groupIds: readonly number[],
+  options?: { requireExisting?: boolean },
+): Promise<boolean> {
+  const containsWildcard = await inviteContainsWildcardGroup(client, groupIds, options);
+  if (containsWildcard) await requireWildcardGraphAuthority(client, actorId);
+  return containsWildcard;
 }
 
 async function enqueueInviteEmail(
@@ -100,6 +149,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
     "/api/invites",
     {
       preHandler: manage,
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.INVITES_MANAGE }),
       schema: {
         body: z.object({
           email: z.string().email(),
@@ -141,11 +191,31 @@ export function registerInviteRoutes(app: FastifyInstance): void {
       const type = kind === "sponsor" ? "sponsor_invite" : "account_claim";
 
       const row = await withTransaction(async (client) => {
+        // An invitation is a deferred membership assignment. Validate its
+        // targets while the graph is locked, so a permissions manager cannot
+        // smuggle wildcard access through account creation (H8/H10, H53).
+        await lockPermissionGraph(client);
+        const wildcardAuthorized = await requireWildcardInviteAuthority(
+          client,
+          req.userId as number,
+          groupIds,
+          { requireExisting: true },
+        );
         const { rows } = await client.query(
-          `INSERT INTO email_verification_tokens (token, type, email, enterprise_id, kind, group_ids, expires_at)
-           VALUES ($1, $2::token_type, $3, $4, $5, $6, now() + make_interval(hours => $7))
+          `INSERT INTO email_verification_tokens
+             (token, type, email, enterprise_id, kind, group_ids, wildcard_authorized, expires_at)
+           VALUES ($1, $2::token_type, $3, $4, $5, $6, $7, now() + make_interval(hours => $8))
            RETURNING *`,
-          [token, type, email, enterpriseId ?? null, kind, groupIds, INVITE_TTL_HOURS],
+          [
+            token,
+            type,
+            email,
+            enterpriseId ?? null,
+            kind,
+            groupIds,
+            wildcardAuthorized,
+            INVITE_TTL_HOURS,
+          ],
         );
         const created = rows[0] as TokenRow;
         await enqueueInviteEmail(client, req.userId as number, email, "en", token);
@@ -179,6 +249,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
     "/api/invites",
     {
       preHandler: manage,
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.INVITES_MANAGE }),
       schema: {
         response: {
           200: z.array(
@@ -221,6 +292,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
     "/api/invites/:id/regenerate",
     {
       preHandler: manage,
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.INVITES_MANAGE }),
       schema: {
         params: z.object({ id: z.coerce.number().int() }),
         response: { 201: inviteResponse },
@@ -229,6 +301,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
     async (req, reply) => {
       const { id } = req.params;
       const result = await withTransaction(async (client) => {
+        await lockPermissionGraph(client);
         const { rows } = await client.query(
           `SELECT * FROM email_verification_tokens
            WHERE id = $1 AND type IN ('sponsor_invite', 'account_claim') FOR UPDATE`,
@@ -241,6 +314,12 @@ export function registerInviteRoutes(app: FastifyInstance): void {
           // "superseded by an earlier regeneration"
           throw new ConflictError("Invite already accepted — nothing to regenerate", { id });
         }
+        const currentWildcard = await requireWildcardInviteAuthority(
+          client,
+          req.userId as number,
+          old.group_ids,
+        );
+        const wildcardAuthorized = old.wildcard_authorized || currentWildcard;
 
         // Old token stops working immediately (H9: "si el enlace caducó, la
         // organización puede generar otro" — one live link at a time).
@@ -251,8 +330,9 @@ export function registerInviteRoutes(app: FastifyInstance): void {
 
         const token = randomBytes(32).toString("base64url");
         const { rows: newRows } = await client.query(
-          `INSERT INTO email_verification_tokens (token, type, email, enterprise_id, kind, group_ids, expires_at)
-           VALUES ($1, $2::token_type, $3, $4, $5, $6, now() + make_interval(hours => $7))
+          `INSERT INTO email_verification_tokens
+             (token, type, email, enterprise_id, kind, group_ids, wildcard_authorized, expires_at)
+           VALUES ($1, $2::token_type, $3, $4, $5, $6, $7, now() + make_interval(hours => $8))
            RETURNING *`,
           [
             token,
@@ -261,6 +341,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
             old.enterprise_id,
             old.kind,
             old.group_ids,
+            wildcardAuthorized,
             INVITE_TTL_HOURS,
           ],
         );
@@ -297,6 +378,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
     "/api/invites/:id/expire",
     {
       preHandler: manage,
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.INVITES_MANAGE }),
       schema: {
         params: z.object({ id: z.coerce.number().int() }),
         response: { 200: z.object({ success: z.literal(true) }) },
@@ -337,6 +419,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
     "/api/invites/:id/renew",
     {
       preHandler: manage,
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.INVITES_MANAGE }),
       schema: {
         params: z.object({ id: z.coerce.number().int() }),
         response: { 200: z.object({ expiresAt: z.string() }) },
@@ -345,6 +428,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
     async (req, reply) => {
       const { id } = req.params;
       const result = await withTransaction(async (client) => {
+        await lockPermissionGraph(client);
         const { rows } = await client.query(
           `SELECT * FROM email_verification_tokens
            WHERE id = $1 AND type IN ('sponsor_invite', 'account_claim') FOR UPDATE`,
@@ -358,12 +442,18 @@ export function registerInviteRoutes(app: FastifyInstance): void {
         if (invite.user_id !== null) {
           throw new ConflictError("Invite already accepted — cannot renew", { id });
         }
+        const containsWildcard = await requireWildcardInviteAuthority(
+          client,
+          req.userId as number,
+          invite.group_ids,
+        );
         const { rows: updated } = await client.query(
           `UPDATE email_verification_tokens
-           SET expires_at = now() + make_interval(hours => $2)
+           SET expires_at = now() + make_interval(hours => $2),
+               wildcard_authorized = wildcard_authorized OR $3
            WHERE id = $1
            RETURNING expires_at`,
-          [id, INVITE_TTL_HOURS],
+          [id, INVITE_TTL_HOURS, containsWildcard],
         );
         await audit(client, {
           actorId: req.userId,
@@ -386,6 +476,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
     "/api/invites/:id/resend",
     {
       preHandler: manage,
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.INVITES_MANAGE }),
       schema: {
         params: z.object({ id: z.coerce.number().int() }),
         response: { 200: z.object({ success: z.literal(true) }) },
@@ -394,6 +485,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
     async (req, reply) => {
       const { id } = req.params;
       await withTransaction(async (client) => {
+        await lockPermissionGraph(client);
         const { rows } = await client.query(
           `SELECT * FROM email_verification_tokens
            WHERE id = $1 AND type IN ('sponsor_invite', 'account_claim') FOR UPDATE`,
@@ -406,6 +498,17 @@ export function registerInviteRoutes(app: FastifyInstance): void {
         }
         if (invite.user_id !== null) {
           throw new ConflictError("Invite already accepted — cannot resend", { id });
+        }
+        const containsWildcard = await requireWildcardInviteAuthority(
+          client,
+          req.userId as number,
+          invite.group_ids,
+        );
+        if (containsWildcard) {
+          await client.query(
+            `UPDATE email_verification_tokens SET wildcard_authorized = true WHERE id = $1`,
+            [id],
+          );
         }
         await enqueueInviteEmail(client, req.userId as number, invite.email, "en", invite.token);
         await audit(client, {
@@ -426,6 +529,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
   api.get(
     "/api/invites/lookup",
     {
+      config: routeAccess({ kind: "token", policy: "invite-lookup" }),
       schema: {
         querystring: z.object({ token: z.string().min(1) }),
         response: {
@@ -458,6 +562,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
   api.post(
     "/api/invites/accept",
     {
+      config: routeAccess({ kind: "token", policy: "invite-accept" }),
       schema: {
         body: z.object({
           token: z.string().min(1),
@@ -494,6 +599,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
       // "email already exists" and staff resolves it; the audit trail stays
       // consistent either way.
       const result = await withTransaction(async (client) => {
+        await lockPermissionGraph(client);
         const { rows } = await client.query(
           `SELECT * FROM email_verification_tokens
            WHERE token = $1 AND type IN ('sponsor_invite', 'account_claim')
@@ -509,6 +615,14 @@ export function registerInviteRoutes(app: FastifyInstance): void {
           throw new ConflictError("Invite expired — ask the organization to send a new one", {
             expired: true,
           });
+        }
+        if (
+          (await inviteContainsWildcardGroup(client, invite.group_ids)) &&
+          !invite.wildcard_authorized
+        ) {
+          throw new ForbiddenError(
+            "This invitation was not authorized to grant the wildcard capability",
+          );
         }
         const kind = (invite.kind ?? (invite.type === "sponsor_invite" ? "sponsor" : "staff")) as
           | "staff"
@@ -585,8 +699,9 @@ export function registerInviteRoutes(app: FastifyInstance): void {
           await issueTicket(client, userId);
         }
 
-        // H8/H10: pre-assigned capability groups. Skip ids for groups deleted
-        // since the invite was issued (WHERE EXISTS avoids an FK violation).
+        // H8/H10: pre-assigned capability groups. The invitation creator
+        // validated every assignment under the same graph lock. A deleted
+        // group is intentionally skipped: deletion revokes deferred grants.
         for (const groupId of invite.group_ids ?? []) {
           await client.query(
             `INSERT INTO permission_group_members (user_id, group_id, assigned_by)
