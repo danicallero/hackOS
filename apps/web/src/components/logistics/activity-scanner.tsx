@@ -316,7 +316,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
             <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_minmax(180px,0.8fr)_140px]">
               <Field id="activity-scan-activity" label={t("colActivity")}>
                 <Select value={activityId} onValueChange={setActivityId}>
-                  <SelectTrigger id="activity-scan-activity">
+                  <SelectTrigger id="activity-scan-activity" className="w-full">
                     <SelectValue
                       placeholder={isMeal ? t("chooseMeal") : t("chooseActivityOption")}
                     />

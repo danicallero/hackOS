@@ -15,6 +15,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { AlertModal } from "@/components/common/alert-modal";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { DevpostTagsField } from "@/components/common/devpost-tags-field";
 import { DurationInput } from "@/components/common/duration-input";
@@ -576,10 +577,9 @@ interface BulkChallengeResponse {
 function BulkEnrollmentCard({ challengeId }: { challengeId: number }) {
   const { t } = useLocale();
   const [busy, setBusy] = useState<"add" | "remove" | null>(null);
+  const [confirming, setConfirming] = useState<"add" | "remove" | null>(null);
 
   async function run(kind: "add" | "remove") {
-    const confirmMessage = kind === "add" ? t("bulkAddConfirm") : t("bulkRemoveConfirm");
-    if (!window.confirm(confirmMessage)) return;
     setBusy(kind);
     try {
       const result = await api.post<BulkChallengeResponse>(
@@ -594,8 +594,11 @@ function BulkEnrollmentCard({ challengeId }: { challengeId: number }) {
       toast.error(err instanceof ApiError ? err.message : t("bulkActionFailed"));
     } finally {
       setBusy(null);
+      setConfirming(null);
     }
   }
+
+  const confirmingRemove = confirming === "remove";
 
   return (
     <SectionCard title={t("bulkEnrollmentTitle")} description={t("bulkEnrollmentDesc")}>
@@ -605,7 +608,7 @@ function BulkEnrollmentCard({ challengeId }: { challengeId: number }) {
           variant="outline"
           size="sm"
           disabled={busy !== null}
-          onClick={() => run("add")}
+          onClick={() => setConfirming("add")}
         >
           {t("bulkAddAllProjects")}
         </Button>
@@ -614,11 +617,24 @@ function BulkEnrollmentCard({ challengeId }: { challengeId: number }) {
           variant="outline"
           size="sm"
           disabled={busy !== null}
-          onClick={() => run("remove")}
+          onClick={() => setConfirming("remove")}
         >
           {t("bulkRemoveAllProjects")}
         </Button>
       </div>
+      {confirming && (
+        <AlertModal
+          open
+          onOpenChange={(open) => !open && busy === null && setConfirming(null)}
+          title={t("bulkEnrollmentTitle")}
+          description={t(confirmingRemove ? "bulkRemoveConfirm" : "bulkAddConfirm")}
+          cancelLabel={t("cancel")}
+          confirmLabel={t(confirmingRemove ? "bulkRemoveAllProjects" : "bulkAddAllProjects")}
+          pending={busy !== null}
+          destructive={confirmingRemove}
+          onConfirm={() => void run(confirming)}
+        />
+      )}
     </SectionCard>
   );
 }

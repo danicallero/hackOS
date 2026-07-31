@@ -340,7 +340,7 @@ function PresencePanel({
                       value={manualKind}
                       onValueChange={(v) => setManualKind(v as "in" | "out")}
                     >
-                      <SelectTrigger id="presence-manual-direction">
+                      <SelectTrigger id="presence-manual-direction" className="w-full">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>

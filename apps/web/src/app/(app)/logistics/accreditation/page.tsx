@@ -337,7 +337,7 @@ function AccreditationPanel({ onAccredited }: { onAccredited: () => void }) {
               <div className="space-y-2">
                 <Label htmlFor="accreditation-method">{t("methodLabel")}</Label>
                 <Select value={method} onValueChange={(v) => setMethod(v as typeof method)}>
-                  <SelectTrigger id="accreditation-method">
+                  <SelectTrigger id="accreditation-method" className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
