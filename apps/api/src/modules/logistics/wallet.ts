@@ -9,6 +9,7 @@ import {
   resolvePassFieldLabels,
   resolvePassFieldVisibility,
 } from "@hackos/shared/wallet-pass-labels";
+import type { preHandlerHookHandler } from "fastify";
 import { config } from "../../config.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
@@ -66,6 +67,20 @@ function appleAuthToken(header: string | undefined): string {
   if (!header?.startsWith(prefix)) throw new UnauthorizedError();
   return header.slice(prefix.length);
 }
+
+/**
+ * PassKit never has a hackOS browser session. Its `ApplePass` credential is
+ * the pass-scoped web-service token embedded in the signed pass instead.
+ */
+export const requireAppleWebServiceToken: preHandlerHookHandler = async (req) => {
+  const token = appleAuthToken(req.headers.authorization);
+  const { rowCount } = await pool.query(
+    `SELECT 1 FROM wallet_passes
+      WHERE platform = 'apple' AND authentication_token = $1`,
+    [token],
+  );
+  if (rowCount === 0) throw new UnauthorizedError();
+};
 
 async function requirePassBySerial(serialNumber: string, authorization?: string): Promise<PassRow> {
   const token = appleAuthToken(authorization);
@@ -270,9 +285,13 @@ export async function buildApplePass(
   if (lookup && lookup.passTypeIdentifier !== PASS_TYPE_IDENTIFIER) {
     throw new NotFoundError("Pass type not recognized");
   }
-  const pass = lookup
-    ? await requirePassBySerial(lookup.serialNumber, lookup.authorization)
-    : await ensurePassRecord(userId ?? 0, purpose ?? "ticket", "apple");
+  let pass: PassRow;
+  if (lookup) {
+    pass = await requirePassBySerial(lookup.serialNumber, lookup.authorization);
+  } else {
+    if (userId == null || purpose == null) throw new UnauthorizedError();
+    pass = await ensurePassRecord(userId, purpose, "apple");
+  }
   if (pass.status === "voided" && !lookup) throw new BadRequestError("Pass has been voided");
 
   const passJson = JSON.stringify(await passPayload(pass));
@@ -426,11 +445,26 @@ export async function unregisterAppleDevice(input: {
 export async function appleChangedSerials(input: {
   deviceLibraryIdentifier: string;
   passTypeIdentifier: string;
+  authorization?: string;
   passesUpdatedSince?: string;
 }) {
   if (input.passTypeIdentifier !== PASS_TYPE_IDENTIFIER) {
     return { lastUpdated: Date.now().toString(), serialNumbers: [] };
   }
+  const token = appleAuthToken(input.authorization);
+  // Apple sends one pass's web-service token when polling a device's changed
+  // registrations. A valid token for a different pass/device cannot enumerate
+  // this device's serial numbers.
+  const devicePass = await pool.query(
+    `SELECT 1
+       FROM wallet_pass_devices d
+       JOIN wallet_passes wp ON wp.id = d.pass_id
+      WHERE d.device_library_identifier = $1
+        AND wp.platform = 'apple'
+        AND wp.authentication_token = $2`,
+    [input.deviceLibraryIdentifier, token],
+  );
+  if (devicePass.rowCount === 0) throw new UnauthorizedError();
   // update_tag is integer epoch millis (0504) and MUST be compared
   // numerically: rows written before 0504 mixed seconds and millis, and the
   // device echoes back whatever lastUpdated we sent it previously — a text

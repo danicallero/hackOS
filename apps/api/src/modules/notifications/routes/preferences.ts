@@ -4,20 +4,33 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool } from "../../../db/pool.js";
 import { requireAuth, userHasCapability } from "../../../lib/capabilities.js";
 import { ForbiddenError } from "../../../lib/errors.js";
+import type { RouteAccessPolicy } from "../../../lib/route-policy.js";
 import { setPreferencesBodySchema } from "../schemas.js";
 import { getPreferences, QUEUE_STAFF_CATEGORY, setPreferences } from "../service.js";
+
+function routeAccess(routeAccessPolicy: RouteAccessPolicy) {
+  return { config: { routeAccessPolicy } };
+}
 
 /** H51: participant-facing notification preference matrix, incl. schedule:<id> reminder opt-ins. */
 export function registerPreferenceRoutes(app: FastifyInstance): void {
   const typedApp = app.withTypeProvider<ZodTypeProvider>();
 
-  typedApp.get("/api/me/notification-preferences", { preHandler: requireAuth }, async (req) => {
-    return getPreferences(pool, req.userId as number);
-  });
+  typedApp.get(
+    "/api/me/notification-preferences",
+    { ...routeAccess({ kind: "authenticated" }), preHandler: requireAuth },
+    async (req) => {
+      return getPreferences(pool, req.userId as number);
+    },
+  );
 
   typedApp.put(
     "/api/me/notification-preferences",
-    { preHandler: requireAuth, schema: { body: setPreferencesBodySchema } },
+    {
+      ...routeAccess({ kind: "authenticated" }),
+      preHandler: requireAuth,
+      schema: { body: setPreferencesBodySchema },
+    },
     async (req) => {
       if (req.body.preferences.some((item) => item.category === QUEUE_STAFF_CATEGORY)) {
         const userId = req.userId as number;

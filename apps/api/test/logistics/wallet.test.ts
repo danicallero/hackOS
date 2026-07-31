@@ -427,9 +427,74 @@ describe("H28 Apple Wallet PassKit", () => {
     const changed = await app.inject({
       method: "GET",
       url: `/api/wallet/apple/v1/devices/device-1/registrations/${PASS_TYPE_IDENTIFIER}`,
+      headers: { authorization: `ApplePass ${token}` },
     });
     expect(changed.statusCode).toBe(200);
     expect(changed.json().serialNumbers).toContain(serial);
+  });
+
+  it("rejects missing, forged, and cross-device ApplePass tokens", async () => {
+    const { PASS_TYPE_IDENTIFIER } = await import("../../src/modules/logistics/wallet.js");
+    const { pool } = await import("../../src/db/pool.js");
+    const owner = await createUser();
+    const other = await createUser();
+    await issueTicket(owner, "ticket-wallet-token-owner");
+    await issueTicket(other, "ticket-wallet-token-other");
+
+    await app.inject({
+      method: "GET",
+      url: "/api/me/wallet/apple/ticket.pkpass",
+      headers: asUser(owner),
+    });
+    await app.inject({
+      method: "GET",
+      url: "/api/me/wallet/apple/ticket.pkpass",
+      headers: asUser(other),
+    });
+    const passes = await pool.query(
+      `SELECT user_id, serial_number, authentication_token FROM wallet_passes WHERE user_id = ANY($1)`,
+      [[owner, other]],
+    );
+    const ownerPass = passes.rows.find((pass) => pass.user_id === owner)!;
+    const otherPass = passes.rows.find((pass) => pass.user_id === other)!;
+    const baseUrl = `/api/wallet/apple/v1/devices/device-token/registrations/${PASS_TYPE_IDENTIFIER}`;
+
+    const register = await app.inject({
+      method: "POST",
+      url: `${baseUrl}/${ownerPass.serial_number}`,
+      headers: { authorization: `ApplePass ${ownerPass.authentication_token}` },
+      payload: { pushToken: "push-token" },
+    });
+    expect(register.statusCode).toBe(201);
+
+    expect((await app.inject({ method: "GET", url: baseUrl })).statusCode).toBe(401);
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: baseUrl,
+          headers: { authorization: "ApplePass forged" },
+        })
+      ).statusCode,
+    ).toBe(401);
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: baseUrl,
+          headers: { authorization: `ApplePass ${otherPass.authentication_token}` },
+        })
+      ).statusCode,
+    ).toBe(401);
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: baseUrl,
+          headers: { authorization: `ApplePass ${ownerPass.authentication_token}` },
+        })
+      ).statusCode,
+    ).toBe(200);
   });
 
   it("reports an event-config bump on the incremental poll a device actually makes (H28 regression)", async () => {
@@ -463,6 +528,7 @@ describe("H28 Apple Wallet PassKit", () => {
     const first = await app.inject({
       method: "GET",
       url: `/api/wallet/apple/v1/devices/device-poll/registrations/${PASS_TYPE_IDENTIFIER}`,
+      headers: { authorization: `ApplePass ${pass.rows[0].authentication_token}` },
     });
     const lastUpdated: string = first.json().lastUpdated;
 
@@ -470,6 +536,7 @@ describe("H28 Apple Wallet PassKit", () => {
     const quiet = await app.inject({
       method: "GET",
       url: `/api/wallet/apple/v1/devices/device-poll/registrations/${PASS_TYPE_IDENTIFIER}?passesUpdatedSince=${lastUpdated}`,
+      headers: { authorization: `ApplePass ${pass.rows[0].authentication_token}` },
     });
     expect(quiet.statusCode).toBe(204);
 
@@ -494,6 +561,7 @@ describe("H28 Apple Wallet PassKit", () => {
     const afterChange = await app.inject({
       method: "GET",
       url: `/api/wallet/apple/v1/devices/device-poll/registrations/${PASS_TYPE_IDENTIFIER}?passesUpdatedSince=${lastUpdated}`,
+      headers: { authorization: `ApplePass ${pass.rows[0].authentication_token}` },
     });
     expect(afterChange.statusCode).toBe(200);
     expect(afterChange.json().serialNumbers).toContain(serial);

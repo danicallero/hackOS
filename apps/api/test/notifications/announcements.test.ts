@@ -61,6 +61,17 @@ describe("announcement CRUD (H50)", () => {
     expect(forbidden.statusCode).toBe(403);
   });
 
+  it("accepts the administrator wildcard for announcement management", async () => {
+    const adminId = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/announcements",
+      headers: asUser(adminId),
+      payload: { title: "Wildcard", body: "managed" },
+    });
+    expect(res.statusCode).toBe(201);
+  });
+
   it("create with no window fans out immediately (in_app+push) and audits (H53)", async () => {
     const adminId = await createUserWithCapabilities([CAPABILITIES.ANNOUNCEMENTS_MANAGE]);
     const otherId = await createUser();

@@ -11,6 +11,7 @@ import {
 } from "../../lib/capabilities.js";
 import { ForbiddenError, NotFoundError, UnauthorizedError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
+import type { RouteAccessPolicy } from "../../lib/route-policy.js";
 import { subscribe } from "../../lib/sse.js";
 import {
   checkIn,
@@ -90,6 +91,7 @@ import {
   appleLog,
   buildApplePass,
   registerAppleDevice,
+  requireAppleWebServiceToken,
   unregisterAppleDevice,
 } from "./wallet.js";
 import { resolveWalletAccessToken } from "./wallet-access.js";
@@ -97,6 +99,10 @@ import { resolveWalletAccessToken } from "./wallet-access.js";
 function actor(userId: number | null): number {
   if (userId == null) throw new UnauthorizedError();
   return userId;
+}
+
+function routeAccess(routeAccessPolicy: RouteAccessPolicy) {
+  return { config: { routeAccessPolicy } };
 }
 
 /**
@@ -139,12 +145,45 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
     CAPABILITIES.LOGISTICS_STATS,
     CAPABILITIES.SCHEDULE_MANAGE,
   );
+  const access = {
+    authenticated: { kind: "authenticated" } as const,
+    publicContent: { kind: "public", anonymousCategory: "public-content" } as const,
+    applePasskit: { kind: "token", policy: "apple-passkit-web-service" } as const,
+    accredit: { kind: "capability", capability: CAPABILITIES.ACCREDIT_SCAN } as const,
+    presence: { kind: "capability", capability: CAPABILITIES.PRESENCE_SCAN } as const,
+    activity: { kind: "capability", capability: CAPABILITIES.ACTIVITY_SCAN } as const,
+    stats: { kind: "capability", capability: CAPABILITIES.LOGISTICS_STATS } as const,
+    scheduleManage: { kind: "capability", capability: CAPABILITIES.SCHEDULE_MANAGE } as const,
+    presenceRead: {
+      kind: "capability",
+      anyOf: [CAPABILITIES.PRESENCE_SCAN, CAPABILITIES.LOGISTICS_STATS],
+    } as const,
+    scanRead: {
+      kind: "capability",
+      anyOf: [CAPABILITIES.ACTIVITY_SCAN, CAPABILITIES.LOGISTICS_STATS],
+    } as const,
+    ticketRead: {
+      kind: "capability",
+      anyOf: [CAPABILITIES.USERS_READ, CAPABILITIES.ACCREDIT_SCAN],
+    } as const,
+    logisticsRead: {
+      kind: "capability",
+      anyOf: [
+        CAPABILITIES.ACCREDIT_SCAN,
+        CAPABILITIES.PRESENCE_SCAN,
+        CAPABILITIES.ACTIVITY_SCAN,
+        CAPABILITIES.LOGISTICS_STATS,
+        CAPABILITIES.SCHEDULE_MANAGE,
+      ],
+    } as const,
+  } satisfies Record<string, RouteAccessPolicy>;
 
   // Full replace-all seed for the native SQLite scanners. Each successful
   // refresh also distributes the complete revoked-badge set (H23).
   typed.get(
     "/api/scanner/snapshot",
     {
+      ...routeAccess(access.logisticsRead),
       preHandler: logisticsRead,
       schema: {
         summary: "Synchronize native scanner data",
@@ -158,7 +197,15 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
 
   typed.get(
     "/api/public/activities",
-    { schema: { response: { 200: z.object({ items: z.array(publicActivitySchema) }) } } },
+    {
+      ...routeAccess(access.publicContent),
+      schema: {
+        summary: "Published public schedule",
+        description:
+          "Anonymous H47/H48 schedule feed. It contains only items currently visible in the public programme; drafts and scheduled future items are omitted.",
+        response: { 200: z.object({ items: z.array(publicActivitySchema) }) },
+      },
+    },
     async () => {
       const { rows } = await pool.query(
         `SELECT id, title, description, location, type, starts_at, ends_at, publish_at
@@ -184,13 +231,18 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
 
   // ── unified person lookup (any logistics station) ────────────────────────
 
-  typed.get("/api/accreditation/stats", { preHandler: accredit }, async () => ({
-    byRole: await accreditationCountsByRole(),
-  }));
+  typed.get(
+    "/api/accreditation/stats",
+    { ...routeAccess(access.accredit), preHandler: accredit },
+    async () => ({
+      byRole: await accreditationCountsByRole(),
+    }),
+  );
 
   typed.post(
     "/api/logistics/people/search",
     {
+      ...routeAccess(access.logisticsRead),
       preHandler: logisticsRead,
       schema: {
         body: personSearchBody,
@@ -206,6 +258,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   typed.post(
     "/api/accreditation/lookup",
     {
+      ...routeAccess(access.accredit),
       preHandler: accredit,
       schema: {
         body: lookupBody,
@@ -219,6 +272,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   typed.post(
     "/api/accreditation/lookup-user",
     {
+      ...routeAccess(access.accredit),
       preHandler: accredit,
       schema: {
         body: lookupUserBody,
@@ -232,6 +286,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   typed.post(
     "/api/accreditation/check-in",
     {
+      ...routeAccess(access.accredit),
       preHandler: [accredit, idempotencyGuard],
       schema: {
         body: checkInBody,
@@ -250,6 +305,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   typed.post(
     "/api/accreditation/check-in-user",
     {
+      ...routeAccess(access.accredit),
       preHandler: [accredit, idempotencyGuard],
       schema: {
         body: checkInUserBody,
@@ -271,6 +327,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   typed.post(
     "/api/accreditation/rotate",
     {
+      ...routeAccess(access.accredit),
       preHandler: [accredit, idempotencyGuard],
       schema: {
         body: rotateBody,
@@ -289,7 +346,11 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
 
   typed.post(
     "/api/accreditation/remove",
-    { preHandler: [accredit, idempotencyGuard], schema: { body: removeBadgeBody } },
+    {
+      ...routeAccess(access.accredit),
+      preHandler: [accredit, idempotencyGuard],
+      schema: { body: removeBadgeBody },
+    },
     async (req) => removeBadge(actor(req.userId), req.body),
   );
 
@@ -297,13 +358,17 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
 
   typed.post(
     "/api/presence/lookup",
-    { preHandler: presence, schema: { body: presenceLookupBody } },
+    { ...routeAccess(access.presence), preHandler: presence, schema: { body: presenceLookupBody } },
     async (req) => presenceLookup(req.body.badgeId),
   );
 
   typed.post(
     "/api/presence/scan",
-    { preHandler: [presence, idempotencyGuard], schema: { body: presenceScanBody } },
+    {
+      ...routeAccess(access.presence),
+      preHandler: [presence, idempotencyGuard],
+      schema: { body: presenceScanBody },
+    },
     async (req) =>
       presenceScan(actor(req.userId), {
         badgeId: req.body.badgeId,
@@ -312,33 +377,52 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       }),
   );
 
-  typed.get("/api/presence/estimate", { preHandler: presenceRead }, async () =>
-    occupancyEstimate(),
+  typed.get(
+    "/api/presence/estimate",
+    { ...routeAccess(access.presenceRead), preHandler: presenceRead },
+    async () => occupancyEstimate(),
   );
 
-  typed.get("/api/presence/hours", { preHandler: presenceRead }, async () => allHours());
+  typed.get(
+    "/api/presence/hours",
+    { ...routeAccess(access.presenceRead), preHandler: presenceRead },
+    async () => allHours(),
+  );
 
   // Staff reconciliation queue: open sessions, stale ones flagged (H24).
-  typed.get("/api/presence/open", { preHandler: presenceRead }, async () => ({
-    items: await openSessions(),
-  }));
+  typed.get(
+    "/api/presence/open",
+    { ...routeAccess(access.presenceRead), preHandler: presenceRead },
+    async () => ({
+      items: await openSessions(),
+    }),
+  );
 
   typed.get(
     "/api/presence/hours/:userId",
-    { preHandler: presenceRead, schema: { params: userIdParam } },
+    {
+      ...routeAccess(access.presenceRead),
+      preHandler: presenceRead,
+      schema: { params: userIdParam },
+    },
     async (req) => userHours(req.params.userId),
   );
 
   // Raw scan admin — view/correct individual door scans (H24 usability).
   typed.get(
     "/api/presence/logs/:userId",
-    { preHandler: presenceRead, schema: { params: userIdParam } },
+    {
+      ...routeAccess(access.presenceRead),
+      preHandler: presenceRead,
+      schema: { params: userIdParam },
+    },
     async (req) => ({ items: await listTimeLogs(req.params.userId) }),
   );
 
   typed.get(
     "/api/presence/timeline/:userId",
     {
+      ...routeAccess(access.presenceRead),
       preHandler: presenceRead,
       schema: {
         params: userIdParam,
@@ -356,7 +440,11 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
 
   typed.post(
     "/api/presence/signals/:userId",
-    { preHandler: presence, schema: { params: userIdParam, body: presenceSignalBody } },
+    {
+      ...routeAccess(access.presence),
+      preHandler: presence,
+      schema: { params: userIdParam, body: presenceSignalBody },
+    },
     async (req, reply) =>
       reply
         .code(201)
@@ -365,7 +453,11 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
 
   typed.patch(
     "/api/presence/logs/:id",
-    { preHandler: presence, schema: { params: timeLogIdParam, body: timeLogPatchBody } },
+    {
+      ...routeAccess(access.presence),
+      preHandler: presence,
+      schema: { params: timeLogIdParam, body: timeLogPatchBody },
+    },
     async (req) =>
       updateTimeLog(actor(req.userId), req.params.id, {
         kind: req.body.kind,
@@ -376,19 +468,23 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
 
   typed.patch(
     "/api/presence/activity-logs/:id",
-    { preHandler: presence, schema: { params: timeLogIdParam, body: presenceActivityPatchBody } },
+    {
+      ...routeAccess(access.presence),
+      preHandler: presence,
+      schema: { params: timeLogIdParam, body: presenceActivityPatchBody },
+    },
     async (req) => updatePresenceActivity(actor(req.userId), req.params.id, req.body),
   );
 
   typed.delete(
     "/api/presence/activity-logs/:id",
-    { preHandler: presence, schema: { params: timeLogIdParam } },
+    { ...routeAccess(access.presence), preHandler: presence, schema: { params: timeLogIdParam } },
     async (req) => deletePresenceActivity(actor(req.userId), req.params.id),
   );
 
   typed.delete(
     "/api/presence/logs/:id",
-    { preHandler: presence, schema: { params: timeLogIdParam } },
+    { ...routeAccess(access.presence), preHandler: presence, schema: { params: timeLogIdParam } },
     async (req) => deleteTimeLog(actor(req.userId), req.params.id),
   );
 
@@ -399,13 +495,18 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   // LOGISTICS_STATS). Fixes the scanner that used to require the stats panel.
   typed.get(
     "/api/activities/scannable",
-    { preHandler: scanRead, schema: { querystring: scannableActivitiesQuery } },
+    {
+      ...routeAccess(access.scanRead),
+      preHandler: scanRead,
+      schema: { querystring: scannableActivitiesQuery },
+    },
     async (req) => ({ items: await scannableActivities(req.query.category) }),
   );
 
   typed.post(
     "/api/activities/:id/scan",
     {
+      ...routeAccess(access.activity),
       preHandler: [activity, idempotencyGuard],
       schema: { params: activityIdParam, body: activityScanBody },
     },
@@ -422,6 +523,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   typed.post(
     "/api/activities/:id/meal-scans/batch",
     {
+      ...routeAccess(access.activity),
       preHandler: [activity, idempotencyGuard],
       schema: { params: activityIdParam, body: mealScanBatchBody },
     },
@@ -434,17 +536,24 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
 
   // ── H27 stats ────────────────────────────────────────────────────────────
 
-  typed.get("/api/logistics/stats", { preHandler: stats }, async () => logisticsStats());
+  typed.get("/api/logistics/stats", { ...routeAccess(access.stats), preHandler: stats }, async () =>
+    logisticsStats(),
+  );
 
-  typed.get("/api/logistics/stream", { preHandler: logisticsRead }, async (_req, reply) => {
-    await subscribe("logistics", reply);
-  });
+  typed.get(
+    "/api/logistics/stream",
+    { ...routeAccess(access.logisticsRead), preHandler: logisticsRead },
+    async (_req, reply) => {
+      await subscribe("logistics", reply);
+    },
+  );
 
   // ── staff scan history/stats (extends H22-H27) ──────────────────────────
 
   typed.get(
     "/api/me/logistics/stats",
     {
+      ...routeAccess(access.logisticsRead),
       preHandler: logisticsRead,
       schema: {
         summary: "My scan counts",
@@ -459,6 +568,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   typed.get(
     "/api/logistics/stats/by-staff",
     {
+      ...routeAccess(access.stats),
       preHandler: stats,
       schema: {
         summary: "Scan ranking across all staff",
@@ -473,6 +583,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   typed.get(
     "/api/logistics/scan-log",
     {
+      ...routeAccess(access.logisticsRead),
       preHandler: logisticsRead,
       schema: {
         summary: "Team-wide scan-log feed",
@@ -497,11 +608,19 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
 
   // ── Schedule CRUD ───────────────────────────────────────────────────────
 
-  typed.get("/api/schedule", { preHandler: scheduleManage }, async () => listSchedule());
+  typed.get(
+    "/api/schedule",
+    { ...routeAccess(access.scheduleManage), preHandler: scheduleManage },
+    async () => listSchedule(),
+  );
 
   typed.post(
     "/api/schedule",
-    { preHandler: scheduleManage, schema: { body: scheduleBody } },
+    {
+      ...routeAccess(access.scheduleManage),
+      preHandler: scheduleManage,
+      schema: { body: scheduleBody },
+    },
     async (req, reply) =>
       reply.code(201).send(
         await createScheduleItem(actor(req.userId), {
@@ -520,7 +639,11 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
 
   typed.patch(
     "/api/schedule/:id",
-    { preHandler: scheduleManage, schema: { params: scheduleIdParam, body: schedulePatchBody } },
+    {
+      ...routeAccess(access.scheduleManage),
+      preHandler: scheduleManage,
+      schema: { params: scheduleIdParam, body: schedulePatchBody },
+    },
     async (req) =>
       updateScheduleItem(actor(req.userId), req.params.id, {
         title: req.body.title,
@@ -537,23 +660,33 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
 
   typed.delete(
     "/api/schedule/:id",
-    { preHandler: scheduleManage, schema: { params: scheduleIdParam } },
+    {
+      ...routeAccess(access.scheduleManage),
+      preHandler: scheduleManage,
+      schema: { params: scheduleIdParam },
+    },
     async (req) => deleteScheduleItem(actor(req.userId), req.params.id),
   );
 
   typed.post(
     "/api/schedule/visibility",
-    { preHandler: scheduleManage, schema: { body: scheduleVisibilityBody } },
+    {
+      ...routeAccess(access.scheduleManage),
+      preHandler: scheduleManage,
+      schema: { body: scheduleVisibilityBody },
+    },
     async (req) => setScheduleVisibility(actor(req.userId), req.body.ids, req.body.visibility),
   );
 
-  typed.get("/api/me/ticket", { preHandler: requireAuth }, async (req) =>
-    ticketQrPayload(actor(req.userId)),
+  typed.get(
+    "/api/me/ticket",
+    { ...routeAccess(access.authenticated), preHandler: requireAuth },
+    async (req) => ticketQrPayload(actor(req.userId)),
   );
 
   typed.get(
     "/api/users/:userId/ticket",
-    { preHandler: ticketRead, schema: { params: userIdParam } },
+    { ...routeAccess(access.ticketRead), preHandler: ticketRead, schema: { params: userIdParam } },
     async (req) => ticketQrPayload(req.params.userId),
   );
 
@@ -561,7 +694,16 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
 
   typed.get(
     "/api/me/wallet/apple/:purpose.pkpass",
-    { schema: { params: walletPurposeParam } },
+    {
+      ...routeAccess(access.authenticated),
+      preHandler: requireAuth,
+      schema: {
+        summary: "Download my Apple Wallet pass",
+        description:
+          "Authenticated self-service H28 pass issuance. The pass belongs only to the current session's user and is then refreshed by the separate ApplePass web-service token protocol.",
+        params: walletPurposeParam,
+      },
+    },
     async (req, reply) => {
       const { pkpass, passTypeIdentifier, serialNumber } = await buildApplePass(
         actor(req.userId),
@@ -578,7 +720,16 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
 
   typed.get(
     "/api/wallet/apple/v1/passes/:passTypeIdentifier/:serialNumber",
-    { schema: { params: applePassParams } },
+    {
+      ...routeAccess(access.applePasskit),
+      preHandler: requireAppleWebServiceToken,
+      schema: {
+        summary: "PassKit pass refresh",
+        description:
+          "Apple Wallet web-service endpoint. It requires the pass's `Authorization: ApplePass <authenticationToken>` credential; a session cookie is neither accepted nor needed.",
+        params: applePassParams,
+      },
+    },
     async (req, reply) => {
       const { pkpass, modifiedAt } = await buildApplePass(null, null, {
         passTypeIdentifier: req.params.passTypeIdentifier,
@@ -604,7 +755,11 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
 
   typed.post(
     "/api/wallet/apple/v1/devices/:deviceLibraryIdentifier/registrations/:passTypeIdentifier/:serialNumber",
-    { schema: { params: appleDeviceParams, body: appleRegistrationBody } },
+    {
+      ...routeAccess(access.applePasskit),
+      preHandler: requireAppleWebServiceToken,
+      schema: { params: appleDeviceParams, body: appleRegistrationBody },
+    },
     async (req, reply) => {
       const registered = await registerAppleDevice({
         ...req.params,
@@ -617,7 +772,11 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
 
   typed.delete(
     "/api/wallet/apple/v1/devices/:deviceLibraryIdentifier/registrations/:passTypeIdentifier/:serialNumber",
-    { schema: { params: appleDeviceParams } },
+    {
+      ...routeAccess(access.applePasskit),
+      preHandler: requireAppleWebServiceToken,
+      schema: { params: appleDeviceParams },
+    },
     async (req, reply) => {
       await unregisterAppleDevice({ ...req.params, authorization: req.headers.authorization });
       return reply.code(200).send({});
@@ -627,6 +786,8 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   typed.get(
     "/api/wallet/apple/v1/devices/:deviceLibraryIdentifier/registrations/:passTypeIdentifier",
     {
+      ...routeAccess(access.applePasskit),
+      preHandler: requireAppleWebServiceToken,
       schema: {
         params: appleDeviceParams.omit({ serialNumber: true }),
         querystring: appleRegistrationsQuery,
@@ -635,6 +796,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
     async (req, reply) => {
       const r = await appleChangedSerials({
         ...req.params,
+        authorization: req.headers.authorization,
         passesUpdatedSince: req.query.passesUpdatedSince,
       });
       if (r.serialNumbers.length === 0) return reply.code(204).send();
@@ -642,15 +804,35 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
     },
   );
 
-  typed.post("/api/wallet/apple/v1/log", { schema: { body: appleLogBody } }, async (req) =>
-    appleLog(req.body.logs),
+  typed.post(
+    "/api/wallet/apple/v1/log",
+    {
+      ...routeAccess(access.applePasskit),
+      preHandler: requireAppleWebServiceToken,
+      schema: {
+        summary: "PassKit device diagnostics",
+        description:
+          "Apple Wallet device diagnostics authenticated with an ApplePass web-service token. The API records only the device-supplied diagnostic lines.",
+        body: appleLogBody,
+      },
+    },
+    async (req) => appleLog(req.body.logs),
   );
 
   // ── H28 Google Wallet ────────────────────────────────────────────────────
 
   typed.get(
     "/api/me/wallet/google/:purpose",
-    { schema: { params: walletPurposeParam } },
+    {
+      ...routeAccess(access.authenticated),
+      preHandler: requireAuth,
+      schema: {
+        summary: "Create my Google Wallet save URL",
+        description:
+          "Authenticated self-service H28 endpoint returning a signed Google Wallet save URL for the caller's own ticket or badge.",
+        params: walletPurposeParam,
+      },
+    },
     async (req) => ({ saveUrl: await buildGoogleSaveUrl(actor(req.userId), req.params.purpose) }),
   );
 

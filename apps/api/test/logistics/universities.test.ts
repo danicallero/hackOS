@@ -36,6 +36,29 @@ async function getApp(): Promise<App> {
 }
 
 describe("university directory", () => {
+  it("requires a signed-in user to propose and attributes a successful proposal", async () => {
+    const a = await getApp();
+    expect(
+      (
+        await a.inject({
+          method: "POST",
+          url: "/api/public/universities/propose",
+          payload: { name: "Anonymous University" },
+        })
+      ).statusCode,
+    ).toBe(401);
+
+    const proposer = await createUser();
+    const proposed = await a.inject({
+      method: "POST",
+      url: "/api/public/universities/propose",
+      headers: asUser(proposer),
+      payload: { name: "Proposer University" },
+    });
+    expect(proposed.statusCode).toBe(201);
+    expect(proposed.json().proposed_by).toBe(proposer);
+  });
+
   it("requires INTOLERANCES_MANAGE to create or rename", async () => {
     const a = await getApp();
     const pleb = await createUser();
@@ -81,6 +104,18 @@ describe("university directory", () => {
       headers: asUser(manager),
     });
     expect(del.statusCode).toBe(204);
+  });
+
+  it("accepts the administrator wildcard for university management", async () => {
+    const a = await getApp();
+    const admin = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/universities",
+      headers: asUser(admin),
+      payload: { name: "Wildcard University" },
+    });
+    expect(res.statusCode).toBe(201);
   });
 
   it("rejects renaming to an existing name (unique) with 409", async () => {

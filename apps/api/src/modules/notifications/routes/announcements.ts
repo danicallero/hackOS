@@ -5,6 +5,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool, withTransaction } from "../../../db/pool.js";
 import { audit } from "../../../lib/audit.js";
 import { requireAuth, requireCapability } from "../../../lib/capabilities.js";
+import type { RouteAccessPolicy } from "../../../lib/route-policy.js";
 import { broadcast } from "../../../lib/sse.js";
 import {
   createAnnouncement,
@@ -22,6 +23,10 @@ import {
   announcementUpdateBodySchema,
 } from "../schemas.js";
 
+function routeAccess(routeAccessPolicy: RouteAccessPolicy) {
+  return { config: { routeAccessPolicy } };
+}
+
 /**
  * H50 announcements: CRUD behind ANNOUNCEMENTS_MANAGE, a public visibility-windowed
  * feed, and per-user read markers. Create/update broadcast CONTENT_ANNOUNCEMENT on
@@ -30,15 +35,35 @@ import {
  */
 export function registerAnnouncementRoutes(app: FastifyInstance): void {
   const typedApp = app.withTypeProvider<ZodTypeProvider>();
+  const publicAnnouncement = {
+    kind: "public",
+    anonymousCategory: "public-announcement",
+  } as const satisfies RouteAccessPolicy;
+  const authenticated = { kind: "authenticated" } as const satisfies RouteAccessPolicy;
+  const manage = {
+    kind: "capability",
+    capability: CAPABILITIES.ANNOUNCEMENTS_MANAGE,
+  } as const satisfies RouteAccessPolicy;
 
-  typedApp.get("/api/announcements/public", async () => {
-    const items = await listAnnouncementsPublic(pool);
-    return { items };
-  });
+  typedApp.get(
+    "/api/announcements/public",
+    {
+      ...routeAccess(publicAnnouncement),
+      schema: {
+        summary: "Published announcements",
+        description:
+          "Anonymous H50 announcement feed. It contains only announcements inside their configured publication and expiry window.",
+      },
+    },
+    async () => {
+      const items = await listAnnouncementsPublic(pool);
+      return { items };
+    },
+  );
 
   typedApp.get(
     "/api/announcements",
-    { preHandler: requireCapability(CAPABILITIES.ANNOUNCEMENTS_MANAGE) },
+    { ...routeAccess(manage), preHandler: requireCapability(CAPABILITIES.ANNOUNCEMENTS_MANAGE) },
     async () => {
       const items = await listAnnouncementsAdmin(pool);
       return { items };
@@ -48,6 +73,7 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
   typedApp.get(
     "/api/announcements/:id",
     {
+      ...routeAccess(manage),
       preHandler: requireCapability(CAPABILITIES.ANNOUNCEMENTS_MANAGE),
       schema: { params: announcementIdParamsSchema },
     },
@@ -59,6 +85,7 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
   typedApp.post(
     "/api/announcements",
     {
+      ...routeAccess(manage),
       preHandler: requireCapability(CAPABILITIES.ANNOUNCEMENTS_MANAGE),
       schema: { body: announcementBodySchema },
     },
@@ -91,6 +118,7 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
   typedApp.put(
     "/api/announcements/:id",
     {
+      ...routeAccess(manage),
       preHandler: requireCapability(CAPABILITIES.ANNOUNCEMENTS_MANAGE),
       schema: { params: announcementIdParamsSchema, body: announcementUpdateBodySchema },
     },
@@ -124,6 +152,7 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
   typedApp.delete(
     "/api/announcements/:id",
     {
+      ...routeAccess(manage),
       preHandler: requireCapability(CAPABILITIES.ANNOUNCEMENTS_MANAGE),
       schema: { params: announcementIdParamsSchema },
     },
@@ -144,7 +173,11 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
 
   typedApp.post(
     "/api/announcements/:id/read",
-    { preHandler: requireAuth, schema: { params: announcementIdParamsSchema } },
+    {
+      ...routeAccess(authenticated),
+      preHandler: requireAuth,
+      schema: { params: announcementIdParamsSchema },
+    },
     async (req) => {
       await markAnnouncementRead(pool, req.userId as number, req.params.id);
       return { ok: true };
