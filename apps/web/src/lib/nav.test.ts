@@ -100,6 +100,12 @@ describe("admin wildcard (H8)", () => {
 });
 
 describe("capability-gated workspace, no association or wildcard", () => {
+  it("gives a decision-only account the Applications workspace without builder or reviewer capability", () => {
+    const ctx = contextFor([CAPABILITIES.APPLICATIONS_DECIDE]);
+    expect(visibleWorkspaceIds(ctx)).toEqual(["applications"]);
+    expect(visibleHrefs(ctx)).toEqual(["/applications"]);
+  });
+
   it("a bare accreditation scanner only sees Logistics", () => {
     const ctx = contextFor([CAPABILITIES.ACCREDIT_SCAN]);
     expect(visibleWorkspaceIds(ctx)).toEqual(["logistics"]);
