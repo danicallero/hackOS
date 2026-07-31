@@ -107,3 +107,81 @@ longer than the deterministic component suite.
 The initial contract covers sign-in/session continuity (H4) and the shared
 mobile experience (H55); it is intentionally small so future domain flows can
 be added without creating a second selector vocabulary.
+
+## Screenshots on UI PRs
+
+**A PR that changes what a screen looks like ships screenshots in a PR
+comment.** Component tests prove behaviour, not appearance: a card can pass
+every assertion and still have an icon two points off the title's centre line.
+Most reviewers are not going to spend 15 minutes compiling a dev client to see
+a spacing change, so a PR without pictures gets reviewed on the diff alone —
+which is exactly how alignment and truncation bugs survive review.
+
+This applies to `apps/mobile` and `apps/web` alike, and to agents as much as
+humans. Show the states that changed: for a collapse/expand affordance that is
+collapsed **and** expanded; for a toggle, both positions; for anything
+conditional, the case where the new UI is absent. Screenshots of a running app
+are the point — mockups and cropped design files are not a substitute.
+
+### Native: build, drive, capture
+
+```sh
+# 1. Point the build at a local API. Check the port is free first: other
+#    worktrees on the same machine may already hold :3000/:3001.
+lsof -nP -iTCP:3000 -sTCP:LISTEN
+printf 'EXPO_PUBLIC_API_URL=http://127.0.0.1:3005\n' > apps/mobile/.env
+cd apps/api && PORT=3005 BETTER_AUTH_URL=http://127.0.0.1:3005 WORKERS_INLINE=1 pnpm dev
+
+# 2. Build and launch the dev client (first run compiles RN from source, ~15 min)
+cd apps/mobile && APP_VARIANT=development pnpm exec expo run:ios --device "iPhone 17 Pro"
+
+# 3. Drive it — Orca's simulator helper, normalized 0..1 coordinates
+orca emulator attach <device-udid>
+orca emulator tap 0.5 0.296
+orca emulator type "you@example.com"
+orca emulator gesture '[{"type":"begin","x":0.5,"y":0.78},{"type":"move","x":0.5,"y":0.3},{"type":"end","x":0.5,"y":0.25}]'
+
+# 4. Capture
+xcrun simctl io booted screenshot shot.png
+```
+
+Gotchas that cost real time:
+
+- **Gesture points use `type`, not `phase`** — `begin` / `move` / `end`. A
+  single `tap` cannot scroll a `SectionList`; use `gesture`.
+- **Seeded rows won't appear** until the versioned read cache is bumped:
+  `docker exec hackos-valkey-1 valkey-cli INCR read-cache:version`. Schedule
+  rows also need `visibility = 'shown'`, not `'public'`.
+- **Sign-in needs `mobileAccess`** (`apps/api/src/modules/identity/mobile-access.ts`):
+  a fresh account bounces straight back to the form unless it has an accepted
+  `application_responses` row or any capability. The bounce is silent, so
+  check the API log rather than guessing.
+- **Running Metro writes `apps/mobile/.expo/types/router.d.ts`**, which narrows
+  `router.push()` and makes `pnpm typecheck` fail on pre-existing call sites.
+  `rm -rf apps/mobile/.expo/types` before typechecking. Never commit `.env`.
+
+Detox (`e2e/mobile`) is the alternative when a flow is worth keeping as a
+spec — `device.takeScreenshot()` writes to the artifacts directory. Prefer it
+when you would otherwise repeat the same manual drive on every revision.
+
+### Posting them
+
+GitHub only accepts image uploads through the web UI, so a CLI agent has to
+host the files itself. Push them to a throwaway `assets/<slug>` branch and
+link the raw URLs:
+
+```sh
+gh api repos/<owner>/<repo>/git/refs \
+  -f ref=refs/heads/assets/<slug> -f sha="$(git rev-parse HEAD)"
+# Build the payload with a script: a shell "$(base64 …)" argument is large
+# enough that gh rejects it as invalid Base64 (422).
+gh api -X PUT repos/<owner>/<repo>/contents/.screenshots/<name>.png --input payload.json
+gh pr comment <number> --body-file comment.md
+```
+
+Resize to ~600px wide before uploading and lay the states out in a table with
+`<img … width="260">` so the comment stays readable. **The raw links break the
+moment that branch is deleted**, so keep it alive until the PR is merged and
+reviewers are done — then delete it knowing the images in the comment go with
+it. Write the comment so its text still says what each screenshot showed.
+Screenshots never belong on the code branch itself.

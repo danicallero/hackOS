@@ -105,6 +105,11 @@ Concrete triggers — if your change does X, update Y:
 | Worker registration or tick cadence (`registerWorker`) | `docs/background-workers.md`'s queue table |
 | A conflict between `plan/` and any other doc | Nothing in `plan/` — it's read-only and wins by definition. Fix the other doc, or flag the conflict to a human if `plan/` itself looks wrong. |
 
+A change to what a screen looks like is not done until reviewers can see it:
+run the app and post screenshots of the changed states in a PR comment
+(`docs/ui-testing.md` § Screenshots on UI PRs). Passing component tests do not
+substitute — they assert behaviour, not spacing or alignment.
+
 New routes are not exempt from having real docs: a route registered without an
 explicit `description` in its schema shows a visible
 `"No description yet — add one to this route's schema."` placeholder in
