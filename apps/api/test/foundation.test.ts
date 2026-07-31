@@ -56,7 +56,16 @@ describe("foundation", () => {
     expect(spec.paths["/api/auth/sign-in/email"].post.tags).toEqual(["auth"]);
     expect(spec.paths["/api/auth/get-session"].get.tags).toEqual(["auth"]);
     expect(spec.paths["/api/auth/{*}"]).toBeUndefined();
-    expect(spec.paths["/healthz"].get.security).toBeUndefined();
+    expect(spec.paths["/healthz"].get.security).toEqual([]);
+    expect(spec.paths["/api/tv/stream"].get.security).toEqual([]);
+    expect(spec.paths["/api/queue/stream"].get.security).toEqual([
+      { sessionToken: [] },
+      { bearerToken: [] },
+    ]);
+    expect(spec.paths["/api/events/stream"].get.security).toEqual([
+      { sessionToken: [] },
+      { bearerToken: [] },
+    ]);
 
     const ui = await app.inject({ method: "GET", url: "/documentation/" });
     expect(ui.statusCode).toBe(200);

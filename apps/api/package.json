@@ -12,6 +12,7 @@
     "seed": "tsx scripts/seed.ts",
     "superadmin:create": "tsx scripts/create-superadmin.ts",
     "superadmin:grant": "node scripts/grant-superadmin.mjs",
+    "route-policy:audit": "tsx scripts/route-policy-audit.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },

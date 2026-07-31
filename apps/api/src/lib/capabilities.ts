@@ -1,30 +1,29 @@
-import { CAPABILITIES, type Capability } from "@hackos/shared/capabilities";
+import { ALL_CAPABILITIES, CAPABILITIES, type Capability } from "@hackos/shared/capabilities";
 import type { FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastify";
 import { pool } from "../db/pool.js";
-import { ForbiddenError, UnauthorizedError } from "./errors.js";
-import { valkey } from "./valkey.js";
+import { BadRequestError, ForbiddenError, UnauthorizedError } from "./errors.js";
 
 /**
  * Capability resolution (H8). Effective capabilities of a user =
  * capabilities of every group they belong to, expanded through nested
  * group includes (groups of groups). `*` grants everything.
  *
- * Cached in Valkey for CACHE_TTL_S; permission mutations must call
- * `invalidateCapabilities(userId)` (or `invalidateAllCapabilities()` when a
- * group definition changes) so revocation takes effect immediately (plan/07:
- * permission checks live at the boundary, by capability, never by role).
+ * Authorization always reads PostgreSQL. A request-local promise prevents
+ * repeated recursive queries by stacked preHandlers without leaving a stale
+ * cross-request window after revocation (H8, H53).
  */
-
-const CACHE_TTL_S = 30;
-const cacheKey = (userId: number) => `caps:${userId}`;
-
-export async function getEffectiveCapabilities(userId: number): Promise<Set<string>> {
-  const cached = await valkey.get(cacheKey(userId));
-  if (cached) return new Set(JSON.parse(cached) as string[]);
-
-  const result = await pool.query(
-    `WITH RECURSIVE user_groups AS (
-       SELECT group_id FROM permission_group_members WHERE user_id = $1
+export async function getEffectiveCapabilities(
+  userId: number,
+  request?: FastifyRequest,
+): Promise<Set<string>> {
+  if (request?.effectiveCapabilities) return request.effectiveCapabilities;
+  const resolve = async (): Promise<Set<string>> => {
+    const result = await pool.query(
+      `WITH RECURSIVE user_groups AS (
+       SELECT pgm.group_id
+       FROM users u
+       JOIN permission_group_members pgm ON pgm.user_id = u.id
+       WHERE u.id = $1 AND u.anonymized_at IS NULL
        UNION
        SELECT gi.child_group_id
        FROM permission_group_includes gi
@@ -33,26 +32,44 @@ export async function getEffectiveCapabilities(userId: number): Promise<Set<stri
      SELECT DISTINCT gc.capability
      FROM group_capabilities gc
      JOIN user_groups ug ON ug.group_id = gc.group_id`,
-    [userId],
-  );
-  const caps = result.rows.map((r: { capability: string }) => r.capability);
-  await valkey.set(cacheKey(userId), JSON.stringify(caps), "EX", CACHE_TTL_S);
-  return new Set(caps);
+      [userId],
+    );
+    return new Set(result.rows.map((r: { capability: string }) => r.capability));
+  };
+  const capabilities = resolve();
+  if (request) request.effectiveCapabilities = capabilities;
+  return capabilities;
 }
 
-export async function userHasCapability(userId: number, capability: Capability): Promise<boolean> {
-  const caps = await getEffectiveCapabilities(userId);
+export async function userHasCapability(
+  userId: number,
+  capability: Capability,
+  request?: FastifyRequest,
+): Promise<boolean> {
+  const caps = await getEffectiveCapabilities(userId, request);
   return caps.has(capability) || caps.has(CAPABILITIES.ADMIN_ALL);
 }
 
-export async function invalidateCapabilities(userId: number): Promise<void> {
-  await valkey.del(cacheKey(userId));
+/** Reject arbitrary persisted grants before they can reach PostgreSQL. */
+export function assertKnownCapabilities(
+  capabilities: readonly string[],
+): asserts capabilities is Capability[] {
+  const unknown = capabilities.filter(
+    (capability) => !ALL_CAPABILITIES.includes(capability as Capability),
+  );
+  if (unknown.length > 0) {
+    throw new BadRequestError("Unknown capability", { unknownCapabilities: unknown });
+  }
 }
 
-/** Group definitions changed (capabilities or includes): flush every entry. */
+/**
+ * Compatibility no-ops for mutation callers. PostgreSQL is the authorization
+ * source on every request, so committed revocations need no cache invalidation.
+ */
+export async function invalidateCapabilities(_userId: number): Promise<void> {}
+
 export async function invalidateAllCapabilities(): Promise<void> {
-  const keys = await valkey.keys("caps:*");
-  if (keys.length) await valkey.del(...keys);
+  return;
 }
 
 /**
@@ -62,7 +79,7 @@ export async function invalidateAllCapabilities(): Promise<void> {
 export function requireCapability(capability: Capability): preHandlerHookHandler {
   return async (req: FastifyRequest, _reply: FastifyReply) => {
     if (req.userId == null) throw new UnauthorizedError();
-    if (!(await userHasCapability(req.userId, capability))) {
+    if (!(await userHasCapability(req.userId, capability, req))) {
       throw new ForbiddenError(`Missing capability: ${capability}`, { capability });
     }
   };
@@ -77,7 +94,7 @@ export function requireAnyCapability(...capabilities: Capability[]): preHandlerH
   return async (req: FastifyRequest, _reply: FastifyReply) => {
     if (req.userId == null) throw new UnauthorizedError();
     for (const cap of capabilities) {
-      if (await userHasCapability(req.userId, cap)) return;
+      if (await userHasCapability(req.userId, cap, req)) return;
     }
     throw new ForbiddenError(`Missing one of capabilities: ${capabilities.join(", ")}`, {
       capabilities,

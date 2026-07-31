@@ -17,6 +17,7 @@ import { pool } from "./db/pool.js";
 import { AppError } from "./lib/errors.js";
 import { idempotencyOnSend } from "./lib/idempotency.js";
 import { cacheJson, invalidateReadCache, readCachedJson, readCacheKey } from "./lib/read-cache.js";
+import { openApiSecurityForPolicy, registerRoutePolicyInfrastructure } from "./lib/route-policy.js";
 import { broadcast } from "./lib/sse.js";
 import { valkey } from "./lib/valkey.js";
 import { registerModules } from "./modules/index.js";
@@ -43,20 +44,6 @@ const TAG_DESCRIPTIONS: Record<string, string> = {
   api: "Everything not yet grouped under a more specific tag above.",
 };
 
-const PUBLIC_OPERATIONS = new Set([
-  "GET /healthz",
-  "GET /api/public/activities",
-  "GET /api/public/challenges",
-  "GET /api/public/sponsors",
-  "GET /api/announcements/public",
-  "GET /api/tv/mode",
-  "GET /api/tv/rooms",
-  "GET /api/queue/stream",
-  "GET /api/tv/stream",
-  "GET /api/content/stream",
-  "GET /api/events/stream",
-]);
-
 function docsTagFor(url: string): string {
   if (url === "/healthz") return "foundation";
   if (url.startsWith("/api/public/")) return "public";
@@ -77,11 +64,6 @@ function docsTagFor(url: string): string {
     return "notifications";
   if (url.startsWith("/api/audit")) return "audit";
   return "api";
-}
-
-function needsAuth(url: string, method: string): boolean {
-  if (url.startsWith("/api/auth/")) return false;
-  return !PUBLIC_OPERATIONS.has(`${method} ${url}`);
 }
 
 function addAuthOperation(
@@ -232,6 +214,10 @@ export async function buildApp(): Promise<App> {
         },
   }).withTypeProvider<ZodTypeProvider>();
 
+  // Every application route is part of the machine-readable access ledger.
+  // Startup fails closed if a route is added without an explicit policy; the
+  // Better Auth generated catch-all is the sole narrow exemption.
+  registerRoutePolicyInfrastructure(app, { enforce: true });
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
 
@@ -355,8 +341,9 @@ export async function buildApp(): Promise<App> {
         // adding `description` to the route's schema (CLAUDE.md doc rule).
         schema.description = "No description yet — add one to this route's schema.";
       }
-      if (needsAuth(transformed.url, method) && !("security" in schema)) {
-        schema.security = [{ sessionToken: [] }, { bearerToken: [] }];
+      const policy = input.route?.config?.routeAccessPolicy;
+      if (policy) {
+        schema.security = openApiSecurityForPolicy(policy);
       }
 
       return { ...transformed, schema };
@@ -394,6 +381,9 @@ export async function buildApp(): Promise<App> {
   app.get(
     "/healthz",
     {
+      config: {
+        routeAccessPolicy: { kind: "public", anonymousCategory: "health" },
+      },
       schema: {
         description:
           "Liveness/readiness probe. Round-trips Postgres and Valkey; returns " +
