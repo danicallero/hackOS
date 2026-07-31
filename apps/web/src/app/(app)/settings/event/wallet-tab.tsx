@@ -268,9 +268,14 @@ function PassPreview({
           </p>
           <dl className="space-y-1.5">
             {visibleFronts.map(({ key, titleKey }) => (
-              <div key={key} className="flex items-baseline justify-between gap-2 text-sm">
-                <dt className="text-muted-foreground">{labels[key] || t(titleKey)}</dt>
-                <dd className="truncate font-medium">{sample[key]}</dd>
+              <div
+                key={key}
+                className="grid min-w-0 grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] items-start gap-2 text-sm"
+              >
+                <dt className="text-muted-foreground min-w-0 break-words text-pretty">
+                  {labels[key] || t(titleKey)}
+                </dt>
+                <dd className="min-w-0 break-words text-pretty font-medium">{sample[key]}</dd>
               </div>
             ))}
           </dl>
@@ -281,16 +286,27 @@ function PassPreview({
           </p>
           <dl className="space-y-1.5">
             {builtinBack.map((f) => (
-              <div key={f.caption} className="flex items-baseline justify-between gap-2 text-sm">
-                <dt className="text-muted-foreground">{f.caption}</dt>
-                <dd className="truncate font-medium">{f.value}</dd>
+              <div
+                key={f.caption}
+                className="grid min-w-0 grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] items-start gap-2 text-sm"
+              >
+                <dt className="text-muted-foreground min-w-0 break-words text-pretty">
+                  {f.caption}
+                </dt>
+                <dd className="min-w-0 break-words text-pretty font-medium">{f.value}</dd>
               </div>
             ))}
-            {backFields.map((f, i) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: mirrors the positional editor rows.
-              <div key={i} className="flex items-baseline justify-between gap-2 text-sm">
-                <dt className="text-muted-foreground truncate">{f.label || t("notSetYet")}</dt>
-                <dd className="truncate font-medium">{f.value || t("notSetYet")}</dd>
+            {backFields.map((f) => (
+              <div
+                key={`${f.label}-${f.value}`}
+                className="grid min-w-0 grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] items-start gap-2 text-sm"
+              >
+                <dt className="text-muted-foreground min-w-0 break-words text-pretty">
+                  {f.label || t("notSetYet")}
+                </dt>
+                <dd className="min-w-0 break-words text-pretty font-medium">
+                  {f.value || t("notSetYet")}
+                </dd>
               </div>
             ))}
           </dl>

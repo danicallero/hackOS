@@ -1,6 +1,7 @@
 "use client";
 
 import { applicantTimelineState } from "@/app/(app)/applications/workflow";
+import { SectionCard } from "@/components/common/section-card";
 import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { MyResponseDetail } from "../lib";
@@ -20,10 +21,7 @@ export function ApplicationTimeline({ response }: { response: MyResponseDetail |
   const currentStep = currentIndex === -1 ? steps.length - 1 : currentIndex;
 
   return (
-    <section aria-labelledby="application-timeline-title" className="rounded-lg border p-4">
-      <h2 id="application-timeline-title" className="text-balance text-sm font-semibold">
-        {t("applicantTimeline")}
-      </h2>
+    <SectionCard title={t("applicantTimeline")} bodyClassName="p-4 sm:p-5">
       <ol className="mt-3 grid gap-2 sm:grid-cols-5">
         {steps.map((step, index) => (
           <li
@@ -48,7 +46,7 @@ export function ApplicationTimeline({ response }: { response: MyResponseDetail |
           </li>
         ))}
       </ol>
-    </section>
+    </SectionCard>
   );
 }
 

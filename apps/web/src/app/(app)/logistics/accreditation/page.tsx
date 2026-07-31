@@ -290,8 +290,8 @@ function AccreditationPanel({ onAccredited }: { onAccredited: () => void }) {
               bodyClassName="space-y-4"
             >
               <div className="space-y-2">
-                <Label>{t("currentBadgeLabel")}</Label>
-                <Input value={card.currentBadge ?? ""} readOnly disabled />
+                <Label htmlFor="current-badge">{t("currentBadgeLabel")}</Label>
+                <Input id="current-badge" value={card.currentBadge ?? ""} readOnly disabled />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="new-badge">{t("newBadgeLabel")}</Label>
@@ -335,15 +335,15 @@ function AccreditationPanel({ onAccredited }: { onAccredited: () => void }) {
                 />
               </div>
               <div className="space-y-2">
-                <Label>{t("methodLabel")}</Label>
+                <Label htmlFor="accreditation-method">{t("methodLabel")}</Label>
                 <Select value={method} onValueChange={(v) => setMethod(v as typeof method)}>
-                  <SelectTrigger>
+                  <SelectTrigger id="accreditation-method" className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="qr">QR</SelectItem>
+                    <SelectItem value="qr">{t("scanMethodQr")}</SelectItem>
                     <SelectItem value="manual">{t("manual")}</SelectItem>
-                    <SelectItem value="nfc">NFC</SelectItem>
+                    <SelectItem value="nfc">{t("scanMethodNfc")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

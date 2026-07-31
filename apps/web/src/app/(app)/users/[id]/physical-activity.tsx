@@ -14,11 +14,20 @@ import { useLocale } from "@/lib/i18n";
 import type { ActivityPass, UserActivity } from "./logs-tab";
 import { timeFmt } from "./shared";
 
-export function PhysicalActivity({ userId }: { userId: number }) {
+export function PhysicalActivity({
+  userId,
+  refreshKey,
+  embedded = false,
+}: {
+  userId: number;
+  refreshKey?: number;
+  embedded?: boolean;
+}) {
   const { t } = useLocale();
   const [data, setData] = useState<UserActivity | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey is a ping-only nonce from the profile event stream.
   useEffect(() => {
     let cancelled = false;
     setState("loading");
@@ -36,7 +45,7 @@ export function PhysicalActivity({ userId }: { userId: number }) {
     return () => {
       cancelled = true;
     };
-  }, [userId]);
+  }, [userId, refreshKey]);
 
   if (state === "loading") {
     return (
@@ -78,21 +87,25 @@ export function PhysicalActivity({ userId }: { userId: number }) {
     },
   ];
 
+  const table = (
+    <DataTable
+      columns={passColumns}
+      data={data.passes}
+      getRowId={(p) => String(p.id)}
+      pageSize={10}
+      empty={{
+        icon: ClipboardListIcon,
+        title: t("noPassesYet"),
+        description: t("passesWillAppear"),
+      }}
+    />
+  );
+
+  if (embedded) return table;
+
   return (
-    <div className="space-y-6">
-      <SectionCard icon={ClipboardListIcon} title={t("activityPasses")} bodyClassName="p-0">
-        <DataTable
-          columns={passColumns}
-          data={data.passes}
-          getRowId={(p) => String(p.id)}
-          pageSize={10}
-          empty={{
-            icon: ClipboardListIcon,
-            title: t("noPassesYet"),
-            description: t("passesWillAppear"),
-          }}
-        />
-      </SectionCard>
-    </div>
+    <SectionCard icon={ClipboardListIcon} title={t("activityPasses")} bodyClassName="p-0">
+      {table}
+    </SectionCard>
   );
 }

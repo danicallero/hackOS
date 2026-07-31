@@ -9,7 +9,9 @@ import type { PublicScheduleItem } from "@/lib/logistics";
 import { cn } from "@/lib/utils";
 
 const HOUR_HEIGHT = 72;
-const MIN_ITEM_HEIGHT = 52;
+// Keep enough vertical room for a wrapped title and location at narrow lanes.
+// The card remains expandable so long values are never hidden by an ellipsis.
+const MIN_ITEM_HEIGHT = 76;
 const LANE_GAP = 8;
 
 interface PositionedItem {
@@ -205,7 +207,7 @@ export function ScheduleTimeline({
                           : undefined
                       }
                       className={cn(
-                        "absolute overflow-hidden rounded-lg border bg-card shadow-sm",
+                        "absolute overflow-visible rounded-lg border bg-card shadow-sm",
                         active && "border-primary bg-primary/5",
                         passed && "opacity-60",
                       )}
@@ -213,12 +215,14 @@ export function ScheduleTimeline({
                     >
                       <button
                         type="button"
-                        className="size-full cursor-pointer px-3 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                        className="min-h-full w-full cursor-pointer px-3 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                         onClick={() => setSelectedItem(item)}
                       >
                         <div className="flex min-w-0 items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <h3 className="truncate text-sm font-medium">{item.title}</h3>
+                            <h3 className="break-words text-pretty text-sm font-medium">
+                              {item.title}
+                            </h3>
                             <p className="text-muted-foreground mt-0.5 flex flex-wrap gap-x-3 text-xs tabular-nums">
                               <span className="inline-flex items-center gap-1">
                                 <Clock3Icon className="size-3" aria-hidden="true" />
@@ -226,7 +230,7 @@ export function ScheduleTimeline({
                                 {timeFormatter.format(new Date(ends))}
                               </span>
                               {item.location && (
-                                <span className="inline-flex min-w-0 items-center gap-1 truncate">
+                                <span className="inline-flex min-w-0 items-start gap-1 break-words text-pretty">
                                   <MapPinIcon className="size-3 shrink-0" aria-hidden="true" />
                                   {item.location}
                                 </span>

@@ -27,6 +27,33 @@ const LOCALE_RE =
 const STORY_ID_RE = /\bH\d{1,3}(?:-H\d{1,3})?\b/;
 const CAP_KEY_RE = /\b[a-z][a-z_]{2,}:[a-z][a-z_]{2,}\b/;
 
+// Focused guards for the audited UI surfaces (H55). This is intentionally
+// small and evidence-based: broad JSX-literal matching would flag technical
+// values, test fixtures, and product names as copy. New user-facing variants
+// on these surfaces should go through the locale dictionary.
+const RAW_COPY_GUARDS = [
+  {
+    file: "apps/web/src/app/(app)/challenges/builders.tsx",
+    pattern: /placeholder\s*=\s*["']innovation["']/,
+    message: "the field-key example must use i18n",
+  },
+  {
+    file: "apps/web/src/app/(app)/settings/libraries/universities-manager.tsx",
+    pattern: /placeholder\s*=\s*["']Universidade de Santiago de Compostela["']/,
+    message: "the university example must use i18n",
+  },
+  {
+    file: "apps/web/src/app/(app)/logistics/accreditation/page.tsx",
+    pattern: /<SelectItem value=["'](?:qr|nfc)["']>\s*(?:QR|NFC)\s*<\//,
+    message: "scanner method labels must use i18n",
+  },
+  {
+    file: "apps/web/src/app/(app)/users/[id]/overview-tab.tsx",
+    pattern: /(?:label\s*=\s*["']DNI["']|<FormLabel>DNI<\/)/,
+    message: "identity labels must use i18n",
+  },
+];
+
 // Short/technical strings that are legitimately identical across locales
 // (product name, punctuation-only, numeric placeholders, URLs, etc.).
 function isPlausiblyUntranslated(a, b, minLen) {
@@ -81,6 +108,13 @@ for (const { file } of TARGETS) {
         `${file}: "${key}" — gl matches en verbatim (looks untranslated): ${JSON.stringify(values.en)}`,
       );
     }
+  }
+}
+
+for (const guard of RAW_COPY_GUARDS) {
+  const src = readFileSync(guard.file, "utf8");
+  if (guard.pattern.test(src)) {
+    failures.push(`${guard.file}: ${guard.message}`);
   }
 }
 

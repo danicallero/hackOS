@@ -300,7 +300,7 @@ export function JudgingPanelBuilder({
               <Field label={t("fieldKeyLabel")} hint={t("fieldKeyHint")}>
                 <Input
                   value={question.key}
-                  placeholder="innovation"
+                  placeholder={t("fieldKeyPlaceholder")}
                   onChange={(event) =>
                     update(index, { ...question, key: slug(event.target.value) })
                   }

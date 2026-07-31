@@ -314,9 +314,9 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
               </div>
             </div>
             <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_minmax(180px,0.8fr)_140px]">
-              <Field label={t("colActivity")}>
+              <Field id="activity-scan-activity" label={t("colActivity")}>
                 <Select value={activityId} onValueChange={setActivityId}>
-                  <SelectTrigger>
+                  <SelectTrigger id="activity-scan-activity" className="w-full">
                     <SelectValue
                       placeholder={isMeal ? t("chooseMeal") : t("chooseActivityOption")}
                     />
@@ -330,9 +330,10 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
                   </SelectContent>
                 </Select>
               </Field>
-              <Field label={t("badge")}>
+              <Field id="activity-scan-badge" label={t("badge")}>
                 <div className="flex gap-2">
                   <Input
+                    id="activity-scan-badge"
                     value={badgeId}
                     onChange={(e) => setBadgeId(e.target.value)}
                     placeholder={t("badgePlaceholder")}

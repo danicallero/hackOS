@@ -88,7 +88,7 @@ export function InviteUserDialog() {
       }}
       trigger={
         <Button>
-          <UserPlusIcon className="size-4" /> {t("inviteUser")}
+          <UserPlusIcon className="size-4" aria-hidden="true" /> {t("inviteUser")}
         </Button>
       }
       icon={UserPlusIcon}
@@ -116,12 +116,14 @@ export function InviteUserDialog() {
               type="button"
               variant="outline"
               size="icon"
+              aria-label={t("copyInviteLink")}
+              title={t("copyInviteLink")}
               onClick={() => {
                 navigator.clipboard.writeText(claimUrl);
                 toast.success(t("copied"));
               }}
             >
-              <CopyIcon className="size-4" />
+              <CopyIcon className="size-4" aria-hidden="true" />
             </Button>
           </div>
         </div>
@@ -138,7 +140,7 @@ export function InviteUserDialog() {
             />
           </div>
           <div className="space-y-2">
-            <Label>{t("accountTypeLabel")}</Label>
+            <Label htmlFor="invite-kind">{t("accountTypeLabel")}</Label>
             <Select
               value={kind}
               onValueChange={(v) => {
@@ -150,7 +152,7 @@ export function InviteUserDialog() {
                 if (next !== "staff") setGroupIds([]);
               }}
             >
-              <SelectTrigger className="w-full">
+              <SelectTrigger id="invite-kind" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -162,9 +164,9 @@ export function InviteUserDialog() {
           </div>
           {kind === "sponsor" && (
             <div className="space-y-2">
-              <Label>{t("enterpriseLabel")}</Label>
+              <Label htmlFor="invite-enterprise">{t("enterpriseLabel")}</Label>
               <Select value={enterpriseId} onValueChange={setEnterpriseId}>
-                <SelectTrigger className="w-full">
+                <SelectTrigger id="invite-enterprise" className="w-full">
                   <SelectValue placeholder={t("selectSponsorEnterprise")} />
                 </SelectTrigger>
                 <SelectContent>
@@ -184,9 +186,10 @@ export function InviteUserDialog() {
               staff capabilities. groupIds is still POSTed (empty []) for them. */}
           {kind === "staff" && (
             <div className="space-y-2">
-              <Label>{t("capabilityGroupsLabel")}</Label>
+              <Label htmlFor="invite-capability-groups">{t("capabilityGroupsLabel")}</Label>
               <MultiSelect
                 inDialog
+                id="invite-capability-groups"
                 options={groups.map((g) => ({ value: String(g.id), label: g.name }))}
                 value={groupIds}
                 onChange={setGroupIds}
