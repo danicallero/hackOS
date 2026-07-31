@@ -15,7 +15,8 @@ import {
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
 import { PageHeader } from "@/components/common/page-header";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TabBar } from "@/components/common/tab-bar";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useLocale } from "@/lib/i18n";
 import {
   confirmDiscardUnsavedChanges,
@@ -77,16 +78,14 @@ export default function EventSettingsPage() {
         <PageHeader title={t("eventSettings")} />
 
         <Tabs value={tab} onValueChange={changeTab}>
-          <div className="max-w-full overflow-x-auto">
-            <TabsList className="w-max min-w-full">
-              <TabsTrigger value="event">{t("eventTitle")}</TabsTrigger>
-              <TabsTrigger value="schedule">{t("scheduleSectionTitle")}</TabsTrigger>
-              <TabsTrigger value="venue">{t("venueSectionTitle")}</TabsTrigger>
-              <TabsTrigger value="wallet">{t("walletPassSectionTitle")}</TabsTrigger>
-              <TabsTrigger value="judging">{t("judgingWindowTitle")}</TabsTrigger>
-              <TabsTrigger value="presence">{t("presencePolicyTitle")}</TabsTrigger>
-            </TabsList>
-          </div>
+          <TabBar className="w-full">
+            <TabsTrigger value="event">{t("eventTitle")}</TabsTrigger>
+            <TabsTrigger value="schedule">{t("scheduleSectionTitle")}</TabsTrigger>
+            <TabsTrigger value="venue">{t("venueSectionTitle")}</TabsTrigger>
+            <TabsTrigger value="wallet">{t("walletPassSectionTitle")}</TabsTrigger>
+            <TabsTrigger value="judging">{t("judgingWindowTitle")}</TabsTrigger>
+            <TabsTrigger value="presence">{t("presencePolicyTitle")}</TabsTrigger>
+          </TabBar>
 
           <TabsContent value="event" className="pt-4">
             <IdentityTab icon={TagIcon} onDirtyChange={(dirty) => setDirty("event", dirty)} />

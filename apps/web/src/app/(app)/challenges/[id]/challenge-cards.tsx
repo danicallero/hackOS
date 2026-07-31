@@ -24,6 +24,7 @@ import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
+import { TabBar } from "@/components/common/tab-bar";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -42,7 +43,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { ApiError, api } from "@/lib/api";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { API_URL } from "@/lib/env";
@@ -221,14 +222,14 @@ export function EditCard({
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <Tabs defaultValue="content">
-          <TabsList className="w-full max-w-2xl flex-wrap">
+          <TabBar className="w-full max-w-2xl">
             <TabsTrigger value="content">{t("contentTabLabel")}</TabsTrigger>
             <TabsTrigger value="prizes">{t("prizesTabLabel")}</TabsTrigger>
             <TabsTrigger value="judging">{t("judgingTabLabel")}</TabsTrigger>
             <TabsTrigger value="winners">{t("winnersTabLabel")}</TabsTrigger>
             <TabsTrigger value="publish">{t("publishTabLabel")}</TabsTrigger>
             <TabsTrigger value="history">{t("historyTabLabel")}</TabsTrigger>
-          </TabsList>
+          </TabBar>
 
           <TabsContent value="content" className="pt-4">
             <SectionCard icon={TrophyIcon} title={t("challengeLabel")}>

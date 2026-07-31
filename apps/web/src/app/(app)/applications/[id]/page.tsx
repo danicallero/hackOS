@@ -25,7 +25,8 @@ import { EmptyState } from "@/components/common/empty-state";
 import { Spinner } from "@/components/common/spinner";
 import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TabBar } from "@/components/common/tab-bar";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
@@ -150,12 +151,12 @@ export default function ApplicationDetailPage() {
       {canStats && stats && <StatsStrip stats={stats} />}
 
       <Tabs defaultValue={defaultTab}>
-        <TabsList className="h-auto w-full justify-start overflow-x-auto">
+        <TabBar className="w-full justify-start">
           {canManage && <TabsTrigger value="builder">{t("formTabLabel")}</TabsTrigger>}
           {canReview && <TabsTrigger value="review">{t("workspaceReview")}</TabsTrigger>}
           {canDecide && <TabsTrigger value="outbox">{t("workspaceOutbox")}</TabsTrigger>}
           {canDecide && <TabsTrigger value="sent">{t("workspaceSentDecisions")}</TabsTrigger>}
-        </TabsList>
+        </TabBar>
 
         {canManage && (
           <TabsContent value="builder" className="space-y-6 pt-2">

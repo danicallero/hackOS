@@ -8,8 +8,9 @@ import { PageHeader } from "@/components/common/page-header";
 import { QrCode } from "@/components/common/qr-code";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
+import { TabBar } from "@/components/common/tab-bar";
 import { WalletButtons, type WalletPurpose } from "@/components/common/wallet-buttons";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { ApiError } from "@/lib/api";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { logisticsApi, type TicketQrPayload } from "@/lib/logistics";
@@ -72,10 +73,10 @@ export default function WalletPage() {
       <PageHeader title={t("wallet")} />
 
       <Tabs value={purpose} onValueChange={(value) => setPurpose(value as Purpose)}>
-        <TabsList>
+        <TabBar>
           <TabsTrigger value="ticket">{t("entranceTicket")}</TabsTrigger>
           <TabsTrigger value="badge">{t("badge")}</TabsTrigger>
-        </TabsList>
+        </TabBar>
         <TabsContent value="ticket" className="space-y-6 pt-4">
           <WalletPurposePanel purpose="ticket" value={payload?.ticketToken} />
         </TabsContent>

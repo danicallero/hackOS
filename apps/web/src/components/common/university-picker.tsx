@@ -19,6 +19,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { useDialogPortal } from "@/hooks/use-dialog-portal";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -55,6 +56,7 @@ export function UniversityPicker({
   "aria-required"?: React.AriaAttributes["aria-required"];
 }) {
   const { t } = useLocale();
+  const { ref: anchorRef, portalProps, contentProps } = useDialogPortal(inDialog);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [options, setOptions] = useState<University[]>([]);
@@ -151,7 +153,9 @@ export function UniversityPicker({
     <PopoverPrimitive.Content
       align="start"
       sideOffset={4}
-      className="bg-popover text-popover-foreground z-50 w-[--radix-popover-trigger-width] rounded-md border shadow-md outline-hidden"
+      collisionPadding={8}
+      {...contentProps}
+      className="bg-popover text-popover-foreground z-50 flex max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] flex-col rounded-md border shadow-md outline-hidden"
     >
       <Command shouldFilter={false}>
         <CommandInput
@@ -159,7 +163,7 @@ export function UniversityPicker({
           value={query}
           onValueChange={setQuery}
         />
-        <CommandList aria-busy={loading || undefined} className="max-h-64">
+        <CommandList aria-busy={loading || undefined} className="max-h-64 min-h-0 flex-1">
           {loading ? (
             <div role="status" className="text-muted-foreground px-2 py-6 text-center text-sm">
               {t("loading")}
@@ -208,6 +212,7 @@ export function UniversityPicker({
     <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
       <PopoverPrimitive.Trigger asChild>
         <Button
+          ref={anchorRef}
           id={id}
           type="button"
           variant="outline"
@@ -230,7 +235,7 @@ export function UniversityPicker({
           />
         </Button>
       </PopoverPrimitive.Trigger>
-      {inDialog ? content : <PopoverPrimitive.Portal>{content}</PopoverPrimitive.Portal>}
+      <PopoverPrimitive.Portal {...portalProps}>{content}</PopoverPrimitive.Portal>
     </PopoverPrimitive.Root>
   );
 }

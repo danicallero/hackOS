@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AlertModal } from "@/components/common/alert-modal";
+import { PageHeader } from "@/components/common/page-header";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -22,15 +23,17 @@ import { fullName, initials, ROLE_TONE } from "./shared";
 export function ProfileHeader({ user }: { user: UserDetail }) {
   const { t } = useLocale();
   return (
-    <div className="flex flex-wrap items-start gap-4">
-      <Avatar size="lg">
-        {user.image && <AvatarImage src={user.image} alt={fullName(user)} />}
-        <AvatarFallback>{initials(user)}</AvatarFallback>
-      </Avatar>
-      <div className="space-y-2">
-        <h1 className="text-2xl font-semibold tracking-tight">{fullName(user)}</h1>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-muted-foreground text-sm">{user.email}</span>
+    <PageHeader
+      leading={
+        <Avatar size="lg">
+          {user.image && <AvatarImage src={user.image} alt={fullName(user)} />}
+          <AvatarFallback>{initials(user)}</AvatarFallback>
+        </Avatar>
+      }
+      title={fullName(user)}
+      meta={
+        <>
+          <span className="text-muted-foreground truncate text-sm">{user.email}</span>
           <StatusBadge tone={user.emailVerified ? "success" : "warning"} dot={false}>
             {user.emailVerified ? t("verified") : t("unverified")}
           </StatusBadge>
@@ -42,10 +45,10 @@ export function ProfileHeader({ user }: { user: UserDetail }) {
               {t("badgeIdInline", { id: user.badgeId })}
             </span>
           )}
-        </div>
-      </div>
-      <div className="ml-auto">
-        <div className="flex flex-wrap justify-end gap-2">
+        </>
+      }
+      secondaryActions={
+        <>
           <Button asChild variant="outline" size="sm">
             <Link href={`/logistics/accreditation?userId=${user.id}`}>
               <IdCardIcon className="size-4" />
@@ -53,9 +56,9 @@ export function ProfileHeader({ user }: { user: UserDetail }) {
             </Link>
           </Button>
           <DeleteAccountButton user={user} />
-        </div>
-      </div>
-    </div>
+        </>
+      }
+    />
   );
 }
 

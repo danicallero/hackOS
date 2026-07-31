@@ -20,6 +20,7 @@ import { type Column, DataTable } from "@/components/common/data-table";
 import { SectionCard } from "@/components/common/section-card";
 import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
+import { TabBar } from "@/components/common/tab-bar";
 import type { PublicEvent } from "@/components/public/public-types";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,7 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError, api } from "@/lib/api";
 import { API_URL } from "@/lib/env";
@@ -220,11 +221,11 @@ export default function LogisticsStatsPage() {
   return (
     <div className="space-y-6" data-wide>
       <Tabs value={phase} onValueChange={selectPhase}>
-        <TabsList aria-label={t("eventPhaseLabel")} className="w-full sm:w-fit">
+        <TabBar aria-label={t("eventPhaseLabel")} className="w-full sm:w-fit">
           <TabsTrigger value="before">{t("phaseBefore")}</TabsTrigger>
           <TabsTrigger value="during">{t("phaseDuring")}</TabsTrigger>
           <TabsTrigger value="after">{t("phaseAfter")}</TabsTrigger>
-        </TabsList>
+        </TabBar>
         <TabsContent value="before" className="mt-4">
           <BeforePanel
             applications={applications}
