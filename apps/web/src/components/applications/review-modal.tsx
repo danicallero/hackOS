@@ -423,8 +423,11 @@ export function ReviewModal({
         {/* Shared staff notes (H13) */}
         {canReview && (
           <div className="space-y-2">
-            <Label className="text-sm font-medium">{t("sharedStaffNotes")}</Label>
+            <Label htmlFor="review-shared-staff-notes" className="text-sm font-medium">
+              {t("sharedStaffNotes")}
+            </Label>
             <Textarea
+              id="review-shared-staff-notes"
               rows={2}
               value={staffNotes}
               onChange={(e) => setStaffNotes(e.target.value)}
@@ -449,10 +452,11 @@ export function ReviewModal({
             </div>
             <div className="grid gap-3 sm:grid-cols-[8rem_1fr]">
               <div className="space-y-1.5">
-                <Label className="text-muted-foreground text-xs uppercase">
+                <Label htmlFor="review-score" className="text-muted-foreground text-xs uppercase">
                   {t("scoreRangeLabel")}
                 </Label>
                 <Input
+                  id="review-score"
                   type="number"
                   min={0}
                   max={100}
@@ -461,8 +465,14 @@ export function ReviewModal({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-muted-foreground text-xs uppercase">{t("notesLabel")}</Label>
-                <Input value={myNotes} onChange={(e) => setMyNotes(e.target.value)} />
+                <Label htmlFor="review-notes" className="text-muted-foreground text-xs uppercase">
+                  {t("notesLabel")}
+                </Label>
+                <Input
+                  id="review-notes"
+                  value={myNotes}
+                  onChange={(e) => setMyNotes(e.target.value)}
+                />
               </div>
             </div>
           </div>

@@ -78,10 +78,16 @@ export function SendDecisionsModal({
     >
       <div className="flex items-center justify-between gap-4">
         <div className="space-y-0.5">
-          <Label className="text-sm">{t("includeRejectionsLabel")}</Label>
+          <Label htmlFor="include-rejections" className="text-sm">
+            {t("includeRejectionsLabel")}
+          </Label>
           <p className="text-muted-foreground text-xs">{t("includeRejectionsDesc")}</p>
         </div>
-        <Switch checked={includeRejected} onCheckedChange={setIncludeRejected} />
+        <Switch
+          id="include-rejections"
+          checked={includeRejected}
+          onCheckedChange={setIncludeRejected}
+        />
       </div>
     </Modal>
   );

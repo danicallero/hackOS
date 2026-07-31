@@ -419,29 +419,31 @@ function AnnouncementFormModal({
   return (
     <Modal open={open} onOpenChange={onOpenChange} title={title} icon={MegaphoneIcon} size="lg">
       <div className="space-y-4">
-        <Field label={t("titleLabel")}>
+        <Field id="announcement-title" label={t("titleLabel")}>
           <Input
+            id="announcement-title"
             value={values.title}
             onChange={(e) => setValues((v) => ({ ...v, title: e.target.value }))}
             placeholder={t("dinnerReadyPlaceholder")}
           />
         </Field>
-        <Field label={t("messageLabel")}>
+        <Field id="announcement-body" label={t("messageLabel")}>
           <Textarea
+            id="announcement-body"
             rows={4}
             value={values.body}
             onChange={(e) => setValues((v) => ({ ...v, body: e.target.value }))}
             placeholder={t("headToMainHallPlaceholder")}
           />
         </Field>
-        <Field label={t("colAudience")}>
+        <Field id="announcement-audience" label={t("colAudience")}>
           <Select
             value={values.targetRole ?? EVERYONE}
             onValueChange={(value) =>
               setValues((v) => ({ ...v, targetRole: value === EVERYONE ? null : value }))
             }
           >
-            <SelectTrigger className="w-full">
+            <SelectTrigger id="announcement-audience" className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -451,8 +453,9 @@ function AnnouncementFormModal({
           </Select>
         </Field>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label={t("visibleFrom")}>
+          <Field id="announcement-publish-at" label={t("visibleFrom")}>
             <DateTimeInput
+              id="announcement-publish-at"
               value={values.publishAt ?? ""}
               onChange={(publishAt) => setValues((v) => ({ ...v, publishAt: publishAt || null }))}
               nullOption={{ label: t("immediatelyLabel") }}
@@ -461,8 +464,9 @@ function AnnouncementFormModal({
               {t("publishDestinationsHint", { timezone: getTimeZoneLabel() })}
             </p>
           </Field>
-          <Field label={t("visibleUntil")}>
+          <Field id="announcement-expires-at" label={t("visibleUntil")}>
             <DateTimeInput
+              id="announcement-expires-at"
               value={values.expiresAt ?? ""}
               onChange={(expiresAt) => setValues((v) => ({ ...v, expiresAt: expiresAt || null }))}
               nullOption={{ label: t("noEndDate") }}
@@ -487,10 +491,10 @@ function AnnouncementFormModal({
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ id, label, children }: { id: string; label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-2">
-      <Label>{label}</Label>
+      <Label htmlFor={id}>{label}</Label>
       {children}
     </div>
   );

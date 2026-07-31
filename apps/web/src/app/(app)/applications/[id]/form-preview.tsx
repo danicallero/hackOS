@@ -70,17 +70,31 @@ export function FormPreviewPanel({
       {fields.map((f) => {
         const label = pickText(f.label, locale) || t("primaryApplicantLabel");
         const opts = f.options ?? [];
+        const fieldId = `preview-${f.key}`;
+        const isChoice = f.kind === "select" || f.kind === "multiselect";
         return (
           <div key={f.key} className="space-y-1.5">
-            <Label>
-              {label}
-              {f.required && <span className="text-destructive"> *</span>}
-            </Label>
+            {isChoice ? (
+              <p className="text-sm font-medium">
+                {label}
+                {f.required && <span className="text-destructive"> *</span>}
+              </p>
+            ) : (
+              <Label htmlFor={fieldId}>
+                {label}
+                {f.required && <span className="text-destructive"> *</span>}
+              </Label>
+            )}
             {f.kind === "textarea" ? (
-              <Textarea disabled rows={2} placeholder={t("applicantsAnswerPlaceholder")} />
+              <Textarea
+                id={fieldId}
+                disabled
+                rows={2}
+                placeholder={t("applicantsAnswerPlaceholder")}
+              />
             ) : f.kind === "checkbox" ? (
               <div className="text-muted-foreground flex items-center gap-2 text-sm">
-                <input type="checkbox" disabled /> {t("yesNoText")}
+                <input id={fieldId} type="checkbox" disabled /> {t("yesNoText")}
               </div>
             ) : f.kind === "select" || f.kind === "multiselect" ? (
               <div className="flex flex-wrap gap-1.5">
@@ -102,6 +116,7 @@ export function FormPreviewPanel({
               </div>
             ) : (
               <Input
+                id={fieldId}
                 disabled
                 type={f.kind === "number" ? "number" : f.kind === "date" ? "date" : "text"}
                 placeholder={

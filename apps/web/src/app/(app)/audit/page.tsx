@@ -196,46 +196,52 @@ export default function AuditPage() {
       <PageHeader title={t("auditLog")} />
 
       <div className="flex flex-wrap items-end gap-3">
-        <FilterField label={t("colAction")}>
+        <FilterField id="audit-action" label={t("colAction")}>
           <Input
+            id="audit-action"
             value={filters.action}
             onChange={(e) => setFilters((f) => ({ ...f, action: e.target.value }))}
             placeholder={`${t("egPrefix")} create, update`}
             className="h-9 w-40"
           />
         </FilterField>
-        <FilterField label={t("entityTypeLabel")}>
+        <FilterField id="audit-entity-type" label={t("entityTypeLabel")}>
           <Input
+            id="audit-entity-type"
             value={filters.entityType}
             onChange={(e) => setFilters((f) => ({ ...f, entityType: e.target.value }))}
             placeholder={`${t("egPrefix")} user, announcement`}
             className="h-9 w-44"
           />
         </FilterField>
-        <FilterField label={t("entityIdLabel")}>
+        <FilterField id="audit-entity-id" label={t("entityIdLabel")}>
           <Input
+            id="audit-entity-id"
             value={filters.entityId}
             onChange={(e) => setFilters((f) => ({ ...f, entityId: e.target.value }))}
             className="h-9 w-28"
           />
         </FilterField>
-        <FilterField label={t("actorUserIdLabel")}>
+        <FilterField id="audit-actor-id" label={t("actorUserIdLabel")}>
           <Input
+            id="audit-actor-id"
             type="number"
             value={filters.actorId}
             onChange={(e) => setFilters((f) => ({ ...f, actorId: e.target.value }))}
             className="h-9 w-28"
           />
         </FilterField>
-        <FilterField label={t("fromLabel")}>
+        <FilterField id="audit-from" label={t("fromLabel")}>
           <DateTimeInput
+            id="audit-from"
             value={filters.dateFrom}
             onChange={(v) => setFilters((f) => ({ ...f, dateFrom: v }))}
             className="h-9"
           />
         </FilterField>
-        <FilterField label={t("toLabel")}>
+        <FilterField id="audit-to" label={t("toLabel")}>
           <DateTimeInput
+            id="audit-to"
             value={filters.dateTo}
             onChange={(v) => setFilters((f) => ({ ...f, dateTo: v }))}
             className="h-9"
@@ -328,10 +334,20 @@ export default function AuditPage() {
   );
 }
 
-function FilterField({ label, children }: { label: string; children: React.ReactNode }) {
+function FilterField({
+  id,
+  label,
+  children,
+}: {
+  id: string;
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="space-y-1">
-      <Label className="text-muted-foreground text-xs">{label}</Label>
+      <Label htmlFor={id} className="text-muted-foreground text-xs">
+        {label}
+      </Label>
       {children}
     </div>
   );
@@ -349,7 +365,7 @@ function DetailField({ label, children }: { label: string; children: React.React
 function JsonBlock({ label, value }: { label: string; value: unknown }) {
   return (
     <div className="space-y-1">
-      <Label className="text-muted-foreground text-xs">{label}</Label>
+      <p className="text-muted-foreground text-xs">{label}</p>
       <pre className="bg-muted max-h-64 overflow-auto rounded-md p-3 text-xs">
         {value === null || value === undefined ? "—" : JSON.stringify(value, null, 2)}
       </pre>

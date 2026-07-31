@@ -363,9 +363,9 @@ export function FieldEditor({
           />
         </div>
         <div className="space-y-1.5">
-          <Label>{t("kindLabel")}</Label>
+          <Label htmlFor={`question-kind-${index}`}>{t("kindLabel")}</Label>
           <Select value={field.kind} onValueChange={(v) => onKind(v as FieldKind)}>
-            <SelectTrigger className="w-full">
+            <SelectTrigger id={`question-kind-${index}`} className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -460,7 +460,7 @@ export function OptionsEditor({
   return (
     <div className="border-border space-y-3 rounded-md border border-dashed p-3">
       <div className="flex items-center justify-between">
-        <Label className="text-muted-foreground text-xs uppercase">{t("optionsLabel")}</Label>
+        <p className="text-muted-foreground text-xs font-medium uppercase">{t("optionsLabel")}</p>
         <Button type="button" variant="ghost" size="sm" onClick={add}>
           <PlusIcon className="size-3.5" />
           {t("addOption")}
@@ -550,10 +550,11 @@ export function FileRestrictionsEditor({
   return (
     <div className="border-border grid gap-4 rounded-md border border-dashed p-3 sm:grid-cols-2">
       <div className="space-y-1.5">
-        <Label className="text-muted-foreground text-xs uppercase">
+        <Label htmlFor="allowed-file-types" className="text-muted-foreground text-xs uppercase">
           {t("allowedFileTypesLabel")}
         </Label>
         <Input
+          id="allowed-file-types"
           value={(field.allowed_file_types ?? []).join(", ")}
           onChange={(e) =>
             onChange({
@@ -568,8 +569,11 @@ export function FileRestrictionsEditor({
         <p className="text-muted-foreground text-xs">{t("allowedFileTypesDesc")}</p>
       </div>
       <div className="space-y-1.5">
-        <Label className="text-muted-foreground text-xs uppercase">{t("maxSizeMbLabel")}</Label>
+        <Label htmlFor="max-file-size-mb" className="text-muted-foreground text-xs uppercase">
+          {t("maxSizeMbLabel")}
+        </Label>
         <Input
+          id="max-file-size-mb"
           type="number"
           min={1}
           value={field.max_file_size_mb ?? ""}
