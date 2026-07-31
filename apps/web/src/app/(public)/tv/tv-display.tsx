@@ -18,7 +18,7 @@ import type {
 } from "@/components/public/public-types";
 import { EventPhaseDisplay, EventTimer, useEventPhase } from "@/components/public/timer";
 import { useElementSize } from "@/hooks/use-element-size";
-import { type SseEnvelope, useEventSource } from "@/hooks/use-event-source";
+import { useEventSource } from "@/hooks/use-event-source";
 import { useFitToViewport } from "@/hooks/use-fit-to-viewport";
 import { api } from "@/lib/api";
 import { type Translate, useLocale } from "@/lib/i18n";
@@ -723,71 +723,18 @@ export function TvDisplay() {
     void load();
   }, [load]);
 
-  // The mode and the venue details travel together: a scheduled Wi-Fi slot is
-  // useless if the credentials it shows are the ones cached at boot.
-  const refreshMode = useCallback(async () => {
-    try {
-      const [state, venue] = await Promise.all([getTvState(), getTvVenueConfig()]);
-      setData((current) => (current ? { ...current, state, venue } : current));
-      setError(null);
-    } catch {
-      setError(t("tvReconnecting"));
-    }
-  }, [t]);
-
-  const refreshRooms = useCallback(async () => {
-    try {
-      const rooms = await getAllRoomViews();
-      setData((current) => (current ? { ...current, rooms } : current));
-      setError(null);
-    } catch {
-      setError(t("tvReconnecting"));
-    }
-  }, [t]);
-
-  const refreshSchedule = useCallback(async () => {
-    try {
-      const schedule = await logisticsApi.publicSchedule();
-      setData((current) => (current ? { ...current, schedule: schedule.items } : current));
-      setError(null);
-    } catch {
-      setError(t("tvReconnecting"));
-    }
-  }, [t]);
-
-  const refreshAnnouncements = useCallback(async () => {
-    try {
-      const announcements = await api.get<{ items: PublicAnnouncement[] }>(
-        "/api/announcements/public",
-      );
-      setData((current) =>
-        current ? { ...current, announcements: announcements.items } : current,
-      );
-      setError(null);
-    } catch {
-      setError(t("tvReconnecting"));
-    }
-  }, [t]);
-
-  const refreshContent = useCallback(
-    (event: SseEnvelope) => {
-      if (event.type === EVENTS.CONTENT_SCHEDULE_CHANGED) void refreshSchedule();
-      if (event.type === EVENTS.CONTENT_ANNOUNCEMENT) void refreshAnnouncements();
-    },
-    [refreshAnnouncements, refreshSchedule],
-  );
+  // Dedicated public TV/content streams carry only `data.changed` invalidations.
+  // Always refetch sanitized projections rather than deriving screen state from
+  // an SSE payload: raw queue events stay on the operational-only channel.
+  const refreshPublicProjection = useCallback(() => void load(), [load]);
 
   useEventSource("/api/tv/stream", {
-    events: [EVENTS.TV_MODE_CHANGED],
-    onEvent: () => void refreshMode(),
-  });
-  useEventSource("/api/queue/stream", {
-    events: [EVENTS.QUEUE_ENTRY_CHANGED, EVENTS.QUEUE_ROOM_CHANGED],
-    onEvent: () => void refreshRooms(),
+    events: [EVENTS.DATA_CHANGED],
+    onEvent: refreshPublicProjection,
   });
   useEventSource("/api/content/stream", {
-    events: [EVENTS.CONTENT_ANNOUNCEMENT, EVENTS.CONTENT_SCHEDULE_CHANGED],
-    onEvent: refreshContent,
+    events: [EVENTS.DATA_CHANGED],
+    onEvent: refreshPublicProjection,
   });
 
   return <TvView data={data} error={error} />;
