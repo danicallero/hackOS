@@ -306,7 +306,13 @@ function ScheduleCard({
           >
             {item.title}
           </Text>
-          {item.type ? <StatusPill>{scheduleTypeLabel(item.type, t)}</StatusPill> : null}
+          {item.type ? (
+            // Without alignSelf the pill keeps its flex-start default and
+            // drifts above the centered bell on multi-line titles (H374).
+            <StatusPill style={{ alignSelf: "center" }}>
+              {scheduleTypeLabel(item.type, t)}
+            </StatusPill>
+          ) : null}
           {reminderOn !== null ? (
             <Pressable
               accessibilityLabel={t(reminderOn ? "scheduleReminderOn" : "scheduleReminderOff", {

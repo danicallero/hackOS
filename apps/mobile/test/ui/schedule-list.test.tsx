@@ -1,4 +1,5 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react-native";
+import { StyleSheet } from "react-native";
 
 const mockPush = jest.fn();
 
@@ -105,6 +106,16 @@ describe("schedule list (H374)", () => {
     expect(screen.getByText(LONG_DESCRIPTION).props.numberOfLines).toBeUndefined();
     // Expanding must not navigate away from the list.
     expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it("keeps the type pill on the bell's centre line", async () => {
+    await renderMobile(<ScheduleScreen />);
+
+    // StatusPill defaults to alignSelf "flex-start", which floats it (and the
+    // bell it sits beside) off the title's centre line on multi-line titles.
+    const pill = await screen.findByText("Meal");
+    const style = StyleSheet.flatten(pill.parent?.props.style);
+    expect(style.alignSelf).toBe("center");
   });
 
   it("leaves short entries without an expand affordance", async () => {
