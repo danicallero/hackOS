@@ -460,6 +460,9 @@ Every UI change, web or mobile:
 - Includes responsive verification, and real-device verification where
   native/offline behaviour applies.
 - Adds or updates tests for state transitions and interaction semantics.
+- Keeps cross-surface UI hooks in `@hackos/shared/ui-test-ids` when a flow needs
+  a stable contract across locales; tests prefer accessible roles and names,
+  never styling classes or layout text.
 
 ## 14. Implementation hotspots
 

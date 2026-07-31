@@ -58,6 +58,9 @@ Frontend (web & mobile):
   setup, prebuild/CNG, EAS profiles and environments, local/cloud compilation,
   signing and push credentials, icons/store artwork, submission, privacy, and
   release checklists.
+- [UI testing](./ui-testing.md) — the shared browser/native selector contract,
+  Playwright browser projects, fast React Native screen tests, and optional
+  Detox simulator/device runs.
 
 Deployment:
 

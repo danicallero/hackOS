@@ -54,6 +54,8 @@ Useful scripts:
 pnpm --filter @hackos/api test   # vitest, wipes + remigrates hackos_test, runs serially
 pnpm --filter @hackos/web test   # vitest, colocated unit tests
 pnpm --filter @hackos/mobile test  # jest
+pnpm test:ui                    # Playwright browser + fast native UI tests
+pnpm test:ui:native             # Detox simulator/device UI tests (host prerequisites)
 pnpm lint                        # biome + copy/localization + page-size checks, whole repo
 pnpm check:copy                  # just the copy/localization check (scripts/check-copy.mjs)
 pnpm check:pages                 # just the page-size ratchet (scripts/check-page-size.mjs)
@@ -75,6 +77,10 @@ deferred to device verification. The complete local-build, prebuild, EAS,
 signing, certificates, artwork, and App Store/Play Store runbook is
 [`docs/mobile-release.md`](docs/mobile-release.md).
 
+UI testing is documented in [`docs/ui-testing.md`](docs/ui-testing.md). The
+browser suite starts an isolated Next.js server on port `3101`; install its
+browser binaries once with `pnpm test:ui:install`.
+
 ## API docs
 
 The API documents itself: every route carries a Zod schema that Fastify turns
@@ -84,7 +90,6 @@ hand — if a route's schema is wrong, the docs are wrong, and vice versa.
 Adding a route means giving it a real `summary`/`description` in its schema,
 not leaving the auto-generated placeholder (see `apps/api/src/app.ts` for how
 tags and auth requirements are derived, and `CLAUDE.md` for the rule).
-
 
 
 
