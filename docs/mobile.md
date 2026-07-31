@@ -8,6 +8,8 @@ meals, and registrable activities.
 For development builds, prebuild/CNG, EAS profiles, signing, certificates,
 store assets, submission, and the release checklist, see
 [`mobile-release.md`](./mobile-release.md).
+The browser/native UI test framework and device prerequisites are in
+[`ui-testing.md`](./ui-testing.md).
 
 ## Story coverage registry (issue #73: H4, H22–H26, H28–H31, H38, H51, H55)
 
@@ -277,6 +279,14 @@ device/EAS build to verify — see "What's left" below.
   lets the auth client refresh session state when the device regains network
   connectivity. As with every native dependency change, an existing dev client
   must be rebuilt rather than only reloading its JavaScript bundle.
+
+**UI testing.** `test/ui/` contains fast React Native Testing Library flows
+rendered through `renderMobile`, including the shared H4 sign-in contract.
+Cross-surface hooks come from `@hackos/shared/ui-test-ids` and are wired to
+web `data-testid` and native `testID` attributes. Detox scenarios in
+`e2e/mobile/` cover the same contract against a built simulator/emulator app;
+run them with the root `test:ui:native` commands described in
+[`docs/ui-testing.md`](./ui-testing.md).
 
 **Scanner state transitions.** A scan is inserted in SQLite before any network
 request: `pending -> acknowledged` only after a 2xx response (including an

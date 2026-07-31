@@ -31,7 +31,15 @@ pnpm dev:web        # web only
 pnpm --filter @hackos/web build      # production build
 pnpm --filter @hackos/web typecheck  # tsc --noEmit
 pnpm --filter @hackos/web test       # vitest — colocated *.test.ts(x) unit tests
+pnpm test:ui:browser                 # Playwright browser + responsive mobile run (root)
 ```
+
+The browser UI suite lives in [`../../e2e/browser`](../../e2e/browser) and its
+full setup is documented in [`../../docs/ui-testing.md`](../../docs/ui-testing.md).
+Use accessible roles and names in browser tests. When a flow must remain stable
+across the web and native clients or across locales, add a shared contract to
+`@hackos/shared/ui-test-ids` and wire it to `data-testid`/`testID` at the
+interactive control.
 
 Config: copy `.env.example` → `.env.local`. `NEXT_PUBLIC_API_URL` is the API
 origin (default `http://localhost:3000`). Because the web and API are different

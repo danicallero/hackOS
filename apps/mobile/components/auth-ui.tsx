@@ -204,10 +204,11 @@ export function AuthField({
   );
 }
 
-export function AuthAlert({ message }: { message: string }) {
+export function AuthAlert({ message, testID }: { message: string; testID?: string }) {
   return (
     <View
       accessibilityRole="alert"
+      testID={testID}
       style={{
         backgroundColor: colors.destructiveSurface,
         borderCurve: "continuous",
@@ -227,11 +228,13 @@ export function AuthButton({
   onPress,
   disabled = false,
   busy = false,
+  testID,
 }: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
   busy?: boolean;
+  testID?: string;
 }) {
   return (
     <Pressable
@@ -240,6 +243,7 @@ export function AuthButton({
       accessibilityState={{ disabled: disabled || busy, busy }}
       disabled={disabled || busy}
       onPress={onPress}
+      testID={testID}
       style={({ pressed }) => ({
         alignItems: "center",
         backgroundColor: colors.accent,

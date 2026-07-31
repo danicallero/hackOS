@@ -44,6 +44,7 @@
     "react-native-worklets": "0.10.0"
   },
   "devDependencies": {
+    "@testing-library/react-native": "^14.0.1",
     "@types/jest": "^29.5.14",
     "@types/react": "~19.2.2",
     "jest": "^29.7.0",
@@ -56,12 +57,14 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "test": "jest"
+    "test": "jest --runInBand",
+    "test:ui": "jest --runInBand test/ui"
   },
   "jest": {
     "preset": "jest-expo",
     "testMatch": [
-      "**/lib/**/*.test.ts"
+      "**/lib/**/*.test.ts",
+      "**/test/**/*.test.tsx"
     ]
   }
 }

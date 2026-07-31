@@ -1,5 +1,6 @@
 "use client";
 
+import { UI_TEST_IDS } from "@hackos/shared/ui-test-ids";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -106,7 +107,7 @@ function LoginInner() {
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             {form.formState.errors.root && (
-              <Alert variant="destructive">
+              <Alert data-testid={UI_TEST_IDS.auth.error} variant="destructive">
                 <AlertDescription>{form.formState.errors.root.message}</AlertDescription>
               </Alert>
             )}
@@ -117,7 +118,12 @@ function LoginInner() {
                 <FormItem>
                   <FormLabel>{t("email")}</FormLabel>
                   <FormControl>
-                    <Input type="email" autoComplete="email" {...field} />
+                    <Input
+                      data-testid={UI_TEST_IDS.auth.email}
+                      type="email"
+                      autoComplete="email"
+                      {...field}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -138,13 +144,21 @@ function LoginInner() {
                     </Link>
                   </div>
                   <FormControl>
-                    <PasswordInput autoComplete="current-password" {...field} />
+                    <PasswordInput
+                      data-testid={UI_TEST_IDS.auth.password}
+                      autoComplete="current-password"
+                      {...field}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
-            <SubmitButton className="w-full" pending={form.formState.isSubmitting}>
+            <SubmitButton
+              data-testid={UI_TEST_IDS.auth.submit}
+              className="w-full"
+              pending={form.formState.isSubmitting}
+            >
               {t("signIn")}
             </SubmitButton>
           </form>

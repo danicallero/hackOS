@@ -1,3 +1,4 @@
+import { UI_TEST_IDS } from "@hackos/shared/ui-test-ids";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Platform, Pressable, Text, type TextInput, View } from "react-native";
@@ -103,9 +104,10 @@ export default function SignInScreen() {
       />
 
       <View style={{ gap: 16 }}>
-        {error ? <AuthAlert message={error} /> : null}
+        {error ? <AuthAlert message={error} testID={UI_TEST_IDS.auth.error} /> : null}
         <View style={{ gap: 14 }}>
           <AuthField
+            testID={UI_TEST_IDS.auth.email}
             {...usernameAutofillProps}
             label={t("emailLabel")}
             placeholder={t("emailPlaceholder")}
@@ -119,6 +121,7 @@ export default function SignInScreen() {
             onSubmitEditing={() => passwordRef.current?.focus()}
           />
           <AuthField
+            testID={UI_TEST_IDS.auth.password}
             {...passwordAutofillProps}
             inputRef={passwordRef}
             label={t("passwordLabel")}
@@ -155,6 +158,7 @@ export default function SignInScreen() {
 
         <AuthButton
           label={t("signInButton")}
+          testID={UI_TEST_IDS.auth.submit}
           busy={submitting}
           disabled={disabled}
           onPress={() => void onSubmit()}
