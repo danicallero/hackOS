@@ -5,6 +5,7 @@ import { pool } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { requireAnyCapability, requireCapability } from "../../lib/capabilities.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
+import type { RouteAccessPolicy } from "../../lib/route-policy.js";
 import { createApplicationSchema, idParamSchema, updateApplicationSchema } from "./schemas.js";
 import { isInvitedParticipant, isWindowOpen } from "./service.js";
 
@@ -15,6 +16,7 @@ import { isInvitedParticipant, isWindowOpen } from "./service.js";
  */
 export function registerAdminRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
+  const routeAccess = (routeAccessPolicy: RouteAccessPolicy) => ({ routeAccessPolicy });
 
   const COLUMNS = `id, name, type, template, description, active, open_at, close_at,
                    capacity, confirmation_window_hours, created_at`;
@@ -22,25 +24,38 @@ export function registerAdminRoutes(app: FastifyInstance): void {
   // ── public: open forms with their template ──────────────────────────────────
   // A late invited participant (H10) can also discover/fetch a closed form —
   // the same bypass service.ts already grants them for saveDraft/submitResponse.
-  r.get("/api/public/applications", async (req) => {
-    const { rows } = await pool.query(`SELECT ${COLUMNS} FROM applications WHERE active = true`);
-    const invited = req.userId ? await isInvitedParticipant(pool, req.userId) : false;
-    const open = rows.filter((a) => isWindowOpen(a) || invited);
-    return { applications: open };
-  });
-
-  r.get("/api/public/applications/:id", { schema: { params: idParamSchema } }, async (req) => {
-    const { rows } = await pool.query(`SELECT ${COLUMNS} FROM applications WHERE id = $1`, [
-      req.params.id,
-    ]);
-    const found = rows[0];
-    if (!found) throw new NotFoundError("Application not open");
-    if (!isWindowOpen(found)) {
+  r.get(
+    "/api/public/applications",
+    {
+      config: routeAccess({ kind: "public", anonymousCategory: "public-content" }),
+    },
+    async (req) => {
+      const { rows } = await pool.query(`SELECT ${COLUMNS} FROM applications WHERE active = true`);
       const invited = req.userId ? await isInvitedParticipant(pool, req.userId) : false;
-      if (!invited) throw new NotFoundError("Application not open");
-    }
-    return found;
-  });
+      const open = rows.filter((a) => isWindowOpen(a) || invited);
+      return { applications: open };
+    },
+  );
+
+  r.get(
+    "/api/public/applications/:id",
+    {
+      config: routeAccess({ kind: "public", anonymousCategory: "public-content" }),
+      schema: { params: idParamSchema },
+    },
+    async (req) => {
+      const { rows } = await pool.query(`SELECT ${COLUMNS} FROM applications WHERE id = $1`, [
+        req.params.id,
+      ]);
+      const found = rows[0];
+      if (!found) throw new NotFoundError("Application not open");
+      if (!isWindowOpen(found)) {
+        const invited = req.userId ? await isInvitedParticipant(pool, req.userId) : false;
+        if (!invited) throw new NotFoundError("Application not open");
+      }
+      return found;
+    },
+  );
 
   // ── manage (H11) ────────────────────────────────────────────────────────────
   r.get(
@@ -49,7 +64,16 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       preHandler: requireAnyCapability(
         CAPABILITIES.APPLICATIONS_MANAGE,
         CAPABILITIES.APPLICATIONS_REVIEW,
+        CAPABILITIES.APPLICATIONS_DECIDE,
       ),
+      config: routeAccess({
+        kind: "capability",
+        anyOf: [
+          CAPABILITIES.APPLICATIONS_MANAGE,
+          CAPABILITIES.APPLICATIONS_REVIEW,
+          CAPABILITIES.APPLICATIONS_DECIDE,
+        ],
+      }),
     },
     async () => {
       const { rows } = await pool.query(`SELECT ${COLUMNS} FROM applications ORDER BY id`);
@@ -63,7 +87,16 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       preHandler: requireAnyCapability(
         CAPABILITIES.APPLICATIONS_MANAGE,
         CAPABILITIES.APPLICATIONS_REVIEW,
+        CAPABILITIES.APPLICATIONS_DECIDE,
       ),
+      config: routeAccess({
+        kind: "capability",
+        anyOf: [
+          CAPABILITIES.APPLICATIONS_MANAGE,
+          CAPABILITIES.APPLICATIONS_REVIEW,
+          CAPABILITIES.APPLICATIONS_DECIDE,
+        ],
+      }),
       schema: { params: idParamSchema },
     },
     async (req) => {
@@ -79,6 +112,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
     "/api/applications",
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_MANAGE),
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.APPLICATIONS_MANAGE }),
       schema: { body: createApplicationSchema },
     },
     async (req, reply) => {
@@ -116,6 +150,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
     "/api/applications/:id",
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_MANAGE),
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.APPLICATIONS_MANAGE }),
       schema: { params: idParamSchema, body: updateApplicationSchema },
     },
     async (req) => {
@@ -167,6 +202,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
     "/api/applications/:id",
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_MANAGE),
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.APPLICATIONS_MANAGE }),
       schema: { params: idParamSchema },
     },
     async (req, reply) => {

@@ -33,6 +33,34 @@ afterAll(async () => {
 });
 
 describe("POST /api/exports/requests (H54)", () => {
+  it("returns 401 anonymously and requires ADMIN_ALL only for deletion requests", async () => {
+    const subject = await createUser();
+    const anonymous = await app.inject({
+      method: "POST",
+      url: "/api/exports/requests",
+      payload: { subjectUserId: subject, type: "export" },
+    });
+    expect(anonymous.statusCode).toBe(401);
+
+    const exporter = await createUserWithCapabilities([CAPABILITIES.EXPORTS_RUN]);
+    const forbiddenDeletion = await app.inject({
+      method: "POST",
+      url: "/api/exports/requests",
+      headers: asUser(exporter),
+      payload: { subjectUserId: subject, type: "deletion" },
+    });
+    expect(forbiddenDeletion.statusCode).toBe(403);
+
+    const wildcard = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
+    const authorizedDeletion = await app.inject({
+      method: "POST",
+      url: "/api/exports/requests",
+      headers: asUser(wildcard),
+      payload: { subjectUserId: subject, type: "deletion" },
+    });
+    expect(authorizedDeletion.statusCode).toBe(201);
+  });
+
   it("creates an export request, processes it, and exposes completed status + download availability", async () => {
     const staff = await createUserWithCapabilities([CAPABILITIES.EXPORTS_RUN]);
     const subject = await createUser({ email: "subject@example.test" });

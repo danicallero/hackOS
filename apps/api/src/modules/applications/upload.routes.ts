@@ -1,11 +1,17 @@
 import type { Readable } from "node:stream";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, preHandlerHookHandler } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { pool } from "../../db/pool.js";
 import { requireAuth, userHasCapability } from "../../lib/capabilities.js";
-import { BadRequestError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import {
+  BadRequestError,
+  ForbiddenError,
+  NotFoundError,
+  UnauthorizedError,
+} from "../../lib/errors.js";
+import type { RouteAccessPolicy } from "../../lib/route-policy.js";
 import { getObject, putObject } from "../../lib/storage.js";
 import type { TemplateField } from "./schemas.js";
 
@@ -15,6 +21,27 @@ const uploadParamsSchema = z.object({
 });
 
 const downloadQuerySchema = z.object({ key: z.string().min(1) });
+const routeAccess = (routeAccessPolicy: RouteAccessPolicy) => ({ routeAccessPolicy });
+
+/** H12: an upload is readable only by its owner or an application reviewer. */
+const requireApplicationUploadAccess: preHandlerHookHandler = async (req) => {
+  if (req.userId == null) throw new UnauthorizedError();
+  const key = (req.query as { key?: string }).key;
+  if (!key?.startsWith("uploads/") || key.includes("..")) {
+    throw new BadRequestError("Not a downloadable file key");
+  }
+  const ownerId = Number(key.split("/")[2]);
+  if (!Number.isInteger(ownerId)) throw new BadRequestError("Malformed file key");
+
+  const userId = req.userId as number;
+  if (
+    userId === ownerId ||
+    (await userHasCapability(userId, CAPABILITIES.APPLICATIONS_REVIEW, req))
+  ) {
+    return;
+  }
+  throw new ForbiddenError("You don't have access to this file");
+};
 
 /** Keep the applicant's original filename but strip anything path-unsafe, so the
  *  stored key's last segment is a clean, human name (not timestamped gibberish). */
@@ -39,6 +66,7 @@ export function registerUploadRoutes(app: FastifyInstance): void {
     "/api/applications/:applicationId/upload/:fieldKey",
     {
       preHandler: requireAuth,
+      config: routeAccess({ kind: "authenticated" }),
       schema: { params: uploadParamsSchema },
     },
     async (req) => {
@@ -103,24 +131,20 @@ export function registerUploadRoutes(app: FastifyInstance): void {
   // in the key path uploads/<appId>/<userId>/…) or staff who can review.
   r.get(
     "/api/files/download",
-    { preHandler: requireAuth, schema: { querystring: downloadQuerySchema } },
+    {
+      preHandler: requireApplicationUploadAccess,
+      config: routeAccess({
+        kind: "contextual",
+        policy: "application-upload-access",
+        resource: { source: "query", field: "key" },
+      }),
+      schema: { querystring: downloadQuerySchema },
+    },
     async (req, reply) => {
       const { key } = req.query;
       if (!key.startsWith("uploads/") || key.includes("..")) {
         throw new BadRequestError("Not a downloadable file key");
       }
-      const ownerId = Number(key.split("/")[2]);
-      if (!Number.isInteger(ownerId)) throw new BadRequestError("Malformed file key");
-
-      const userId = req.userId as number;
-      const isOwner = userId === ownerId;
-      const isStaff = isOwner
-        ? false
-        : await userHasCapability(userId, CAPABILITIES.APPLICATIONS_REVIEW);
-      if (!isOwner && !isStaff) {
-        throw new ForbiddenError("You don't have access to this file");
-      }
-
       let obj: Awaited<ReturnType<typeof getObject>>;
       try {
         obj = await getObject(key);

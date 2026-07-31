@@ -127,6 +127,38 @@ describe("applications CRUD (H11)", () => {
     expect(patch.statusCode).toBe(403);
   });
 
+  it("APPLICATIONS_DECIDE can discover decision metadata without gaining form management", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);
+    const decider = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_DECIDE]);
+    const created = await a.inject({
+      method: "POST",
+      url: "/api/applications",
+      headers: asUser(manager),
+      payload: { name: "Decision form", type: "participant", template: sampleTemplate() },
+    });
+    const id = created.json().id as number;
+
+    expect(
+      (await a.inject({ method: "GET", url: "/api/applications", headers: asUser(decider) }))
+        .statusCode,
+    ).toBe(200);
+    expect(
+      (await a.inject({ method: "GET", url: `/api/applications/${id}`, headers: asUser(decider) }))
+        .statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await a.inject({
+          method: "PATCH",
+          url: `/api/applications/${id}`,
+          headers: asUser(decider),
+          payload: { name: "No" },
+        })
+      ).statusCode,
+    ).toBe(403);
+  });
+
   it("rejects an invalid template (select without options)", async () => {
     const a = await getApp();
     const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);
