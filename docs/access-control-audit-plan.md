@@ -32,11 +32,11 @@ usability controls; the API remains authoritative.
 
 ## Implementation result
 
-- Strict startup enforcement records **273 non-HEAD route-policy rows** and
-  exactly one logical Better Auth generated-route exemption, yielding **274
-  logical declarations**. This is +3 from the 271-route baseline, matching the
-  three added permission-template APIs.
-- The runtime audit snapshots **15 public** and **10 token** rows, rejects
+- Strict startup enforcement records **275 non-HEAD route-policy rows** and
+  exactly one logical Better Auth generated-route exemption, yielding **276
+  logical declarations**. This is +5 from the 271-route baseline, matching the
+  three added permission-template APIs and two scoped wallet-token routes.
+- The runtime audit snapshots **15 public** and **12 token** rows, rejects
   malformed policy metadata (including unknown capabilities), and has no broad
   exemption.
 - Effective capabilities resolve from PostgreSQL per request; unknown grants
@@ -47,7 +47,7 @@ usability controls; the API remains authoritative.
   operations require an active assignment to that exact room even when another
   room hosts the same challenge.
 - The independent AC-5 gate approved release after the route audit, lint, API
-  integration suite (**69 files / 607 tests**), web typecheck and tests
+  integration suite (**70 files / 614 tests**), web typecheck and tests
   (**28 files / 179 tests**), and mobile typecheck and tests
   (**15 suites / 68 tests**) passed.
 

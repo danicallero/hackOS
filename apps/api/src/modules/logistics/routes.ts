@@ -149,6 +149,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
     authenticated: { kind: "authenticated" } as const,
     publicContent: { kind: "public", anonymousCategory: "public-content" } as const,
     applePasskit: { kind: "token", policy: "apple-passkit-web-service" } as const,
+    scopedWallet: { kind: "token", policy: "scoped-wallet-access" } as const,
     accredit: { kind: "capability", capability: CAPABILITIES.ACCREDIT_SCAN } as const,
     presence: { kind: "capability", capability: CAPABILITIES.PRESENCE_SCAN } as const,
     activity: { kind: "capability", capability: CAPABILITIES.ACTIVITY_SCAN } as const,
@@ -846,6 +847,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   typed.get(
     "/api/wallet/scoped/apple/:purpose.pkpass",
     {
+      ...routeAccess(access.scopedWallet),
       schema: {
         params: walletPurposeParam,
         querystring: walletAccessQuery,
@@ -872,6 +874,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   typed.get(
     "/api/wallet/scoped/google/:purpose",
     {
+      ...routeAccess(access.scopedWallet),
       schema: {
         params: walletPurposeParam,
         querystring: walletAccessQuery,

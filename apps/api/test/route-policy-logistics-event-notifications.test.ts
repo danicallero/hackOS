@@ -34,10 +34,10 @@ describe("logistics, event and notifications route policy ledger", () => {
     registerPreferenceRoutes(app);
     registerPushTokenRoutes(app);
 
-    // Fastify synthesizes a matching HEAD route for each GET; the 71 explicit
+    // Fastify synthesizes a matching HEAD route for each GET; the 73 explicit
     // declarations below are the reviewable API policy delta.
     const declared = app.routePolicyLedger.filter((row) => row.method !== "HEAD");
-    expect(declared).toHaveLength(71);
+    expect(declared).toHaveLength(73);
     expect(declared).toContainEqual({
       method: "POST",
       url: "/api/public/universities/propose",
@@ -52,6 +52,16 @@ describe("logistics, event and notifications route policy ledger", () => {
       method: "GET",
       url: "/api/wallet/apple/v1/devices/:deviceLibraryIdentifier/registrations/:passTypeIdentifier",
       policy: { kind: "token", policy: "apple-passkit-web-service" },
+    });
+    expect(declared).toContainEqual({
+      method: "GET",
+      url: "/api/wallet/scoped/apple/:purpose.pkpass",
+      policy: { kind: "token", policy: "scoped-wallet-access" },
+    });
+    expect(declared).toContainEqual({
+      method: "GET",
+      url: "/api/wallet/scoped/google/:purpose",
+      policy: { kind: "token", policy: "scoped-wallet-access" },
     });
     expect(declared).toContainEqual({
       method: "GET",

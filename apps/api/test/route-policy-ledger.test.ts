@@ -12,9 +12,9 @@ describe("final route-policy ledger", () => {
   it("has the exact classified rows, allowlists, and sole Better Auth exemption", async () => {
     app = await buildTestApp();
     const rows = app.routePolicyLedger.filter((row) => row.method !== "HEAD");
-    expect(rows).toHaveLength(273);
+    expect(rows).toHaveLength(275);
     expect(rows.filter((row) => row.policy.kind === "public")).toHaveLength(15);
-    expect(rows.filter((row) => row.policy.kind === "token")).toHaveLength(10);
+    expect(rows.filter((row) => row.policy.kind === "token")).toHaveLength(12);
     expect(rows.filter((row) => row.policy.kind === "authenticated")).toHaveLength(29);
     expect(rows.filter((row) => row.policy.kind === "capability")).toHaveLength(168);
     expect(rows.filter((row) => row.policy.kind === "contextual")).toHaveLength(51);
@@ -53,6 +53,8 @@ describe("final route-policy ledger", () => {
       "GET /api/invites/lookup",
       "GET /api/wallet/apple/v1/devices/:deviceLibraryIdentifier/registrations/:passTypeIdentifier",
       "GET /api/wallet/apple/v1/passes/:passTypeIdentifier/:serialNumber",
+      "GET /api/wallet/scoped/apple/:purpose.pkpass",
+      "GET /api/wallet/scoped/google/:purpose",
       "POST /api/applications/confirm",
       "POST /api/applications/decline",
       "POST /api/auth/resend-verification",
