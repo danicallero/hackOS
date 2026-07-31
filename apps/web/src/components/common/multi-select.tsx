@@ -13,6 +13,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { useDialogPortal } from "@/hooks/use-dialog-portal";
 import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -27,12 +28,8 @@ export interface MultiSelectOption {
  * group, filters…). Options are `{ value, label, description }`; `value` is a
  * string[] of selected values. Fully controlled and prop-driven.
  *
- * `inDialog`: when this lives inside a <Modal>/<Dialog>, set it true so the
- * popover renders WITHOUT a portal. A portaled popover lands outside the
- * dialog's scroll-lock (react-remove-scroll), which silently blocks scrolling
- * the option list. Rendered inline it stays inside the lock scope and scrolls.
- * Outside a dialog keep the default (portaled) so overflow-hidden ancestors
- * like SectionCard don't clip it.
+ * `inDialog`: set it true when this lives inside a <Modal>/<Dialog> so the
+ * popover is portaled into the dialog panel — see `useDialogPortal`.
  */
 export function MultiSelect({
   options,
@@ -67,6 +64,7 @@ export function MultiSelect({
 }) {
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
+  const { ref: boxRef, portalProps, contentProps } = useDialogPortal(inDialog);
   const selected = new Set(value);
   const toggle = (v: string) =>
     onChange(selected.has(v) ? value.filter((x) => x !== v) : [...value, v]);
@@ -76,11 +74,13 @@ export function MultiSelect({
     <PopoverPrimitive.Content
       align="start"
       sideOffset={4}
-      className="bg-popover text-popover-foreground z-50 w-[--radix-popover-trigger-width] rounded-md border shadow-md outline-hidden"
+      collisionPadding={8}
+      {...contentProps}
+      className="bg-popover text-popover-foreground z-50 flex max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] flex-col rounded-md border shadow-md outline-hidden"
     >
       <Command>
         <CommandInput placeholder={searchPlaceholder ?? t("genericSearchPlaceholder")} />
-        <CommandList className="max-h-64">
+        <CommandList className="max-h-64 min-h-0 flex-1">
           <CommandEmpty>{emptyText ?? t("noResultsLabel")}</CommandEmpty>
           <CommandGroup>
             {options.map((opt) => (
@@ -109,17 +109,25 @@ export function MultiSelect({
 
   return (
     <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
-      <div
-        className={cn(
-          "flex min-h-10 w-full items-center gap-2 rounded-control border bg-background px-3 py-2",
-          disabled && "opacity-50",
-          className,
-        )}
-      >
-        <span className="flex min-w-0 flex-1 flex-wrap gap-1">
-          {value.length === 0
-            ? null
-            : value.map((v) => (
+      {/* Anchored on the whole control, not on the inner trigger button: the
+          button is inset by the box's padding (and by any badges), so anchoring
+          to it would leave the popover narrower than, and offset from, the
+          field it belongs to. */}
+      <PopoverPrimitive.Anchor asChild>
+        <div
+          ref={boxRef}
+          className={cn(
+            "flex min-h-10 w-full items-center gap-2 rounded-control border bg-background px-3 py-2",
+            disabled && "opacity-50",
+            className,
+          )}
+        >
+          {/* Only rendered when something is selected: an empty flex-1 span would
+              eat half the control and push the trigger (and its placeholder) into
+              the middle of the box instead of leaving it left-aligned. */}
+          {value.length > 0 && (
+            <span className="flex min-w-0 flex-wrap gap-1">
+              {value.map((v) => (
                 <Badge key={v} variant="secondary" className="gap-1">
                   {labelOf(v)}
                   <button
@@ -133,38 +141,43 @@ export function MultiSelect({
                   </button>
                 </Badge>
               ))}
-        </span>
-        <PopoverPrimitive.Trigger asChild>
-          <button
-            id={id}
-            name={name}
-            type="button"
-            disabled={disabled}
-            role="combobox"
-            aria-expanded={open}
-            aria-haspopup="listbox"
-            aria-labelledby={ariaLabelledBy}
-            aria-describedby={ariaDescribedBy}
-            aria-invalid={ariaInvalid}
-            className={cn(
-              buttonVariants({ variant: "ghost" }),
-              "min-w-0 flex-1 justify-between px-1 font-normal",
-              value.length > 0 && "flex-none",
-            )}
-          >
-            <span className={cn(value.length > 0 && "sr-only", "truncate")}>
-              {value.length > 0
-                ? t("selectedCount", { count: value.length })
-                : (placeholder ?? t("selectPlaceholder"))}
             </span>
-            <ChevronsUpDownIcon
-              aria-hidden="true"
-              className="text-muted-foreground size-4 shrink-0"
-            />
-          </button>
-        </PopoverPrimitive.Trigger>
-      </div>
-      {inDialog ? content : <PopoverPrimitive.Portal>{content}</PopoverPrimitive.Portal>}
+          )}
+          <PopoverPrimitive.Trigger asChild>
+            <button
+              id={id}
+              name={name}
+              type="button"
+              disabled={disabled}
+              role="combobox"
+              aria-expanded={open}
+              aria-haspopup="listbox"
+              aria-labelledby={ariaLabelledBy}
+              aria-describedby={ariaDescribedBy}
+              aria-invalid={ariaInvalid}
+              className={cn(
+                buttonVariants({ variant: "ghost" }),
+                "min-w-0 flex-1 px-1 text-left font-normal",
+                // With badges the label is sr-only, so the chevron is the only
+                // visible child: pin it to the far edge of the control instead
+                // of leaving it floating where the label used to start.
+                value.length > 0 ? "justify-end" : "justify-between",
+              )}
+            >
+              <span className={cn(value.length > 0 && "sr-only", "truncate")}>
+                {value.length > 0
+                  ? t("selectedCount", { count: value.length })
+                  : (placeholder ?? t("selectPlaceholder"))}
+              </span>
+              <ChevronsUpDownIcon
+                aria-hidden="true"
+                className="text-muted-foreground size-4 shrink-0"
+              />
+            </button>
+          </PopoverPrimitive.Trigger>
+        </div>
+      </PopoverPrimitive.Anchor>
+      <PopoverPrimitive.Portal {...portalProps}>{content}</PopoverPrimitive.Portal>
     </PopoverPrimitive.Root>
   );
 }

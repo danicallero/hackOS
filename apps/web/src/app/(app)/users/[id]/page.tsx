@@ -7,7 +7,8 @@ import { useCallback, useEffect, useState } from "react";
 import { BackLink } from "@/components/common/back-link";
 import { EmptyState } from "@/components/common/empty-state";
 import { Spinner } from "@/components/common/spinner";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TabBar } from "@/components/common/tab-bar";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
@@ -96,32 +97,15 @@ export default function UserProfilePage() {
       <ProfileHeader user={user} />
 
       <Tabs defaultValue={initialTab}>
-        <TabsList
-          aria-label={t("profileSections")}
-          className="w-full max-w-3xl justify-start overflow-x-auto"
-        >
-          <TabsTrigger className="flex-none" value="overview">
-            {t("tabOverview")}
-          </TabsTrigger>
-          <TabsTrigger className="flex-none" value="qr">
-            {t("qrCodes")}
-          </TabsTrigger>
-          <TabsTrigger className="flex-none" value="permissions">
-            {t("permissions")}
-          </TabsTrigger>
-          <TabsTrigger className="flex-none" value="presence">
-            {t("presence")}
-          </TabsTrigger>
-          <TabsTrigger className="flex-none" value="activity">
-            {t("tabLogs")}
-          </TabsTrigger>
-          <TabsTrigger className="flex-none" value="application">
-            {t("tabApplication")}
-          </TabsTrigger>
-          <TabsTrigger className="flex-none" value="projects">
-            {t("projects")}
-          </TabsTrigger>
-        </TabsList>
+        <TabBar aria-label={t("profileSections")} className="w-full justify-start">
+          <TabsTrigger value="overview">{t("tabOverview")}</TabsTrigger>
+          <TabsTrigger value="qr">{t("qrCodes")}</TabsTrigger>
+          <TabsTrigger value="permissions">{t("permissions")}</TabsTrigger>
+          <TabsTrigger value="presence">{t("presence")}</TabsTrigger>
+          <TabsTrigger value="activity">{t("tabLogs")}</TabsTrigger>
+          <TabsTrigger value="application">{t("tabApplication")}</TabsTrigger>
+          <TabsTrigger value="projects">{t("projects")}</TabsTrigger>
+        </TabBar>
 
         <TabsContent value="overview" className="pt-2">
           <OverviewTab user={user} intolerances={intolerances} onUpdated={load} />

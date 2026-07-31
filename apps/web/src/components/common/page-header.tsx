@@ -6,8 +6,10 @@ import { cn } from "@/lib/utils";
  */
 export function PageHeader({
   context,
+  leading,
   title,
   state,
+  meta,
   description,
   primaryAction,
   secondaryActions,
@@ -15,8 +17,12 @@ export function PageHeader({
   className,
 }: {
   context?: React.ReactNode;
+  /** Visual identity for record pages (an avatar, a logo). Never an action. */
+  leading?: React.ReactNode;
   title: string;
   state?: React.ReactNode;
+  /** Identity metadata under the title (email, badge id) — not a description. */
+  meta?: React.ReactNode;
   description?: string;
   primaryAction?: React.ReactNode;
   secondaryActions?: React.ReactNode;
@@ -41,13 +47,21 @@ export function PageHeader({
         className,
       )}
     >
-      <div className="min-w-0 space-y-1">
-        {context && <div className="type-meta">{context}</div>}
-        <div className="flex flex-wrap items-center gap-[var(--space-related)]">
-          <h1 className="type-page-title text-balance">{title}</h1>
-          {state && <div className="shrink-0">{state}</div>}
+      <div className="flex min-w-0 items-start gap-[var(--space-related)]">
+        {leading && <div className="shrink-0">{leading}</div>}
+        <div className="min-w-0 space-y-1">
+          {context && <div className="type-meta">{context}</div>}
+          <div className="flex flex-wrap items-center gap-[var(--space-related)]">
+            <h1 className="type-page-title text-balance">{title}</h1>
+            {state && <div className="shrink-0">{state}</div>}
+          </div>
+          {meta && (
+            <div className="flex flex-wrap items-center gap-[var(--space-related)]">{meta}</div>
+          )}
+          {description && (
+            <p className="text-muted-foreground text-pretty text-sm">{description}</p>
+          )}
         </div>
-        {description && <p className="text-muted-foreground text-pretty text-sm">{description}</p>}
       </div>
       {actionContent && (
         <div className="flex flex-wrap items-center gap-[var(--space-related)] sm:shrink-0 sm:justify-end">

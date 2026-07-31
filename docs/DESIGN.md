@@ -126,10 +126,15 @@ colour tokens.
 **Summary: title-first `PageHeader`, one primary action per scope,
 descriptions only for risk/policy, disabled actions explain themselves.**
 
-`PageHeader` anatomy: optional `context` (breadcrumb or workspace label) →
-title → `state` (nearby count/status when useful) → one `primaryAction` +
-optional `secondaryActions`.
+`PageHeader` anatomy: optional `leading` (avatar/logo on record pages) →
+optional `context` (breadcrumb or workspace label) → title → `state` (nearby
+count/status when useful) → optional `meta` (identity metadata: email, badge
+id) → one `primaryAction` + optional `secondaryActions`.
 
+- **Record pages use the same header as every other page.** An avatar goes in
+  `leading` and the identity line in `meta` — don't hand-roll a second header
+  layout with its own `h1` size and an `ml-auto` action block, which strands
+  the actions on their own right-aligned row as soon as the title row wraps.
 - **The top bar carries the workspace, the page carries its own name.** The
   sticky app-shell bar names the containing workspace; the `h1` names the
   destination. Never render the same string in both, and never give one
@@ -173,6 +178,8 @@ in the running app.**
 | Communicate entity status | `StatusBadge` with a `tone` (queue states: `QueueStatusBadge`) | Coloured text, custom pills |
 | A metric | `StatCard` (delta/footer slots for meters/sparklines) | Bare big numbers in a `Surface` |
 | Comparative data, sorting, bulk selection | `DataTable<T>` | Custom table markup |
+| A horizontal tab bar | `TabBar` (scrolls itself when the triggers outgrow the container) | Bare `TabsList` with a per-page `overflow-x-auto` wrapper or `flex-wrap`, which the fixed pill height clips |
+| A combobox/multi-select inside a `Modal` | `MultiSelect`/`UniversityPicker` with `inDialog` | The same control without it — its list then either can't scroll or spills outside the dialog |
 | A set of same-shaped objects users drill into (esp. mobile) | Cards / drill-down list rows | A horizontally scrolling table |
 | Zero-state | `EmptyState` with one direct CTA | Prose explaining where to navigate |
 | Long-form save feedback | `SaveStatus` (`lib/save-state.ts`) | Silent autosave, per-section save buttons |

@@ -99,7 +99,7 @@ export function TimezonePicker({
     <PopoverPrimitive.Content
       align="start"
       sideOffset={4}
-      className="bg-popover text-popover-foreground z-50 w-[--radix-popover-trigger-width] rounded-md border shadow-md outline-hidden"
+      className="bg-popover text-popover-foreground z-50 flex max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] flex-col rounded-md border shadow-md outline-hidden"
     >
       <Command shouldFilter={false}>
         <CommandInput
@@ -107,7 +107,7 @@ export function TimezonePicker({
           value={query}
           onValueChange={setQuery}
         />
-        <CommandList className="max-h-64">
+        <CommandList className="max-h-64 min-h-0 flex-1">
           {filtered.length === 0 && <CommandEmpty>{t("noTimezoneMatch")}</CommandEmpty>}
           <CommandGroup>
             {filtered.map((zone) => (

@@ -119,9 +119,15 @@ re-implementing. Each is a **single canonical component configured by props**
 `/components` in the running app.
 
 Key components: `PageHeader`, `SectionCard`, `StatCard`, `StatusBadge`,
-`EmptyState`, `DataTable`, `Modal`, `AlertModal`, `ContextualError`,
+`EmptyState`, `DataTable`, `TabBar`, `Modal`, `AlertModal`, `ContextualError`,
 `CapabilityGate`, `AccessDenied`, `Spinner`, `SubmitButton`, `PasswordInput`,
-`QrCode`, `TemplateFieldControl`, `FileUploadField`.
+`QrCode`, `MultiSelect`, `TemplateFieldControl`, `FileUploadField`.
+
+Popovers (`MultiSelect`, `UniversityPicker`, `TimezonePicker`) take an
+`inDialog` prop: inside a `Modal` it portals the list into the dialog panel via
+`useDialogPortal`, which is the only place that is both inside the dialog's
+scroll-lock and outside the modal body's scroller. Pass it, or the option list
+either refuses to scroll or spills past the dialog edge.
 
 A capability-denied page is `<AccessDenied ask={t("…")} />` and nothing else —
 one heading for every page, one per-page ask naming the access to request. It

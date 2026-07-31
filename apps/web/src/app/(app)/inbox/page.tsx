@@ -1,7 +1,8 @@
 "use client";
 
 import { PageHeader } from "@/components/common/page-header";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TabBar } from "@/components/common/tab-bar";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useLocale } from "@/lib/i18n";
 import { MessagesTab, PreferencesTab } from "./inbox-tabs";
 
@@ -11,10 +12,10 @@ export default function InboxPage() {
     <div className="space-y-6">
       <PageHeader title={t("inbox")} />
       <Tabs defaultValue="messages">
-        <TabsList>
+        <TabBar>
           <TabsTrigger value="messages">{t("messages")}</TabsTrigger>
           <TabsTrigger value="preferences">{t("preferences")}</TabsTrigger>
-        </TabsList>
+        </TabBar>
         <TabsContent value="messages" className="pt-4">
           <MessagesTab />
         </TabsContent>
