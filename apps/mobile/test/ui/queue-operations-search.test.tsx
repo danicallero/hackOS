@@ -26,7 +26,8 @@ jest.mock("@/lib/i18n", () => ({
       ({
         queueOpsSearchResultCount: `${params?.count} results`,
         queueOpsSearchResultCountOne: "1 result",
-        queueOpsSearchNoResultsCount: "No results",
+        scannerNoResults: "No results",
+        queueOpsNoSearchResults: "No teams or people match this search.",
         queuePossibleRoomsLabel: "Possible rooms",
         queuePositionLabel: "Position",
         queueStatusWaiting: "Waiting",
@@ -120,13 +121,16 @@ describe("queue operations search (H29-H31)", () => {
     }
   });
 
-  it("reports an empty search", async () => {
+  it("falls back to the empty state, with no duplicate count line, when nothing matches", async () => {
     await renderMobile(<QueueOperationsScreen />);
     await waitFor(() => expect(mockApiFetch).toHaveBeenCalledTimes(ROOMS.length + 1));
 
     await search("nobody");
 
-    await waitFor(() => expect(screen.getByText("No results")).toBeTruthy());
+    await waitFor(() =>
+      expect(screen.getByText("No teams or people match this search.")).toBeTruthy(),
+    );
+    expect(screen.getAllByText("No results")).toHaveLength(1);
     expect(screen.queryByText("K2 Platform")).toBeNull();
   });
 });

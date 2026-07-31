@@ -356,11 +356,6 @@ const dict = {
     gl: "{count} resultados",
   },
   queueOpsSearchResultCountOne: { en: "1 result", es: "1 resultado", gl: "1 resultado" },
-  queueOpsSearchNoResultsCount: {
-    en: "No results",
-    es: "Sin resultados",
-    gl: "Sen resultados",
-  },
   queueOpsNoSearchResults: {
     en: "No teams or people match this search.",
     es: "No hay equipos ni personas que coincidan con la búsqueda.",

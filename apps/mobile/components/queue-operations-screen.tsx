@@ -227,7 +227,8 @@ export function QueueOperationsScreen() {
         }}
         ListHeaderComponent={
           <View style={{ gap: 12 }}>
-            <SearchResultCount count={searchResults.length} />
+            {/* Zero is left to the empty state below — it already says "No results". */}
+            {searchResults.length ? <SearchResultCount count={searchResults.length} /> : null}
             {actionErrorBanner}
           </View>
         }
@@ -332,11 +333,9 @@ function SearchResultCount({ count }: { count: number }) {
       selectable
       style={{ color: colors.secondaryLabel, fontSize: 13, fontWeight: "600" }}
     >
-      {count === 0
-        ? t("queueOpsSearchNoResultsCount")
-        : count === 1
-          ? t("queueOpsSearchResultCountOne")
-          : t("queueOpsSearchResultCount", { count: String(count) })}
+      {count === 1
+        ? t("queueOpsSearchResultCountOne")
+        : t("queueOpsSearchResultCount", { count: String(count) })}
     </Text>
   );
 }
