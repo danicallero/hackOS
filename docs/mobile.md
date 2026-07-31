@@ -177,11 +177,14 @@ route below. No migration needed.
   entry's `queue_history` timeline. Re-notification uses the existing
   idempotent `notify-enter` transition with a React Native-safe generated
   key. On top of the existing 10s poll, the screen opens
-  `lib/server-events.ts`'s `startQueueEventStream()` (the public
-  `GET /api/queue/stream` topic) while focused, so `QUEUE_TEAM_CALLED` /
-  `QUEUE_ENTRY_CHANGED` / `QUEUE_ROOM_CHANGED` refresh the board immediately
-  and mark the newly-called room/entry with an accent border and a "Just
-  called" badge for ~12s. `notifyTeamCalled` (apps/api) also pushes the
+  `lib/server-events.ts`'s `startQueueEventStream()` (the authenticated,
+  capability-gated `GET /api/queue/stream` topic) while focused, so
+  `QUEUE_TEAM_CALLED` / `QUEUE_ENTRY_CHANGED` / `QUEUE_ROOM_CHANGED` refresh
+  the board immediately and mark the newly-called room/entry with an accent
+  border and a "Just called" badge for ~12s. The native client sends the
+  Better Auth restored session cookie on every initial connection and reconnect,
+  and it stops the loop as soon as the screen loses its queue capability.
+  `notifyTeamCalled` (apps/api) also pushes the
   existing opt-in `queue.staff` push category (same mechanism as
   `notify-enter`'s staff alert) so an operator with a backgrounded app still
   gets a device notification. The layout is one column on phones, two from
