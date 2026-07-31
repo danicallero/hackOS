@@ -6,7 +6,8 @@ import { z } from "zod";
 import { pool } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { requireCapability } from "../../lib/capabilities.js";
-import { NotFoundError, UnauthorizedError } from "../../lib/errors.js";
+import { NotFoundError } from "../../lib/errors.js";
+import type { RouteAccessPolicy } from "../../lib/route-policy.js";
 
 /**
  * Food-intolerance dictionary (H12/H25). Administration maintains the shared
@@ -33,24 +34,46 @@ const updateBody = z
 
 const COLUMNS = "id, label, description, proposed_by, created_at";
 
+function routeAccess(routeAccessPolicy: RouteAccessPolicy) {
+  return { config: { routeAccessPolicy } };
+}
+
 export function registerIntoleranceRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
   const manage = requireCapability(CAPABILITIES.INTOLERANCES_MANAGE);
+  const publicContent = {
+    kind: "public",
+    anonymousCategory: "public-content",
+  } as const satisfies RouteAccessPolicy;
+  const manageAccess = {
+    kind: "capability",
+    capability: CAPABILITIES.INTOLERANCES_MANAGE,
+  } as const satisfies RouteAccessPolicy;
 
   // Public: the picker's option list.
-  r.get("/api/public/food-intolerances", async () => {
-    const { rows } = await pool.query(
-      `SELECT id, label, description FROM food_intolerances ORDER BY id`,
-    );
-    return { intolerances: rows };
-  });
+  r.get(
+    "/api/public/food-intolerances",
+    {
+      ...routeAccess(publicContent),
+      schema: {
+        summary: "List public food-intolerance options",
+        description:
+          "Anonymous read-only catalogue used by application and profile pickers; staff maintain it through the protected management endpoints.",
+      },
+    },
+    async () => {
+      const { rows } = await pool.query(
+        `SELECT id, label, description FROM food_intolerances ORDER BY id`,
+      );
+      return { intolerances: rows };
+    },
+  );
 
   r.post(
     "/api/food-intolerances",
-    { preHandler: manage, schema: { body: createBody } },
+    { ...routeAccess(manageAccess), preHandler: manage, schema: { body: createBody } },
     async (req, reply) => {
-      const userId = req.userId;
-      if (userId == null) throw new UnauthorizedError();
+      const userId = req.userId as number;
       const { rows } = await pool.query(
         `INSERT INTO food_intolerances (label, description, proposed_by)
        VALUES ($1::jsonb, $2::jsonb, $3) RETURNING ${COLUMNS}`,
@@ -74,7 +97,11 @@ export function registerIntoleranceRoutes(app: FastifyInstance): void {
 
   r.patch(
     "/api/food-intolerances/:id",
-    { preHandler: manage, schema: { params: idParam, body: updateBody } },
+    {
+      ...routeAccess(manageAccess),
+      preHandler: manage,
+      schema: { params: idParam, body: updateBody },
+    },
     async (req) => {
       const sets: string[] = [];
       const values: unknown[] = [];
@@ -108,7 +135,7 @@ export function registerIntoleranceRoutes(app: FastifyInstance): void {
 
   r.delete(
     "/api/food-intolerances/:id",
-    { preHandler: manage, schema: { params: idParam } },
+    { ...routeAccess(manageAccess), preHandler: manage, schema: { params: idParam } },
     async (req, reply) => {
       const { rowCount } = await pool.query(`DELETE FROM food_intolerances WHERE id = $1`, [
         req.params.id,

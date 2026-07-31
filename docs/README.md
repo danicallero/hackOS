@@ -39,6 +39,14 @@ Architecture & modules:
   override / timetable / default precedence, the combined live screen and its
   payload, slot rotation, venue Wi-Fi, and how each mode adapts to any screen
   size or aspect ratio.
+- [Access-control audit and consolidation plan](./access-control-audit-plan.md)
+  — implementation status and the Orca-orchestration brief for mandatory route
+  policies, contextual authorization, immediate capability revocation,
+  permission-group safety and templates, SSE isolation, the task DAG, and the
+  release gate.
+- [Generated API route-policy ledger](./access-control-route-ledger.md) — the
+  complete sorted runtime declaration inventory and public/token allowlist
+  snapshot; regenerate it with `pnpm --filter @hackos/api route-policy:audit`.
 
 Frontend (web & mobile):
 
@@ -75,5 +83,3 @@ this folder), [`apps/web/README.md`](../apps/web/README.md) for web frontend
 conventions and the component library, and
 [`deploy/README.md`](../deploy/README.md) for the full deployment story
 (networking, secrets, Dokploy modes).
-
-## Index

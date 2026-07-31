@@ -48,8 +48,8 @@ function retryAfter(response: Response): number | null {
  * avoids a browser cookie jar dependency. RN's fetch response body is a
  * readable stream, so no EventSource polyfill is required.
  */
-function startEventStream(path: string): () => void {
-  if (Platform.OS === "web") return () => undefined;
+function startEventStream(path: string, enabled = true): () => void {
+  if (!enabled || Platform.OS === "web") return () => undefined;
   let stopped = false;
   let controller: AbortController | null = null;
   let reconnect: ReturnType<typeof setTimeout> | null = null;
@@ -115,6 +115,6 @@ export function startPersonalEventStream(): () => void {
  * Unlike the personal stream this is only opened while an operator has the
  * queue-operations screen mounted, not app-wide.
  */
-export function startQueueEventStream(): () => void {
-  return startEventStream("/api/queue/stream");
+export function startQueueEventStream(enabled = true): () => void {
+  return startEventStream("/api/queue/stream", enabled);
 }

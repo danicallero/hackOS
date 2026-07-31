@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/command";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
+import { useSessionContext } from "@/lib/session";
 import { cn } from "@/lib/utils";
 
 interface University {
@@ -55,6 +56,7 @@ export function UniversityPicker({
   "aria-required"?: React.AriaAttributes["aria-required"];
 }) {
   const { t } = useLocale();
+  const { status } = useSessionContext();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [options, setOptions] = useState<University[]>([]);
@@ -128,7 +130,7 @@ export function UniversityPicker({
 
   async function propose() {
     const name = query.trim();
-    if (!name) return;
+    if (!name || status !== "authenticated") return;
     setProposing(true);
     try {
       const created = await api.post<University>("/api/public/universities/propose", { name });
@@ -136,7 +138,16 @@ export function UniversityPicker({
       select(created);
       setQuery("");
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotAddUniversity"));
+      // The session can expire after this authenticated-only action becomes
+      // available. Point back to sign-in rather than presenting it as a
+      // catalogue-validation failure.
+      toast.error(
+        err instanceof ApiError && err.status === 401
+          ? t("signIn")
+          : err instanceof ApiError
+            ? err.message
+            : t("couldNotAddUniversity"),
+      );
     } finally {
       setProposing(false);
     }
@@ -144,7 +155,12 @@ export function UniversityPicker({
 
   const exactMatch = options.some((o) => o.name.toLowerCase() === query.trim().toLowerCase());
   const canPropose =
-    allowPropose && !searchError && query.trim().length > 1 && !exactMatch && !loading;
+    allowPropose &&
+    status === "authenticated" &&
+    !searchError &&
+    query.trim().length > 1 &&
+    !exactMatch &&
+    !loading;
   const label = value ? (selectedLabel ?? t("universityNumberFallback", { id: value })) : null;
 
   const content = (

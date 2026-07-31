@@ -202,6 +202,55 @@ describe("challenge lifecycle (H43-H45)", () => {
     expect(scheduleEdit.statusCode).toBe(403);
   });
 
+  it("fails closed across sponsor enterprises while preserving owner and wildcard access", async () => {
+    const server = await getApp();
+    const owner = await createUser();
+    const foreignOwner = await createUser();
+    const challengeId = await createOwnedChallenge(owner);
+    const foreignChallengeId = await createOwnedChallenge(foreignOwner);
+
+    expect(
+      (
+        await server.inject({
+          method: "PATCH",
+          url: `/api/challenges/${challengeId}`,
+          payload: { description: "x" },
+        })
+      ).statusCode,
+    ).toBe(401);
+    expect(
+      (
+        await server.inject({
+          method: "PATCH",
+          url: `/api/challenges/${foreignChallengeId}`,
+          headers: asUser(owner),
+          payload: { description: "x" },
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (
+        await server.inject({
+          method: "GET",
+          url: `/api/challenges/${challengeId}/panel/preview`,
+          headers: asUser(owner),
+        })
+      ).statusCode,
+    ).toBe(200);
+
+    const wildcard = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
+    expect(
+      (
+        await server.inject({
+          method: "PATCH",
+          url: `/api/challenges/${foreignChallengeId}`,
+          headers: asUser(wildcard),
+          payload: { description: "global" },
+        })
+      ).statusCode,
+    ).toBe(200);
+  });
+
   it("persists and clears challenge reveal time through the main update route", async () => {
     const server = await getApp();
     const admin = await createUserWithCapabilities([CAPABILITIES.SPONSORS_MANAGE]);

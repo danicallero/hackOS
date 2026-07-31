@@ -3,11 +3,17 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
-import { requireAuth, requireCapability, userHasCapability } from "../../lib/capabilities.js";
-import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import { requireCapability } from "../../lib/capabilities.js";
+import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { requireAnyCapability } from "./access.js";
-import { requireRoomJudgeOrCapability } from "./contextual-access.js";
+import {
+  accessibleRoomIds,
+  requireRoomAccessOrCapability,
+  requireRoomJudgeManager,
+  requireRoomJudgeOrCapability,
+  requireRoomListAccess,
+} from "./contextual-access.js";
 import { scheduleTopUp } from "./pump.js";
 import {
   assignChallengeBody,
@@ -24,55 +30,6 @@ import {
 } from "./schemas.js";
 import { enqueueChallenge, pauseRoom, resumeRoom } from "./service.js";
 
-async function assertCanManageRoomJudges(
-  userId: number | null,
-  roomId: number,
-  challengeId: number,
-): Promise<"admin" | "owner"> {
-  if (userId == null) throw new ConflictError("Missing actor");
-  if (await userHasCapability(userId, CAPABILITIES.QUEUE_ADMIN)) return "admin";
-
-  const { rows } = await pool.query(
-    `SELECT rc.challenge_id
-       FROM room_challenges rc
-       JOIN challenges c ON c.id = rc.challenge_id
-       JOIN sponsors author ON author.id = c.author
-       JOIN sponsors mine ON mine.enterprise_id = author.enterprise_id
-      WHERE rc.room_id = $1 AND rc.challenge_id = $2 AND mine.user_id = $3`,
-    [roomId, challengeId, userId],
-  );
-  if (rows[0]) return "owner";
-
-  throw new ForbiddenError("Not allowed to manage judges for this room", {
-    roomId,
-    challengeId,
-  });
-}
-
-async function roomIdsForSponsorOwner(userId: number): Promise<number[]> {
-  const { rows } = await pool.query(
-    `SELECT DISTINCT rc.room_id
-       FROM room_challenges rc
-       JOIN challenges c ON c.id = rc.challenge_id
-       JOIN sponsors author ON author.id = c.author
-       JOIN sponsors mine ON mine.enterprise_id = author.enterprise_id
-      WHERE mine.user_id = $1`,
-    [userId],
-  );
-  return rows.map((row: { room_id: number }) => row.room_id);
-}
-
-async function roomIdsForAssignedJudge(userId: number): Promise<number[]> {
-  const { rows } = await pool.query(
-    `SELECT DISTINCT room_id
-       FROM room_judges
-      WHERE user_id = $1
-      ORDER BY room_id ASC`,
-    [userId],
-  );
-  return rows.map((row: { room_id: number }) => row.room_id);
-}
-
 function auditRequest(req: FastifyRequest) {
   return {
     ip: req.ip,
@@ -88,7 +45,11 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
   // ── rooms CRUD ─────────────────────────────────────────────────────────
   typed.post(
     "/api/queue/rooms",
-    { preHandler: requireCapability(CAPABILITIES.QUEUE_ADMIN), schema: { body: createRoomBody } },
+    {
+      preHandler: requireCapability(CAPABILITIES.QUEUE_ADMIN),
+      config: { routeAccessPolicy: { kind: "capability", capability: CAPABILITIES.QUEUE_ADMIN } },
+      schema: { body: createRoomBody },
+    },
     async (req, reply) => {
       const { name, slug, location } = req.body;
       const { rows } = await pool.query(
@@ -106,58 +67,58 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
     },
   );
 
-  typed.get("/api/queue/rooms", { preHandler: requireAuth }, async (req) => {
-    if (
-      req.userId != null &&
-      ((await userHasCapability(req.userId, CAPABILITIES.QUEUE_OPERATE)) ||
-        (await userHasCapability(req.userId, CAPABILITIES.QUEUE_ADMIN)))
-    ) {
-      const { rows } = await pool.query(
-        `SELECT rooms.*, CASE WHEN rqs.is_paused THEN 'paused' ELSE 'active' END AS status
+  typed.get(
+    "/api/queue/rooms",
+    {
+      preHandler: requireRoomListAccess,
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "room-list",
+        },
+      },
+    },
+    async (req) => {
+      const roomIds = await accessibleRoomIds(req);
+      if (roomIds === null) {
+        const { rows } = await pool.query(
+          `SELECT rooms.*, CASE WHEN rqs.is_paused THEN 'paused' ELSE 'active' END AS status
          FROM rooms
          LEFT JOIN room_queue_state rqs ON rqs.room_id = rooms.id
          ORDER BY rooms.id ASC`,
-      );
-      return rows;
-    }
+        );
+        return rows;
+      }
 
-    if (req.userId == null) throw new ForbiddenError("Missing user");
-    const roomIds = [
-      ...new Set([
-        ...(await roomIdsForSponsorOwner(req.userId)),
-        ...(await roomIdsForAssignedJudge(req.userId)),
-      ]),
-    ];
-    if (roomIds.length === 0) {
-      throw new ForbiddenError("Not allowed to list queue rooms");
-    }
-    const { rows } = await pool.query(
-      `SELECT rooms.*, CASE WHEN rqs.is_paused THEN 'paused' ELSE 'active' END AS status
+      const { rows } = await pool.query(
+        `SELECT rooms.*, CASE WHEN rqs.is_paused THEN 'paused' ELSE 'active' END AS status
        FROM rooms
        LEFT JOIN room_queue_state rqs ON rqs.room_id = rooms.id
        WHERE rooms.id = ANY($1)
        ORDER BY rooms.id ASC`,
-      [roomIds],
-    );
-    return rows;
-  });
+        [roomIds],
+      );
+      return rows;
+    },
+  );
 
   typed.get(
     "/api/queue/rooms/:roomId",
     {
-      preHandler: requireAuth,
+      preHandler: requireRoomAccessOrCapability(
+        CAPABILITIES.QUEUE_OPERATE,
+        CAPABILITIES.QUEUE_ADMIN,
+      ),
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "room-read",
+          resource: { source: "params", field: "roomId" },
+        },
+      },
       schema: { params: roomIdParam },
     },
     async (req) => {
-      if (
-        req.userId == null ||
-        (!(await userHasCapability(req.userId, CAPABILITIES.QUEUE_OPERATE)) &&
-          !(await userHasCapability(req.userId, CAPABILITIES.QUEUE_ADMIN)) &&
-          !(await roomIdsForAssignedJudge(req.userId)).includes(req.params.roomId) &&
-          !(await roomIdsForSponsorOwner(req.userId)).includes(req.params.roomId))
-      ) {
-        throw new ForbiddenError("Not allowed to read this room");
-      }
       const room = (await pool.query(`SELECT * FROM rooms WHERE id = $1`, [req.params.roomId]))
         .rows[0];
       if (!room) throw new NotFoundError("Room not found");
@@ -172,6 +133,7 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
     "/api/queue/rooms/:roomId",
     {
       preHandler: requireCapability(CAPABILITIES.QUEUE_ADMIN),
+      config: { routeAccessPolicy: { kind: "capability", capability: CAPABILITIES.QUEUE_ADMIN } },
       schema: { params: roomIdParam, body: updateRoomBody },
     },
     async (req) => {
@@ -198,6 +160,7 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
     "/api/queue/rooms/:roomId/challenges",
     {
       preHandler: requireCapability(CAPABILITIES.QUEUE_ADMIN),
+      config: { routeAccessPolicy: { kind: "capability", capability: CAPABILITIES.QUEUE_ADMIN } },
       schema: { params: roomIdParam, body: assignChallengeBody },
     },
     async (req, reply) => {
@@ -254,6 +217,7 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
     "/api/queue/rooms/:roomId/challenges/:challengeId",
     {
       preHandler: requireCapability(CAPABILITIES.QUEUE_ADMIN),
+      config: { routeAccessPolicy: { kind: "capability", capability: CAPABILITIES.QUEUE_ADMIN } },
       schema: { params: roomChallengeParam },
     },
     async (req) => {
@@ -284,17 +248,17 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
   typed.get(
     "/api/queue/rooms/:roomId/judge-candidates",
     {
-      preHandler: requireAuth,
+      preHandler: requireRoomJudgeManager("room"),
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "room-judge-manage",
+          resource: { source: "params", field: "roomId" },
+        },
+      },
       schema: { params: roomIdParam },
     },
-    async (req) => {
-      const challenge = (
-        await pool.query(`SELECT challenge_id FROM room_challenges WHERE room_id = $1`, [
-          req.params.roomId,
-        ])
-      ).rows[0] as { challenge_id: number } | undefined;
-      if (!challenge) throw new NotFoundError("Room challenge assignment not found");
-      await assertCanManageRoomJudges(req.userId, req.params.roomId, challenge.challenge_id);
+    async () => {
       const { rows } = await pool.query(
         `SELECT id, email, name, surname
            FROM users
@@ -308,11 +272,17 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
   typed.post(
     "/api/queue/rooms/:roomId/judges",
     {
-      preHandler: requireAuth,
+      preHandler: requireRoomJudgeManager("body"),
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "room-judge-manage",
+          resource: { source: "params", field: "roomId" },
+        },
+      },
       schema: { params: roomIdParam, body: assignJudgeBody },
     },
     async (req, reply) => {
-      await assertCanManageRoomJudges(req.userId, req.params.roomId, req.body.challengeId);
       await withTransaction(async (client) => {
         const roomChallenge = (
           await client.query(
@@ -356,11 +326,17 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
   typed.delete(
     "/api/queue/rooms/:roomId/judges/:challengeId/:userId",
     {
-      preHandler: requireAuth,
+      preHandler: requireRoomJudgeManager("params"),
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "room-judge-manage",
+          resource: { source: "params", field: "roomId" },
+        },
+      },
       schema: { params: roomJudgeParam },
     },
     async (req) => {
-      await assertCanManageRoomJudges(req.userId, req.params.roomId, req.params.challengeId);
       await withTransaction(async (client) => {
         const before = (
           await client.query(
@@ -386,6 +362,7 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
     "/api/queue/rooms/:roomId/state",
     {
       preHandler: requireCapability(CAPABILITIES.QUEUE_ADMIN),
+      config: { routeAccessPolicy: { kind: "capability", capability: CAPABILITIES.QUEUE_ADMIN } },
       schema: { params: roomIdParam, body: roomQueueStateBody },
     },
     async (req) => {
@@ -417,6 +394,13 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
         requireRoomJudgeOrCapability(CAPABILITIES.QUEUE_OPERATE, CAPABILITIES.JUDGE_PANEL),
         idempotencyGuard,
       ],
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "room-operate",
+          resource: { source: "params", field: "roomId" },
+        },
+      },
       schema: { params: roomIdParam },
     },
     async (req) => {
@@ -433,6 +417,13 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
         requireRoomJudgeOrCapability(CAPABILITIES.QUEUE_OPERATE, CAPABILITIES.JUDGE_PANEL),
         idempotencyGuard,
       ],
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "room-operate",
+          resource: { source: "params", field: "roomId" },
+        },
+      },
       schema: { params: roomIdParam },
     },
     async (req) => {
@@ -447,7 +438,15 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
   // ── queue_settings singleton ──────────────────────────────────────────────
   typed.get(
     "/api/queue/settings",
-    { preHandler: requireAnyCapability(CAPABILITIES.QUEUE_OPERATE, CAPABILITIES.QUEUE_ADMIN) },
+    {
+      preHandler: requireAnyCapability(CAPABILITIES.QUEUE_OPERATE, CAPABILITIES.QUEUE_ADMIN),
+      config: {
+        routeAccessPolicy: {
+          kind: "capability",
+          anyOf: [CAPABILITIES.QUEUE_OPERATE, CAPABILITIES.QUEUE_ADMIN],
+        },
+      },
+    },
     async () => (await pool.query(`SELECT * FROM queue_settings WHERE id = 1`)).rows[0],
   );
 
@@ -455,6 +454,7 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
     "/api/queue/settings",
     {
       preHandler: requireCapability(CAPABILITIES.QUEUE_ADMIN),
+      config: { routeAccessPolicy: { kind: "capability", capability: CAPABILITIES.QUEUE_ADMIN } },
       schema: { body: queueSettingsBody },
     },
     async (req) => {
@@ -486,6 +486,7 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
     "/api/queue/challenges/:challengeId/enqueue",
     {
       preHandler: [requireCapability(CAPABILITIES.QUEUE_ADMIN), idempotencyGuard],
+      config: { routeAccessPolicy: { kind: "capability", capability: CAPABILITIES.QUEUE_ADMIN } },
       schema: { params: challengeIdParam, body: enqueueChallengeBody },
     },
     async (req) => {

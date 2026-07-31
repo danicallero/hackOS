@@ -344,7 +344,8 @@ describe("GET /api/repos scoping for judges & sponsors (H8, H44/H46)", () => {
     const caffeine = await createChallenge("Caffeine", ["Most Caffeinated"]);
     await createChallenge("AI", ["Best AI Hack"]);
 
-    const judge = await createUserWithCapabilities([CAPABILITIES.JUDGE_PANEL]);
+    // Relationship scope is sufficient; it must not widen to every project.
+    const judge = await createUser();
     await assignJudge(judge, caffeine);
 
     const judged = await server.inject({
@@ -362,14 +363,21 @@ describe("GET /api/repos scoping for judges & sponsors (H8, H44/H46)", () => {
     expect(all.json().repos).toHaveLength(2);
   });
 
-  it("a judge with no assignments gets an empty list, not a 403", async () => {
+  it("a sponsor relationship with no challenge gets an empty list, not a 403", async () => {
     const server = await getApp();
     await seedMatchableUsers();
     const operator = await createUserWithCapabilities([CAPABILITIES.PROJECTS_IMPORT]);
     await importFixtures(operator);
 
-    const judge = await createUserWithCapabilities([CAPABILITIES.JUDGE_PANEL]);
-    const res = await server.inject({ method: "GET", url: "/api/repos", headers: asUser(judge) });
+    const sponsor = await createUser();
+    const enterprise = await pool.query(
+      `INSERT INTO enterprises (name) VALUES ('empty scope') RETURNING id`,
+    );
+    await pool.query(`INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2)`, [
+      enterprise.rows[0].id,
+      sponsor,
+    ]);
+    const res = await server.inject({ method: "GET", url: "/api/repos", headers: asUser(sponsor) });
     expect(res.statusCode).toBe(200);
     expect(res.json().repos).toHaveLength(0);
   });
@@ -399,13 +407,13 @@ describe("GET /api/repos scoping for judges & sponsors (H8, H44/H46)", () => {
     expect(res.statusCode).toBe(403);
   });
 
-  it("scopes GET /api/repos/:id — out-of-scope repo is 404, not a leak", async () => {
+  it("rejects anonymous and foreign repository probes while allowing wildcard access", async () => {
     const server = await getApp();
     await seedMatchableUsers();
     const operator = await createUserWithCapabilities([CAPABILITIES.PROJECTS_IMPORT]);
     await importFixtures(operator);
     const caffeine = await createChallenge("Caffeine", ["Most Caffeinated"]);
-    const judge = await createUserWithCapabilities([CAPABILITIES.JUDGE_PANEL]);
+    const judge = await createUser();
     await assignJudge(judge, caffeine);
 
     const reader = await createUserWithCapabilities([CAPABILITIES.PROJECTS_READ]);
@@ -423,12 +431,23 @@ describe("GET /api/repos scoping for judges & sponsors (H8, H44/H46)", () => {
     expect(inScope.statusCode).toBe(200);
     expect(inScope.json().name).toBe("Neural Beans");
 
+    const anonymous = await server.inject({ method: "GET", url: `/api/repos/${beans.id}` });
+    expect(anonymous.statusCode).toBe(401);
+
     const outOfScope = await server.inject({
       method: "GET",
       url: `/api/repos/${rustacean.id}`,
       headers: asUser(judge),
     });
-    expect(outOfScope.statusCode).toBe(404);
+    expect(outOfScope.statusCode).toBe(403);
+
+    const wildcard = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
+    const globallyAllowed = await server.inject({
+      method: "GET",
+      url: `/api/repos/${rustacean.id}`,
+      headers: asUser(wildcard),
+    });
+    expect(globallyAllowed.statusCode).toBe(200);
   });
 });
 

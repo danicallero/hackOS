@@ -87,6 +87,61 @@ describe("enterprise management (H43-H45)", () => {
     expect(mine.json().id).toBe(entId);
   });
 
+  it("requires an exact enterprise relationship and preserves wildcard access", async () => {
+    const a = await getApp();
+    const admin = await createUserWithCapabilities([CAPABILITIES.SPONSORS_MANAGE]);
+    const first = await a.inject({
+      method: "POST",
+      url: "/api/enterprises",
+      headers: asUser(admin),
+      payload: { name: "First contextual" },
+    });
+    const second = await a.inject({
+      method: "POST",
+      url: "/api/enterprises",
+      headers: asUser(admin),
+      payload: { name: "Second contextual" },
+    });
+    const owner = await createUser();
+    await linkSponsor(owner, first.json().id);
+
+    expect(
+      (await a.inject({ method: "GET", url: `/api/enterprises/${first.json().id}` })).statusCode,
+    ).toBe(401);
+    expect(
+      (
+        await a.inject({
+          method: "PATCH",
+          url: `/api/enterprises/${second.json().id}`,
+          headers: asUser(owner),
+          payload: { description: "foreign" },
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (
+        await a.inject({
+          method: "PATCH",
+          url: `/api/enterprises/${first.json().id}`,
+          headers: asUser(owner),
+          payload: { description: "owned" },
+        })
+      ).statusCode,
+    ).toBe(200);
+
+    const wildcard = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
+    expect(
+      (
+        await a.inject({
+          method: "PATCH",
+          url: `/api/enterprises/${second.json().id}`,
+          headers: asUser(wildcard),
+          payload: { description: "global" },
+        })
+      ).statusCode,
+    ).toBe(200);
+  });
+
   it("returns both logo variants, falling back to the standard logo", async () => {
     const a = await getApp();
     const admin = await createUserWithCapabilities([CAPABILITIES.SPONSORS_MANAGE]);

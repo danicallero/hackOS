@@ -52,6 +52,10 @@ describe("event config (H45/H47)", () => {
 
   it("requires SCHEDULE_MANAGE to edit", async () => {
     const a = await getApp();
+    expect(
+      (await a.inject({ method: "PUT", url: "/api/event", payload: { name: "hackOS" } }))
+        .statusCode,
+    ).toBe(401);
     const pleb = await createUser();
     const res = await a.inject({
       method: "PUT",
@@ -60,6 +64,18 @@ describe("event config (H45/H47)", () => {
       payload: { name: "hackOS" },
     });
     expect(res.statusCode).toBe(403);
+  });
+
+  it("accepts the administrator wildcard for event configuration", async () => {
+    const a = await getApp();
+    const admin = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
+    const res = await a.inject({
+      method: "PUT",
+      url: "/api/event",
+      headers: asUser(admin),
+      payload: { name: "Wildcard event" },
+    });
+    expect(res.statusCode).toBe(200);
   });
 
   it("upserts the hacking window and reveals it publicly", async () => {

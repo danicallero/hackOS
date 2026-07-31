@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { TooManyRequestsError } from "../../../lib/errors.js";
+import type { RouteAccessPolicy } from "../../../lib/route-policy.js";
 import { auth } from "../auth.js";
 import { checkResendVerificationRateLimit } from "../rate-limit.js";
 
@@ -23,6 +24,12 @@ export function registerResendVerificationRoutes(app: FastifyInstance): void {
   api.post(
     "/api/auth/resend-verification",
     {
+      config: {
+        routeAccessPolicy: {
+          kind: "token",
+          policy: "email-verification-resend",
+        } satisfies RouteAccessPolicy,
+      },
       schema: {
         summary:
           "Resend the sign-up verification email (H3: 3/hour, 60s cooldown), optionally carrying the same-origin destination to return to after verifying (H188).",

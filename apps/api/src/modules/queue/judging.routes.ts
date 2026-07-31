@@ -4,10 +4,12 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { requireCapability } from "../../lib/capabilities.js";
 import { UnauthorizedError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
-import { assertCanExportChallenge } from "./access.js";
 import {
+  requireChallengeExport,
   requireChallengeJudgeOrCapability,
   requireEntryJudgeOrCapability,
+  requireReviewEntryAccess,
+  requireReviewScopeAccess,
 } from "./contextual-access.js";
 import { exportEvaluationsCsv, exportQueueCsv } from "./exports.js";
 import {
@@ -58,39 +60,99 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
 
   typed.get(
     "/api/queue/entries/:entryId/review",
-    { preHandler: judgePanel, schema: { params: entryIdParam } },
+    {
+      preHandler: judgePanel,
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "queue-entry-judge",
+          resource: { source: "params", field: "entryId" },
+        },
+      },
+      schema: { params: entryIdParam },
+    },
     async (req) => getAttemptReview(req.params.entryId),
   );
 
   // H36: field-level last-write-wins collaborative save; every save versioned.
   typed.patch(
     "/api/queue/entries/:entryId/review",
-    { preHandler: judgePanel, schema: { params: entryIdParam, body: reviewPatchBody } },
+    {
+      preHandler: judgePanel,
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "queue-entry-judge",
+          resource: { source: "params", field: "entryId" },
+        },
+      },
+      schema: { params: entryIdParam, body: reviewPatchBody },
+    },
     async (req) => upsertAttemptReview(req.params.entryId, actor(req.userId), req.body),
   );
 
   typed.get(
     "/api/queue/entries/:entryId/review/versions",
-    { preHandler: judgePanel, schema: { params: entryIdParam } },
+    {
+      preHandler: judgePanel,
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "queue-entry-judge",
+          resource: { source: "params", field: "entryId" },
+        },
+      },
+      schema: { params: entryIdParam },
+    },
     async (req) => listAttemptReviewVersions(req.params.entryId),
   );
 
   // H36: judge presence on a ficha.
   typed.post(
     "/api/queue/entries/:entryId/session",
-    { preHandler: judgePanel, schema: { params: entryIdParam, body: sessionJoinBody } },
+    {
+      preHandler: judgePanel,
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "queue-entry-judge",
+          resource: { source: "params", field: "entryId" },
+        },
+      },
+      schema: { params: entryIdParam, body: sessionJoinBody },
+    },
     async (req) => joinJudgingSession(req.params.entryId, actor(req.userId), req.body.roomId),
   );
 
   typed.delete(
     "/api/queue/entries/:entryId/session",
-    { preHandler: judgePanel, schema: { params: entryIdParam } },
+    {
+      preHandler: judgePanel,
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "queue-entry-judge",
+          resource: { source: "params", field: "entryId" },
+        },
+      },
+      schema: { params: entryIdParam },
+    },
     async (req) => leaveJudgingSession(req.params.entryId, actor(req.userId)),
   );
 
   typed.get(
     "/api/queue/entries/:entryId/sessions",
-    { preHandler: judgeOrOperateEntry, schema: { params: entryIdParam } },
+    {
+      preHandler: judgeOrOperateEntry,
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "queue-entry-operate",
+          resource: { source: "params", field: "entryId" },
+        },
+      },
+      schema: { params: entryIdParam },
+    },
     async (req) => listActiveJudgingSessions(req.params.entryId),
   );
 
@@ -101,6 +163,13 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
     "/api/queue/challenges/:challengeId/search",
     {
       preHandler: judgeOrOperateChallenge,
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "challenge-judge",
+          resource: { source: "params", field: "challengeId" },
+        },
+      },
       schema: { params: challengeIdParam, querystring: searchQuery },
     },
     async (req) => searchChallengeQueue(req.params.challengeId, req.query.q),
@@ -110,8 +179,13 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
   typed.get(
     "/api/queue/challenges/:challengeId/export/queue.csv",
     {
-      preHandler: async (req) => {
-        await assertCanExportChallenge(req.userId, Number(req.params.challengeId));
+      preHandler: requireChallengeExport(),
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "challenge-export",
+          resource: { source: "params", field: "challengeId" },
+        },
       },
       schema: { params: challengeIdParam },
     },
@@ -128,8 +202,13 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
   typed.get(
     "/api/queue/challenges/:challengeId/export/evaluations.csv",
     {
-      preHandler: async (req) => {
-        await assertCanExportChallenge(req.userId, Number(req.params.challengeId));
+      preHandler: requireChallengeExport(),
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "challenge-export",
+          resource: { source: "params", field: "challengeId" },
+        },
       },
       schema: { params: challengeIdParam },
     },
@@ -146,10 +225,24 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
   // Reviews overview: admin sees every challenge, a sponsor rep only ever
   // sees their own enterprise's — enforced inside resolveReviewScope/listReviews,
   // not by a capability flag (see reviews.ts for why).
-  typed.get("/api/queue/reviews", { schema: { querystring: reviewsQuery } }, async (req) => {
-    const scope = await resolveReviewScope(req.userId);
-    return { reviews: await listReviews(scope, req.query) };
-  });
+  typed.get(
+    "/api/queue/reviews",
+    {
+      preHandler: requireReviewScopeAccess,
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "review-list",
+          resource: { source: "query", field: "challengeId" },
+        },
+      },
+      schema: { querystring: reviewsQuery },
+    },
+    async (req) => {
+      const scope = await resolveReviewScope(req.userId);
+      return { reviews: await listReviews(scope, req.query) };
+    },
+  );
 
   // The ficha behind a reviews-overview row: project + team, the challenge's
   // judging panel questions, the answers given, and the edit history. Same
@@ -157,6 +250,14 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
   typed.get(
     "/api/queue/reviews/:entryId",
     {
+      preHandler: requireReviewEntryAccess,
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "review",
+          resource: { source: "params", field: "entryId" },
+        },
+      },
       schema: {
         params: entryIdParam,
         summary: "Review detail",
@@ -173,7 +274,14 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
   typed.patch(
     "/api/queue/reviews/:entryId",
     {
-      preHandler: idempotencyGuard,
+      preHandler: [requireReviewEntryAccess, idempotencyGuard],
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "review",
+          resource: { source: "params", field: "entryId" },
+        },
+      },
       schema: {
         params: entryIdParam,
         body: reviewPatchBody,
@@ -194,7 +302,18 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
   typed.post(
     "/api/queue/reviews/:entryId/message",
     {
-      preHandler: [requireCapability(CAPABILITIES.NOTIFICATIONS_SEND), idempotencyGuard],
+      preHandler: [
+        requireReviewEntryAccess,
+        requireCapability(CAPABILITIES.NOTIFICATIONS_SEND),
+        idempotencyGuard,
+      ],
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "review-message",
+          resource: { source: "params", field: "entryId" },
+        },
+      },
       schema: {
         params: entryIdParam,
         body: reviewMessageBody,
@@ -211,7 +330,17 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
 
   typed.get(
     "/api/queue/reviews/export.csv",
-    { schema: { querystring: reviewsQuery } },
+    {
+      preHandler: requireReviewScopeAccess,
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "review-export",
+          resource: { source: "query", field: "challengeId" },
+        },
+      },
+      schema: { querystring: reviewsQuery },
+    },
     async (req, reply) => {
       const scope = await resolveReviewScope(req.userId);
       reply.header("content-type", "text/csv; charset=utf-8");

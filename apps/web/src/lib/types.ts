@@ -69,12 +69,24 @@ export interface PermissionGroupSummary {
   id: number;
   name: string;
   description: string | null;
+  /** Originating platform template, if this group was created from one. */
+  templateKey: string | null;
+  /** True when direct capabilities or includes no longer match the template. */
+  templateDrifted: boolean;
 }
 /** GET /api/permission-groups/:id — full group. */
 export interface PermissionGroupDetail extends PermissionGroupSummary {
   capabilities: string[];
   includes: number[];
   members: number[];
+}
+
+/** GET /api/permission-group-templates item. Keys select the web i18n catalogue. */
+export interface PermissionGroupTemplate {
+  key: string;
+  labelKey: string;
+  descriptionKey: string;
+  capabilities: Capability[];
 }
 
 /** Food-intolerance dictionary entry (GET /api/public/food-intolerances). */

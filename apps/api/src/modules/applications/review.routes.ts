@@ -1,8 +1,10 @@
+import type { Capability } from "@hackos/shared/capabilities";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool } from "../../db/pool.js";
 import { requireAnyCapability, requireCapability } from "../../lib/capabilities.js";
+import type { RouteAccessPolicy } from "../../lib/route-policy.js";
 import {
   batchDecideSchema,
   batchIdsSchema,
@@ -48,6 +50,10 @@ import {
  */
 export function registerReviewRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
+  const routeAccess = (routeAccessPolicy: RouteAccessPolicy) => ({ routeAccessPolicy });
+  const capability = (value: Capability) => routeAccess({ kind: "capability", capability: value });
+  const anyCapability = (...values: Capability[]) =>
+    routeAccess({ kind: "capability", anyOf: values });
 
   // ── H13: list responses for a form, with filters ───────────────────────────
   r.get(
@@ -57,6 +63,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
         CAPABILITIES.APPLICATIONS_REVIEW,
         CAPABILITIES.APPLICATIONS_DECIDE,
       ),
+      config: anyCapability(CAPABILITIES.APPLICATIONS_REVIEW, CAPABILITIES.APPLICATIONS_DECIDE),
       schema: { params: idParamSchema, querystring: listResponsesQuerySchema },
     },
     async (req) => {
@@ -98,6 +105,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     "/api/responses/:responseId/my-review",
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_REVIEW),
+      config: capability(CAPABILITIES.APPLICATIONS_REVIEW),
       schema: { params: responseIdParamSchema, body: reviewUpsertSchema },
     },
     async (req) => {
@@ -116,6 +124,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     "/api/responses/:responseId/staff-notes",
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_REVIEW),
+      config: capability(CAPABILITIES.APPLICATIONS_REVIEW),
       schema: { params: responseIdParamSchema, body: staffNotesSchema },
     },
     async (req) => {
@@ -133,6 +142,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     "/api/responses/:responseId/decide",
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
+      config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
       schema: { params: responseIdParamSchema, body: decideSchema },
     },
     async (req) => decide(req.userId as number, req.params.responseId, req.body.decision),
@@ -143,6 +153,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     "/api/responses/:responseId/send-decision",
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
+      config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
       schema: { params: responseIdParamSchema },
     },
     async (req) => sendDecision(req.userId as number, req.params.responseId),
@@ -153,6 +164,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     "/api/applications/:id/send-decisions",
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
+      config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
       schema: { params: idParamSchema, body: sendDecisionsSchema },
     },
     async (req) =>
@@ -164,6 +176,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     "/api/responses/:responseId/resend-decision",
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
+      config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
       schema: { params: responseIdParamSchema },
     },
     async (req) => resendDecision(req.userId as number, req.params.responseId),
@@ -174,6 +187,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     "/api/responses/:responseId/re-accept",
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
+      config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
       schema: { params: responseIdParamSchema },
     },
     async (req) => reAccept(req.userId as number, req.params.responseId),
@@ -184,6 +198,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     "/api/responses/:responseId/revoke-spot",
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
+      config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
       schema: { params: responseIdParamSchema },
     },
     async (req) => revokeSpot(req.userId as number, req.params.responseId),
@@ -193,7 +208,11 @@ export function registerReviewRoutes(app: FastifyInstance): void {
   r.get(
     "/api/users/:id/applications",
     {
-      preHandler: requireCapability(CAPABILITIES.APPLICATIONS_REVIEW),
+      preHandler: requireAnyCapability(
+        CAPABILITIES.APPLICATIONS_REVIEW,
+        CAPABILITIES.APPLICATIONS_DECIDE,
+      ),
+      config: anyCapability(CAPABILITIES.APPLICATIONS_REVIEW, CAPABILITIES.APPLICATIONS_DECIDE),
       schema: { params: idParamSchema },
     },
     async (req) => ({ responses: await listUserResponsesForStaff(req.params.id) }),
@@ -207,6 +226,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
         CAPABILITIES.APPLICATIONS_REVIEW,
         CAPABILITIES.APPLICATIONS_DECIDE,
       ),
+      config: anyCapability(CAPABILITIES.APPLICATIONS_REVIEW, CAPABILITIES.APPLICATIONS_DECIDE),
       schema: { params: idParamSchema },
     },
     async (req) => getDecisionPool(req.params.id),
@@ -217,6 +237,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     "/api/responses/:responseId/revert-decision",
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
+      config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
       schema: { params: responseIdParamSchema, body: revertDecisionSchema },
     },
     async (req) => revertDecision(req.userId as number, req.params.responseId, req.body.decision),
@@ -227,6 +248,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     "/api/responses/:responseId/confirm-link",
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
+      config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
       schema: { params: responseIdParamSchema },
     },
     async (req) => {
@@ -247,6 +269,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
         CAPABILITIES.APPLICATIONS_REVIEW,
         CAPABILITIES.APPLICATIONS_DECIDE,
       ),
+      config: anyCapability(CAPABILITIES.APPLICATIONS_REVIEW, CAPABILITIES.APPLICATIONS_DECIDE),
       schema: { params: responseIdParamSchema },
     },
     async (req) => getResponseDetail(req.params.responseId),
@@ -257,6 +280,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     "/api/responses/:responseId",
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_EDIT_RESPONSE),
+      config: capability(CAPABILITIES.APPLICATIONS_EDIT_RESPONSE),
       schema: { params: responseIdParamSchema, body: saveDraftSchema },
     },
     async (req) => editResponse(req.userId as number, req.params.responseId, req.body.responses),
@@ -267,6 +291,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     "/api/responses/batch/decide",
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
+      config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
       schema: { body: batchDecideSchema },
     },
     async (req) => batchDecide(req.userId as number, req.body.response_ids, req.body.decision),
@@ -276,6 +301,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     "/api/responses/batch/send-decision",
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
+      config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
       schema: { body: batchSendDecisionsSchema },
     },
     async (req) => batchSendDecisions(req.userId as number, req.body.response_ids),
@@ -286,6 +312,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     "/api/responses/batch/resend-decision",
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
+      config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
       schema: {
         summary: "Batch re-send already-sent decisions",
         description:
@@ -303,6 +330,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     "/api/responses/batch/revert-decision",
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
+      config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
       schema: { body: batchRevertDecisionSchema },
     },
     async (req) =>
@@ -314,6 +342,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     "/api/responses/batch/re-accept",
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
+      config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
       schema: { body: batchIdsSchema },
     },
     async (req) => batchReAccept(req.userId as number, req.body.response_ids),
@@ -324,6 +353,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     "/api/responses/batch/revoke-spot",
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
+      config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
       schema: { body: batchIdsSchema },
     },
     async (req) => batchRevokeSpots(req.userId as number, req.body.response_ids),

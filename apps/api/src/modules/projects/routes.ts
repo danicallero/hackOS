@@ -2,16 +2,15 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { pool } from "../../db/pool.js";
-import {
-  requireAnyCapability,
-  requireAuth,
-  requireCapability,
-  userHasCapability,
-} from "../../lib/capabilities.js";
-import { ForbiddenError } from "../../lib/errors.js";
+import { requireAnyCapability, requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
+import type { RouteAccessPolicy } from "../../lib/route-policy.js";
 import { listDevpostPrizes } from "../challenges/service.js";
+import {
+  repositoryScopeFor,
+  requireRepositoryAccess,
+  requireRepositoryListAccess,
+} from "./access.js";
 import {
   challengeIdOnlyParamsSchema,
   claimEmailBodySchema,
@@ -38,17 +37,16 @@ import {
   confirmImport,
   createMyProject,
   createRepoNative,
-  getRepoForUser,
+  getRepoForScope,
   linkParticipant,
   linkParticipantSecondary,
   listPublicChallenges,
-  listReposForUser,
+  listReposForScope,
   listUnmatchedParticipants,
   mapPrizeToChallenge,
   myProjects,
   participantsCanCreateProjects,
   previewImport,
-  type RepoScope,
   removeDevpostParticipant,
   removeRepoChallenge,
   removeRepoMember,
@@ -63,27 +61,8 @@ import {
  * org-side creation/metadata edits (H18) plus policy-gated participant
  * self-creation (H19) and the participant self-view (H20).
  */
-/**
- * Who may open Projects (H8, H20, H44/H46): full-access (`projects:read`/`*`),
- * judges (`judge:panel`), and sponsor reps (linked in `sponsors`). Returns the
- * caller's access modes, or null when they hold none (→ 403). Sponsor access is
- * association-based, so it can't be a plain capability guard.
- */
-async function resolveRepoScope(userId: number): Promise<RepoScope | null> {
-  const [isFullAccess, hasJudgePanel] = await Promise.all([
-    userHasCapability(userId, CAPABILITIES.PROJECTS_READ),
-    userHasCapability(userId, CAPABILITIES.JUDGE_PANEL),
-  ]);
-  const isAssignedJudge =
-    (await pool.query(`SELECT 1 FROM room_judges WHERE user_id = $1 LIMIT 1`, [userId])).rows
-      .length > 0;
-  const isJudge = hasJudgePanel || isAssignedJudge;
-  const isSponsor =
-    (await pool.query(`SELECT 1 FROM sponsors WHERE user_id = $1 LIMIT 1`, [userId])).rows.length >
-    0;
-  if (!isFullAccess && !isJudge && !isSponsor) return null;
-  return { isFullAccess, isJudge, isSponsor };
-}
+const access = (routeAccessPolicy: RouteAccessPolicy) => ({ config: { routeAccessPolicy } });
+const repoParam = { source: "params", field: "id" } as const;
 
 export function registerProjectRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
@@ -106,7 +85,14 @@ export function registerProjectRoutes(app: FastifyInstance): void {
 
   r.get(
     "/api/public/challenges",
-    { schema: { response: { 200: z.object({ items: z.array(publicChallengeSchema) }) } } },
+    {
+      ...access({ kind: "public", anonymousCategory: "public-content" }),
+      schema: {
+        summary: "List public challenges",
+        description: "Lists published challenges for anonymous visitors (H45).",
+        response: { 200: z.object({ items: z.array(publicChallengeSchema) }) },
+      },
+    },
     async () => ({ items: await listPublicChallenges() }),
   );
 
@@ -120,8 +106,13 @@ export function registerProjectRoutes(app: FastifyInstance): void {
   r.post(
     "/api/devpost/imports/preview",
     {
+      ...access({ kind: "capability", capability: CAPABILITIES.PROJECTS_IMPORT }),
       preHandler: requireCapability(CAPABILITIES.PROJECTS_IMPORT),
-      schema: { body: importCsvBodySchema },
+      schema: {
+        body: importCsvBodySchema,
+        summary: "Preview Devpost import",
+        description: "Computes a read-only Devpost import plan (H16).",
+      },
     },
     async (req) => previewImport(req.body.projectsCsv, req.body.participantsCsv),
   );
@@ -130,8 +121,13 @@ export function registerProjectRoutes(app: FastifyInstance): void {
   r.post(
     "/api/devpost/imports/confirm",
     {
+      ...access({ kind: "capability", capability: CAPABILITIES.PROJECTS_IMPORT }),
       preHandler: [requireCapability(CAPABILITIES.PROJECTS_IMPORT), idempotencyGuard],
-      schema: { body: importCsvBodySchema },
+      schema: {
+        body: importCsvBodySchema,
+        summary: "Confirm Devpost import",
+        description: "Commits an idempotent Devpost import transaction (H16).",
+      },
     },
     async (req) => {
       // requireCapability guarantees userId is set
@@ -143,15 +139,27 @@ export function registerProjectRoutes(app: FastifyInstance): void {
 
   r.get(
     "/api/devpost/imports/unmatched",
-    { preHandler: requireCapability(CAPABILITIES.PROJECTS_IMPORT) },
+    {
+      ...access({ kind: "capability", capability: CAPABILITIES.PROJECTS_IMPORT }),
+      preHandler: requireCapability(CAPABILITIES.PROJECTS_IMPORT),
+      schema: {
+        summary: "List unmatched participants",
+        description: "Lists imported Devpost people requiring reconciliation (H17).",
+      },
+    },
     async () => ({ participants: await listUnmatchedParticipants() }),
   );
 
   r.post(
     "/api/devpost/imports/link",
     {
+      ...access({ kind: "capability", capability: CAPABILITIES.PROJECTS_IMPORT }),
       preHandler: requireCapability(CAPABILITIES.PROJECTS_IMPORT),
-      schema: { body: linkParticipantBodySchema },
+      schema: {
+        body: linkParticipantBodySchema,
+        summary: "Link imported participant",
+        description: "Links an imported participant to an account (H17).",
+      },
     },
     async (req) => {
       const { repoId, email, userId } = req.body;
@@ -164,8 +172,13 @@ export function registerProjectRoutes(app: FastifyInstance): void {
   r.post(
     "/api/devpost/imports/link-secondary",
     {
+      ...access({ kind: "capability", capability: CAPABILITIES.PROJECTS_IMPORT }),
       preHandler: [requireCapability(CAPABILITIES.PROJECTS_IMPORT), idempotencyGuard],
-      schema: { body: linkParticipantBodySchema },
+      schema: {
+        body: linkParticipantBodySchema,
+        summary: "Link participant secondary email",
+        description: "Uses the verified-secondary matching path for an imported participant (H17).",
+      },
     },
     async (req) => {
       const { repoId, email, userId } = req.body;
@@ -176,8 +189,13 @@ export function registerProjectRoutes(app: FastifyInstance): void {
   r.post(
     "/api/devpost/imports/claim-email",
     {
+      ...access({ kind: "capability", capability: CAPABILITIES.PROJECTS_IMPORT }),
       preHandler: [requireCapability(CAPABILITIES.PROJECTS_IMPORT), idempotencyGuard],
-      schema: { body: claimEmailBodySchema },
+      schema: {
+        body: claimEmailBodySchema,
+        summary: "Send project claim invite",
+        description: "Sends an idempotent claim invitation for an imported participant (H17).",
+      },
     },
     async (req) => {
       const { repoId, email } = req.body;
@@ -190,8 +208,14 @@ export function registerProjectRoutes(app: FastifyInstance): void {
   r.post(
     "/api/devpost/prizes/:prizeName/map",
     {
+      ...access({ kind: "capability", capability: CAPABILITIES.PROJECTS_IMPORT }),
       preHandler: requireCapability(CAPABILITIES.PROJECTS_IMPORT),
-      schema: { params: prizeParamsSchema, body: mapPrizeBodySchema },
+      schema: {
+        params: prizeParamsSchema,
+        body: mapPrizeBodySchema,
+        summary: "Map Devpost prize",
+        description: "Maps one Devpost prize name to an exact challenge (H16).",
+      },
     },
     async (req) =>
       mapPrizeToChallenge(req.userId as number, req.params.prizeName, req.body.challengeId),
@@ -201,7 +225,17 @@ export function registerProjectRoutes(app: FastifyInstance): void {
   // need mapping on the conflict-resolution screen, not just queue admins.
   r.get(
     "/api/devpost/prizes",
-    { preHandler: requireAnyCapability(CAPABILITIES.QUEUE_ADMIN, CAPABILITIES.PROJECTS_IMPORT) },
+    {
+      ...access({
+        kind: "capability",
+        anyOf: [CAPABILITIES.QUEUE_ADMIN, CAPABILITIES.PROJECTS_IMPORT],
+      }),
+      preHandler: requireAnyCapability(CAPABILITIES.QUEUE_ADMIN, CAPABILITIES.PROJECTS_IMPORT),
+      schema: {
+        summary: "List Devpost prizes",
+        description: "Lists imported prize names for queue and import operators (H16).",
+      },
+    },
     async () => ({ prizes: await listDevpostPrizes() }),
   );
 
@@ -209,23 +243,37 @@ export function registerProjectRoutes(app: FastifyInstance): void {
 
   // H8/H44/H46: full-access sees all repos; judges/sponsors see only the
   // projects of participants in THEIR challenges (empty list if they have none).
-  r.get("/api/repos", { preHandler: requireAuth }, async (req) => {
-    const userId = req.userId as number;
-    const scope = await resolveRepoScope(userId);
-    if (!scope) throw new ForbiddenError(`Missing capability: ${CAPABILITIES.PROJECTS_READ}`);
-    return { repos: await listReposForUser(userId, scope) };
-  });
+  r.get(
+    "/api/repos",
+    {
+      ...access({
+        kind: "contextual",
+        policy: "repository-list",
+      }),
+      preHandler: requireRepositoryListAccess,
+      schema: {
+        summary: "List scoped projects",
+        description:
+          "Global project readers see all projects; sponsor representatives and assigned judges see only their exact challenge scope (H20, H46).",
+      },
+    },
+    async (req) => {
+      return { repos: await listReposForScope(repositoryScopeFor(req)) };
+    },
+  );
 
   r.get(
     "/api/repos/:id",
-    { preHandler: requireAuth, schema: { params: repoIdParamsSchema } },
-    async (req) => {
-      const userId = req.userId as number;
-      const scope = await resolveRepoScope(userId);
-      if (!scope) throw new ForbiddenError(`Missing capability: ${CAPABILITIES.PROJECTS_READ}`);
-      // Out-of-scope repo -> 404, so a judge/sponsor can't probe existence.
-      return getRepoForUser(userId, req.params.id, scope);
+    {
+      ...access({ kind: "contextual", policy: "repository-access", resource: repoParam }),
+      preHandler: requireRepositoryAccess(repoParam),
+      schema: {
+        params: repoIdParamsSchema,
+        summary: "Get scoped project",
+        description: "Returns a project only after exact repository authorization (H20, H46).",
+      },
     },
+    async (req) => getRepoForScope(req.params.id, repositoryScopeFor(req)),
   );
 
   // ── H18: native creation + metadata edits ────────────────────────────────
@@ -233,6 +281,7 @@ export function registerProjectRoutes(app: FastifyInstance): void {
   r.post(
     "/api/repos",
     {
+      ...access({ kind: "capability", capability: CAPABILITIES.PROJECTS_EDIT }),
       preHandler: [requireCapability(CAPABILITIES.PROJECTS_EDIT), idempotencyGuard],
       schema: {
         summary: "Create a project natively (H18), no Devpost involved.",
@@ -247,6 +296,7 @@ export function registerProjectRoutes(app: FastifyInstance): void {
   r.patch(
     "/api/repos/:id",
     {
+      ...access({ kind: "capability", capability: CAPABILITIES.PROJECTS_EDIT }),
       preHandler: requireCapability(CAPABILITIES.PROJECTS_EDIT),
       schema: {
         summary: "Edit a project's metadata (H18): name, description, links.",
@@ -263,8 +313,14 @@ export function registerProjectRoutes(app: FastifyInstance): void {
   r.post(
     "/api/repos/:repoId/members",
     {
+      ...access({ kind: "capability", capability: CAPABILITIES.PROJECTS_EDIT }),
       preHandler: [requireCapability(CAPABILITIES.PROJECTS_EDIT), idempotencyGuard],
-      schema: { params: repoMemberParamsSchema.pick({ repoId: true }), body: repoMemberBodySchema },
+      schema: {
+        params: repoMemberParamsSchema.pick({ repoId: true }),
+        body: repoMemberBodySchema,
+        summary: "Add project member",
+        description: "Adds a member to an exact project under global project-edit access (H21).",
+      },
     },
     async (req) => addRepoMember(req.userId as number, req.params.repoId, req.body.userId),
   );
@@ -272,8 +328,13 @@ export function registerProjectRoutes(app: FastifyInstance): void {
   r.delete(
     "/api/repos/:repoId/members/:userId",
     {
+      ...access({ kind: "capability", capability: CAPABILITIES.PROJECTS_EDIT }),
       preHandler: requireCapability(CAPABILITIES.PROJECTS_EDIT),
-      schema: { params: repoMemberParamsSchema },
+      schema: {
+        params: repoMemberParamsSchema,
+        summary: "Remove project member",
+        description: "Removes the exact member from the exact project (H21).",
+      },
     },
     async (req) => removeRepoMember(req.userId as number, req.params.repoId, req.params.userId),
   );
@@ -281,8 +342,13 @@ export function registerProjectRoutes(app: FastifyInstance): void {
   r.delete(
     "/api/repos/:repoId/devpost-participants/:email",
     {
+      ...access({ kind: "capability", capability: CAPABILITIES.PROJECTS_EDIT }),
       preHandler: requireCapability(CAPABILITIES.PROJECTS_EDIT),
-      schema: { params: repoDevpostParticipantParamsSchema },
+      schema: {
+        params: repoDevpostParticipantParamsSchema,
+        summary: "Remove imported project member",
+        description: "Detaches an exact imported participant from an exact project (H21).",
+      },
     },
     async (req) =>
       removeDevpostParticipant(
@@ -295,10 +361,13 @@ export function registerProjectRoutes(app: FastifyInstance): void {
   r.post(
     "/api/repos/:repoId/challenges",
     {
+      ...access({ kind: "capability", capability: CAPABILITIES.PROJECTS_EDIT }),
       preHandler: [requireCapability(CAPABILITIES.PROJECTS_EDIT), idempotencyGuard],
       schema: {
         params: repoChallengeParamsSchema.pick({ repoId: true }),
         body: repoChallengeBodySchema,
+        summary: "Enter project in challenge",
+        description: "Adds one exact project to one exact challenge queue (H21).",
       },
     },
     async (req) => addRepoChallenge(req.userId as number, req.params.repoId, req.body.challengeId),
@@ -307,8 +376,13 @@ export function registerProjectRoutes(app: FastifyInstance): void {
   r.delete(
     "/api/repos/:repoId/challenges/:challengeId",
     {
+      ...access({ kind: "capability", capability: CAPABILITIES.PROJECTS_EDIT }),
       preHandler: requireCapability(CAPABILITIES.PROJECTS_EDIT),
-      schema: { params: repoChallengeParamsSchema },
+      schema: {
+        params: repoChallengeParamsSchema,
+        summary: "Withdraw project from challenge",
+        description: "Removes the exact project from the exact challenge queue (H21).",
+      },
     },
     async (req) =>
       removeRepoChallenge(req.userId as number, req.params.repoId, req.params.challengeId),
@@ -319,8 +393,14 @@ export function registerProjectRoutes(app: FastifyInstance): void {
   r.post(
     "/api/challenges/:challengeId/repos/bulk-add",
     {
+      ...access({ kind: "capability", capability: CAPABILITIES.PROJECTS_EDIT }),
       preHandler: [requireCapability(CAPABILITIES.PROJECTS_EDIT), idempotencyGuard],
-      schema: { params: challengeIdOnlyParamsSchema },
+      schema: {
+        params: challengeIdOnlyParamsSchema,
+        summary: "Bulk-enter projects",
+        description:
+          "Adds every project to one exact challenge under global project-edit access (H21).",
+      },
     },
     async (req) => bulkAddRepoChallenge(req.userId as number, req.params.challengeId),
   );
@@ -328,8 +408,14 @@ export function registerProjectRoutes(app: FastifyInstance): void {
   r.post(
     "/api/challenges/:challengeId/repos/bulk-remove",
     {
+      ...access({ kind: "capability", capability: CAPABILITIES.PROJECTS_EDIT }),
       preHandler: requireCapability(CAPABILITIES.PROJECTS_EDIT),
-      schema: { params: challengeIdOnlyParamsSchema },
+      schema: {
+        params: challengeIdOnlyParamsSchema,
+        summary: "Bulk-withdraw projects",
+        description:
+          "Removes projects from one exact challenge under global project-edit access (H21).",
+      },
     },
     async (req) => bulkRemoveRepoChallenge(req.userId as number, req.params.challengeId),
   );
@@ -337,8 +423,13 @@ export function registerProjectRoutes(app: FastifyInstance): void {
   r.delete(
     "/api/repos/:repoId/prizes/:prizeName",
     {
+      ...access({ kind: "capability", capability: CAPABILITIES.PROJECTS_EDIT }),
       preHandler: requireCapability(CAPABILITIES.PROJECTS_EDIT),
-      schema: { params: repoPrizeParamsSchema },
+      schema: {
+        params: repoPrizeParamsSchema,
+        summary: "Remove project prize",
+        description: "Removes one exact prize from one exact project (H21).",
+      },
     },
     async (req) => removeRepoPrize(req.userId as number, req.params.repoId, req.params.prizeName),
   );
@@ -348,6 +439,7 @@ export function registerProjectRoutes(app: FastifyInstance): void {
   r.get(
     "/api/me/projects",
     {
+      ...access({ kind: "authenticated" }),
       preHandler: requireAuth,
       schema: {
         summary: "My projects (H20): team roster, challenges and queue status. Read-only.",
@@ -365,6 +457,7 @@ export function registerProjectRoutes(app: FastifyInstance): void {
   r.post(
     "/api/me/projects",
     {
+      ...access({ kind: "authenticated" }),
       preHandler: [requireAuth, idempotencyGuard],
       schema: {
         summary: "Create my own project (H19) — only while the event policy allows it.",

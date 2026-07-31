@@ -64,6 +64,7 @@ function translationsOf(i18n: unknown, fallback: string | null): TranslationMap 
 function challengeReadModel(row: Record<string, unknown>) {
   return {
     ...row,
+    id: Number(row.id),
     title: translationsOf(row.title_i18n, String(row.title ?? "")),
     description: translationsOf(row.description_i18n, String(row.description ?? "")),
     criteria: translationsOf(row.criteria_i18n, (row.criteria as string | null) ?? null),

@@ -1,10 +1,8 @@
 "use client";
 
-// Application forms directory (H11): admins with applications:manage define
-// forms per person type, each with an open/close window and optional quota.
-// Rows link to the detail page (form editor + responses/review/decisions).
-// List data: GET /api/applications (APPLICATIONS_MANAGE). Create: POST
-// /api/applications with an empty template — questions are added in detail.
+// Application forms directory (H11-H14): manage, review, and decision holders
+// share the protected list. Only applications:manage can create a form or
+// reach the builder controls on its detail page.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
@@ -106,6 +104,8 @@ export default function ApplicationsPage() {
     setLoading(true);
     setLoadError(null);
     try {
+      // The API admits manage, review, and decide holders. It never infers
+      // builder permission merely from access to this directory.
       const { applications } = await api.get<{ applications: ApplicationForm[] }>(
         "/api/applications",
       );

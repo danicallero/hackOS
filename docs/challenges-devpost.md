@@ -236,9 +236,32 @@ no realtime events — it produces the data the queue module later acts on.
 
 ## 4. Permissions & audit (guardrails)
 
+### 4.1 Contextual authorization (H16-H21, H43-H46)
+
+Every projects, challenges, and sponsors route declares an explicit
+`RouteAccessPolicy` in the API route ledger. Named enterprise, challenge, and
+repository pre-handlers resolve the actual database resource before a handler
+runs: anonymous private calls receive `401`; authenticated callers without a
+global capability or the exact relationship receive `403`.
+
+- `projects:read` (and the administrator wildcard) is global. Sponsor
+  representatives otherwise see only repositories attached to challenges of
+  their own enterprise, and assigned judges see only repositories attached to
+  their assigned challenge. A repository identifier is checked against that
+  derived scope, so a foreign repository probe fails closed.
+- `sponsors:manage` and `queue:admin` remain global for their challenge
+  operations. A sponsor row grants access only to its enterprise's challenges;
+  a `room_judges(user_id, challenge_id)` relationship grants only that exact
+  challenge's read/panel view, never edit access.
+- Enterprise profile routes resolve `:id` before authorizing. A representative
+  can edit only their linked enterprise and its owner-editable fields; an
+  unrelated enterprise id is forbidden. Nested project/challenge operations
+  continue to validate the supplied parent and child pair in the same domain
+  transaction (for example, a winner repo must be entered in that challenge).
+
 - Every mutating route is guarded by `requireCapability`/`requireAnyCapability`
   by capability, never by role (H8): `projects:import` for all Devpost intake,
-  `projects:read` for the repo views, `sponsor:portal` / `sponsors:manage` /
+  `projects:read` for the repo views, `sponsors:manage` /
   `queue:admin` for challenges. Ownership-sensitive challenge routes additionally
   check the challenge author's enterprise against the caller inside the handler.
 - Critical mutations carry `idempotencyGuard` (import confirm, claim-email).

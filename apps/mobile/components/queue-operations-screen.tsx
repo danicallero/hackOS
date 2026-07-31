@@ -82,6 +82,7 @@ export function QueueOperationsScreen() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [justCalledEntryIds, setJustCalledEntryIds] = useState<Set<number>>(new Set());
+  const canOperate = canOperateQueues(me?.capabilities ?? []);
   const columns = width >= 1_100 ? 3 : width >= 680 ? 2 : 1;
 
   useLayoutEffect(() => {
@@ -127,7 +128,8 @@ export function QueueOperationsScreen() {
   // waiting for the next poll.
   useFocusEffect(
     useCallback(() => {
-      const stopStream = startQueueEventStream();
+      if (!canOperate) return;
+      const stopStream = startQueueEventStream(canOperate);
       const timers = new Map<number, ReturnType<typeof setTimeout>>();
       const markCalled = (entryId: number) => {
         setJustCalledEntryIds((current) => new Set(current).add(entryId));
@@ -161,7 +163,7 @@ export function QueueOperationsScreen() {
         unsubscribeRoom();
         for (const timer of timers.values()) clearTimeout(timer);
       };
-    }, [load]),
+    }, [canOperate, load]),
   );
 
   const refresh = useCallback(async () => {
@@ -201,7 +203,7 @@ export function QueueOperationsScreen() {
     [load, t],
   );
 
-  if (!canOperateQueues(me?.capabilities ?? [])) {
+  if (!canOperate) {
     return (
       <EmptyState
         icon="lock.fill"

@@ -18,6 +18,43 @@ const CHANNEL_PREFIX = "sse:";
 const localSubscribers = new Map<string, Set<FastifyReply>>();
 let relayStarted = false;
 
+export interface PublicInvalidation {
+  topic: string;
+  type: typeof EVENTS.DATA_CHANGED;
+  data: Record<string, never>;
+}
+
+/**
+ * The only domain-to-public mirrors. Keep this mapping narrow: public screens
+ * must not observe unrelated logistics, identity, export, or global activity.
+ */
+export function publicInvalidationFor(topic: string): PublicInvalidation | null {
+  if (topic === SSE_TOPICS.QUEUE || topic === SSE_TOPICS.TV) {
+    return { topic: SSE_TOPICS.PUBLIC_TV, type: EVENTS.DATA_CHANGED, data: {} };
+  }
+  if (topic === SSE_TOPICS.CONTENT) {
+    return { topic: SSE_TOPICS.PUBLIC_CONTENT, type: EVENTS.DATA_CHANGED, data: {} };
+  }
+  return null;
+}
+
+function isPublicInvalidationTopic(topic: string): boolean {
+  return topic === SSE_TOPICS.PUBLIC_TV || topic === SSE_TOPICS.PUBLIC_CONTENT;
+}
+
+function assertPayloadFreePublicInvalidation(topic: string, type: string, data: unknown): void {
+  if (!isPublicInvalidationTopic(topic)) return;
+  if (
+    type !== EVENTS.DATA_CHANGED ||
+    typeof data !== "object" ||
+    data === null ||
+    Array.isArray(data) ||
+    Object.keys(data).length !== 0
+  ) {
+    throw new Error(`Public SSE topic ${topic} accepts only an empty data.changed invalidation`);
+  }
+}
+
 async function ensureRelay(): Promise<void> {
   if (relayStarted) return;
   relayStarted = true;
@@ -38,6 +75,7 @@ function formatSse(envelope: SseEnvelope): string {
 
 /** Publish an event to every subscriber of `topic`, across instances. */
 export async function broadcast<T>(topic: string, type: string, data: T): Promise<SseEnvelope<T>> {
+  assertPayloadFreePublicInvalidation(topic, type, data);
   const seq = await valkey.incr(`sse:seq:${topic}`);
   const envelope: SseEnvelope<T> = {
     type,
@@ -46,10 +84,16 @@ export async function broadcast<T>(topic: string, type: string, data: T): Promis
     data,
   };
   await valkey.publish(`${CHANNEL_PREFIX}${topic}`, formatSse(envelope));
-  // Worker-originated changes do not have an HTTP response, so mirror every
-  // domain event into the global refresh stream as well. The guard prevents
-  // the mirror from recursively publishing itself.
-  if (topic !== SSE_TOPICS.GLOBAL) {
+  // Public walls see only their relevant, payload-free invalidation. This is
+  // intentionally separate from authenticated global refresh notifications.
+  const publicInvalidation = publicInvalidationFor(topic);
+  if (publicInvalidation) {
+    await broadcast(publicInvalidation.topic, publicInvalidation.type, publicInvalidation.data);
+  }
+  // Worker-originated changes do not have an HTTP response, so mirror domain
+  // events into the authenticated global refresh stream. Public invalidation
+  // topics are terminal: they neither recurse into global nor into each other.
+  if (topic !== SSE_TOPICS.GLOBAL && !isPublicInvalidationTopic(topic)) {
     await invalidateReadCache();
     await broadcast(SSE_TOPICS.GLOBAL, EVENTS.DATA_CHANGED, { at: envelope.at });
   }

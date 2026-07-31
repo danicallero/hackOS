@@ -99,6 +99,18 @@ Wallet logs its client-side errors to `POST /v1/log` — those lines are printed
 with a `wallet: device log:` prefix, and are the first place to look when a
 phone won't update.
 
+### Access boundary
+
+`GET /api/me/wallet/apple/:purpose.pkpass` and the Google save-url endpoint
+are authenticated self-service routes: a signed-in user can issue only their
+own pass. The `/api/wallet/apple/v1/*` device protocol deliberately does not
+use browser sessions; every endpoint requires `Authorization: ApplePass
+<authenticationToken>`, validates that token against an Apple pass record, and
+the changed-registration poll additionally verifies that the token belongs to
+a pass registered on the requested device. This prevents a valid token for one
+pass from enumerating another device's serial numbers while preserving the
+native PassKit protocol.
+
 ## 3. The settings page (apps/web/src/app/(app)/settings/event/page.tsx)
 
 One form over `GET/PUT /api/event`, presented as four cards — Event (identity),

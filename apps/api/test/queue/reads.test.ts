@@ -373,13 +373,19 @@ describe("TV mode (H42)", () => {
 });
 
 describe("SSE streams (H41/H42)", () => {
-  it("GET /api/queue/stream and /api/tv/stream open public event-streams", async () => {
+  it("keeps the operational queue stream authorized while the TV stream remains public", async () => {
+    const anonymousQueue = await app.inject({ method: "GET", url: "/api/queue/stream" });
+    expect(anonymousQueue.statusCode).toBe(401);
+
     // inject with payloadAsStream so the never-ending SSE body doesn't hang the test
-    for (const url of ["/api/queue/stream", "/api/tv/stream"]) {
+    for (const { url, headers } of [
+      { url: "/api/queue/stream", headers: asUser(operatorId) },
+      { url: "/api/tv/stream", headers: undefined },
+    ]) {
       const res = await app.inject({
         method: "GET",
         url,
-        headers: { origin: "https://hackos.example.test" },
+        headers: { origin: "https://hackos.example.test", ...headers },
         payloadAsStream: true,
       });
       expect(res.statusCode).toBe(200);

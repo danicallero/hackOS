@@ -46,6 +46,43 @@ Staff with `users:write` can manually set an attendee relationship to
 participant or mentor; during accreditation, a scanner can make that same
 choice for an otherwise unassigned person before assigning their badge.
 
+**Access policy (H8, H53, H54).** Every identity, invitation, application, and
+export route now declares `RouteAccessPolicy` metadata for the generated API
+ledger. Invite lookup/acceptance and spot confirmation are explicit token
+flows; profile/application self-service routes are authenticated; staff routes
+declare their concrete capability (or the documented review/decide discovery
+combination). Invitation group assignments are checked against the shared
+capability catalogue while the permission-graph transaction lock is held, and
+only an existing wildcard holder can defer a wildcard group through an invite.
+Each token persists that wildcard authorization as durable provenance: if a
+previously ordinary group later inherits `*`, acceptance fails closed unless a
+wildcard holder has explicitly regenerated, renewed, or resent the invite
+under the graph lock. Acceptance takes that same lock before writing
+memberships, so group deletion and deferred membership grants serialize
+correctly. Account deletion and
+anonymization also retain at least one active effective wildcard holder; a
+last-holder removal rolls back with 409. `applications:decide` can read form
+metadata and decision discovery surfaces, but cannot manage forms, review, or
+edit responses. Operational exports require `exports:run`; deletion requests
+add `*` in a reusable pre-handler before the handler creates work. Private
+application-file download and conditional export-request creation are recorded
+as contextual policies (the former binds the upload key; the latter binds the
+data-subject request body) rather than overstating their access as merely
+authenticated or `exports:run`.
+
+**Resettable permission templates (H8, H53).** The permission-template
+catalogue is code-owned (`identity/templates.ts`) and exposes stable keys,
+client-side i18n message keys, and capability sets — never localized interface
+copy or mutable role rows. `GET /api/permission-group-templates` lists the
+catalogue; instantiation creates a normal editable `permission_groups` row
+with nullable `template_key`, while reset restores its exact direct grants and
+removes every custom include without changing its name, description, or
+members. Group DTOs derive `templateDrifted` from direct-capability set equality
+plus absence of includes on every read; wildcard-bearing before/after graphs
+take the permission-graph advisory lock, require an existing wildcard holder,
+and retain the last active holder or roll back with 409. The deprecated
+`sponsor:portal` compatibility grant is deliberately absent from templates.
+
 ---
 
 ## Module 2 — Application status state machine & batch actions

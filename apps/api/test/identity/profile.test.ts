@@ -695,11 +695,13 @@ describe("staff user routes (H7)", () => {
     const a = await getApp();
     const admin = await createUserWithCapabilities(["*"]);
     const staff = await createUserWithCapabilities([CAPABILITIES.USERS_WRITE]);
-    const target = await createUser({ name: "Real Person", email: "person@example.test" });
+    const target = await createUserWithCapabilities([CAPABILITIES.USERS_READ]);
 
     const { pool } = await import("../../src/db/pool.js");
     await pool.query(
-      `UPDATE users SET surname = 'Doe', phone = '555', dni = '00000000T' WHERE id = $1`,
+      `UPDATE users
+       SET email = 'person@example.test', name = 'Real Person', surname = 'Doe', phone = '555', dni = '00000000T'
+       WHERE id = $1`,
       [target],
     );
 
@@ -744,6 +746,12 @@ describe("staff user routes (H7)", () => {
     expect(rows[0].email_verified).toBe(false);
     expect(rows[0].anonymized_at).not.toBeNull();
 
+    const { getEffectiveCapabilities, userHasCapability } = await import(
+      "../../src/lib/capabilities.js"
+    );
+    expect(await getEffectiveCapabilities(target)).toEqual(new Set());
+    expect(await userHasCapability(target, CAPABILITIES.USERS_READ)).toBe(false);
+
     // The audit trail for the anonymize action must not retain the very PII
     // it was supposed to scrub.
     const auditRows = await pool.query(
@@ -753,5 +761,22 @@ describe("staff user routes (H7)", () => {
     expect(auditRows.rows).toHaveLength(1);
     expect(JSON.stringify(auditRows.rows[0].before ?? "")).not.toContain("person@example.test");
     expect(JSON.stringify(auditRows.rows[0].after ?? "")).not.toContain("person@example.test");
+  });
+
+  it("keeps the last active wildcard holder when an anonymization job runs", async () => {
+    const soleHolder = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
+    const { withTransaction, pool } = await import("../../src/db/pool.js");
+    const { anonymizeUser } = await import("../../src/modules/identity/anonymize.js");
+
+    await expect(
+      withTransaction((client) =>
+        anonymizeUser(client, { targetId: soleHolder, actorId: null, source: "system" }),
+      ),
+    ).rejects.toMatchObject({ statusCode: 409 });
+
+    const { rows } = await pool.query(`SELECT anonymized_at FROM users WHERE id = $1`, [
+      soleHolder,
+    ]);
+    expect(rows[0].anonymized_at).toBeNull();
   });
 });
