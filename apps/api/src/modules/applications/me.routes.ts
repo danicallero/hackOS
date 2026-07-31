@@ -3,6 +3,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool } from "../../db/pool.js";
 import { requireAuth } from "../../lib/capabilities.js";
 import { NotFoundError } from "../../lib/errors.js";
+import type { RouteAccessPolicy } from "../../lib/route-policy.js";
 import { idParamSchema, saveDraftSchema, submitSchema } from "./schemas.js";
 import {
   enrichTemplate,
@@ -19,16 +20,28 @@ import {
  */
 export function registerMeRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
+  const routeAccess = (routeAccessPolicy: RouteAccessPolicy) => ({ routeAccessPolicy });
 
   // List my responses across all forms.
-  r.get("/api/me/applications", { preHandler: requireAuth }, async (req) => ({
-    responses: await listMyResponses(req.userId as number),
-  }));
+  r.get(
+    "/api/me/applications",
+    {
+      preHandler: requireAuth,
+      config: routeAccess({ kind: "authenticated" }),
+    },
+    async (req) => ({
+      responses: await listMyResponses(req.userId as number),
+    }),
+  );
 
   // My response for one form (draft included), with masked status.
   r.get(
     "/api/applications/:id/response",
-    { preHandler: requireAuth, schema: { params: idParamSchema } },
+    {
+      preHandler: requireAuth,
+      config: routeAccess({ kind: "authenticated" }),
+      schema: { params: idParamSchema },
+    },
     async (req) => {
       const { rows } = await pool.query(
         `SELECT a.template, a.type, r.*, t.expires_at AS confirmation_expires_at
@@ -63,6 +76,7 @@ export function registerMeRoutes(app: FastifyInstance): void {
     "/api/applications/:id/response",
     {
       preHandler: requireAuth,
+      config: routeAccess({ kind: "authenticated" }),
       schema: { params: idParamSchema, body: saveDraftSchema },
     },
     async (req) => {
@@ -76,6 +90,7 @@ export function registerMeRoutes(app: FastifyInstance): void {
     "/api/applications/:id/response/submit",
     {
       preHandler: requireAuth,
+      config: routeAccess({ kind: "authenticated" }),
       schema: { params: idParamSchema, body: submitSchema },
     },
     async (req) => {

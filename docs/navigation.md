@@ -43,7 +43,7 @@ workspace never over-grants access.
 
 | Workspace | Items | Visible when |
 | --- | --- | --- |
-| Applications | Applications | `applications:review` or `applications:manage` |
+| Applications | Applications | `applications:review`, `applications:decide`, or `applications:manage` |
 | Projects and imports | Projects, Resolve import | `projects:read`, `projects:import`, `judge:panel`, or an assigned-judge/sponsor-rep association |
 | Live judging | Queue operations, Judging, Rooms, Reviews | `queue:operate`, `queue:admin`, `judge:panel`, an assigned-judge association (Judging), or a sponsor-rep association (Rooms) |
 | Logistics | Accreditation, Meals, Activities, Presence, Logistics stats | `accredit:scan`, `activity:scan`, `presence:scan`, `logistics:stats` (each item its own capability — H22-H27 per-station gating) |
@@ -124,16 +124,24 @@ behaviour stays sane; deeper screens inside a section still push normally on
 top of it. Pathname matching normalizes Expo Router route groups first
 (`/others/...` vs `/(tabs)/others/...`).
 
-## Known gap (backend follow-up needed)
+## Decision-only applications and dashboard shortcuts
 
-A domain page can still gate *content* on the single-priority `role` instead
-of the new `isRoomJudge`/`isSponsorRep` facts (e.g.
-`apps/web/src/app/(app)/dashboard/page.tsx`). This means a sponsor+judge
-account can now reach every relevant workspace from the sidebar, but such a
-page may still only render sponsor- or judge-specific content for whichever
-`role` value won priority. Fixing that is domain page content, out of this
-issue's Agent boundary (owned by #190 Queue/judging); `isRoomJudge`/
-`isSponsorRep` are now available on `Me` for that issue to adopt.
+`applications:decide` is a first-class Applications workspace capability. A
+decision-only account can discover and open the protected application list and
+form metadata, then use Outbox and Sent decisions, but it never receives form
+builder, review, score, note, or response-edit controls solely from that
+capability.
+
+The dashboard follows the same additive policy as the sidebar. Its quick
+actions are derived independently from effective capabilities,
+`isRoomJudge`, and `isSponsorRep`; a sponsor representative assigned as a
+room judge sees both sponsor and judging actions. The derived `role` remains
+display-only and is not consulted for dashboard access.
+
+This work reuses existing localized action labels, so it requires no new
+translation keys.
+
+## Association-aware domain pages
 
 `apps/web/src/app/(app)/judging/page.tsx` was fixed to `isRoomJudge` by
 issue #225 (H40): the page previously gated `canUse`/`canJudge` purely on

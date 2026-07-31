@@ -32,6 +32,7 @@ import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import { type ApplicationForm, type ApplicationStats, windowState } from "../lib";
+import { defaultApplicationWorkspace } from "../workflow";
 
 import { MetadataCard } from "./metadata-card";
 import { QuestionsCard } from "./questions-card";
@@ -54,25 +55,17 @@ export default function ApplicationDetailPage() {
 
   const loadForm = useCallback(async () => {
     try {
-      // Metadata is behind applications:manage. A reviewer without it falls back
-      // to the public template (works only while the form window is open) so
-      // answers can still render by label; otherwise raw keys are shown.
-      const data = canManage
-        ? await api.get<ApplicationForm>(`/api/applications/${id}`)
-        : await api.get<ApplicationForm>(`/api/public/applications/${id}`);
+      // H11-H14: every application workspace uses the protected metadata
+      // endpoint. This lets decision-only staff open a closed form without
+      // granting the builder's update controls.
+      const data = await api.get<ApplicationForm>(`/api/applications/${id}`);
       setForm(data);
       setState("ready");
     } catch (err) {
-      if (!canManage) {
-        // Reviewer on a closed form: no template, but responses still load.
-        setForm(null);
-        setState("ready");
-        return;
-      }
       setErrorMsg(err instanceof ApiError ? err.message : t("couldNotLoadForm"));
       setState("error");
     }
-  }, [id, canManage, t]);
+  }, [id, t]);
 
   // Soft, in-place refresh instead of a hard reload when someone else edits
   // this form, its questions, or a response changes its stats elsewhere.
@@ -114,7 +107,11 @@ export default function ApplicationDetailPage() {
     );
   }
 
-  const defaultTab = canManage ? "builder" : canReview ? "review" : "outbox";
+  const defaultTab = defaultApplicationWorkspace({
+    manage: canManage,
+    review: canReview,
+    decide: canDecide,
+  });
   const w = form ? windowState(form, t) : null;
 
   return (
@@ -150,47 +147,49 @@ export default function ApplicationDetailPage() {
 
       {canStats && stats && <StatsStrip stats={stats} />}
 
-      <Tabs defaultValue={defaultTab}>
-        <TabBar className="w-full justify-start">
-          {canManage && <TabsTrigger value="builder">{t("formTabLabel")}</TabsTrigger>}
-          {canReview && <TabsTrigger value="review">{t("workspaceReview")}</TabsTrigger>}
-          {canDecide && <TabsTrigger value="outbox">{t("workspaceOutbox")}</TabsTrigger>}
-          {canDecide && <TabsTrigger value="sent">{t("workspaceSentDecisions")}</TabsTrigger>}
-        </TabBar>
+      {defaultTab && (
+        <Tabs defaultValue={defaultTab}>
+          <TabBar className="w-full justify-start">
+            {canManage && <TabsTrigger value="builder">{t("formTabLabel")}</TabsTrigger>}
+            {canReview && <TabsTrigger value="review">{t("workspaceReview")}</TabsTrigger>}
+            {canDecide && <TabsTrigger value="outbox">{t("workspaceOutbox")}</TabsTrigger>}
+            {canDecide && <TabsTrigger value="sent">{t("workspaceSentDecisions")}</TabsTrigger>}
+          </TabBar>
 
-        {canManage && (
-          <TabsContent value="builder" className="space-y-6 pt-2">
-            {form ? (
-              <>
-                <MetadataCard form={form} onSaved={loadForm} />
-                <QuestionsCard form={form} onSaved={loadForm} />
-              </>
-            ) : (
-              <EmptyState
-                icon={LockIcon}
-                title={t("metadataUnavailable")}
-                description={t("metadataUnavailableDesc")}
-              />
-            )}
-          </TabsContent>
-        )}
+          {canManage && (
+            <TabsContent value="builder" className="space-y-6 pt-2">
+              {form ? (
+                <>
+                  <MetadataCard form={form} onSaved={loadForm} />
+                  <QuestionsCard form={form} onSaved={loadForm} />
+                </>
+              ) : (
+                <EmptyState
+                  icon={LockIcon}
+                  title={t("metadataUnavailable")}
+                  description={t("metadataUnavailableDesc")}
+                />
+              )}
+            </TabsContent>
+          )}
 
-        {canReview && (
-          <TabsContent value="review" className="pt-2">
-            <ResponsesTab id={id} template={form?.template ?? null} workspace="review" />
-          </TabsContent>
-        )}
-        {canDecide && (
-          <TabsContent value="outbox" className="pt-2">
-            <ResponsesTab id={id} template={form?.template ?? null} workspace="outbox" />
-          </TabsContent>
-        )}
-        {canDecide && (
-          <TabsContent value="sent" className="pt-2">
-            <ResponsesTab id={id} template={form?.template ?? null} workspace="sent" />
-          </TabsContent>
-        )}
-      </Tabs>
+          {canReview && (
+            <TabsContent value="review" className="pt-2">
+              <ResponsesTab id={id} template={form?.template ?? null} workspace="review" />
+            </TabsContent>
+          )}
+          {canDecide && (
+            <TabsContent value="outbox" className="pt-2">
+              <ResponsesTab id={id} template={form?.template ?? null} workspace="outbox" />
+            </TabsContent>
+          )}
+          {canDecide && (
+            <TabsContent value="sent" className="pt-2">
+              <ResponsesTab id={id} template={form?.template ?? null} workspace="sent" />
+            </TabsContent>
+          )}
+        </Tabs>
+      )}
     </div>
   );
 }

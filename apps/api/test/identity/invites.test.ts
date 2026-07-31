@@ -157,6 +157,58 @@ describe("H10 invite creation", () => {
     });
     expect(res.statusCode).toBe(409);
   });
+
+  it("rejects anonymous and non-wildcard escalation, but lets a wildcard holder delegate a wildcard group", async () => {
+    const a = await getApp();
+    const manager = await inviter();
+    const wildcard = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows } = await pool.query(
+      `INSERT INTO permission_groups (name) VALUES ('invite-platform-admin') RETURNING id`,
+    );
+    const groupId = rows[0].id as number;
+    await pool.query(`INSERT INTO group_capabilities (group_id, capability) VALUES ($1, $2)`, [
+      groupId,
+      CAPABILITIES.ADMIN_ALL,
+    ]);
+
+    const anonymous = await a.inject({
+      method: "POST",
+      url: "/api/invites",
+      payload: { email: "anonymous@example.com", kind: "staff" },
+    });
+    expect(anonymous.statusCode).toBe(401);
+
+    const missingGroup = await a.inject({
+      method: "POST",
+      url: "/api/invites",
+      headers: asUser(manager),
+      payload: { email: "missing-group@example.com", kind: "staff", groupIds: [999_999] },
+    });
+    expect(missingGroup.statusCode).toBe(404);
+
+    const escalation = await a.inject({
+      method: "POST",
+      url: "/api/invites",
+      headers: asUser(manager),
+      payload: { email: "escalation@example.com", kind: "staff", groupIds: [groupId] },
+    });
+    expect(escalation.statusCode).toBe(403);
+
+    const delegated = await createInvite(a, wildcard, {
+      email: "delegated@example.com",
+      kind: "staff",
+      groupIds: [groupId],
+    });
+    const accepted = await a.inject({
+      method: "POST",
+      url: "/api/invites/accept",
+      payload: { ...ACCEPT_BASE, token: delegated.token },
+    });
+    expect(accepted.statusCode).toBe(201);
+    const { userHasCapability } = await import("../../src/lib/capabilities.js");
+    expect(await userHasCapability(accepted.json().userId, CAPABILITIES.INVITES_MANAGE)).toBe(true);
+  });
 });
 
 describe("GET /api/invites — list active invites", () => {
@@ -650,5 +702,134 @@ describe("H9 invite regeneration", () => {
       url: `/api/invites/lookup?token=${invite.token}`,
     });
     expect(after.statusCode).toBe(404);
+  });
+
+  it("fails closed if an ordinary deferred group later inherits wildcard access", async () => {
+    const a = await getApp();
+    const manager = await inviter();
+    const wildcard = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
+    const { pool } = await import("../../src/db/pool.js");
+    const createGroup = async (name: string) => {
+      const { rows } = await pool.query(
+        `INSERT INTO permission_groups (name) VALUES ($1) RETURNING id`,
+        [name],
+      );
+      return rows[0].id as number;
+    };
+    const parent = await createGroup("deferred-ordinary-parent");
+    const child = await createGroup("deferred-nested-child");
+    await pool.query(
+      `INSERT INTO permission_group_includes (parent_group_id, child_group_id) VALUES ($1, $2)`,
+      [parent, child],
+    );
+    const stale = await createInvite(a, manager, {
+      email: "stale-wildcard@example.com",
+      kind: "staff",
+      groupIds: [parent],
+    });
+
+    // The closure changes after issuance through a nested child, not by
+    // editing the invitation. Its default provenance must now fail closed.
+    await pool.query(`INSERT INTO group_capabilities (group_id, capability) VALUES ($1, $2)`, [
+      child,
+      CAPABILITIES.ADMIN_ALL,
+    ]);
+    for (const action of [
+      { url: `/api/invites/${stale.id}/regenerate` },
+      { url: `/api/invites/${stale.id}/renew` },
+      { url: `/api/invites/${stale.id}/resend` },
+    ]) {
+      const res = await a.inject({
+        method: "POST",
+        url: action.url,
+        headers: asUser(manager),
+      });
+      expect(res.statusCode).toBe(403);
+    }
+
+    const rejected = await a.inject({
+      method: "POST",
+      url: "/api/invites/accept",
+      payload: { ...ACCEPT_BASE, token: stale.token },
+    });
+    expect(rejected.statusCode).toBe(403);
+    expect(
+      (await pool.query(`SELECT id FROM users WHERE email = 'stale-wildcard@example.com'`)).rows,
+    ).toHaveLength(0);
+
+    const authorized = await createInvite(a, wildcard, {
+      email: "authorized-wildcard@example.com",
+      kind: "staff",
+      groupIds: [parent],
+    });
+    const accepted = await a.inject({
+      method: "POST",
+      url: "/api/invites/accept",
+      payload: { ...ACCEPT_BASE, token: authorized.token },
+    });
+    expect(accepted.statusCode).toBe(201);
+    const { rows } = await pool.query(
+      `SELECT wildcard_authorized FROM email_verification_tokens WHERE id = $1`,
+      [authorized.id],
+    );
+    expect(rows[0].wildcard_authorized).toBe(true);
+  });
+
+  it("lets a wildcard holder reauthorize existing stale invites through every renewal path", async () => {
+    const a = await getApp();
+    const manager = await inviter();
+    const wildcard = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
+    const { pool } = await import("../../src/db/pool.js");
+    const createGroup = async (name: string) => {
+      const { rows } = await pool.query(
+        `INSERT INTO permission_groups (name) VALUES ($1) RETURNING id`,
+        [name],
+      );
+      return rows[0].id as number;
+    };
+    const parent = await createGroup("reauthorize-parent");
+    const child = await createGroup("reauthorize-child");
+    await pool.query(
+      `INSERT INTO permission_group_includes (parent_group_id, child_group_id) VALUES ($1, $2)`,
+      [parent, child],
+    );
+
+    const stale = await Promise.all(
+      ["regenerate", "renew", "resend"].map(async (operation) => ({
+        operation,
+        invite: await createInvite(a, manager, {
+          email: `reauthorize-${operation}@example.com`,
+          kind: "staff",
+          groupIds: [parent],
+        }),
+      })),
+    );
+    await pool.query(`INSERT INTO group_capabilities (group_id, capability) VALUES ($1, $2)`, [
+      child,
+      CAPABILITIES.ADMIN_ALL,
+    ]);
+
+    for (const { operation, invite } of stale) {
+      const response = await a.inject({
+        method: "POST",
+        url: `/api/invites/${invite.id}/${operation}`,
+        headers: asUser(wildcard),
+      });
+      expect(response.statusCode).toBe(operation === "regenerate" ? 201 : 200);
+      const token = operation === "regenerate" ? (response.json().token as string) : invite.token;
+      expect(token).toBeTruthy();
+      const { rows } = await pool.query(
+        `SELECT wildcard_authorized FROM email_verification_tokens WHERE token = $1`,
+        [token],
+      );
+      expect(rows[0].wildcard_authorized).toBe(true);
+
+      const accepted = await a.inject({
+        method: "POST",
+        url: "/api/invites/accept",
+        payload: { ...ACCEPT_BASE, token },
+      });
+      expect(accepted.statusCode).toBe(201);
+    }
   });
 });

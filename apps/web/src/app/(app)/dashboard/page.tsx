@@ -28,8 +28,9 @@ import { ApiError, api } from "@/lib/api";
 import { LOCALE_CODES, useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem } from "@/lib/logistics";
 import { getMyQueue, type MyQueueEntry } from "@/lib/queue";
-import { useMe } from "@/lib/session";
+import { useSessionContext } from "@/lib/session";
 import { type MyResponseSummary, statusLabel, statusTone } from "../my-applications/lib";
+import { dashboardQuickActions } from "./model";
 
 type DashboardData = {
   event: PublicEvent | null;
@@ -88,7 +89,7 @@ function ResourceLoading({ label }: { label: string }) {
 }
 
 export default function DashboardPage() {
-  const me = useMe();
+  const { can, me } = useSessionContext();
   const { language, t } = useLocale();
   const [data, setData] = useState<DashboardData>(initialData);
   const [loading, setLoading] = useState(true);
@@ -214,6 +215,11 @@ export default function DashboardPage() {
     [data.queue],
   );
   if (!me) return null;
+  const quickActions = dashboardQuickActions({
+    can,
+    isRoomJudge: me.isRoomJudge,
+    isSponsorRep: me.isSponsorRep,
+  });
 
   return (
     <div className="space-y-6">
@@ -411,7 +417,7 @@ export default function DashboardPage() {
             title={t("quickActions")}
             bodyClassName="grid gap-2 space-y-0 sm:grid-cols-2 lg:grid-cols-4"
           >
-            {(me.role === "participant" || me.role === "staff") && (
+            {quickActions.includes("wallet") && (
               <Button asChild variant="outline" className="justify-start">
                 <Link href="/wallet">
                   <WalletCardsIcon className="size-4" aria-hidden="true" />
@@ -419,7 +425,7 @@ export default function DashboardPage() {
                 </Link>
               </Button>
             )}
-            {me.role === "sponsor" && (
+            {quickActions.includes("challenges") && (
               <Button asChild variant="outline" className="justify-start">
                 <Link href="/challenges">
                   <TrophyIcon className="size-4" aria-hidden="true" />
@@ -427,7 +433,7 @@ export default function DashboardPage() {
                 </Link>
               </Button>
             )}
-            {me.role === "judge" && (
+            {quickActions.includes("judging") && (
               <Button asChild variant="outline" className="justify-start">
                 <Link href="/judging">
                   <GavelIcon className="size-4" aria-hidden="true" />
@@ -435,7 +441,7 @@ export default function DashboardPage() {
                 </Link>
               </Button>
             )}
-            {(me.role === "staff" || me.role === "admin") && (
+            {quickActions.includes("logistics") && (
               <Button asChild variant="outline" className="justify-start">
                 <Link href="/logistics">
                   <TicketIcon className="size-4" aria-hidden="true" />
@@ -443,28 +449,30 @@ export default function DashboardPage() {
                 </Link>
               </Button>
             )}
-            {me.role === "admin" && (
-              <>
-                <Button asChild variant="outline" className="justify-start">
-                  <Link href="/queue">
-                    <TicketIcon className="size-4" aria-hidden="true" />
-                    {t("queueOperations")}
-                  </Link>
-                </Button>
-                <Button asChild variant="outline" className="justify-start">
-                  <Link href="/settings/event">
-                    <SettingsIcon className="size-4" aria-hidden="true" />
-                    {t("eventSettings")}
-                  </Link>
-                </Button>
-              </>
+            {quickActions.includes("queueOperations") && (
+              <Button asChild variant="outline" className="justify-start">
+                <Link href="/queue">
+                  <TicketIcon className="size-4" aria-hidden="true" />
+                  {t("queueOperations")}
+                </Link>
+              </Button>
             )}
-            <Button asChild variant="outline" className="justify-start">
-              <Link href="/timetable">
-                <CalendarDaysIcon className="size-4" aria-hidden="true" />
-                {t("viewSchedule")}
-              </Link>
-            </Button>
+            {quickActions.includes("eventSettings") && (
+              <Button asChild variant="outline" className="justify-start">
+                <Link href="/settings/event">
+                  <SettingsIcon className="size-4" aria-hidden="true" />
+                  {t("eventSettings")}
+                </Link>
+              </Button>
+            )}
+            {quickActions.includes("schedule") && (
+              <Button asChild variant="outline" className="justify-start">
+                <Link href="/timetable">
+                  <CalendarDaysIcon className="size-4" aria-hidden="true" />
+                  {t("viewSchedule")}
+                </Link>
+              </Button>
+            )}
           </SectionCard>
         </>
       )}

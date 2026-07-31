@@ -13,6 +13,7 @@ import { pool } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { requireCapability } from "../../lib/capabilities.js";
 import { BadRequestError } from "../../lib/errors.js";
+import type { RouteAccessPolicy } from "../../lib/route-policy.js";
 import { bumpAllAppleWalletUpdateTags } from "../logistics/wallet-passes.js";
 import { enqueueWalletSync } from "../logistics/wallet-sync.js";
 
@@ -87,6 +88,10 @@ const DEFAULTS = {
   pass_field_labels: {},
   pass_field_visibility: {},
 } as const;
+
+function routeAccess(routeAccessPolicy: RouteAccessPolicy) {
+  return { config: { routeAccessPolicy } };
+}
 
 interface EventConfigRow {
   name: string | null;
@@ -194,17 +199,33 @@ function toAdmin(
 
 export function registerEventRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
+  const publicContent = {
+    kind: "public",
+    anonymousCategory: "public-content",
+  } as const satisfies RouteAccessPolicy;
+  const scheduleManage = {
+    kind: "capability",
+    capability: CAPABILITIES.SCHEDULE_MANAGE,
+  } as const satisfies RouteAccessPolicy;
 
   // Anonymous: the public countdown feed for web / TV.
   r.get(
     "/api/public/event",
-    { schema: { summary: "Public event countdown feed (name, hacking/judging window, venue)." } },
+    {
+      ...routeAccess(publicContent),
+      schema: {
+        summary: "Public event countdown feed",
+        description:
+          "Anonymous event identity, public countdown windows and venue projection for website and TV consumers. It never includes venue Wi-Fi credentials.",
+      },
+    },
     async () => toPublic(await readConfig(), await readJudgingWindow()),
   );
 
   r.get(
     "/api/event",
     {
+      ...routeAccess(scheduleManage),
       preHandler: requireCapability(CAPABILITIES.SCHEDULE_MANAGE),
       schema: {
         summary:
@@ -217,6 +238,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
   r.put(
     "/api/event",
     {
+      ...routeAccess(scheduleManage),
       preHandler: requireCapability(CAPABILITIES.SCHEDULE_MANAGE),
       schema: {
         summary:

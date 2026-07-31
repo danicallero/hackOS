@@ -1,6 +1,11 @@
-import type { Queryable } from "../../db/pool.js";
+import type pg from "pg";
 import { audit } from "../../lib/audit.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
+import {
+  assertActiveWildcardHolder,
+  lockPermissionGraph,
+  userHasWildcard,
+} from "./permission-graph.js";
 
 export interface AnonymizeUserOptions {
   targetId: number;
@@ -20,10 +25,15 @@ export interface AnonymizeUserOptions {
  * workflow. Caller must run this inside a transaction and, once committed,
  * call invalidateCapabilities(targetId).
  */
-export async function anonymizeUser(client: Queryable, opts: AnonymizeUserOptions): Promise<void> {
+export async function anonymizeUser(
+  client: pg.PoolClient,
+  opts: AnonymizeUserOptions,
+): Promise<void> {
   if (opts.actorId != null && opts.actorId === opts.targetId) {
     throw new BadRequestError("You can't anonymize your own account");
   }
+  await lockPermissionGraph(client);
+  const wasWildcardHolder = await userHasWildcard(client, opts.targetId);
   const { rows } = await client.query(`SELECT id FROM users WHERE id = $1 FOR UPDATE`, [
     opts.targetId,
   ]);
@@ -44,6 +54,9 @@ export async function anonymizeUser(client: Queryable, opts: AnonymizeUserOption
   // them explicitly so the anonymized row can no longer authenticate.
   await client.query(`DELETE FROM sessions WHERE user_id = $1`, [opts.targetId]);
   await client.query(`DELETE FROM accounts WHERE user_id = $1`, [opts.targetId]);
+  // Active wildcard holders are derived through the graph, including nested
+  // groups. Marking a user inactive therefore counts as access removal.
+  if (wasWildcardHolder) await assertActiveWildcardHolder(client);
   // No `before`: the whole point of anonymizing is erasing PII, so the
   // original email must not be retained anywhere afterward — including here.
   await audit(client, {

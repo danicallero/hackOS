@@ -40,7 +40,7 @@ queue no matter how many times scheduling runs (idempotent scheduling).
 | `announcements-publisher` | `notifications/announcements-publisher.ts` | **15 s** | announcements whose `publish_at` has passed → reveals them |
 | `spot-confirmation expirer` | `applications/expirer.ts` | **60 s** | accepted responses whose confirmation window elapsed → `expired` (`expireDueConfirmations`), then scoped wallet tokens dead for over a day (`purgeExpiredWalletAccessTokens`, issue #369) |
 | `queue-pump` | `queue/pump.ts` | repeatable | for each active room, tops up the live judging queue (`callNextForRoom`) |
-| `tv-scheduler` | `queue/tv-scheduler.ts` | **5 s** | resolves what the venue screens should show (operator override → covering `tv_slots` window → default `rooms`), drops an override whose `expiresAt` passed, and broadcasts `tv.mode.changed` **only when the resolved state changed** — so a slot boundary reaches the fleet unattended without waking every screen every tick (H42) |
+| `tv-scheduler` | `queue/tv-scheduler.ts` | **5 s** | resolves what the venue screens should show (operator override → covering `tv_slots` window → default `rooms`), drops an override whose `expiresAt` passed, and broadcasts `tv.mode.changed` **only when the resolved state changed** — so a slot boundary reaches the fleet unattended without waking every screen every tick (H42). The public TV SSE endpoint receives only the dedicated payload-free `public-tv` invalidation mirror and refetches its sanitized projection; the operational TV event remains off the public stream. |
 | `presence-event-end-closer` | `logistics/presence-closer.ts` | **60 s** | once `event_config.event_ends_at` passes, force-closes every still-open door session with an audited `out` at that instant (`scanned_by NULL` = system actor, migration 0708). H24 product override of the original "the system never closes a session itself" rule; an `out` outside the certainty window credits no hours, so it only restores the in/out invariant. |
 
 (The table lists the workers relevant to the flows documented here; other
@@ -130,3 +130,16 @@ write it to a durable table with a `status` + `next_attempt_at`, and either
 extend an existing tick or add a new `registerWorker`. Do not reach for BullMQ
 per-job retries/DLQ — the codebase's contract is DB-owned durability drained by
 idempotent ticks.
+
+## Queue and public-screen streams
+
+`GET /api/queue/stream` is an authenticated operational channel: only global
+`queue:operate`, `queue:admin`, or `judge:panel` holders can subscribe because
+its events carry room-control and team details. `GET /api/events/stream` is
+also authenticated; public `/api/tv/stream` subscribes only to `public-tv`
+(mirrors `queue` and `tv`) and `/api/content/stream` only to `public-content`
+(mirrors `content`). Both mirrors use an empty `data.changed` envelope, never
+the source payload, and neither sees unrelated global/logistics/export writes.
+A public screen refetches `/api/tv/mode`, `/api/tv/rooms`, or its public content
+projection after its relevant invalidation; it never receives operational queue,
+account, project-link, or content-management payloads over SSE.

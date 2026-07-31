@@ -1,0 +1,245 @@
+import { ALL_CAPABILITIES, type Capability } from "@hackos/shared/capabilities";
+import type { FastifyInstance, FastifyRequest, RouteOptions } from "fastify";
+
+/**
+ * Machine-readable API access contract (H8, H53).  Route modules declare one
+ * of these in `config.routeAccessPolicy`; it is both the audit ledger source
+ * and the input for the shared authorization pre-handlers.
+ */
+export type AnonymousAccessCategory =
+  | "health"
+  | "public-content"
+  | "public-announcement"
+  | "public-tv"
+  | "public-invalidation";
+
+export type RouteAccessPolicy =
+  | { kind: "public"; anonymousCategory: AnonymousAccessCategory }
+  | { kind: "token"; policy: string }
+  | { kind: "authenticated" }
+  | {
+      kind: "capability";
+      capability?: Capability;
+      allOf?: readonly Capability[];
+      anyOf?: readonly Capability[];
+    }
+  | {
+      kind: "contextual";
+      policy: string;
+      /**
+       * Omit for collection/global policies whose resolver derives context
+       * from the authenticated caller rather than a single route resource.
+       */
+      resource?: ContextualResourceLocator;
+    };
+
+/** Identifies the route input a contextual resolver must bind to. */
+export interface ContextualResourceLocator {
+  /** The parameter/query/body location holding the resource identifier. */
+  source: "params" | "query" | "body";
+  /** Dot-separated field path within that location. */
+  field: string;
+}
+
+/**
+ * Named relationship policy contract shared by domain modules.  Resolvers
+ * must load and cross-check the target resource rather than trusting a parent
+ * id supplied separately by the caller.
+ */
+export interface ContextualPolicyResolver<Resource> {
+  readonly name: string;
+  resolve(request: FastifyRequest, locator: ContextualResourceLocator): Promise<Resource>;
+  authorize(request: FastifyRequest, resource: Resource): Promise<void>;
+}
+
+export interface RoutePolicyLedgerRow {
+  method: string;
+  url: string;
+  policy: RouteAccessPolicy;
+}
+
+export interface RoutePolicyExemption {
+  url: string;
+  exemption: "better-auth-generated";
+}
+
+declare module "fastify" {
+  interface FastifyContextConfig {
+    routeAccessPolicy?: RouteAccessPolicy;
+    /** Only Better Auth's raw generated handler may use this exemption. */
+    routeAccessPolicyExemption?: "better-auth-generated";
+  }
+
+  interface FastifyInstance {
+    routePolicyLedger: RoutePolicyLedgerRow[];
+    routePolicyExemptions: RoutePolicyExemption[];
+  }
+}
+
+function isApplicationRoute(route: RouteOptions): boolean {
+  return route.url === "/healthz" || route.url.startsWith("/api/");
+}
+
+function validatePolicy(policy: RouteAccessPolicy, route: RouteOptions): void {
+  if (!policy || typeof policy !== "object" || !("kind" in policy)) {
+    throw new Error(`Route ${String(route.method)} ${route.url} has invalid policy metadata`);
+  }
+  if (policy.kind === "public") {
+    if (
+      ![
+        "health",
+        "public-content",
+        "public-announcement",
+        "public-tv",
+        "public-invalidation",
+      ].includes(policy.anonymousCategory)
+    ) {
+      throw new Error(`Route ${String(route.method)} ${route.url} has an invalid public category`);
+    }
+    return;
+  }
+
+  if (policy.kind === "token") {
+    if (typeof policy.policy !== "string" || policy.policy.trim().length === 0) {
+      throw new Error(`Route ${String(route.method)} ${route.url} has an empty token policy`);
+    }
+    return;
+  }
+
+  if (policy.kind === "authenticated") return;
+
+  if (policy.kind === "capability") {
+    if (
+      (policy.capability !== undefined && typeof policy.capability !== "string") ||
+      (policy.allOf !== undefined && !Array.isArray(policy.allOf)) ||
+      (policy.anyOf !== undefined && !Array.isArray(policy.anyOf)) ||
+      [...(policy.allOf ?? []), ...(policy.anyOf ?? [])].some(
+        (capability) => typeof capability !== "string",
+      )
+    ) {
+      throw new Error(`Route ${String(route.method)} ${route.url} has malformed capability policy`);
+    }
+    const alternatives = [policy.capability, policy.allOf, policy.anyOf].filter(
+      (value) => value !== undefined,
+    );
+    if (alternatives.length !== 1) {
+      throw new Error(
+        `Route ${String(route.method)} ${route.url} must declare exactly one capability, allOf, or anyOf policy`,
+      );
+    }
+    if (
+      (policy.allOf?.length ?? 0) === 0 &&
+      (policy.anyOf?.length ?? 0) === 0 &&
+      !policy.capability
+    ) {
+      throw new Error(`Route ${String(route.method)} ${route.url} has an empty capability policy`);
+    }
+    const declared = policy.capability
+      ? [policy.capability]
+      : [...(policy.allOf ?? []), ...(policy.anyOf ?? [])];
+    const unknown = declared.filter((capability) => !ALL_CAPABILITIES.includes(capability));
+    if (unknown.length > 0) {
+      throw new Error(
+        `Route ${String(route.method)} ${route.url} declares unknown capability ${unknown.join(", ")}`,
+      );
+    }
+    return;
+  }
+
+  if (policy.kind === "contextual") {
+    if (typeof policy.policy !== "string" || policy.policy.trim().length === 0) {
+      throw new Error(`Route ${String(route.method)} ${route.url} has an empty contextual policy`);
+    }
+    if (policy.resource === undefined) return;
+
+    if (
+      typeof policy.resource !== "object" ||
+      policy.resource === null ||
+      !["params", "query", "body"].includes(policy.resource.source)
+    ) {
+      throw new Error(
+        `Route ${String(route.method)} ${route.url} has an invalid contextual resource source`,
+      );
+    }
+    if (
+      typeof policy.resource.field !== "string" ||
+      policy.resource.field.trim().length === 0 ||
+      policy.resource.field.split(".").some((segment) => segment.length === 0)
+    ) {
+      throw new Error(
+        `Route ${String(route.method)} ${route.url} has an invalid contextual resource field`,
+      );
+    }
+    return;
+  }
+
+  throw new Error(`Route ${String(route.method)} ${route.url} has unknown policy kind`);
+}
+
+/**
+ * Adds the route-policy ledger and enforcement hook.  `enforce` is opt-in
+ * during the AC-1/AC-2 transition so the foundation can land before each
+ * domain has classified its owned routes; production startup must enable it
+ * once the complete ledger is registered.  Tests can always opt in directly.
+ */
+export function registerRoutePolicyInfrastructure(
+  app: FastifyInstance,
+  { enforce = false }: { enforce?: boolean } = {},
+): void {
+  const ledger: RoutePolicyLedgerRow[] = [];
+  const exemptions: RoutePolicyExemption[] = [];
+  app.decorate("routePolicyLedger", ledger);
+  app.decorate("routePolicyExemptions", exemptions);
+  app.addHook("onRoute", (route) => {
+    if (!isApplicationRoute(route)) return;
+
+    const exemption = route.config?.routeAccessPolicyExemption;
+    if (exemption === "better-auth-generated") {
+      if (route.url !== "/api/auth/*") {
+        throw new Error("The Better Auth route-policy exemption is limited to /api/auth/*");
+      }
+      if (!exemptions.some((entry) => entry.url === route.url && entry.exemption === exemption)) {
+        exemptions.push({ url: route.url, exemption });
+      }
+      return;
+    }
+
+    const policy = route.config?.routeAccessPolicy;
+    if (!policy) {
+      if (enforce) {
+        throw new Error(
+          `Application route ${String(route.method)} ${route.url} is missing mandatory RouteAccessPolicy metadata`,
+        );
+      }
+      return;
+    }
+    validatePolicy(policy, route);
+    const methods = Array.isArray(route.method) ? route.method : [route.method];
+    for (const method of methods) ledger.push({ method, url: route.url, policy });
+  });
+}
+
+/** Stable, human-readable representation shared by the audit script and tests. */
+export function describeRoutePolicy(policy: RouteAccessPolicy): string {
+  switch (policy.kind) {
+    case "public":
+      return `public:${policy.anonymousCategory}`;
+    case "token":
+      return `token:${policy.policy}`;
+    case "authenticated":
+      return "authenticated";
+    case "capability":
+      if (policy.capability) return `capability:${policy.capability}`;
+      if (policy.allOf) return `capability:allOf(${policy.allOf.join(",")})`;
+      return `capability:anyOf(${policy.anyOf?.join(",")})`;
+    case "contextual":
+      return `contextual:${policy.policy}${policy.resource ? ` (${policy.resource.source}.${policy.resource.field})` : ""}`;
+  }
+}
+
+/** OpenAPI's session/bearer marker derives exclusively from route policy. */
+export function openApiSecurityForPolicy(policy: RouteAccessPolicy): Array<Record<string, []>> {
+  return policy.kind === "public" || policy.kind === "token"
+    ? []
+    : [{ sessionToken: [] }, { bearerToken: [] }];
+}

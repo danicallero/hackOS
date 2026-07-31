@@ -11,11 +11,17 @@ import {
   requireCapability,
 } from "../../../lib/capabilities.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../../lib/errors.js";
+import type { RouteAccessPolicy } from "../../../lib/route-policy.js";
 import { issueTicket } from "../../logistics/tickets.js";
 import { reconcileDevpostParticipantsForUser } from "../../projects/reconciliation.js";
 import { myProjects } from "../../projects/service.js";
 import { anonymizeUser } from "../anonymize.js";
 import { hasMobileAccess } from "../mobile-access.js";
+import {
+  assertActiveWildcardHolder,
+  lockPermissionGraph,
+  userHasWildcard,
+} from "../permission-graph.js";
 import { getAccountRemovalEligibility } from "../removal.js";
 import { computeDerivedRole, computeMembershipFlags } from "../role.js";
 
@@ -31,6 +37,7 @@ import { computeDerivedRole, computeMembershipFlags } from "../role.js";
 
 const LANGUAGES = ["en", "es", "gl"] as const;
 const DIETARY_DATA_STATES = ["not_provided", "present"] as const;
+const routeAccess = (routeAccessPolicy: RouteAccessPolicy) => ({ routeAccessPolicy });
 
 /** Fields a user may edit on themself (H7: "consultar mis datos… y si detecto un error"). */
 const selfPatchSchema = z
@@ -243,6 +250,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     "/api/me",
     {
       preHandler: requireAuth,
+      config: routeAccess({ kind: "authenticated" }),
       schema: {
         description:
           "The caller's own profile, illustrative role, effective capabilities (H8), " +
@@ -297,6 +305,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     "/api/me",
     {
       preHandler: requireAuth,
+      config: routeAccess({ kind: "authenticated" }),
       schema: {
         body: selfPatchSchema,
         response: { 200: userResponseSchema },
@@ -342,6 +351,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     "/api/users",
     {
       preHandler: requireCapability(CAPABILITIES.USERS_READ),
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.USERS_READ }),
       schema: {
         querystring: z.object({
           q: z.string().optional(),
@@ -453,6 +463,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     "/api/users/:id",
     {
       preHandler: requireCapability(CAPABILITIES.USERS_READ),
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.USERS_READ }),
       schema: {
         params: z.object({ id: z.coerce.number().int() }),
         response: {
@@ -494,6 +505,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     "/api/users/:id/projects",
     {
       preHandler: requireCapability(CAPABILITIES.USERS_READ),
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.USERS_READ }),
       schema: {
         params: z.object({ id: z.coerce.number().int() }),
         response: { 200: z.object({ projects: z.array(userProjectSchema) }) },
@@ -509,6 +521,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     "/api/users/:id",
     {
       preHandler: requireCapability(CAPABILITIES.USERS_WRITE),
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.USERS_WRITE }),
       schema: {
         params: z.object({ id: z.coerce.number().int() }),
         body: staffPatchSchema,
@@ -525,6 +538,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     "/api/users/:id/attendee-role",
     {
       preHandler: requireCapability(CAPABILITIES.USERS_WRITE),
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.USERS_WRITE }),
       schema: {
         params: z.object({ id: z.coerce.number().int() }),
         body: attendeeRoleBody,
@@ -566,6 +580,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     "/api/users/:id/removal-eligibility",
     {
       preHandler: requireCapability(CAPABILITIES.ADMIN_ALL),
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.ADMIN_ALL }),
       schema: {
         description:
           "Read-only H54 preflight selecting the one safe account-removal action from retained references.",
@@ -601,6 +616,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     "/api/users/:id",
     {
       preHandler: requireCapability(CAPABILITIES.ADMIN_ALL),
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.ADMIN_ALL }),
       schema: {
         params: z.object({ id: z.coerce.number().int() }),
         response: { 200: z.object({ deleted: z.literal(true) }) },
@@ -621,6 +637,8 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       }
       try {
         await withTransaction(async (client) => {
+          await lockPermissionGraph(client);
+          const wasWildcardHolder = await userHasWildcard(client, targetId);
           await audit(client, {
             actorId: req.userId,
             entityType: "user",
@@ -630,6 +648,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             before: { email: target.email },
           });
           await client.query(`DELETE FROM users WHERE id = $1`, [targetId]);
+          if (wasWildcardHolder) await assertActiveWildcardHolder(client);
         });
       } catch (err) {
         if (
@@ -660,6 +679,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     "/api/users/:id/email",
     {
       preHandler: requireCapability(CAPABILITIES.USERS_WRITE),
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.USERS_WRITE }),
       schema: {
         params: z.object({ id: z.coerce.number().int() }),
         body: z.object({ email: z.string().email() }).strict(),
@@ -729,6 +749,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     "/api/users/:id/anonymize",
     {
       preHandler: requireCapability(CAPABILITIES.ADMIN_ALL),
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.ADMIN_ALL }),
       schema: {
         params: z.object({ id: z.coerce.number().int() }),
         response: { 200: z.object({ anonymized: z.literal(true) }) },
@@ -752,6 +773,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     "/api/users/:id/activity",
     {
       preHandler: requireCapability(CAPABILITIES.USERS_READ),
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.USERS_READ }),
       schema: {
         params: z.object({ id: z.coerce.number().int() }),
         response: {
@@ -862,6 +884,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     "/api/users/:id/responses",
     {
       preHandler: requireCapability(CAPABILITIES.USERS_READ),
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.USERS_READ }),
       schema: {
         params: z.object({ id: z.coerce.number().int() }),
         response: {

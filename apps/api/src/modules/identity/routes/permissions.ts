@@ -6,29 +6,43 @@ import { z } from "zod";
 import { pool, withTransaction } from "../../../db/pool.js";
 import { audit } from "../../../lib/audit.js";
 import {
+  assertKnownCapabilities,
   invalidateAllCapabilities,
   invalidateCapabilities,
   requireCapability,
 } from "../../../lib/capabilities.js";
 import { ConflictError, NotFoundError } from "../../../lib/errors.js";
+import type { RouteAccessPolicy } from "../../../lib/route-policy.js";
 import { issueTicket } from "../../logistics/tickets.js";
+import {
+  assertActiveWildcardHolder,
+  groupContainsWildcard,
+  lockPermissionGraph,
+  requireGroupMutationAuthority,
+  requireWildcardGraphAuthority,
+} from "../permission-graph.js";
+import { getPermissionGroupTemplate, PERMISSION_GROUP_TEMPLATES } from "../templates.js";
 
 /**
  * Permission-group management (H8): groups of capabilities, groups of groups
  * (cycles rejected with 409), member assignment. Everything guarded by
  * PERMISSIONS_MANAGE, everything audited (H53) in the same transaction, and
- * every mutation invalidates the Valkey capability cache so revocation takes
- * effect immediately.
+ * capability decisions are read from PostgreSQL per request, so committed
+ * graph changes take effect on the next request without a Valkey cache window.
  */
 
 const manage = requireCapability(CAPABILITIES.PERMISSIONS_MANAGE);
+const routeAccess = (routeAccessPolicy: RouteAccessPolicy) => ({ routeAccessPolicy });
 
 const groupIdParams = z.object({ groupId: z.coerce.number().int() });
+const templateKeyParams = z.object({ templateKey: z.string().min(1).max(120) });
 
 const groupResponse = z.object({
   id: z.number(),
   name: z.string(),
   description: z.string().nullable(),
+  templateKey: z.string().nullable(),
+  templateDrifted: z.boolean(),
   capabilities: z.array(z.string()),
   includes: z.array(z.number()),
   members: z.array(z.number()),
@@ -51,12 +65,24 @@ async function loadGroup(db: pg.Pool | pg.PoolClient, groupId: number) {
     `SELECT user_id FROM permission_group_members WHERE group_id = $1 ORDER BY user_id`,
     [groupId],
   );
+  const templateKey = (rows[0].template_key as string | null | undefined) ?? null;
+  const template = templateKey ? getPermissionGroupTemplate(templateKey) : undefined;
+  const capabilities = caps.rows.map((r: { capability: string }) => r.capability);
+  const includeIds = includes.rows.map((r: { child_group_id: number }) => r.child_group_id);
+  const templateDrifted =
+    templateKey !== null &&
+    (template === undefined ||
+      includeIds.length > 0 ||
+      capabilities.length !== template.capabilities.length ||
+      template.capabilities.some((capability) => !capabilities.includes(capability)));
   return {
     id: rows[0].id as number,
     name: rows[0].name as string,
     description: rows[0].description as string | null,
-    capabilities: caps.rows.map((r: { capability: string }) => r.capability),
-    includes: includes.rows.map((r: { child_group_id: number }) => r.child_group_id),
+    templateKey,
+    templateDrifted,
+    capabilities,
+    includes: includeIds,
     members: members.rows.map((r: { user_id: number }) => r.user_id),
   };
 }
@@ -123,28 +149,136 @@ export function registerPermissionGroupRoutes(app: FastifyInstance): void {
   const api = app.withTypeProvider<ZodTypeProvider>();
 
   api.get(
+    "/api/permission-group-templates",
+    {
+      preHandler: manage,
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      schema: {
+        summary: "List permission-group templates",
+        description:
+          "Returns the stable H8 template catalogue. Labels and descriptions are message keys for the client i18n catalogue, not localized interface copy; `sponsor:portal` is deliberately absent.",
+        response: {
+          200: z.array(
+            z.object({
+              key: z.string(),
+              labelKey: z.string(),
+              descriptionKey: z.string(),
+              capabilities: z.array(z.string()),
+            }),
+          ),
+        },
+      },
+    },
+    async () =>
+      PERMISSION_GROUP_TEMPLATES.map((template) => ({
+        ...template,
+        capabilities: [...template.capabilities],
+      })),
+  );
+
+  api.post(
+    "/api/permission-group-templates/:templateKey/instantiate",
+    {
+      preHandler: manage,
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      schema: {
+        summary: "Instantiate an editable permission-group template",
+        description:
+          "Creates an ordinary, editable group from an H8 catalogue template. The caller provides the unique group name and optional description; no template is auto-assigned to users.",
+        params: templateKeyParams,
+        body: z.object({
+          name: z.string().min(1).max(200),
+          description: z.string().max(2000).optional(),
+        }),
+        response: { 201: groupResponse },
+      },
+    },
+    async (req, reply) => {
+      const template = getPermissionGroupTemplate(req.params.templateKey);
+      if (!template) {
+        throw new NotFoundError("Permission-group template not found", {
+          templateKey: req.params.templateKey,
+        });
+      }
+      const group = await withTransaction(async (client) => {
+        await lockPermissionGraph(client);
+        const actorId = req.userId as number;
+        const introducesWildcard = template.capabilities.includes(CAPABILITIES.ADMIN_ALL);
+        if (introducesWildcard) await requireWildcardGraphAuthority(client, actorId);
+        const { rows: existing } = await client.query(
+          `SELECT id FROM permission_groups WHERE name = $1`,
+          [req.body.name],
+        );
+        if (existing.length > 0) {
+          throw new ConflictError("A group with this name already exists", { name: req.body.name });
+        }
+        const { rows } = await client.query(
+          `INSERT INTO permission_groups (name, description, template_key)
+           VALUES ($1, $2, $3) RETURNING id`,
+          [req.body.name, req.body.description ?? null, template.key],
+        );
+        const groupId = rows[0].id as number;
+        for (const capability of template.capabilities) {
+          await client.query(
+            `INSERT INTO group_capabilities (group_id, capability) VALUES ($1, $2)`,
+            [groupId, capability],
+          );
+        }
+        const created = await loadGroup(client, groupId);
+        await audit(client, {
+          actorId,
+          entityType: "permission_group",
+          entityId: groupId,
+          action: "instantiate_template",
+          source: "admin",
+          after: created,
+        });
+        return created;
+      });
+      await invalidateAllCapabilities();
+      return reply.code(201).send(group);
+    },
+  );
+
+  api.get(
     "/api/permission-groups",
     {
       preHandler: manage,
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
       schema: {
         response: {
           200: z.array(
-            z.object({ id: z.number(), name: z.string(), description: z.string().nullable() }),
+            z.object({
+              id: z.number(),
+              name: z.string(),
+              description: z.string().nullable(),
+              templateKey: z.string().nullable(),
+              templateDrifted: z.boolean(),
+            }),
           ),
         },
       },
     },
     async () => {
-      const { rows } = await pool.query(
-        `SELECT id, name, description FROM permission_groups ORDER BY name`,
-      );
-      return rows;
+      const { rows } = await pool.query(`SELECT id FROM permission_groups ORDER BY name`);
+      const groups = await Promise.all(rows.map((row: { id: number }) => loadGroup(pool, row.id)));
+      return groups.map(({ id, name, description, templateKey, templateDrifted }) => ({
+        id,
+        name,
+        description,
+        templateKey,
+        templateDrifted,
+      }));
     },
   );
 
   api.get(
     "/api/permission-groups/:groupId",
-    { preHandler: manage, schema: { params: groupIdParams, response: { 200: groupResponse } } },
+    {
+      preHandler: manage,
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      schema: { params: groupIdParams, response: { 200: groupResponse } },
+    },
     async (req) => loadGroup(pool, req.params.groupId),
   );
 
@@ -152,6 +286,7 @@ export function registerPermissionGroupRoutes(app: FastifyInstance): void {
     "/api/permission-groups",
     {
       preHandler: manage,
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
       schema: {
         body: z.object({
           name: z.string().min(1).max(200),
@@ -163,7 +298,12 @@ export function registerPermissionGroupRoutes(app: FastifyInstance): void {
     },
     async (req, reply) => {
       const { name, description, capabilities } = req.body;
+      assertKnownCapabilities(capabilities);
       const group = await withTransaction(async (client) => {
+        await lockPermissionGraph(client);
+        if (capabilities.includes(CAPABILITIES.ADMIN_ALL)) {
+          await requireWildcardGraphAuthority(client, req.userId as number);
+        }
         const { rows: existing } = await client.query(
           `SELECT id FROM permission_groups WHERE name = $1`,
           [name],
@@ -189,6 +329,7 @@ export function registerPermissionGroupRoutes(app: FastifyInstance): void {
           source: "admin",
           after: { name, description: description ?? null, capabilities },
         });
+        if (capabilities.includes(CAPABILITIES.ADMIN_ALL)) await assertActiveWildcardHolder(client);
         return loadGroup(client, groupId);
       });
       return reply.code(201).send(group);
@@ -199,6 +340,7 @@ export function registerPermissionGroupRoutes(app: FastifyInstance): void {
     "/api/permission-groups/:groupId",
     {
       preHandler: manage,
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
       schema: {
         params: groupIdParams,
         body: z.object({
@@ -211,6 +353,8 @@ export function registerPermissionGroupRoutes(app: FastifyInstance): void {
     async (req) => {
       const { groupId } = req.params;
       return withTransaction(async (client) => {
+        await lockPermissionGraph(client);
+        await requireGroupMutationAuthority(client, req.userId as number, groupId);
         const before = await loadGroup(client, groupId);
         const name = req.body.name ?? before.name;
         const description =
@@ -237,13 +381,18 @@ export function registerPermissionGroupRoutes(app: FastifyInstance): void {
     "/api/permission-groups/:groupId",
     {
       preHandler: manage,
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
       schema: { params: groupIdParams, response: { 200: z.object({ deleted: z.literal(true) }) } },
     },
     async (req) => {
       const { groupId } = req.params;
       await withTransaction(async (client) => {
+        await lockPermissionGraph(client);
+        const removesWildcardAccess = await groupContainsWildcard(client, groupId);
+        await requireGroupMutationAuthority(client, req.userId as number, groupId);
         const before = await loadGroup(client, groupId);
         await client.query(`DELETE FROM permission_groups WHERE id = $1`, [groupId]);
+        if (removesWildcardAccess) await assertActiveWildcardHolder(client);
         await audit(client, {
           actorId: req.userId,
           entityType: "permission_group",
@@ -258,12 +407,81 @@ export function registerPermissionGroupRoutes(app: FastifyInstance): void {
     },
   );
 
+  api.post(
+    "/api/permission-groups/:groupId/reset-template",
+    {
+      preHandler: manage,
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      schema: {
+        summary: "Reset an editable group to its template",
+        description:
+          "Restores the originating H8 template's exact direct capabilities and removes every included group. The group name, description, template origin, and members are preserved; the complete before/after graph is audited in the same transaction.",
+        params: groupIdParams,
+        response: { 200: groupResponse },
+      },
+    },
+    async (req) => {
+      const { groupId } = req.params;
+      const result = await withTransaction(async (client) => {
+        await lockPermissionGraph(client);
+        const actorId = req.userId as number;
+        const before = await loadGroup(client, groupId);
+        if (!before.templateKey) {
+          throw new ConflictError("This permission group was not created from a template", {
+            groupId,
+          });
+        }
+        const template = getPermissionGroupTemplate(before.templateKey);
+        if (!template) {
+          throw new ConflictError("This permission group's template is no longer available", {
+            groupId,
+            templateKey: before.templateKey,
+          });
+        }
+        const beforeContainsWildcard = await groupContainsWildcard(client, groupId);
+        const afterContainsWildcard = template.capabilities.includes(CAPABILITIES.ADMIN_ALL);
+        if (beforeContainsWildcard || afterContainsWildcard) {
+          await requireWildcardGraphAuthority(client, actorId);
+        }
+
+        await client.query(`DELETE FROM permission_group_includes WHERE parent_group_id = $1`, [
+          groupId,
+        ]);
+        await client.query(`DELETE FROM group_capabilities WHERE group_id = $1`, [groupId]);
+        for (const capability of template.capabilities) {
+          await client.query(
+            `INSERT INTO group_capabilities (group_id, capability) VALUES ($1, $2)`,
+            [groupId, capability],
+          );
+        }
+        await issueTicketsForGroupMembers(client, groupId);
+        if (beforeContainsWildcard || afterContainsWildcard) {
+          await assertActiveWildcardHolder(client);
+        }
+        const after = await loadGroup(client, groupId);
+        await audit(client, {
+          actorId,
+          entityType: "permission_group",
+          entityId: groupId,
+          action: "reset_template",
+          source: "admin",
+          before,
+          after,
+        });
+        return after;
+      });
+      await invalidateAllCapabilities();
+      return result;
+    },
+  );
+
   // ── capabilities ─────────────────────────────────────────────────────────
 
   api.put(
     "/api/permission-groups/:groupId/capabilities",
     {
       preHandler: manage,
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
       schema: {
         params: groupIdParams,
         body: z.object({ capabilities: z.array(z.string().min(1)) }),
@@ -272,7 +490,13 @@ export function registerPermissionGroupRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const { groupId } = req.params;
+      assertKnownCapabilities(req.body.capabilities);
       const result = await withTransaction(async (client) => {
+        await lockPermissionGraph(client);
+        await requireGroupMutationAuthority(client, req.userId as number, groupId);
+        if (req.body.capabilities.includes(CAPABILITIES.ADMIN_ALL)) {
+          await requireWildcardGraphAuthority(client, req.userId as number);
+        }
         const before = await loadGroup(client, groupId);
         await client.query(`DELETE FROM group_capabilities WHERE group_id = $1`, [groupId]);
         for (const capability of req.body.capabilities) {
@@ -291,6 +515,12 @@ export function registerPermissionGroupRoutes(app: FastifyInstance): void {
           before: { capabilities: before.capabilities },
           after: { capabilities: req.body.capabilities },
         });
+        if (
+          before.capabilities.includes(CAPABILITIES.ADMIN_ALL) ||
+          (await groupContainsWildcard(client, groupId))
+        ) {
+          await assertActiveWildcardHolder(client);
+        }
         return loadGroup(client, groupId);
       });
       await invalidateAllCapabilities();
@@ -304,6 +534,7 @@ export function registerPermissionGroupRoutes(app: FastifyInstance): void {
     "/api/permission-groups/:groupId/includes",
     {
       preHandler: manage,
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
       schema: {
         params: groupIdParams,
         body: z.object({ childGroupId: z.number().int() }),
@@ -314,8 +545,13 @@ export function registerPermissionGroupRoutes(app: FastifyInstance): void {
       const { groupId } = req.params;
       const { childGroupId } = req.body;
       const result = await withTransaction(async (client) => {
+        await lockPermissionGraph(client);
+        await requireGroupMutationAuthority(client, req.userId as number, groupId);
         await loadGroup(client, groupId);
         await loadGroup(client, childGroupId);
+        if (await groupContainsWildcard(client, childGroupId)) {
+          await requireWildcardGraphAuthority(client, req.userId as number);
+        }
         if (await wouldCreateCycle(client, groupId, childGroupId)) {
           throw new ConflictError("Including this group would create a cycle", {
             parentGroupId: groupId,
@@ -336,6 +572,7 @@ export function registerPermissionGroupRoutes(app: FastifyInstance): void {
           source: "admin",
           after: { childGroupId },
         });
+        if (await groupContainsWildcard(client, groupId)) await assertActiveWildcardHolder(client);
         return loadGroup(client, groupId);
       });
       await invalidateAllCapabilities();
@@ -347,6 +584,7 @@ export function registerPermissionGroupRoutes(app: FastifyInstance): void {
     "/api/permission-groups/:groupId/includes/:childGroupId",
     {
       preHandler: manage,
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
       schema: {
         params: z.object({
           groupId: z.coerce.number().int(),
@@ -358,6 +596,9 @@ export function registerPermissionGroupRoutes(app: FastifyInstance): void {
     async (req) => {
       const { groupId, childGroupId } = req.params;
       const result = await withTransaction(async (client) => {
+        await lockPermissionGraph(client);
+        const removesWildcardAccess = await groupContainsWildcard(client, groupId);
+        await requireGroupMutationAuthority(client, req.userId as number, groupId);
         await loadGroup(client, groupId);
         await client.query(
           `DELETE FROM permission_group_includes WHERE parent_group_id = $1 AND child_group_id = $2`,
@@ -371,6 +612,7 @@ export function registerPermissionGroupRoutes(app: FastifyInstance): void {
           source: "admin",
           before: { childGroupId },
         });
+        if (removesWildcardAccess) await assertActiveWildcardHolder(client);
         return loadGroup(client, groupId);
       });
       await invalidateAllCapabilities();
@@ -384,6 +626,7 @@ export function registerPermissionGroupRoutes(app: FastifyInstance): void {
     "/api/permission-groups/:groupId/members",
     {
       preHandler: manage,
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
       schema: {
         params: groupIdParams,
         body: z.object({ userId: z.number().int() }),
@@ -394,6 +637,8 @@ export function registerPermissionGroupRoutes(app: FastifyInstance): void {
       const { groupId } = req.params;
       const { userId } = req.body;
       const result = await withTransaction(async (client) => {
+        await lockPermissionGraph(client);
+        await requireGroupMutationAuthority(client, req.userId as number, groupId);
         await loadGroup(client, groupId);
         const { rows: userRows } = await client.query(`SELECT id FROM users WHERE id = $1`, [
           userId,
@@ -439,6 +684,7 @@ export function registerPermissionGroupRoutes(app: FastifyInstance): void {
     "/api/permission-groups/:groupId/members/:userId",
     {
       preHandler: manage,
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
       schema: {
         params: z.object({
           groupId: z.coerce.number().int(),
@@ -450,6 +696,9 @@ export function registerPermissionGroupRoutes(app: FastifyInstance): void {
     async (req) => {
       const { groupId, userId } = req.params;
       const result = await withTransaction(async (client) => {
+        await lockPermissionGraph(client);
+        const removesWildcardAccess = await groupContainsWildcard(client, groupId);
+        await requireGroupMutationAuthority(client, req.userId as number, groupId);
         await loadGroup(client, groupId);
         await client.query(
           `DELETE FROM permission_group_members WHERE user_id = $1 AND group_id = $2`,
@@ -463,6 +712,7 @@ export function registerPermissionGroupRoutes(app: FastifyInstance): void {
           source: "admin",
           before: { userId },
         });
+        if (removesWildcardAccess) await assertActiveWildcardHolder(client);
         return loadGroup(client, groupId);
       });
       await invalidateCapabilities(userId);

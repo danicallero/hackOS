@@ -22,6 +22,7 @@ import { MultiSelect } from "@/components/common/multi-select";
 import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
+import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,27 +44,32 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
-import { useLocale } from "@/lib/i18n";
+import { type Translate, useLocale } from "@/lib/i18n";
+import { useMe } from "@/lib/session";
 import type {
   PermissionGroupDetail,
   PermissionGroupSummary,
   UserList,
   UserListItem,
 } from "@/lib/types";
-import { capabilityOptions, userDisplayName } from "../helpers";
+import { capabilityOptions, permissionTemplateName, userDisplayName } from "../helpers";
+import { canResetPermissionTemplate } from "./template-reset";
+import { TemplateResetSection } from "./template-reset-section";
 
 // H8: group detail — edit name/description, set capabilities, manage members
 // and nested included groups. Every mutation hits the permission-group API and
 // re-syncs the group in place.
 
-const detailsSchema = z.object({
-  name: z.string().min(1, "Required").max(200),
-  description: z.string().max(2000),
-});
-type DetailsValues = z.infer<typeof detailsSchema>;
+const detailsSchema = (t: Translate) =>
+  z.object({
+    name: z.string().min(1, t("required")).max(200),
+    description: z.string().max(2000),
+  });
+type DetailsValues = z.infer<ReturnType<typeof detailsSchema>>;
 
 export default function PermissionGroupDetailPage() {
   const { t } = useLocale();
+  const me = useMe();
   const router = useRouter();
   const params = useParams<{ groupId: string }>();
   const groupId = Number(params.groupId);
@@ -82,8 +88,9 @@ export default function PermissionGroupDetailPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  const schema = detailsSchema(t);
   const form = useForm<DetailsValues>({
-    resolver: zodResolver(detailsSchema),
+    resolver: zodResolver(schema),
     defaultValues: { name: "", description: "" },
   });
   const { reset } = form;
@@ -313,6 +320,8 @@ export default function PermissionGroupDetailPage() {
 
   const capsDirty =
     caps.length !== group.capabilities.length || caps.some((c) => !group.capabilities.includes(c));
+  const templateName = group.templateKey ? permissionTemplateName(group.templateKey, t) : null;
+  const canResetTemplate = canResetPermissionTemplate(group.templateKey, me?.capabilities ?? []);
 
   return (
     <div className="space-y-8">
@@ -330,6 +339,20 @@ export default function PermissionGroupDetailPage() {
         }
         title={group.name}
         description={group.description ?? undefined}
+        state={
+          templateName ? (
+            <div className="flex flex-wrap gap-2">
+              <StatusBadge tone="neutral" dot={false}>
+                {t("basedOnPermissionTemplate", { template: templateName })}
+              </StatusBadge>
+              <StatusBadge tone={group.templateDrifted ? "warning" : "success"} dot={false}>
+                {group.templateDrifted
+                  ? t("permissionTemplateDrifted")
+                  : t("permissionTemplateCurrent")}
+              </StatusBadge>
+            </div>
+          ) : undefined
+        }
       />
 
       {loadError && <ContextualError message={loadError} onRetry={() => void load()} />}
@@ -392,6 +415,15 @@ export default function PermissionGroupDetailPage() {
           emptyText={t("noMatchingCapability")}
         />
       </SectionCard>
+
+      {templateName && (
+        <TemplateResetSection
+          group={group}
+          templateName={templateName}
+          canReset={canResetTemplate}
+          onGroupUpdated={applyGroup}
+        />
+      )}
 
       <SectionCard
         icon={UsersIcon}

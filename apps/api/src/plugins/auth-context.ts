@@ -6,6 +6,8 @@ declare module "fastify" {
   interface FastifyRequest {
     /** Authenticated user id, or null. Filled from the Better Auth session. */
     userId: number | null;
+    /** Request-scoped PostgreSQL capability resolution (H8). */
+    effectiveCapabilities?: Promise<Set<string>>;
   }
 }
 
@@ -27,6 +29,7 @@ export function setUserIdResolver(resolver: UserIdResolver): void {
 
 export const authContextPlugin = fp(async (app: FastifyInstance) => {
   app.decorateRequest("userId", null);
+  app.decorateRequest("effectiveCapabilities", undefined);
   app.addHook("onRequest", async (req) => {
     if (config.isTest) {
       const testHeader = req.headers["x-test-user-id"];

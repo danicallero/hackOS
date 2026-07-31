@@ -1,11 +1,12 @@
 import type { Readable } from "node:stream";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { SSE_TOPICS } from "@hackos/shared/events";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, preHandlerHookHandler } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { requireCapability, userHasCapability } from "../../lib/capabilities.js";
 import { ConflictError, ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
+import type { RouteAccessPolicy } from "../../lib/route-policy.js";
 import { subscribe } from "../../lib/sse.js";
 import { getObject } from "../../lib/storage.js";
 import { createRequest, getRequest, listRequests, serializeRequest } from "./requests.service.js";
@@ -26,26 +27,39 @@ import { enqueueDataSubjectRequest } from "./worker.js";
  */
 export function registerWorkflowRoutes(app: FastifyInstance): void {
   const typed = app.withTypeProvider<ZodTypeProvider>();
+  const routeAccess = (routeAccessPolicy: RouteAccessPolicy) => ({ routeAccessPolicy });
+  const requireExportRequestAccess: preHandlerHookHandler = async (req) => {
+    if (req.userId == null) throw new UnauthorizedError();
+    if (!(await userHasCapability(req.userId, CAPABILITIES.EXPORTS_RUN, req))) {
+      throw new ForbiddenError(`Missing capability: ${CAPABILITIES.EXPORTS_RUN}`, {
+        capability: CAPABILITIES.EXPORTS_RUN,
+      });
+    }
+    if (
+      (req.body as { type?: string } | undefined)?.type === "deletion" &&
+      !(await userHasCapability(req.userId, CAPABILITIES.ADMIN_ALL, req))
+    ) {
+      throw new ForbiddenError(`Missing capability: ${CAPABILITIES.ADMIN_ALL}`, {
+        capability: CAPABILITIES.ADMIN_ALL,
+      });
+    }
+  };
 
   typed.post(
     "/api/exports/requests",
     {
-      preHandler: [requireCapability(CAPABILITIES.EXPORTS_RUN), idempotencyGuard],
+      preHandler: [requireExportRequestAccess, idempotencyGuard],
+      config: routeAccess({
+        kind: "contextual",
+        policy: "export-request-create",
+        resource: { source: "body", field: "subjectUserId" },
+      }),
       schema: { body: createRequestBody, response: { 201: requestResponseSchema } },
     },
     async (req, reply) => {
-      if (req.userId == null) throw new UnauthorizedError();
-      if (
-        req.body.type === "deletion" &&
-        !(await userHasCapability(req.userId, CAPABILITIES.ADMIN_ALL))
-      ) {
-        throw new ForbiddenError(`Missing capability: ${CAPABILITIES.ADMIN_ALL}`, {
-          capability: CAPABILITIES.ADMIN_ALL,
-        });
-      }
       const row = await createRequest({
         subjectUserId: req.body.subjectUserId,
-        requestedBy: req.userId,
+        requestedBy: req.userId as number,
         type: req.body.type,
         reason: req.body.reason,
       });
@@ -59,6 +73,7 @@ export function registerWorkflowRoutes(app: FastifyInstance): void {
     "/api/exports/requests",
     {
       preHandler: requireCapability(CAPABILITIES.EXPORTS_RUN),
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.EXPORTS_RUN }),
       schema: { querystring: listRequestsQuery, response: { 200: listRequestsResponseSchema } },
     },
     async (req) => {
@@ -72,6 +87,7 @@ export function registerWorkflowRoutes(app: FastifyInstance): void {
     "/api/exports/requests/:id",
     {
       preHandler: requireCapability(CAPABILITIES.EXPORTS_RUN),
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.EXPORTS_RUN }),
       schema: { params: requestIdParam, response: { 200: requestResponseSchema } },
     },
     async (req) => serializeRequest(await getRequest(req.params.id)),
@@ -83,6 +99,7 @@ export function registerWorkflowRoutes(app: FastifyInstance): void {
     "/api/exports/requests/:id/download",
     {
       preHandler: requireCapability(CAPABILITIES.EXPORTS_RUN),
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.EXPORTS_RUN }),
       schema: { params: requestIdParam },
     },
     async (req, reply) => {
@@ -109,7 +126,10 @@ export function registerWorkflowRoutes(app: FastifyInstance): void {
 
   typed.get(
     "/api/exports/stream",
-    { preHandler: requireCapability(CAPABILITIES.EXPORTS_RUN) },
+    {
+      preHandler: requireCapability(CAPABILITIES.EXPORTS_RUN),
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.EXPORTS_RUN }),
+    },
     async (_req, reply) => {
       await subscribe(SSE_TOPICS.EXPORTS, reply);
     },

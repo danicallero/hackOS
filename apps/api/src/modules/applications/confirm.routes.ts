@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
+import type { RouteAccessPolicy } from "../../lib/route-policy.js";
 import {
   confirmByEmailResponseSchema,
   confirmTokenSchema,
@@ -27,12 +28,14 @@ import {
  */
 export function registerConfirmRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
+  const routeAccess = (routeAccessPolicy: RouteAccessPolicy) => ({ routeAccessPolicy });
 
   // ── public via email link ───────────────────────────────────────────────────
   r.post(
     "/api/applications/confirm",
     {
       preHandler: idempotencyGuard,
+      config: routeAccess({ kind: "token", policy: "application-confirmation" }),
       schema: {
         body: confirmTokenSchema,
         summary: "Confirm a spot from the acceptance email",
@@ -58,7 +61,11 @@ export function registerConfirmRoutes(app: FastifyInstance): void {
   // ── public decline via email link ──────────────────────────────────────────
   r.post(
     "/api/applications/decline",
-    { preHandler: idempotencyGuard, schema: { body: confirmTokenSchema } },
+    {
+      preHandler: idempotencyGuard,
+      config: routeAccess({ kind: "token", policy: "application-confirmation" }),
+      schema: { body: confirmTokenSchema },
+    },
     async (req) => {
       const res = await declineByToken(req.body.token);
       return {
@@ -71,7 +78,11 @@ export function registerConfirmRoutes(app: FastifyInstance): void {
   // ── authenticated owner (web) ───────────────────────────────────────────────
   r.post(
     "/api/me/responses/:responseId/confirm",
-    { preHandler: [requireAuth, idempotencyGuard], schema: { params: responseIdParamSchema } },
+    {
+      preHandler: [requireAuth, idempotencyGuard],
+      config: routeAccess({ kind: "authenticated" }),
+      schema: { params: responseIdParamSchema },
+    },
     async (req) => {
       const uid = req.userId as number;
       const res = await confirmByResponseId(req.params.responseId, "web", uid, uid);
@@ -85,7 +96,11 @@ export function registerConfirmRoutes(app: FastifyInstance): void {
 
   r.post(
     "/api/me/responses/:responseId/decline",
-    { preHandler: requireAuth, schema: { params: responseIdParamSchema } },
+    {
+      preHandler: requireAuth,
+      config: routeAccess({ kind: "authenticated" }),
+      schema: { params: responseIdParamSchema },
+    },
     async (req) => {
       const uid = req.userId as number;
       const res = await declineByResponseId(req.params.responseId, "web", uid, uid);
@@ -101,6 +116,10 @@ export function registerConfirmRoutes(app: FastifyInstance): void {
     "/api/responses/:responseId/confirm",
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_CONFIRM_OVERRIDE),
+      config: routeAccess({
+        kind: "capability",
+        capability: CAPABILITIES.APPLICATIONS_CONFIRM_OVERRIDE,
+      }),
       schema: { params: responseIdParamSchema },
     },
     async (req) => {
@@ -121,6 +140,10 @@ export function registerConfirmRoutes(app: FastifyInstance): void {
     "/api/responses/:responseId/decline",
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_CONFIRM_OVERRIDE),
+      config: routeAccess({
+        kind: "capability",
+        capability: CAPABILITIES.APPLICATIONS_CONFIRM_OVERRIDE,
+      }),
       schema: { params: responseIdParamSchema },
     },
     async (req) => {

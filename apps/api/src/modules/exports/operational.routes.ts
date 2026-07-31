@@ -2,6 +2,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { requireCapability } from "../../lib/capabilities.js";
+import type { RouteAccessPolicy } from "../../lib/route-policy.js";
 import {
   exportApplicationsCsv,
   exportAttendanceCsv,
@@ -13,10 +14,14 @@ import { applicationsCsvQuery } from "./schemas.js";
 /** H54: operational CSV exports, gated by exports:run (previously declared but unused). */
 export function registerOperationalRoutes(app: FastifyInstance): void {
   const typed = app.withTypeProvider<ZodTypeProvider>();
+  const routeAccess = (routeAccessPolicy: RouteAccessPolicy) => ({ routeAccessPolicy });
 
   typed.get(
     "/api/exports/attendance.csv",
-    { preHandler: requireCapability(CAPABILITIES.EXPORTS_RUN) },
+    {
+      preHandler: requireCapability(CAPABILITIES.EXPORTS_RUN),
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.EXPORTS_RUN }),
+    },
     async (_req, reply) => {
       reply.header("content-type", "text/csv; charset=utf-8");
       reply.header("content-disposition", `attachment; filename="attendance.csv"`);
@@ -26,7 +31,10 @@ export function registerOperationalRoutes(app: FastifyInstance): void {
 
   typed.get(
     "/api/exports/meals.csv",
-    { preHandler: requireCapability(CAPABILITIES.EXPORTS_RUN) },
+    {
+      preHandler: requireCapability(CAPABILITIES.EXPORTS_RUN),
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.EXPORTS_RUN }),
+    },
     async (_req, reply) => {
       reply.header("content-type", "text/csv; charset=utf-8");
       reply.header("content-disposition", `attachment; filename="meals.csv"`);
@@ -36,7 +44,10 @@ export function registerOperationalRoutes(app: FastifyInstance): void {
 
   typed.get(
     "/api/exports/staff-scan-stats.csv",
-    { preHandler: requireCapability(CAPABILITIES.EXPORTS_RUN) },
+    {
+      preHandler: requireCapability(CAPABILITIES.EXPORTS_RUN),
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.EXPORTS_RUN }),
+    },
     async (_req, reply) => {
       reply.header("content-type", "text/csv; charset=utf-8");
       reply.header("content-disposition", `attachment; filename="staff-scan-stats.csv"`);
@@ -48,6 +59,7 @@ export function registerOperationalRoutes(app: FastifyInstance): void {
     "/api/exports/applications.csv",
     {
       preHandler: requireCapability(CAPABILITIES.EXPORTS_RUN),
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.EXPORTS_RUN }),
       schema: { querystring: applicationsCsvQuery },
     },
     async (req, reply) => {

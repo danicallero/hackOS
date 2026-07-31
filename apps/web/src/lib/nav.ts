@@ -153,7 +153,11 @@ export const WORKSPACES: Workspace[] = [
         title: "applications",
         href: "/applications",
         icon: ClipboardListIcon,
-        anyCapability: [CAPABILITIES.APPLICATIONS_REVIEW, CAPABILITIES.APPLICATIONS_MANAGE],
+        anyCapability: [
+          CAPABILITIES.APPLICATIONS_REVIEW,
+          CAPABILITIES.APPLICATIONS_MANAGE,
+          CAPABILITIES.APPLICATIONS_DECIDE,
+        ],
       },
     ],
   },

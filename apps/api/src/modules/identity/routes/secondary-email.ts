@@ -8,6 +8,7 @@ import { pool, withTransaction } from "../../../db/pool.js";
 import { audit } from "../../../lib/audit.js";
 import { requireAuth, requireCapability } from "../../../lib/capabilities.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../../lib/errors.js";
+import type { RouteAccessPolicy } from "../../../lib/route-policy.js";
 import { reconcileDevpostParticipantsForUser } from "../../projects/reconciliation.js";
 import { enqueueAuthEmail } from "../outbox.js";
 
@@ -32,6 +33,7 @@ import { enqueueAuthEmail } from "../outbox.js";
  */
 
 const TOKEN_TTL_HOURS = 24;
+const routeAccess = (routeAccessPolicy: RouteAccessPolicy) => ({ routeAccessPolicy });
 
 export async function assertSecondaryEmailAvailable(
   email: string,
@@ -63,6 +65,7 @@ export function registerSecondaryEmailRoutes(app: FastifyInstance): void {
     "/api/me/secondary-email",
     {
       preHandler: requireAuth,
+      config: routeAccess({ kind: "authenticated" }),
       schema: {
         body: z.object({ email: z.string().email() }),
         response: { 200: z.object({ status: z.literal(true) }) },
@@ -126,6 +129,7 @@ export function registerSecondaryEmailRoutes(app: FastifyInstance): void {
     "/api/me/secondary-email/verify",
     {
       preHandler: requireAuth,
+      config: routeAccess({ kind: "authenticated" }),
       schema: {
         body: z.object({ token: z.string().min(1) }),
         response: {
@@ -201,6 +205,7 @@ export function registerSecondaryEmailRoutes(app: FastifyInstance): void {
     "/api/users/:userId/secondary-email",
     {
       preHandler: requireCapability(CAPABILITIES.USERS_WRITE),
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.USERS_WRITE }),
       schema: {
         params: z.object({ userId: z.coerce.number().int() }),
         body: z.object({ email: z.string().email() }),

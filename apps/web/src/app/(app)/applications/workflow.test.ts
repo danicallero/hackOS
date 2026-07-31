@@ -7,6 +7,7 @@ import {
   applicantTimelineState,
   applicationStatusLabel,
   availableApplicationWorkspaces,
+  defaultApplicationWorkspace,
   generatedFieldKey,
   rowsForWorkspace,
 } from "./workflow";
@@ -53,6 +54,13 @@ describe("application capability workspaces", () => {
       "outbox",
       "sent",
     ]);
+    expect(defaultApplicationWorkspace({ manage: false, review: false, decide: true })).toBe(
+      "outbox",
+    );
+  });
+
+  it("does not expose a workspace when no application capability is granted", () => {
+    expect(defaultApplicationWorkspace({ manage: false, review: false, decide: false })).toBeNull();
   });
 });
 

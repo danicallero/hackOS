@@ -11,16 +11,27 @@ import type { ResponseRow } from "./lib";
 // lifecycle.
 export type ApplicationWorkspace = "review" | "outbox" | "sent";
 
-export function availableApplicationWorkspaces(capabilities: {
+export interface ApplicationWorkspaceCapabilities {
   manage: boolean;
   review: boolean;
   decide: boolean;
-}): Array<"builder" | ApplicationWorkspace> {
+}
+
+export function availableApplicationWorkspaces(
+  capabilities: ApplicationWorkspaceCapabilities,
+): Array<"builder" | ApplicationWorkspace> {
   return [
     ...(capabilities.manage ? (["builder"] as const) : []),
     ...(capabilities.review ? (["review"] as const) : []),
     ...(capabilities.decide ? (["outbox", "sent"] as const) : []),
   ];
+}
+
+/** First accessible workspace, preserving builder → review → decision priority. */
+export function defaultApplicationWorkspace(
+  capabilities: ApplicationWorkspaceCapabilities,
+): "builder" | ApplicationWorkspace | null {
+  return availableApplicationWorkspaces(capabilities)[0] ?? null;
 }
 
 const WORKSPACE_STATUSES: Record<ApplicationWorkspace, ReadonlySet<string>> = {

@@ -1,19 +1,19 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { SSE_TOPICS } from "@hackos/shared/events";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import { pool } from "../../db/pool.js";
-import { requireAuth, requireCapability, userHasCapability } from "../../lib/capabilities.js";
-import { ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
+import { requireAnyCapability, requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { subscribe } from "../../lib/sse.js";
 import {
   requireChallengeJudgeOrCapability,
   requireRepoJudgeOrCapability,
+  requireRoomAssignmentsAccess,
   requireRoomJudgeOrCapability,
 } from "./contextual-access.js";
 import {
-  allRoomViews,
   challengeProgress,
   myQueueStatus,
+  publicRoomViews,
   repoChallenges,
   roomAssignments,
   roomPace,
@@ -31,27 +31,15 @@ import {
 import { clearTvOverride, listTvSlots, resolveTvState, setTvMode, tvVenueConfig } from "./tv.js";
 import { createTvSlot, deleteTvSlot, updateTvSlot } from "./tv-slots.js";
 
-/** Read APIs (H38-H42): progress, room views, participant status, pace, SSE streams, TV mode. */
+const tvControlPolicy = {
+  kind: "capability" as const,
+  capability: CAPABILITIES.TV_CONTROL,
+};
+
+/** Read APIs (H38-H42): scoped queue data, TV snapshots and SSE isolation. */
 export function registerReadsRoutes(app: FastifyInstance): void {
   const typed = app.withTypeProvider<ZodTypeProvider>();
 
-  async function assertCanReadRoomAssignments(userId: number | null, roomId: number) {
-    if (userId == null) throw new UnauthorizedError();
-    if (await userHasCapability(userId, CAPABILITIES.QUEUE_ADMIN)) return;
-    const { rows } = await pool.query(
-      `SELECT 1
-         FROM room_challenges rc
-         JOIN challenges c ON c.id = rc.challenge_id
-         JOIN sponsors author ON author.id = c.author
-         JOIN sponsors mine ON mine.enterprise_id = author.enterprise_id
-        WHERE rc.room_id = $1 AND mine.user_id = $2
-        LIMIT 1`,
-      [roomId, userId],
-    );
-    if (rows.length === 0) throw new ForbiddenError("Not allowed to read room assignments");
-  }
-
-  // H40: progress panel per challenge.
   typed.get(
     "/api/queue/challenges/:challengeId/progress",
     {
@@ -60,13 +48,18 @@ export function registerReadsRoutes(app: FastifyInstance): void {
         CAPABILITIES.QUEUE_OPERATE,
         CAPABILITIES.QUEUE_ADMIN,
       ),
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "challenge-read",
+          resource: { source: "params", field: "challengeId" },
+        },
+      },
       schema: { params: challengeIdParam },
     },
     async (req) => challengeProgress(req.params.challengeId),
   );
 
-  // H40 (judging card): every challenge queue this repo belongs to, not just
-  // the one the current room judges — a project can submit to several.
   typed.get(
     "/api/queue/repos/:repoId/challenges",
     {
@@ -75,12 +68,18 @@ export function registerReadsRoutes(app: FastifyInstance): void {
         CAPABILITIES.QUEUE_OPERATE,
         CAPABILITIES.QUEUE_ADMIN,
       ),
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "repo-read",
+          resource: { source: "params", field: "repoId" },
+        },
+      },
       schema: { params: repoIdParam },
     },
     async (req) => repoChallenges(req.params.repoId),
   );
 
-  // H41: full room view for operator panels; also the TV data source.
   typed.get(
     "/api/queue/rooms/:roomId/view",
     {
@@ -89,22 +88,34 @@ export function registerReadsRoutes(app: FastifyInstance): void {
         CAPABILITIES.QUEUE_OPERATE,
         CAPABILITIES.QUEUE_ADMIN,
       ),
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "room-read",
+          resource: { source: "params", field: "roomId" },
+        },
+      },
       schema: { params: roomIdParam },
     },
     async (req) => roomView(req.params.roomId, { includeCrossRoomSkips: true }),
   );
 
-  // H46: authoritative room assignment surface for the admin panel.
   typed.get(
     "/api/queue/rooms/:roomId/assignments",
-    { preHandler: requireAuth, schema: { params: roomIdParam } },
-    async (req) => {
-      await assertCanReadRoomAssignments(req.userId, req.params.roomId);
-      return roomAssignments(req.params.roomId);
+    {
+      preHandler: requireRoomAssignmentsAccess,
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "room-assignments",
+          resource: { source: "params", field: "roomId" },
+        },
+      },
+      schema: { params: roomIdParam },
     },
+    async (req) => roomAssignments(req.params.roomId),
   );
 
-  // H39: pace check.
   typed.get(
     "/api/queue/rooms/:roomId/pace",
     {
@@ -113,51 +124,120 @@ export function registerReadsRoutes(app: FastifyInstance): void {
         CAPABILITIES.QUEUE_OPERATE,
         CAPABILITIES.QUEUE_ADMIN,
       ),
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "room-read",
+          resource: { source: "params", field: "roomId" },
+        },
+      },
       schema: { params: roomIdParam },
     },
     async (req) => roomPace(req.params.roomId),
   );
 
-  // H38: participant "my queue status" — auth only, no capability.
-  typed.get("/api/queue/me", { preHandler: requireAuth }, async (req) => {
-    if (req.userId == null) throw new UnauthorizedError();
-    return myQueueStatus(req.userId);
-  });
+  typed.get(
+    "/api/queue/me",
+    { preHandler: requireAuth, config: { routeAccessPolicy: { kind: "authenticated" } } },
+    async (req) => myQueueStatus(req.userId!),
+  );
 
-  // H41: public TV data (all rooms) — no auth, read-only aggregate.
-  typed.get("/api/tv/rooms", async () => allRoomViews());
+  typed.get(
+    "/api/tv/rooms",
+    {
+      config: { routeAccessPolicy: { kind: "public", anonymousCategory: "public-tv" } },
+      schema: {
+        summary: "Sanitized venue room snapshot",
+        description:
+          "Public TV projection containing only room, challenge and visible team-status fields. It intentionally omits team members, account identifiers, project links and operational cross-room diagnostics.",
+      },
+    },
+    async () => publicRoomViews(),
+  );
 
-  // H41/H42: public SSE streams. subscribe() keeps the socket open itself.
-  typed.get("/api/queue/stream", async (_req, reply) => {
-    await subscribe("queue", reply);
-  });
+  // Raw queue events contain operational room and team data. Public walls use
+  // the invalidation streams below and refetch their sanitized read models.
+  typed.get(
+    "/api/queue/stream",
+    {
+      preHandler: requireAnyCapability(
+        CAPABILITIES.QUEUE_OPERATE,
+        CAPABILITIES.QUEUE_ADMIN,
+        CAPABILITIES.JUDGE_PANEL,
+      ),
+      config: {
+        routeAccessPolicy: {
+          kind: "capability",
+          anyOf: [CAPABILITIES.QUEUE_OPERATE, CAPABILITIES.QUEUE_ADMIN, CAPABILITIES.JUDGE_PANEL],
+        },
+      },
+      schema: {
+        summary: "Operational judging stream",
+        description:
+          "Authenticated operational SSE stream for global queue operators, judging administrators and global judging-panel holders. Assigned relationship-only judges use scoped reads; raw queue events are never public.",
+      },
+    },
+    async (_req, reply) => subscribe("queue", reply),
+  );
 
-  typed.get("/api/tv/stream", async (_req, reply) => {
-    await subscribe("tv", reply);
-  });
+  typed.get(
+    "/api/tv/stream",
+    {
+      config: { routeAccessPolicy: { kind: "public", anonymousCategory: "public-invalidation" } },
+      schema: {
+        summary: "Public TV invalidation stream",
+        description:
+          "Public, payload-free SSE invalidations for venue screens. Clients refetch the sanitized TV projection after each event; no operational queue or display payload crosses this stream.",
+      },
+    },
+    async (_req, reply) => subscribe(SSE_TOPICS.PUBLIC_TV, reply),
+  );
 
-  // Public displays also need to react when the agenda or announcement feed
-  // changes; these are published on the shared content topic.
-  typed.get("/api/content/stream", async (_req, reply) => {
-    await subscribe("content", reply);
-  });
+  typed.get(
+    "/api/content/stream",
+    {
+      config: { routeAccessPolicy: { kind: "public", anonymousCategory: "public-invalidation" } },
+      schema: {
+        summary: "Public content invalidation stream",
+        description:
+          "Public, payload-free SSE invalidations for TV and public content. Clients refetch their public projection after an event.",
+      },
+    },
+    async (_req, reply) => subscribe(SSE_TOPICS.PUBLIC_CONTENT, reply),
+  );
 
-  // A deliberately payload-free stream for clients which are not tied to a
-  // single domain read model. Every successful API write publishes here.
-  typed.get("/api/events/stream", async (_req, reply) => {
-    await subscribe("global", reply);
-  });
+  typed.get(
+    "/api/events/stream",
+    {
+      preHandler: requireAuth,
+      config: { routeAccessPolicy: { kind: "authenticated" } },
+      schema: {
+        summary: "Authenticated global invalidation stream",
+        description:
+          "Authenticated, payload-free refresh stream for signed-in clients. It does not authorize any operational resource or disclose mutation payloads.",
+      },
+    },
+    async (_req, reply) => subscribe("global", reply),
+  );
 
-  // Personal stream (H31/H38 aviso/pre-aviso): only your own topic.
-  typed.get("/api/queue/me/stream", { preHandler: requireAuth }, async (req, reply) => {
-    await subscribe(`user:${req.userId}`, reply);
-  });
+  typed.get(
+    "/api/queue/me/stream",
+    {
+      preHandler: requireAuth,
+      config: { routeAccessPolicy: { kind: "authenticated" } },
+      schema: {
+        summary: "Personal queue stream",
+        description:
+          "Authenticated SSE stream for the current participant's queue notifications only.",
+      },
+    },
+    async (req, reply) => subscribe(`user:${req.userId}`, reply),
+  );
 
-  // H42: what the screens should show right now — an operator override if one
-  // is live, otherwise the covering timetable slot, otherwise the default.
   typed.get(
     "/api/tv/mode",
     {
+      config: { routeAccessPolicy: { kind: "public", anonymousCategory: "public-tv" } },
       schema: {
         summary: "What the venue screens are currently showing.",
         description:
@@ -171,10 +251,11 @@ export function registerReadsRoutes(app: FastifyInstance): void {
     "/api/tv/mode",
     {
       preHandler: requireCapability(CAPABILITIES.TV_CONTROL),
+      config: { routeAccessPolicy: tvControlPolicy },
       schema: {
         summary: "Broadcast a mode to every screen, overriding the timetable.",
         description:
-          "Sets the operator override, which wins over any running timetable slot until it is cleared or its optional expiresAt passes (the tv-scheduler worker drops it and the timetable takes back over). Returns the newly resolved display state.",
+          "Sets the operator override, which wins over any running timetable slot until it is cleared or its optional expiresAt passes.",
         body: tvModeBody,
       },
     },
@@ -185,38 +266,38 @@ export function registerReadsRoutes(app: FastifyInstance): void {
     "/api/tv/mode",
     {
       preHandler: requireCapability(CAPABILITIES.TV_CONTROL),
+      config: { routeAccessPolicy: tvControlPolicy },
       schema: {
         summary: "Clear the operator override and go back to the timetable.",
         description:
-          "Drops the manual broadcast so the screens follow the tv_slots timetable again, landing on whichever slot is running at that moment (or the default rooms view if none covers now).",
+          "Drops the manual broadcast so screens follow the active timetable slot or default rooms view.",
       },
     },
     async () => clearTvOverride(),
   );
 
-  // H42: venue details every screen may need regardless of mode. Public, like
-  // the rest of the TV feed — these are credentials printed on the venue wall.
   typed.get(
     "/api/tv/config",
     {
+      config: { routeAccessPolicy: { kind: "public", anonymousCategory: "public-tv" } },
       schema: {
         summary: "Venue details the screens render (Wi-Fi credentials).",
         description:
-          "Public TV feed companion to /api/tv/mode. Serves the venue Wi-Fi network name, password and note from the event config, so the combined live screen and the full-screen Wi-Fi mode can show them unattended. Returns null when no network is configured.",
+          "Public TV companion feed for venue Wi-Fi details printed on the wall. It is intentionally separate from the public event site projection.",
       },
     },
     async () => tvVenueConfig(),
   );
 
-  // H42 timetable: absolute time windows saying what the fleet shows when.
   typed.get(
     "/api/tv/slots",
     {
       preHandler: requireCapability(CAPABILITIES.TV_CONTROL),
+      config: { routeAccessPolicy: tvControlPolicy },
       schema: {
         summary: "List the TV timetable.",
         description:
-          "Every scheduled slot in start order. Slots may overlap; the one covering now with the latest start is the one that ends up on screen.",
+          "Every scheduled slot in start order. Slots may overlap; the latest-starting slot covering now wins.",
       },
     },
     async () => ({ items: await listTvSlots() }),
@@ -226,10 +307,11 @@ export function registerReadsRoutes(app: FastifyInstance): void {
     "/api/tv/slots",
     {
       preHandler: requireCapability(CAPABILITIES.TV_CONTROL),
+      config: { routeAccessPolicy: tvControlPolicy },
       schema: {
         summary: "Add a slot to the TV timetable.",
         description:
-          "Schedules what the screens show during an absolute time window. One item renders statically; several make the display rotate through them on each item's `seconds` dwell. Rejected when the window ends before it starts.",
+          "Schedules a display mode for an absolute time window; several items rotate by their configured dwell.",
         body: tvSlotBody,
       },
     },
@@ -240,10 +322,11 @@ export function registerReadsRoutes(app: FastifyInstance): void {
     "/api/tv/slots/:id",
     {
       preHandler: requireCapability(CAPABILITIES.TV_CONTROL),
+      config: { routeAccessPolicy: tvControlPolicy },
       schema: {
         summary: "Edit a TV timetable slot.",
         description:
-          "Updates the window, label or items of an existing slot. Editing the slot that is currently running takes effect on the screens immediately. Fields omitted from the body are left unchanged.",
+          "Updates a slot and republishes the resolved public display state immediately when it is active.",
         params: idParam,
         body: tvSlotPatchBody,
       },
@@ -255,10 +338,10 @@ export function registerReadsRoutes(app: FastifyInstance): void {
     "/api/tv/slots/:id",
     {
       preHandler: requireCapability(CAPABILITIES.TV_CONTROL),
+      config: { routeAccessPolicy: tvControlPolicy },
       schema: {
         summary: "Remove a TV timetable slot.",
-        description:
-          "Deletes the slot. If it was the one running, the screens fall through to whatever other slot covers now, or to the default rooms view.",
+        description: "Deletes the slot and falls through to the next applicable timetable state.",
         params: idParam,
       },
     },

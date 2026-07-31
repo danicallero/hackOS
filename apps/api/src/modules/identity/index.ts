@@ -52,6 +52,7 @@ export async function registerIdentityModule(app: FastifyInstance): Promise<void
     scoped.route({
       method: ["GET", "POST", "PUT", "PATCH", "DELETE"],
       url: "/api/auth/*",
+      config: { routeAccessPolicyExemption: "better-auth-generated" },
       handler: betterAuthPassthrough,
     });
   });
