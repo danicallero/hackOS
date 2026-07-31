@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DateTimeField } from "@/components/date-time-field";
 import {
   ActionButton,
+  EmptyState,
   FloatingBackButton,
   InfoRow,
   Section,
@@ -14,6 +15,7 @@ import {
 } from "@/components/native-ui";
 import { PresenceManagement } from "@/components/presence-management";
 import { QrCamera } from "@/components/QrCamera";
+import { RequestFeedback } from "@/components/RequestFeedback";
 import { ScannerTransactionStatus } from "@/components/scanner-transaction-status";
 import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
@@ -36,6 +38,8 @@ interface PersonDetails extends ScannerPerson {
   currentBadge?: string | null;
 }
 
+type PersonLoadState = "loading" | "ready" | "missing" | "error";
+
 export function PersonOperationsScreen() {
   useColorScheme();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -51,6 +55,8 @@ export function PersonOperationsScreen() {
   const canAccredit = admin || capabilities.has(CAPABILITIES.ACCREDIT_SCAN);
   const canPresence = admin || capabilities.has(CAPABILITIES.PRESENCE_SCAN);
   const [person, setPerson] = useState<PersonDetails | null>(null);
+  const [loadState, setLoadState] = useState<PersonLoadState>("loading");
+  const [loadError, setLoadError] = useState<Error | null>(null);
   const [cameraAction, setCameraAction] = useState<"assign" | "replace" | null>(null);
   const [attendeeRole, setAttendeeRole] = useState<"participant" | "mentor" | null>(null);
   const [scannedAt, setScannedAt] = useState(new Date());
@@ -64,27 +70,41 @@ export function PersonOperationsScreen() {
     [],
   );
   const load = useCallback(async () => {
-    const local = await findPersonById(userId);
-    if (!local) return;
-    if (canAccredit) {
-      try {
-        const details = await apiFetch<PersonDetails>("/api/accreditation/lookup-user", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ userId }),
-        });
-        // Single setPerson call with the fully-merged result: setting the
-        // local-only snapshot first and the enriched one after causes a
-        // visible flicker as dni/phone/shirtSize/badge briefly disappear and
-        // reappear on every periodic sync.
-        setPerson({ ...local, ...details, badgeId: details.currentBadge ?? local.badgeId });
+    setLoadError(null);
+    setLoadState((current) => (current === "ready" ? current : "loading"));
+    try {
+      const local = await findPersonById(userId);
+      if (!local) {
+        setPerson(null);
+        setLoadState("missing");
         return;
-      } catch {
-        /* Fall through to the local-only card, e.g. while offline. */
       }
+
+      if (canAccredit) {
+        try {
+          const details = await apiFetch<PersonDetails>("/api/accreditation/lookup-user", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ userId }),
+          });
+          // Single setPerson call with the fully-merged result: setting the
+          // local-only snapshot first and the enriched one after causes a
+          // visible flicker as dni/phone/shirtSize/badge briefly disappear and
+          // reappear on every periodic sync.
+          setPerson({ ...local, ...details, badgeId: details.currentBadge ?? local.badgeId });
+          setLoadState("ready");
+          return;
+        } catch {
+          /* Fall through to the local-only card, e.g. while offline. */
+        }
+      }
+      setPerson(local);
+      setLoadState("ready");
+    } catch (cause) {
+      setLoadError(cause instanceof Error ? cause : new Error(t("requestError")));
+      setLoadState("error");
     }
-    setPerson(local);
-  }, [canAccredit, userId]);
+  }, [canAccredit, t, userId]);
 
   // Reload on every scanner sync: the register derives its direction from
   // the person's last door log, which door scans on other devices (or manual
@@ -249,17 +269,51 @@ export function PersonOperationsScreen() {
     );
   }
 
-  if (!person) {
+  if (loadState === "loading" && !person) {
     return (
       <View
         style={{
-          alignItems: "center",
           backgroundColor: colors.background,
           flex: 1,
           justifyContent: "center",
         }}
       >
-        <Text style={{ color: colors.secondaryLabel }}>{t("personLoading")}</Text>
+        <RequestFeedback loading />
+        <FloatingBackButton top={insets.top + 12} onPress={() => router.back()} />
+      </View>
+    );
+  }
+
+  if (loadState === "error" && !person && loadError) {
+    return (
+      <View
+        style={{
+          backgroundColor: colors.background,
+          flex: 1,
+          justifyContent: "center",
+          padding: 16,
+        }}
+      >
+        <RequestFeedback error={loadError} onRetry={() => void load()} />
+        <FloatingBackButton top={insets.top + 12} onPress={() => router.back()} />
+      </View>
+    );
+  }
+
+  if (loadState === "missing" || !person) {
+    return (
+      <View
+        style={{
+          backgroundColor: colors.background,
+          flex: 1,
+          justifyContent: "center",
+        }}
+      >
+        <EmptyState
+          icon="person.2"
+          title={t("screenNotFoundTitle")}
+          description={t("requestUnavailable")}
+        />
         <FloatingBackButton top={insets.top + 12} onPress={() => router.back()} />
       </View>
     );
@@ -392,6 +446,9 @@ export function PersonOperationsScreen() {
         }}
         style={{ backgroundColor: colors.background }}
       >
+        {loadState === "error" && loadError ? (
+          <RequestFeedback error={loadError} onRetry={() => void load()} />
+        ) : null}
         <View style={{ alignItems: "center", gap: 10, paddingVertical: 8 }}>
           <View
             style={{
