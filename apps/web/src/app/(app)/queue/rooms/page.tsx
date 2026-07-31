@@ -428,22 +428,25 @@ export default function QueueRoomsPage() {
         {modalMode === "create" && (
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="space-y-2">
-              <Label>{t("name")}</Label>
+              <Label htmlFor="room-create-name">{t("name")}</Label>
               <Input
+                id="room-create-name"
                 value={createDraft.name}
                 onChange={(e) => setCreateDraft((d) => ({ ...d, name: e.target.value }))}
               />
             </div>
             <div className="space-y-2">
-              <Label>{t("slugLabel")}</Label>
+              <Label htmlFor="room-create-slug">{t("slugLabel")}</Label>
               <Input
+                id="room-create-slug"
                 value={createDraft.slug}
                 onChange={(e) => setCreateDraft((d) => ({ ...d, slug: e.target.value }))}
               />
             </div>
             <div className="space-y-2 lg:col-span-2">
-              <Label>{t("locationLabel")}</Label>
+              <Label htmlFor="room-create-location">{t("locationLabel")}</Label>
               <Input
+                id="room-create-location"
                 value={createDraft.location}
                 onChange={(e) => setCreateDraft((d) => ({ ...d, location: e.target.value }))}
               />
@@ -460,8 +463,9 @@ export default function QueueRoomsPage() {
             )}
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="space-y-2">
-                <Label>{t("name")}</Label>
+                <Label htmlFor={`room-${selectedRoom.id}-name`}>{t("name")}</Label>
                 <Input
+                  id={`room-${selectedRoom.id}-name`}
                   value={roomDraft.name}
                   disabled={!canAdmin}
                   onChange={(e) =>
@@ -470,8 +474,9 @@ export default function QueueRoomsPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>{t("slugLabel")}</Label>
+                <Label htmlFor={`room-${selectedRoom.id}-slug`}>{t("slugLabel")}</Label>
                 <Input
+                  id={`room-${selectedRoom.id}-slug`}
                   value={roomDraft.slug}
                   disabled={!canAdmin}
                   onChange={(e) =>
@@ -480,8 +485,9 @@ export default function QueueRoomsPage() {
                 />
               </div>
               <div className="space-y-2 lg:col-span-2">
-                <Label>{t("locationLabel")}</Label>
+                <Label htmlFor={`room-${selectedRoom.id}-location`}>{t("locationLabel")}</Label>
                 <Input
+                  id={`room-${selectedRoom.id}-location`}
                   value={roomDraft.location}
                   disabled={!canAdmin}
                   onChange={(e) =>

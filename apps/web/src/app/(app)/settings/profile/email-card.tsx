@@ -46,9 +46,9 @@ export function EmailCard() {
     <SectionCard icon={MailIcon} title={t("emailAddressesTitle")}>
       {/* Primary */}
       <div className="space-y-2">
-        <Label>{t("primaryEmailLabel")}</Label>
+        <Label htmlFor="primary-email">{t("primaryEmailLabel")}</Label>
         <div className="flex flex-wrap items-center gap-2">
-          <Input value={me.email} disabled readOnly className="max-w-md" />
+          <Input id="primary-email" value={me.email} disabled readOnly className="max-w-md" />
           {me.emailVerified ? (
             <StatusBadge tone="success">{t("verified")}</StatusBadge>
           ) : (

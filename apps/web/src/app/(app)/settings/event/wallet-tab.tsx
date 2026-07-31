@@ -392,7 +392,7 @@ export function WalletTab({
         footer={<SubmitButton pending={submitting}>{t("saveChanges")}</SubmitButton>}
       >
         <div className="space-y-2">
-          <Label>{t("passFrontFieldsLabel")}</Label>
+          <p className="text-sm font-medium">{t("passFrontFieldsLabel")}</p>
           <PassFrontFieldsEditor
             labels={passFieldLabels}
             onLabelsChange={markDirty(setPassFieldLabels)}
@@ -419,7 +419,7 @@ export function WalletTab({
           </CollapsibleTrigger>
           <CollapsibleContent className="space-y-4 pt-3">
             <div className="space-y-2">
-              <Label>{t("passBackBuiltinLabel")}</Label>
+              <p className="text-sm font-medium">{t("passBackBuiltinLabel")}</p>
               {/* Same order as on the actual pass: event, venue, then "Organized by" last. */}
               <BuiltinBackFieldRow
                 caption={passFieldLabels.event ?? ""}
@@ -445,7 +445,7 @@ export function WalletTab({
               />
             </div>
             <div className="space-y-2">
-              <Label>{t("passBackFieldsLabel")}</Label>
+              <p className="text-sm font-medium">{t("passBackFieldsLabel")}</p>
               <BackFieldBuilder value={passBackFields} onChange={markDirty(setPassBackFields)} />
             </div>
           </CollapsibleContent>

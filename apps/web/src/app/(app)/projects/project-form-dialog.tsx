@@ -177,9 +177,10 @@ export function ProjectFormDialog({
         </div>
         {!isEdit && (
           <div className="space-y-2">
-            <Label>{t("challenges")}</Label>
+            <Label htmlFor="project-challenges">{t("challenges")}</Label>
             <MultiSelect
               inDialog
+              id="project-challenges"
               options={challengeOptions}
               value={challengeIds}
               onChange={setChallengeIds}

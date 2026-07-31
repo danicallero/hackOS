@@ -426,22 +426,23 @@ function ScheduleFormModal({
   return (
     <Modal open={open} onOpenChange={onOpenChange} title={title} icon={CalendarDaysIcon} size="lg">
       <div className="space-y-4">
-        <Field label={t("titleLabel")}>
+        <Field id="schedule-title" label={t("titleLabel")}>
           <Input
+            id="schedule-title"
             value={values.title}
             onChange={(e) => setValues((v) => ({ ...v, title: e.target.value }))}
             placeholder={t("openingCeremonyPlaceholder")}
           />
         </Field>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label={t("colType")}>
+          <Field id="schedule-type" label={t("colType")}>
             <Select
               value={values.type ?? "activity"}
               onValueChange={(type) =>
                 setValues((v) => ({ ...v, type, requiresScan: type === "meal" || v.requiresScan }))
               }
             >
-              <SelectTrigger>
+              <SelectTrigger id="schedule-type" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -453,14 +454,14 @@ function ScheduleFormModal({
               </SelectContent>
             </Select>
           </Field>
-          <Field label={t("colVisibility")}>
+          <Field id="schedule-visibility" label={t("colVisibility")}>
             <Select
               value={values.visibility}
               onValueChange={(visibility) =>
                 setValues((v) => ({ ...v, visibility: visibility as "shown" | "hidden" }))
               }
             >
-              <SelectTrigger>
+              <SelectTrigger id="schedule-visibility" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -485,21 +486,24 @@ function ScheduleFormModal({
           </Label>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label={t("colStarts")}>
+          <Field id="schedule-starts" label={t("colStarts")}>
             <DateTimeInput
+              id="schedule-starts"
               value={values.startsAt}
               onChange={(startsAt) => setValues((v) => ({ ...v, startsAt }))}
             />
           </Field>
-          <Field label={t("endsLabel")}>
+          <Field id="schedule-ends" label={t("endsLabel")}>
             <DateTimeInput
+              id="schedule-ends"
               value={values.endsAt}
               onChange={(endsAt) => setValues((v) => ({ ...v, endsAt }))}
             />
           </Field>
         </div>
-        <Field label={t("publishAtLabel")}>
+        <Field id="schedule-publish-at" label={t("publishAtLabel")}>
           <DateTimeInput
+            id="schedule-publish-at"
             value={values.publishAt ?? ""}
             onChange={(publishAt) => setValues((v) => ({ ...v, publishAt: publishAt || null }))}
             nullOption={{ label: t("immediate") }}
@@ -508,15 +512,17 @@ function ScheduleFormModal({
             {t("publishDestinationsHint", { timezone: getTimeZoneLabel() })}
           </p>
         </Field>
-        <Field label={t("locationLabel")}>
+        <Field id="schedule-location" label={t("locationLabel")}>
           <Input
+            id="schedule-location"
             value={values.location ?? ""}
             onChange={(e) => setValues((v) => ({ ...v, location: e.target.value }))}
             placeholder={t("mainHallPlaceholder")}
           />
         </Field>
-        <Field label={t("descriptionLabel")}>
+        <Field id="schedule-description" label={t("descriptionLabel")}>
           <Textarea
+            id="schedule-description"
             value={values.description ?? ""}
             onChange={(e) => setValues((v) => ({ ...v, description: e.target.value }))}
             placeholder={t("visibleInPublicAgenda")}
@@ -539,10 +545,10 @@ function ScheduleFormModal({
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ id, label, children }: { id: string; label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-2">
-      <Label>{label}</Label>
+      <Label htmlFor={id}>{label}</Label>
       {children}
     </div>
   );

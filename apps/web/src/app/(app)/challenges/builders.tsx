@@ -278,14 +278,14 @@ export function JudgingPanelBuilder({
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label={t("colType")}>
+              <Field id={`question-${index}-kind`} label={t("colType")}>
                 <Select
                   value={question.kind}
                   onValueChange={(kind) =>
                     update(index, retargetQuestion(question, kind as BuilderKind, t))
                   }
                 >
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger id={`question-${index}-kind`} className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -297,8 +297,13 @@ export function JudgingPanelBuilder({
                   </SelectContent>
                 </Select>
               </Field>
-              <Field label={t("fieldKeyLabel")} hint={t("fieldKeyHint")}>
+              <Field
+                id={`question-${index}-key`}
+                label={t("fieldKeyLabel")}
+                hint={t("fieldKeyHint")}
+              >
                 <Input
+                  id={`question-${index}-key`}
                   value={question.key}
                   placeholder={t("fieldKeyPlaceholder")}
                   onChange={(event) =>
@@ -325,7 +330,11 @@ export function JudgingPanelBuilder({
               optional
             />
 
-            <QuestionSettings question={question} onChange={(next) => update(index, next)} />
+            <QuestionSettings
+              question={question}
+              onChange={(next) => update(index, next)}
+              idPrefix={`question-${index}`}
+            />
 
             <div className="flex items-center gap-2">
               <Switch
@@ -346,9 +355,11 @@ export function JudgingPanelBuilder({
 function QuestionSettings({
   question,
   onChange,
+  idPrefix,
 }: {
   question: Question;
   onChange: (question: Question) => void;
+  idPrefix: string;
 }) {
   const { t } = useLocale();
   if (question.kind === "scale") {
@@ -361,16 +372,18 @@ function QuestionSettings({
   if (question.kind === "integer" || question.kind === "float") {
     return (
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label={t("minimumLabel")}>
+        <Field id={`${idPrefix}-minimum`} label={t("minimumLabel")}>
           <Input
+            id={`${idPrefix}-minimum`}
             value={question.min ?? ""}
             placeholder={t("noLimitPlaceholder")}
             inputMode={question.kind === "integer" ? "numeric" : "decimal"}
             onChange={(event) => onChange(numberPatch(question, "min", event.target.value))}
           />
         </Field>
-        <Field label={t("maximumLabel")}>
+        <Field id={`${idPrefix}-maximum`} label={t("maximumLabel")}>
           <Input
+            id={`${idPrefix}-maximum`}
             value={question.max ?? ""}
             placeholder={t("noLimitPlaceholder")}
             inputMode={question.kind === "integer" ? "numeric" : "decimal"}
@@ -382,8 +395,9 @@ function QuestionSettings({
   }
   if (question.kind === "short_text" || question.kind === "long_text") {
     return (
-      <Field label={t("maxLengthLabel")}>
+      <Field id={`${idPrefix}-max-length`} label={t("maxLengthLabel")}>
         <Input
+          id={`${idPrefix}-max-length`}
           value={question.maxLength}
           inputMode="numeric"
           onChange={(event) =>
@@ -418,7 +432,7 @@ function OptionsBuilder({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <Label>{t("optionsFieldLabel")}</Label>
+        <p className="text-sm font-medium">{t("optionsFieldLabel")}</p>
         <Button
           type="button"
           variant="outline"
@@ -534,10 +548,10 @@ export function MultilingualInput({
   return (
     <div className="space-y-2">
       <div className="flex min-h-8 items-center justify-between gap-2">
-        <Label>
+        <p className="text-sm font-medium">
           {label}
           {optional ? t("optionalSuffix") : ""}
-        </Label>
+        </p>
         <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(!open)}>
           {open ? t("hideTranslations") : t("addTranslations")}
         </Button>
@@ -610,18 +624,20 @@ function TaggedControl({
 }
 
 function Field({
+  id,
   label,
   hint,
   children,
 }: {
+  id: string;
   label: string;
   hint?: string;
   children: React.ReactNode;
 }) {
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-1.5">
-        <Label>{label}</Label>
+      <div className="flex min-h-5 items-center gap-1.5">
+        <Label htmlFor={id}>{label}</Label>
         {hint && <FieldHint text={hint} />}
       </div>
       {children}
@@ -641,7 +657,7 @@ function FieldHint({ text }: { text: string }) {
             aria-label={t("moreInformationAria")}
             className="text-muted-foreground hover:text-foreground focus-visible:text-foreground inline-flex"
           >
-            <CircleHelpIcon className="size-3.5" />
+            <CircleHelpIcon className="size-3.5" aria-hidden="true" />
           </button>
         </TooltipTrigger>
         <TooltipContent className="max-w-60 text-pretty">{text}</TooltipContent>

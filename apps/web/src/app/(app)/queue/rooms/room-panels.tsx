@@ -280,7 +280,7 @@ export function AssignmentsEditor({
       </div>
 
       <div className="space-y-2">
-        <Label>{t("judgesCount", { count: judges.length })}</Label>
+        <p className="text-sm font-medium">{t("judgesCount", { count: judges.length })}</p>
         {judges.length ? (
           <ul className="divide-y rounded-md border">
             {judges.map((assignment) => {
