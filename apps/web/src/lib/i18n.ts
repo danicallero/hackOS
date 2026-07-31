@@ -3471,6 +3471,16 @@ const dict: Record<string, I18nText> = {
     gl: "Os datos de asistencia non están dispoñibles agora mesmo.",
     en: "Attendance data is unavailable right now.",
   },
+  presenceLessThanHourAgo: {
+    es: "hace menos de 1 h",
+    gl: "hai menos de 1 h",
+    en: "less than 1h ago",
+  },
+  presenceHoursAgo: {
+    es: "hace {hours} h",
+    gl: "hai {hours} h",
+    en: "{hours}h ago",
+  },
   presenceUnavailableTitle: {
     es: "Presencia no disponible",
     gl: "Presenza non dispoñible",

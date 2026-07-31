@@ -15,6 +15,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 import { AccessDenied } from "@/components/common/access-denied";
+import { ContextualError } from "@/components/common/contextual-error";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { PageHeader } from "@/components/common/page-header";
@@ -33,7 +34,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useLiveQuery } from "@/hooks/use-event-source";
-import { type Translate, useLocale } from "@/lib/i18n";
+import { LOCALE_CODES, type Translate, useLocale } from "@/lib/i18n";
 import {
   logisticsApi,
   type OpenPresenceSession,
@@ -43,16 +44,24 @@ import {
 } from "@/lib/logistics";
 import { useCan } from "@/lib/session";
 
-const timeFmt = new Intl.DateTimeFormat("en-GB", {
+const TIME_FORMAT_OPTIONS: Intl.DateTimeFormatOptions = {
   day: "2-digit",
   month: "short",
   hour: "2-digit",
   minute: "2-digit",
-});
+};
 
-function hoursSince(iso: string): string {
+function hoursSince(iso: string, t: Translate): string {
   const h = (Date.now() - new Date(iso).getTime()) / 3_600_000;
-  return h < 1 ? "<1h ago" : `${Math.round(h)}h ago`;
+  return h < 1 ? t("presenceLessThanHourAgo") : t("presenceHoursAgo", { hours: Math.round(h) });
+}
+
+function queryLoadError(
+  error: unknown,
+  fallback: string,
+  onRetry: () => void,
+): { message: string; onRetry: () => void } | undefined {
+  return error ? { message: errorMessage(error, fallback), onRetry } : undefined;
 }
 
 const PRESENCE_EVENTS = [EVENTS.LOGISTICS_PRESENCE_SCAN, EVENTS.LOGISTICS_ACTIVITY_SCAN];
@@ -80,6 +89,20 @@ export default function PresencePage() {
     { enabled: canPresence, debounceMs: 400 },
   );
 
+  // H24/H27: each read model keeps its own failure and retry path so one
+  // outage cannot make another operational dataset look empty or unknown.
+  const estimateError = queryLoadError(
+    estimate.error,
+    t("attendanceDataUnavailable"),
+    estimate.refetch,
+  );
+  const hoursError = queryLoadError(hours.error, t("couldNotLoadStatistics"), hours.refetch);
+  const openSessionsError = queryLoadError(
+    openSessions.error,
+    t("attendanceDataUnavailable"),
+    openSessions.refetch,
+  );
+
   if (!canPresence) {
     return <AccessDenied ask={t("presenceDeniedDesc")} />;
   }
@@ -93,25 +116,30 @@ export default function PresencePage() {
           value={estimate.data?.presentCount ?? "—"}
           icon={UsersIcon}
           hint={estimate.connected ? t("liveEstimate") : t("reconnectsAutomatically")}
+          footer={estimateError && <ContextualError {...estimateError} />}
         />
         <StatCard
           label={t("openSessions")}
           value={openSessions.data?.length ?? "—"}
           icon={DoorOpenIcon}
           hint={t("enteredNotExited")}
+          footer={openSessionsError && <ContextualError {...openSessionsError} />}
         />
         <StatCard
           label={t("staleSessions")}
           value={openSessions.data?.filter((s) => s.stale).length ?? "—"}
           icon={AlertTriangleIcon}
           hint={t("staleSessionsHint")}
+          footer={openSessionsError && <ContextualError {...openSessionsError} />}
         />
       </div>
       <PresencePanel
         hours={hours.data ?? []}
         loading={hours.loading}
+        hoursError={hoursError}
         openSessions={openSessions.data ?? []}
         openSessionsLoading={openSessions.loading}
+        openSessionsError={openSessionsError}
         onScanned={() => {
           estimate.refetch();
           hours.refetch();
@@ -125,17 +153,22 @@ export default function PresencePage() {
 function PresencePanel({
   hours,
   loading,
+  hoursError,
   openSessions,
   openSessionsLoading,
+  openSessionsError,
   onScanned,
 }: {
   hours: PresenceHours[];
   loading: boolean;
+  hoursError?: { message: string; onRetry: () => void };
   openSessions: OpenPresenceSession[];
   openSessionsLoading: boolean;
+  openSessionsError?: { message: string; onRetry: () => void };
   onScanned: () => void;
 }) {
-  const { t } = useLocale();
+  const { language, t } = useLocale();
+  const timeFmt = new Intl.DateTimeFormat(LOCALE_CODES[language], TIME_FORMAT_OPTIONS);
   const [badgeId, setBadgeId] = useState("");
   const [lookup, setLookup] = useState<PresenceLookup | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
@@ -264,7 +297,7 @@ function PresencePanel({
                 <AlertTriangleIcon className="size-4 shrink-0" />
                 {t("alreadyOpenSession", {
                   time: timeFmt.format(new Date(lookup.openSince)),
-                  hours: hoursSince(lookup.openSince),
+                  hours: hoursSince(lookup.openSince, t),
                 })}
               </div>
             )}
@@ -349,6 +382,7 @@ function PresencePanel({
           searchable={(row) => `${row.userId} ${row.name ?? ""} ${row.surname ?? ""} ${row.hours}`}
           searchPlaceholder={t("filterUsers")}
           pageSize={10}
+          error={hoursError}
           empty={{
             icon: UsersIcon,
             title: t("noPresenceYet"),
@@ -364,7 +398,7 @@ function PresencePanel({
         className="xl:col-span-2"
       >
         <DataTable
-          columns={getOpenSessionColumns(t)}
+          columns={getOpenSessionColumns(t, timeFmt)}
           data={openSessions}
           getRowId={(row) => String(row.userId)}
           getRowHref={(row) => `/users/${row.userId}?tab=presence`}
@@ -375,6 +409,7 @@ function PresencePanel({
           searchable={(row) => `${row.userId} ${row.name ?? ""} ${row.surname ?? ""}`}
           searchPlaceholder={t("filterUsers")}
           pageSize={10}
+          error={openSessionsError}
           empty={{
             icon: DoorOpenIcon,
             title: t("noOpenSessions"),
@@ -386,7 +421,10 @@ function PresencePanel({
   );
 }
 
-function getOpenSessionColumns(t: Translate): Column<OpenPresenceSession>[] {
+function getOpenSessionColumns(
+  t: Translate,
+  timeFmt: Intl.DateTimeFormat,
+): Column<OpenPresenceSession>[] {
   return [
     {
       id: "user",
@@ -413,7 +451,7 @@ function getOpenSessionColumns(t: Translate): Column<OpenPresenceSession>[] {
       sortValue: (row) => row.lastSignal,
       cell: (row) => (
         <span className="text-sm">
-          {timeFmt.format(new Date(row.lastSignal))} ({hoursSince(row.lastSignal)})
+          {timeFmt.format(new Date(row.lastSignal))} ({hoursSince(row.lastSignal, t)})
         </span>
       ),
     },
