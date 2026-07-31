@@ -260,6 +260,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
         userId: req.body.userId,
         badgeId: req.body.badgeId,
         method: req.body.method,
+        attendeeRole: req.body.attendeeRole,
       }),
   );
 

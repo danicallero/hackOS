@@ -523,6 +523,11 @@ const dict: Record<string, I18nText> = {
   },
   copied: { es: "Copiado.", gl: "Copiado.", en: "Copied." },
   copy: { es: "Copiar", gl: "Copiar", en: "Copy" },
+  copyInviteLink: {
+    es: "Copiar enlace de invitación",
+    gl: "Copiar ligazón de invitación",
+    en: "Copy invite link",
+  },
   chooseFile: { es: "Elegir archivo", gl: "Escoller ficheiro", en: "Choose file" },
   chooseFileForField: {
     es: "{field}: elegir archivo",
@@ -623,6 +628,11 @@ const dict: Record<string, I18nText> = {
   viewTicket: { es: "Ver mi entrada", gl: "Ver a miña entrada", en: "View my ticket" },
   badge: { es: "Acreditación", gl: "Acreditación", en: "Badge" },
   qrCodes: { es: "Códigos QR", gl: "Códigos QR", en: "QR codes" },
+  profileSections: {
+    es: "Secciones del perfil",
+    gl: "Seccións do perfil",
+    en: "Profile sections",
+  },
   badgeNotAssigned: {
     es: "Acreditación sin asignar",
     gl: "Acreditación sen asignar",
@@ -1076,6 +1086,8 @@ const dict: Record<string, I18nText> = {
   badgeIdLabel: { es: "ID de acreditación", gl: "ID de acreditación", en: "Badge ID" },
   badgeIdPlaceholder: { es: "B-1024", gl: "B-1024", en: "B-1024" },
   methodLabel: { es: "Método", gl: "Método", en: "Method" },
+  scanMethodQr: { es: "Código QR", gl: "Código QR", en: "QR code" },
+  scanMethodNfc: { es: "NFC", gl: "NFC", en: "NFC" },
   manual: { es: "Manual", gl: "Manual", en: "Manual" },
   checkIn: { es: "Registrar entrada", gl: "Rexistrar entrada", en: "Check in" },
   lostBadge: { es: "Acreditación perdida", gl: "Acreditación perdida", en: "Lost badge" },
@@ -1185,6 +1197,11 @@ const dict: Record<string, I18nText> = {
     en: "Scan a badge to load the person, then register an entry or exit.",
   },
   badgePlaceholder: { es: "escanear acreditación", gl: "escanear acreditación", en: "scan badge" },
+  fieldKeyPlaceholder: {
+    es: "por ejemplo, innovación",
+    gl: "por exemplo, innovación",
+    en: "e.g. innovation",
+  },
   alreadyOpenSession: {
     es: "Ya tiene una sesión abierta desde las {time} ({hours}). Registra una salida antes de una nueva entrada.",
     gl: "Xa ten unha sesión aberta desde as {time} ({hours}). Rexistra unha saída antes dunha nova entrada.",
@@ -3220,6 +3237,67 @@ const dict: Record<string, I18nText> = {
     gl: "Dúas entradas sen saída nin actividade entre elas ({from} → {to}). Non se computan horas da primeira entrada ata engadir o punto que falta nese intervalo.",
     en: "Two entries with no exit or activity between them ({from} → {to}). No hours are counted for the first entry until the missing point is added inside that gap.",
   },
+  presenceSummary: {
+    es: "Resumen de presencia",
+    gl: "Resumo da presenza",
+    en: "Presence summary",
+  },
+  presenceGuaranteedHours: {
+    es: "Horas garantizadas",
+    gl: "Horas garantidas",
+    en: "Guaranteed hours",
+  },
+  presenceProvisionalHours: {
+    es: "Horas provisionales",
+    gl: "Horas provisionais",
+    en: "Provisional hours",
+  },
+  presenceTimeline: {
+    es: "Cronología de presencia",
+    gl: "Cronoloxía da presenza",
+    en: "Presence timeline",
+  },
+  presenceTimelineFooter: {
+    es: "Cada entrada o actividad abre una ventana de certeza; las salidas la cierran.",
+    gl: "Cada entrada ou actividade abre unha ventá de certeza; as saídas péchana.",
+    en: "Each entry or activity opens a certainty window; exits close it.",
+  },
+  presenceSecured: { es: "Asegurada", gl: "Asegurada", en: "Secured" },
+  presenceProvisional: { es: "Provisional", gl: "Provisional", en: "Provisional" },
+  presenceInvalid: { es: "Invalidada", gl: "Invalidada", en: "Invalidated" },
+  presenceDeadline: { es: "Límite: {time}", gl: "Límite: {time}", en: "Deadline: {time}" },
+  presenceSecuredFor: {
+    es: "Aseguradas: {duration}",
+    gl: "Aseguradas: {duration}",
+    en: "Secured: {duration}",
+  },
+  presenceRecordedBy: {
+    es: "Registrado por {name}",
+    gl: "Rexistrado por {name}",
+    en: "Recorded by {name}",
+  },
+  presenceRecordedBySystem: {
+    es: "Registrado automáticamente por el sistema",
+    gl: "Rexistrado automaticamente polo sistema",
+    en: "Recorded automatically by the system",
+  },
+  presenceConflictBounds: {
+    es: "Elige una entrada, salida o actividad entre {from} y {to}; los extremos no se admiten.",
+    gl: "Escolle unha entrada, saída ou actividade entre {from} e {to}; os extremos non se admiten.",
+    en: "Choose an entry, exit, or activity between {from} and {to}; the endpoints are not allowed.",
+  },
+  presenceConflictTimeInvalid: {
+    es: "La hora debe estar estrictamente dentro del intervalo del conflicto.",
+    gl: "A hora debe estar estritamente dentro do intervalo do conflito.",
+    en: "The time must be strictly inside the conflict interval.",
+  },
+  presenceMinutesValue: { es: "{minutes} min", gl: "{minutes} min", en: "{minutes} min" },
+  presenceWholeHoursValue: { es: "{hours} h", gl: "{hours} h", en: "{hours} h" },
+  presenceHoursMinutesValue: {
+    es: "{hours} h {minutes} min",
+    gl: "{hours} h {minutes} min",
+    en: "{hours} h {minutes} min",
+  },
   activitySignal: { es: "Actividad o comida", gl: "Actividade ou comida", en: "Activity or meal" },
   windowOf: {
     es: "Abre una ventana de {duration}",
@@ -3424,6 +3502,11 @@ const dict: Record<string, I18nText> = {
     en: "This user's passes are unavailable right now.",
   },
   activityPasses: { es: "Pases de actividad", gl: "Pases de actividade", en: "Activity passes" },
+  activityPassesProjectionDesc: {
+    es: "Consulta los pases registrados como una proyección del mismo flujo de actividad.",
+    gl: "Consulta os pases rexistrados como unha proxección do mesmo fluxo de actividade.",
+    en: "Review recorded passes as a projection of the same activity stream.",
+  },
   noPassesYet: { es: "Aún no hay pases", gl: "Aínda non hai pases", en: "No passes yet" },
   passesWillAppear: {
     es: "Los pases de comidas y talleres aparecerán aquí a medida que se escaneen.",
@@ -5836,6 +5919,11 @@ const dict: Record<string, I18nText> = {
     en: "Rename university",
   },
   newUniversityTitle: { es: "Nueva universidad", gl: "Nova universidade", en: "New university" },
+  universityNamePlaceholder: {
+    es: "Universidad de Santiago de Compostela",
+    gl: "Universidade de Santiago de Compostela",
+    en: "e.g. University of Santiago de Compostela",
+  },
   updateInstitutionNameDesc: {
     es: "Actualiza el nombre de la institución. Las selecciones de los solicitantes conservan su id.",
     gl: "Actualiza o nome da institución. As seleccións dos solicitantes conservan o seu id.",

@@ -251,7 +251,7 @@ export function UniversitiesManager() {
                 <FormItem>
                   <FormLabel>{t("name")}</FormLabel>
                   <FormControl>
-                    <Input placeholder="Universidade de Santiago de Compostela" {...field} />
+                    <Input placeholder={t("universityNamePlaceholder")} {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

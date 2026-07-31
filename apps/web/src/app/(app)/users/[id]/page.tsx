@@ -1,7 +1,7 @@
 "use client";
 
 import { EVENTS } from "@hackos/shared/events";
-import { UsersIcon } from "lucide-react";
+import { ChevronDownIcon, UsersIcon } from "lucide-react";
 import { useParams, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { BackLink } from "@/components/common/back-link";
@@ -96,14 +96,31 @@ export default function UserProfilePage() {
       <ProfileHeader user={user} />
 
       <Tabs defaultValue={initialTab}>
-        <TabsList className="w-full max-w-3xl">
-          <TabsTrigger value="overview">{t("tabOverview")}</TabsTrigger>
-          <TabsTrigger value="qr">QR</TabsTrigger>
-          <TabsTrigger value="permissions">{t("permissions")}</TabsTrigger>
-          <TabsTrigger value="presence">{t("presence")}</TabsTrigger>
-          <TabsTrigger value="activity">{t("tabLogs")}</TabsTrigger>
-          <TabsTrigger value="application">{t("tabApplication")}</TabsTrigger>
-          <TabsTrigger value="projects">{t("projects")}</TabsTrigger>
+        <TabsList
+          aria-label={t("profileSections")}
+          className="w-full max-w-3xl justify-start overflow-x-auto"
+        >
+          <TabsTrigger className="flex-none" value="overview">
+            {t("tabOverview")}
+          </TabsTrigger>
+          <TabsTrigger className="flex-none" value="qr">
+            {t("qrCodes")}
+          </TabsTrigger>
+          <TabsTrigger className="flex-none" value="permissions">
+            {t("permissions")}
+          </TabsTrigger>
+          <TabsTrigger className="flex-none" value="presence">
+            {t("presence")}
+          </TabsTrigger>
+          <TabsTrigger className="flex-none" value="activity">
+            {t("tabLogs")}
+          </TabsTrigger>
+          <TabsTrigger className="flex-none" value="application">
+            {t("tabApplication")}
+          </TabsTrigger>
+          <TabsTrigger className="flex-none" value="projects">
+            {t("projects")}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="pt-2">
@@ -117,8 +134,24 @@ export default function UserProfilePage() {
         </TabsContent>
         <TabsContent value="presence" className="pt-2">
           <div className="space-y-6">
-            <PresenceSection userId={user.id} />
-            <PhysicalActivity userId={user.id} />
+            <PresenceSection userId={user.id} refreshKey={liveRefresh} />
+            <details className="group rounded-lg border">
+              <summary className="flex cursor-pointer list-none items-start justify-between gap-3 rounded-lg p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset sm:p-5">
+                <div className="min-w-0">
+                  <h2 className="type-section-title text-balance">{t("activityPasses")}</h2>
+                  <p className="text-muted-foreground mt-1 text-pretty text-sm">
+                    {t("activityPassesProjectionDesc")}
+                  </p>
+                </div>
+                <ChevronDownIcon
+                  className="text-muted-foreground mt-1 size-5 shrink-0 transition-transform group-open:rotate-180"
+                  aria-hidden="true"
+                />
+              </summary>
+              <div className="border-border border-t p-4 sm:p-5">
+                <PhysicalActivity userId={user.id} refreshKey={liveRefresh} embedded />
+              </div>
+            </details>
           </div>
         </TabsContent>
         <TabsContent value="activity" className="pt-2">

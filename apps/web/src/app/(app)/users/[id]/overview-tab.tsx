@@ -132,7 +132,7 @@ export function ReadOnlyOverview({
           value={intoleranceNames(user.foodIntolerances, intolerances, lang)}
         />
         <Field label={t("dietaryNotesLabel")} value={user.foodIntoleranceNotes} />
-        <Field label="DNI" value={user.dni} />
+        <Field label={t("dniLabel")} value={user.dni} />
       </dl>
     </SectionCard>
   );
@@ -329,7 +329,7 @@ export function StaffEditForm({
             name="dni"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>DNI</FormLabel>
+                <FormLabel>{t("dniLabel")}</FormLabel>
                 <FormControl>
                   <Input {...field} />
                 </FormControl>

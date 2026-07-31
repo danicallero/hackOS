@@ -207,12 +207,10 @@ export default function SchedulePage() {
               {scheduleTypeLabel(item.type, t)}
             </StatusBadge>
             {item.requiresScan && (
-              <span
-                className="text-muted-foreground inline-flex items-center gap-1 text-xs"
-                title={t("registrableByScanner")}
-              >
+              <StatusBadge tone="info" dot={false} className="max-w-full whitespace-normal">
                 <ScanLineIcon className="size-3.5" aria-hidden="true" />
-              </span>
+                <span className="break-words">{t("registrableByScanner")}</span>
+              </StatusBadge>
             )}
           </div>
         );

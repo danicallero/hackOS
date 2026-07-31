@@ -268,8 +268,9 @@ function PresencePanel({
         bodyClassName="space-y-4"
       >
         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_140px]">
-          <Field label={t("badge")}>
+          <Field id="presence-badge" label={t("badge")}>
             <Input
+              id="presence-badge"
               value={badgeId}
               onChange={(e) => setBadgeId(e.target.value)}
               onKeyDown={(e) => {
@@ -334,12 +335,12 @@ function PresencePanel({
             {manualOpen && (
               <div className="bg-muted/40 space-y-3 rounded-lg border p-3">
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label={t("directionLabel")}>
+                  <Field id="presence-manual-direction" label={t("directionLabel")}>
                     <Select
                       value={manualKind}
                       onValueChange={(v) => setManualKind(v as "in" | "out")}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger id="presence-manual-direction">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -348,8 +349,12 @@ function PresencePanel({
                       </SelectContent>
                     </Select>
                   </Field>
-                  <Field label={t("timeLabel")}>
-                    <DateTimeInput value={manualScannedAt} onChange={setManualScannedAt} />
+                  <Field id="presence-manual-time" label={t("timeLabel")}>
+                    <DateTimeInput
+                      id="presence-manual-time"
+                      value={manualScannedAt}
+                      onChange={setManualScannedAt}
+                    />
                   </Field>
                 </div>
                 <Button

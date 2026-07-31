@@ -666,10 +666,10 @@ export function PreferencesTab() {
                   return (
                     <li
                       key={category}
-                      className="flex items-center justify-between gap-3 px-4 py-2 text-sm"
+                      className="flex items-start justify-between gap-3 px-4 py-2 text-sm"
                     >
                       <div className="min-w-0 flex-1">
-                        <span className="block truncate">{label}</span>
+                        <span className="block break-words text-pretty">{label}</span>
                         {removalState === "failed" && (
                           <span className="text-destructive block text-xs" role="alert">
                             {t("couldNotRemoveReminder")}
