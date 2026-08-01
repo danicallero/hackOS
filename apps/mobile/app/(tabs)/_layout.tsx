@@ -26,6 +26,11 @@ import {
   canOperateQueues,
   canScanActivities,
   isOperator,
+  isPadIdiom,
+  OVERFLOW_TAB_ICON,
+  OVERFLOW_TAB_LABEL_KEY,
+  OVERFLOW_TAB_ROUTE,
+  type OverflowTabKey,
   queueOperationsInPrimaryBar,
   shouldUseOverflowMenu,
 } from "@/lib/tabs";
@@ -36,13 +41,9 @@ interface UnreadInboxResponse {
 }
 
 interface OperationsMenuItem extends MenuAction {
-  id: "account" | "queue" | "wallet" | "operations";
+  id: OverflowTabKey;
   label: string;
-  route:
-    | "/(tabs)/others/account"
-    | "/(tabs)/others/queue"
-    | "/(tabs)/others/wallet"
-    | "/(tabs)/others/operations";
+  route: (typeof OVERFLOW_TAB_ROUTE)[OverflowTabKey];
 }
 
 /**
@@ -64,6 +65,13 @@ interface OperationsMenuItem extends MenuAction {
  * Keep this behavior documented and tested. Earlier versions regressed by
  * treating the overflow menu as a plain stack launcher, which duplicated
  * overflow pages and broke back behavior.
+ *
+ * That popover contract is iPhone-only. On iPad — and this same build
+ * "Designed for iPad" on a Mac — `NativeTabs` relocates to a top-anchored
+ * bar whose on-screen geometry this app has no supported way to query, so
+ * the popover's bottom-anchored overlay is skipped there (see
+ * `overflowAsBottomBarPopover`) and "Others" behaves as an ordinary tab
+ * that opens a real hub screen (app/(tabs)/others/index.tsx).
  */
 export default function TabLayout() {
   useColorScheme();
@@ -76,6 +84,12 @@ export default function TabLayout() {
   const activitiesVisible = canScanActivities(capabilities);
   const queueOperationsVisible = canOperateQueues(capabilities);
   const queueOperationsPrimary = queueOperationsInPrimaryBar(capabilities);
+  // iPad (and this same build "Designed for iPad" on a Mac) moves NativeTabs
+  // to a top-anchored bar whose geometry JS can't know — see isPadIdiom's
+  // doc comment. The bottom-anchored popover overlay below only makes sense
+  // against iPhone's fixed bottom bar, so on that idiom "others" is left as
+  // a real tab: it navigates to a genuine hub screen instead (app/(tabs)/others/index.tsx).
+  const overflowAsBottomBarPopover = operatorExperience && !isPadIdiom();
 
   const refreshUnreadNotifications = useCallback(async () => {
     if (!me) return;
@@ -173,9 +187,13 @@ export default function TabLayout() {
         </NativeTabs.Trigger>
         {operatorExperience ? (
           // `role="search"` is what gives this item the separated Liquid Glass
-          // capsule treatment on iOS 18+ — it's still the same custom overflow
-          // menu underneath (NativeOperationsMenu), just visually split off
-          // from the rest of the tab bar instead of grouped in with them.
+          // capsule treatment on iOS 18+. On iPhone it's still the same
+          // custom overflow menu underneath (NativeOperationsMenu), just
+          // visually split off from the rest of the tab bar instead of
+          // grouped in with them. On iPad/macOS there's no popover overlay
+          // to intercept the tap, so this is a real tab: it navigates to
+          // app/(tabs)/others/index.tsx, which renders the hub list instead
+          // of redirecting straight to Account.
           <NativeTabs.Trigger name="others" role="search">
             <NativeTabs.Trigger.Icon sf="ellipsis" md="more_horiz" />
             <NativeTabs.Trigger.Label hidden>{t("tabOthers")}</NativeTabs.Trigger.Label>
@@ -190,7 +208,7 @@ export default function TabLayout() {
           </NativeTabs.Trigger>
         )}
       </NativeTabs>
-      {operatorExperience ? (
+      {overflowAsBottomBarPopover ? (
         <NativeOperationsMenu
           tabCount={activitiesVisible ? 5 : 4}
           showQueueOperations={queueOperationsVisible && !queueOperationsPrimary}
@@ -215,40 +233,19 @@ function NativeOperationsMenu({
   const menuRef = useRef<MenuComponentRef>(null);
   const triggerHeight = bottom + 60;
   const triggerWidth = process.env.EXPO_OS === "ios" ? 76 : width / tabCount;
-  const items: OperationsMenuItem[] = [
-    {
-      id: "queue",
-      image: "clock",
-      label: t("tabQueue"),
-      route: "/(tabs)/others/queue",
-      title: t("tabQueue"),
-    },
-    {
-      id: "wallet",
-      image: "wallet.pass",
-      label: t("tabWallet"),
-      route: "/(tabs)/others/wallet",
-      title: t("tabWallet"),
-    },
-    {
-      id: "account",
-      image: "person.crop.circle",
-      label: t("tabAccount"),
-      route: "/(tabs)/others/account",
-      title: t("tabAccount"),
-    },
-    ...(showQueueOperations
-      ? [
-          {
-            id: "operations" as const,
-            image: "rectangle.3.group" as const,
-            label: t("tabQueueOperations"),
-            route: "/(tabs)/others/operations" as const,
-            title: t("tabQueueOperations"),
-          },
-        ]
-      : []),
+  const overflowIds: OverflowTabKey[] = [
+    "queue",
+    "wallet",
+    "account",
+    ...(showQueueOperations ? (["operations"] as const) : []),
   ];
+  const items: OperationsMenuItem[] = overflowIds.map((id) => ({
+    id,
+    image: OVERFLOW_TAB_ICON[id],
+    label: t(OVERFLOW_TAB_LABEL_KEY[id]),
+    route: OVERFLOW_TAB_ROUTE[id],
+    title: t(OVERFLOW_TAB_LABEL_KEY[id]),
+  }));
 
   return (
     <>

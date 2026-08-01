@@ -1,4 +1,6 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import type { SFSymbol } from "expo-symbols";
+import { Platform } from "react-native";
 
 export type TabKey =
   | "schedule"
@@ -9,6 +11,8 @@ export type TabKey =
   | "scan"
   | "activities"
   | "operations";
+
+export type OverflowTabKey = Extract<TabKey, "queue" | "wallet" | "account" | "operations">;
 
 const PARTICIPANT_PRIMARY_TAB_KEYS = ["schedule", "queue", "wallet", "notifications"] as const;
 
@@ -75,7 +79,7 @@ export function primaryTabs(capabilities: string[]): TabKey[] {
 }
 
 /** Tabs represented inside the native Others selector rather than the main bar. */
-export function overflowTabs(capabilities: string[]): TabKey[] {
+export function overflowTabs(capabilities: string[]): OverflowTabKey[] {
   if (!isOperator(capabilities) && !canOperateQueues(capabilities)) return [];
   return [
     "queue",
@@ -90,4 +94,46 @@ export function overflowTabs(capabilities: string[]): TabKey[] {
 /** True whenever any tab lives outside the primary bar and needs the overflow selector. */
 export function shouldUseOverflowMenu(capabilities: string[]): boolean {
   return overflowTabs(capabilities).length > 0;
+}
+
+/** SF Symbol per overflow destination — shared between the iPhone popover menu and the iPad/macOS hub list so both surfaces render the exact same icon. */
+export const OVERFLOW_TAB_ICON: Record<OverflowTabKey, SFSymbol> = {
+  queue: "clock",
+  wallet: "wallet.pass",
+  account: "person.crop.circle",
+  operations: "rectangle.3.group",
+};
+
+/** Route per overflow destination — shared for the same reason as {@link OVERFLOW_TAB_ICON}. */
+export const OVERFLOW_TAB_ROUTE: Record<OverflowTabKey, `/(tabs)/others/${OverflowTabKey}`> = {
+  queue: "/(tabs)/others/queue",
+  wallet: "/(tabs)/others/wallet",
+  account: "/(tabs)/others/account",
+  operations: "/(tabs)/others/operations",
+};
+
+/** i18n dictionary key per overflow destination — shared for the same reason as {@link OVERFLOW_TAB_ICON}. */
+export const OVERFLOW_TAB_LABEL_KEY: Record<
+  OverflowTabKey,
+  "tabQueue" | "tabWallet" | "tabAccount" | "tabQueueOperations"
+> = {
+  queue: "tabQueue",
+  wallet: "tabWallet",
+  account: "tabAccount",
+  operations: "tabQueueOperations",
+};
+
+/**
+ * True on real iPad hardware, and identically true for this same iPad build
+ * running "Designed for iPad" on an Apple Silicon Mac — UIKit reports both
+ * as the `.pad` interface idiom. Either way `NativeTabs` abandons iPhone's
+ * fixed bottom bar for a top-anchored bar (regular-width UITabBarController
+ * adaptivity, see WWDC24 "Elevate your tab and sidebar experience in
+ * iPadOS"), so screen-position math tuned for the bottom bar no longer
+ * lines up with anything real. Idiom — unlike a size-class check — is fixed
+ * for the process lifetime, so this doesn't flip mid-session as a Mac
+ * window is resized.
+ */
+export function isPadIdiom(): boolean {
+  return Platform.OS === "ios" && Platform.isPad === true;
 }

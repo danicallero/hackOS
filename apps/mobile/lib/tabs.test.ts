@@ -1,5 +1,9 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import {
+  OVERFLOW_TAB_ICON,
+  OVERFLOW_TAB_LABEL_KEY,
+  OVERFLOW_TAB_ROUTE,
+  type OverflowTabKey,
   overflowTabs,
   primaryTabs,
   queueOperationsInPrimaryBar,
@@ -96,5 +100,40 @@ describe("overflowTabs / shouldUseOverflowMenu", () => {
     expect(primaryTabs(capabilities)).toEqual(["schedule", "scan", "notifications"]);
     expect(overflowTabs(capabilities)).toEqual(["queue", "wallet", "account", "operations"]);
     expect(queueOperationsInPrimaryBar(capabilities)).toBe(false);
+  });
+});
+
+describe("overflow destination descriptors (shared by the iPhone popover and the iPad/macOS hub list)", () => {
+  const keys: OverflowTabKey[] = ["queue", "wallet", "account", "operations"];
+
+  it("has an icon, a route, and a label key for every overflow destination", () => {
+    for (const key of keys) {
+      expect(OVERFLOW_TAB_ICON[key]).toEqual(expect.any(String));
+      expect(OVERFLOW_TAB_ROUTE[key]).toBe(`/(tabs)/others/${key}`);
+      expect(OVERFLOW_TAB_LABEL_KEY[key]).toEqual(expect.any(String));
+    }
+  });
+});
+
+describe("isPadIdiom", () => {
+  function isPadIdiomWith(platform: { OS: string; isPad?: boolean }): boolean {
+    let result: boolean | undefined;
+    jest.isolateModules(() => {
+      jest.doMock("react-native", () => ({ Platform: platform }));
+      result = (require("./tabs") as typeof import("./tabs")).isPadIdiom();
+    });
+    return result as boolean;
+  }
+
+  it('is true on iPad — and identically on a Mac running this build "Designed for iPad", since both report the `.pad` idiom', () => {
+    expect(isPadIdiomWith({ OS: "ios", isPad: true })).toBe(true);
+  });
+
+  it("is false on iPhone, which keeps the bottom-anchored popover", () => {
+    expect(isPadIdiomWith({ OS: "ios", isPad: false })).toBe(false);
+  });
+
+  it("is false on Android regardless of `isPad`, since NativeTabs there is never top-anchored", () => {
+    expect(isPadIdiomWith({ OS: "android", isPad: true })).toBe(false);
   });
 });
