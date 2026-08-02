@@ -1,9 +1,13 @@
 import { UI_TEST_IDS } from "@hackos/shared/ui-test-ids";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Platform, Pressable, Text, type TextInput, View } from "react-native";
+import { Alert, Pressable, Text, useWindowDimensions, View } from "react-native";
 
-import { AuthAlert, AuthButton, AuthField, AuthHeader, AuthScreen } from "@/components/auth-ui";
+import {
+  AuthCredentialField,
+  type AuthCredentialFieldHandle,
+} from "@/components/auth-credential-field";
+import { AuthAlert, AuthButton, AuthHeader, AuthScreen } from "@/components/auth-ui";
 import { apiFetch } from "@/lib/api";
 import { signIn, signOut } from "@/lib/auth-client";
 import { EVENT_WEBSITE_DISPLAY } from "@/lib/env";
@@ -11,33 +15,32 @@ import { useLocale } from "@/lib/i18n";
 import type { Me, PublicEvent } from "@/lib/types";
 import { colors } from "@/theme/colors";
 
-// React Native recommends choosing one autofill API per platform. Combining
-// autoComplete and textContentType can make iOS credential-provider fills
-// unreliable, especially when both fields are populated in one operation.
-const usernameAutofillProps = Platform.select({
-  ios: { textContentType: "username" as const },
-  android: { autoComplete: "username" as const, importantForAutofill: "yes" as const },
-  default: { autoComplete: "username" as const },
-});
-
-const passwordAutofillProps = Platform.select({
-  ios: { textContentType: "password" as const },
-  android: { autoComplete: "current-password" as const, importantForAutofill: "yes" as const },
-  default: { autoComplete: "current-password" as const },
-});
-
 export default function SignInScreen() {
   const router = useRouter();
   const { accessDenied } = useLocalSearchParams<{ accessDenied?: string }>();
   const { t } = useLocale();
-  const passwordRef = useRef<TextInput>(null);
+  const { fontScale } = useWindowDimensions();
+  const emailRef = useRef<AuthCredentialFieldHandle>(null);
+  const passwordRef = useRef<AuthCredentialFieldHandle>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(
-    accessDenied === "1" ? t("mobileAccessDenied", { website: EVENT_WEBSITE_DISPLAY }) : null,
-  );
+  const [error, setError] = useState<string | null>(null);
   const [event, setEvent] = useState<PublicEvent | null>(null);
+
+  useEffect(() => {
+    if (accessDenied !== "1") return;
+    // Consume the route signal before opening the native dialog so a later
+    // remount cannot announce the same access denial twice.
+    router.setParams({ accessDenied: "" });
+    Alert.alert(
+      t("mobileAccessDeniedTitle"),
+      t("mobileAccessDenied", { website: EVENT_WEBSITE_DISPLAY }),
+      [{ text: t("close") }],
+    );
+  }, [accessDenied, router, t]);
 
   useEffect(() => {
     let active = true;
@@ -53,14 +56,26 @@ export default function SignInScreen() {
     };
   }, []);
 
-  const disabled = submitting || !email.trim() || !password;
-
   async function onSubmit() {
-    if (disabled) return;
+    if (submitting) return;
+    const currentEmail = emailRef.current?.getText() ?? email;
+    const currentPassword = passwordRef.current?.getText() ?? password;
+    const nextEmailError = currentEmail.trim() ? null : t("emailRequired");
+    const nextPasswordError = currentPassword ? null : t("passwordRequired");
+    setEmailError(nextEmailError);
+    setPasswordError(nextPasswordError);
+    if (nextEmailError || nextPasswordError) {
+      if (nextEmailError) emailRef.current?.focus();
+      else passwordRef.current?.focus();
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
-      const { error: signInError } = await signIn.email({ email: email.trim(), password });
+      const { error: signInError } = await signIn.email({
+        email: currentEmail.trim(),
+        password: currentPassword,
+      });
       if (signInError) {
         setError(t("signInError"));
         return;
@@ -68,7 +83,7 @@ export default function SignInScreen() {
       const me = await apiFetch<Me>("/api/me");
       if (!me.mobileAccess) {
         await signOut();
-        setError(t("mobileAccessDenied", { website: EVENT_WEBSITE_DISPLAY }));
+        router.replace({ pathname: "/(auth)/sign-in", params: { accessDenied: "1" } });
         return;
       }
       router.replace("/");
@@ -85,55 +100,63 @@ export default function SignInScreen() {
 
   return (
     <AuthScreen
+      scrollable={fontScale > 1.3}
       footer={
-        <View
-          style={{
-            gap: 4,
-          }}
-        >
-          <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13, lineHeight: 18 }}>
+        <View style={{ alignItems: "center", gap: 4 }}>
+          <Text
+            selectable
+            style={{ color: colors.label, fontSize: 15, fontWeight: "600", lineHeight: 20 }}
+          >
+            {t("eventAccessTitle")}
+          </Text>
+          <Text
+            selectable
+            style={{
+              color: colors.secondaryLabel,
+              fontSize: 14,
+              lineHeight: 20,
+              textAlign: "center",
+            }}
+          >
             {t("eventAccessNotice", { website: EVENT_WEBSITE_DISPLAY })}
           </Text>
         </View>
       }
     >
-      <AuthHeader
-        align="leading"
-        title={event?.name || "hackOS"}
-        description={event?.tagline || t("eventCompanionSubtitle")}
-      />
+      <AuthHeader align="leading" context={event?.name || "hackOS"} title={t("signInTitle")} />
 
       <View style={{ gap: 16 }}>
         {error ? <AuthAlert message={error} testID={UI_TEST_IDS.auth.error} /> : null}
         <View style={{ gap: 14 }}>
-          <AuthField
+          <AuthCredentialField
             testID={UI_TEST_IDS.auth.email}
-            {...usernameAutofillProps}
+            autoComplete="username"
+            fieldRef={emailRef}
             label={t("emailLabel")}
             placeholder={t("emailPlaceholder")}
-            autoCapitalize="none"
-            autoCorrect={false}
+            error={emailError}
             keyboardType="email-address"
             returnKeyType="next"
-            spellCheck={false}
-            onChangeText={setEmail}
-            onEndEditing={({ nativeEvent }) => setEmail(nativeEvent.text)}
+            onChangeText={(value) => {
+              setEmail(value);
+              if (emailError) setEmailError(null);
+            }}
             onSubmitEditing={() => passwordRef.current?.focus()}
           />
-          <AuthField
+          <AuthCredentialField
             testID={UI_TEST_IDS.auth.password}
-            {...passwordAutofillProps}
-            inputRef={passwordRef}
+            autoComplete="current-password"
+            fieldRef={passwordRef}
             label={t("passwordLabel")}
-            placeholder={t("passwordPlaceholder")}
-            autoCapitalize="none"
-            autoCorrect={false}
-            enablesReturnKeyAutomatically
+            error={passwordError}
+            showPasswordLabel={t("showPassword")}
+            hidePasswordLabel={t("hidePassword")}
             returnKeyType="go"
             secureTextEntry
-            spellCheck={false}
-            onChangeText={setPassword}
-            onEndEditing={({ nativeEvent }) => setPassword(nativeEvent.text)}
+            onChangeText={(value) => {
+              setPassword(value);
+              if (passwordError) setPasswordError(null);
+            }}
             onSubmitEditing={() => void onSubmit()}
           />
         </View>
@@ -141,7 +164,10 @@ export default function SignInScreen() {
         <Pressable
           accessibilityRole="link"
           onPress={() =>
-            router.push({ pathname: "/(auth)/forgot-password", params: { email: email.trim() } })
+            router.push({
+              pathname: "/(auth)/forgot-password",
+              params: { email: (emailRef.current?.getText() ?? email).trim() },
+            })
           }
           style={({ pressed }) => ({
             alignSelf: "flex-start",
@@ -151,7 +177,7 @@ export default function SignInScreen() {
             paddingHorizontal: 4,
           })}
         >
-          <Text style={{ color: colors.accent, fontSize: 15, fontWeight: "600" }}>
+          <Text style={{ color: colors.interactiveText, fontSize: 15, fontWeight: "600" }}>
             {t("forgotPassword")}
           </Text>
         </Pressable>
@@ -160,7 +186,7 @@ export default function SignInScreen() {
           label={t("signInButton")}
           testID={UI_TEST_IDS.auth.submit}
           busy={submitting}
-          disabled={disabled}
+          disabled={submitting}
           onPress={() => void onSubmit()}
         />
       </View>

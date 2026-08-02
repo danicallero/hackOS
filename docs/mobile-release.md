@@ -235,12 +235,16 @@ team, or bundle identifier changes. This association lets Password AutoFill
 offer the same event accounts on the website and in the installed app; changing
 it requires a new native build.
 
-The sign-in screen mentions the configured website as selectable text; it is
-deliberately not a tappable external link and the app has no purchase flow.
-Re-check App Review Guidelines 3.1 before turning that text into a link or
-adding any paid digital access. In App Review notes, explain that event
-applications and account creation happen on the website, while the native app
-serves accepted attendees during the physical event.
+The sign-in footer keeps this domain visible and selectable but deliberately
+does not make it a tappable account-creation link. Apple's account-deletion
+guidance says that sending someone to the default browser to register or sign
+in is not appropriate under App Review Guideline 4; it would also require the
+app to let the person initiate full account deletion under 5.1.1(v). The app
+has no purchase flow, so the external-purchase restrictions in 3.1.1 are not
+the reason for this choice. Re-check all three rules before adding a link,
+in-app registration, or paid digital access. In App Review notes, explain that
+event applications and account creation happen on the website, while the
+native app serves accepted attendees during the physical event.
 
 ## 4. EAS environments and API URLs
 

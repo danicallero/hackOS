@@ -48,6 +48,8 @@ const ANDROID_SYMBOL_NAMES: Record<string, string> = {
   envelope: "mail",
   "envelope.badge": "mark_email_unread",
   "envelope.badge.fill": "mark_email_unread",
+  eye: "visibility",
+  "eye.slash": "visibility_off",
   "exclamationmark.arrow.circlepath": "sync_problem",
   "exclamationmark.circle.fill": "error",
   "exclamationmark.triangle": "warning",

@@ -56,6 +56,21 @@ export const colors = {
     android: Color.android.dynamic.onPrimary,
     default: "#ffffff",
   })!,
+  primaryAction: Platform.select({
+    ios: iosDynamic("#0057b8", "#78b7ff"),
+    android: Color.android.dynamic.primary,
+    default: "#0057b8",
+  })!,
+  primaryActionText: Platform.select({
+    ios: iosDynamic("#ffffff", "#001a33"),
+    android: Color.android.dynamic.onPrimary,
+    default: "#ffffff",
+  })!,
+  interactiveText: Platform.select({
+    ios: iosDynamic("#0057b8", "#78b7ff"),
+    android: Color.android.dynamic.primary,
+    default: "#0057b8",
+  })!,
   accentSurface: Platform.select({
     ios: iosDynamic("#e8f2ff", "#102a43"),
     android: Color.android.dynamic.primaryContainer,

@@ -1,15 +1,11 @@
 import { Stack } from "expo-router/stack";
 
-import { useLocale } from "@/lib/i18n";
-
 export default function AuthLayout() {
-  const { t } = useLocale();
-
   return (
-    <Stack screenOptions={{ headerBackButtonDisplayMode: "minimal" }}>
-      <Stack.Screen name="sign-in" options={{ headerShown: false }} />
-      <Stack.Screen name="forgot-password" options={{ title: t("resetPassword") }} />
-      <Stack.Screen name="reset-password" options={{ title: t("setNewPassword") }} />
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="sign-in" />
+      <Stack.Screen name="forgot-password" />
+      <Stack.Screen name="reset-password" />
     </Stack>
   );
 }

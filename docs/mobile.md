@@ -144,12 +144,41 @@ route below. No migration needed.
   launches. That regresses the back stack and duplicates overflow pages —
   earlier versions broke exactly this way.
 - `app/(auth)/sign-in.tsx` — email/password only; no in-app registration. The
-  anonymous event feed supplies the configured name and tagline, and the screen
-  explains that only accepted participants can sign in and directs them to the
-  configured `EXPO_PUBLIC_EVENT_WEBSITE_URL` to review their application. The
-  fields use the native username/current-password pairing; iOS additionally
-  associates that domain through `webcredentials`.
+  anonymous event feed supplies the configured event name, while the task
+  heading remains the localized “Sign in” label for visual and screen-reader
+  orientation. Missing credentials are reported inline and focus moves to the
+  first field that needs attention instead of hiding validation behind a disabled
+  submit button. The password field has a 52-point, screen-reader-labelled reveal
+  action, and password recovery keeps a 44-point hit target. At standard text
+  sizes the composition does not scroll: the form stays vertically centred and
+  a concise account/application note stays at the safe-area bottom. At
+  accessibility text sizes the same screen permits scrolling rather than clip a
+  field or action. The note shows the configured
+  `EXPO_PUBLIC_EVENT_WEBSITE_URL` as selectable text but deliberately does not
+  link out to account creation (see `docs/mobile-release.md`). The
+  uncontrolled native credential fields use the username/current-password
+  pairing so password managers can fill both credentials together after their
+  provider sheet temporarily moves focus away from the app. Session
+  revalidation after Passwords/Face ID returns never unmounts the auth
+  navigator, so the native fields that receive the selected values remain the
+  same instances; iOS additionally associates the domain through
+  `webcredentials`.
+  If authentication succeeds but the account lacks `mobileAccess`, the app
+  revokes that device session and returns to sign-in with a native, modal
+  access-denied alert. The route signal is consumed before presentation so
+  VoiceOver does not hear the same denial again after a remount. `mobileAccess`
+  is also part of the synchronous protected-stack guard: an ineligible account
+  never mounts an event screen while its asynchronous sign-out is running.
   (accounts come from the web onboarding/invite flows, H10/H12).
+- `app/(auth)/forgot-password.tsx` and `reset-password.tsx` share the same
+  leading, task-first composition. Their primary actions remain discoverable,
+  invalid values are explained beside the relevant field, and focus moves to
+  the first correction. They stay fixed at standard text sizes and become
+  scrollable only for accessibility text sizes.
+- `app/_layout.tsx` keeps a neutral background while the authenticated profile
+  restores. It only announces and renders the session progress state after a
+  500 ms grace period, so a normal fast restore does not flash an intermediate
+  screen; a persistent recovery error still shows retry and sign-out actions.
 - `app/(tabs)/schedule.tsx`, `queue.tsx`, `wallet.tsx`, `notifications.tsx`,
   `account.tsx` — the five participant screens. API-backed screens expose
   loading, retryable error, and empty states without leaking rejected promises.

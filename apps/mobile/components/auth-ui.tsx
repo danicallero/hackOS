@@ -1,4 +1,4 @@
-import type { ReactNode, RefObject } from "react";
+import { type ReactNode, type RefObject, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -40,7 +40,7 @@ export function AuthScreen({
               justifyContent: "center",
               maxWidth: 440,
               paddingHorizontal: 24,
-              paddingVertical: 16,
+              paddingVertical: 24,
               width: "100%",
             }}
           >
@@ -52,8 +52,9 @@ export function AuthScreen({
             style={{
               alignSelf: "center",
               maxWidth: 440,
-              paddingBottom: 12,
+              paddingBottom: 16,
               paddingHorizontal: 24,
+              paddingTop: 8,
               width: "100%",
             }}
           >
@@ -98,11 +99,13 @@ export function AuthScreen({
 export function AuthHeader({
   title,
   description,
+  context,
   icon,
   align = "center",
 }: {
   title: string;
-  description: string;
+  description?: string;
+  context?: string;
   icon?: SymbolViewProps["name"];
   align?: "center" | "leading";
 }) {
@@ -125,6 +128,20 @@ export function AuthHeader({
         </View>
       ) : null}
       <View style={{ alignItems: leading ? "flex-start" : "center", gap: 6 }}>
+        {context ? (
+          <Text
+            selectable
+            style={{
+              color: colors.interactiveText,
+              fontSize: 15,
+              fontWeight: "600",
+              lineHeight: 20,
+              textAlign: leading ? "left" : "center",
+            }}
+          >
+            {context}
+          </Text>
+        ) : null}
         <Text
           selectable
           accessibilityRole="header"
@@ -137,17 +154,19 @@ export function AuthHeader({
         >
           {title}
         </Text>
-        <Text
-          selectable
-          style={{
-            color: colors.secondaryLabel,
-            fontSize: 16,
-            lineHeight: 22,
-            textAlign: leading ? "left" : "center",
-          }}
-        >
-          {description}
-        </Text>
+        {description ? (
+          <Text
+            selectable
+            style={{
+              color: colors.secondaryLabel,
+              fontSize: 16,
+              lineHeight: 22,
+              textAlign: leading ? "left" : "center",
+            }}
+          >
+            {description}
+          </Text>
+        ) : null}
       </View>
     </View>
   );
@@ -157,40 +176,94 @@ export function AuthField({
   label,
   inputRef,
   error,
+  showPasswordLabel,
+  hidePasswordLabel,
   style,
+  onBlur,
+  onFocus,
+  secureTextEntry,
   ...props
 }: TextInputProps & {
   label: string;
   inputRef?: RefObject<TextInput | null>;
   error?: string | null;
+  showPasswordLabel?: string;
+  hidePasswordLabel?: string;
 }) {
+  const [focused, setFocused] = useState(false);
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const canRevealPassword = Boolean(secureTextEntry && showPasswordLabel && hidePasswordLabel);
+
   return (
     <View style={{ gap: 7 }}>
       <Text selectable style={{ color: colors.label, fontSize: 15, fontWeight: "600" }}>
         {label}
       </Text>
-      <TextInput
-        ref={inputRef}
-        accessibilityLabel={error ? `${label}, ${error}` : label}
-        accessibilityHint={error ?? undefined}
-        placeholderTextColor={colors.tertiaryLabel}
-        selectionColor={colors.accent}
-        style={[
-          {
-            backgroundColor: colors.surface,
-            borderColor: error ? colors.destructive : colors.separator,
-            borderCurve: "continuous",
-            borderRadius: 12,
-            borderWidth: 1,
-            color: colors.label,
-            fontSize: 17,
-            minHeight: 52,
-            paddingHorizontal: 14,
-          },
-          style,
-        ]}
-        {...props}
-      />
+      <View
+        style={{
+          alignItems: "center",
+          backgroundColor: colors.surface,
+          borderColor: error ? colors.destructive : focused ? colors.accent : colors.separator,
+          borderCurve: "continuous",
+          borderRadius: 12,
+          borderWidth: focused ? 2 : 1,
+          flexDirection: "row",
+          minHeight: 52,
+        }}
+      >
+        <TextInput
+          ref={inputRef}
+          accessibilityLabel={label}
+          accessibilityHint={error ?? undefined}
+          aria-invalid={Boolean(error)}
+          placeholderTextColor={colors.secondaryLabel}
+          selectionColor={colors.accent}
+          secureTextEntry={secureTextEntry && !passwordVisible}
+          style={[
+            {
+              color: colors.label,
+              flex: 1,
+              fontSize: 17,
+              minHeight: 50,
+              paddingHorizontal: 14,
+              paddingVertical: 12,
+            },
+            style,
+          ]}
+          onBlur={(event) => {
+            setFocused(false);
+            onBlur?.(event);
+          }}
+          onFocus={(event) => {
+            setFocused(true);
+            onFocus?.(event);
+          }}
+          {...props}
+        />
+        {canRevealPassword ? (
+          <Pressable
+            accessibilityLabel={passwordVisible ? hidePasswordLabel : showPasswordLabel}
+            accessibilityRole="button"
+            onPress={() => setPasswordVisible((visible) => !visible)}
+            style={({ pressed }) => ({
+              alignItems: "center",
+              alignSelf: "stretch",
+              justifyContent: "center",
+              minHeight: 52,
+              minWidth: 52,
+              opacity: pressed ? 0.6 : 1,
+            })}
+          >
+            <SymbolView
+              accessible={false}
+              name={passwordVisible ? "eye.slash" : "eye"}
+              size={20}
+              tintColor={colors.interactiveText}
+              weight="medium"
+            />
+          </Pressable>
+        ) : null}
+      </View>
       {error ? (
         <Text
           selectable
@@ -246,7 +319,7 @@ export function AuthButton({
       testID={testID}
       style={({ pressed }) => ({
         alignItems: "center",
-        backgroundColor: colors.accent,
+        backgroundColor: colors.primaryAction,
         borderCurve: "continuous",
         borderRadius: 12,
         flexDirection: "row",
@@ -255,10 +328,13 @@ export function AuthButton({
         minHeight: 52,
         opacity: disabled || busy ? 0.45 : pressed ? 0.75 : 1,
         paddingHorizontal: 16,
+        transform: [{ scale: pressed && !disabled && !busy ? 0.96 : 1 }],
       })}
     >
-      {busy ? <ActivityIndicator color={colors.accentText} /> : null}
-      <Text style={{ color: colors.accentText, fontSize: 17, fontWeight: "700" }}>{label}</Text>
+      {busy ? <ActivityIndicator color={colors.primaryActionText} /> : null}
+      <Text style={{ color: colors.primaryActionText, fontSize: 17, fontWeight: "700" }}>
+        {label}
+      </Text>
     </Pressable>
   );
 }
