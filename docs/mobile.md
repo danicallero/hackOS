@@ -217,7 +217,14 @@ route below. No migration needed.
   `GeneralScannerScreen` (camera/manual scanners selected by capability:
   accreditation, badge replacement, door presence, meals, and activities),
   a dedicated primary tab for operators (see `docs/navigation.md`). Its
-  person/people drill-down routes live under `app/(tabs)/scan/*`.
+  person/people drill-down routes live under `app/(tabs)/scan/*`. Screen-level
+  actions use `AdaptiveToolbarButton`: on iOS the scanner directory/search,
+  schedule back/reminder, activity-scanner back/person search, and person-detail
+  back actions are native stack toolbar items over transparent headers, so
+  iPhone, iPadOS, and the iPad app on macOS place and render them with their own
+  navigation chrome; Android keeps the equivalent 44-point floating controls.
+  Camera-owned torch/manual-entry buttons and modal-owned close/save actions
+  remain attached to their surfaces rather than moving into navigation chrome.
   `lib/scanner-db.ts` (native: `scanner-db.native.ts`) owns two WAL-mode
   SQLite files — see "Scanner cache encryption & isolation" below — and
   `lib/scanner-sync.ts` replays in creation order with the persisted scan id

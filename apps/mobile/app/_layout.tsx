@@ -190,7 +190,16 @@ function RootLayoutNav({ authenticated, pending }: { authenticated: boolean; pen
         <Stack.Protected guard={authenticated}>
           <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="schedule/[id]" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="schedule/[id]"
+            options={{
+              headerShown: process.env.EXPO_OS === "ios",
+              headerTransparent: true,
+              headerShadowVisible: false,
+              headerTitle: "",
+              headerBackVisible: false,
+            }}
+          />
         </Stack.Protected>
       </Stack>
     </ThemeProvider>

@@ -74,6 +74,8 @@ export function PeopleDirectoryScreen() {
       headerSearchBarOptions: {
         placeholder: t("scannerPeopleSearchPlaceholder"),
         autoCapitalize: "none",
+        hideWhenScrolling: true,
+        placement: "automatic",
         onChangeText: (event: { nativeEvent: { text: string } }) =>
           setQuery(event.nativeEvent.text),
       },

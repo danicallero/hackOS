@@ -3,6 +3,7 @@ import { useCallback, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassView } from "@/components/glass-view";
+import { AdaptiveToolbarButton } from "@/components/native-ui";
 import { QrCamera } from "@/components/QrCamera";
 import { ScannerQueueStatus } from "@/components/scanner-transaction-status";
 import { SymbolView } from "@/components/symbol";
@@ -44,28 +45,14 @@ export function GeneralScannerScreen() {
         onClose={pathname === "/scan" ? undefined : () => router.back()}
         onValue={(value) => void resolve(value)}
       />
-      <GlassView
-        colorScheme="dark"
-        glassEffectStyle="regular"
-        isInteractive
-        style={{
-          borderRadius: 22,
-          height: 44,
-          position: "absolute",
-          right: 16,
-          top: insets.top + 12,
-          width: 44,
-        }}
-      >
-        <Pressable
-          accessibilityLabel={t("scannerViewPeople")}
-          accessibilityRole="button"
-          onPress={() => router.push("/(tabs)/scan/people")}
-          style={{ alignItems: "center", flex: 1, justifyContent: "center" }}
-        >
-          <SymbolView name="list.bullet" tintColor="white" size={19} weight="semibold" />
-        </Pressable>
-      </GlassView>
+      <AdaptiveToolbarButton
+        top={insets.top + 12}
+        side="right"
+        icon="list.bullet"
+        tintColor="white"
+        accessibilityLabel={t("scannerViewPeople")}
+        onPress={() => router.push("/(tabs)/scan/people")}
+      />
       <View
         pointerEvents="box-none"
         style={{ left: 72, position: "absolute", right: 72, top: insets.top + 12 }}

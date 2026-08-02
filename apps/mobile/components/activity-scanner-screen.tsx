@@ -12,6 +12,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassView } from "@/components/glass-view";
+import { AdaptiveBackButton, AdaptiveToolbarButton } from "@/components/native-ui";
 import { QrCamera } from "@/components/QrCamera";
 import { ScannerQueueStatus } from "@/components/scanner-transaction-status";
 import { SymbolView } from "@/components/symbol";
@@ -177,9 +178,22 @@ export function ActivityScannerScreen() {
     <View style={{ backgroundColor: "black", flex: 1 }}>
       <QrCamera
         hint={null}
-        onClose={() => router.back()}
         onValue={(value) => void scanned(value)}
         scanningEnabled={Boolean(activity) && !result}
+      />
+      <AdaptiveBackButton top={insets.top + 12} onPress={() => router.back()} />
+      <AdaptiveToolbarButton
+        top={insets.top + 12}
+        side="right"
+        icon="person.crop.badge.magnifyingglass"
+        tintColor="white"
+        accessibilityLabel={t("scannerSearchPerson")}
+        onPress={() =>
+          router.push({
+            pathname: "/(tabs)/activities/people",
+            params: { activityId: String(activityId) },
+          })
+        }
       />
       <View
         pointerEvents="box-none"
@@ -204,26 +218,6 @@ export function ActivityScannerScreen() {
           >
             {activity?.name ?? t("scannerActivity")}
           </Text>
-        </GlassView>
-        <GlassView
-          colorScheme="dark"
-          glassEffectStyle="regular"
-          isInteractive
-          style={{ borderRadius: 22, height: 44, position: "absolute", right: 16, width: 44 }}
-        >
-          <Pressable
-            accessibilityLabel={t("scannerSearchPerson")}
-            accessibilityRole="button"
-            onPress={() =>
-              router.push({
-                pathname: "/(tabs)/activities/people",
-                params: { activityId: String(activityId) },
-              })
-            }
-            style={{ alignItems: "center", flex: 1, justifyContent: "center" }}
-          >
-            <SymbolView name="person.crop.badge.magnifyingglass" tintColor="white" size={19} />
-          </Pressable>
         </GlassView>
         <ActivityStatistics activity={activity} stats={stats} />
       </View>

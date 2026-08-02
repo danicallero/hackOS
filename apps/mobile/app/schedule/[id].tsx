@@ -2,7 +2,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect } from "react";
 import { ScrollView, Text, useColorScheme, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { EmptyState, FloatingBackButton, FloatingGlassButton } from "@/components/native-ui";
+import { AdaptiveBackButton, AdaptiveToolbarButton, EmptyState } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
@@ -149,9 +149,9 @@ export default function ScheduleDetailScreen() {
           </View>
         )}
       </ScrollView>
-      <FloatingBackButton top={insets.top + 8} onPress={() => router.back()} />
+      <AdaptiveBackButton top={insets.top + 8} onPress={() => router.back()} />
       {item && reminderOn !== null ? (
-        <FloatingGlassButton
+        <AdaptiveToolbarButton
           top={insets.top + 8}
           side="right"
           icon={reminderOn ? "bell.fill" : "bell"}

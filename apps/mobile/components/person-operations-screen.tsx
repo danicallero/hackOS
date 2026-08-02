@@ -6,8 +6,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DateTimeField } from "@/components/date-time-field";
 import {
   ActionButton,
+  AdaptiveBackButton,
   EmptyState,
-  FloatingBackButton,
   InfoRow,
   Section,
   Separator,
@@ -279,7 +279,7 @@ export function PersonOperationsScreen() {
         }}
       >
         <RequestFeedback loading />
-        <FloatingBackButton top={insets.top + 12} onPress={() => router.back()} />
+        <AdaptiveBackButton top={insets.top + 12} onPress={() => router.back()} />
       </View>
     );
   }
@@ -295,7 +295,7 @@ export function PersonOperationsScreen() {
         }}
       >
         <RequestFeedback error={loadError} onRetry={() => void load()} />
-        <FloatingBackButton top={insets.top + 12} onPress={() => router.back()} />
+        <AdaptiveBackButton top={insets.top + 12} onPress={() => router.back()} />
       </View>
     );
   }
@@ -314,7 +314,7 @@ export function PersonOperationsScreen() {
           title={t("screenNotFoundTitle")}
           description={t("requestUnavailable")}
         />
-        <FloatingBackButton top={insets.top + 12} onPress={() => router.back()} />
+        <AdaptiveBackButton top={insets.top + 12} onPress={() => router.back()} />
       </View>
     );
   }
@@ -542,7 +542,7 @@ export function PersonOperationsScreen() {
           />
         ) : null}
       </ScrollView>
-      <FloatingBackButton top={insets.top + 12} onPress={() => router.back()} />
+      <AdaptiveBackButton top={insets.top + 12} onPress={() => router.back()} />
     </>
   );
 }

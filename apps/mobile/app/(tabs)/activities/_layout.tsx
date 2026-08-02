@@ -7,7 +7,18 @@ export default function ActivitiesLayout() {
   return (
     <Stack screenOptions={{ headerBackButtonDisplayMode: "minimal" }}>
       <Stack.Screen name="index" options={{ title: t("tabActivities"), headerLargeTitle: true }} />
-      <Stack.Screen name="[id]" options={{ title: t("scannerScanActivity"), headerShown: false }} />
+      <Stack.Screen
+        name="[id]"
+        options={{
+          title: t("scannerScanActivity"),
+          headerShown: process.env.EXPO_OS === "ios",
+          headerTransparent: true,
+          headerShadowVisible: false,
+          headerTitle: "",
+          headerTintColor: "white",
+          headerBackVisible: false,
+        }}
+      />
       <Stack.Screen name="people/index" />
       <Stack.Screen name="person" options={{ headerShown: false }} />
     </Stack>

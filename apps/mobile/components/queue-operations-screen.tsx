@@ -76,6 +76,8 @@ export function QueueOperationsScreen() {
       headerSearchBarOptions: {
         placeholder: t("queueOpsSearchPlaceholder"),
         autoCapitalize: "none",
+        hideWhenScrolling: true,
+        placement: "automatic",
         onChangeText: (event: { nativeEvent: { text: string } }) =>
           setQuery(event.nativeEvent.text),
       },
