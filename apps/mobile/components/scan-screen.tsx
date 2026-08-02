@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { QrCamera } from "@/components/QrCamera";
 import { Text, View } from "@/components/Themed";
+import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import {
@@ -61,7 +62,10 @@ export default function ScanScreen() {
         <Button
           title={syncState.syncing ? t("scannerSyncing") : t("scannerSync")}
           disabled={syncState.syncing}
-          onPress={() => void syncState.sync()}
+          onPress={() => {
+            void haptic("light");
+            void syncState.sync();
+          }}
         />
       </NativeView>
       {syncState.error ? <Text style={styles.error}>{syncState.error}</Text> : null}
@@ -73,6 +77,7 @@ export default function ScanScreen() {
             accessibilityRole="button"
             accessibilityState={{ selected: candidate === activeMode }}
             onPress={() => {
+              void haptic("selection");
               setMode(candidate);
               setMessage(null);
             }}
@@ -165,7 +170,13 @@ function ScanField({
         onChangeText={onChange}
         style={styles.input}
       />
-      <Button title={t("scannerCamera")} onPress={() => setCameraSetter(() => onChange)} />
+      <Button
+        title={t("scannerCamera")}
+        onPress={() => {
+          void haptic("light");
+          setCameraSetter(() => onChange);
+        }}
+      />
     </NativeView>
   );
 }
@@ -216,17 +227,20 @@ function AccreditationForm({ setCameraSetter, afterSubmit }: FormProps) {
       },
       ownerUserId,
     );
+    void haptic("light");
     await afterSubmit(t("scannerAccreditationPending"));
     // Live retry: this flow deliberately waits for a real server OK before
     // displaying success, while SQLite keeps the mutation across restarts.
     const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === id);
-    await afterSubmit(
-      stored?.status === "acknowledged"
-        ? t("scannerAcknowledged")
-        : stored?.status === "failed"
-          ? (stored.lastError ?? t("scannerAccreditationPending"))
-          : t("scannerAccreditationPending"),
-    );
+    if (stored?.status === "acknowledged") {
+      void haptic("success");
+      await afterSubmit(t("scannerAcknowledged"));
+    } else if (stored?.status === "failed") {
+      void haptic("error");
+      await afterSubmit(stored.lastError ?? t("scannerAccreditationPending"));
+    } else {
+      await afterSubmit(t("scannerAccreditationPending"));
+    }
   };
 
   return (
@@ -289,6 +303,7 @@ function BadgeRotationForm({ setCameraSetter, afterSubmit }: FormProps) {
       },
       ownerUserId,
     );
+    void haptic("light");
     await afterSubmit(t("scannerPendingAck"));
   };
   return (
@@ -356,18 +371,21 @@ function PresenceForm({ setCameraSetter, afterSubmit }: FormProps) {
       },
       ownerUserId,
     );
+    void haptic("light");
     await afterSubmit(t("scannerPendingAck"));
     // A 4xx replay (entry with a session already open, exit with none) fails
     // the queued scan permanently — surface the server's reason instead of
     // leaving the rejection buried in the queue panel.
     const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === id);
-    await afterSubmit(
-      stored?.status === "failed"
-        ? (stored.lastError ?? t("presenceScanRejectedBody"))
-        : stored?.status === "acknowledged"
-          ? t("scannerAcknowledged")
-          : t("scannerPendingAck"),
-    );
+    if (stored?.status === "failed") {
+      void haptic("error");
+      await afterSubmit(stored.lastError ?? t("presenceScanRejectedBody"));
+    } else if (stored?.status === "acknowledged") {
+      void haptic("success");
+      await afterSubmit(t("scannerAcknowledged"));
+    } else {
+      await afterSubmit(t("scannerPendingAck"));
+    }
   };
   return (
     <View style={styles.section}>
@@ -386,7 +404,10 @@ function PresenceForm({ setCameraSetter, afterSubmit }: FormProps) {
             key={value}
             accessibilityRole="button"
             accessibilityState={{ selected: direction === value }}
-            onPress={() => setDirection(value)}
+            onPress={() => {
+              void haptic("selection");
+              setDirection(value);
+            }}
             style={[styles.modeButton, direction === value && styles.modeSelected]}
           >
             <Text style={direction === value ? styles.modeSelectedText : undefined}>
@@ -442,6 +463,7 @@ function ActivityForm({ setCameraSetter, afterSubmit }: FormProps) {
       },
       ownerUserId,
     );
+    void haptic("light");
     setCount((value) => value + 1);
     await afterSubmit(t("scannerPendingAck"));
   };
@@ -471,6 +493,7 @@ function ActivityForm({ setCameraSetter, afterSubmit }: FormProps) {
             accessibilityRole="button"
             accessibilityState={{ selected: selected?.id === activity.id }}
             onPress={() => {
+              void haptic("selection");
               setSelected(activity);
               setError(null);
               setPerson(null);

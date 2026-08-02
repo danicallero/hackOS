@@ -1,6 +1,7 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { ApiError } from "@/lib/api";
+import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { colors } from "@/theme/colors";
 
@@ -66,7 +67,10 @@ export function RequestFeedback({
           accessibilityRole="button"
           accessibilityState={{ busy: retrying, disabled: retrying }}
           disabled={retrying}
-          onPress={onRetry}
+          onPress={() => {
+            void haptic("light");
+            onRetry();
+          }}
           style={({ pressed }) => [
             styles.button,
             { opacity: retrying ? 0.45 : pressed ? 0.65 : 1 },

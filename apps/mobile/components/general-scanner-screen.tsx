@@ -8,6 +8,7 @@ import { AdaptiveToolbarButton } from "@/components/native-ui";
 import { QrCamera } from "@/components/QrCamera";
 import { ScannerQueueStatus } from "@/components/scanner-transaction-status";
 import { SymbolView } from "@/components/symbol";
+import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { findPersonByBadge, findPersonByTicket } from "@/lib/scanner-db";
 import { useScannerSync } from "@/lib/use-scanner";
@@ -34,6 +35,7 @@ export function GeneralScannerScreen() {
         return;
       }
       setError(null);
+      void haptic("light");
       router.push({
         pathname: "/(tabs)/scan/person/[id]",
         params: { id: String(person.userId) },

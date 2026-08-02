@@ -13,6 +13,7 @@ import { EmptyState, StatusPill } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
+import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { fetchPublicSchedule, type ScheduleItem, scheduleTypeLabel } from "@/lib/schedule";
 import { useActivityReminders } from "@/lib/use-activity-reminders";
@@ -381,6 +382,7 @@ function ScheduleCard({
             hitSlop={{ bottom: 12, left: 12, right: 12, top: 12 }}
             onPress={(event) => {
               event.stopPropagation();
+              void haptic("selection");
               setExpanded((current) => !current);
             }}
             style={({ pressed }) => ({

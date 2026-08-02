@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { apiFetch } from "./api";
+import { haptic } from "./haptics";
 import { useMeContext } from "./me-context";
 import { emitNotificationChange, subscribeToNotificationChanges } from "./notification-events";
 import { useCachedApi } from "./use-cached-api";
@@ -72,6 +73,7 @@ export function useActivityReminders() {
         const next = await savePreferences([{ category, channel: "push", enabled }]);
         setData(next);
         emitNotificationChange();
+        void haptic("selection");
       } catch (cause) {
         setActionError(cause instanceof Error ? cause : new Error("Reminder update failed"));
       } finally {
