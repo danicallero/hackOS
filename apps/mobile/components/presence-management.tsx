@@ -25,6 +25,7 @@ import {
 import { SegmentedControl } from "@/components/segmented-control";
 import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
+import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { durationMinutes, securedWindowFraction } from "@/lib/presence-timeline";
 import { colors } from "@/theme/colors";
@@ -164,6 +165,7 @@ export function PresenceManagement({
               const collection = signal.source === "door" ? "logs" : "activity-logs";
               await apiFetch(`/api/presence/${collection}/${signal.id}`, { method: "DELETE" });
               await load();
+              void haptic("warning");
             } catch {
               Alert.alert(t("presenceCouldNotDelete"));
             }
@@ -293,6 +295,7 @@ export function PresenceManagement({
           onSaved={async () => {
             setDraft(null);
             await load();
+            void haptic("success");
           }}
           userId={userId}
         />

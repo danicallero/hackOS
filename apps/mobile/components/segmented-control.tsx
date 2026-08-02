@@ -1,5 +1,6 @@
 import { Pressable, Text, View } from "react-native";
 
+import { haptic } from "@/lib/haptics";
 import { colors } from "@/theme/colors";
 
 export interface SegmentedControlProps {
@@ -42,7 +43,10 @@ export function SegmentedControl({
               min: 1,
               now: selectedIndex + 1,
             }}
-            onPress={() => onChange(index)}
+            onPress={() => {
+              void haptic("selection");
+              onChange(index);
+            }}
             style={({ pressed }) => ({
               alignItems: "center",
               backgroundColor: selected ? colors.surface : colors.transparent,

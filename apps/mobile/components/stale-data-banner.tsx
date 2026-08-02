@@ -1,6 +1,7 @@
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { SymbolView } from "@/components/symbol";
 
+import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { colors } from "@/theme/colors";
@@ -66,7 +67,10 @@ export function StaleDataBanner({
             accessibilityRole="button"
             accessibilityState={{ busy: retrying, disabled: retrying }}
             disabled={retrying}
-            onPress={onRetry}
+            onPress={() => {
+              void haptic("light");
+              onRetry();
+            }}
             style={({ pressed }) => ({
               alignItems: "center",
               alignSelf: "flex-start",

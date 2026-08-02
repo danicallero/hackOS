@@ -19,6 +19,7 @@ import { RequestFeedback } from "@/components/RequestFeedback";
 import { ScannerTransactionStatus } from "@/components/scanner-transaction-status";
 import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
+import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import {
@@ -139,11 +140,20 @@ export function PersonOperationsScreen() {
           },
       ownerUserId,
     );
+    void haptic("light");
     setCameraAction(null);
     setAttendeeRole(null);
     setLastOperation((await pendingScans(ownerUserId)).find((scan) => scan.id === scanId) ?? null);
     await sync.sync();
     setLastOperation((await pendingScans(ownerUserId)).find((scan) => scan.id === scanId) ?? null);
+    const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
+    void haptic(
+      stored?.status === "failed"
+        ? "error"
+        : stored?.status === "acknowledged"
+          ? "success"
+          : "light",
+    );
     await load();
   }
 
@@ -209,9 +219,18 @@ export function PersonOperationsScreen() {
             setLastOperation(
               (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId) ?? null,
             );
+            void haptic("light");
             await sync.sync();
             setLastOperation(
               (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId) ?? null,
+            );
+            const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
+            void haptic(
+              stored?.status === "failed"
+                ? "error"
+                : stored?.status === "acknowledged"
+                  ? "warning"
+                  : "light",
             );
             await load();
           })(),
@@ -242,16 +261,20 @@ export function PersonOperationsScreen() {
       const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
       setLastOperation(stored ?? null);
       if (stored?.status === "failed") {
+        void haptic("error");
         Alert.alert(
           t("presenceScanRejectedTitle"),
           stored.lastError ?? t("presenceScanRejectedBody"),
         );
-      } else {
+      } else if (stored?.status === "acknowledged") {
+        void haptic("success");
         setPerson({
           ...person,
           lastPresenceKind: direction,
           lastPresenceAt: scannedAt.toISOString(),
         });
+      } else {
+        void haptic("light");
       }
       await load();
     } finally {

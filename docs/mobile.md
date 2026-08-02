@@ -369,6 +369,13 @@ device/EAS build to verify — see "What's left" below.
 - `lib/i18n.tsx` — minimal `{ en, es, gl }`-per-key dictionary (same shape as
   `apps/web/src/lib/i18n.ts`, but only the strings these screens need), synced
   to `me.language` from `/api/me`.
+- `lib/haptics.ts` — best-effort Expo Haptics feedback for custom controls and
+  meaningful outcomes. Selection/light feedback is used for custom toggles,
+  segmented choices, scanner capture and retry actions; success/warning/error
+  feedback is reserved for confirmed mutations and scanner outcomes (H22-H26,
+  H51). Native `Switch`, segmented `Picker`, Wallet controls and system menus
+  keep their platform-provided feedback, and passive navigation/QR frame
+  detection stays silent.
 - `expo-network` is installed as a required peer of `@better-auth/expo`; it
   lets the auth client refresh session state when the device regains network
   connectivity. As with every native dependency change, an existing dev client

@@ -8,6 +8,7 @@ import { GlassView } from "@/components/glass-view";
 import { ActionButton, FloatingGlassButton, Section } from "@/components/native-ui";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
 import { CLOCK_SKEW_TOLERANCE_MS } from "@/lib/api";
+import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { listScannerActivities, listScannerPeople } from "@/lib/scanner-db";
 import { scannerQueueHealth, scannerTransactionState } from "@/lib/scanner-state";
@@ -229,7 +230,10 @@ function DeleteRevealAction({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={t("scannerDeleteScan")}
-        onPress={onDelete}
+        onPress={() => {
+          void haptic("warning");
+          onDelete();
+        }}
         style={({ pressed }) => ({
           alignItems: "center",
           backgroundColor: colors.destructive,
@@ -587,7 +591,10 @@ export function ScannerQueueStatus({
             accessibilityLabel={hasAttention ? t("scannerRetryFailed") : t("scannerSync")}
             accessibilityState={{ busy: syncing }}
             disabled={syncing}
-            onPress={hasAttention ? onRetry : onSync}
+            onPress={() => {
+              void haptic("light");
+              (hasAttention ? onRetry : onSync)();
+            }}
           />
         </View>
       </Modal>

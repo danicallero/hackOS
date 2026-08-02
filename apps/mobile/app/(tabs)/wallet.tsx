@@ -14,6 +14,7 @@ import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { API_URL } from "@/lib/env";
+import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { createIdempotencyKey } from "@/lib/idempotency-key";
 import { useMeContext } from "@/lib/me-context";
@@ -135,6 +136,7 @@ export default function WalletScreen() {
       headers: { "Idempotency-Key": key },
     });
     setSpotConfirmed(true);
+    void haptic("success");
     await Promise.all([load(), refetchMe()]);
   }
 
@@ -237,6 +239,7 @@ export default function WalletScreen() {
               <ActionButton
                 label={t("walletConfirmSpotAction")}
                 icon="checkmark.circle.fill"
+                haptic={false}
                 busy={busyAction === `spot:${spot.responseId}`}
                 onPress={() =>
                   void runAction(() => confirmSpot(spot.responseId), `spot:${spot.responseId}`)

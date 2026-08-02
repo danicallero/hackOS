@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { GlassView } from "@/components/glass-view";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
-
+import { type HapticIntent, haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { colors } from "@/theme/colors";
 
@@ -190,6 +190,7 @@ export function ActionButton({
   busy = false,
   destructive = false,
   icon,
+  haptic: hapticIntent = "light",
   style,
 }: {
   label: string;
@@ -198,6 +199,7 @@ export function ActionButton({
   busy?: boolean;
   destructive?: boolean;
   icon?: SymbolViewProps["name"];
+  haptic?: HapticIntent | false;
   style?: ViewStyle;
 }) {
   const foreground = destructive ? colors.destructive : colors.accent;
@@ -207,7 +209,10 @@ export function ActionButton({
       accessibilityRole="button"
       accessibilityState={{ disabled: disabled || busy, busy }}
       disabled={disabled || busy}
-      onPress={onPress}
+      onPress={() => {
+        if (hapticIntent) void haptic(hapticIntent);
+        onPress();
+      }}
       style={({ pressed }) => [
         {
           alignItems: "center",

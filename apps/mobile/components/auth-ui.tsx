@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
 
+import { haptic } from "@/lib/haptics";
 import { colors } from "@/theme/colors";
 
 export function AuthScreen({
@@ -315,7 +316,10 @@ export function AuthButton({
       accessibilityRole="button"
       accessibilityState={{ disabled: disabled || busy, busy }}
       disabled={disabled || busy}
-      onPress={onPress}
+      onPress={() => {
+        void haptic("light");
+        onPress();
+      }}
       testID={testID}
       style={({ pressed }) => ({
         alignItems: "center",

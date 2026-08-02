@@ -17,6 +17,7 @@ import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
 import { ApiError, apiFetch } from "@/lib/api";
+import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { createIdempotencyKey } from "@/lib/idempotency-key";
 import { useMeContext } from "@/lib/me-context";
@@ -231,6 +232,7 @@ export function QueueOperationsScreen() {
           headers: { "Idempotency-Key": createIdempotencyKey() },
         });
         setNotifiedEntryId(entryId);
+        void haptic("success");
         await load();
       } catch (cause) {
         setActionError(actionErrorMessage(cause, t));
@@ -744,6 +746,7 @@ function RoomCard({
                 </Pressable>
                 <ActionButton
                   busy={busyEntryId === entry.id}
+                  haptic={false}
                   icon="bell.badge.fill"
                   label={t("queueOpsNotifyTeam")}
                   onPress={() => onNotify(entry.id)}

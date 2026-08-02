@@ -21,6 +21,7 @@ import { SegmentedControl } from "@/components/segmented-control";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
+import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import {
@@ -192,6 +193,7 @@ function MessagesView() {
         return next;
       });
       emitNotificationChange();
+      void haptic("warning");
     } catch (cause) {
       setActionError(cause instanceof Error ? cause : new Error(t("notificationsCouldNotDelete")));
     } finally {
@@ -419,6 +421,7 @@ function NotificationRow({
         accessibilityState={{ busy: busy || deleting, expanded }}
         onPress={() => {
           if (swiping.current || busy || deleting) return;
+          void haptic("light");
           onPress();
         }}
         style={({ pressed }) => ({
@@ -573,6 +576,7 @@ function PreferencesView() {
       const next = await savePreferences([{ category, channel, enabled }]);
       setData(next);
       emitNotificationChange();
+      void haptic("selection");
     } catch (cause) {
       setActionError(cause instanceof Error ? cause : new Error("Failed to save preference"));
     } finally {
@@ -590,6 +594,7 @@ function PreferencesView() {
       );
       setData(next);
       emitNotificationChange();
+      void haptic("selection");
     } catch (cause) {
       setActionError(cause instanceof Error ? cause : new Error(t("notificationsCouldNotAdd")));
     } finally {
@@ -619,6 +624,7 @@ function PreferencesView() {
           delete nextStates[operation.category];
           return nextStates;
         });
+        void haptic("selection");
         changed = true;
       } catch (cause) {
         setRemovalStates((current) => ({ ...current, [operation.category]: "failed" }));
@@ -852,6 +858,7 @@ function PreferencesView() {
                     busy={removalBusy}
                     disabled={savingKey !== null}
                     destructive
+                    haptic={false}
                     onPress={() => enqueueReminderRemoval(category, prefs.channels)}
                     style={{ minHeight: 54 }}
                   />

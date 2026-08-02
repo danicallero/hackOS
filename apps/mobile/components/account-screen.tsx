@@ -7,6 +7,7 @@ import { ActionButton, InfoRow, Section, Separator, StatusPill } from "@/compone
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { apiFetch } from "@/lib/api";
 import { signOut } from "@/lib/auth-client";
+import { haptic } from "@/lib/haptics";
 import { type Lang, useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { fetchMyScanStats, type MyScanStats } from "@/lib/scan-log";
@@ -77,6 +78,7 @@ export default function AccountScreen() {
       });
       await refetch();
       setLanguageRetry(null);
+      void haptic("selection");
     } catch (cause) {
       setLanguageError(cause instanceof Error ? cause : new Error(t("accountLanguageError")));
     } finally {

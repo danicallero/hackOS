@@ -16,6 +16,7 @@ import Svg, { Path } from "react-native-svg";
 import { GlassView } from "@/components/glass-view";
 import { SymbolView } from "@/components/symbol";
 
+import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { getBarcodeFrameObservation } from "@/lib/qr-frame";
 import { advanceQrScanCandidate, type QrScanCandidate } from "@/lib/qr-scan-stability";
@@ -206,7 +207,10 @@ export function QrCamera({
             }
             accessibilityRole="button"
             accessibilityState={{ selected: torchEnabled }}
-            onPress={() => setTorchEnabled((current) => !current)}
+            onPress={() => {
+              void haptic("selection");
+              setTorchEnabled((current) => !current);
+            }}
             style={styles.cameraControlPressable}
           >
             <SymbolView
@@ -232,6 +236,7 @@ export function QrCamera({
           accessibilityLabel={t("scannerEnterManually")}
           accessibilityRole="button"
           onPress={() => {
+            void haptic("light");
             scanCandidate.current = null;
             setManualEntryVisible(true);
           }}

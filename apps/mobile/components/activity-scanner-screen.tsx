@@ -18,6 +18,7 @@ import { QrCamera } from "@/components/QrCamera";
 import { ScannerQueueStatus } from "@/components/scanner-transaction-status";
 import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
+import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { subscribeToManualActivityScan } from "@/lib/manual-activity-scan";
 import { useMeContext } from "@/lib/me-context";
@@ -111,11 +112,13 @@ export function ActivityScannerScreen() {
           state: "saved",
           wasRepeat: allowRepeat,
         });
+        void haptic("light");
         await runSync();
         // A business rejection fails the queued scan permanently — surface it
         // here instead of leaving the operator believing it was registered.
         const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
         if (stored?.status === "failed") {
+          void haptic("error");
           setResult((current) =>
             current
               ? {
@@ -126,6 +129,7 @@ export function ActivityScannerScreen() {
               : current,
           );
         } else if (stored?.status === "acknowledged") {
+          void haptic("success");
           setResult((current) => (current ? { ...current, state: "confirmed" } : current));
         }
         await loadStats();
@@ -151,6 +155,7 @@ export function ActivityScannerScreen() {
       // confirmation (H25/H26): the API 409s repeats sent without allowRepeat,
       // which would strand the queued scan as failed.
       if (state.count > 0) {
+        void haptic("warning");
         setResult({
           badgeId,
           count: state.count,
