@@ -17,20 +17,19 @@ import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { subscribeToNotificationChanges } from "@/lib/notification-events";
+import { resolveOperationsNavigationAction } from "@/lib/operations-navigation";
 import {
-  type OperationsRoute,
-  resolveOperationsNavigationAction,
-} from "@/lib/operations-navigation";
+  OVERFLOW_TAB_ICON,
+  OVERFLOW_TAB_LABEL_KEY,
+  OVERFLOW_TAB_ROUTE,
+  type OverflowTabKey,
+} from "@/lib/overflow-tabs";
 import { subscribeToServerEvent } from "@/lib/server-events";
 import {
   canOperateQueues,
   canScanActivities,
   isOperator,
   isPadIdiom,
-  OVERFLOW_TAB_ICON,
-  OVERFLOW_TAB_LABEL_KEY,
-  OVERFLOW_TAB_ROUTE,
-  type OverflowTabKey,
   queueOperationsInPrimaryBar,
   shouldUseOverflowMenu,
 } from "@/lib/tabs";
@@ -261,7 +260,7 @@ function NativeOperationsMenu({
         onPressAction={({ nativeEvent }) => {
           const item = items.find(({ id }) => id === nativeEvent.event);
           if (!item) return;
-          const action = resolveOperationsNavigationAction(pathname, item.route as OperationsRoute);
+          const action = resolveOperationsNavigationAction(pathname, item.route);
           if (action === "noop") return;
           router.replace(item.route);
         }}

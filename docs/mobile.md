@@ -133,6 +133,12 @@ route below. No migration needed.
   - Route matching must normalize Expo Router route groups first, because
     `usePathname()` may return `/others/...` while tests and typed hrefs still
     use `/(tabs)/others/...`.
+  - `OVERFLOW_TAB_KEYS` plus the descriptor maps in `lib/overflow-tabs.ts` are
+    the only destination registry. `lib/operations-navigation.ts` derives its route
+    union and section matching from that registry; never duplicate the list or
+    cast a new route into the helper. Exhaustive tests iterate every registered
+    destination so a future pseudo-tab cannot silently inherit another
+    section's `noop` behaviour.
 
   Do not re-implement these as plain `push()` calls or stack-style route
   launches. That regresses the back stack and duplicates overflow pages —

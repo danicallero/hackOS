@@ -2,40 +2,45 @@ import {
   operationsSectionFromPathname,
   resolveOperationsNavigationAction,
 } from "./operations-navigation";
+import { OVERFLOW_TAB_KEYS, OVERFLOW_TAB_ROUTE } from "./overflow-tabs";
 
 describe("operations navigation", () => {
-  it("treats queue, wallet, and account as their own pseudo-tabs", () => {
-    expect(operationsSectionFromPathname("/(tabs)/others/queue")).toBe("queue");
-    expect(operationsSectionFromPathname("/others/queue")).toBe("queue");
-    expect(operationsSectionFromPathname("/(tabs)/others/wallet")).toBe("wallet");
-    expect(operationsSectionFromPathname("/others/wallet")).toBe("wallet");
-    expect(operationsSectionFromPathname("/(tabs)/others/account")).toBe("account");
-    expect(operationsSectionFromPathname("/others/account")).toBe("account");
+  it("classifies every declared overflow destination with and without route groups", () => {
+    for (const section of OVERFLOW_TAB_KEYS) {
+      const route = OVERFLOW_TAB_ROUTE[section];
+      expect(operationsSectionFromPathname(route)).toBe(section);
+      expect(operationsSectionFromPathname(route.replace("/(tabs)", ""))).toBe(section);
+    }
     expect(operationsSectionFromPathname("/schedule")).toBe("external");
     expect(operationsSectionFromPathname("/wallet")).toBe("external");
   });
 
-  it("avoids stacking the same pseudo-tab twice", () => {
-    expect(resolveOperationsNavigationAction("/(tabs)/others/queue", "/(tabs)/others/queue")).toBe(
-      "noop",
-    );
-    expect(
-      resolveOperationsNavigationAction("/(tabs)/others/wallet", "/(tabs)/others/wallet"),
-    ).toBe("noop");
+  it("avoids stacking every declared pseudo-tab twice", () => {
+    for (const section of OVERFLOW_TAB_KEYS) {
+      const route = OVERFLOW_TAB_ROUTE[section];
+      expect(resolveOperationsNavigationAction(route, route)).toBe("noop");
+    }
   });
 
-  it("replaces across pseudo-tabs and returns to account without stacking", () => {
-    expect(
-      resolveOperationsNavigationAction("/(tabs)/others/account", "/(tabs)/others/queue"),
-    ).toBe("replace");
-    expect(resolveOperationsNavigationAction("/schedule", "/(tabs)/others/account")).toBe(
-      "replace",
-    );
-    expect(resolveOperationsNavigationAction("/(tabs)/others/queue", "/(tabs)/others/wallet")).toBe(
-      "replace",
-    );
-    expect(
-      resolveOperationsNavigationAction("/(tabs)/others/queue", "/(tabs)/others/account"),
-    ).toBe("replace");
+  it("replaces between every pair of distinct pseudo-tabs", () => {
+    for (const currentSection of OVERFLOW_TAB_KEYS) {
+      for (const targetSection of OVERFLOW_TAB_KEYS) {
+        if (currentSection === targetSection) continue;
+        expect(
+          resolveOperationsNavigationAction(
+            OVERFLOW_TAB_ROUTE[currentSection],
+            OVERFLOW_TAB_ROUTE[targetSection],
+          ),
+        ).toBe("replace");
+      }
+    }
+  });
+
+  it("enters every pseudo-tab from outside the overflow stack", () => {
+    for (const section of OVERFLOW_TAB_KEYS) {
+      expect(resolveOperationsNavigationAction("/schedule", OVERFLOW_TAB_ROUTE[section])).toBe(
+        "replace",
+      );
+    }
   });
 });

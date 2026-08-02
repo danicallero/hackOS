@@ -3,12 +3,8 @@ import { Pressable, ScrollView, useColorScheme, View } from "react-native";
 import { InfoRow, Section, Separator } from "@/components/native-ui";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
-import {
-  OVERFLOW_TAB_ICON,
-  OVERFLOW_TAB_LABEL_KEY,
-  OVERFLOW_TAB_ROUTE,
-  overflowTabs,
-} from "@/lib/tabs";
+import { OVERFLOW_TAB_ICON, OVERFLOW_TAB_LABEL_KEY, OVERFLOW_TAB_ROUTE } from "@/lib/overflow-tabs";
+import { overflowTabs } from "@/lib/tabs";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 
 /**

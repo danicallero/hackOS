@@ -124,6 +124,19 @@ behaviour stays sane; deeper screens inside a section still push normally on
 top of it. Pathname matching normalizes Expo Router route groups first
 (`/others/...` vs `/(tabs)/others/...`).
 
+`OVERFLOW_TAB_KEYS` and the exhaustive descriptor maps in
+`apps/mobile/lib/overflow-tabs.ts` are the single source of truth for these
+destinations. `operations-navigation.ts` derives both its route type and its
+pathname classification from that source; it must never introduce a parallel
+union or a default destination. Adding an overflow page therefore requires a
+key plus its icon, route, and localized-label descriptors (enforced by
+TypeScript `Record`s). `operations-navigation.test.ts` iterates every declared
+key and verifies grouped/ungrouped pathname recognition, same-section no-op,
+all cross-section replacements, and entry from outside the overflow stack.
+This guards every new destination without requiring someone to remember an
+extra hand-written navigation case. Keep this registry free of React Native
+runtime imports so its contract tests remain deterministic outside Expo.
+
 On iPad/macOS, pages opened from the real Others hub remain in the hub's
 single native Stack. The `operations` and `team` child layouts therefore use a
 plain `Slot` on that idiom instead of introducing another navigator: a nested
