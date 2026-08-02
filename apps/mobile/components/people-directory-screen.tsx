@@ -9,6 +9,7 @@ import { useLocale } from "@/lib/i18n";
 import { emitManualActivityScan } from "@/lib/manual-activity-scan";
 import { listScannerPeople } from "@/lib/scanner-db";
 import type { ScannerPerson } from "@/lib/scanner-types";
+import { isPadIdiom } from "@/lib/tabs";
 import { useScannerSync } from "@/lib/use-scanner";
 import { colors } from "@/theme/colors";
 
@@ -24,6 +25,7 @@ export function PeopleDirectoryScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const usesListTitle = isPadIdiom();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -69,13 +71,17 @@ export function PeopleDirectoryScreen() {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: activityId ? t("scannerSearchPerson") : t("scannerPeople"),
-      headerLargeTitle: true,
+      // Both entry points open the same people directory. Keep the screen
+      // title stable; the search field already explains the available action.
+      title: usesListTitle ? "" : t("scannerPeople"),
+      headerLargeTitle: !usesListTitle,
       headerSearchBarOptions: {
         placeholder: t("scannerPeopleSearchPlaceholder"),
         autoCapitalize: "none",
         hideWhenScrolling: true,
-        placement: "automatic",
+        // iOS 26 otherwise expands this into a full field on regular-width
+        // iPads whenever UIKit decides there is enough trailing space.
+        placement: "integratedButton",
         onChangeText: (event: { nativeEvent: { text: string } }) =>
           setQuery(event.nativeEvent.text),
       },
@@ -101,7 +107,7 @@ export function PeopleDirectoryScreen() {
         </MenuView>
       ),
     });
-  }, [activityId, navigation, roleFilter, t]);
+  }, [navigation, roleFilter, t, usesListTitle]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
@@ -143,13 +149,22 @@ export function PeopleDirectoryScreen() {
       ItemSeparatorComponent={() => <Separator inset={72} />}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
       ListHeaderComponent={
-        loadError && people.length > 0 ? (
-          <RequestFeedback
-            error={loadError}
-            message={t("requestError")}
-            onRetry={() => void onRefresh()}
-            retrying={loading || refreshing || sync.syncing}
-          />
+        usesListTitle || (loadError && people.length > 0) ? (
+          <View style={{ gap: 16, paddingBottom: usesListTitle ? 16 : 0, paddingTop: 8 }}>
+            {usesListTitle ? (
+              <Text style={{ color: colors.label, fontSize: 34, fontWeight: "700" }}>
+                {t("scannerPeople")}
+              </Text>
+            ) : null}
+            {loadError && people.length > 0 ? (
+              <RequestFeedback
+                error={loadError}
+                message={t("requestError")}
+                onRetry={() => void onRefresh()}
+                retrying={loading || refreshing || sync.syncing}
+              />
+            ) : null}
+          </View>
         ) : null
       }
       ListEmptyComponent={

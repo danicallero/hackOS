@@ -1,5 +1,5 @@
 import { useFonts } from "expo-font";
-import { useRootNavigationState, useRouter } from "expo-router";
+import { type Href, useRootNavigationState, useRouter } from "expo-router";
 import { DarkTheme, DefaultTheme, ThemeProvider } from "expo-router/react-navigation";
 import { Stack } from "expo-router/stack";
 import * as SplashScreen from "expo-splash-screen";
@@ -126,7 +126,7 @@ function NotificationListeners() {
   const pendingNavigation = useRef(false);
   const navigationReady = Boolean(navigationState?.key);
   const queueRoute = isOperator(me?.capabilities ?? []) ? "/(tabs)/others/queue" : "/(tabs)/queue";
-  const queueRouteRef = useRef(queueRoute);
+  const queueRouteRef = useRef<Href>(queueRoute);
 
   isReady.current = navigationReady;
   queueRouteRef.current = queueRoute;

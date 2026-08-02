@@ -5,6 +5,7 @@ const mockSetOptions = jest.fn();
 jest.mock("expo-router", () => ({
   useFocusEffect: () => {},
   useNavigation: () => ({ setOptions: mockSetOptions }),
+  usePathname: () => "/operations",
   useRouter: () => ({ push: jest.fn() }),
 }));
 
@@ -108,6 +109,13 @@ describe("queue operations search (H29-H31)", () => {
   it("shows one card listing every room, plus the result count", async () => {
     await renderMobile(<QueueOperationsScreen />);
     await waitFor(() => expect(mockApiFetch).toHaveBeenCalledTimes(ROOMS.length + 1));
+
+    expect(mockSetOptions.mock.calls.at(-1)?.[0].headerSearchBarOptions).toMatchObject({
+      allowToolbarIntegration: true,
+      hideWhenScrolling: true,
+      placement: "integratedButton",
+    });
+    expect(mockSetOptions.mock.calls.at(-1)?.[0].headerRight).toEqual(expect.any(Function));
 
     await search("daniel ca");
 

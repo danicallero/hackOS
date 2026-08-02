@@ -1,6 +1,7 @@
 import { usePathname, useRouter } from "expo-router";
+import { Stack } from "expo-router/stack";
 import { useCallback, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassView } from "@/components/glass-view";
 import { AdaptiveToolbarButton } from "@/components/native-ui";
@@ -14,6 +15,8 @@ import { colors } from "@/theme/colors";
 
 export function GeneralScannerScreen() {
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const usesTopTabBar = process.env.EXPO_OS === "ios" && width >= 700;
   const pathname = usePathname();
   const { t } = useLocale();
   const insets = useSafeAreaInsets();
@@ -41,6 +44,7 @@ export function GeneralScannerScreen() {
 
   return (
     <View style={{ backgroundColor: "black", flex: 1 }}>
+      <Stack.Screen options={{ headerTitle: "" }} />
       <QrCamera
         onClose={pathname === "/scan" ? undefined : () => router.back()}
         onValue={(value) => void resolve(value)}
@@ -48,14 +52,19 @@ export function GeneralScannerScreen() {
       <AdaptiveToolbarButton
         top={insets.top + 12}
         side="right"
-        icon="list.bullet"
+        icon="person.crop.badge.magnifyingglass"
         tintColor="white"
         accessibilityLabel={t("scannerViewPeople")}
         onPress={() => router.push("/(tabs)/scan/people")}
       />
       <View
         pointerEvents="box-none"
-        style={{ left: 72, position: "absolute", right: 72, top: insets.top + 12 }}
+        style={{
+          left: 72,
+          position: "absolute",
+          right: 72,
+          top: insets.top + (usesTopTabBar ? 72 : 12),
+        }}
       >
         <ScannerQueueStatus
           queue={sync.queue}

@@ -4,6 +4,7 @@ import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import Animated, { type SharedValue, useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { GlassView } from "@/components/glass-view";
 import { ActionButton, FloatingGlassButton, Section } from "@/components/native-ui";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
 import { CLOCK_SKEW_TOLERANCE_MS } from "@/lib/api";
@@ -368,6 +369,7 @@ export function ScannerQueueStatus({
   onRetry,
   onDelete,
   clockSkewMs = null,
+  fillWidth = false,
 }: {
   queue: PendingScan[];
   syncing: boolean;
@@ -375,6 +377,7 @@ export function ScannerQueueStatus({
   onSync: () => void;
   onRetry: () => void;
   onDelete: (id: string) => void;
+  fillWidth?: boolean;
 }) {
   const { t } = useLocale();
   const router = useRouter();
@@ -405,33 +408,42 @@ export function ScannerQueueStatus({
           : t("scannerBadge");
   return (
     <>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={label}
-        onPress={() => setOpen(true)}
-        style={({ pressed }) => ({
-          alignItems: "center",
-          alignSelf: "center",
-          backgroundColor: "rgba(0,0,0,0.72)",
-          borderCurve: "continuous",
+      <GlassView
+        colorScheme="dark"
+        glassEffectStyle="regular"
+        isInteractive
+        style={{
+          alignSelf: fillWidth ? "stretch" : "center",
           borderRadius: 999,
-          flexDirection: "row",
-          gap: 8,
           minHeight: 44,
-          opacity: pressed ? 0.65 : 1,
-          paddingHorizontal: 14,
-        })}
+          overflow: "hidden",
+        }}
       >
-        <SymbolView
-          accessible={false}
-          name={hasAttention ? "exclamationmark.triangle.fill" : "arrow.triangle.2.circlepath"}
-          size={16}
-          tintColor={
-            hasAttention ? colors.destructive : health.saved > 0 ? colors.warning : "white"
-          }
-        />
-        <Text style={{ color: "white", fontSize: 14, fontWeight: "700" }}>{label}</Text>
-      </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={label}
+          onPress={() => setOpen(true)}
+          style={({ pressed }) => ({
+            alignItems: "center",
+            flexDirection: "row",
+            gap: 8,
+            justifyContent: "center",
+            minHeight: 44,
+            opacity: pressed ? 0.65 : 1,
+            paddingHorizontal: 14,
+          })}
+        >
+          <SymbolView
+            accessible={false}
+            name={hasAttention ? "exclamationmark.triangle.fill" : "arrow.triangle.2.circlepath"}
+            size={16}
+            tintColor={
+              hasAttention ? colors.destructive : health.saved > 0 ? colors.warning : "white"
+            }
+          />
+          <Text style={{ color: "white", fontSize: 14, fontWeight: "700" }}>{label}</Text>
+        </Pressable>
+      </GlassView>
       <Modal
         animationType="slide"
         onRequestClose={() => setOpen(false)}

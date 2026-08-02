@@ -1,5 +1,6 @@
+import { MenuView } from "@expo/ui/community/menu";
 import { EVENTS, type SseEnvelope } from "@hackos/shared/events";
-import { useFocusEffect, useNavigation, useRouter } from "expo-router";
+import { useFocusEffect, useNavigation, usePathname, useRouter } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import {
   FlatList,
@@ -27,7 +28,7 @@ import {
   type RoomView,
 } from "@/lib/queue-search";
 import { startQueueEventStream, subscribeToServerEvent } from "@/lib/server-events";
-import { canOperateQueues } from "@/lib/tabs";
+import { canOperateQueues, isPadIdiom } from "@/lib/tabs";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { colors } from "@/theme/colors";
@@ -57,7 +58,9 @@ export function QueueOperationsScreen() {
   const { t } = useLocale();
   const { me } = useMeContext();
   const router = useRouter();
-  const navigation = useNavigation();
+  const pathname = usePathname();
+  const usesOthersStack = isPadIdiom() && pathname.includes("/others/operations");
+  const headerNavigation = useNavigation(usesOthersStack ? "/(tabs)/others" : undefined);
   const androidTopInset = useAndroidTopInset();
   const { width } = useWindowDimensions();
   const [refreshing, setRefreshing] = useState(false);
@@ -65,24 +68,11 @@ export function QueueOperationsScreen() {
   const [notifiedEntryId, setNotifiedEntryId] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [roomFilter, setRoomFilter] = useState<"all" | "live" | "paused">("all");
   const [justCalledEntryIds, setJustCalledEntryIds] = useState<Set<number>>(new Set());
   const canOperate = canOperateQueues(me?.capabilities ?? []);
   const columns = width >= 1_100 ? 3 : width >= 680 ? 2 : 1;
-
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      title: t("tabQueueOperations"),
-      headerLargeTitle: true,
-      headerSearchBarOptions: {
-        placeholder: t("queueOpsSearchPlaceholder"),
-        autoCapitalize: "none",
-        hideWhenScrolling: true,
-        placement: "automatic",
-        onChangeText: (event: { nativeEvent: { text: string } }) =>
-          setQuery(event.nativeEvent.text),
-      },
-    });
-  }, [navigation, t]);
+  const usesListTitle = isPadIdiom();
 
   const fetchRooms = useCallback(async () => {
     const rooms = await apiFetch<RoomListItem[]>("/api/queue/rooms");
@@ -93,10 +83,72 @@ export function QueueOperationsScreen() {
     fetchRooms,
   );
   const rooms = data ?? [];
+
+  useLayoutEffect(() => {
+    headerNavigation.setOptions({
+      title: usesListTitle ? "" : t("tabQueueOperations"),
+      headerLargeTitle: !usesListTitle,
+      headerRight: () => (
+        <MenuView
+          actions={[
+            {
+              id: "all",
+              title: t("queueOpsFilterAll"),
+              image: "square.grid.2x2",
+              state: roomFilter === "all" ? "on" : "off",
+            },
+            {
+              id: "live",
+              title: t("queueOpsFilterLive"),
+              image: "play.circle",
+              state: roomFilter === "live" ? "on" : "off",
+            },
+            {
+              id: "paused",
+              title: t("queueOpsFilterPaused"),
+              image: "pause.circle",
+              state: roomFilter === "paused" ? "on" : "off",
+            },
+          ]}
+          onPressAction={({ nativeEvent }) => setRoomFilter(nativeEvent.event as typeof roomFilter)}
+        >
+          <SymbolView
+            name={
+              roomFilter === "all"
+                ? "line.3.horizontal.decrease"
+                : "line.3.horizontal.decrease.circle.fill"
+            }
+            tintColor={colors.accent}
+            size={19}
+          />
+        </MenuView>
+      ),
+      headerSearchBarOptions: {
+        placeholder: t("queueOpsSearchPlaceholder"),
+        autoCapitalize: "none",
+        hideWhenScrolling: true,
+        allowToolbarIntegration: true,
+        // Match the People directory: keep the inactive search control as a
+        // compact native button even when regular-width iPad has room.
+        placement: "integratedButton",
+        onChangeText: (event: { nativeEvent: { text: string } }) =>
+          setQuery(event.nativeEvent.text),
+      },
+    });
+  }, [headerNavigation, roomFilter, t, usesListTitle]);
+
+  const visibleRooms = useMemo(
+    () =>
+      rooms.filter((room) => {
+        if (roomFilter === "all") return true;
+        return roomFilter === "paused" ? room.state?.is_paused === true : !room.state?.is_paused;
+      }),
+    [roomFilter, rooms],
+  );
   const searchActive = query.trim().length > 0;
   const searchResults = useMemo(
-    () => (searchActive ? findQueueEntries(rooms, query) : []),
-    [searchActive, query, rooms],
+    () => (searchActive ? findQueueEntries(visibleRooms, query) : []),
+    [searchActive, query, visibleRooms],
   );
 
   useEffect(() => {
@@ -229,6 +281,7 @@ export function QueueOperationsScreen() {
         }}
         ListHeaderComponent={
           <View style={{ gap: 12 }}>
+            {usesListTitle ? <QueueOperationsListTitle /> : null}
             {/* Zero is left to the empty state below — it already says "No results". */}
             {searchResults.length ? <SearchResultCount count={searchResults.length} /> : null}
             {actionErrorBanner}
@@ -255,7 +308,7 @@ export function QueueOperationsScreen() {
   return (
     <FlatList
       key={columns}
-      data={rooms}
+      data={visibleRooms}
       keyExtractor={(item) => String(item.room.id)}
       numColumns={columns}
       contentInsetAdjustmentBehavior="automatic"
@@ -269,6 +322,7 @@ export function QueueOperationsScreen() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} />}
       ListHeaderComponent={
         <View style={{ gap: 12 }}>
+          {usesListTitle ? <QueueOperationsListTitle /> : null}
           <StaleDataBanner updatedAt={staleSince} />
           {actionErrorBanner}
         </View>
@@ -298,6 +352,15 @@ export function QueueOperationsScreen() {
         />
       )}
     />
+  );
+}
+
+function QueueOperationsListTitle() {
+  const { t } = useLocale();
+  return (
+    <Text style={{ color: colors.label, fontSize: 34, fontWeight: "700", paddingVertical: 8 }}>
+      {t("tabQueueOperations")}
+    </Text>
   );
 }
 
