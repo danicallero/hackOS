@@ -445,6 +445,22 @@ Full architecture: [`mobile.md`](./mobile.md).**
 - Touch and layout: primary targets ≥ 44 pt; safe-area insets respected for
   fixed actions and scanner feedback; critical scan actions never depend on
   small overflow menus.
+- Mobile authentication keeps submit actions discoverable, reports missing
+  values inline and focuses the first invalid field. Sign-in uses the native
+  `username`/`current-password` credential pairing plus the configured iOS
+  `webcredentials` domain; password reveal controls have changing localized
+  accessible names and at least a 44-point target. Its form is fixed and its
+  short account note stays at the safe-area bottom at standard text sizes;
+  accessibility text sizes may scroll rather than clip content. Filled primary
+  actions and text links use the dedicated high-contrast mobile semantic pairs
+  rather than assuming the system tint is legible as body text.
+- Password recovery follows the same task-first composition and inline error
+  pattern. Session restoration uses a neutral surface for the first 500 ms and
+  only presents a progress announcement when the operation is genuinely slow,
+  preventing transient content and VoiceOver noise during normal launches.
+- A successfully authenticated account without mobile-event access is signed
+  out and receives one native modal alert with a clear dismissal action. This
+  access boundary must not be represented only as transient inline copy.
 - Notifications render in the foreground too (Expo's default suppresses
   them); a tapped queue notification navigates to the queue tab.
 - Copy comes from `lib/i18n.tsx` — same `{ es, gl, en }` shape as web,

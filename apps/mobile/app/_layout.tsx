@@ -4,6 +4,7 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from "expo-router/react-naviga
 import { Stack } from "expo-router/stack";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect, useRef, useState } from "react";
+import { View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 
@@ -12,10 +13,12 @@ import { useColorScheme } from "@/components/useColorScheme";
 import { authClient, signOut } from "@/lib/auth-client";
 import { isSupportedLanguage, LocaleProvider, useLocale } from "@/lib/i18n";
 import { MeProvider, useMeContext } from "@/lib/me-context";
+import { canEnterMobileApp, isMobileAccessDenied } from "@/lib/mobile-access";
 import { setupNotificationListeners } from "@/lib/notifications-setup";
 import { registerForPushNotifications } from "@/lib/push";
 import { startPersonalEventStream } from "@/lib/server-events";
 import { isOperator } from "@/lib/tabs";
+import { colors } from "@/theme/colors";
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -55,7 +58,7 @@ export default function RootLayout() {
 
 function RootLayoutSession() {
   const { data: session, isPending } = authClient.useSession();
-  const pendingGraceElapsed = usePendingGrace(isPending);
+  const initialSessionPending = useInitialSessionPending(isPending);
 
   return (
     <MeProvider authenticated={Boolean(session)}>
@@ -64,33 +67,43 @@ function RootLayoutSession() {
       <NotificationListeners />
       <MobileAccessGate authenticated={Boolean(session)} />
       <PersonalEventStream authenticated={Boolean(session)} />
-      <RootLayoutNav authenticated={Boolean(session)} pending={isPending && !pendingGraceElapsed} />
+      <RootLayoutNav authenticated={Boolean(session)} pending={initialSessionPending} />
     </MeProvider>
   );
 }
 
-/** Avoid flashing auth UI during restore without allowing storage to block forever. */
-function usePendingGrace(pending: boolean) {
+/**
+ * Hide routing only for the first Secure Store hydration. Password providers
+ * temporarily background the app and can trigger a later session revalidation;
+ * unmounting the auth stack then would discard the credentials iOS is filling.
+ */
+function useInitialSessionPending(pending: boolean) {
+  const hasResolved = useRef(!pending);
   const [elapsed, setElapsed] = useState(false);
 
+  if (!pending) hasResolved.current = true;
+  const waitingForInitialSession = pending && !hasResolved.current;
+
   useEffect(() => {
-    if (!pending) {
+    if (!waitingForInitialSession) {
       setElapsed(false);
       return;
     }
     const timeout = setTimeout(() => setElapsed(true), 3_000);
     return () => clearTimeout(timeout);
-  }, [pending]);
+  }, [waitingForInitialSession]);
 
-  return elapsed;
+  return waitingForInitialSession && !elapsed;
 }
 
 /** Push-independent foreground updates for queue and wallet state (H28/H38). */
 function PersonalEventStream({ authenticated }: { authenticated: boolean }) {
+  const { me } = useMeContext();
+  const enabled = authenticated && me?.mobileAccess === true;
   useEffect(() => {
-    if (!authenticated) return;
+    if (!enabled) return;
     return startPersonalEventStream();
-  }, [authenticated]);
+  }, [enabled]);
   return null;
 }
 
@@ -166,7 +179,9 @@ function MobileAccessGate({ authenticated }: { authenticated: boolean }) {
 
 function RootLayoutNav({ authenticated, pending }: { authenticated: boolean; pending: boolean }) {
   const colorScheme = useColorScheme();
-  const { me, loading: meLoading, error: meError, refetch } = useMeContext();
+  const { me, loading: meLoading, refetch } = useMeContext();
+  const showRestoringSession = useDelayedVisibility(authenticated && !me && meLoading, 500);
+  const canEnterApp = canEnterMobileApp(authenticated, me?.mobileAccess);
 
   // Keep one navigator in charge of session transitions. Protected screens
   // are removed from navigation history when their guard changes, so signing
@@ -178,7 +193,20 @@ function RootLayoutNav({ authenticated, pending }: { authenticated: boolean; pen
   // unavailable or the server has revoked it, instead of leaving a blank tab
   // navigator with no retry or sign-out path.
   if (authenticated && !me) {
-    return <SessionState loading={meLoading} error={meError} onRetry={() => void refetch()} />;
+    // Most profile restores complete in a fraction of a second. Keep the
+    // neutral app surface during that grace period instead of flashing a
+    // transient status screen between the splash screen and the app.
+    if (meLoading && !showRestoringSession) {
+      return <View style={{ backgroundColor: colors.background, flex: 1 }} />;
+    }
+    return <SessionState loading={meLoading} onRetry={() => void refetch()} />;
+  }
+
+  // Access is part of the navigation guard, not just an asynchronous sign-out
+  // side effect. This prevents an ineligible account from mounting any event
+  // screen during the frame(s) before MobileAccessGate revokes its session.
+  if (isMobileAccessDenied(authenticated, me?.mobileAccess)) {
+    return <View style={{ backgroundColor: colors.background, flex: 1 }} />;
   }
 
   return (
@@ -187,7 +215,7 @@ function RootLayoutNav({ authenticated, pending }: { authenticated: boolean; pen
         <Stack.Protected guard={!authenticated}>
           <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         </Stack.Protected>
-        <Stack.Protected guard={authenticated}>
+        <Stack.Protected guard={canEnterApp}>
           <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen
@@ -204,4 +232,19 @@ function RootLayoutNav({ authenticated, pending }: { authenticated: boolean; pen
       </Stack>
     </ThemeProvider>
   );
+}
+
+function useDelayedVisibility(active: boolean, delayMs: number) {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (!active) {
+      setVisible(false);
+      return;
+    }
+    const timeout = setTimeout(() => setVisible(true), delayMs);
+    return () => clearTimeout(timeout);
+  }, [active, delayMs]);
+
+  return visible;
 }

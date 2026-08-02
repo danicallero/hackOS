@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { useRef, useState } from "react";
+import { Pressable, Text, type TextInput, useWindowDimensions, View } from "react-native";
 
 import { AuthAlert, AuthButton, AuthField, AuthHeader, AuthScreen } from "@/components/auth-ui";
 import { authClient } from "@/lib/auth-client";
@@ -13,13 +13,21 @@ export default function ForgotPasswordScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ email?: string }>();
   const { t } = useLocale();
+  const { fontScale } = useWindowDimensions();
+  const emailRef = useRef<TextInput>(null);
   const [email, setEmail] = useState(typeof params.email === "string" ? params.email : "");
+  const [emailError, setEmailError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function onSubmit() {
-    if (!email.trim() || submitting) return;
+    if (submitting) return;
+    if (!email.trim()) {
+      setEmailError(t("emailRequired"));
+      emailRef.current?.focus();
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -38,9 +46,10 @@ export default function ForgotPasswordScreen() {
 
   if (sent) {
     return (
-      <AuthScreen>
+      <AuthScreen scrollable={fontScale > 1.3}>
         <AuthHeader
-          icon="envelope.badge.fill"
+          align="leading"
+          context="hackOS"
           title={t("checkEmail")}
           description={t("resetEmailSent")}
         />
@@ -50,16 +59,37 @@ export default function ForgotPasswordScreen() {
   }
 
   return (
-    <AuthScreen>
+    <AuthScreen
+      scrollable={fontScale > 1.3}
+      footer={
+        <Pressable
+          accessibilityRole="link"
+          onPress={() => router.back()}
+          style={({ pressed }) => ({
+            alignItems: "center",
+            justifyContent: "center",
+            minHeight: 44,
+            opacity: pressed ? 0.6 : 1,
+          })}
+        >
+          <Text style={{ color: colors.interactiveText, fontSize: 15, fontWeight: "600" }}>
+            {t("backToSignIn")}
+          </Text>
+        </Pressable>
+      }
+    >
       <AuthHeader
-        icon="key.fill"
+        align="leading"
+        context="hackOS"
         title={t("resetPassword")}
         description={t("resetPasswordDescription")}
       />
       <View style={{ gap: 18 }}>
         {error ? <AuthAlert message={error} /> : null}
         <AuthField
+          inputRef={emailRef}
           label={t("emailLabel")}
+          error={emailError}
           placeholder={t("emailPlaceholder")}
           autoCapitalize="none"
           autoComplete="email"
@@ -70,28 +100,18 @@ export default function ForgotPasswordScreen() {
           spellCheck={false}
           textContentType="emailAddress"
           value={email}
-          onChangeText={setEmail}
+          onChangeText={(value) => {
+            setEmail(value);
+            if (emailError) setEmailError(null);
+          }}
           onSubmitEditing={() => void onSubmit()}
         />
         <AuthButton
           label={t("sendResetLink")}
           busy={submitting}
-          disabled={!email.trim()}
+          disabled={submitting}
           onPress={() => void onSubmit()}
         />
-        <Pressable
-          accessibilityRole="link"
-          onPress={() => router.back()}
-          style={({ pressed }) => ({
-            alignSelf: "center",
-            justifyContent: "center",
-            minHeight: 44,
-            opacity: pressed ? 0.6 : 1,
-            paddingHorizontal: 8,
-          })}
-        >
-          <Text style={{ color: colors.accent, fontSize: 15 }}>{t("backToSignIn")}</Text>
-        </Pressable>
       </View>
     </AuthScreen>
   );
