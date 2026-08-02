@@ -159,7 +159,13 @@ route below. No migration needed.
   button must be the system control, not custom artwork — wired to
   `react-native-wallet-manager`'s `addPassFromUrl` (authenticated fetch of the
   `.pkpass` endpoint with the session cookie, then native
-  `PKAddPassesViewController` presentation). Google Wallet still goes through
+  `PKAddPassesViewController` presentation). The native button is mounted only
+  on iPhone and iPad: an iPad-compatible build running on macOS is reported by
+  `expo-device` as `DeviceType.DESKTOP`, where PassKit cannot create the button
+  and the wallet dependency would otherwise crash while force-unwrapping it.
+  On macOS the screen instead downloads the authenticated `.pkpass` and opens
+  the system share/save handoff, matching the web wallet's download behavior.
+  Google Wallet still goes through
   the existing `saveUrl` endpoint via `Linking.openURL`.
   `queue.tsx` refetches immediately on a "queue" push
   (below) and also polls `GET /api/queue/me` every 15s while focused as a
