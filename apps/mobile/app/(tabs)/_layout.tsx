@@ -125,7 +125,13 @@ export default function TabLayout() {
     };
   }, [refreshUnreadNotifications, me]);
 
-  if (meLoading) return null;
+  // Only block on `me` being absent, not merely `meLoading`: a foreground
+  // revalidation (e.g. AppState flipping through `inactive` when iOS
+  // Control Center opens/closes) sets `meLoading` again after data already
+  // loaded. Unmounting NativeTabs here would reset it to its first
+  // registered trigger (Schedule) on every remount, flashing that tab in
+  // over whatever the user actually had selected.
+  if (meLoading && !me) return null;
   if (!me?.mobileAccess) return null;
 
   return (

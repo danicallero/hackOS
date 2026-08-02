@@ -111,7 +111,14 @@ route below. No migration needed.
   `href: null` mechanism rather than omitting the route, so the underlying
   screen stays reachable. The fetch refetches on app foreground, so a
   capability change made elsewhere (web admin) shows up without a reinstall
-  (H55's explicit acceptance bar).
+  (H55's explicit acceptance bar). `useMe` only surfaces `loading: true` for
+  the *first* fetch (no cached profile yet, e.g. after sign-in); a foreground
+  revalidation of an already-loaded profile — including the `inactive ->
+  active` blip iOS sends when Control Center, Notification Center, or the app
+  switcher briefly covers the app — refreshes quietly instead. The tab layout
+  mirrors that split (`meLoading && !me`), so a background revalidation never
+  unmounts `NativeTabs`, which previously reset to its first registered tab
+  (Schedule) on remount and flashed it in over whatever tab was selected.
 
   The entries inside the native "Others" dropdown (Queue, Wallet, Account, and
   Queue operations when a scanner operator has queue access —
