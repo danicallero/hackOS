@@ -244,6 +244,12 @@ route below. No migration needed.
   compact-width iPhone keeps the native large-title presentation.
   Camera-owned torch/manual-entry buttons and modal-owned close/save actions
   remain attached to their surfaces rather than moving into navigation chrome.
+  The local `modules/camera-capabilities` Expo module reads the back camera's
+  actual torch support from AVFoundation/Camera2. Flash-capable devices keep
+  manual entry at bottom-left and the torch at bottom-right. Devices without a
+  torch (including supported iPads and the iPad app running on Mac) omit the
+  non-functional torch action and place manual entry in its bottom-right slot,
+  directly below the People action.
   `lib/scanner-db.ts` (native: `scanner-db.native.ts`) owns two WAL-mode
   SQLite files — see "Scanner cache encryption & isolation" below — and
   `lib/scanner-sync.ts` replays in creation order with the persisted scan id

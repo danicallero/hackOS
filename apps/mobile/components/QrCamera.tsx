@@ -19,6 +19,8 @@ import { SymbolView } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
 import { getBarcodeFrameObservation } from "@/lib/qr-frame";
 import { advanceQrScanCandidate, type QrScanCandidate } from "@/lib/qr-scan-stability";
+import { scannerCameraControls } from "@/lib/scanner-camera-controls";
+import CameraCapabilities from "@/modules/camera-capabilities";
 import { colors } from "@/theme/colors";
 
 export function QrCamera({
@@ -40,6 +42,13 @@ export function QrCamera({
   const scanCandidate = useRef<QrScanCandidate | null>(null);
   const [{ height, width }, setViewport] = useState({ height: 0, width: 0 });
   const [torchEnabled, setTorchEnabled] = useState(false);
+  const [cameraControls] = useState(() => {
+    try {
+      return scannerCameraControls(CameraCapabilities?.hasBackCameraTorch() === true);
+    } catch {
+      return scannerCameraControls(false);
+    }
+  });
   const [manualEntryVisible, setManualEntryVisible] = useState(false);
   const [manualCode, setManualCode] = useState("");
   const frameLeft = (width - FRAME) / 2;
@@ -139,7 +148,7 @@ export function QrCamera({
           active={isFocused}
           style={StyleSheet.absoluteFill}
           facing="back"
-          enableTorch={torchEnabled}
+          enableTorch={cameraControls.showTorch && torchEnabled}
           barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
           onBarcodeScanned={
             scanningEnabled && !manualEntryVisible
@@ -184,34 +193,40 @@ export function QrCamera({
           {hint ?? t("scannerQrHint")}
         </Text>
       )}
-      <GlassView
-        glassEffectStyle="regular"
-        isInteractive
-        colorScheme="dark"
-        style={[styles.cameraControl, { bottom: insets.bottom + 26 }]}
-      >
-        <Pressable
-          accessibilityLabel={
-            torchEnabled ? t("scannerTurnOffFlashlight") : t("scannerTurnOnFlashlight")
-          }
-          accessibilityRole="button"
-          accessibilityState={{ selected: torchEnabled }}
-          onPress={() => setTorchEnabled((current) => !current)}
-          style={styles.cameraControlPressable}
+      {cameraControls.showTorch ? (
+        <GlassView
+          glassEffectStyle="regular"
+          isInteractive
+          colorScheme="dark"
+          style={[styles.cameraControl, { bottom: insets.bottom + 26 }]}
         >
-          <SymbolView
-            name={torchEnabled ? "flashlight.on.fill" : "flashlight.off.fill"}
-            tintColor="white"
-            size={23}
-            weight="semibold"
-          />
-        </Pressable>
-      </GlassView>
+          <Pressable
+            accessibilityLabel={
+              torchEnabled ? t("scannerTurnOffFlashlight") : t("scannerTurnOnFlashlight")
+            }
+            accessibilityRole="button"
+            accessibilityState={{ selected: torchEnabled }}
+            onPress={() => setTorchEnabled((current) => !current)}
+            style={styles.cameraControlPressable}
+          >
+            <SymbolView
+              name={torchEnabled ? "flashlight.on.fill" : "flashlight.off.fill"}
+              tintColor="white"
+              size={23}
+              weight="semibold"
+            />
+          </Pressable>
+        </GlassView>
+      ) : null}
       <GlassView
         glassEffectStyle="regular"
         isInteractive
         colorScheme="dark"
-        style={[styles.cameraControl, styles.cameraControlLeft, { bottom: insets.bottom + 26 }]}
+        style={[
+          styles.cameraControl,
+          cameraControls.manualEntrySide === "left" && styles.cameraControlLeft,
+          { bottom: insets.bottom + 26 },
+        ]}
       >
         <Pressable
           accessibilityLabel={t("scannerEnterManually")}
