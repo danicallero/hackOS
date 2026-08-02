@@ -1,3 +1,4 @@
+import Stack from "expo-router/stack";
 import type { ReactNode } from "react";
 import {
   ActivityIndicator,
@@ -230,7 +231,61 @@ export function ActionButton({
   );
 }
 
-/** Floating chrome-less icon button for header-less detail screens (position it with `top: insets.top + 12`). */
+/**
+ * Screen-chrome action that joins the native iOS toolbar and falls back to
+ * the established floating glass control on platforms without SF toolbar
+ * icons. Use floating controls directly when the action belongs to a camera
+ * or modal surface rather than to navigation.
+ */
+export function AdaptiveToolbarButton({
+  top,
+  side = "left",
+  icon,
+  tintColor,
+  accessibilityLabel,
+  accessibilityState,
+  disabled = false,
+  onPress,
+}: {
+  top: number;
+  side?: "left" | "right";
+  icon: Extract<SymbolViewProps["name"], string>;
+  tintColor?: SymbolViewProps["tintColor"];
+  accessibilityLabel: string;
+  accessibilityState?: { selected?: boolean; busy?: boolean };
+  disabled?: boolean;
+  onPress: () => void;
+}) {
+  if (process.env.EXPO_OS === "ios") {
+    return (
+      <Stack.Toolbar placement={side}>
+        <Stack.Toolbar.Button
+          accessibilityLabel={accessibilityLabel}
+          disabled={disabled}
+          icon={icon}
+          onPress={onPress}
+          selected={accessibilityState?.selected}
+          tintColor={tintColor}
+        />
+      </Stack.Toolbar>
+    );
+  }
+
+  return (
+    <FloatingGlassButton
+      top={top}
+      side={side}
+      icon={icon}
+      tintColor={tintColor}
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={accessibilityState}
+      disabled={disabled}
+      onPress={onPress}
+    />
+  );
+}
+
+/** Floating chrome-less icon button for camera and modal surfaces. */
 export function FloatingGlassButton({
   top,
   side = "left",
@@ -282,11 +337,11 @@ export function FloatingGlassButton({
   );
 }
 
-/** Floating chrome-less back button for header-less detail screens (position it with `top: insets.top + 12`). */
-export function FloatingBackButton({ top, onPress }: { top: number; onPress: () => void }) {
+/** Adaptive navigation back action; `top` is used by the non-iOS fallback. */
+export function AdaptiveBackButton({ top, onPress }: { top: number; onPress: () => void }) {
   const { t } = useLocale();
   return (
-    <FloatingGlassButton
+    <AdaptiveToolbarButton
       top={top}
       icon="chevron.left"
       accessibilityLabel={t("back")}
