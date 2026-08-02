@@ -1,5 +1,6 @@
 import { EVENTS } from "@hackos/shared/events";
 import { ButtonStyle, ButtonType, RNWalletView } from "@premieroctet/react-native-wallet";
+import * as Device from "expo-device";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -19,6 +20,7 @@ import { useMeContext } from "@/lib/me-context";
 import { subscribeToServerEvent } from "@/lib/server-events";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
+import { supportsAppleWalletButton, supportsAppleWalletFileHandoff } from "@/lib/wallet-platform";
 import { colors } from "@/theme/colors";
 
 interface TicketPayload {
@@ -90,13 +92,10 @@ export default function WalletScreen() {
   }
 
   /**
-   * The `.pkpass` file behind `react-native-wallet-manager`'s iOS-only
-   * handoff is a portable, signed archive that several third-party Android
-   * wallet apps can import directly. This downloads the same authenticated
-   * endpoint and opens the system share sheet so the user can route it to
-   * whichever app supports `.pkpass` import (or save it), instead of
-   * leaving Android users with no way to get this pass off this screen at
-   * all.
+   * The `.pkpass` file is a portable, signed archive. This mirrors the web
+   * download on macOS, where PKAddPassButton is unavailable, and also lets
+   * Android users route it to a compatible wallet app. The authenticated
+   * download happens inside the app before the system share sheet opens.
    */
   async function downloadPkpass(purpose: "ticket" | "badge") {
     const passUrl = `${API_URL}/api/me/wallet/apple/${purpose}.pkpass`;
@@ -111,7 +110,7 @@ export default function WalletScreen() {
     }
     await Sharing.shareAsync(file.uri, {
       mimeType: "application/vnd.apple.pkpass",
-      dialogTitle: t("walletDownloadPkpass"),
+      dialogTitle: Platform.OS === "ios" ? t("addToAppleWallet") : t("walletDownloadPkpass"),
     });
   }
 
@@ -147,6 +146,8 @@ export default function WalletScreen() {
   const label = purpose === "ticket" ? t("ticketLabel") : t("badgeLabel");
   const retryAction = actionRetry.current;
   const actionBusy = busyAction !== null;
+  const showAppleWalletButton = supportsAppleWalletButton(Platform.OS, Device.deviceType);
+  const showAppleWalletFileHandoff = supportsAppleWalletFileHandoff(Platform.OS, Device.deviceType);
 
   return (
     <ScrollView
@@ -333,9 +334,10 @@ export default function WalletScreen() {
         </Section>
       ) : null}
 
-      {value ? (
+      {value &&
+      (showAppleWalletButton || showAppleWalletFileHandoff || Platform.OS === "android") ? (
         <Section title={t("walletAddPass")} footer={t("walletAddPassHint")}>
-          {Platform.OS === "ios" ? (
+          {showAppleWalletButton ? (
             <View style={{ padding: 16 }}>
               {/*
                 Apple's Add to Apple Wallet guidelines require apps to use
@@ -353,7 +355,17 @@ export default function WalletScreen() {
               />
             </View>
           ) : null}
-          {Platform.OS === "ios" ? <Separator /> : null}
+          {showAppleWalletButton ? <Separator /> : null}
+          {showAppleWalletFileHandoff ? (
+            <View style={{ padding: 16 }}>
+              <ActionButton
+                label={t("addToAppleWallet")}
+                icon="arrow.down.circle"
+                busy={busyAction === `wallet:${purpose}`}
+                onPress={() => void runAction(() => downloadPkpass(purpose), `wallet:${purpose}`)}
+              />
+            </View>
+          ) : null}
           {Platform.OS === "android" ? (
             <View style={{ alignItems: "center", padding: 16 }}>
               {/*
