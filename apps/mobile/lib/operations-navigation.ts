@@ -1,9 +1,8 @@
-export type OperationsSection = "account" | "queue" | "wallet" | "external";
+import { OVERFLOW_TAB_KEYS, OVERFLOW_TAB_ROUTE, type OverflowTabKey } from "./overflow-tabs";
 
-export type OperationsRoute =
-  | "/(tabs)/others/account"
-  | "/(tabs)/others/queue"
-  | "/(tabs)/others/wallet";
+export type OperationsSection = OverflowTabKey | "external";
+
+export type OperationsRoute = (typeof OVERFLOW_TAB_ROUTE)[OverflowTabKey];
 
 export type OperationsNavigationAction = "noop" | "replace";
 
@@ -15,8 +14,8 @@ export type OperationsNavigationAction = "noop" | "replace";
  * - tapping the active pseudo-tab is a no-op;
  * - changing pseudo-tabs always replaces the current section instead of
  *   stacking duplicates;
- * - Queue, Wallet, and Account replace one another instead of stacking
- *   duplicate routes.
+ * - every destination declared in OVERFLOW_TAB_ROUTE participates without a
+ *   second hand-maintained route list.
  */
 export function resolveOperationsNavigationAction(
   currentPathname: string,
@@ -34,16 +33,21 @@ export function operationsSectionFromPathname(pathname: string): OperationsSecti
   // (for example `/others/queue`) or preserved in tests / internal flow
   // (`/(tabs)/others/queue`). Normalize both shapes before matching.
   const normalized = normalizeOperationsPath(pathname);
-  if (normalized.startsWith("/others/queue")) return "queue";
-  if (normalized.startsWith("/others/wallet")) return "wallet";
-  if (normalized.startsWith("/others/account")) return "account";
+  for (const section of OVERFLOW_TAB_KEYS) {
+    const sectionPath = normalizeOperationsPath(OVERFLOW_TAB_ROUTE[section]);
+    if (normalized === sectionPath || normalized.startsWith(`${sectionPath}/`)) return section;
+  }
   return "external";
 }
 
-export function operationsSectionFromRoute(route: OperationsRoute): OperationsSection {
-  if (route === "/(tabs)/others/queue") return "queue";
-  if (route === "/(tabs)/others/wallet") return "wallet";
-  return "account";
+export function operationsSectionFromRoute(route: OperationsRoute): OverflowTabKey {
+  for (const section of OVERFLOW_TAB_KEYS) {
+    if (OVERFLOW_TAB_ROUTE[section] === route) return section;
+  }
+
+  // OperationsRoute is derived from OVERFLOW_TAB_ROUTE, so reaching this at
+  // runtime means an untyped native payload violated the navigation contract.
+  throw new Error(`Unknown overflow route: ${route}`);
 }
 
 function normalizeOperationsPath(pathname: string): string {
