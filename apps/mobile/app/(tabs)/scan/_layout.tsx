@@ -20,7 +20,21 @@ export default function ScannerLayout() {
         }}
       />
       <Stack.Screen name="scan-log" />
-      <Stack.Screen name="people/index" />
+      <Stack.Screen
+        name="people/index"
+        options={{
+          headerLargeTitle: true,
+          headerTransparent: true,
+          headerShadowVisible: false,
+          title: t("scannerPeople"),
+          headerSearchBarOptions: {
+            placeholder: t("scannerPeopleSearchPlaceholder"),
+            autoCapitalize: "none",
+            hideWhenScrolling: true,
+            placement: "integratedButton",
+          },
+        }}
+      />
       <Stack.Screen name="person" options={{ headerShown: false }} />
     </Stack>
   );

@@ -5,6 +5,7 @@ import {
   Pressable,
   Text,
   type TextStyle,
+  useWindowDimensions,
   View,
   type ViewStyle,
 } from "react-native";
@@ -233,9 +234,9 @@ export function ActionButton({
 
 /**
  * Screen-chrome action that joins the native iOS toolbar and falls back to
- * the established floating glass control on platforms without SF toolbar
- * icons. Use floating controls directly when the action belongs to a camera
- * or modal surface rather than to navigation.
+ * the established floating glass control on compact widths and platforms
+ * without SF toolbar icons. Use floating controls directly when the action
+ * belongs to a camera or modal surface rather than to navigation.
  */
 export function AdaptiveToolbarButton({
   top,
@@ -256,7 +257,9 @@ export function AdaptiveToolbarButton({
   disabled?: boolean;
   onPress: () => void;
 }) {
-  if (process.env.EXPO_OS === "ios") {
+  const { width } = useWindowDimensions();
+
+  if (process.env.EXPO_OS === "ios" && width >= 700) {
     return (
       <Stack.Toolbar placement={side}>
         <Stack.Toolbar.Button

@@ -191,9 +191,14 @@ route below. No migration needed.
   to scan. `operations/_layout.tsx` and `others/operations/_layout.tsx` wrap
   it in its own `Stack` so it can use the same native
   `headerLargeTitle`/`headerSearchBarOptions` search bar as
-  `people-directory-screen.tsx`; typing a query swaps the room grid for a
-  flat, sorted list of every matching queue entry (by team name or member
-  name/email) across every challenge that team is in, each rendered as the
+  `people-directory-screen.tsx`; both use iOS 26's `integratedButton`
+  placement so the inactive search control stays a compact native button on
+  regular-width iPads instead of expanding into a full trailing field. Queue
+  operations also pairs that search action with the same native filter pattern
+  as People Finder, offering all, live, and paused rooms. Typing a query swaps
+  the filtered room grid for a flat, sorted list. The results include
+  every matching queue entry (by team name or member name/email) across every
+  challenge that team is in, each rendered as the
   participant's own My Queue card, under a result count ("3 results" / "No
   results"). `lib/queue-search.ts`'s `findQueueEntries()` does the matching
   and folds the repeats `roomView` returns — its `next` list is the whole
@@ -224,11 +229,19 @@ route below. No migration needed.
   accreditation, badge replacement, door presence, meals, and activities),
   a dedicated primary tab for operators (see `docs/navigation.md`). Its
   person/people drill-down routes live under `app/(tabs)/scan/*`. Screen-level
-  actions use `AdaptiveToolbarButton`: on iOS the scanner directory/search,
-  schedule back/reminder, activity-scanner back/person search, and person-detail
-  back actions are native stack toolbar items over transparent headers, so
-  iPhone, iPadOS, and the iPad app on macOS place and render them with their own
-  navigation chrome; Android keeps the equivalent 44-point floating controls.
+  actions use `AdaptiveToolbarButton`: compact-width iPhones and Android keep
+  navigation actions in the same 44-point glass row as the activity/queue
+  labels. Regular-width iPad and Mac promote those actions into UIKit's top
+  toolbar. Activity scanning uses a balanced second row with equal-width glass
+  activity and queue-sync containers, followed by the statistics; the general
+  scanner's queue-sync capsule sits directly below the adaptive tab bar.
+  Scanner and activity people-directory actions use the same
+  person-with-magnifier symbol. Because `react-native-screens` can attach an
+  asynchronously populated iPad `FlatList` at its compact scroll edge, the two
+  people directories and Queue operations render their regular-width heading
+  as the list's first item while keeping back, filter, and search in native
+  toolbar chrome. This guarantees the heading is visible on initial entry;
+  compact-width iPhone keeps the native large-title presentation.
   Camera-owned torch/manual-entry buttons and modal-owned close/save actions
   remain attached to their surfaces rather than moving into navigation chrome.
   `lib/scanner-db.ts` (native: `scanner-db.native.ts`) owns two WAL-mode

@@ -15,7 +15,10 @@ import { isPadIdiom } from "@/lib/tabs";
  * becomes a plain heading underneath, the same native pattern already used
  * by app/(tabs)/scan/people (see PeopleDirectoryScreen's
  * `navigation.setOptions({ headerLargeTitle: true, ... })`).
- * `operations` keeps its own nested Stack/header, unrelated to this file.
+ * Child detail routes should stay in this Stack as well. Introducing another
+ * Stack under this navigator creates a second native navigation bar below the
+ * iPad tab bar, which prevents compact search controls from integrating into
+ * the shared top row.
  */
 export default function OthersLayout() {
   const { t } = useLocale();
@@ -39,6 +42,24 @@ export default function OthersLayout() {
         name="wallet"
         options={{ headerShown, headerLargeTitle: true, title: t("tabWallet") }}
       />
+      <Stack.Screen
+        name="operations"
+        options={{
+          headerShown,
+          headerLargeTitle: true,
+          headerTransparent: true,
+          headerShadowVisible: false,
+          title: t("tabQueueOperations"),
+          headerSearchBarOptions: {
+            placeholder: t("queueOpsSearchPlaceholder"),
+            autoCapitalize: "none",
+            hideWhenScrolling: true,
+            allowToolbarIntegration: true,
+            placement: "integratedButton",
+          },
+        }}
+      />
+      <Stack.Screen name="team" options={{ headerShown, headerLargeTitle: true }} />
     </Stack>
   );
 }

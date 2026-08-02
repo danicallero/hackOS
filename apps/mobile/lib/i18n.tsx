@@ -350,6 +350,9 @@ const dict = {
     es: "Nombre de equipo o persona",
     gl: "Nome de equipo ou persoa",
   },
+  queueOpsFilterAll: { en: "All rooms", es: "Todas las salas", gl: "Todas as salas" },
+  queueOpsFilterLive: { en: "Live rooms", es: "Salas en directo", gl: "Salas en directo" },
+  queueOpsFilterPaused: { en: "Paused rooms", es: "Salas pausadas", gl: "Salas pausadas" },
   queueOpsSearchResultCount: {
     en: "{count} results",
     es: "{count} resultados",

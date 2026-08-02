@@ -124,6 +124,14 @@ behaviour stays sane; deeper screens inside a section still push normally on
 top of it. Pathname matching normalizes Expo Router route groups first
 (`/others/...` vs `/(tabs)/others/...`).
 
+On iPad/macOS, pages opened from the real Others hub remain in the hub's
+single native Stack. The `operations` and `team` child layouts therefore use a
+plain `Slot` on that idiom instead of introducing another navigator: a nested
+Stack produces a second navigation-bar row and stops iOS from integrating
+back, status, search, and filter controls alongside the top tab chrome. On
+iPhone those layouts retain their own Stack because overflow destinations are
+header-less pseudo-tabs and still need local navigation chrome.
+
 ## Decision-only applications and dashboard shortcuts
 
 `applications:decide` is a first-class Applications workspace capability. A

@@ -8,8 +8,9 @@ import {
   multilineTextAlignment,
 } from "@expo/ui/swift-ui/modifiers";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { Stack } from "expo-router/stack";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassView } from "@/components/glass-view";
 import { AdaptiveBackButton, AdaptiveToolbarButton } from "@/components/native-ui";
@@ -48,6 +49,8 @@ export function ActivityScannerScreen() {
   }>();
   const activityId = Number(id);
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const usesTopTabBar = process.env.EXPO_OS === "ios" && width >= 700;
   const { language, t } = useLocale();
   const insets = useSafeAreaInsets();
   const { me } = useMeContext();
@@ -176,6 +179,7 @@ export function ActivityScannerScreen() {
 
   return (
     <View style={{ backgroundColor: "black", flex: 1 }}>
+      <Stack.Screen options={{ headerTitle: "" }} />
       <QrCamera
         hint={null}
         onValue={(value) => void scanned(value)}
@@ -195,35 +199,49 @@ export function ActivityScannerScreen() {
           })
         }
       />
+      <GlassView
+        colorScheme="dark"
+        glassEffectStyle="regular"
+        style={{
+          alignSelf: "center",
+          borderRadius: 999,
+          height: 44,
+          justifyContent: "center",
+          left: usesTopTabBar ? 16 : "22.5%",
+          maxWidth: usesTopTabBar ? undefined : "55%",
+          paddingHorizontal: 16,
+          position: "absolute",
+          right: usesTopTabBar ? "52%" : "22.5%",
+          top: insets.top + (usesTopTabBar ? 72 : 12),
+        }}
+      >
+        <Text
+          selectable
+          numberOfLines={1}
+          style={{ color: "white", fontSize: 16, fontWeight: "700", textAlign: "center" }}
+        >
+          {activity?.name ?? t("scannerActivity")}
+        </Text>
+      </GlassView>
       <View
         pointerEvents="box-none"
-        style={{ left: 0, position: "absolute", right: 0, top: insets.top + 12 }}
+        style={{
+          left: 0,
+          position: "absolute",
+          right: 0,
+          top: insets.top + (usesTopTabBar ? 116 : 56),
+        }}
       >
-        <GlassView
-          colorScheme="dark"
-          glassEffectStyle="regular"
-          style={{
-            alignSelf: "center",
-            borderRadius: 999,
-            height: 44,
-            justifyContent: "center",
-            maxWidth: "55%",
-            paddingHorizontal: 16,
-          }}
-        >
-          <Text
-            selectable
-            numberOfLines={1}
-            style={{ color: "white", fontSize: 16, fontWeight: "700", textAlign: "center" }}
-          >
-            {activity?.name ?? t("scannerActivity")}
-          </Text>
-        </GlassView>
         <ActivityStatistics activity={activity} stats={stats} />
       </View>
       <View
         pointerEvents="box-none"
-        style={{ left: 16, position: "absolute", right: 16, top: insets.top + 150 }}
+        style={{
+          left: usesTopTabBar ? "52%" : 16,
+          position: "absolute",
+          right: 16,
+          top: insets.top + (usesTopTabBar ? 72 : 150),
+        }}
       >
         <ScannerQueueStatus
           queue={syncState.queue}
@@ -232,6 +250,7 @@ export function ActivityScannerScreen() {
           onRetry={() => void syncState.retryFailed()}
           onDelete={(id) => void syncState.discardScan(id)}
           clockSkewMs={syncState.clockSkewMs}
+          fillWidth={usesTopTabBar}
         />
       </View>
       {error ? (

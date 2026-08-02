@@ -6,6 +6,7 @@ import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
+import { isPadIdiom } from "@/lib/tabs";
 import { colors } from "@/theme/colors";
 
 interface TeamMember {
@@ -54,7 +55,7 @@ type TeamLoadState = "loading" | "ready" | "missing" | "error";
 export function TeamOperationsScreen() {
   useColorScheme();
   const { entryId, roomId } = useLocalSearchParams<{ entryId: string; roomId: string }>();
-  const navigation = useNavigation();
+  const headerNavigation = useNavigation(isPadIdiom() ? "/(tabs)/others" : undefined);
   const router = useRouter();
   const { t } = useLocale();
   const [entry, setEntry] = useState<TeamEntry | null>(null);
@@ -101,7 +102,7 @@ export function TeamOperationsScreen() {
   const teamName = entry?.repo_name ?? t("queueOpsUnnamedTeam");
 
   useLayoutEffect(() => {
-    navigation.setOptions({
+    headerNavigation.setOptions({
       title: entry ? teamName : "",
       headerLargeTitle: true,
       headerLeft: () => (
@@ -122,7 +123,7 @@ export function TeamOperationsScreen() {
           )
         : undefined,
     });
-  }, [navigation, teamName, entry, router, t]);
+  }, [headerNavigation, teamName, entry, router, t]);
 
   if (loadState === "loading") {
     return (
