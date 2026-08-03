@@ -201,6 +201,7 @@ export interface RepoChallenge {
   status: QueueStatus | string;
   room_id: number | null;
   room_name: string | null;
+  judging_rooms: Array<{ id: number; name: string }>;
 }
 export const getRepoChallenges = (repoId: number) =>
   api.get<RepoChallenge[]>(`/api/queue/repos/${repoId}/challenges`);

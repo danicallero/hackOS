@@ -347,6 +347,7 @@ const dict = {
     gl: "A túa cola está baleira",
   },
   queueAnyMoment: { en: "Any moment", es: "En cualquier momento", gl: "En calquera momento" },
+  queueLoading: { en: "Loading…", es: "Cargando…", gl: "Cargando…" },
   queuePositionLabel: { en: "Position", es: "Posición", gl: "Posición" },
   queueWaitLabel: { en: "Estimated wait", es: "Espera estimada", gl: "Espera estimada" },
   queueEtaMinutes: { en: "~{minutes} min", es: "~{minutes} min", gl: "~{minutes} min" },
@@ -567,10 +568,72 @@ const dict = {
     es: "No vinculado a una cuenta",
     gl: "Non ligado a unha conta",
   },
+  teamDetailLinkToAccount: {
+    en: "Link to account",
+    es: "Vincular a cuenta",
+    gl: "Ligar a conta",
+  },
+  teamDetailLinkTitle: {
+    en: "Link to hackOS account",
+    es: "Vincular a cuenta hackOS",
+    gl: "Ligar a conta hackOS",
+  },
+  teamDetailLinkHint: {
+    en: "Search for the hackOS account to link this imported email to. They'll receive a verification email.",
+    es: "Busca la cuenta hackOS para vincular este correo importado. Recibirán un correo de verificación.",
+    gl: "Busca a conta hackOS para ligar este correo importado. Recibirán un correo de verificación.",
+  },
+  teamDetailLinkSearchPlaceholder: {
+    en: "Search by name or email",
+    es: "Buscar por nombre o correo",
+    gl: "Buscar por nome ou correo",
+  },
+  teamDetailLinkSuccess: {
+    en: "Link request sent. The user will receive a verification email.",
+    es: "Solicitud de vinculación enviada. El usuario recibirá un correo de verificación.",
+    gl: "Solicitude de ligazón enviada. O usuario recibirá un correo de verificación.",
+  },
+  teamDetailLinkError: {
+    en: "Could not link this participant. Try again.",
+    es: "No se pudo vincular este participante. Inténtalo de nuevo.",
+    gl: "Non se puido ligar este participante. Téntao de novo.",
+  },
   teamDetailLinks: { en: "Links", es: "Enlaces", gl: "Ligazóns" },
   teamDetailGithub: { en: "GitHub", es: "GitHub", gl: "GitHub" },
   teamDetailDevpost: { en: "Devpost", es: "Devpost", gl: "Devpost" },
   teamDetailDemo: { en: "Demo", es: "Demo", gl: "Demo" },
+  teamDetailQueueTabs: { en: "Queues", es: "Colas", gl: "Colas" },
+  teamDetailAddQueue: { en: "Add to queue", es: "Añadir a cola", gl: "Engadir á cola" },
+  teamDetailRemoveFromQueue: {
+    en: "Remove from queue",
+    es: "Eliminar de la cola",
+    gl: "Eliminar da cola",
+  },
+  teamDetailRemoveFromQueueConfirm: {
+    en: "Remove {team} from {challenge}?",
+    es: "¿Eliminar a {team} de {challenge}?",
+    gl: "Eliminar a {team} de {challenge}?",
+  },
+  teamDetailNoQueues: {
+    en: "Not in any queue",
+    es: "No está en ninguna cola",
+    gl: "Non está en ningunha cola",
+  },
+  teamDetailSelectChallenge: {
+    en: "Select a challenge",
+    es: "Seleccionar un reto",
+    gl: "Seleccionar un reto",
+  },
+  teamDetailAlreadyEnqueued: {
+    en: "Already enrolled",
+    es: "Ya inscrito",
+    gl: "Xa inscrito",
+  },
+  teamDetailQueueEmpty: {
+    en: "No queue data",
+    es: "Sin datos de cola",
+    gl: "Sen datos de cola",
+  },
   teamDetailHistory: { en: "History", es: "Historial", gl: "Historial" },
   teamDetailHistoryTransition: {
     en: "{from} → {to}",
@@ -1536,6 +1599,7 @@ const dict = {
   },
   cancel: { en: "Cancel", es: "Cancelar", gl: "Cancelar" },
   confirm: { en: "Confirm", es: "Confirmar", gl: "Confirmar" },
+  add: { en: "Add", es: "Añadir", gl: "Engadir" },
 } satisfies Record<string, I18nText>;
 
 type Key = keyof typeof dict;
