@@ -506,16 +506,31 @@ const dict = {
     es: "No hay cuentas que coincidan con esa búsqueda.",
     gl: "Non hai contas que coincidan con esa busca.",
   },
+  teamDetailMemberCandidateCount: {
+    en: "{count} account candidates",
+    es: "{count} cuentas candidatas",
+    gl: "{count} contas candidatas",
+  },
   teamDetailAddCandidate: {
     en: "Add {name}",
     es: "Añadir a {name}",
     gl: "Engadir a {name}",
   },
   teamDetailRemoveMember: { en: "Remove member", es: "Eliminar miembro", gl: "Eliminar membro" },
+  teamDetailUnlinkSecondary: {
+    en: "Unlink secondary account",
+    es: "Desvincular cuenta secundaria",
+    gl: "Desvincular conta secundaria",
+  },
   teamDetailRemoveMemberConfirm: {
     en: "Remove {name} from this team?",
     es: "¿Eliminar a {name} de este equipo?",
     gl: "Queres eliminar a {name} deste equipo?",
+  },
+  teamDetailUnlinkSecondaryConfirm: {
+    en: "Unlink {name}'s verified secondary email from this project?",
+    es: "¿Desvincular el correo secundario verificado de {name} en este proyecto?",
+    gl: "Queres desvincular o correo secundario verificado de {name} neste proxecto?",
   },
   teamDetailRemoveImportedMemberConfirm: {
     en: "Remove {name} from this project's imported roster? This does not change their account email or identity.",

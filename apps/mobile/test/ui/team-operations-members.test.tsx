@@ -19,9 +19,12 @@ const mockT = (key: string, params?: Record<string, string>) =>
     teamDetailMemberSearch: "Search accounts",
     teamDetailMemberSearchPlaceholder: "Name or email",
     teamDetailNoMemberCandidates: "No accounts match that search.",
+    teamDetailMemberCandidateCount: `${params?.count} account candidates`,
     teamDetailAddCandidate: `Add ${params?.name}`,
     teamDetailRemoveMember: "Remove member",
+    teamDetailUnlinkSecondary: "Unlink secondary account",
     teamDetailRemoveMemberConfirm: `Remove ${params?.name}?`,
+    teamDetailUnlinkSecondaryConfirm: `Unlink ${params?.name}'s verified secondary email from this project?`,
     teamDetailMemberAddedByStaff: "Added by staff",
     teamDetailMemberPrimaryEmail: "Linked automatically by primary email",
     teamDetailMemberSecondaryEmail: "Linked by verified secondary email",
@@ -58,6 +61,24 @@ jest.mock("@/theme/colors", () => ({
 }));
 jest.mock("@/lib/i18n", () => ({
   useLocale: () => ({ t: mockT }),
+}));
+jest.mock("react-native-gesture-handler/ReanimatedSwipeable", () => ({
+  __esModule: true,
+  default: ({ children }: { children: unknown }) => {
+    const ReactLib = require("react");
+    return ReactLib.createElement(ReactLib.Fragment, null, children);
+  },
+}));
+jest.mock("react-native-reanimated", () => ({
+  __esModule: true,
+  default: {
+    View: ({ children }: { children: unknown }) => {
+      const ReactLib = require("react");
+      return ReactLib.createElement(ReactLib.Fragment, null, children);
+    },
+  },
+  interpolate: () => 1,
+  useAnimatedStyle: (factory: () => unknown) => factory(),
 }));
 
 import { TeamOperationsScreen } from "@/components/team-operations-screen";
@@ -178,7 +199,7 @@ describe("team member controls (H21)", () => {
     await renderMobile(<TeamOperationsScreen />);
     await waitFor(() => expect(screen.getByText("Dev Post")).toBeTruthy());
 
-    fireEvent.press(screen.getAllByRole("button", { name: "Remove member" })[0]);
+    fireEvent.press(screen.getByRole("button", { name: "Unlink secondary account" }));
     const importedActions = alert.mock.calls[0]?.[2] as Array<{ onPress?: () => Promise<void> }>;
     await act(async () => {
       await importedActions[1]?.onPress?.();
@@ -190,7 +211,7 @@ describe("team member controls (H21)", () => {
       ),
     );
 
-    fireEvent.press(screen.getAllByRole("button", { name: "Remove member" })[1]);
+    fireEvent.press(screen.getByRole("button", { name: "Remove member" }));
     const manualActions = alert.mock.calls[1]?.[2] as Array<{ onPress?: () => Promise<void> }>;
     await act(async () => {
       await manualActions[1]?.onPress?.();
