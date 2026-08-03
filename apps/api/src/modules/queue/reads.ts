@@ -579,7 +579,14 @@ export async function roomPace(roomId: number) {
 export async function repoChallenges(repoId: number) {
   const { rows } = await pool.query(
     `SELECT qe.challenge_id AS id, c.title, qe.status,
-            qe.assigned_room_id AS room_id, r.name AS room_name
+            qe.assigned_room_id AS room_id, r.name AS room_name,
+            COALESCE(
+              (SELECT jsonb_agg(jsonb_build_object('id', rm.id, 'name', rm.name) ORDER BY rm.name ASC)
+                 FROM room_challenges rc
+                 JOIN rooms rm ON rm.id = rc.room_id
+                WHERE rc.challenge_id = qe.challenge_id),
+              '[]'::jsonb
+            ) AS judging_rooms
        FROM queue_entries qe
        JOIN challenges c ON c.id = qe.challenge_id
        LEFT JOIN rooms r ON r.id = qe.assigned_room_id

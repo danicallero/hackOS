@@ -347,6 +347,7 @@ const dict = {
     gl: "A túa cola está baleira",
   },
   queueAnyMoment: { en: "Any moment", es: "En cualquier momento", gl: "En calquera momento" },
+  queueLoading: { en: "Loading…", es: "Cargando…", gl: "Cargando…" },
   queuePositionLabel: { en: "Position", es: "Posición", gl: "Posición" },
   queueWaitLabel: { en: "Estimated wait", es: "Espera estimada", gl: "Espera estimada" },
   queueEtaMinutes: { en: "~{minutes} min", es: "~{minutes} min", gl: "~{minutes} min" },
@@ -601,6 +602,38 @@ const dict = {
   teamDetailGithub: { en: "GitHub", es: "GitHub", gl: "GitHub" },
   teamDetailDevpost: { en: "Devpost", es: "Devpost", gl: "Devpost" },
   teamDetailDemo: { en: "Demo", es: "Demo", gl: "Demo" },
+  teamDetailQueueTabs: { en: "Queues", es: "Colas", gl: "Colas" },
+  teamDetailAddQueue: { en: "Add to queue", es: "Añadir a cola", gl: "Engadir á cola" },
+  teamDetailRemoveFromQueue: {
+    en: "Remove from queue",
+    es: "Eliminar de la cola",
+    gl: "Eliminar da cola",
+  },
+  teamDetailRemoveFromQueueConfirm: {
+    en: "Remove {team} from {challenge}?",
+    es: "¿Eliminar a {team} de {challenge}?",
+    gl: "Eliminar a {team} de {challenge}?",
+  },
+  teamDetailNoQueues: {
+    en: "Not in any queue",
+    es: "No está en ninguna cola",
+    gl: "Non está en ningunha cola",
+  },
+  teamDetailSelectChallenge: {
+    en: "Select a challenge",
+    es: "Seleccionar un reto",
+    gl: "Seleccionar un reto",
+  },
+  teamDetailAlreadyEnqueued: {
+    en: "Already enrolled",
+    es: "Ya inscrito",
+    gl: "Xa inscrito",
+  },
+  teamDetailQueueEmpty: {
+    en: "No queue data",
+    es: "Sin datos de cola",
+    gl: "Sen datos de cola",
+  },
   teamDetailHistory: { en: "History", es: "Historial", gl: "Historial" },
   teamDetailHistoryTransition: {
     en: "{from} → {to}",
