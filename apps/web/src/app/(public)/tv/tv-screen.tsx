@@ -71,13 +71,22 @@ export function TvHeader({
   title,
   icon: Icon,
   eventName,
+  compact = false,
 }: {
   title?: string;
   icon?: LucideIcon;
   eventName?: string | null;
+  /** Rooms fit their dense card grid with a slightly shorter version of the
+   * same bar; the information and hierarchy never change between modes. */
+  compact?: boolean;
 }) {
   return (
-    <header className="flex shrink-0 items-center justify-between gap-[1.5em] border-b px-[2.5em] py-[1.5em]">
+    <header
+      className={cn(
+        "flex shrink-0 items-center justify-between gap-[1.5em] border-b",
+        compact ? "px-[1.5em] py-[0.8em]" : "px-[2.5em] py-[1.5em]",
+      )}
+    >
       {eventName ? (
         <span className="min-w-0 flex-1 text-[1.5em] font-semibold tracking-tight">
           <MarqueeText text={eventName} />

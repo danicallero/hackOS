@@ -91,15 +91,15 @@ describe("tv state resolution (H42)", () => {
       items: [{ mode: "live" }],
     });
     await insertSlot({
-      label: "Ceremony",
+      label: "Sponsor wall",
       startsAt: minutesFromNow(-5),
       endsAt: minutesFromNow(25),
-      items: [{ mode: "announcement" }],
+      items: [{ mode: "sponsors" }],
     });
 
     const state = await resolveTvState();
-    expect(state).toMatchObject({ mode: "announcement", source: "slot" });
-    expect(state.slot?.label).toBe("Ceremony");
+    expect(state).toMatchObject({ mode: "sponsors", source: "slot" });
+    expect(state.slot?.label).toBe("Sponsor wall");
   });
 
   it("carries every rotation item so the display can cycle them", async () => {
@@ -133,9 +133,9 @@ describe("tv state resolution (H42)", () => {
       items: [{ mode: "rooms" }],
     });
 
-    await setTvMode("announcement", { title: "Fuego" });
+    await setTvMode("live", null);
     expect(await resolveTvState()).toMatchObject({
-      mode: "announcement",
+      mode: "live",
       source: "override",
       slot: null,
     });
@@ -162,7 +162,7 @@ describe("tv scheduler worker (H42)", () => {
     expect(await runTvSchedulerOnce()).toMatchObject({ reverted: false });
     expect((await resolveTvState()).mode).toBe("wifi");
 
-    await setTvMode("announcement", { title: "Fuego" }, new Date(Date.now() - 1000).toISOString());
+    await setTvMode("live", null, new Date(Date.now() - 1000).toISOString());
     expect(await runTvSchedulerOnce()).toMatchObject({ reverted: true });
     expect(await resolveTvState()).toMatchObject({ mode: "live", source: "slot" });
 

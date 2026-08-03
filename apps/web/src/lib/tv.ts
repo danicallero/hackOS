@@ -18,6 +18,12 @@ export type TvModeName =
   | "timer"
   | "live";
 
+/** Modes organisers may schedule or broadcast from the TV control surface.
+ * Legacy announcement/timer states remain renderable by the public TV while
+ * their independent controls are retired. */
+export const TV_CONTROL_MODES = ["live", "rooms", "schedule", "sponsors", "wifi"] as const;
+export type TvControlMode = (typeof TV_CONTROL_MODES)[number];
+
 export interface TvSlotItem {
   mode: TvModeName;
   payload: unknown;

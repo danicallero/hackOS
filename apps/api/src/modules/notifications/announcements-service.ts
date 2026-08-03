@@ -1,6 +1,6 @@
 import type { Queryable } from "../../db/pool.js";
-import { NotFoundError } from "../../lib/errors.js";
-import { notify } from "./service.js";
+import { BadRequestError, NotFoundError } from "../../lib/errors.js";
+import { DEFAULT_CHANNELS, notify } from "./service.js";
 
 /**
  * H50 announcements: publish_at + expires_at is the vigencia window
@@ -12,21 +12,49 @@ import { notify } from "./service.js";
 export interface AnnouncementInput {
   title: string;
   body: string;
-  targetRole: string | null;
+  translations: AnnouncementTranslations;
+  notifyUsers: boolean;
+  screenPlacement: ScreenPlacement;
   publishAt: string | null;
   expiresAt: string | null;
 }
+
+export const SCREEN_PLACEMENTS = ["none", "embedded", "fullscreen"] as const;
+export type ScreenPlacement = (typeof SCREEN_PLACEMENTS)[number];
+export type AnnouncementLanguage = "es" | "gl" | "en";
+export type AnnouncementTranslation = { title: string; body: string };
+export type AnnouncementTranslations = Partial<
+  Record<AnnouncementLanguage, AnnouncementTranslation>
+>;
 
 export interface Announcement {
   id: number;
   author_id: number;
   title: string;
   body: string;
-  target_role: string | null;
+  translations: AnnouncementTranslations;
+  notify_users: boolean;
+  screen_placement: ScreenPlacement;
   publish_at: string | null;
   expires_at: string | null;
   fanned_out_at: string | null;
   created_at: string;
+}
+
+export interface PublicAnnouncement {
+  id: number;
+  title: string;
+  body: string;
+  translations: AnnouncementTranslations;
+  publishAt: string | null;
+  expiresAt: string | null;
+  screenPlacement: ScreenPlacement;
+}
+
+function assertVisibilityWindow(publishAt: string | null, expiresAt: string | null): void {
+  if (publishAt && expiresAt && new Date(expiresAt).getTime() <= new Date(publishAt).getTime()) {
+    throw new BadRequestError("An announcement must expire after it becomes visible");
+  }
 }
 
 export async function createAnnouncement(
@@ -34,11 +62,22 @@ export async function createAnnouncement(
   authorId: number,
   input: AnnouncementInput,
 ): Promise<Announcement> {
+  assertVisibilityWindow(input.publishAt, input.expiresAt);
   const { rows } = await db.query(
-    `INSERT INTO announcements (author_id, title, body, target_role, publish_at, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO announcements
+       (author_id, title, body, translations, notify_users, screen_placement, publish_at, expires_at)
+     VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8)
      RETURNING *`,
-    [authorId, input.title, input.body, input.targetRole, input.publishAt, input.expiresAt],
+    [
+      authorId,
+      input.title,
+      input.body,
+      JSON.stringify(input.translations),
+      input.notifyUsers,
+      input.screenPlacement,
+      input.publishAt,
+      input.expiresAt,
+    ],
   );
   return rows[0];
 }
@@ -52,16 +91,29 @@ export async function updateAnnouncement(
   const merged = {
     title: input.title ?? existing.title,
     body: input.body ?? existing.body,
-    targetRole: input.targetRole !== undefined ? input.targetRole : existing.target_role,
+    translations: input.translations ?? existing.translations,
+    notifyUsers: input.notifyUsers ?? existing.notify_users,
+    screenPlacement: input.screenPlacement ?? existing.screen_placement,
     publishAt: input.publishAt !== undefined ? input.publishAt : existing.publish_at,
     expiresAt: input.expiresAt !== undefined ? input.expiresAt : existing.expires_at,
   };
+  assertVisibilityWindow(merged.publishAt, merged.expiresAt);
   const { rows } = await db.query(
     `UPDATE announcements
-     SET title = $2, body = $3, target_role = $4, publish_at = $5, expires_at = $6
+     SET title = $2, body = $3, translations = $4::jsonb, notify_users = $5,
+         screen_placement = $6, publish_at = $7, expires_at = $8
      WHERE id = $1
      RETURNING *`,
-    [id, merged.title, merged.body, merged.targetRole, merged.publishAt, merged.expiresAt],
+    [
+      id,
+      merged.title,
+      merged.body,
+      JSON.stringify(merged.translations),
+      merged.notifyUsers,
+      merged.screenPlacement,
+      merged.publishAt,
+      merged.expiresAt,
+    ],
   );
   return rows[0];
 }
@@ -84,14 +136,22 @@ export async function listAnnouncementsAdmin(db: Queryable): Promise<Announcemen
 }
 
 /** Public feed (H49/H50): only announcements currently inside their vigencia window. */
-export async function listAnnouncementsPublic(db: Queryable): Promise<Announcement[]> {
+export async function listAnnouncementsPublic(db: Queryable): Promise<PublicAnnouncement[]> {
   const { rows } = await db.query(
-    `SELECT * FROM announcements
+    `SELECT id, title, body, translations, publish_at, expires_at, screen_placement FROM announcements
      WHERE (publish_at IS NULL OR publish_at <= now())
        AND (expires_at IS NULL OR expires_at > now())
      ORDER BY publish_at DESC NULLS LAST, created_at DESC`,
   );
-  return rows;
+  return rows.map((row) => ({
+    id: Number(row.id),
+    title: String(row.title),
+    body: String(row.body),
+    translations: (row.translations as AnnouncementTranslations) ?? {},
+    publishAt: row.publish_at ? new Date(row.publish_at as Date).toISOString() : null,
+    expiresAt: row.expires_at ? new Date(row.expires_at as Date).toISOString() : null,
+    screenPlacement: row.screen_placement as ScreenPlacement,
+  }));
 }
 
 export async function markAnnouncementRead(
@@ -107,32 +167,29 @@ export async function markAnnouncementRead(
   );
 }
 
-/**
- * Resolves the target audience for `target_role` (DELTA(H50) simplification,
- * documented here since role is derived, not stored, per plan/07 invariant
- * 13): null = everyone; 'participant' = anyone with a submissions row (has a
- * project) OR a confirmed application; anything else falls back to everyone
- * for MVP rather than modelling every illustrative role as a real audience.
- */
-async function resolveTargetUserIds(db: Queryable, targetRole: string | null): Promise<number[]> {
-  if (targetRole === "participant") {
-    const { rows } = await db.query(
-      `SELECT DISTINCT u.id FROM users u
-       WHERE EXISTS (SELECT 1 FROM submissions s WHERE s.user_id = u.id)
-          OR EXISTS (
-               SELECT 1 FROM application_responses ar
-               WHERE ar.user_id = u.id AND ar.status = 'confirmed'
-             )`,
-    );
-    return rows.map((r: { id: number }) => r.id);
-  }
-  const { rows } = await db.query(`SELECT id FROM users`);
-  return rows.map((r: { id: number }) => r.id);
+/** Every announcement is addressed to every account; people decide their own channels in H51 preferences. */
+async function resolveRecipients(
+  db: Queryable,
+): Promise<Array<{ id: number; language: string | null }>> {
+  const { rows } = await db.query(`SELECT id, language FROM users`);
+  return rows as Array<{ id: number; language: string | null }>;
+}
+
+function translatedContent(
+  announcement: Announcement,
+  language: string | null,
+): AnnouncementTranslation {
+  const translations = announcement.translations ?? {};
+  const preferred = language === "es" || language === "gl" || language === "en" ? language : "es";
+  return (
+    translations[preferred] ??
+    translations.es ?? { title: announcement.title, body: announcement.body }
+  );
 }
 
 /**
- * Fans out in_app + push outbox rows (respecting H51 'announcements'
- * preferences) to the announcement's target audience, then marks it as
+ * Fans out the supported participant channels (respecting H51 preferences)
+ * to every account, then marks it as
  * fanned out so a later poll of the visibility publisher doesn't repeat it.
  * NOT idempotent by itself — it always re-sends, so callers must gate on
  * fanned_out_at IS NULL (fanOutIfVisibleNow below, and the publisher's
@@ -143,16 +200,18 @@ async function resolveTargetUserIds(db: Queryable, targetRole: string | null): P
  * without a re-read.
  */
 export async function fanOutAnnouncement(db: Queryable, announcement: Announcement): Promise<void> {
-  const userIds = await resolveTargetUserIds(db, announcement.target_role);
-  for (const userId of userIds) {
+  if (!announcement.notify_users) return;
+  const recipients = await resolveRecipients(db);
+  for (const recipient of recipients) {
+    const content = translatedContent(announcement, recipient.language);
     await notify(db, {
-      userId,
+      userId: recipient.id,
       category: "announcements",
-      channels: ["in_app", "push"],
+      channels: DEFAULT_CHANNELS,
       payload: {
         template: "generic",
-        subject: announcement.title,
-        body: announcement.body,
+        subject: content.title,
+        body: content.body,
         vars: { announcementId: announcement.id },
       },
     });
@@ -174,6 +233,7 @@ export function isCurrentlyVisible(a: Pick<Announcement, "publish_at" | "expires
 
 /** Called right after create/update: fans out immediately if the row is visible right now and hasn't been fanned out yet. */
 export async function fanOutIfVisibleNow(db: Queryable, announcement: Announcement): Promise<void> {
+  if (!announcement.notify_users) return;
   if (announcement.fanned_out_at) return;
   if (isCurrentlyVisible(announcement)) {
     await fanOutAnnouncement(db, announcement);

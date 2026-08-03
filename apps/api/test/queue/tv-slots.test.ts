@@ -198,9 +198,9 @@ describe("tv override lifecycle (H42)", () => {
       method: "PATCH",
       url: "/api/tv/mode",
       headers: asUser(controllerId),
-      payload: { mode: "announcement", payload: { title: "Evacuación" } },
+      payload: { mode: "live", payload: null },
     });
-    expect(override.json()).toMatchObject({ mode: "announcement", source: "override" });
+    expect(override.json()).toMatchObject({ mode: "live", source: "override" });
 
     const back = await app.inject({
       method: "DELETE",

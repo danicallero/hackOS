@@ -36,7 +36,7 @@ My profile.
 
 ### Work workspaces (`WORKSPACES`)
 
-Nine capability-gated groups replace the old flat "operations" +
+Eight capability-gated groups replace the old flat "operations" +
 "administration" sections. A workspace renders only when at least one of its
 items is visible; each visible item still checks its own capability so a
 workspace never over-grants access.
@@ -47,9 +47,8 @@ workspace never over-grants access.
 | Projects and imports | Projects, Resolve import | `projects:read`, `projects:import`, `judge:panel`, or an assigned-judge/sponsor-rep association |
 | Live judging | Queue operations, Judging, Rooms, Reviews | `queue:operate`, `queue:admin`, `judge:panel`, an assigned-judge association (Judging), or a sponsor-rep association (Rooms) |
 | Logistics | Accreditation, Meals, Activities, Presence, Logistics stats | `accredit:scan`, `activity:scan`, `presence:scan`, `logistics:stats` (each item its own capability — H22-H27 per-station gating) |
-| Programme | Manage schedule, TV control | `schedule:manage` (also judge-visible), `tv:control` |
+| Programme | Manage schedule, TV control, Announcements | `schedule:manage` (also judge-visible), `tv:control`, `announcements:manage` |
 | Sponsors | Enterprises, Challenges | `sponsors:manage`, `queue:admin`, or a sponsor-rep association |
-| Communications | Announcements | `announcements:manage` |
 | Event setup (`Configuración` in es/gl) | Event settings, Libraries | `schedule:manage`, `intolerances:manage` |
 | Access and audit | Users, Permissions, Audit log | `users:read`, `permissions:manage`, `audit:read` |
 

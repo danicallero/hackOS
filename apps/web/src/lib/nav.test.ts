@@ -112,6 +112,13 @@ describe("capability-gated workspace, no association or wildcard", () => {
     expect(visibleHrefs(ctx)).toEqual(["/logistics/accreditation"]);
   });
 
+  it("puts announcement management in Programme, alongside schedule and TV control", () => {
+    const ctx = contextFor([CAPABILITIES.ANNOUNCEMENTS_MANAGE]);
+    expect(visibleWorkspaceIds(ctx)).toEqual(["programme"]);
+    expect(visibleHrefs(ctx)).toEqual(["/announcements"]);
+    expect(WORKSPACES.some((workspace) => workspace.id === "communications")).toBe(false);
+  });
+
   it("holds no work workspace with no capability and no association", () => {
     const ctx = contextFor([]);
     expect(visibleWorkspaceIds(ctx)).toEqual([]);

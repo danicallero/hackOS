@@ -2,7 +2,11 @@
 
 import { WifiIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { PublicEvent, PublicSponsor } from "@/components/public/public-types";
+import type {
+  PublicAnnouncement,
+  PublicEvent,
+  PublicSponsor,
+} from "@/components/public/public-types";
 import { EventPhaseDisplay, EventTimer, useEventPhase } from "@/components/public/timer";
 import { useElementSize } from "@/hooks/use-element-size";
 import { useLocale } from "@/lib/i18n";
@@ -15,6 +19,7 @@ import {
   upcomingWindow,
 } from "@/lib/tv";
 import { cn } from "@/lib/utils";
+import { announcementContent } from "./announcement-content";
 import { MarqueeText } from "./marquee-text";
 import { SponsorMark } from "./sponsor-mark";
 import { TvHeader, TvScreen } from "./tv-screen";
@@ -112,17 +117,20 @@ function Countdown({
   );
 }
 
-function ScheduleBlock({
+export function ScheduleBlock({
   schedule,
   visible,
   timezone,
   grow,
+  showHeading = true,
 }: {
   schedule: PublicScheduleItem[];
   visible: number;
   timezone: string;
   /** Landscape gives the agenda the leftover height; portrait gives it to the sponsors. */
   grow: boolean;
+  /** A dedicated schedule screen already names itself in the shared top bar. */
+  showHeading?: boolean;
 }) {
   const { t } = useLocale();
   const [now, setNow] = useState(() => Date.now());
@@ -168,9 +176,11 @@ function ScheduleBlock({
 
   return (
     <section className={cn("flex min-h-0 flex-col gap-[0.75em]", grow && "flex-1")}>
-      <h2 className="text-muted-foreground shrink-0 text-[1em] font-medium tracking-[0.18em] uppercase">
-        {t("schedule")}
-      </h2>
+      {showHeading && (
+        <h2 className="text-muted-foreground shrink-0 text-[1em] font-medium tracking-[0.18em] uppercase">
+          {t("schedule")}
+        </h2>
+      )}
       {ordered.length === 0 ? (
         <p className="text-muted-foreground text-[1.5em]">{t("scheduleEmptyDesc")}</p>
       ) : (
@@ -234,8 +244,15 @@ function ScheduleBlock({
   );
 }
 
-function SponsorsBlock({ sponsors, portrait }: { sponsors: PublicSponsor[]; portrait: boolean }) {
-  const { t } = useLocale();
+function SponsorsBlock({
+  sponsors,
+  portrait,
+  compact,
+}: {
+  sponsors: PublicSponsor[];
+  portrait: boolean;
+  compact: boolean;
+}) {
   // Hooks before the empty-list bail-out: sponsors arrive from a fetch, so
   // this component legitimately renders empty first and populated after.
   const { ref, width, height } = useElementSize<HTMLUListElement>();
@@ -248,15 +265,7 @@ function SponsorsBlock({ sponsors, portrait }: { sponsors: PublicSponsor[]; port
   });
   if (sponsors.length === 0) return null;
   return (
-    <aside
-      className={cn(
-        "flex min-h-0 flex-col gap-[0.75em]",
-        portrait ? "w-full flex-1" : "w-[26%] shrink-0 border-l pl-[2em]",
-      )}
-    >
-      <h2 className="text-muted-foreground shrink-0 text-[1em] font-medium tracking-[0.18em] uppercase">
-        {t("sponsors")}
-      </h2>
+    <section className="flex min-h-0 flex-1 flex-col">
       {/* Tiles stay logo-shaped and take the fewest columns that still fit the
           block, so the same six sponsors read as bigger marks on a bigger
           screen instead of the same small ones with more empty space. */}
@@ -268,13 +277,52 @@ function SponsorsBlock({ sponsors, portrait }: { sponsors: PublicSponsor[]; port
         {sponsors.map((sponsor) => (
           <li
             key={sponsor.enterpriseId}
-            className="bg-muted/40 flex aspect-3/2 items-center justify-center overflow-hidden rounded-[0.6em] p-[0.9em]"
+            className={cn(
+              "bg-muted/40 flex aspect-3/2 items-center justify-center overflow-hidden rounded-[0.6em]",
+              compact ? "p-[0.65em]" : "p-[0.9em]",
+            )}
           >
             <SponsorMark sponsor={sponsor} className="max-h-full max-w-full object-contain" />
           </li>
         ))}
       </ul>
-    </aside>
+    </section>
+  );
+}
+
+/** A compact, always-readable integrated notice. The full-screen variant is
+ * selected by the display shell before any mode renders; this one deliberately
+ * lives inside each view so it never covers operational content. */
+export function EmbeddedAnnouncement({
+  announcement,
+  compact = false,
+}: {
+  announcement: PublicAnnouncement;
+  compact?: boolean;
+}) {
+  const { language } = useLocale();
+  const content = announcementContent(announcement, language);
+  return (
+    <article
+      className={cn(
+        "border-primary/30 bg-primary/5 min-w-0 rounded-[0.6em] border-l-[0.3em] p-[0.9em]",
+        compact && "p-[0.7em]",
+      )}
+    >
+      <h2 className={cn("text-[1.2em] font-semibold text-balance", compact && "text-[1.05em]")}>
+        <MarqueeText text={content.title} />
+      </h2>
+      {content.body && (
+        <p
+          className={cn(
+            "text-muted-foreground mt-[0.25em] text-[0.95em]",
+            compact && "text-[0.85em]",
+          )}
+        >
+          <MarqueeText text={content.body} />
+        </p>
+      )}
+    </article>
   );
 }
 
@@ -338,12 +386,14 @@ export function LiveScreen({
   schedule,
   sponsors,
   venue,
+  announcement,
 }: {
   config: LiveScreenConfig;
   event: PublicEvent;
   schedule: PublicScheduleItem[];
   sponsors: PublicSponsor[];
   venue: TvVenueConfig | null;
+  announcement?: PublicAnnouncement;
 }) {
   const showWifi = config.wifi.show && Boolean(venue?.wifi);
   return (
@@ -376,7 +426,23 @@ export function LiveScreen({
                 />
               )}
             </div>
-            {config.sponsors.show && <SponsorsBlock sponsors={sponsors} portrait={portrait} />}
+            {(config.sponsors.show || announcement) && (
+              <aside
+                className={cn(
+                  "flex min-h-0 flex-col gap-[1em]",
+                  portrait ? "w-full flex-1" : "w-[26%] shrink-0 border-l pl-[2em]",
+                )}
+              >
+                {config.sponsors.show && (
+                  <SponsorsBlock
+                    sponsors={sponsors}
+                    portrait={portrait}
+                    compact={Boolean(announcement)}
+                  />
+                )}
+                {announcement && <EmbeddedAnnouncement announcement={announcement} compact />}
+              </aside>
+            )}
           </div>
           {showWifi && (
             <footer className="shrink-0 border-t px-[2.5em] py-[1em]">

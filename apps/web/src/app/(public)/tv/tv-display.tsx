@@ -1,22 +1,14 @@
 "use client";
 
 import { EVENTS } from "@hackos/shared/events";
-import {
-  AlertCircleIcon,
-  CalendarDaysIcon,
-  Clock3Icon,
-  UsersRoundIcon,
-  WifiIcon,
-} from "lucide-react";
+import { CalendarDaysIcon, MegaphoneIcon, UsersRoundIcon, WifiIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Brand } from "@/components/common/brand";
 import { Spinner } from "@/components/common/spinner";
 import type {
   PublicAnnouncement,
   PublicEvent,
   PublicSponsor,
 } from "@/components/public/public-types";
-import { EventPhaseDisplay, EventTimer, useEventPhase } from "@/components/public/timer";
 import { useElementSize } from "@/hooks/use-element-size";
 import { useEventSource } from "@/hooks/use-event-source";
 import { useFitToViewport } from "@/hooks/use-fit-to-viewport";
@@ -35,10 +27,11 @@ import {
   type TvVenueConfig,
 } from "@/lib/tv";
 import { cn } from "@/lib/utils";
-import { LiveScreen } from "./live-screen";
+import { announcementContent } from "./announcement-content";
+import { EmbeddedAnnouncement, LiveScreen, ScheduleBlock } from "./live-screen";
 import { MarqueeText } from "./marquee-text";
 import { SponsorMark } from "./sponsor-mark";
-import { TvBody, TvClock, TvEmpty, TvHeader, TvScreen } from "./tv-screen";
+import { TvBody, TvEmpty, TvHeader, TvScreen } from "./tv-screen";
 import { WifiQr } from "./wifi-qr";
 
 /** Room-card sizing used to derive the outer grid's column count from the
@@ -85,12 +78,16 @@ type TvData = {
   venue: TvVenueConfig | null;
 };
 
-function textPayload(payload: unknown, key: string): string | null {
-  return typeof payload === "object" &&
-    payload !== null &&
-    typeof (payload as Record<string, unknown>)[key] === "string"
-    ? String((payload as Record<string, unknown>)[key])
-    : null;
+type ScreenPlacement = NonNullable<PublicAnnouncement["screenPlacement"]>;
+
+/** The public feed is already filtered to the announcement's validity window.
+ * Select the first one in its server-defined order so every venue display
+ * makes the same choice when an operator accidentally overlaps two notices. */
+export function activeAnnouncement(
+  announcements: PublicAnnouncement[],
+  placement: ScreenPlacement,
+): PublicAnnouncement | undefined {
+  return announcements.find((announcement) => announcement.screenPlacement === placement);
 }
 
 /** A room considered "ready" (not paused) vs. paused — mirrors the room's own
@@ -339,7 +336,40 @@ function groupRoomsByChallenge(rooms: RoomView[]): RoomGroup[] {
  * is exactly the case `useFitToViewport` is safe for, and it additionally
  * needs the measured width to choose a column count.
  */
-function RoomsView({ rooms }: { rooms: RoomView[] }) {
+function AnnouncementRoomCard({ announcement }: { announcement: PublicAnnouncement }) {
+  const { language, t } = useLocale();
+  const content = announcementContent(announcement, language);
+  return (
+    <article className="border-primary/35 bg-primary/5 flex min-w-0 flex-col rounded-2xl border p-5 shadow-sm">
+      <div className="flex items-start gap-3">
+        <MegaphoneIcon className="text-primary mt-1 size-5 shrink-0" aria-hidden="true" />
+        <div className="min-w-0">
+          <p className="text-primary text-xs font-bold tracking-wide uppercase">
+            {t("modeAnnouncement")}
+          </p>
+          <h2 className="mt-1 text-2xl font-medium">
+            <MarqueeText text={content.title} />
+          </h2>
+        </div>
+      </div>
+      {content.body && (
+        <p className="text-muted-foreground mt-4 text-lg">
+          <MarqueeText text={content.body} />
+        </p>
+      )}
+    </article>
+  );
+}
+
+function RoomsView({
+  rooms,
+  event,
+  announcement,
+}: {
+  rooms: RoomView[];
+  event: PublicEvent;
+  announcement?: PublicAnnouncement;
+}) {
   const { t } = useLocale();
   const groups = useMemo(() => groupRoomsByChallenge(rooms), [rooms]);
   const { containerRef, contentRef, scale, containerWidth, contentWidthPercent } =
@@ -357,20 +387,15 @@ function RoomsView({ rooms }: { rooms: RoomView[] }) {
           transform: `scale(${scale})`,
           transformOrigin: "top left",
         }}
-        className="p-10"
+        className="flex min-h-full flex-col"
       >
-        <header className="flex items-center justify-between gap-6 border-b pb-6">
-          <div className="flex items-center gap-3">
-            <Brand className="text-xl" />
-            <span className="text-muted-foreground text-2xl font-light">·</span>
-            <div className="flex items-center gap-2 text-2xl font-semibold">
-              <UsersRoundIcon className="size-6" aria-hidden="true" />
-              {t("judgingRoomsTitle")}
-            </div>
-          </div>
-          <TvClock className="text-2xl font-semibold" />
-        </header>
-        <div className="mt-8">
+        <TvHeader
+          compact
+          title={t("judgingRoomsTitle")}
+          icon={UsersRoundIcon}
+          eventName={event.name}
+        />
+        <div className="min-h-0 flex-1 p-8">
           {groups.length ? (
             <div
               className="grid gap-6"
@@ -391,10 +416,14 @@ function RoomsView({ rooms }: { rooms: RoomView[] }) {
                   <StandaloneRoomCard key={group.id} room={group.rooms[0]} t={t} />
                 ),
               )}
+              {announcement && <AnnouncementRoomCard announcement={announcement} />}
             </div>
           ) : (
-            <div className="grid min-h-80 place-items-center rounded-2xl border text-center text-2xl text-muted-foreground">
-              {t("judgingRoomsEmptyDesc")}
+            <div className="grid min-h-80 grid-cols-1 gap-6">
+              {announcement && <AnnouncementRoomCard announcement={announcement} />}
+              <div className="grid place-items-center rounded-2xl border text-center text-2xl text-muted-foreground">
+                {t("judgingRoomsEmptyDesc")}
+              </div>
             </div>
           )}
         </div>
@@ -403,56 +432,42 @@ function RoomsView({ rooms }: { rooms: RoomView[] }) {
   );
 }
 
-function ScheduleView({ schedule, event }: { schedule: PublicScheduleItem[]; event: PublicEvent }) {
+function ScheduleView({
+  schedule,
+  event,
+  announcement,
+}: {
+  schedule: PublicScheduleItem[];
+  event: PublicEvent;
+  announcement?: PublicAnnouncement;
+}) {
   const { t } = useLocale();
-  const format = (date: string) =>
-    new Intl.DateTimeFormat(undefined, {
-      weekday: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-      timeZone: event.timezone,
-    }).format(new Date(date));
   return (
     <TvScreen>
       <TvHeader title={t("schedule")} icon={CalendarDaysIcon} eventName={event.name} />
-      <TvBody>
-        {schedule.length ? (
-          <ol className="min-h-0 flex-1 divide-y overflow-hidden rounded-[0.75em] border px-[1.5em]">
-            {schedule.map((item) => (
-              <li
-                key={item.id}
-                className="grid grid-cols-[max-content_minmax(0,1fr)_max-content] gap-[1em] py-[1.25em]"
-              >
-                <time className="text-muted-foreground text-[1.4em] whitespace-nowrap tabular-nums">
-                  {format(item.startsAt)}
-                </time>
-                <div className="min-w-0">
-                  <h2 className="text-[1.75em] font-semibold">
-                    <MarqueeText text={item.title} />
-                  </h2>
-                  {item.description && (
-                    <p className="text-muted-foreground mt-[0.35em] text-[1.15em]">
-                      <MarqueeText text={item.description} />
-                    </p>
-                  )}
-                </div>
-                {item.location && (
-                  <p className="max-w-[14em] text-[1.4em]">
-                    <MarqueeText text={item.location} />
-                  </p>
-                )}
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <TvEmpty text={t("scheduleEmptyDesc")} />
-        )}
+      <TvBody className="gap-[1em]">
+        {announcement && <EmbeddedAnnouncement announcement={announcement} compact />}
+        <ScheduleBlock
+          schedule={schedule}
+          visible={8}
+          timezone={event.timezone}
+          grow
+          showHeading={false}
+        />
       </TvBody>
     </TvScreen>
   );
 }
 
-function SponsorsView({ sponsors, event }: { sponsors: PublicSponsor[]; event: PublicEvent }) {
+function SponsorsView({
+  sponsors,
+  event,
+  announcement,
+}: {
+  sponsors: PublicSponsor[];
+  event: PublicEvent;
+  announcement?: PublicAnnouncement;
+}) {
   const { t } = useLocale();
   const { ref, width, height } = useElementSize<HTMLUListElement>();
   const columns = bestSponsorColumns({
@@ -464,8 +479,8 @@ function SponsorsView({ sponsors, event }: { sponsors: PublicSponsor[]; event: P
   });
   return (
     <TvScreen>
-      <TvHeader title={t("sponsors")} icon={UsersRoundIcon} eventName={event.name} />
-      <TvBody>
+      <TvHeader eventName={event.name} />
+      <TvBody className="gap-[1em]">
         {sponsors.length ? (
           // The whole screen belongs to the logos here: tiles split it evenly
           // and each logo fills its tile, so few sponsors read as large marks
@@ -487,6 +502,7 @@ function SponsorsView({ sponsors, event }: { sponsors: PublicSponsor[]; event: P
         ) : (
           <TvEmpty text={t("sponsorsEmptyDesc")} />
         )}
+        {announcement && <EmbeddedAnnouncement announcement={announcement} compact />}
       </TvBody>
     </TvScreen>
   );
@@ -494,8 +510,8 @@ function SponsorsView({ sponsors, event }: { sponsors: PublicSponsor[]; event: P
 
 /**
  * Full-screen Wi-Fi. Reads the venue's configured credentials first so a
- * scheduled slot can show this with nobody at the control page, falling back
- * to whatever an operator typed into the broadcast payload.
+ * scheduled slot can show this with nobody at the control page. Credentials
+ * only ever come from the event's venue configuration.
  *
  * Two ways in, side by side and given equal weight: scan the code, or read
  * the credentials. The password is the largest thing on the screen because
@@ -503,18 +519,17 @@ function SponsorsView({ sponsors, event }: { sponsors: PublicSponsor[]; event: P
  * letter-spaced, on its own plate so it never blends into the prose around it.
  */
 function WifiView({
-  payload,
   venue,
   event,
+  announcement,
 }: {
-  payload: unknown;
   venue: TvVenueConfig | null;
   event: PublicEvent;
+  announcement?: PublicAnnouncement;
 }) {
   const { t } = useLocale();
-  const ssid = venue?.wifi?.ssid ?? textPayload(payload, "ssid") ?? t("wifiDetailsFallback");
-  const password = venue?.wifi?.password ?? textPayload(payload, "password");
-  const instructions = textPayload(payload, "instructions");
+  const ssid = venue?.wifi?.ssid ?? t("wifiDetailsFallback");
+  const password = venue?.wifi?.password;
   return (
     <TvScreen>
       {({ portrait }) => (
@@ -552,9 +567,6 @@ function WifiView({
                     </p>
                   </div>
                 )}
-                {instructions && (
-                  <p className="text-muted-foreground text-[1.5em] text-pretty">{instructions}</p>
-                )}
               </div>
               {/* Only when the credentials came from venue config: a QR built
                   from a half-typed operator payload would fail to connect
@@ -568,6 +580,7 @@ function WifiView({
                 </div>
               )}
             </div>
+            {announcement && <EmbeddedAnnouncement announcement={announcement} compact />}
           </TvBody>
         </>
       )}
@@ -575,69 +588,27 @@ function WifiView({
   );
 }
 
-function TimerView({ event, payload }: { event: PublicEvent; payload: unknown }) {
-  const { t } = useLocale();
-  // An operator's manual override (H42) always wins; otherwise fall back to
-  // the same hacking/judging phase logic as the public landing page.
-  const override = textPayload(payload, "endsAt") ?? textPayload(payload, "label");
-  const phase = useEventPhase(event);
-  const timerClassName = "mt-[0.15em] block font-mono text-[8em] font-semibold tabular-nums";
-  return (
-    <TvScreen>
-      <TvHeader title={t("eventTimerTitle")} icon={Clock3Icon} eventName={event.name} />
-      <TvBody className="items-center justify-center">
-        <div className="text-center">
-          {override ? (
-            <>
-              <p className="text-muted-foreground text-[1.75em]">
-                {textPayload(payload, "label") ?? t("timeRemaining")}
-              </p>
-              <EventTimer
-                endsAt={textPayload(payload, "endsAt") ?? event.hackingEndsAt}
-                className={timerClassName}
-              />
-            </>
-          ) : (
-            <EventPhaseDisplay
-              phase={phase}
-              className={timerClassName}
-              labelClassName="text-[1.75em] text-muted-foreground"
-            />
-          )}
-        </div>
-      </TvBody>
-    </TvScreen>
-  );
-}
-
-function AnnouncementView({
-  announcements,
-  payload,
+function FullscreenAnnouncement({
+  announcement,
   event,
 }: {
-  announcements: PublicAnnouncement[];
-  payload: unknown;
+  announcement: PublicAnnouncement;
   event: PublicEvent;
 }) {
-  const { t } = useLocale();
-  const title = textPayload(payload, "title");
-  const body = textPayload(payload, "body");
-  const item =
-    title || body ? { title: title ?? t("modeAnnouncement"), body: body ?? "" } : announcements[0];
+  const { language } = useLocale();
+  const content = announcementContent(announcement, language);
   return (
     <TvScreen>
-      <TvHeader title={t("modeAnnouncement")} icon={AlertCircleIcon} eventName={event.name} />
+      <TvHeader eventName={event.name} />
       <TvBody className="items-center justify-center">
-        {item ? (
-          <article className="max-w-[55em] text-center">
-            <h2 className="text-[4em] leading-tight font-semibold text-balance">{item.title}</h2>
-            <p className="text-muted-foreground mt-[0.75em] text-[1.9em] whitespace-pre-wrap">
-              {item.body}
+        <article className="max-w-[55em] text-center">
+          <h1 className="text-[4em] leading-tight font-semibold text-balance">{content.title}</h1>
+          {content.body && (
+            <p className="text-muted-foreground mt-[0.75em] text-[1.9em] whitespace-pre-wrap text-pretty">
+              {content.body}
             </p>
-          </article>
-        ) : (
-          <TvEmpty text={t("announcementEmptyDesc")} />
-        )}
+          )}
+        </article>
       </TvBody>
     </TvScreen>
   );
@@ -771,6 +742,15 @@ function TvView({ data, error }: { data: TvData | null; error: string | null }) 
       </div>
     );
 
+  // This is a content layer, not a competing TV mode: it has priority over
+  // whatever the timetable is currently showing and disappears at the
+  // announcement's own expiry (or when it is deleted).
+  const fullscreenAnnouncement = activeAnnouncement(data.announcements, "fullscreen");
+  if (fullscreenAnnouncement) {
+    return <FullscreenAnnouncement announcement={fullscreenAnnouncement} event={data.event} />;
+  }
+  const embeddedAnnouncement = activeAnnouncement(data.announcements, "embedded");
+
   if (mode === "live")
     return (
       <LiveScreen
@@ -779,15 +759,28 @@ function TvView({ data, error }: { data: TvData | null; error: string | null }) 
         schedule={data.schedule}
         sponsors={data.sponsors}
         venue={data.venue}
+        announcement={embeddedAnnouncement}
       />
     );
-  if (mode === "schedule") return <ScheduleView schedule={data.schedule} event={data.event} />;
-  if (mode === "sponsors") return <SponsorsView sponsors={data.sponsors} event={data.event} />;
-  if (mode === "announcement")
+  if (mode === "schedule")
     return (
-      <AnnouncementView announcements={data.announcements} payload={payload} event={data.event} />
+      <ScheduleView
+        schedule={data.schedule}
+        event={data.event}
+        announcement={embeddedAnnouncement}
+      />
     );
-  if (mode === "wifi") return <WifiView payload={payload} venue={data.venue} event={data.event} />;
-  if (mode === "timer") return <TimerView event={data.event} payload={payload} />;
-  return <RoomsView rooms={data.rooms} />;
+  if (mode === "sponsors")
+    return (
+      <SponsorsView
+        sponsors={data.sponsors}
+        event={data.event}
+        announcement={embeddedAnnouncement}
+      />
+    );
+  if (mode === "wifi")
+    return <WifiView venue={data.venue} event={data.event} announcement={embeddedAnnouncement} />;
+  // Legacy announcement/timer values resolve safely to the rooms display until
+  // the control/API cleanup removes them from the persisted mode enum.
+  return <RoomsView rooms={data.rooms} event={data.event} announcement={embeddedAnnouncement} />;
 }

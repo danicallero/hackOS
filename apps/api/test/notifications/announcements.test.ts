@@ -9,8 +9,8 @@ import { resetNotificationsState } from "./notif-helpers.js";
 
 /**
  * H50 announcements: capability-guarded CRUD with audit, the vigencia
- * window (publish_at/expires_at — DELTA(H50)), immediate + scheduled
- * fan-out, target_role filtering, and per-user read markers.
+ * window (publish_at/expires_at — DELTA(H50)), explicit notification delivery,
+ * translations, screen placement, and per-user read markers.
  */
 
 let app: App;
@@ -40,6 +40,12 @@ async function outboxRowsFor(category = "announcements") {
     [category],
   );
   return rows as { user_id: number; channel: string }[];
+}
+
+async function broadcastCount(topic: string): Promise<number> {
+  const { valkey } = await import("../../src/lib/valkey.js");
+  const value = await valkey.get(`sse:seq:${topic}`);
+  return value ? Number(value) : 0;
 }
 
 describe("announcement CRUD (H50)", () => {
@@ -72,9 +78,9 @@ describe("announcement CRUD (H50)", () => {
     expect(res.statusCode).toBe(201);
   });
 
-  it("create with no window fans out immediately (in_app+push) and audits (H53)", async () => {
+  it("creates without notifying by default and audits (H53)", async () => {
     const adminId = await createUserWithCapabilities([CAPABILITIES.ANNOUNCEMENTS_MANAGE]);
-    const otherId = await createUser();
+    await createUser();
 
     const res = await app.inject({
       method: "POST",
@@ -84,16 +90,11 @@ describe("announcement CRUD (H50)", () => {
     });
     expect(res.statusCode).toBe(201);
     const announcement = res.json();
-    expect(announcement.fanned_out_at).not.toBeNull();
+    expect(announcement.fanned_out_at).toBeNull();
+    expect(announcement.notify_users).toBe(false);
+    expect(announcement.screen_placement).toBe("none");
 
-    // fan-out: both users (target_role null = everyone), in_app + push each
-    const rows = await outboxRowsFor();
-    expect(rows).toEqual([
-      { user_id: adminId, channel: "in_app" },
-      { user_id: adminId, channel: "push" },
-      { user_id: otherId, channel: "in_app" },
-      { user_id: otherId, channel: "push" },
-    ]);
+    expect(await outboxRowsFor()).toEqual([]);
 
     const { rows: auditRows } = await pool.query(
       `SELECT * FROM audit_log WHERE entity_type = 'announcement' AND action = 'create'`,
@@ -103,7 +104,7 @@ describe("announcement CRUD (H50)", () => {
     expect(String(auditRows[0].entity_id)).toBe(String(announcement.id));
   });
 
-  it("fan-out respects the 'announcements' preference category (H51)", async () => {
+  it("notifies every account through inbox, email and push while respecting preferences (H51)", async () => {
     const adminId = await createUserWithCapabilities([CAPABILITIES.ANNOUNCEMENTS_MANAGE]);
     const quietId = await createUser();
     await pool.query(
@@ -111,18 +112,50 @@ describe("announcement CRUD (H50)", () => {
        VALUES ($1, 'announcements', 'push', false)`,
       [quietId],
     );
+    await pool.query(`UPDATE users SET language = 'gl' WHERE id = $1`, [quietId]);
 
     const res = await app.inject({
       method: "POST",
       url: "/api/announcements",
       headers: asUser(adminId),
-      payload: { title: "t", body: "b" },
+      payload: {
+        title: "t",
+        body: "b",
+        notifyUsers: true,
+        screenPlacement: "embedded",
+        translations: {
+          es: { title: "es", body: "cuerpo es" },
+          gl: { title: "gl", body: "corpo gl" },
+          en: { title: "en", body: "body en" },
+        },
+      },
     });
     expect(res.statusCode).toBe(201);
+    expect(res.json().fanned_out_at).not.toBeNull();
+    expect(res.json().screen_placement).toBe("embedded");
 
     const rows = await outboxRowsFor();
     const quietRows = rows.filter((r) => r.user_id === quietId);
-    expect(quietRows).toEqual([{ user_id: quietId, channel: "in_app" }]);
+    expect(quietRows).toEqual([
+      { user_id: quietId, channel: "in_app" },
+      { user_id: quietId, channel: "email" },
+    ]);
+    expect(rows.filter((r) => r.user_id === adminId)).toEqual([
+      { user_id: adminId, channel: "in_app" },
+      { user_id: adminId, channel: "email" },
+      { user_id: adminId, channel: "push" },
+    ]);
+
+    const { rows: payloadRows } = await pool.query(
+      `SELECT payload FROM notification_outbox WHERE user_id = $1 AND channel = 'in_app'`,
+      [adminId],
+    );
+    expect(payloadRows[0].payload).toMatchObject({ subject: "en", body: "body en" });
+    const { rows: galicianPayloadRows } = await pool.query(
+      `SELECT payload FROM notification_outbox WHERE user_id = $1 AND channel = 'in_app'`,
+      [quietId],
+    );
+    expect(galicianPayloadRows[0].payload).toMatchObject({ subject: "gl", body: "corpo gl" });
   });
 
   it("update and delete are audited", async () => {
@@ -146,12 +179,14 @@ describe("announcement CRUD (H50)", () => {
     expect(updated.json().title).toBe("after");
     expect(updated.json().body).toBe("b"); // partial update keeps the rest
 
+    const contentBroadcasts = await broadcastCount("content");
     const del = await app.inject({
       method: "DELETE",
       url: `/api/announcements/${created.id}`,
       headers: asUser(adminId),
     });
     expect(del.statusCode).toBe(200);
+    expect(await broadcastCount("content")).toBe(contentBroadcasts + 1);
 
     const { rows } = await pool.query(
       `SELECT action FROM audit_log WHERE entity_type = 'announcement' ORDER BY id`,
@@ -173,7 +208,13 @@ describe("visibility window (H50 vigencia — DELTA expires_at)", () => {
     const make = (payload: Record<string, unknown>) =>
       app.inject({ method: "POST", url: "/api/announcements", headers: asUser(adminId), payload });
 
-    await make({ title: "active", body: "b", publishAt: iso(-60_000), expiresAt: iso(60_000) });
+    await make({
+      title: "active",
+      body: "b",
+      screenPlacement: "fullscreen",
+      publishAt: iso(-60_000),
+      expiresAt: iso(60_000),
+    });
     await make({ title: "no-window", body: "b" });
     await make({ title: "future", body: "b", publishAt: iso(60_000) });
     await make({ title: "expired", body: "b", publishAt: iso(-120_000), expiresAt: iso(-60_000) });
@@ -182,6 +223,14 @@ describe("visibility window (H50 vigencia — DELTA expires_at)", () => {
     expect(publicRes.statusCode).toBe(200);
     const titles = publicRes.json().items.map((a: { title: string }) => a.title);
     expect(titles.sort()).toEqual(["active", "no-window"]);
+    expect(publicRes.json().items[0]).toMatchObject({
+      screenPlacement: expect.any(String),
+      publishAt: expect.anything(),
+      translations: {},
+    });
+    expect(publicRes.json().items[0]).not.toHaveProperty("author_id");
+    expect(publicRes.json().items[0]).not.toHaveProperty("notify_users");
+    expect(publicRes.json().items[0]).not.toHaveProperty("fanned_out_at");
 
     // admin list still sees everything
     const adminRes = await app.inject({
@@ -201,7 +250,7 @@ describe("visibility window (H50 vigencia — DELTA expires_at)", () => {
         method: "POST",
         url: "/api/announcements",
         headers: asUser(adminId),
-        payload: { title: "scheduled", body: "b", publishAt: iso(60_000) },
+        payload: { title: "scheduled", body: "b", notifyUsers: true, publishAt: iso(60_000) },
       })
     ).json();
 
@@ -234,6 +283,7 @@ describe("visibility window (H50 vigencia — DELTA expires_at)", () => {
           body: "b",
           publishAt: iso(-120_000),
           expiresAt: iso(-60_000),
+          notifyUsers: true,
         },
       })
     ).json();
@@ -244,32 +294,32 @@ describe("visibility window (H50 vigencia — DELTA expires_at)", () => {
   });
 });
 
-describe("target_role (MVP simplification, documented in announcements-service.ts)", () => {
-  it("'participant' targets confirmed applications / submission members only", async () => {
+describe("announcement delivery controls", () => {
+  it("does not accept an audience field and reaches every account when delivery is selected", async () => {
     const adminId = await createUserWithCapabilities([CAPABILITIES.ANNOUNCEMENTS_MANAGE]);
-    const participantId = await createUser();
-    const bystanderId = await createUser();
+    const firstUserId = await createUser();
+    const secondUserId = await createUser();
 
-    const { rows: appRows } = await pool.query(
-      `INSERT INTO applications (name, type, template) VALUES ('hackers', 'participant', '{}') RETURNING id`,
-    );
-    await pool.query(
-      `INSERT INTO application_responses (user_id, application_id, status) VALUES ($1, $2, 'confirmed')`,
-      [participantId, appRows[0].id],
-    );
-
-    await app.inject({
+    const obsoleteAudience = await app.inject({
       method: "POST",
       url: "/api/announcements",
       headers: asUser(adminId),
-      payload: { title: "hackers only", body: "b", targetRole: "participant" },
+      payload: { title: "all accounts", body: "b", notifyUsers: true, targetRole: "participant" },
     });
+    expect(obsoleteAudience.statusCode).toBe(400);
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/announcements",
+      headers: asUser(adminId),
+      payload: { title: "all accounts", body: "b", notifyUsers: true },
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.json()).not.toHaveProperty("target_role");
 
     const rows = await outboxRowsFor();
     const userIds = [...new Set(rows.map((r) => r.user_id))];
-    expect(userIds).toEqual([participantId]);
-    expect(userIds).not.toContain(bystanderId);
-    expect(userIds).not.toContain(adminId);
+    expect(userIds).toEqual([adminId, firstUserId, secondUserId]);
   });
 });
 

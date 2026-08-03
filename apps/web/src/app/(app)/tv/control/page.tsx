@@ -2,19 +2,15 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { AlertTriangleIcon, MonitorUpIcon, RadioIcon, WifiIcon } from "lucide-react";
+import { MonitorUpIcon, RadioIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AccessDenied } from "@/components/common/access-denied";
-import { DateTimeInput } from "@/components/common/datetime-input";
-import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
-import { PasswordInput } from "@/components/common/password-input";
 import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -23,7 +19,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { useEventSource } from "@/hooks/use-event-source";
 import { ApiError } from "@/lib/api";
 import { formatScheduledDateTime } from "@/lib/datetime";
@@ -36,7 +31,8 @@ import {
   type LiveScreenConfig,
   liveConfigFrom,
   setTvMode,
-  type TvModeName,
+  TV_CONTROL_MODES,
+  type TvControlMode,
   type TvState,
 } from "@/lib/tv";
 import { LiveSettings } from "./live-settings";
@@ -44,40 +40,34 @@ import { Timetable } from "./timetable";
 
 function buildModes(
   t: ReturnType<typeof useLocale>["t"],
-): Array<{ value: TvModeName; label: string; detail: string }> {
+): Array<{ value: TvControlMode; label: string; detail: string }> {
   return [
     { value: "live", label: t("modeLive"), detail: t("modeLiveDetail") },
     { value: "rooms", label: t("modeRooms"), detail: t("modeRoomsDetail") },
     { value: "schedule", label: t("schedule"), detail: t("modeScheduleDetail") },
     { value: "sponsors", label: t("sponsors"), detail: t("modeSponsorsDetail") },
-    { value: "announcement", label: t("modeAnnouncement"), detail: t("modeAnnouncementDetail") },
     { value: "wifi", label: t("modeWifi"), detail: t("modeWifiDetail") },
-    { value: "timer", label: t("modeTimer"), detail: t("modeTimerDetail") },
   ];
 }
 
 const EXPIRY_OPTIONS = ["none", "15", "30", "60"] as const;
 type ExpiryOption = (typeof EXPIRY_OPTIONS)[number];
 
-/** Modes that take over every screen and deserve an automatic expiry + a confirmation step (H42). */
-const SENSITIVE_MODES: TvModeName[] = ["announcement", "wifi"];
-const EXPIRABLE_MODES: TvModeName[] = ["announcement", "wifi", "timer"];
+const EXPIRABLE_MODES: TvControlMode[] = ["wifi"];
+
+function isTvControlMode(mode: string): mode is TvControlMode {
+  return (TV_CONTROL_MODES as readonly string[]).includes(mode);
+}
 
 export default function TvControlPage() {
   const { t } = useLocale();
   const MODES = useMemo(() => buildModes(t), [t]);
   const canControl = useCan(CAPABILITIES.TV_CONTROL);
   const [current, setCurrent] = useState<TvState | null>(null);
-  const [mode, setMode] = useState<TvModeName>("live");
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  const [ssid, setSsid] = useState("");
-  const [password, setPassword] = useState("");
-  const [endsAt, setEndsAt] = useState("");
+  const [mode, setMode] = useState<TvControlMode>("live");
   const [liveConfig, setLiveConfig] = useState<LiveScreenConfig>(DEFAULT_LIVE_CONFIG);
   const [expiryOption, setExpiryOption] = useState<ExpiryOption>("none");
   const [busy, setBusy] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
   const [timetableKey, setTimetableKey] = useState(0);
   const initializedRef = useRef(false);
 
@@ -90,7 +80,7 @@ export default function TvControlPage() {
       // must not clobber an in-progress edit.
       if (!initializedRef.current) {
         initializedRef.current = true;
-        setMode(next.mode);
+        if (isTvControlMode(next.mode)) setMode(next.mode);
         if (next.mode === "live") setLiveConfig(liveConfigFrom(next.payload));
       }
     } catch (err) {
@@ -119,25 +109,12 @@ export default function TvControlPage() {
   }
 
   async function broadcast() {
-    const payload =
-      mode === "announcement"
-        ? { title: title.trim() || undefined, body: body.trim() || undefined }
-        : mode === "wifi"
-          ? { ssid: ssid.trim(), password: password.trim() || undefined }
-          : mode === "timer"
-            ? {
-                label: title.trim() || undefined,
-                endsAt: endsAt ? new Date(endsAt).toISOString() : undefined,
-              }
-            : mode === "live"
-              ? liveConfig
-              : null;
+    const payload = mode === "live" ? liveConfig : null;
     const expiresAt = EXPIRABLE_MODES.includes(mode) ? expiresAtFor(expiryOption) : null;
     setBusy(true);
     try {
       const next = await setTvMode(mode, payload, expiresAt);
       setCurrent(next);
-      setConfirmOpen(false);
       toast.success(t("tvDisplaysUpdated"));
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("couldNotUpdateTvDisplays"));
@@ -147,10 +124,6 @@ export default function TvControlPage() {
   }
 
   function requestBroadcast() {
-    if (SENSITIVE_MODES.includes(mode)) {
-      setConfirmOpen(true);
-      return;
-    }
     void broadcast();
   }
 
@@ -159,7 +132,7 @@ export default function TvControlPage() {
     try {
       const next = await clearTvOverride();
       setCurrent(next);
-      setMode(next.mode);
+      if (isTvControlMode(next.mode)) setMode(next.mode);
       toast.success(t("backOnTimetable"));
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("couldNotUpdateTvDisplays"));
@@ -306,75 +279,6 @@ export default function TvControlPage() {
             <LiveSettings value={liveConfig} onChange={setLiveConfig} />
           </div>
         )}
-        {mode === "announcement" && (
-          <div className="grid gap-4 pt-2">
-            <div className="grid gap-2">
-              <Label htmlFor="announcement-title">{t("titleLabel")}</Label>
-              <Input
-                id="announcement-title"
-                value={title}
-                onChange={(event) => setTitle(event.target.value)}
-                placeholder={t("leaveBlankShowActive")}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="announcement-body">{t("messageLabel")}</Label>
-              <Textarea
-                id="announcement-body"
-                value={body}
-                onChange={(event) => setBody(event.target.value)}
-                placeholder={t("optionalMessageEveryTv")}
-              />
-            </div>
-          </div>
-        )}
-        {mode === "wifi" && (
-          <div className="grid gap-4 pt-2 sm:grid-cols-2">
-            <div className="grid gap-2">
-              <Label htmlFor="wifi-ssid">{t("networkNameLabel")}</Label>
-              <Input
-                id="wifi-ssid"
-                value={ssid}
-                onChange={(event) => setSsid(event.target.value)}
-                placeholder={t("hackathonWifiPlaceholder")}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="wifi-password">{t("password")}</Label>
-              <PasswordInput
-                id="wifi-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-            </div>
-            <p className="text-muted-foreground flex items-center gap-2 text-sm sm:col-span-2">
-              <WifiIcon className="size-4" aria-hidden="true" />
-              {t("wifiOverridesVenueHint")}
-            </p>
-          </div>
-        )}
-        {mode === "timer" && (
-          <div className="grid gap-4 pt-2 sm:grid-cols-2">
-            <div className="grid gap-2">
-              <Label htmlFor="timer-label">{t("timerLabelField")}</Label>
-              <Input
-                id="timer-label"
-                value={title}
-                onChange={(event) => setTitle(event.target.value)}
-                placeholder={t("timeRemaining")}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="timer-end">{t("customEndTime")}</Label>
-              <DateTimeInput
-                id="timer-end"
-                value={endsAt}
-                onChange={setEndsAt}
-                nullOption={{ label: t("useEventEndTime") }}
-              />
-            </div>
-          </div>
-        )}
         {EXPIRABLE_MODES.includes(mode) && (
           <div className="grid gap-2 pt-2 sm:max-w-xs">
             <Label htmlFor="expiry-option">{t("autoRevertLabel")}</Label>
@@ -400,44 +304,6 @@ export default function TvControlPage() {
       {/* Remounted (not just refetched) when another admin edits the
           timetable, so an open editor never sits on a stale slot. */}
       <Timetable key={timetableKey} modes={MODES} onChanged={load} />
-
-      <Modal
-        open={confirmOpen}
-        onOpenChange={setConfirmOpen}
-        title={mode === "wifi" ? t("confirmWifiBroadcastTitle") : t("confirmUrgentBroadcastTitle")}
-        icon={AlertTriangleIcon}
-        footer={
-          <>
-            <Button variant="outline" onClick={() => setConfirmOpen(false)}>
-              {t("cancel")}
-            </Button>
-            <SubmitButton pending={busy} onClick={broadcast}>
-              {t("broadcastNow")}
-            </SubmitButton>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <p className="text-muted-foreground text-sm">
-            {mode === "wifi" ? t("confirmWifiBroadcastDesc") : t("confirmUrgentBroadcastDesc")}
-          </p>
-          <div className="rounded-lg border p-4">
-            {mode === "wifi" ? (
-              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-                <dt className="text-muted-foreground">{t("networkNameLabel")}</dt>
-                <dd className="font-mono">{ssid || "—"}</dd>
-                <dt className="text-muted-foreground">{t("password")}</dt>
-                <dd className="font-mono">{password || "—"}</dd>
-              </dl>
-            ) : (
-              <div>
-                <p className="font-semibold">{title || t("leaveBlankShowActive")}</p>
-                {body && <p className="text-muted-foreground mt-1 text-sm">{body}</p>}
-              </div>
-            )}
-          </div>
-        </div>
-      </Modal>
     </div>
   );
 }

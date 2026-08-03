@@ -355,15 +355,15 @@ describe("TV mode (H42)", () => {
       method: "PATCH",
       url: "/api/tv/mode",
       headers: asUser(tvController),
-      payload: { mode: "announcement", payload: { title: "Apertura", body: "¡Empezamos!" } },
+      payload: { mode: "live", payload: null },
     });
     expect(res.statusCode).toBe(200);
     expect(await broadcastCount("tv")).toBe(before + 1); // TV_MODE_CHANGED
 
     const read = await app.inject({ method: "GET", url: "/api/tv/mode" });
     expect(read.json()).toMatchObject({
-      mode: "announcement",
-      payload: { title: "Apertura", body: "¡Empezamos!" },
+      mode: "live",
+      payload: null,
       expiresAt: null,
     });
 

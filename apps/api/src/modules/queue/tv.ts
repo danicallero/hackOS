@@ -19,14 +19,7 @@ const TV_MODE_KEY = "tv:mode";
 /** Last state the scheduler actually published, so a tick only broadcasts on change. */
 const TV_EFFECTIVE_KEY = "tv:effective";
 
-export type TvModeName =
-  | "rooms"
-  | "schedule"
-  | "sponsors"
-  | "announcement"
-  | "wifi"
-  | "timer"
-  | "live";
+export type TvModeName = "rooms" | "schedule" | "sponsors" | "wifi" | "live";
 
 /** One operator broadcast. Wins over the timetable until cleared or expired. */
 export interface TvMode {
@@ -60,6 +53,16 @@ export interface TvState extends TvMode {
   slot: TvSlot | null;
 }
 
+const TV_MODE_NAMES: readonly TvModeName[] = ["rooms", "schedule", "sponsors", "wifi", "live"];
+
+/** Older Valkey overrides may survive a deploy. Timer safely becomes live;
+ * retired announcement overrides are ignored so they cannot strand the wall
+ * on a mode the display no longer renders. */
+function normalizeLegacyTvMode(mode: unknown): TvModeName | null {
+  if (mode === "timer") return "live";
+  return TV_MODE_NAMES.includes(mode as TvModeName) ? (mode as TvModeName) : null;
+}
+
 const DEFAULT_MODE: TvMode = {
   mode: "rooms",
   payload: null,
@@ -72,7 +75,10 @@ export async function getTvOverride(): Promise<TvMode | null> {
   const raw = await valkey.get(TV_MODE_KEY);
   if (!raw) return null;
   // Older payloads (pre issue #193) lack expiresAt/broadcastAt — default them.
-  return { ...DEFAULT_MODE, ...(JSON.parse(raw) as Partial<TvMode>) };
+  const parsed = JSON.parse(raw) as Partial<TvMode>;
+  const mode = normalizeLegacyTvMode(parsed.mode);
+  if (!mode) return null;
+  return { ...DEFAULT_MODE, ...parsed, mode };
 }
 
 function overrideIsLive(override: TvMode | null, now: number): override is TvMode {

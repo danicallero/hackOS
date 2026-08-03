@@ -255,7 +255,7 @@ capability→workspace mapping: [`navigation.md`](./navigation.md).**
   applications, My project, My queue, Wallet, Inbox, Profile. Concepts that
   aren't available yet don't become permanent empty nav items.
 - Work area: capability-gated workspaces — Applications, Projects, Live
-  judging, Logistics, Programme, Sponsors, Communications, Event setup,
+  judging, Logistics, Programme, Sponsors, Event setup,
   Access and audit. A participant who also judges keeps their personal queue
   *and* gains Live judging.
 - Keep the last workspace per device; order time-critical work above
@@ -383,6 +383,12 @@ the rules that bind UI work:
   ignores the screen entirely. Use `text-[1.75em]`, `p-[2em]`, `gap-[1em]`.
 - **Nothing may require hover, focus, click, or scroll to be read.** Overflowing
   text uses `MarqueeText`, never a truncating ellipsis or a tooltip.
+- **One shared top bar.** Every TV mode uses `TvHeader`; dense room grids use
+  its compact variant instead of rebuilding brand, event name, and clock.
+- **Announcements are content, not a TV mode.** An active announcement may
+  temporarily replace the base view at full screen or occupy reserved space
+  inside it. Embedded announcements never cover schedule, room, sponsor, or
+  Wi-Fi content, and a null end keeps them present until deletion.
 - **Assume portrait exists.** `TvScreen` reports `portrait`; stack rather than
   squeeze.
 - **Set leading explicitly on anything that wraps.** `globals.css` puts a fixed

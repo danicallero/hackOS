@@ -10,8 +10,10 @@ what each mode renders. Code lives in `apps/api/src/modules/queue/tv*.ts` and
 There is exactly one public route, `/tv`, and every screen in the venue shows
 the same thing — that is the product decision, not a limitation to route
 around. What changes over the event is *which* view is on it: the combined
-live screen for most of the day, the judging rooms grid while judging runs, a
-full-screen announcement when something happens.
+live screen for most of the day or the judging rooms grid while judging runs.
+Announcements are a content layer managed from **Programme → Announcements**:
+they can reserve space inside the current view or temporarily occupy the full
+screen without becoming a manually selectable TV mode.
 
 ## What's on screen: three layers
 
@@ -66,11 +68,32 @@ flip at the same instant, and rotation generates no SSE traffic.
 | --- | --- |
 | `live` | The everyday screen: countdown + upcoming schedule + sponsor grid + Wi-Fi, each block individually toggleable |
 | `rooms` | Per-room judging grid: presenting now, waiting room, next in queue (H41) |
-| `schedule` | The full public agenda |
-| `sponsors` | Sponsor logo wall |
-| `announcement` | One full-screen message (from the payload, else the active announcement) |
+| `schedule` | The same self-advancing upcoming-agenda component used by `live`, without countdown, sponsors or Wi-Fi |
+| `sponsors` | Event name and sponsor logo wall, without a redundant “Sponsors” wordmark |
 | `wifi` | Full-screen network name + password |
-| `timer` | The event countdown alone |
+
+The former `announcement` and `timer` modes are normalised out of stored
+timetable JSON by migration 0602. A legacy timer becomes `live`; a legacy
+announcement item is removed, with `live` used when that would empty a slot.
+The countdown remains available as a block of the `live` composition.
+
+### Announcements on screens
+
+An announcement independently chooses whether it sends user notifications and
+how it appears on TVs: `none`, `embedded`, or `fullscreen`. Its
+`publish_at`/`expires_at` window controls both public visibility and screen
+presence; no expiry means it remains until deletion. If several eligible
+announcements overlap, the newest visible announcement for each placement is
+the deterministic winner.
+
+- `fullscreen` occupies the TV frame above the current base mode, while the
+  underlying override/timetable continues to resolve normally.
+- `embedded` reserves layout space: below the reduced sponsor grid on `live`,
+  as an announcement card in the room grid, and as a compact non-covering band
+  on schedule, sponsors, and Wi-Fi views.
+
+Deleting an announcement broadcasts a public-content invalidation so an
+indefinite message disappears from already-open screens immediately.
 
 ### The live screen's payload
 
@@ -112,8 +135,9 @@ They are **not** on `/api/public/event` — that feed backs the public website.
 printed on the venue wall, and the screens showing it are unauthenticated
 kiosks. An audit entry records that the password changed, never its value.
 
-An operator's `wifi` broadcast payload still overrides the stored values while
-it is on screen.
+The TV control page never edits or overrides those credentials. Both the live
+block and full-screen Wi-Fi mode always read the event configuration, keeping a
+single source of truth for the network shown across the venue.
 
 Both surfaces render a **join QR** (`WifiQr`, `wifiJoinCode()`): the standard
 `WIFI:T:…;S:…;P:…;;` payload a phone camera joins from, so nobody types a
@@ -129,7 +153,9 @@ half-typed operator payload that would fail to connect anyone.
 Nobody can scroll, zoom, or squint at a TV, and the same page has to work on a
 1080p panel, a 4K wall and a portrait totem. Two mechanisms, deliberately:
 
-- **`TvScreen`** (`tv-screen.tsx`) — the frame for every mode except `rooms`.
+- **`TvScreen`** (`tv-screen.tsx`) — the frame for every mode, with one shared
+  `TvHeader`. The rooms grid selects the compact header and keeps its specialised
+  fitting strategy below that universal chrome.
   It is exactly one screen tall (`h-dvh`, never scrolls) and sets a root font
   size from `useTvScale()` (see the short-side rule below). Views
   size themselves in **`em`** (`text-[2em]`, `p-[1.5em]`), never in Tailwind's
@@ -162,9 +188,9 @@ fewer than two (`bestSponsorColumns`).
 1. **Current broadcast** — live preview, SSE connection state, and *why* the
    screens show what they show (override / timetable slot / default), with
    **Back to schedule** when an override is live.
-2. **Display mode** — the manual broadcast, with the per-mode payload editors
-   and the existing 15/30/60-minute auto-revert for announcement, Wi-Fi and
-   timer.
+2. **Display mode** — the manual broadcast for live, rooms, schedule, sponsors,
+   and Wi-Fi. Wi-Fi has no credential editor; it reads event configuration.
+   Announcements and standalone countdowns are not selectable modes.
 3. **Screen timetable** — slot CRUD. Slot mutations are audited (H53) and
    broadcast `tv.schedule.changed`; editing the running slot changes the wall
    immediately rather than at the next tick.

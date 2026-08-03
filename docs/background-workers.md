@@ -37,7 +37,7 @@ queue no matter how many times scheduling runs (idempotent scheduling).
 | Queue (`jobId`) | File | Tick | What it drains |
 | --- | --- | --- | --- |
 | `notifications-outbox` | `notifications/dispatcher.ts` | **5 s** | `notification_outbox` rows that are `queued AND next_attempt_at <= now()` → renders + sends via the channel adapter |
-| `announcements-publisher` | `notifications/announcements-publisher.ts` | **15 s** | announcements whose `publish_at` has passed → reveals them |
+| `announcements-publisher` | `notifications/announcements-publisher.ts` | **15 s** | announcements whose `publish_at` has passed → reveals their configured screen placement and, when selected, fans out inbox/email/push through each recipient's preferences exactly once |
 | `spot-confirmation expirer` | `applications/expirer.ts` | **60 s** | accepted responses whose confirmation window elapsed → `expired` (`expireDueConfirmations`), then scoped wallet tokens dead for over a day (`purgeExpiredWalletAccessTokens`, issue #369) |
 | `queue-pump` | `queue/pump.ts` | repeatable | for each active room, tops up the live judging queue (`callNextForRoom`) |
 | `tv-scheduler` | `queue/tv-scheduler.ts` | **5 s** | resolves what the venue screens should show (operator override → covering `tv_slots` window → default `rooms`), drops an override whose `expiresAt` passed, and broadcasts `tv.mode.changed` **only when the resolved state changed** — so a slot boundary reaches the fleet unattended without waking every screen every tick (H42). The public TV SSE endpoint receives only the dedicated payload-free `public-tv` invalidation mirror and refetches its sanitized projection; the operational TV event remains off the public stream. |

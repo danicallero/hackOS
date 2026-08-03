@@ -6,8 +6,8 @@ import { clearTvOverride, getTvOverride, publishTvStateIfChanged } from "./tv.js
  * H42: keeps the fleet on whatever it should be showing without a human.
  * Two jobs, both on the same tick:
  *
- *  - **override expiry** — a mode broadcast with an expiresAt (announcement,
- *    wifi, timer…) is dropped once it's due, handing the screens back to the
+ *  - **override expiry** — a mode broadcast with an expiresAt (wifi…) is
+ *    dropped once it's due, handing the screens back to the
  *    timetable rather than needing someone to remember;
  *  - **slot boundaries** — when a tv_slots window opens or closes, the newly
  *    effective state is broadcast so every screen follows along.

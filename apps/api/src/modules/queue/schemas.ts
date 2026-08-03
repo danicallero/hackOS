@@ -95,15 +95,7 @@ export const reviewMessageBody = z.object({
 });
 
 /** Every view a screen can show (H42). "live" combines countdown + schedule + sponsors + Wi-Fi. */
-export const tvModeName = z.enum([
-  "rooms",
-  "schedule",
-  "sponsors",
-  "announcement",
-  "wifi",
-  "timer",
-  "live",
-]);
+export const tvModeName = z.enum(["rooms", "schedule", "sponsors", "wifi", "live"]);
 
 export const tvModeBody = z.object({
   mode: tvModeName,
