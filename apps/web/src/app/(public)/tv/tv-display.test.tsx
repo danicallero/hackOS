@@ -2,7 +2,8 @@ import { EVENTS } from "@hackos/shared/events";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { TvDisplay } from "./tv-display";
+import { announcementContent } from "./announcement-content";
+import { activeAnnouncement, TvDisplay } from "./tv-display";
 
 const { pending, useEventSource } = vi.hoisted(() => ({
   pending: new Promise<never>(() => undefined),
@@ -63,5 +64,68 @@ describe("TvDisplay public realtime boundary", () => {
       expect.objectContaining({ events: [EVENTS.DATA_CHANGED] }),
     );
     expect(useEventSource).not.toHaveBeenCalledWith("/api/queue/stream", expect.anything());
+  });
+});
+
+describe("TV announcement layers", () => {
+  const announcements = [
+    {
+      id: 1,
+      title: "Integrated",
+      body: "Below the content",
+      publishAt: null,
+      expiresAt: null,
+      screenPlacement: "embedded" as const,
+    },
+    {
+      id: 2,
+      title: "Urgent",
+      body: "All screens",
+      publishAt: null,
+      expiresAt: null,
+      screenPlacement: "fullscreen" as const,
+    },
+  ];
+
+  it("selects the first active notice of each placement in feed order", () => {
+    expect(activeAnnouncement(announcements, "fullscreen")?.title).toBe("Urgent");
+    expect(activeAnnouncement(announcements, "embedded")?.title).toBe("Integrated");
+  });
+
+  it("ignores legacy notices without an explicit screen placement", () => {
+    expect(
+      activeAnnouncement(
+        [
+          {
+            id: 3,
+            title: "Inbox only",
+            body: "No wall display",
+            publishAt: null,
+            expiresAt: null,
+          },
+        ],
+        "fullscreen",
+      ),
+    ).toBeUndefined();
+  });
+
+  it("uses the current language when available and falls back field-by-field to base copy", () => {
+    const notice = {
+      id: 4,
+      title: "Cena lista",
+      body: "Comedor principal",
+      translations: { en: { title: "Dinner is ready", body: "" } },
+      publishAt: null,
+      expiresAt: null,
+      screenPlacement: "embedded" as const,
+    };
+    expect(announcementContent(notice, "en")).toEqual({
+      title: "Dinner is ready",
+      body: "Comedor principal",
+    });
+    expect(announcementContent(notice, "gl")).toEqual({
+      title: "Cena lista",
+      body: "Comedor principal",
+    });
   });
 });

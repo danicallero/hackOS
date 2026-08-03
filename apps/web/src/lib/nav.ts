@@ -286,6 +286,12 @@ export const WORKSPACES: Workspace[] = [
         judgeVisible: true,
       },
       {
+        title: "announcements",
+        href: "/announcements",
+        icon: MegaphoneIcon,
+        capability: CAPABILITIES.ANNOUNCEMENTS_MANAGE,
+      },
+      {
         title: "tvControl",
         href: "/tv/control",
         icon: TvIcon,
@@ -311,19 +317,6 @@ export const WORKSPACES: Workspace[] = [
         icon: TrophyIcon,
         anyCapability: [CAPABILITIES.SPONSORS_MANAGE, CAPABILITIES.QUEUE_ADMIN],
         sponsorVisible: true,
-      },
-    ],
-  },
-  {
-    id: "communications",
-    label: "workspaceCommunications",
-    icon: MegaphoneIcon,
-    items: [
-      {
-        title: "announcements",
-        href: "/announcements",
-        icon: MegaphoneIcon,
-        capability: CAPABILITIES.ANNOUNCEMENTS_MANAGE,
       },
     ],
   },

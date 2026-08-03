@@ -22,7 +22,8 @@ export async function runAnnouncementsPublisherOnce(): Promise<{ published: numb
   const published = await withTransaction(async (client) => {
     const { rows } = await client.query(
       `SELECT * FROM announcements
-       WHERE fanned_out_at IS NULL
+       WHERE notify_users = TRUE
+         AND fanned_out_at IS NULL
          AND (publish_at IS NULL OR publish_at <= now())
          AND (expires_at IS NULL OR expires_at > now())
        ORDER BY id

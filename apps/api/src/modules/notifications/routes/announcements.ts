@@ -29,9 +29,10 @@ function routeAccess(routeAccessPolicy: RouteAccessPolicy) {
 
 /**
  * H50 announcements: CRUD behind ANNOUNCEMENTS_MANAGE, a public visibility-windowed
- * feed, and per-user read markers. Create/update broadcast CONTENT_ANNOUNCEMENT on
- * topic "content" for TV/panels (H41-H42 style live refresh) and, when the row is
- * visible right now, fan out in_app+push outbox rows to the target audience.
+ * feed, and per-user read markers. Create/update/delete broadcast
+ * CONTENT_ANNOUNCEMENT on topic "content" for TV/panels (H41-H42 style live
+ * refresh). When an opted-in announcement is visible, it fans out through
+ * every recipient's enabled inbox/email/push preferences.
  */
 export function registerAnnouncementRoutes(app: FastifyInstance): void {
   const typedApp = app.withTypeProvider<ZodTypeProvider>();
@@ -87,7 +88,12 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
     {
       ...routeAccess(manage),
       preHandler: requireCapability(CAPABILITIES.ANNOUNCEMENTS_MANAGE),
-      schema: { body: announcementBodySchema },
+      schema: {
+        summary: "Create announcement",
+        description:
+          "Creates an auditable announcement with optional es/gl/en translations, a single publication window and a screen placement. notifyUsers sends inbox, email and push only through each recipient's enabled announcement preferences.",
+        body: announcementBodySchema,
+      },
     },
     async (req, reply) => {
       const body = req.body;
@@ -95,7 +101,9 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
         const created = await createAnnouncement(client, req.userId as number, {
           title: body.title,
           body: body.body,
-          targetRole: body.targetRole ?? null,
+          translations: body.translations,
+          notifyUsers: body.notifyUsers,
+          screenPlacement: body.screenPlacement,
           publishAt: body.publishAt ?? null,
           expiresAt: body.expiresAt ?? null,
         });
@@ -120,7 +128,13 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
     {
       ...routeAccess(manage),
       preHandler: requireCapability(CAPABILITIES.ANNOUNCEMENTS_MANAGE),
-      schema: { params: announcementIdParamsSchema, body: announcementUpdateBodySchema },
+      schema: {
+        summary: "Update announcement",
+        description:
+          "Updates an auditable announcement's translations, delivery opt-in, screen placement or publication window. A notification fan-out occurs at most once when notifyUsers is enabled and the announcement becomes visible.",
+        params: announcementIdParamsSchema,
+        body: announcementUpdateBodySchema,
+      },
     },
     async (req) => {
       const body = req.body;
@@ -129,7 +143,9 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
         const updated = await updateAnnouncement(client, req.params.id, {
           title: body.title,
           body: body.body,
-          targetRole: body.targetRole,
+          translations: body.translations,
+          notifyUsers: body.notifyUsers,
+          screenPlacement: body.screenPlacement,
           publishAt: body.publishAt,
           expiresAt: body.expiresAt,
         });
@@ -154,10 +170,15 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
     {
       ...routeAccess(manage),
       preHandler: requireCapability(CAPABILITIES.ANNOUNCEMENTS_MANAGE),
-      schema: { params: announcementIdParamsSchema },
+      schema: {
+        summary: "Delete announcement",
+        description:
+          "Deletes the announcement in an audited transaction and emits a content invalidation so permanent TV placements disappear immediately.",
+        params: announcementIdParamsSchema,
+      },
     },
     async (req) => {
-      return withTransaction(async (client) => {
+      const deleted = await withTransaction(async (client) => {
         const deleted = await deleteAnnouncement(client, req.params.id);
         await audit(client, {
           actorId: req.userId as number,
@@ -166,8 +187,13 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
           action: "delete",
           before: deleted,
         });
-        return { ok: true };
+        return deleted;
       });
+      await broadcast(SSE_TOPICS.CONTENT, EVENTS.CONTENT_ANNOUNCEMENT, {
+        action: "delete",
+        id: deleted.id,
+      });
+      return { ok: true };
     },
   );
 

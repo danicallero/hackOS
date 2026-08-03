@@ -7,6 +7,7 @@ import {
   msUntilNextRotation,
   resolveTimer,
   rotationIndexAt,
+  TV_CONTROL_MODES,
   type TvSlotItem,
   upcomingWindow,
   wifiJoinCode,
@@ -18,6 +19,13 @@ const item = (mode: TvSlotItem["mode"], seconds: number | null = null): TvSlotIt
   mode,
   payload: null,
   seconds,
+});
+
+describe("TV control modes", () => {
+  it("keeps legacy standalone announcements and timers out of operator controls", () => {
+    expect(TV_CONTROL_MODES).not.toContain("announcement");
+    expect(TV_CONTROL_MODES).not.toContain("timer");
+  });
 });
 
 describe("liveConfigFrom", () => {

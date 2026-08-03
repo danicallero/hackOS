@@ -30,13 +30,24 @@ export const notificationIdParamsSchema = z.object({
   id: z.coerce.number().int().positive(),
 });
 
-export const announcementBodySchema = z.object({
-  title: z.string().min(1).max(200),
-  body: z.string().min(1),
-  targetRole: z.string().nullable().optional(),
-  publishAt: z.iso.datetime({ offset: true }).nullable().optional(),
-  expiresAt: z.iso.datetime({ offset: true }).nullable().optional(),
-});
+export const announcementBodySchema = z
+  .object({
+    title: z.string().min(1).max(200),
+    body: z.string().min(1),
+    translations: z
+      .object({
+        es: z.object({ title: z.string().min(1).max(200), body: z.string().min(1) }).optional(),
+        gl: z.object({ title: z.string().min(1).max(200), body: z.string().min(1) }).optional(),
+        en: z.object({ title: z.string().min(1).max(200), body: z.string().min(1) }).optional(),
+      })
+      .optional()
+      .default({}),
+    notifyUsers: z.boolean().optional().default(false),
+    screenPlacement: z.enum(["none", "embedded", "fullscreen"]).optional().default("none"),
+    publishAt: z.iso.datetime({ offset: true }).nullable().optional(),
+    expiresAt: z.iso.datetime({ offset: true }).nullable().optional(),
+  })
+  .strict();
 
 export const announcementUpdateBodySchema = announcementBodySchema.partial();
 

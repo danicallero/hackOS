@@ -29,6 +29,8 @@ import {
   deleteTvSlot,
   listTvSlots,
   liveConfigFrom,
+  TV_CONTROL_MODES,
+  type TvControlMode,
   type TvModeName,
   type TvSlot,
   updateTvSlot,
@@ -42,7 +44,7 @@ import { LiveSettings } from "./live-settings";
  * short ceremony window sit inside an all-day one.
  */
 
-type DraftItem = { mode: TvModeName; payload: unknown; seconds: number | null };
+type DraftItem = { mode: TvControlMode; payload: unknown; seconds: number | null };
 type Draft = {
   id: number | null;
   label: string;
@@ -64,16 +66,19 @@ function emptyDraft(): Draft {
 }
 
 function draftFrom(slot: TvSlot): Draft {
+  const items = slot.items
+    .filter((item) => (TV_CONTROL_MODES as readonly TvModeName[]).includes(item.mode))
+    .map((item) => ({
+      mode: item.mode as TvControlMode,
+      payload: item.payload,
+      seconds: item.seconds,
+    }));
   return {
     id: slot.id,
     label: slot.label ?? "",
     startsAt: toDatetimeLocal(slot.startsAt),
     endsAt: toDatetimeLocal(slot.endsAt),
-    items: slot.items.map((item) => ({
-      mode: item.mode,
-      payload: item.payload,
-      seconds: item.seconds,
-    })),
+    items: items.length ? items : [{ mode: "live", payload: DEFAULT_LIVE_CONFIG, seconds: null }],
   };
 }
 
@@ -85,7 +90,7 @@ export function Timetable({
   modes,
   onChanged,
 }: {
-  modes: Array<{ value: TvModeName; label: string }>;
+  modes: Array<{ value: TvControlMode; label: string }>;
   onChanged: () => void;
 }) {
   const { t } = useLocale();
@@ -295,7 +300,7 @@ export function Timetable({
                           const items = [...draft.items];
                           items[index] = {
                             ...item,
-                            mode: mode as TvModeName,
+                            mode: mode as TvControlMode,
                             payload: mode === "live" ? (item.payload ?? DEFAULT_LIVE_CONFIG) : null,
                           };
                           setDraft({ ...draft, items });

@@ -7,13 +7,23 @@
 import { api } from "./api";
 
 export type NotificationChannel = "in_app" | "email" | "push" | "discord";
+export type AnnouncementScreenPlacement = "none" | "embedded" | "fullscreen";
+export type AnnouncementTranslations = Partial<
+  Record<"es" | "gl" | "en", { title: string; body: string }>
+>;
+export type AnnouncementTranslationFields = Record<
+  "es" | "gl" | "en",
+  { title: string; body: string }
+>;
 
 export interface Announcement {
   id: number;
   author_id: number;
   title: string;
   body: string;
-  target_role: string | null;
+  translations: AnnouncementTranslations | null;
+  notify_users: boolean;
+  screen_placement: AnnouncementScreenPlacement;
   publish_at: string | null;
   expires_at: string | null;
   fanned_out_at: string | null;
@@ -23,7 +33,9 @@ export interface Announcement {
 export interface AnnouncementInput {
   title: string;
   body: string;
-  targetRole: string | null;
+  translations: AnnouncementTranslationFields;
+  notifyUsers: boolean;
+  screenPlacement: AnnouncementScreenPlacement;
   publishAt: string | null;
   expiresAt: string | null;
 }

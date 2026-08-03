@@ -2676,6 +2676,33 @@ const dict: Record<string, I18nText> = {
     gl: "Non se puido gardar o aviso.",
     en: "Could not save announcement.",
   },
+  announcementNotifyUsers: {
+    es: "Enviar notificación a las personas",
+    gl: "Enviar notificación ás persoas",
+    en: "Notify people",
+  },
+  announcementNotifyUsersHelp: {
+    es: "La bandeja de entrada, el correo y las notificaciones push siguen las preferencias de cada persona.",
+    gl: "A caixa de entrada, o correo e as notificacións push seguen as preferencias de cada persoa.",
+    en: "Inbox, email, and push delivery follow each person's preferences.",
+  },
+  announcementScreenPlacement: {
+    es: "Mostrar en pantallas",
+    gl: "Amosar en pantallas",
+    en: "Show on screens",
+  },
+  announcementPlacementNone: { es: "No mostrar", gl: "Non amosar", en: "Do not show" },
+  announcementPlacementEmbedded: { es: "Integrado", gl: "Integrado", en: "Embedded" },
+  announcementPlacementFullscreen: {
+    es: "Pantalla completa",
+    gl: "Pantalla completa",
+    en: "Full screen",
+  },
+  announcementTranslationsRequired: {
+    es: "Completa el título y el mensaje en castellano, gallego e inglés.",
+    gl: "Completa o título e a mensaxe en castelán, galego e inglés.",
+    en: "Complete the title and message in Spanish, Galician, and English.",
+  },
 
   // ---- Admin: TV control ----
   couldNotLoadTvMode: {
