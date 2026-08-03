@@ -93,6 +93,38 @@ describe("push channel", () => {
     });
   });
 
+  it("uses compact, ready-to-act copy for pre-call notifications (H38)", async () => {
+    const userId = await createUser();
+    await addPushToken(userId, "ExponentPushToken[precall]");
+    await enqueueOutbox(
+      userId,
+      "push",
+      {
+        template: "queue.precall",
+        vars: { teamName: "Rocket", challengeName: "Sustainability", etaMinutes: "8" },
+      },
+      "queue",
+    );
+
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ data: [{ status: "ok" }] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await drainOutboxOnce();
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, { body: string }];
+    const [message] = JSON.parse(init.body) as { title: string; body: string }[];
+    expect(message).toMatchObject({
+      title: "You're up soon — get ready",
+      body: "Your team Rocket will be called for Sustainability in about 8 minutes.",
+    });
+  });
+
   it("includes category and template in the push data payload for client-side routing", async () => {
     const userId = await createUser();
     await addPushToken(userId, "ExponentPushToken[ccc]");
