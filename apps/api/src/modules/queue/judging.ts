@@ -5,6 +5,7 @@ import { audit } from "../../lib/audit.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
 import { writeQueueHistory } from "./history.js";
+import { REPO_MEMBER_RELATION_SQL } from "./membership.js";
 import { notifyChallengeQueueChanged } from "./notify.js";
 import type { QueueEntryRow } from "./types.js";
 
@@ -299,8 +300,8 @@ export async function searchChallengeQueue(challengeId: number, q: string) {
        LEFT JOIN attempt_review ar ON ar.attempt_id = qe.id
        LEFT JOIN LATERAL (
          SELECT br.id AS room_id, br.name AS room_name, brepo.name AS team_name, bqe.status
-           FROM submissions s1
-           JOIN submissions s2 ON s2.user_id = s1.user_id
+           FROM (${REPO_MEMBER_RELATION_SQL}) s1
+           JOIN (${REPO_MEMBER_RELATION_SQL}) s2 ON s2.user_id = s1.user_id
            JOIN queue_entries bqe ON bqe.repo_id = s2.repo_id
                                   AND bqe.status IN ('called', 'in_room', 'presenting')
            JOIN rooms br ON br.id = bqe.assigned_room_id

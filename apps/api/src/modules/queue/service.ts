@@ -119,7 +119,13 @@ export async function callNextForRoom(
     );
 
     for (const candidate of candidates as QueueEntryRow[]) {
-      if (await isRepoBlockedByBusyMember(client, candidate.repo_id)) continue; // H30: skip, keep position
+      if (
+        await isRepoBlockedByBusyMember(client, candidate.repo_id, {
+          roomId,
+          excludeEntryId: candidate.id,
+        })
+      )
+        continue; // H30: skip, keep position
 
       const { rows: updatedRows } = await client.query(
         `UPDATE queue_entries
@@ -699,7 +705,12 @@ export async function manualCall(
     if (entry.status === targetStatus) {
       throw new ConflictError(`Entry is already ${targetStatus}`, { entryId });
     }
-    if (await isRepoBlockedByBusyMember(client, entry.repo_id)) {
+    if (
+      await isRepoBlockedByBusyMember(client, entry.repo_id, {
+        roomId,
+        excludeEntryId: entry.id,
+      })
+    ) {
       throw new ConflictError("Team has a member busy in another room (H30)", { entryId });
     }
     const roomRes = await client.query(`SELECT * FROM rooms WHERE id = $1`, [roomId]);

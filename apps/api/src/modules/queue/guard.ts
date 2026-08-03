@@ -1,11 +1,14 @@
 import type { Queryable } from "../../db/pool.js";
+import { REPO_MEMBER_RELATION_SQL } from "./membership.js";
 
 /**
- * H30 hard invariant: never call a team if any of its members (via
- * `submissions` of the repo being considered) is already `called`, `in_room`
- * or `presenting` in ANOTHER room. This includes another entry for the same
- * repo when that project competes in more than one challenge: a team cannot
- * physically wait at two room doors at once.
+ * H30 hard invariant: never call a team if any of its members is already
+ * `called`, `in_room` or `presenting` in ANOTHER room. Membership includes the
+ * authoritative submission row, a linked Devpost participant, and the primary
+ * or verified-secondary email fallback used by the project/queue roster.
+ * This includes another entry for the same repo when that project competes in
+ * more than one challenge: a team cannot physically wait at two room doors at
+ * once.
  *
  * Race note (plan/07 §2): row locks on the candidate entry are NOT enough —
  * two rooms calling two different repos that share a member would each lock
@@ -20,21 +23,30 @@ const H30_LOCK_NAMESPACE = 815_030;
 export async function isRepoBlockedByBusyMember(
   client: Queryable,
   repoId: number,
+  opts: { roomId?: number | null; excludeEntryId?: number | null } = {},
 ): Promise<boolean> {
   await client.query(
-    `SELECT pg_advisory_xact_lock($1::int, user_id)
-       FROM (SELECT DISTINCT user_id FROM submissions WHERE repo_id = $2 ORDER BY user_id) members`,
+    `SELECT pg_advisory_xact_lock($1::int, members.user_id)
+       FROM (
+         SELECT DISTINCT user_id
+           FROM (${REPO_MEMBER_RELATION_SQL}) repo_members
+          WHERE repo_id = $2
+          ORDER BY user_id
+       ) members`,
     [H30_LOCK_NAMESPACE, repoId],
   );
   const { rows } = await client.query(
-    `SELECT 1
-       FROM submissions s1
-       JOIN submissions s2 ON s2.user_id = s1.user_id
-       JOIN queue_entries qe ON qe.repo_id = s2.repo_id
+    `WITH repo_members AS (${REPO_MEMBER_RELATION_SQL})
+     SELECT 1
+       FROM repo_members candidate
+       JOIN repo_members active ON active.user_id = candidate.user_id
+       JOIN queue_entries qe ON qe.repo_id = active.repo_id
                               AND qe.status IN ('called', 'in_room', 'presenting')
-      WHERE s1.repo_id = $1
+      WHERE candidate.repo_id = $1
+        AND ($2::int IS NULL OR qe.assigned_room_id IS DISTINCT FROM $2::int)
+        AND ($3::int IS NULL OR qe.id <> $3::int)
       LIMIT 1`,
-    [repoId],
+    [repoId, opts.roomId ?? null, opts.excludeEntryId ?? null],
   );
   return rows.length > 0;
 }

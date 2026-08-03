@@ -60,6 +60,11 @@ Key facts that drive every design decision below:
   `unmatched`. The imported email, name, username, and batch stay intact for
   audit and a later reconciliation; the detached account no longer appears in
   project, queue, or profile membership views.
+- **Queue availability uses the full roster relation (H30).** The busy-member
+  guard and its operator-facing skip projection consider `submissions`, linked
+  `devpost_participants`, and primary/verified-secondary email matches. This
+  keeps judging safe while legacy imports are being reconciled and matches the
+  membership relation used by queue roster and notification reads.
 
 ### 1.2 Challenges module (`apps/api/src/modules/challenges/`)
 
