@@ -2,8 +2,10 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { useLocalSearchParams, useNavigation } from "expo-router";
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Linking,
+  Modal,
   Pressable,
   ScrollView,
   Text,
@@ -13,9 +15,10 @@ import {
 } from "react-native";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import Animated, { interpolate, type SharedValue, useAnimatedStyle } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  ActionButton,
   EmptyState,
+  FloatingGlassButton,
   InfoRow,
   Section,
   Separator,
@@ -90,6 +93,7 @@ export function TeamOperationsScreen() {
   const headerNavigation = useNavigation(isPadIdiom() ? "/(tabs)/others" : undefined);
   const { t } = useLocale();
   const { me } = useMeContext();
+  const insets = useSafeAreaInsets();
   const [entry, setEntry] = useState<TeamEntry | null>(null);
   const [room, setRoom] = useState<RoomView["room"] | null>(null);
   const [challenge, setChallenge] = useState<RoomView["challenge"]>(null);
@@ -107,6 +111,19 @@ export function TeamOperationsScreen() {
     me?.capabilities.includes(CAPABILITIES.ADMIN_ALL) ||
     me?.capabilities.includes(CAPABILITIES.PROJECTS_EDIT) ||
     false;
+  const canLinkProject =
+    me?.capabilities.includes(CAPABILITIES.ADMIN_ALL) ||
+    me?.capabilities.includes(CAPABILITIES.PROJECTS_IMPORT) ||
+    false;
+  const [linkTarget, setLinkTarget] = useState<TeamMember | null>(null);
+  const [linkQuery, setLinkQuery] = useState("");
+  const [linkCandidates, setLinkCandidates] = useState<MemberCandidate[]>([]);
+  const [linkCandidatesLoading, setLinkCandidatesLoading] = useState(false);
+  const [linkCandidatesError, setLinkCandidatesError] = useState<Error | null>(null);
+  const [linkSearched, setLinkSearched] = useState(false);
+  const [linkMutation, setLinkMutation] = useState(false);
+  const [linkError, setLinkError] = useState<Error | null>(null);
+  const [linkSuccess, setLinkSuccess] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -267,6 +284,93 @@ export function TeamOperationsScreen() {
     [deleteMember, t],
   );
 
+  const openLinkModal = useCallback((member: TeamMember) => {
+    setLinkTarget(member);
+    setLinkQuery("");
+    setLinkCandidates([]);
+    setLinkSearched(false);
+    setLinkError(null);
+    setLinkSuccess(false);
+  }, []);
+
+  const closeLinkModal = useCallback(() => {
+    setLinkTarget(null);
+    setLinkQuery("");
+    setLinkCandidates([]);
+    setLinkSearched(false);
+    setLinkError(null);
+    setLinkSuccess(false);
+  }, []);
+
+  const searchLinkCandidates = useCallback(
+    async (rawQuery = linkQuery) => {
+      const query = rawQuery.trim();
+      if (!query) {
+        setLinkCandidates([]);
+        setLinkSearched(false);
+        return;
+      }
+      setLinkCandidatesLoading(true);
+      setLinkCandidatesError(null);
+      try {
+        const result = await apiFetch<{ users: MemberCandidate[] }>(
+          `/api/projects/member-candidates?q=${encodeURIComponent(query)}`,
+        );
+        setLinkCandidates(result.users);
+        setLinkSearched(true);
+      } catch (cause) {
+        setLinkCandidatesError(
+          cause instanceof Error ? cause : new Error(t("teamDetailMemberSearchError")),
+        );
+      } finally {
+        setLinkCandidatesLoading(false);
+      }
+    },
+    [linkQuery, t],
+  );
+
+  useEffect(() => {
+    const query = linkQuery.trim();
+    if (query.length < 2 || !linkTarget) {
+      setLinkCandidates([]);
+      setLinkSearched(false);
+      return;
+    }
+    const handle = setTimeout(() => {
+      void searchLinkCandidates(query);
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [searchLinkCandidates, linkQuery, linkTarget]);
+
+  const linkParticipant = useCallback(
+    async (candidate: MemberCandidate) => {
+      if (!linkTarget || !entry) return;
+      setLinkMutation(true);
+      setLinkError(null);
+      try {
+        await apiFetch("/api/devpost/imports/link-secondary", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Idempotency-Key": createIdempotencyKey(),
+          },
+          body: JSON.stringify({
+            repoId: entry.repo_id,
+            email: linkTarget.email,
+            userId: candidate.id,
+          }),
+        });
+        setLinkSuccess(true);
+        await load();
+      } catch (cause) {
+        setLinkError(cause instanceof Error ? cause : new Error(t("teamDetailLinkError")));
+      } finally {
+        setLinkMutation(false);
+      }
+    },
+    [linkTarget, entry, load, t],
+  );
+
   useLayoutEffect(() => {
     headerNavigation.setOptions({
       title: entry ? teamName : "",
@@ -421,41 +525,57 @@ export function TeamOperationsScreen() {
                 }
                 onAction={() => removeMember(member)}
               >
-                <View style={{ gap: 8, paddingHorizontal: 16, paddingVertical: 12 }}>
-                  <Text selectable style={{ color: colors.label, fontSize: 16, fontWeight: "600" }}>
-                    {memberDisplayName(member)}
-                  </Text>
-                  <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13 }}>
-                    {member.email}
-                  </Text>
-                  <StatusPill tone={memberLinkTone(member)}>
-                    {memberLinkLabel(member, t)}
-                  </StatusPill>
-                  {canEditProject && member.source ? (
+                <View
+                  accessible
+                  accessibilityLabel={`${memberDisplayName(member)}, ${member.email}, ${memberLinkLabel(member, t)}`}
+                  style={{
+                    flexDirection: "row",
+                    gap: 12,
+                    minHeight: 44,
+                    paddingHorizontal: 16,
+                    paddingVertical: 8,
+                  }}
+                >
+                  <View style={{ flex: 1, justifyContent: "center" }}>
+                    <Text
+                      selectable
+                      numberOfLines={1}
+                      style={{ color: colors.label, fontSize: 17 }}
+                    >
+                      {memberDisplayName(member)}
+                    </Text>
+                    <Text
+                      selectable
+                      numberOfLines={1}
+                      style={{ color: colors.secondaryLabel, fontSize: 15 }}
+                    >
+                      {member.email}
+                    </Text>
+                  </View>
+                  {member.matchType === "unmatched" && canLinkProject ? (
                     <Pressable
-                      accessibilityLabel={
-                        isSecondaryLinkedMember(member)
-                          ? t("teamDetailUnlinkSecondary")
-                          : t("teamDetailRemoveMember")
-                      }
                       accessibilityRole="button"
-                      accessibilityState={{ busy: memberMutation === member.email }}
+                      accessibilityLabel={t("teamDetailLinkToAccount")}
+                      onPress={() => openLinkModal(member)}
                       disabled={memberMutation !== null}
-                      onPress={() => removeMember(member)}
+                      hitSlop={8}
                       style={({ pressed }) => ({
-                        alignSelf: "flex-start",
-                        minHeight: 44,
+                        alignItems: "center",
                         justifyContent: "center",
-                        opacity: memberMutation !== null ? 0.45 : pressed ? 0.6 : 1,
+                        opacity: pressed ? 0.5 : 1,
                       })}
                     >
-                      <Text style={{ color: colors.destructive, fontSize: 15, fontWeight: "600" }}>
-                        {isSecondaryLinkedMember(member)
-                          ? t("teamDetailUnlinkSecondary")
-                          : t("teamDetailRemoveMember")}
+                      <Text style={{ color: colors.accent, fontSize: 15 }}>
+                        {t("teamDetailLinkToAccount")}
                       </Text>
                     </Pressable>
-                  ) : null}
+                  ) : (
+                    <View style={{ alignItems: "center", justifyContent: "center" }}>
+                      <StatusPill tone={memberLinkTone(member)}>
+                        {memberLinkLabel(member, t)}
+                      </StatusPill>
+                    </View>
+                  )}
                 </View>
               </SwipeableMemberRow>
             </View>
@@ -463,44 +583,74 @@ export function TeamOperationsScreen() {
           {canEditProject ? (
             <>
               {members.length ? <Separator /> : null}
-              <View style={{ gap: 10, padding: 16 }}>
-                <Text selectable style={{ color: colors.label, fontSize: 16, fontWeight: "600" }}>
+              <View style={{ gap: 8, padding: 16 }}>
+                <Text style={{ color: colors.label, fontSize: 15, fontWeight: "600" }}>
                   {t("teamDetailAddMember")}
                 </Text>
-                <Text
-                  selectable
-                  style={{ color: colors.secondaryLabel, fontSize: 13, lineHeight: 18 }}
-                >
+                <Text style={{ color: colors.secondaryLabel, fontSize: 13, lineHeight: 18 }}>
                   {t("teamDetailAddMemberHint")}
                 </Text>
-                <Text
-                  selectable
-                  style={{ color: colors.secondaryLabel, fontSize: 13, fontWeight: "600" }}
-                >
-                  {t("teamDetailMemberSearch")}
-                </Text>
-                <TextInput
+                <View
+                  accessible
                   accessibilityLabel={t("teamDetailMemberSearch")}
-                  editable={memberMutation === null && !memberCandidatesLoading}
-                  onChangeText={(value) => {
-                    setMemberQuery(value);
-                    setMemberCandidates([]);
-                    setMemberCandidatesError(null);
-                    setMemberSearched(false);
-                  }}
-                  placeholder={t("teamDetailMemberSearchPlaceholder")}
-                  placeholderTextColor={colors.tertiaryLabel}
-                  value={memberQuery}
                   style={{
+                    alignItems: "center",
                     backgroundColor: colors.elevatedSurface,
                     borderCurve: "continuous",
                     borderRadius: 10,
-                    color: colors.label,
-                    fontSize: 16,
-                    minHeight: 44,
-                    paddingHorizontal: 12,
+                    flexDirection: "row",
+                    gap: 8,
+                    minHeight: 36,
+                    paddingHorizontal: 8,
                   }}
-                />
+                >
+                  <SymbolView
+                    name="magnifyingglass"
+                    tintColor={colors.tertiaryLabel}
+                    size={15}
+                    accessible={false}
+                  />
+                  <TextInput
+                    accessibilityLabel={t("teamDetailMemberSearch")}
+                    editable={memberMutation === null && !memberCandidatesLoading}
+                    onChangeText={(value) => {
+                      setMemberQuery(value);
+                      setMemberCandidates([]);
+                      setMemberCandidatesError(null);
+                      setMemberSearched(false);
+                    }}
+                    onSubmitEditing={() => void findMemberCandidates()}
+                    placeholder={t("teamDetailMemberSearchPlaceholder")}
+                    placeholderTextColor={colors.tertiaryLabel}
+                    returnKeyType="search"
+                    value={memberQuery}
+                    style={{
+                      color: colors.label,
+                      flex: 1,
+                      fontSize: 17,
+                      minHeight: 36,
+                    }}
+                  />
+                  {memberQuery.length > 0 ? (
+                    <Pressable
+                      accessibilityLabel={t("cancel")}
+                      onPress={() => {
+                        setMemberQuery("");
+                        setMemberCandidates([]);
+                        setMemberCandidatesError(null);
+                        setMemberSearched(false);
+                      }}
+                      hitSlop={8}
+                    >
+                      <SymbolView
+                        name="xmark.circle.fill"
+                        tintColor={colors.tertiaryLabel}
+                        size={16}
+                        accessible={false}
+                      />
+                    </Pressable>
+                  ) : null}
+                </View>
                 {memberCandidatesError ? (
                   <RequestFeedback
                     error={memberCandidatesError}
@@ -513,47 +663,69 @@ export function TeamOperationsScreen() {
                     message={memberMutationError.message}
                   />
                 ) : null}
-                <ActionButton
-                  busy={memberCandidatesLoading}
-                  disabled={memberMutation !== null || memberQuery.trim().length < 2}
-                  icon="magnifyingglass"
-                  label={t("teamDetailMemberSearch")}
-                  onPress={() => void findMemberCandidates()}
-                />
-                {memberQuery.trim().length === 1 ? (
-                  <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13 }}>
-                    {t("teamDetailMemberSearchMin")}
-                  </Text>
-                ) : null}
-                {!memberCandidatesLoading && memberSearched && memberCandidates.length > 0 ? (
-                  <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13 }}>
-                    {t("teamDetailMemberCandidateCount", {
-                      count: String(memberCandidates.length),
-                    })}
-                  </Text>
-                ) : null}
                 {memberCandidates.map((candidate) => (
-                  <View key={candidate.id} style={{ gap: 4, paddingTop: 4 }}>
-                    <Text
-                      selectable
-                      style={{ color: colors.label, fontSize: 15, fontWeight: "600" }}
+                  <View key={candidate.id}>
+                    <Separator inset={0} />
+                    <View
+                      style={{
+                        alignItems: "center",
+                        flexDirection: "row",
+                        gap: 12,
+                        minHeight: 44,
+                        paddingVertical: 6,
+                      }}
                     >
-                      {memberCandidateName(candidate)}
-                    </Text>
-                    <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13 }}>
-                      {candidate.email}
-                    </Text>
-                    <ActionButton
-                      busy={memberMutation === `add:${candidate.id}`}
-                      disabled={memberMutation !== null}
-                      icon="person.badge.plus"
-                      label={t("teamDetailAddCandidate", { name: memberCandidateName(candidate) })}
-                      onPress={() => void addMember(candidate.id)}
-                    />
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          selectable
+                          numberOfLines={1}
+                          style={{ color: colors.label, fontSize: 17 }}
+                        >
+                          {memberCandidateName(candidate)}
+                        </Text>
+                        <Text
+                          selectable
+                          numberOfLines={1}
+                          style={{ color: colors.secondaryLabel, fontSize: 15 }}
+                        >
+                          {candidate.email}
+                        </Text>
+                      </View>
+                      {memberMutation === `add:${candidate.id}` ? (
+                        <ActivityIndicator size="small" color={colors.accent} />
+                      ) : (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={t("teamDetailAddCandidate", {
+                            name: memberCandidateName(candidate),
+                          })}
+                          disabled={memberMutation !== null}
+                          onPress={() => void addMember(candidate.id)}
+                          hitSlop={8}
+                          style={({ pressed }) => ({
+                            minHeight: 44,
+                            minWidth: 44,
+                            alignItems: "center",
+                            justifyContent: "center",
+                            opacity: pressed ? 0.5 : 1,
+                          })}
+                        >
+                          <Text style={{ color: colors.accent, fontSize: 17 }}>{t("add")}</Text>
+                        </Pressable>
+                      )}
+                    </View>
                   </View>
                 ))}
                 {!memberCandidatesLoading && memberSearched && memberCandidates.length === 0 ? (
-                  <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13 }}>
+                  <Text
+                    selectable
+                    style={{
+                      color: colors.secondaryLabel,
+                      fontSize: 13,
+                      paddingTop: 4,
+                      textAlign: "center",
+                    }}
+                  >
                     {t("teamDetailNoMemberCandidates")}
                   </Text>
                 ) : null}
@@ -608,6 +780,203 @@ export function TeamOperationsScreen() {
               </View>
             ))}
         </Section>
+      ) : null}
+
+      {linkTarget ? (
+        <Modal animationType="slide" onRequestClose={closeLinkModal} presentationStyle="pageSheet">
+          <View style={{ backgroundColor: colors.background, flex: 1 }}>
+            <ScrollView
+              contentInsetAdjustmentBehavior="automatic"
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{
+                gap: 22,
+                padding: 16,
+                paddingBottom: Math.max(32, insets.bottom + 16),
+                paddingTop: 16,
+              }}
+            >
+              <View style={{ justifyContent: "center", minHeight: 44, paddingHorizontal: 52 }}>
+                <Text
+                  selectable
+                  style={{
+                    color: colors.label,
+                    fontSize: 20,
+                    fontWeight: "700",
+                    textAlign: "center",
+                  }}
+                >
+                  {t("teamDetailLinkTitle")}
+                </Text>
+              </View>
+
+              <Section>
+                <View style={{ gap: 4, paddingHorizontal: 16, paddingVertical: 10 }}>
+                  <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>
+                    {t("teamDetailLinkHint")}
+                  </Text>
+                  <Text style={{ color: colors.label, fontSize: 17 }}>{linkTarget.email}</Text>
+                </View>
+              </Section>
+
+              <Section>
+                <View
+                  accessible
+                  accessibilityLabel={t("teamDetailLinkSearchPlaceholder")}
+                  style={{
+                    alignItems: "center",
+                    flexDirection: "row",
+                    gap: 8,
+                    minHeight: 44,
+                    paddingHorizontal: 16,
+                    paddingVertical: 10,
+                  }}
+                >
+                  <SymbolView
+                    name="magnifyingglass"
+                    tintColor={colors.tertiaryLabel}
+                    size={16}
+                    accessible={false}
+                  />
+                  <TextInput
+                    accessibilityLabel={t("teamDetailLinkSearchPlaceholder")}
+                    editable={!linkMutation}
+                    onChangeText={(value) => {
+                      setLinkQuery(value);
+                      setLinkCandidates([]);
+                      setLinkCandidatesError(null);
+                      setLinkSearched(false);
+                      setLinkSuccess(false);
+                    }}
+                    onSubmitEditing={() => void searchLinkCandidates()}
+                    placeholder={t("teamDetailLinkSearchPlaceholder")}
+                    placeholderTextColor={colors.tertiaryLabel}
+                    returnKeyType="search"
+                    value={linkQuery}
+                    style={{
+                      color: colors.label,
+                      flex: 1,
+                      fontSize: 17,
+                      minHeight: 44,
+                    }}
+                  />
+                  {linkQuery.length > 0 ? (
+                    <Pressable
+                      accessibilityLabel={t("cancel")}
+                      onPress={() => {
+                        setLinkQuery("");
+                        setLinkCandidates([]);
+                        setLinkCandidatesError(null);
+                        setLinkSearched(false);
+                        setLinkSuccess(false);
+                      }}
+                      hitSlop={8}
+                    >
+                      <SymbolView
+                        name="xmark.circle.fill"
+                        tintColor={colors.tertiaryLabel}
+                        size={16}
+                        accessible={false}
+                      />
+                    </Pressable>
+                  ) : null}
+                </View>
+              </Section>
+
+              {linkCandidatesError ? (
+                <RequestFeedback
+                  error={linkCandidatesError}
+                  message={linkCandidatesError.message}
+                />
+              ) : null}
+              {linkError ? <RequestFeedback error={linkError} message={linkError.message} /> : null}
+              {linkSuccess ? (
+                <View
+                  style={{
+                    backgroundColor: colors.successSurface,
+                    borderCurve: "continuous",
+                    borderRadius: 14,
+                    paddingHorizontal: 16,
+                    paddingVertical: 12,
+                  }}
+                >
+                  <Text style={{ color: colors.success, fontSize: 15 }}>
+                    {t("teamDetailLinkSuccess")}
+                  </Text>
+                </View>
+              ) : null}
+
+              {linkCandidates.length > 0 ? (
+                <Section>
+                  {linkCandidates.map((candidate, index) => (
+                    <View key={candidate.id}>
+                      {index > 0 ? <Separator /> : null}
+                      <Pressable
+                        accessibilityRole="button"
+                        disabled={linkMutation}
+                        onPress={() => void linkParticipant(candidate)}
+                        style={({ pressed }) => ({
+                          flexDirection: "row",
+                          gap: 12,
+                          minHeight: 44,
+                          opacity: pressed ? 0.5 : 1,
+                          paddingHorizontal: 16,
+                          paddingVertical: 10,
+                        })}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text numberOfLines={1} style={{ color: colors.label, fontSize: 17 }}>
+                            {memberCandidateName(candidate)}
+                          </Text>
+                          <Text
+                            numberOfLines={1}
+                            style={{ color: colors.secondaryLabel, fontSize: 15 }}
+                          >
+                            {candidate.email}
+                          </Text>
+                        </View>
+                        {linkMutation ? (
+                          <ActivityIndicator size="small" color={colors.accent} />
+                        ) : (
+                          <SymbolView
+                            name="plus.circle"
+                            tintColor={colors.accent}
+                            size={22}
+                            accessible={false}
+                          />
+                        )}
+                      </Pressable>
+                    </View>
+                  ))}
+                </Section>
+              ) : null}
+
+              {!linkCandidatesLoading &&
+              linkSearched &&
+              linkCandidates.length === 0 &&
+              !linkSuccess ? (
+                <Text
+                  selectable
+                  style={{
+                    color: colors.secondaryLabel,
+                    fontSize: 13,
+                    paddingTop: 4,
+                    textAlign: "center",
+                  }}
+                >
+                  {t("teamDetailNoMemberCandidates")}
+                </Text>
+              ) : null}
+            </ScrollView>
+
+            <FloatingGlassButton
+              top={16}
+              side="left"
+              icon="xmark"
+              accessibilityLabel={t("cancel")}
+              onPress={closeLinkModal}
+            />
+          </View>
+        </Modal>
       ) : null}
     </ScrollView>
   );
