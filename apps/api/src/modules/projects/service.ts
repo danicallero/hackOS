@@ -238,6 +238,31 @@ export async function listUnmatchedParticipants(): Promise<UnmatchedParticipant[
   return rows;
 }
 
+export interface ProjectMemberCandidate {
+  id: number;
+  email: string;
+  name: string | null;
+  surname: string | null;
+}
+
+/** Minimal account lookup for H21 membership edits; does not expose profile data. */
+export async function listProjectMemberCandidates(
+  query: string,
+  limit: number,
+): Promise<ProjectMemberCandidate[]> {
+  const filter = `%${query.trim()}%`;
+  const { rows } = await pool.query(
+    `SELECT id, email, name, surname
+       FROM users
+      WHERE anonymized_at IS NULL
+        AND (email ILIKE $1 OR name ILIKE $1 OR surname ILIKE $1)
+      ORDER BY name ASC NULLS LAST, surname ASC NULLS LAST, email ASC
+      LIMIT $2`,
+    [filter, limit],
+  );
+  return rows;
+}
+
 export interface LinkResult {
   repoId: number;
   email: string;
@@ -259,6 +284,13 @@ export async function linkParticipant(
     );
     if (existing.rows.length === 0) {
       throw new NotFoundError(`No devpost participant ${email} for repo ${repoId}`);
+    }
+    if (existing.rows[0].merge_status !== "unmatched") {
+      throw new ConflictError("Only an unmatched imported participant can be linked", {
+        repoId,
+        email,
+        mergeStatus: existing.rows[0].merge_status,
+      });
     }
     const user = await client.query(`SELECT id FROM users WHERE id = $1`, [userId]);
     if (user.rows.length === 0) throw new NotFoundError(`User ${userId} not found`);
@@ -295,7 +327,9 @@ export interface LinkSecondaryResult {
   userId: number;
   /** False when the Devpost address is already the account's primary address. */
   secondaryEmailSent: boolean;
-  mergeStatus: "manually_linked";
+  /** Membership is only active once the address is a verified identity. */
+  linked: boolean;
+  mergeStatus: "auto_matched" | "unmatched";
 }
 
 const SECONDARY_EMAIL_TTL_HOURS = 24;
@@ -304,10 +338,11 @@ const SECONDARY_EMAIL_TTL_HOURS = 24;
  * H6/H16: link an unmatched Devpost email to a hackOS account by registering
  * it as that account's SECONDARY email and firing the platform's normal
  * secondary-email verification (identity, H6) — we do NOT invent a new flow.
- * The participant is linked to the account immediately, so all project and
- * queue reads see the team without waiting for a later import. It still
- * reuses identity's secondary-email verification flow so the new address is
- * verified through the normal account-security mechanism.
+ * The participant stays unmatched until the account holder verifies the new
+ * address. Verification invokes reconciliation and creates the membership.
+ * This makes the link revocable when the secondary address is replaced or
+ * removed. An address that is already the account's primary identity is
+ * reconciled immediately and remains an automatic match.
  */
 export async function linkParticipantSecondary(
   actorId: number,
@@ -316,6 +351,7 @@ export async function linkParticipantSecondary(
   userId: number,
 ): Promise<LinkSecondaryResult> {
   let secondaryEmailSent = false;
+  let linked = false;
   await withTransaction(async (client) => {
     const participant = await client.query(
       `SELECT * FROM devpost_participants WHERE repo_id = $1 AND email = $2 FOR UPDATE`,
@@ -323,6 +359,13 @@ export async function linkParticipantSecondary(
     );
     if (participant.rows.length === 0) {
       throw new NotFoundError(`No devpost participant ${email} for repo ${repoId}`);
+    }
+    if (participant.rows[0].merge_status !== "unmatched") {
+      throw new ConflictError("Only an unmatched imported participant can start identity linking", {
+        repoId,
+        email,
+        mergeStatus: participant.rows[0].merge_status,
+      });
     }
     const userRes = await client.query(
       `SELECT id, email, name FROM users WHERE id = $1 FOR UPDATE`,
@@ -335,7 +378,7 @@ export async function linkParticipantSecondary(
     secondaryEmailSent = !isPrimaryEmail;
     if (!isPrimaryEmail) {
       // Uniqueness rule (H6), checked before we touch anything — explicit 409.
-      await assertSecondaryEmailAvailable(email, userId);
+      await assertSecondaryEmailAvailable(email, userId, client);
       const token = randomBytes(32).toString("base64url");
 
       // A new request supersedes any pending unverified token for this user.
@@ -369,25 +412,21 @@ export async function linkParticipantSecondary(
     }
 
     const before = participant.rows[0];
-    await client.query(
-      `UPDATE devpost_participants
-       SET user_id = $1, merge_status = 'manually_linked', linked_by = $2, linked_at = now()
-       WHERE repo_id = $3 AND email = $4`,
-      [userId, actorId, repoId, email],
-    );
-    await client.query(
-      `INSERT INTO submissions (repo_id, user_id, imported_from, external_id)
-       VALUES ($1, $2, 'devpost', $3)
-       ON CONFLICT (repo_id, user_id) DO NOTHING`,
-      [repoId, userId, before.devpost_username],
-    );
+    if (isPrimaryEmail) {
+      await reconcileDevpostParticipantsForUser(client, userId);
+      linked = true;
+    }
     await audit(client, {
       actorId,
       entityType: "devpost_participant",
       entityId: `${repoId}:${email}`,
       action: "secondary_email_link_requested",
       before: { mergeStatus: before.merge_status, userId: before.user_id },
-      after: { mergeStatus: "manually_linked", userId, secondaryEmailSent: !isPrimaryEmail },
+      after: {
+        mergeStatus: isPrimaryEmail ? "auto_matched" : "unmatched",
+        userId: isPrimaryEmail ? userId : null,
+        secondaryEmailSent: !isPrimaryEmail,
+      },
       source: "admin",
     });
   });
@@ -397,7 +436,8 @@ export async function linkParticipantSecondary(
     email,
     userId,
     secondaryEmailSent,
-    mergeStatus: "manually_linked",
+    linked,
+    mergeStatus: linked ? "auto_matched" : "unmatched",
   };
 }
 
@@ -553,6 +593,7 @@ interface RepoMember {
   name: string | null;
   surname: string | null;
   mergeStatus: string;
+  matchType: "primary_email" | "secondary_email" | "manual" | "unmatched";
   devpostUsername: string | null;
 }
 
@@ -602,8 +643,17 @@ async function attachMembersAndPrizes(
   const visibleSet = visibleChallengeIds === "all" ? null : new Set(visibleChallengeIds);
 
   const membersRes = await pool.query(
-    `SELECT repo_id, email, name, surname, devpost_username, user_id, merge_status
-       FROM devpost_participants
+    `SELECT dp.repo_id, dp.email, dp.name, dp.surname, dp.devpost_username,
+            dp.user_id, dp.merge_status,
+            CASE
+              WHEN dp.user_id IS NULL THEN 'unmatched'
+              WHEN lower(dp.email) = lower(u.email) THEN 'primary_email'
+              WHEN u.secondary_email_verified_at IS NOT NULL
+                AND lower(dp.email) = lower(u.secondary_email) THEN 'secondary_email'
+              ELSE 'manual'
+            END AS match_type
+       FROM devpost_participants dp
+       LEFT JOIN users u ON u.id = dp.user_id
       WHERE repo_id = ANY($1::int[])
       ORDER BY repo_id, name ASC NULLS LAST, surname ASC NULLS LAST, email ASC`,
     [ids],
@@ -673,6 +723,7 @@ async function attachMembersAndPrizes(
     devpost_username: string | null;
     user_id: number | null;
     merge_status: string;
+    match_type: RepoMember["matchType"];
   }>) {
     const arr = membersByRepo.get(row.repo_id) ?? [];
     arr.push({
@@ -681,6 +732,7 @@ async function attachMembersAndPrizes(
       name: row.name,
       surname: row.surname,
       mergeStatus: row.merge_status,
+      matchType: row.match_type,
       devpostUsername: row.devpost_username,
     });
     membersByRepo.set(row.repo_id, arr);
@@ -699,6 +751,7 @@ async function attachMembersAndPrizes(
       name: row.name,
       surname: row.surname,
       mergeStatus: "manual",
+      matchType: "manual",
       devpostUsername: null,
     });
     membersByRepo.set(row.repo_id, arr);
@@ -911,21 +964,22 @@ export async function removeRepoMember(actorId: number, repoId: number, userId: 
     );
     if (!existing.rows[0]) throw new NotFoundError(`Repo member ${repoId}:${userId} not found`);
 
+    const importedIdentity = await client.query(
+      `SELECT email FROM devpost_participants WHERE repo_id = $1 AND user_id = $2 LIMIT 1`,
+      [repoId, userId],
+    );
+    if (importedIdentity.rows[0]) {
+      throw new ConflictError(
+        "Imported project members must be removed by their exact roster email",
+        { repoId, userId, email: importedIdentity.rows[0].email },
+      );
+    }
+
     await client.query(`DELETE FROM submissions WHERE repo_id = $1 AND user_id = $2`, [
       repoId,
       userId,
     ]);
 
-    // Keep the imported Devpost row (email/name/import batch) for audit and a
-    // future reconciliation, but detach its account link. A matched Devpost row
-    // is otherwise also treated as roster membership by project/profile reads.
-    const detached = await client.query(
-      `UPDATE devpost_participants
-          SET user_id = NULL, merge_status = 'unmatched'
-        WHERE repo_id = $1 AND user_id = $2
-        RETURNING email, merge_status`,
-      [repoId, userId],
-    );
     await audit(client, {
       actorId,
       entityType: "submission",
@@ -935,7 +989,7 @@ export async function removeRepoMember(actorId: number, repoId: number, userId: 
       after: {
         repoId,
         userId,
-        detachedDevpostParticipants: detached.rows.map((row: { email: string }) => row.email),
+        detachedDevpostParticipants: [],
       },
       source: "admin",
     });
@@ -959,8 +1013,12 @@ export async function removeDevpostParticipant(actorId: number, repoId: number, 
     if (participant.user_id !== null) {
       await client.query(
         `DELETE FROM submissions
-          WHERE repo_id = $1 AND user_id = $2 AND imported_from = 'devpost'`,
-        [repoId, participant.user_id],
+          WHERE repo_id = $1 AND user_id = $2 AND imported_from = 'devpost'
+          AND NOT EXISTS (
+            SELECT 1 FROM devpost_participants
+             WHERE repo_id = $1 AND user_id = $2 AND email <> $3
+          )`,
+        [repoId, participant.user_id, email],
       );
     }
     await client.query(`DELETE FROM devpost_participants WHERE repo_id = $1 AND email = $2`, [

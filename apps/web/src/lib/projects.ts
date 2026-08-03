@@ -78,6 +78,7 @@ export interface RepoWithExtras {
     importedFrom: string;
     externalId: string | null;
     mergeStatus: string;
+    matchType: "primary_email" | "secondary_email" | "manual" | "unmatched";
     devpostUsername: string | null;
   }>;
   challenges?: Array<{

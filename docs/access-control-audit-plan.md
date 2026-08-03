@@ -32,7 +32,7 @@ usability controls; the API remains authoritative.
 
 ## Implementation result
 
-- Strict startup enforcement records **275 non-HEAD route-policy rows** and
+- Strict startup enforcement records **278 non-HEAD route-policy rows** and
   exactly one logical Better Auth generated-route exemption, yielding **276
   logical declarations**. This is +5 from the 271-route baseline, matching the
   three added permission-template APIs and two scoped wallet-token routes.

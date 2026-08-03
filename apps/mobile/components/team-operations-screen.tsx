@@ -1,11 +1,23 @@
+import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
-import { Linking, Pressable, ScrollView, Text, useColorScheme, View } from "react-native";
-import { EmptyState, InfoRow, Section, Separator } from "@/components/native-ui";
+import {
+  Alert,
+  Linking,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  useColorScheme,
+  View,
+} from "react-native";
+import { ActionButton, EmptyState, InfoRow, Section, Separator } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
+import { createIdempotencyKey } from "@/lib/idempotency-key";
+import { useMeContext } from "@/lib/me-context";
 import { isPadIdiom } from "@/lib/tabs";
 import { colors } from "@/theme/colors";
 
@@ -14,10 +26,14 @@ interface TeamMember {
   email: string;
   name: string | null;
   surname: string | null;
+  /** The route that owns removal: Devpost import vs a staff-added repo member. */
+  source?: "devpost" | "manual";
+  matchType?: "primary_email" | "secondary_email" | "manual" | "unmatched";
 }
 
 interface TeamEntry {
   id: number;
+  repo_id: number;
   status: string;
   position: number | null;
   eta_minutes: number | null;
@@ -28,6 +44,13 @@ interface TeamEntry {
   repo_devpost_url?: string | null;
   repo_demo_url?: string | null;
   repo_members?: TeamMember[];
+}
+
+interface MemberCandidate {
+  id: number;
+  email: string;
+  name: string | null;
+  surname: string | null;
 }
 
 interface RoomView {
@@ -58,12 +81,24 @@ export function TeamOperationsScreen() {
   const headerNavigation = useNavigation(isPadIdiom() ? "/(tabs)/others" : undefined);
   const router = useRouter();
   const { t } = useLocale();
+  const { me } = useMeContext();
   const [entry, setEntry] = useState<TeamEntry | null>(null);
   const [room, setRoom] = useState<RoomView["room"] | null>(null);
   const [challenge, setChallenge] = useState<RoomView["challenge"]>(null);
   const [history, setHistory] = useState<HistoryRow[] | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [loadState, setLoadState] = useState<TeamLoadState>("loading");
+  const [memberQuery, setMemberQuery] = useState("");
+  const [memberCandidates, setMemberCandidates] = useState<MemberCandidate[]>([]);
+  const [memberCandidatesLoading, setMemberCandidatesLoading] = useState(false);
+  const [memberCandidatesError, setMemberCandidatesError] = useState<Error | null>(null);
+  const [memberSearched, setMemberSearched] = useState(false);
+  const [memberMutationError, setMemberMutationError] = useState<Error | null>(null);
+  const [memberMutation, setMemberMutation] = useState<string | null>(null);
+  const canEditProject =
+    me?.capabilities.includes(CAPABILITIES.ADMIN_ALL) ||
+    me?.capabilities.includes(CAPABILITIES.PROJECTS_EDIT) ||
+    false;
 
   const load = useCallback(async () => {
     setError(null);
@@ -100,6 +135,108 @@ export function TeamOperationsScreen() {
   }, [load]);
 
   const teamName = entry?.repo_name ?? t("queueOpsUnnamedTeam");
+
+  const findMemberCandidates = useCallback(async () => {
+    const query = memberQuery.trim();
+    if (!query) {
+      setMemberCandidates([]);
+      setMemberSearched(false);
+      return;
+    }
+    setMemberCandidatesLoading(true);
+    setMemberCandidatesError(null);
+    try {
+      const result = await apiFetch<{ users: MemberCandidate[] }>(
+        `/api/projects/member-candidates?q=${encodeURIComponent(query)}`,
+      );
+      setMemberCandidates(result.users);
+      setMemberSearched(true);
+    } catch (cause) {
+      setMemberCandidatesError(
+        cause instanceof Error ? cause : new Error(t("teamDetailMemberSearchError")),
+      );
+    } finally {
+      setMemberCandidatesLoading(false);
+    }
+  }, [memberQuery, t]);
+
+  const addMember = useCallback(
+    async (userId: number) => {
+      if (!entry) return;
+
+      setMemberMutation(`add:${userId}`);
+      setMemberMutationError(null);
+      try {
+        await apiFetch(`/api/repos/${entry.repo_id}/members`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Idempotency-Key": createIdempotencyKey(),
+          },
+          body: JSON.stringify({ userId }),
+        });
+        setMemberQuery("");
+        setMemberCandidates([]);
+        setMemberSearched(false);
+        await load();
+      } catch (cause) {
+        setMemberMutationError(
+          cause instanceof Error ? cause : new Error(t("teamDetailMemberUpdateError")),
+        );
+      } finally {
+        setMemberMutation(null);
+      }
+    },
+    [entry, load, t],
+  );
+
+  const deleteMember = useCallback(
+    async (member: TeamMember) => {
+      if (!entry || !member.source) return;
+      setMemberMutation(member.email);
+      setMemberMutationError(null);
+      try {
+        if (member.source === "devpost") {
+          await apiFetch(
+            `/api/repos/${entry.repo_id}/devpost-participants/${encodeURIComponent(member.email)}`,
+            { method: "DELETE" },
+          );
+        } else if (member.userId !== null) {
+          await apiFetch(`/api/repos/${entry.repo_id}/members/${member.userId}`, {
+            method: "DELETE",
+          });
+        }
+        await load();
+      } catch (cause) {
+        setMemberMutationError(
+          cause instanceof Error ? cause : new Error(t("teamDetailMemberUpdateError")),
+        );
+      } finally {
+        setMemberMutation(null);
+      }
+    },
+    [entry, load, t],
+  );
+
+  const removeMember = useCallback(
+    (member: TeamMember) => {
+      if (!member.source) return;
+      const name = memberDisplayName(member);
+      const description =
+        member.source === "devpost"
+          ? t("teamDetailRemoveImportedMemberConfirm", { name })
+          : t("teamDetailRemoveMemberConfirm", { name });
+      Alert.alert(t("teamDetailRemoveMember"), description, [
+        { text: t("cancel"), style: "cancel" },
+        {
+          text: t("teamDetailRemoveMember"),
+          style: "destructive",
+          onPress: () => deleteMember(member),
+        },
+      ]);
+    },
+    [deleteMember, t],
+  );
 
   useLayoutEffect(() => {
     headerNavigation.setOptions({
@@ -249,19 +386,138 @@ export function TeamOperationsScreen() {
         ) : null}
       </Section>
 
-      {members.length ? (
+      {members.length || canEditProject ? (
         <Section title={t("teamDetailMembers")}>
           {members.map((member, index) => (
             <View key={member.userId ?? member.email}>
               {index > 0 ? <Separator /> : null}
-              <View style={{ gap: 2, paddingHorizontal: 16, paddingVertical: 10 }}>
-                <Text style={{ color: colors.label, fontSize: 16, fontWeight: "600" }}>
-                  {[member.name, member.surname].filter(Boolean).join(" ") || member.email}
+              <View style={{ gap: 5, paddingHorizontal: 16, paddingVertical: 10 }}>
+                <Text selectable style={{ color: colors.label, fontSize: 16, fontWeight: "600" }}>
+                  {memberDisplayName(member)}
                 </Text>
-                <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>{member.email}</Text>
+                <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13 }}>
+                  {member.email}
+                </Text>
+                <Text selectable style={{ color: colors.tertiaryLabel, fontSize: 12 }}>
+                  {memberLinkLabel(member, t)}
+                </Text>
+                {canEditProject && member.source ? (
+                  <Pressable
+                    accessibilityLabel={t("teamDetailRemoveMember", {
+                      name: memberDisplayName(member),
+                    })}
+                    accessibilityRole="button"
+                    accessibilityState={{ busy: memberMutation === member.email }}
+                    disabled={memberMutation !== null}
+                    onPress={() => removeMember(member)}
+                    style={({ pressed }) => ({
+                      alignSelf: "flex-start",
+                      minHeight: 44,
+                      justifyContent: "center",
+                      opacity: memberMutation !== null ? 0.45 : pressed ? 0.6 : 1,
+                    })}
+                  >
+                    <Text style={{ color: colors.destructive, fontSize: 15, fontWeight: "600" }}>
+                      {t("teamDetailRemoveMember")}
+                    </Text>
+                  </Pressable>
+                ) : null}
               </View>
             </View>
           ))}
+          {canEditProject ? (
+            <>
+              {members.length ? <Separator /> : null}
+              <View style={{ gap: 10, padding: 16 }}>
+                <Text selectable style={{ color: colors.label, fontSize: 16, fontWeight: "600" }}>
+                  {t("teamDetailAddMember")}
+                </Text>
+                <Text
+                  selectable
+                  style={{ color: colors.secondaryLabel, fontSize: 13, lineHeight: 18 }}
+                >
+                  {t("teamDetailAddMemberHint")}
+                </Text>
+                <Text
+                  selectable
+                  style={{ color: colors.secondaryLabel, fontSize: 13, fontWeight: "600" }}
+                >
+                  {t("teamDetailMemberSearch")}
+                </Text>
+                <TextInput
+                  accessibilityLabel={t("teamDetailMemberSearch")}
+                  editable={memberMutation === null && !memberCandidatesLoading}
+                  onChangeText={(value) => {
+                    setMemberQuery(value);
+                    setMemberCandidates([]);
+                    setMemberCandidatesError(null);
+                    setMemberSearched(false);
+                  }}
+                  placeholder={t("teamDetailMemberSearchPlaceholder")}
+                  placeholderTextColor={colors.tertiaryLabel}
+                  value={memberQuery}
+                  style={{
+                    backgroundColor: colors.elevatedSurface,
+                    borderCurve: "continuous",
+                    borderRadius: 10,
+                    color: colors.label,
+                    fontSize: 16,
+                    minHeight: 44,
+                    paddingHorizontal: 12,
+                  }}
+                />
+                {memberCandidatesError ? (
+                  <RequestFeedback
+                    error={memberCandidatesError}
+                    message={memberCandidatesError.message}
+                  />
+                ) : null}
+                {memberMutationError ? (
+                  <RequestFeedback
+                    error={memberMutationError}
+                    message={memberMutationError.message}
+                  />
+                ) : null}
+                <ActionButton
+                  busy={memberCandidatesLoading}
+                  disabled={memberMutation !== null || memberQuery.trim().length < 2}
+                  icon="magnifyingglass"
+                  label={t("teamDetailMemberSearch")}
+                  onPress={() => void findMemberCandidates()}
+                />
+                {memberQuery.trim().length === 1 ? (
+                  <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13 }}>
+                    {t("teamDetailMemberSearchMin")}
+                  </Text>
+                ) : null}
+                {memberCandidates.map((candidate) => (
+                  <View key={candidate.id} style={{ gap: 4, paddingTop: 4 }}>
+                    <Text
+                      selectable
+                      style={{ color: colors.label, fontSize: 15, fontWeight: "600" }}
+                    >
+                      {memberCandidateName(candidate)}
+                    </Text>
+                    <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13 }}>
+                      {candidate.email}
+                    </Text>
+                    <ActionButton
+                      busy={memberMutation === `add:${candidate.id}`}
+                      disabled={memberMutation !== null}
+                      icon="person.badge.plus"
+                      label={t("teamDetailAddCandidate", { name: memberCandidateName(candidate) })}
+                      onPress={() => void addMember(candidate.id)}
+                    />
+                  </View>
+                ))}
+                {!memberCandidatesLoading && memberSearched && memberCandidates.length === 0 ? (
+                  <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13 }}>
+                    {t("teamDetailNoMemberCandidates")}
+                  </Text>
+                ) : null}
+              </View>
+            </>
+          ) : null}
         </Section>
       ) : null}
 
@@ -313,6 +569,28 @@ export function TeamOperationsScreen() {
       ) : null}
     </ScrollView>
   );
+}
+
+function memberDisplayName(member: TeamMember): string {
+  return [member.name, member.surname].filter(Boolean).join(" ") || member.email;
+}
+
+function memberCandidateName(candidate: MemberCandidate): string {
+  return [candidate.name, candidate.surname].filter(Boolean).join(" ") || candidate.email;
+}
+
+function memberLinkLabel(member: TeamMember, t: ReturnType<typeof useLocale>["t"]): string {
+  if (member.source === "manual") return t("teamDetailMemberAddedByStaff");
+  switch (member.matchType) {
+    case "primary_email":
+      return t("teamDetailMemberPrimaryEmail");
+    case "secondary_email":
+      return t("teamDetailMemberSecondaryEmail");
+    case "manual":
+      return t("teamDetailMemberStaffLinked");
+    default:
+      return t("teamDetailMemberUnmatched");
+  }
 }
 
 function queueStatusLabel(status: string, t: ReturnType<typeof useLocale>["t"]): string {

@@ -40,6 +40,7 @@ import {
   getRepoForScope,
   linkParticipant,
   linkParticipantSecondary,
+  listProjectMemberCandidates,
   listPublicChallenges,
   listReposForScope,
   listUnmatchedParticipants,
@@ -177,7 +178,8 @@ export function registerProjectRoutes(app: FastifyInstance): void {
       schema: {
         body: linkParticipantBodySchema,
         summary: "Link participant secondary email",
-        description: "Uses the verified-secondary matching path for an imported participant (H17).",
+        description:
+          "Starts secondary-email verification for an imported participant; project membership is created only after verification (H6, H17).",
       },
     },
     async (req) => {
@@ -274,6 +276,38 @@ export function registerProjectRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => getRepoForScope(req.params.id, repositoryScopeFor(req)),
+  );
+
+  r.get(
+    "/api/projects/member-candidates",
+    {
+      ...access({ kind: "capability", capability: CAPABILITIES.PROJECTS_EDIT }),
+      preHandler: requireCapability(CAPABILITIES.PROJECTS_EDIT),
+      schema: {
+        querystring: z.object({
+          q: z.string().trim().min(2),
+          limit: z.coerce.number().int().min(1).max(50).default(20),
+        }),
+        summary: "Search project member candidates",
+        description:
+          "Returns minimal account identity fields for an authorized operator adding a project member (H21).",
+        response: {
+          200: z.object({
+            users: z.array(
+              z.object({
+                id: z.number().int(),
+                email: z.string(),
+                name: z.string().nullable(),
+                surname: z.string().nullable(),
+              }),
+            ),
+          }),
+        },
+      },
+    },
+    async (req) => ({
+      users: await listProjectMemberCandidates(req.query.q, req.query.limit),
+    }),
   );
 
   // ── H18: native creation + metadata edits ────────────────────────────────

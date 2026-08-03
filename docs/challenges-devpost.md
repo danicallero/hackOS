@@ -54,12 +54,14 @@ Key facts that drive every design decision below:
 - **`devpost_participants` is a staging/reconciliation table**, distinct from the
   authoritative `submissions`. A participant is `unmatched`, `auto_matched`, or
   `manually_linked`; only matched participants get a `submissions` row.
-- **Removing a project member detaches every membership link.** When an operator
-  removes a matched Devpost member, hackOS deletes the `submissions` row and
-  clears `devpost_participants.user_id`, changing its `merge_status` to
-  `unmatched`. The imported email, name, username, and batch stay intact for
-  audit and a later reconciliation; the detached account no longer appears in
-  project, queue, or profile membership views.
+- **Identity matching and roster correction are separate.** A primary-email
+  match is automatic. A secondary-email match becomes automatic only after the
+  address is verified, and replacing/removing that address revokes only links
+  that depended on it. Operators do not mutate either identity when correcting
+  a project: deleting an imported roster row removes that exact
+  `devpost_participants` row (and its submission only when no other imported
+  identity still represents the account); manually-added roster entries use the
+  separate `submissions` member route.
 - **Queue availability uses the full roster relation (H30).** The busy-member
   guard and its operator-facing skip projection consider `submissions`, linked
   `devpost_participants`, and primary/verified-secondary email matches. This
@@ -116,13 +118,16 @@ judging deadline, but the public/general fields (`title`, `description`,
 | `POST /api/devpost/imports/confirm` | `projects:import` + idempotency | H16 | transactional upsert |
 | `GET /api/devpost/imports/unmatched` | `projects:import` | H17 | participants no email matched |
 | `POST /api/devpost/imports/link` | `projects:import` | H17 | manually link participant → account |
+| `POST /api/devpost/imports/link-secondary` | `projects:import` | H6/H17 | request secondary verification; link activates only after verification |
 | `POST /api/devpost/imports/claim-email` | `projects:import` + idempotency | H17 | fire account-claim invite |
 | `POST /api/devpost/prizes/:prizeName/map` | `projects:import` | H16 | append prize to a challenge's `devpost_tags` |
 | `GET /api/repos` | `projects:read` | H20/queue | repos + members + prizes + mapped challenges |
 | `GET /api/repos/:id` | `projects:read` | H20/queue | one repo, same shape |
+| `GET /api/projects/member-candidates` | `projects:edit` | H21 | minimal account search for team editors |
 | `POST /api/repos` | `projects:edit` + idempotency | H18 | native creation: metadata + members + challenge lineup in one transaction |
 | `PATCH /api/repos/:id` | `projects:edit` | H18 | metadata edit (name, description, links), audited before/after |
-| `POST /api/repos/:id/members` / `DELETE …/members/:userId` | `projects:edit` | H21 | hot-edit team membership |
+| `POST /api/repos/:id/members` / `DELETE …/members/:userId` | `projects:edit` | H21 | hot-edit manually-added membership |
+| `DELETE /api/repos/:id/devpost-participants/:email` | `projects:edit` | H21 | remove one exact imported roster row |
 | `POST /api/repos/:id/challenges` / `DELETE …/challenges/:challengeId` | `projects:edit` | H21 | enqueue at queue bottom / remove + compact positions |
 | `GET /api/me/projects` | authenticated | H20 | participant self-view: team roster (teammate emails redacted to `null`), challenges, live queue status, plus `canCreate` (H19 policy ∧ no project yet) |
 | `POST /api/me/projects` | authenticated + idempotency | H19 | participant self-creation, only while the event policy allows it |

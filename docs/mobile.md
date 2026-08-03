@@ -243,8 +243,16 @@ route below. No migration needed.
   shown on a room card — pushes `components/team-operations-screen.tsx`
   (`/(tabs)/others/team/[entryId]`), a detail view built on the same layout as
   the participant's own queue card but with the extra context only an
-  operator needs: full member emails, repo/Devpost/demo links, and the
-  entry's `queue_history` timeline. Re-notification uses the existing
+  operator needs: full member emails, their membership origin (automatic
+  primary-email match, verified secondary-email match, staff link, unmatched,
+  or staff-added), repo/Devpost/demo links, and the entry's `queue_history`
+  timeline. A caller with `projects:edit` (or `*`) can search the
+  project-edit candidate directory, add a selected account, and remove a
+  member after native confirmation. Queue access alone never exposes those
+  controls. Imported Devpost participants are removed through the Devpost
+  participant endpoint; staff-added members use the repository-member
+  endpoint, so a correction preserves the imported-record audit trail.
+  Re-notification uses the existing
   idempotent `notify-enter` transition with a React Native-safe generated
   key. On top of the existing 10s poll, the screen opens
   `lib/server-events.ts`'s `startQueueEventStream()` (the authenticated,

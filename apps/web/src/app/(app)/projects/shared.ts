@@ -28,6 +28,7 @@ export interface RepoMember {
   importedFrom: string;
   externalId: string | null;
   mergeStatus: string;
+  matchType: "primary_email" | "secondary_email" | "manual" | "unmatched";
   devpostUsername: string | null;
 }
 
@@ -214,9 +215,14 @@ export function mergeStatusTone(status: string): Tone {
   return "success"; // auto_matched, etc.
 }
 
-export function mergeStatusLabel(status: string): string {
-  if (status === "manual") return "manual";
-  return status.replace(/_/g, " ");
+export function memberMatchLabel(member: RepoMember, t: Translate): string {
+  const labels: Record<RepoMember["matchType"], string> = {
+    primary_email: t("linkedPrimaryEmail"),
+    secondary_email: t("linkedSecondaryEmail"),
+    manual: t("linkedManually"),
+    unmatched: t("unmatchedBadge"),
+  };
+  return labels[member.matchType];
 }
 
 /** i18n challenge title from `GET /api/public/challenges` (title is a record). */

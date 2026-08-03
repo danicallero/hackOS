@@ -3,6 +3,7 @@
 import { HelpCircleIcon, MailIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { AlertModal } from "@/components/common/alert-modal";
 import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
@@ -35,6 +36,19 @@ export function EmailCard() {
       await refresh();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("couldNotSendVerificationEmail"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function removeSecondaryEmail() {
+    setSaving(true);
+    try {
+      await api.delete("/api/me/secondary-email");
+      toast.success(t("secondaryEmailRemoved"));
+      await refresh();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveSecondaryEmail"));
     } finally {
       setSaving(false);
     }
@@ -91,6 +105,20 @@ export function EmailCard() {
                 {t("resend")}
               </SubmitButton>
             )}
+            <AlertModal
+              title={t("removeSecondaryEmailTitle")}
+              description={t("removeSecondaryEmailDesc")}
+              cancelLabel={t("cancel")}
+              confirmLabel={t("remove")}
+              destructive
+              pending={saving}
+              trigger={
+                <SubmitButton type="button" size="sm" variant="outline" pending={false}>
+                  {t("remove")}
+                </SubmitButton>
+              }
+              onConfirm={removeSecondaryEmail}
+            />
           </div>
         )}
 

@@ -2238,6 +2238,31 @@ const dict: Record<string, I18nText> = {
     gl: "Rexistra o correo que usaches en Devpost para que poidamos vincular automaticamente os teus proxectos á túa conta cando se importen.",
     en: "Register the email you used on Devpost so we can automatically match your projects to your account when imports run.",
   },
+  removeSecondaryEmailTitle: {
+    es: "Quitar correo secundario",
+    gl: "Quitar correo secundario",
+    en: "Remove secondary email",
+  },
+  removeSecondaryEmailDesc: {
+    es: "Los proyectos vinculados automáticamente mediante esta dirección dejarán de estar asociados a tu cuenta.",
+    gl: "Os proxectos vinculados automaticamente mediante este enderezo deixarán de estar asociados á túa conta.",
+    en: "Projects automatically linked through this address will no longer be associated with your account.",
+  },
+  removeSecondaryEmailStaffDesc: {
+    es: "Se quitará esta dirección de la cuenta y se revocarán los vínculos de proyecto que dependan de ella.",
+    gl: "Quitarase este enderezo da conta e revogaranse os vínculos de proxecto que dependan del.",
+    en: "This address will be removed from the account, and project links that depend on it will be revoked.",
+  },
+  secondaryEmailRemoved: {
+    es: "Correo secundario eliminado.",
+    gl: "Correo secundario eliminado.",
+    en: "Secondary email removed.",
+  },
+  couldNotRemoveSecondaryEmail: {
+    es: "No se ha podido quitar el correo secundario.",
+    gl: "Non se puido quitar o correo secundario.",
+    en: "Could not remove the secondary email.",
+  },
   pendingVerification: {
     es: "Verificación pendiente",
     gl: "Verificación pendente",
@@ -4030,6 +4055,37 @@ const dict: Record<string, I18nText> = {
     en: "Add a user to make this project visible in participant and queue views.",
   },
   addedManually: { es: "Añadido manualmente", gl: "Engadido manualmente", en: "Added manually" },
+  linkedPrimaryEmail: {
+    es: "Automático · correo principal",
+    gl: "Automático · correo principal",
+    en: "Automatic · primary email",
+  },
+  linkedSecondaryEmail: {
+    es: "Automático · correo secundario",
+    gl: "Automático · correo secundario",
+    en: "Automatic · secondary email",
+  },
+  linkedManually: { es: "Vínculo manual", gl: "Vínculo manual", en: "Manual link" },
+  removeProjectMemberTitle: {
+    es: "Quitar miembro del proyecto",
+    gl: "Quitar membro do proxecto",
+    en: "Remove project member",
+  },
+  removeProjectMemberDesc: {
+    es: "Esta persona dejará de aparecer en el equipo y en sus colas. Su cuenta no se eliminará.",
+    gl: "Esta persoa deixará de aparecer no equipo e nas súas colas. A súa conta non se eliminará.",
+    en: "This person will be removed from the team and its queues. Their account will not be deleted.",
+  },
+  removeImportedParticipantTitle: {
+    es: "Quitar participante importado",
+    gl: "Quitar participante importado",
+    en: "Remove imported participant",
+  },
+  removeImportedParticipantDesc: {
+    es: "Se quitará esta fila importada del equipo. Una importación posterior puede volver a añadirla.",
+    gl: "Quitarase esta fila importada do equipo. Unha importación posterior pode volver engadila.",
+    en: "This imported row will be removed from the team. A later import may add it again.",
+  },
   noChallengesAssignedTitle: {
     es: "Ningún reto asignado",
     gl: "Ningún reto asignado",
@@ -4117,9 +4173,9 @@ const dict: Record<string, I18nText> = {
     en: "Could not delete participant.",
   },
   verificationEmailSentLinked: {
-    es: "Correo de verificación enviado a la dirección vinculada.",
-    gl: "Correo de verificación enviado ao enderezo vinculado.",
-    en: "Verification email sent to the linked address.",
+    es: "Correo de verificación enviado. El vínculo se activará cuando se verifique la dirección.",
+    gl: "Correo de verificación enviado. O vínculo activarase cando se verifique o enderezo.",
+    en: "Verification email sent. The link will activate after the address is verified.",
   },
   couldNotLinkParticipant: {
     es: "No se ha podido vincular el participante al usuario.",
