@@ -10,6 +10,7 @@ import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { AlertModal } from "@/components/common/alert-modal";
 import { MultiSelect } from "@/components/common/multi-select";
 import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -226,6 +227,19 @@ export function StaffEditForm({
     }
   }
 
+  async function handleRemoveSecondaryEmail() {
+    setSecSending(true);
+    try {
+      await api.delete(`/api/users/${user.id}/secondary-email`);
+      toast.success(t("secondaryEmailRemoved"));
+      await onUpdated();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveSecondaryEmail"));
+    } finally {
+      setSecSending(false);
+    }
+  }
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)}>
@@ -394,6 +408,20 @@ export function StaffEditForm({
                 <StatusBadge tone={user.secondaryEmailVerified ? "success" : "warning"} dot={false}>
                   {user.secondaryEmailVerified ? t("verified") : t("pendingShort")}
                 </StatusBadge>
+                <AlertModal
+                  title={t("removeSecondaryEmailTitle")}
+                  description={t("removeSecondaryEmailStaffDesc")}
+                  cancelLabel={t("cancel")}
+                  confirmLabel={t("remove")}
+                  destructive
+                  pending={secSending}
+                  trigger={
+                    <Button type="button" variant="outline" size="sm">
+                      {t("remove")}
+                    </Button>
+                  }
+                  onConfirm={handleRemoveSecondaryEmail}
+                />
               </div>
             )}
             <div className="flex items-end gap-2">

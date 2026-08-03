@@ -2,7 +2,7 @@
 import { LinkIcon, SearchIcon, Trash2Icon, UserPlusIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { StatusBadge } from "@/components/common/status-badge";
+import { AlertModal } from "@/components/common/alert-modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,7 +16,6 @@ import {
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { linkSecondaryEmail, removeDevpostParticipant, removeRepoMember } from "@/lib/projects";
-import type { UserList } from "@/lib/types";
 import { challengeTitleText, type ProjectRepo } from "../shared";
 
 type ChallengeOption = {
@@ -28,7 +27,9 @@ function _manualMemberCount(repo: ProjectRepo): number {
   return repo.members.filter((member) => member.mergeStatus === "manual").length;
 }
 
-function userLabel(user: UserList["users"][number]): string {
+type MemberCandidate = { id: number; email: string; name: string | null; surname: string | null };
+
+function userLabel(user: MemberCandidate): string {
   const name = [user.name, user.surname].filter(Boolean).join(" ").trim();
   return name ? `${name} · ${user.email}` : user.email;
 }
@@ -36,43 +37,57 @@ function userLabel(user: UserList["users"][number]): string {
 export function MemberRemoveButton({
   repoId,
   userId,
+  email,
+  imported,
   onRemoved,
 }: {
   repoId: number;
   userId: number;
+  email: string | null;
+  imported: boolean;
   onRemoved: () => Promise<void>;
 }) {
   const { t } = useLocale();
+  const [busy, setBusy] = useState(false);
   return (
-    <Button
-      variant="outline"
-      size="sm"
-      onClick={async () => {
+    <AlertModal
+      title={t("removeProjectMemberTitle")}
+      description={imported ? t("removeImportedParticipantDesc") : t("removeProjectMemberDesc")}
+      cancelLabel={t("cancel")}
+      confirmLabel={t("remove")}
+      destructive
+      pending={busy}
+      trigger={
+        <Button variant="outline" size="sm">
+          {t("remove")}
+        </Button>
+      }
+      onConfirm={async () => {
+        setBusy(true);
         try {
-          await removeRepoMember(repoId, userId);
+          if (imported && email) await removeDevpostParticipant(repoId, email);
+          else await removeRepoMember(repoId, userId);
           toast.success(t("memberRemoved"));
           await onRemoved();
         } catch (err) {
           toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveMember"));
+        } finally {
+          setBusy(false);
         }
       }}
-    >
-      {t("remove")}
-    </Button>
+    />
   );
 }
 
 export function DevpostParticipantActions({
   repoId,
   email,
-  users,
   canDelete,
   canLink,
   onChanged,
 }: {
   repoId: number;
   email: string;
-  users: UserList["users"];
   canDelete: boolean;
   canLink: boolean;
   onChanged: () => Promise<void>;
@@ -80,8 +95,42 @@ export function DevpostParticipantActions({
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState("");
+  const [query, setQuery] = useState("");
+  const [users, setUsers] = useState<MemberCandidate[]>([]);
+  const [searching, setSearching] = useState(false);
   const [busy, setBusy] = useState<"delete" | "link" | null>(null);
   const dialogId = `devpost-link-${repoId}-${email}`;
+
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (!open || trimmed.length < 2) {
+      setUsers([]);
+      setSearching(false);
+      return;
+    }
+    let cancelled = false;
+    const handle = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const result = await api.get<{ users: MemberCandidate[] }>(
+          "/api/projects/member-candidates",
+          { query: { q: trimmed, limit: 20 } },
+        );
+        if (!cancelled) setUsers(result.users);
+      } catch (err) {
+        if (!cancelled) {
+          setUsers([]);
+          toast.error(err instanceof ApiError ? err.message : t("couldNotSearchUsers"));
+        }
+      } finally {
+        if (!cancelled) setSearching(false);
+      }
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [open, query, t]);
 
   async function deleteParticipant() {
     setBusy("delete");
@@ -128,13 +177,24 @@ export function DevpostParticipantActions({
             {t("linkParticipantToUser")}
           </Button>
           {open && (
-            <div id={dialogId} className="grid w-full gap-2 sm:grid-cols-[minmax(220px,1fr)_auto]">
+            <div id={dialogId} className="grid w-full gap-2">
               <Label htmlFor={`${dialogId}-user`} className="sr-only">
                 {t("userForEmail", { email })}
               </Label>
+              <Input
+                id={`${dialogId}-user`}
+                value={query}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setSelectedUserId("");
+                }}
+                placeholder={t("searchUsersNameEmailPlaceholder")}
+              />
               <Select value={selectedUserId} onValueChange={setSelectedUserId}>
-                <SelectTrigger id={`${dialogId}-user`}>
-                  <SelectValue placeholder={t("selectUserPlaceholder")} />
+                <SelectTrigger aria-label={t("userForEmail", { email })}>
+                  <SelectValue
+                    placeholder={searching ? t("searchingEllipsis") : t("selectUserPlaceholder")}
+                  />
                 </SelectTrigger>
                 <SelectContent>
                   {users.map((user) => (
@@ -158,16 +218,21 @@ export function DevpostParticipantActions({
         </>
       )}
       {canDelete && (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={busy === "delete"}
-          onClick={deleteParticipant}
-        >
-          <Trash2Icon className="size-4" />
-          {t("deleteAction")}
-        </Button>
+        <AlertModal
+          title={t("removeImportedParticipantTitle")}
+          description={t("removeImportedParticipantDesc")}
+          cancelLabel={t("cancel")}
+          confirmLabel={t("deleteAction")}
+          destructive
+          pending={busy === "delete"}
+          trigger={
+            <Button type="button" variant="outline" size="sm" disabled={busy !== null}>
+              <Trash2Icon className="size-4" />
+              {t("deleteAction")}
+            </Button>
+          }
+          onConfirm={deleteParticipant}
+        />
       )}
     </div>
   );
@@ -184,8 +249,8 @@ export function ProjectMemberAdder({
 }) {
   const { t } = useLocale();
   const [query, setQuery] = useState("");
-  const [users, setUsers] = useState<UserList["users"]>([]);
-  const [selectedUser, setSelectedUser] = useState<UserList["users"][number] | null>(null);
+  const [users, setUsers] = useState<MemberCandidate[]>([]);
+  const [selectedUser, setSelectedUser] = useState<MemberCandidate | null>(null);
   const [searching, setSearching] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -202,7 +267,9 @@ export function ProjectMemberAdder({
     const handle = setTimeout(async () => {
       setSearching(true);
       try {
-        const res = await api.get<UserList>("/api/users", { query: { q: trimmed, limit: 10 } });
+        const res = await api.get<{ users: MemberCandidate[] }>("/api/projects/member-candidates", {
+          query: { q: trimmed, limit: 10 },
+        });
         if (!cancelled) setUsers(res.users);
       } catch (err) {
         if (!cancelled) {
@@ -275,9 +342,6 @@ export function ProjectMemberAdder({
                           </span>
                         )}
                       </span>
-                      <StatusBadge tone={user.confirmedSpot ? "success" : "neutral"}>
-                        {user.confirmedSpot ? t("confirmedStatus") : user.role}
-                      </StatusBadge>
                     </button>
                   );
                 })

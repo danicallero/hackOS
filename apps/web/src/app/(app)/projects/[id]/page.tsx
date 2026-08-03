@@ -37,12 +37,11 @@ import {
   removeRepoPrize,
 } from "@/lib/projects";
 import { useSessionContext } from "@/lib/session";
-import type { UserList } from "@/lib/types";
 import { ProjectFormDialog } from "../project-form-dialog";
 import {
   challengeTitleText,
+  memberMatchLabel,
   memberName,
-  mergeStatusLabel,
   mergeStatusTone,
   type ProjectRepo,
   toProjectRepo,
@@ -56,11 +55,6 @@ type ChallengeOption = {
 
 function manualMemberCount(repo: ProjectRepo): number {
   return repo.members.filter((member) => member.mergeStatus === "manual").length;
-}
-
-function _userLabel(user: UserList["users"][number]): string {
-  const name = [user.name, user.surname].filter(Boolean).join(" ").trim();
-  return name ? `${name} · ${user.email}` : user.email;
 }
 
 import {
@@ -79,7 +73,6 @@ export default function ProjectDetailPage() {
   const canImport = can(CAPABILITIES.PROJECTS_IMPORT);
   const id = Number(params.id);
   const [repo, setRepo] = useState<ProjectRepo | null>(null);
-  const [users, setUsers] = useState<UserList["users"]>([]);
   const [challenges, setChallenges] = useState<ChallengeOption[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -99,17 +92,11 @@ export default function ProjectDetailPage() {
       hasLoadedRef.current = true;
 
       if (canEdit || canImport) {
-        const [usersResult, challengeResult] = await Promise.allSettled([
-          canImport
-            ? api.get<UserList>("/api/users", { query: { limit: 200 } })
-            : Promise.resolve(null),
+        const [challengeResult] = await Promise.allSettled([
           canEdit
             ? api.get<{ challenges: ChallengeOption[] }>("/api/challenges")
             : api.get<{ items: ChallengeOption[] }>("/api/public/challenges"),
         ]);
-        if (usersResult.status === "fulfilled" && usersResult.value) {
-          setUsers(usersResult.value.users);
-        } else if (canImport) setUsers([]);
         if (challengeResult.status === "fulfilled") {
           setChallenges(
             "challenges" in challengeResult.value
@@ -282,17 +269,19 @@ export default function ProjectDetailPage() {
                           ? t("addedManually")
                           : member.devpostUsername
                             ? `@${member.devpostUsername}`
-                            : mergeStatusLabel(member.mergeStatus)}
+                            : memberMatchLabel(member, t)}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
                       <StatusBadge tone={mergeStatusTone(member.mergeStatus)}>
-                        {mergeStatusLabel(member.mergeStatus)}
+                        {memberMatchLabel(member, t)}
                       </StatusBadge>
                       {canEdit && member.userId !== null && (
                         <MemberRemoveButton
                           repoId={repo.id}
                           userId={member.userId}
+                          email={member.email}
+                          imported={member.mergeStatus !== "manual"}
                           onRemoved={load}
                         />
                       )}
@@ -302,7 +291,6 @@ export default function ProjectDetailPage() {
                           <DevpostParticipantActions
                             repoId={repo.id}
                             email={member.email}
-                            users={users}
                             canDelete={canEdit}
                             canLink={canImport}
                             onChanged={load}

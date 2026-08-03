@@ -10,24 +10,35 @@ const QUEUE_ENTRY_SELECT = `qe.*, r.name AS repo_name, r.description AS repo_des
              )
         FROM (
           SELECT jsonb_build_object(
-                   'userId', u.id, 'email', u.email, 'name', u.name, 'surname', u.surname
-                 ) AS m
-            FROM users u
-            JOIN (
-              SELECT user_id FROM submissions WHERE repo_id = qe.repo_id
-              UNION
-              SELECT user_id FROM devpost_participants
-               WHERE repo_id = qe.repo_id AND user_id IS NOT NULL
-            ) members ON members.user_id = u.id
-          UNION ALL
-          -- Devpost participants who never matched a system account still get
-          -- listed, using the name Devpost imported instead of dropping them.
-          SELECT jsonb_build_object(
-                   'userId', NULL, 'email', dp.email, 'name', dp.name, 'surname', dp.surname
+                   'userId', dp.user_id,
+                   'email', dp.email,
+                   'name', COALESCE(u.name, dp.name),
+                   'surname', COALESCE(u.surname, dp.surname),
+                   'source', 'devpost',
+                   'matchType', CASE
+                     WHEN dp.user_id IS NULL THEN 'unmatched'
+                     WHEN lower(dp.email) = lower(u.email) THEN 'primary_email'
+                     WHEN u.secondary_email_verified_at IS NOT NULL
+                       AND lower(dp.email) = lower(u.secondary_email) THEN 'secondary_email'
+                     ELSE 'manual'
+                   END
                  ) AS m
             FROM devpost_participants dp
+            LEFT JOIN users u ON u.id = dp.user_id
            WHERE dp.repo_id = qe.repo_id
-             AND dp.user_id IS NULL
+          UNION ALL
+          -- A submission without a Devpost identity is an operator-added row.
+          SELECT jsonb_build_object(
+                   'userId', u.id, 'email', u.email, 'name', u.name, 'surname', u.surname,
+                   'source', 'manual', 'matchType', 'manual'
+                 ) AS m
+            FROM submissions s
+            JOIN users u ON u.id = s.user_id
+           WHERE s.repo_id = qe.repo_id
+             AND NOT EXISTS (
+               SELECT 1 FROM devpost_participants dp
+                WHERE dp.repo_id = s.repo_id AND dp.user_id = s.user_id
+             )
         ) all_members
     ),
     '[]'::jsonb

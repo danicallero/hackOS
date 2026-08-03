@@ -536,7 +536,7 @@ describe("GET /api/me/projects (participant self-view)", () => {
     expect(missing.statusCode).toBe(404);
   });
 
-  it("detaches a removed Devpost-matched member from project, queue, and profile views", async () => {
+  it("removes an imported roster member from project, queue, and profile views", async () => {
     const server = await getApp();
     const { aliceId } = await seedMatchableUsers();
     const operator = await createUserWithCapabilities([
@@ -567,7 +567,7 @@ describe("GET /api/me/projects (participant self-view)", () => {
 
     const removed = await server.inject({
       method: "DELETE",
-      url: `/api/repos/${beans}/members/${aliceId}`,
+      url: `/api/repos/${beans}/devpost-participants/${encodeURIComponent(EMAILS.alice)}`,
       headers: asUser(operator),
     });
     expect(removed.statusCode).toBe(200);
@@ -582,17 +582,13 @@ describe("GET /api/me/projects (participant self-view)", () => {
         WHERE repo_id = $1 AND email = $2`,
       [beans, EMAILS.alice],
     );
-    expect(dp.rows).toEqual([
-      expect.objectContaining({ email: EMAILS.alice, user_id: null, merge_status: "unmatched" }),
-    ]);
+    expect(dp.rows).toEqual([]);
     const audit = await pool.query(
-      `SELECT after FROM audit_log
-        WHERE entity_type = 'submission' AND entity_id = $1 AND action = 'remove_member'`,
-      [`${beans}:${aliceId}`],
+      `SELECT before FROM audit_log
+        WHERE entity_type = 'devpost_participant' AND entity_id = $1 AND action = 'delete'`,
+      [`${beans}:${EMAILS.alice}`],
     );
-    expect(audit.rows[0].after).toMatchObject({
-      detachedDevpostParticipants: [EMAILS.alice],
-    });
+    expect(audit.rows[0].before).toMatchObject({ userId: aliceId });
 
     const roster = await server.inject({
       method: "GET",
@@ -602,8 +598,8 @@ describe("GET /api/me/projects (participant self-view)", () => {
     expect(
       (roster.json().members as { userId: number | null }[]).some((m) => m.userId === aliceId),
     ).toBe(false);
-    expect(roster.json().members).toContainEqual(
-      expect.objectContaining({ email: EMAILS.alice, userId: null, mergeStatus: "unmatched" }),
+    expect(roster.json().members.some((m: { email: string }) => m.email === EMAILS.alice)).toBe(
+      false,
     );
 
     const queue = await server.inject({

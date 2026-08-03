@@ -162,6 +162,12 @@ foreign-keys on the email string.
   verification passed no `recipient`, so the email channel adapter
   (`channels/email.ts:70`, `payload.recipient ?? user.email`) fell back to the
   **primary** address. Now the new secondary address is passed as `recipient`.
+- `POST /api/me/secondary-email` and the staff equivalent store the address as
+  pending; Devpost membership is created only after verification. Replacing or
+  deleting it (`DELETE /api/me/secondary-email`, or the `USERS_WRITE` staff
+  route) transactionally revokes automatic matches that depended on it. A
+  case-insensitive partial unique index plus an address-scoped transaction lock
+  guarantees one verified owner under concurrent verification.
 - `profile.ts` `PATCH /api/users/:id/email` (`USERS_WRITE`) — safe primary-email
   change: uniqueness check vs any primary / verified-secondary, single-column
   update, marks verified (admin-vouched), audited.

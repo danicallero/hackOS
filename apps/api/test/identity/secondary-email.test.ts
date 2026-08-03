@@ -1,7 +1,14 @@
 import "./env.js";
+import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
-import { asUser, buildTestApp, createUser, truncateAll } from "../helpers.js";
+import {
+  asUser,
+  buildTestApp,
+  createUser,
+  createUserWithCapabilities,
+  truncateAll,
+} from "../helpers.js";
 
 /** H6: add + verify a secondary email; strict cross-account uniqueness. */
 
@@ -294,5 +301,106 @@ describe("H6 secondary email", () => {
       payload: { token },
     });
     expect(res.statusCode).toBe(400);
+  });
+
+  it("removing a verified secondary email revokes only its automatic project links", async () => {
+    const a = await getApp();
+    const userId = await createUser({ email: "primary@example.com" });
+    const { pool } = await import("../../src/db/pool.js");
+    const secondaryRepo = await pool.query(
+      `INSERT INTO repos (name) VALUES ('Secondary-linked') RETURNING id`,
+    );
+    const primaryRepo = await pool.query(
+      `INSERT INTO repos (name) VALUES ('Primary-linked') RETURNING id`,
+    );
+    await pool.query(
+      `INSERT INTO devpost_participants (repo_id, email, import_batch)
+       VALUES ($1, 'secondary@example.com', 'test'), ($2, 'primary@example.com', 'test')`,
+      [secondaryRepo.rows[0].id, primaryRepo.rows[0].id],
+    );
+    await requestSecondary(a, userId, "secondary@example.com");
+    await a.inject({
+      method: "POST",
+      url: "/api/me/secondary-email/verify",
+      headers: asUser(userId),
+      payload: { token: await latestToken(userId) },
+    });
+
+    const removed = await a.inject({
+      method: "DELETE",
+      url: "/api/me/secondary-email",
+      headers: asUser(userId),
+    });
+    expect(removed.statusCode).toBe(200);
+    const identities = await pool.query(
+      `SELECT email, user_id, merge_status FROM devpost_participants ORDER BY email`,
+    );
+    expect(identities.rows).toEqual([
+      { email: "primary@example.com", user_id: userId, merge_status: "auto_matched" },
+      { email: "secondary@example.com", user_id: null, merge_status: "unmatched" },
+    ]);
+    const user = await pool.query(
+      `SELECT secondary_email, secondary_email_verified_at FROM users WHERE id = $1`,
+      [userId],
+    );
+    expect(user.rows[0]).toEqual({ secondary_email: null, secondary_email_verified_at: null });
+  });
+
+  it("staff with user-write access can remove another account's secondary email", async () => {
+    const a = await getApp();
+    const target = await createUser();
+    const unauthorized = await createUser();
+    const editor = await createUserWithCapabilities([CAPABILITIES.USERS_WRITE]);
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `UPDATE users SET secondary_email = 'staff-remove@example.com', secondary_email_verified_at = now()
+        WHERE id = $1`,
+      [target],
+    );
+    expect(
+      (
+        await a.inject({
+          method: "DELETE",
+          url: `/api/users/${target}/secondary-email`,
+          headers: asUser(unauthorized),
+        })
+      ).statusCode,
+    ).toBe(403);
+    const removed = await a.inject({
+      method: "DELETE",
+      url: `/api/users/${target}/secondary-email`,
+      headers: asUser(editor),
+    });
+    expect(removed.statusCode).toBe(200);
+    const audit = await pool.query(
+      `SELECT actor_id FROM audit_log
+        WHERE action = 'secondary_email_admin_removed' AND entity_id = $1`,
+      [String(target)],
+    );
+    expect(audit.rows).toEqual([{ actor_id: editor }]);
+  });
+
+  it("allows only one concurrent verification winner for the same secondary address", async () => {
+    const a = await getApp();
+    const first = await createUser();
+    const second = await createUser();
+    await requestSecondary(a, first, "one-owner@example.com");
+    await requestSecondary(a, second, "one-owner@example.com");
+    const [firstToken, secondToken] = await Promise.all([latestToken(first), latestToken(second)]);
+    const results = await Promise.all([
+      a.inject({
+        method: "POST",
+        url: "/api/me/secondary-email/verify",
+        headers: asUser(first),
+        payload: { token: firstToken },
+      }),
+      a.inject({
+        method: "POST",
+        url: "/api/me/secondary-email/verify",
+        headers: asUser(second),
+        payload: { token: secondToken },
+      }),
+    ]);
+    expect(results.map((result) => result.statusCode).sort()).toEqual([200, 409]);
   });
 });
