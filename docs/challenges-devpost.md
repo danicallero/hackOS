@@ -62,6 +62,11 @@ Key facts that drive every design decision below:
   `devpost_participants` row (and its submission only when no other imported
   identity still represents the account); manually-added roster entries use the
   separate `submissions` member route.
+- **Queue availability uses the full roster relation (H30).** The busy-member
+  guard and its operator-facing skip projection consider `submissions`, linked
+  `devpost_participants`, and primary/verified-secondary email matches. This
+  keeps judging safe while legacy imports are being reconciled and matches the
+  membership relation used by queue roster and notification reads.
 
 ### 1.2 Challenges module (`apps/api/src/modules/challenges/`)
 

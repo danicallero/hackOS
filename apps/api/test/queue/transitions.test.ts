@@ -247,6 +247,60 @@ describe("call_next (H29, H30)", () => {
     expect(third.json().entry.id).toBe(entryB);
   });
 
+  it("H30: treats linked Devpost participants as members even when submissions is missing", async () => {
+    const { challengeId: ch1, roomId: room1 } = await setup();
+    const ch2 = await createChallenge();
+    const room2 = await createRoom();
+    await assignChallengeToRoom(room2, ch2);
+
+    const sharedMember = await createUser({ email: "linked-member@test.local" });
+    const { pool } = await import("../../src/db/pool.js");
+    const activeRepo = (
+      await pool.query(`INSERT INTO repos (name) VALUES ('Devpost active') RETURNING id`)
+    ).rows[0].id;
+    const waitingRepo = (
+      await pool.query(`INSERT INTO repos (name) VALUES ('Devpost waiting') RETURNING id`)
+    ).rows[0].id;
+    for (const repoId of [activeRepo, waitingRepo]) {
+      await pool.query(
+        `INSERT INTO devpost_participants
+           (repo_id, email, user_id, import_batch, merge_status)
+         VALUES ($1, 'linked-member@test.local', $2, 'test-import', 'manually_linked')`,
+        [repoId, sharedMember],
+      );
+    }
+
+    const activeEntry = await enqueueRepo(ch1, activeRepo, 1);
+    const waitingEntry = await enqueueRepo(ch2, waitingRepo, 1);
+    const first = await app.inject({
+      method: "POST",
+      url: `/api/queue/rooms/${room1}/call-next`,
+      headers: asUser(operatorId),
+      payload: {},
+    });
+    expect(first.json().entry.id).toBe(activeEntry);
+
+    const second = await app.inject({
+      method: "POST",
+      url: `/api/queue/rooms/${room2}/call-next`,
+      headers: asUser(operatorId),
+      payload: {},
+    });
+    expect(second.json().called).toBe(false);
+    expect((await getEntry(waitingEntry)).status).toBe("waiting");
+
+    const view = await app.inject({
+      method: "GET",
+      url: `/api/queue/rooms/${room2}/view`,
+      headers: asUser(operatorId),
+    });
+    expect(view.json().crossRoomSkips).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ entryId: waitingEntry, blockingRoomId: room1 }),
+      ]),
+    );
+  });
+
   it("H203: room view explains a cross-room skip, preserves position, and clears once the blocker leaves", async () => {
     const { challengeId: ch1, roomId: room1 } = await setup();
     const ch2 = await createChallenge();
