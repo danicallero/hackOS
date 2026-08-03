@@ -39,27 +39,38 @@ export function MemberRemoveButton({
   userId,
   email,
   imported,
+  secondaryLinked = false,
   onRemoved,
 }: {
   repoId: number;
   userId: number;
   email: string | null;
   imported: boolean;
+  secondaryLinked?: boolean;
   onRemoved: () => Promise<void>;
 }) {
   const { t } = useLocale();
   const [busy, setBusy] = useState(false);
+  const title = secondaryLinked
+    ? t("unlinkSecondaryProjectAccountTitle")
+    : t("removeProjectMemberTitle");
+  const description = secondaryLinked
+    ? t("unlinkSecondaryProjectAccountDesc")
+    : imported
+      ? t("removeImportedParticipantDesc")
+      : t("removeProjectMemberDesc");
+  const confirmLabel = secondaryLinked ? t("unlinkSecondaryProjectAccountAction") : t("remove");
   return (
     <AlertModal
-      title={t("removeProjectMemberTitle")}
-      description={imported ? t("removeImportedParticipantDesc") : t("removeProjectMemberDesc")}
+      title={title}
+      description={description}
       cancelLabel={t("cancel")}
-      confirmLabel={t("remove")}
+      confirmLabel={confirmLabel}
       destructive
       pending={busy}
       trigger={
         <Button variant="outline" size="sm">
-          {t("remove")}
+          {confirmLabel}
         </Button>
       }
       onConfirm={async () => {

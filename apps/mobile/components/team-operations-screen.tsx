@@ -1,6 +1,6 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
-import { useCallback, useEffect, useLayoutEffect, useState } from "react";
+import { useLocalSearchParams, useNavigation } from "expo-router";
+import { type ReactNode, useCallback, useEffect, useLayoutEffect, useState } from "react";
 import {
   Alert,
   Linking,
@@ -11,7 +11,16 @@ import {
   useColorScheme,
   View,
 } from "react-native";
-import { ActionButton, EmptyState, InfoRow, Section, Separator } from "@/components/native-ui";
+import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
+import Animated, { interpolate, type SharedValue, useAnimatedStyle } from "react-native-reanimated";
+import {
+  ActionButton,
+  EmptyState,
+  InfoRow,
+  Section,
+  Separator,
+  StatusPill,
+} from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
@@ -79,7 +88,6 @@ export function TeamOperationsScreen() {
   useColorScheme();
   const { entryId, roomId } = useLocalSearchParams<{ entryId: string; roomId: string }>();
   const headerNavigation = useNavigation(isPadIdiom() ? "/(tabs)/others" : undefined);
-  const router = useRouter();
   const { t } = useLocale();
   const { me } = useMeContext();
   const [entry, setEntry] = useState<TeamEntry | null>(null);
@@ -136,29 +144,45 @@ export function TeamOperationsScreen() {
 
   const teamName = entry?.repo_name ?? t("queueOpsUnnamedTeam");
 
-  const findMemberCandidates = useCallback(async () => {
+  const findMemberCandidates = useCallback(
+    async (rawQuery = memberQuery) => {
+      const query = rawQuery.trim();
+      if (!query) {
+        setMemberCandidates([]);
+        setMemberSearched(false);
+        return;
+      }
+      setMemberCandidatesLoading(true);
+      setMemberCandidatesError(null);
+      try {
+        const result = await apiFetch<{ users: MemberCandidate[] }>(
+          `/api/projects/member-candidates?q=${encodeURIComponent(query)}`,
+        );
+        setMemberCandidates(result.users);
+        setMemberSearched(true);
+      } catch (cause) {
+        setMemberCandidatesError(
+          cause instanceof Error ? cause : new Error(t("teamDetailMemberSearchError")),
+        );
+      } finally {
+        setMemberCandidatesLoading(false);
+      }
+    },
+    [memberQuery, t],
+  );
+
+  useEffect(() => {
     const query = memberQuery.trim();
-    if (!query) {
+    if (query.length < 2) {
       setMemberCandidates([]);
       setMemberSearched(false);
       return;
     }
-    setMemberCandidatesLoading(true);
-    setMemberCandidatesError(null);
-    try {
-      const result = await apiFetch<{ users: MemberCandidate[] }>(
-        `/api/projects/member-candidates?q=${encodeURIComponent(query)}`,
-      );
-      setMemberCandidates(result.users);
-      setMemberSearched(true);
-    } catch (cause) {
-      setMemberCandidatesError(
-        cause instanceof Error ? cause : new Error(t("teamDetailMemberSearchError")),
-      );
-    } finally {
-      setMemberCandidatesLoading(false);
-    }
-  }, [memberQuery, t]);
+    const handle = setTimeout(() => {
+      void findMemberCandidates(query);
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [findMemberCandidates, memberQuery]);
 
   const addMember = useCallback(
     async (userId: number) => {
@@ -221,15 +245,20 @@ export function TeamOperationsScreen() {
   const removeMember = useCallback(
     (member: TeamMember) => {
       if (!member.source) return;
+      const secondaryLinked = isSecondaryLinkedMember(member);
       const name = memberDisplayName(member);
-      const description =
-        member.source === "devpost"
+      const description = secondaryLinked
+        ? t("teamDetailUnlinkSecondaryConfirm", { name })
+        : member.source === "devpost"
           ? t("teamDetailRemoveImportedMemberConfirm", { name })
           : t("teamDetailRemoveMemberConfirm", { name });
-      Alert.alert(t("teamDetailRemoveMember"), description, [
+      const actionLabel = secondaryLinked
+        ? t("teamDetailUnlinkSecondary")
+        : t("teamDetailRemoveMember");
+      Alert.alert(actionLabel, description, [
         { text: t("cancel"), style: "cancel" },
         {
-          text: t("teamDetailRemoveMember"),
+          text: actionLabel,
           style: "destructive",
           onPress: () => deleteMember(member),
         },
@@ -242,16 +271,8 @@ export function TeamOperationsScreen() {
     headerNavigation.setOptions({
       title: entry ? teamName : "",
       headerLargeTitle: true,
-      headerLeft: () => (
-        <Pressable
-          accessibilityLabel={t("back")}
-          accessibilityRole="button"
-          hitSlop={8}
-          onPress={() => router.back()}
-        >
-          <SymbolView name="chevron.left" tintColor={colors.accent} size={20} weight="semibold" />
-        </Pressable>
-      ),
+      headerBackVisible: true,
+      headerLeft: undefined,
       headerRight: entry
         ? () => (
             <Text style={{ color: colors.secondaryLabel, fontSize: 15, fontWeight: "600" }}>
@@ -260,7 +281,7 @@ export function TeamOperationsScreen() {
           )
         : undefined,
     });
-  }, [headerNavigation, teamName, entry, router, t]);
+  }, [headerNavigation, teamName, entry, t]);
 
   if (loadState === "loading") {
     return (
@@ -391,38 +412,52 @@ export function TeamOperationsScreen() {
           {members.map((member, index) => (
             <View key={member.userId ?? member.email}>
               {index > 0 ? <Separator /> : null}
-              <View style={{ gap: 5, paddingHorizontal: 16, paddingVertical: 10 }}>
-                <Text selectable style={{ color: colors.label, fontSize: 16, fontWeight: "600" }}>
-                  {memberDisplayName(member)}
-                </Text>
-                <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13 }}>
-                  {member.email}
-                </Text>
-                <Text selectable style={{ color: colors.tertiaryLabel, fontSize: 12 }}>
-                  {memberLinkLabel(member, t)}
-                </Text>
-                {canEditProject && member.source ? (
-                  <Pressable
-                    accessibilityLabel={t("teamDetailRemoveMember", {
-                      name: memberDisplayName(member),
-                    })}
-                    accessibilityRole="button"
-                    accessibilityState={{ busy: memberMutation === member.email }}
-                    disabled={memberMutation !== null}
-                    onPress={() => removeMember(member)}
-                    style={({ pressed }) => ({
-                      alignSelf: "flex-start",
-                      minHeight: 44,
-                      justifyContent: "center",
-                      opacity: memberMutation !== null ? 0.45 : pressed ? 0.6 : 1,
-                    })}
-                  >
-                    <Text style={{ color: colors.destructive, fontSize: 15, fontWeight: "600" }}>
-                      {t("teamDetailRemoveMember")}
-                    </Text>
-                  </Pressable>
-                ) : null}
-              </View>
+              <SwipeableMemberRow
+                enabled={canEditProject && Boolean(member.source)}
+                actionLabel={
+                  isSecondaryLinkedMember(member)
+                    ? t("teamDetailUnlinkSecondary")
+                    : t("teamDetailRemoveMember")
+                }
+                onAction={() => removeMember(member)}
+              >
+                <View style={{ gap: 8, paddingHorizontal: 16, paddingVertical: 12 }}>
+                  <Text selectable style={{ color: colors.label, fontSize: 16, fontWeight: "600" }}>
+                    {memberDisplayName(member)}
+                  </Text>
+                  <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13 }}>
+                    {member.email}
+                  </Text>
+                  <StatusPill tone={memberLinkTone(member)}>
+                    {memberLinkLabel(member, t)}
+                  </StatusPill>
+                  {canEditProject && member.source ? (
+                    <Pressable
+                      accessibilityLabel={
+                        isSecondaryLinkedMember(member)
+                          ? t("teamDetailUnlinkSecondary")
+                          : t("teamDetailRemoveMember")
+                      }
+                      accessibilityRole="button"
+                      accessibilityState={{ busy: memberMutation === member.email }}
+                      disabled={memberMutation !== null}
+                      onPress={() => removeMember(member)}
+                      style={({ pressed }) => ({
+                        alignSelf: "flex-start",
+                        minHeight: 44,
+                        justifyContent: "center",
+                        opacity: memberMutation !== null ? 0.45 : pressed ? 0.6 : 1,
+                      })}
+                    >
+                      <Text style={{ color: colors.destructive, fontSize: 15, fontWeight: "600" }}>
+                        {isSecondaryLinkedMember(member)
+                          ? t("teamDetailUnlinkSecondary")
+                          : t("teamDetailRemoveMember")}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              </SwipeableMemberRow>
             </View>
           ))}
           {canEditProject ? (
@@ -488,6 +523,13 @@ export function TeamOperationsScreen() {
                 {memberQuery.trim().length === 1 ? (
                   <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13 }}>
                     {t("teamDetailMemberSearchMin")}
+                  </Text>
+                ) : null}
+                {!memberCandidatesLoading && memberSearched && memberCandidates.length > 0 ? (
+                  <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13 }}>
+                    {t("teamDetailMemberCandidateCount", {
+                      count: String(memberCandidates.length),
+                    })}
                   </Text>
                 ) : null}
                 {memberCandidates.map((candidate) => (
@@ -591,6 +633,99 @@ function memberLinkLabel(member: TeamMember, t: ReturnType<typeof useLocale>["t"
     default:
       return t("teamDetailMemberUnmatched");
   }
+}
+
+function isSecondaryLinkedMember(member: TeamMember): boolean {
+  return member.source === "devpost" && member.matchType === "secondary_email";
+}
+
+function memberLinkTone(
+  member: TeamMember,
+): "neutral" | "accent" | "success" | "warning" | "destructive" {
+  if (member.source === "manual") return "accent";
+  switch (member.matchType) {
+    case "primary_email":
+      return "success";
+    case "secondary_email":
+      return "warning";
+    case "manual":
+      return "accent";
+    default:
+      return "neutral";
+  }
+}
+
+function DeleteMemberRevealAction({
+  progress,
+  label,
+  onPress,
+}: {
+  progress: SharedValue<number>;
+  label: string;
+  onPress: () => void;
+}) {
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scaleX: interpolate(progress.value, [0, 1], [0.9, 1]) }],
+    opacity: interpolate(progress.value, [0, 0.1, 1], [0, 0.5, 1]),
+  }));
+  return (
+    <Animated.View
+      style={[
+        {
+          alignItems: "center",
+          backgroundColor: colors.destructive,
+          borderBottomLeftRadius: 14,
+          borderTopLeftRadius: 14,
+          justifyContent: "center",
+          minWidth: 140,
+        },
+        animatedStyle,
+      ]}
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        onPress={onPress}
+        style={({ pressed }) => ({
+          alignItems: "center",
+          flexDirection: "row",
+          gap: 6,
+          height: "100%",
+          justifyContent: "center",
+          opacity: pressed ? 0.75 : 1,
+          paddingHorizontal: 18,
+        })}
+      >
+        <SymbolView name="trash.fill" tintColor="white" size={16} accessible={false} />
+        <Text style={{ color: "white", fontSize: 14, fontWeight: "700" }}>{label}</Text>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+function SwipeableMemberRow({
+  enabled,
+  actionLabel,
+  onAction,
+  children,
+}: {
+  enabled: boolean;
+  actionLabel: string;
+  onAction: () => void;
+  children: ReactNode;
+}) {
+  if (!enabled) return <>{children}</>;
+  return (
+    <Swipeable
+      enabled
+      rightThreshold={40}
+      renderRightActions={(progress) => (
+        <DeleteMemberRevealAction progress={progress} label={actionLabel} onPress={onAction} />
+      )}
+    >
+      {children}
+    </Swipeable>
+  );
 }
 
 function queueStatusLabel(status: string, t: ReturnType<typeof useLocale>["t"]): string {

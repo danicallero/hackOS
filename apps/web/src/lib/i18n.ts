@@ -4113,6 +4113,21 @@ const dict: Record<string, I18nText> = {
     gl: "Quitarase esta fila importada do equipo. Unha importación posterior pode volver engadila.",
     en: "This imported row will be removed from the team. A later import may add it again.",
   },
+  unlinkSecondaryProjectAccountTitle: {
+    es: "Desvincular cuenta secundaria",
+    gl: "Desvincular conta secundaria",
+    en: "Unlink secondary account",
+  },
+  unlinkSecondaryProjectAccountDesc: {
+    es: "Este vínculo por correo secundario verificado se quitará del proyecto. La cuenta no se eliminará.",
+    gl: "Esta ligazón por correo secundario verificado quitarase do proxecto. A conta non se eliminará.",
+    en: "This verified-secondary-email link will be removed from the project. The account will not be deleted.",
+  },
+  unlinkSecondaryProjectAccountAction: {
+    es: "Desvincular",
+    gl: "Desvincular",
+    en: "Unlink",
+  },
   noChallengesAssignedTitle: {
     es: "Ningún reto asignado",
     gl: "Ningún reto asignado",

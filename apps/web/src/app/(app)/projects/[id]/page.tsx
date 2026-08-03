@@ -282,6 +282,7 @@ export default function ProjectDetailPage() {
                           userId={member.userId}
                           email={member.email}
                           imported={member.mergeStatus !== "manual"}
+                          secondaryLinked={member.matchType === "secondary_email"}
                           onRemoved={load}
                         />
                       )}

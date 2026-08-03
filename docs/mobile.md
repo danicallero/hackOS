@@ -247,8 +247,11 @@ route below. No migration needed.
   primary-email match, verified secondary-email match, staff link, unmatched,
   or staff-added), repo/Devpost/demo links, and the entry's `queue_history`
   timeline. A caller with `projects:edit` (or `*`) can search the
-  project-edit candidate directory, add a selected account, and remove a
-  member after native confirmation. Queue access alone never exposes those
+  project-edit candidate directory (live typeahead), add a selected account,
+  and remove a member after native confirmation. Team rows now also support
+  swipe-to-reveal destructive actions (notification center style): "Remove
+  member" for manual links and "Unlink secondary account" when the match came
+  from a verified secondary email. Queue access alone never exposes those
   controls. Imported Devpost participants are removed through the Devpost
   participant endpoint; staff-added members use the repository-member
   endpoint, so a correction preserves the imported-record audit trail.
