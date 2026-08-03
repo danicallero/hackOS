@@ -252,6 +252,20 @@ const TEMPLATES: Record<string, TemplateDefinition> = {
  * what the participant needs to do at a glance.
  */
 const PUSH_TEMPLATES: Record<string, PushTemplateDefinition> = {
+  "queue.precall": {
+    en: {
+      title: "You're up soon — get ready",
+      body: "Your team {{teamName}} will be called for {{challengeName}} in about {{etaMinutes}} minutes.",
+    },
+    es: {
+      title: "Te toca pronto — prepárate",
+      body: "Llamarán a tu equipo {{teamName}} para {{challengeName}} en unos {{etaMinutes}} minutos.",
+    },
+    gl: {
+      title: "Tócache pronto — prepárate",
+      body: "Chamaran ao teu equipo {{teamName}} para {{challengeName}} en uns {{etaMinutes}} minutos.",
+    },
+  },
   "queue.staff.enter": {
     en: { title: "{{teamName}} enters {{roomName}}", body: "Called in for {{challengeName}}." },
     es: { title: "{{teamName}} entra en {{roomName}}", body: "Llamado para {{challengeName}}." },
