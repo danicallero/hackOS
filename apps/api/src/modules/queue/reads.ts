@@ -1,5 +1,6 @@
 import { pool } from "../../db/pool.js";
 import { NotFoundError } from "../../lib/errors.js";
+import { REPO_MEMBER_RELATION_SQL } from "./membership.js";
 
 const QUEUE_ENTRY_SELECT = `qe.*, r.name AS repo_name, r.description AS repo_description,
   r.github_url AS repo_github_url, r.devpost_url AS repo_devpost_url, r.demo_url AS repo_demo_url,
@@ -150,7 +151,10 @@ export async function roomView(roomId: number, opts: { includeCrossRoomSkips?: b
   // called into THIS room. Recomputed on every read, so it clears the moment
   // the blocking member's other entry leaves called/in_room/presenting.
   const crossRoomSkips = opts.includeCrossRoomSkips
-    ? await crossRoomSkipReasons(next as { id: number; repo_id: number; position: number | null }[])
+    ? await crossRoomSkipReasons(
+        roomId,
+        next as { id: number; repo_id: number; position: number | null }[],
+      )
     : [];
 
   return { room, state, challenge, active, called, next, crossRoomSkips };
@@ -166,6 +170,7 @@ export async function roomView(roomId: number, opts: { includeCrossRoomSkips?: b
  * without leaking which specific member is shared.
  */
 async function crossRoomSkipReasons(
+  roomId: number,
   entries: { id: number; repo_id: number; position: number | null }[],
 ): Promise<
   {
@@ -180,20 +185,22 @@ async function crossRoomSkipReasons(
 > {
   if (entries.length === 0) return [];
   const { rows } = await pool.query(
-    `SELECT DISTINCT ON (qe.id)
+    `WITH repo_members AS (${REPO_MEMBER_RELATION_SQL})
+     SELECT DISTINCT ON (qe.id)
             qe.id AS entry_id,
             br.id AS blocking_room_id, br.name AS blocking_room_name,
             bqe.status AS blocking_status, brepo.name AS blocking_team_name
        FROM queue_entries qe
-       JOIN submissions s1 ON s1.repo_id = qe.repo_id
-       JOIN submissions s2 ON s2.user_id = s1.user_id
+       JOIN repo_members s1 ON s1.repo_id = qe.repo_id
+       JOIN repo_members s2 ON s2.user_id = s1.user_id
        JOIN queue_entries bqe ON bqe.repo_id = s2.repo_id
                               AND bqe.status IN ('called', 'in_room', 'presenting')
+                              AND bqe.assigned_room_id IS DISTINCT FROM $2::int
        JOIN rooms br ON br.id = bqe.assigned_room_id
        JOIN repos brepo ON brepo.id = bqe.repo_id
       WHERE qe.id = ANY($1)
       ORDER BY qe.id, bqe.id`,
-    [entries.map((e) => e.id)],
+    [entries.map((e) => e.id), roomId],
   );
   const byEntryId = new Map(
     (
