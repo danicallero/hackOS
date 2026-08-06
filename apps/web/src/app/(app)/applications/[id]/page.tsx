@@ -31,6 +31,7 @@ import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
+import { useUrlTab } from "@/lib/url-tab";
 import { type ApplicationForm, type ApplicationStats, windowState } from "../lib";
 import { defaultApplicationWorkspace } from "../workflow";
 
@@ -47,6 +48,19 @@ export default function ApplicationDetailPage() {
   const canReview = useCan(CAPABILITIES.APPLICATIONS_REVIEW);
   const canDecide = useCan(CAPABILITIES.APPLICATIONS_DECIDE);
   const canStats = useCan(CAPABILITIES.LOGISTICS_STATS);
+  const applicationTabs = [
+    canManage ? "builder" : null,
+    canReview ? "review" : null,
+    canDecide ? "outbox" : null,
+    canDecide ? "sent" : null,
+  ].filter((value): value is "builder" | "review" | "outbox" | "sent" => value !== null);
+  const defaultTab =
+    defaultApplicationWorkspace({
+      manage: canManage,
+      review: canReview,
+      decide: canDecide,
+    }) ?? "builder";
+  const { tab, setTab } = useUrlTab({ values: applicationTabs, defaultValue: defaultTab });
 
   const [form, setForm] = useState<ApplicationForm | null>(null);
   const [stats, setStats] = useState<ApplicationStats | null>(null);
@@ -107,11 +121,6 @@ export default function ApplicationDetailPage() {
     );
   }
 
-  const defaultTab = defaultApplicationWorkspace({
-    manage: canManage,
-    review: canReview,
-    decide: canDecide,
-  });
   const w = form ? windowState(form, t) : null;
 
   return (
@@ -147,8 +156,8 @@ export default function ApplicationDetailPage() {
 
       {canStats && stats && <StatsStrip stats={stats} />}
 
-      {defaultTab && (
-        <Tabs defaultValue={defaultTab}>
+      {applicationTabs.length > 0 && (
+        <Tabs value={tab} onValueChange={setTab}>
           <TabBar className="w-full justify-start">
             {canManage && <TabsTrigger value="builder">{t("formTabLabel")}</TabsTrigger>}
             {canReview && <TabsTrigger value="review">{t("workspaceReview")}</TabsTrigger>}

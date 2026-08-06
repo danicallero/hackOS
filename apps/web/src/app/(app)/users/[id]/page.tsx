@@ -2,7 +2,7 @@
 
 import { EVENTS } from "@hackos/shared/events";
 import { ChevronDownIcon, UsersIcon } from "lucide-react";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { BackLink } from "@/components/common/back-link";
 import { EmptyState } from "@/components/common/empty-state";
@@ -13,6 +13,7 @@ import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import type { Intolerance, UserDetail } from "@/lib/types";
+import { useUrlTab } from "@/lib/url-tab";
 
 import { ApplicationTab } from "./application-tab";
 import { LogsTab } from "./logs-tab";
@@ -23,18 +24,25 @@ import { PresenceSection } from "./presence-tab";
 import { ProfileHeader } from "./profile-header";
 import { ProjectsTab } from "./projects-tab";
 import { QrTab } from "./qr-tab";
-import { TAB_VALUES } from "./shared";
+
+const USER_TABS = [
+  "overview",
+  "access",
+  "attendance",
+  "activity",
+  "application",
+  "projects",
+] as const;
 
 export default function UserProfilePage() {
   const { t } = useLocale();
   const params = useParams<{ id: string }>();
   const userId = Number(params.id);
-  const searchParams = useSearchParams();
-  const requestedTab = searchParams.get("tab");
-  const initialTab =
-    requestedTab && (TAB_VALUES as readonly string[]).includes(requestedTab)
-      ? requestedTab
-      : "overview";
+  const { tab, setTab } = useUrlTab({
+    values: USER_TABS,
+    defaultValue: "overview",
+    aliases: { qr: "access", permissions: "access", presence: "attendance" },
+  });
 
   const [user, setUser] = useState<UserDetail | null>(null);
   const [intolerances, setIntolerances] = useState<Intolerance[]>([]);
@@ -96,12 +104,11 @@ export default function UserProfilePage() {
       <BackLink href="/users" label={t("backToUsers")} />
       <ProfileHeader user={user} />
 
-      <Tabs defaultValue={initialTab}>
+      <Tabs value={tab} onValueChange={setTab}>
         <TabBar aria-label={t("profileSections")} className="w-full justify-start">
           <TabsTrigger value="overview">{t("tabOverview")}</TabsTrigger>
-          <TabsTrigger value="qr">{t("qrCodes")}</TabsTrigger>
-          <TabsTrigger value="permissions">{t("permissions")}</TabsTrigger>
-          <TabsTrigger value="presence">{t("presence")}</TabsTrigger>
+          <TabsTrigger value="access">{t("accessTab")}</TabsTrigger>
+          <TabsTrigger value="attendance">{t("attendanceTab")}</TabsTrigger>
           <TabsTrigger value="activity">{t("tabLogs")}</TabsTrigger>
           <TabsTrigger value="application">{t("tabApplication")}</TabsTrigger>
           <TabsTrigger value="projects">{t("projects")}</TabsTrigger>
@@ -110,13 +117,11 @@ export default function UserProfilePage() {
         <TabsContent value="overview" className="pt-2">
           <OverviewTab user={user} intolerances={intolerances} onUpdated={load} />
         </TabsContent>
-        <TabsContent value="qr" className="pt-2">
+        <TabsContent value="access" className="grid gap-6 pt-2 xl:grid-cols-2">
           <QrTab user={user} />
-        </TabsContent>
-        <TabsContent value="permissions" className="pt-2">
           <PermissionsTab user={user} onChanged={load} />
         </TabsContent>
-        <TabsContent value="presence" className="pt-2">
+        <TabsContent value="attendance" className="pt-2">
           <div className="space-y-6">
             <PresenceSection userId={user.id} refreshKey={liveRefresh} />
             <details className="group rounded-lg border">

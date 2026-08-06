@@ -114,12 +114,14 @@ function WorkspaceGroup({
   workspace,
   items,
   active,
+  open,
   onOpen,
 }: {
   workspace: (typeof WORKSPACES)[number];
   items: NavItem[];
   active: boolean;
-  onOpen: (id: string) => void;
+  open: boolean;
+  onOpen: (id: string, open: boolean) => void;
 }) {
   const { t } = useLocale();
   const { state: railState, isMobile } = useSidebar();
@@ -127,11 +129,6 @@ function WorkspaceGroup({
   // or on a mobile sheet, every item must stay directly reachable exactly
   // like before (audit: active/collapsed/mobile states are all accessible).
   const isIconRail = railState === "collapsed" && !isMobile;
-  const [open, setOpen] = useState(active);
-
-  useEffect(() => {
-    if (active) setOpen(true);
-  }, [active]);
 
   const Icon = workspace.icon;
   const effectiveOpen = isIconRail || open;
@@ -141,8 +138,7 @@ function WorkspaceGroup({
       open={effectiveOpen}
       onOpenChange={(next) => {
         if (isIconRail) return;
-        setOpen(next);
-        if (next) onOpen(workspace.id);
+        onOpen(workspace.id, next);
       }}
     >
       <SidebarGroup>
@@ -159,9 +155,9 @@ function WorkspaceGroup({
           <CollapsiblePrimitive.Trigger asChild>
             <SidebarGroupLabel
               asChild
-              className="hover:bg-sidebar-accent hover:text-sidebar-accent-foreground cursor-pointer"
+              className={`hover:bg-sidebar-accent hover:text-sidebar-accent-foreground cursor-pointer ${active ? "bg-sidebar-accent/70 text-sidebar-accent-foreground" : ""}`}
             >
-              <button type="button" aria-expanded={effectiveOpen}>
+              <button type="button" aria-expanded={effectiveOpen} data-active={active || undefined}>
                 <Icon className="mr-2 size-4 shrink-0" />
                 <span className="flex-1 text-left">{t(workspace.label)}</span>
                 <span
@@ -206,6 +202,7 @@ export function AppSidebar() {
   const isVisible = useVisible();
   const unreadCount = useUnreadCount();
   const [lastWorkspace, setLastWorkspace] = useState<string | null>(null);
+  const [openWorkspace, setOpenWorkspace] = useState<string | null>(null);
 
   useEffect(() => {
     setLastWorkspace(readLastWorkspace());
@@ -281,10 +278,19 @@ export function AppSidebar() {
                 key={workspace.id}
                 workspace={workspace}
                 items={items}
-                active={shouldOpenInitially}
-                onOpen={(id) => {
-                  setLastWorkspace(id);
-                  writeLastWorkspace(id);
+                active={containsActiveRoute}
+                open={
+                  containsActiveRoute ||
+                  openWorkspace === workspace.id ||
+                  (openWorkspace === null && shouldOpenInitially)
+                }
+                onOpen={(id, nextOpen) => {
+                  const next = nextOpen ? id : null;
+                  setOpenWorkspace(next);
+                  if (next) {
+                    setLastWorkspace(next);
+                    writeLastWorkspace(next);
+                  }
                 }}
               />
             );

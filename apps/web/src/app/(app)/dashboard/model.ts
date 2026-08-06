@@ -2,12 +2,15 @@ import { CAPABILITIES, type Capability } from "@hackos/shared/capabilities";
 
 export type DashboardQuickAction =
   | "wallet"
+  | "applications"
   | "challenges"
   | "judging"
   | "logistics"
   | "queueOperations"
   | "eventSettings"
   | "schedule";
+
+export type DashboardPrimaryAction = Exclude<DashboardQuickAction, "wallet">;
 
 export interface DashboardAccessContext {
   can: (capability: Capability) => boolean;
@@ -70,4 +73,39 @@ export function dashboardQuickActions(context: DashboardAccessContext): Dashboar
 
   actions.push("schedule");
   return actions;
+}
+
+/** Pick one starting point so the dashboard does not become a second sidebar. */
+export function dashboardPrimaryAction(context: DashboardAccessContext): DashboardPrimaryAction {
+  if (
+    context.isRoomJudge ||
+    canAny(context, [
+      CAPABILITIES.QUEUE_OPERATE,
+      CAPABILITIES.QUEUE_ADMIN,
+      CAPABILITIES.JUDGE_PANEL,
+    ])
+  ) {
+    return "judging";
+  }
+  if (canAny(context, [CAPABILITIES.APPLICATIONS_REVIEW, CAPABILITIES.APPLICATIONS_DECIDE])) {
+    return "applications";
+  }
+  if (
+    context.isSponsorRep ||
+    canAny(context, [CAPABILITIES.SPONSORS_MANAGE, CAPABILITIES.QUEUE_ADMIN])
+  ) {
+    return "challenges";
+  }
+  if (
+    canAny(context, [
+      CAPABILITIES.ACCREDIT_SCAN,
+      CAPABILITIES.ACTIVITY_SCAN,
+      CAPABILITIES.PRESENCE_SCAN,
+      CAPABILITIES.LOGISTICS_STATS,
+    ])
+  ) {
+    return "logistics";
+  }
+  if (context.can(CAPABILITIES.SCHEDULE_MANAGE)) return "eventSettings";
+  return "schedule";
 }

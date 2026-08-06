@@ -5,12 +5,8 @@ import {
   CalendarDaysIcon,
   ChevronRightIcon,
   ClipboardListIcon,
-  GavelIcon,
   MapPinIcon,
-  SettingsIcon,
   TicketIcon,
-  TrophyIcon,
-  WalletCardsIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -24,13 +20,14 @@ import { StatusBadge } from "@/components/common/status-badge";
 import type { PublicAnnouncement, PublicEvent } from "@/components/public/public-types";
 import { EventPhaseDisplay, useEventPhase } from "@/components/public/timer";
 import { Button } from "@/components/ui/button";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import { ApiError, api } from "@/lib/api";
 import { LOCALE_CODES, useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem } from "@/lib/logistics";
 import { getMyQueue, type MyQueueEntry } from "@/lib/queue";
 import { useSessionContext } from "@/lib/session";
 import { type MyResponseSummary, statusLabel, statusTone } from "../my-applications/lib";
-import { dashboardQuickActions } from "./model";
+import { dashboardPrimaryAction } from "./model";
 
 type DashboardData = {
   event: PublicEvent | null;
@@ -214,18 +211,48 @@ export default function DashboardPage() {
         .slice(0, 3),
     [data.queue],
   );
-  if (!me) return null;
-  const quickActions = dashboardQuickActions({
+  const primaryAction = dashboardPrimaryAction({
     can,
-    isRoomJudge: me.isRoomJudge,
-    isSponsorRep: me.isSponsorRep,
+    isRoomJudge: me?.isRoomJudge ?? false,
+    isSponsorRep: me?.isSponsorRep ?? false,
   });
+  const recommendedAction = useMemo(() => {
+    const draft = data.applications.find((application) => application.status === "draft");
+    if (draft) {
+      return {
+        href: `/my-applications/${draft.application_id}`,
+        label: t("continueApplication"),
+      };
+    }
+    if (attentionQueues.length > 0) {
+      return { href: "/my-queue", label: t("viewQueue") };
+    }
+    const actions = {
+      applications: { href: "/applications", label: t("applications") },
+      challenges: { href: "/challenges", label: t("challenges") },
+      judging: { href: "/judging", label: t("openJudging") },
+      logistics: { href: "/logistics/accreditation", label: t("logistics") },
+      queueOperations: { href: "/queue", label: t("queueOperations") },
+      eventSettings: { href: "/settings/event", label: t("eventSettings") },
+      schedule: { href: "/timetable", label: t("viewSchedule") },
+    } as const;
+    return actions[primaryAction];
+  }, [attentionQueues.length, data.applications, primaryAction, t]);
+  if (!me) return null;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title={`${t("welcome")}${me.name ? `, ${me.name}` : ""}`}
         description={data.event?.tagline ?? undefined}
+        primaryAction={
+          recommendedAction ? (
+            <Button asChild>
+              <Link href={recommendedAction.href}>{recommendedAction.label}</Link>
+            </Button>
+          ) : undefined
+        }
+        secondaryActions={<SidebarTrigger aria-label={t("moreWorkspaces")} />}
       />
 
       {loading ? (
@@ -237,14 +264,14 @@ export default function DashboardPage() {
         <>
           <div className="grid gap-4 lg:grid-cols-2">
             <SectionCard
-              title={data.event?.name ?? "hackOS"}
+              title={t("needsAttention")}
+              icon={BellIcon}
               action={
-                <Button asChild variant="ghost" size="sm">
-                  <Link href="/timetable">
-                    <CalendarDaysIcon className="size-4" aria-hidden="true" />
-                    {t("viewSchedule")}
-                  </Link>
-                </Button>
+                recommendedAction ? (
+                  <Button asChild size="sm">
+                    <Link href={recommendedAction.href}>{recommendedAction.label}</Link>
+                  </Button>
+                ) : undefined
               }
             >
               {statuses.event === "loading" ? (
@@ -252,12 +279,24 @@ export default function DashboardPage() {
               ) : errors.event ? (
                 <ContextualError message={errors.event} onRetry={() => void loadEvent()} />
               ) : phase.kind !== "none" ? (
-                <EventPhaseDisplay
-                  phase={phase}
-                  className="block font-mono text-3xl font-semibold tabular-nums"
-                />
+                <div className="space-y-3">
+                  <p className="text-muted-foreground text-sm">{data.event?.name ?? "hackOS"}</p>
+                  <EventPhaseDisplay
+                    phase={phase}
+                    className="block font-mono text-3xl font-semibold tabular-nums"
+                  />
+                  {recommendedAction && (
+                    <p className="text-muted-foreground text-sm">
+                      {t("nextAction")}:{" "}
+                      <span className="text-foreground font-medium">{recommendedAction.label}</span>
+                    </p>
+                  )}
+                </div>
               ) : (
-                <EmptyState icon={CalendarDaysIcon} title={t("eventTimingPending")} />
+                <div className="space-y-3">
+                  <p className="text-muted-foreground text-sm">{data.event?.name ?? "hackOS"}</p>
+                  <EmptyState icon={CalendarDaysIcon} title={t("eventTimingPending")} />
+                </div>
               )}
             </SectionCard>
 
@@ -412,68 +451,6 @@ export default function DashboardPage() {
               )}
             </SectionCard>
           </div>
-
-          <SectionCard
-            title={t("quickActions")}
-            bodyClassName="grid gap-2 space-y-0 sm:grid-cols-2 lg:grid-cols-4"
-          >
-            {quickActions.includes("wallet") && (
-              <Button asChild variant="outline" className="justify-start">
-                <Link href="/wallet">
-                  <WalletCardsIcon className="size-4" aria-hidden="true" />
-                  {t("viewTicket")}
-                </Link>
-              </Button>
-            )}
-            {quickActions.includes("challenges") && (
-              <Button asChild variant="outline" className="justify-start">
-                <Link href="/challenges">
-                  <TrophyIcon className="size-4" aria-hidden="true" />
-                  {t("challenges")}
-                </Link>
-              </Button>
-            )}
-            {quickActions.includes("judging") && (
-              <Button asChild variant="outline" className="justify-start">
-                <Link href="/judging">
-                  <GavelIcon className="size-4" aria-hidden="true" />
-                  {t("judging")}
-                </Link>
-              </Button>
-            )}
-            {quickActions.includes("logistics") && (
-              <Button asChild variant="outline" className="justify-start">
-                <Link href="/logistics">
-                  <TicketIcon className="size-4" aria-hidden="true" />
-                  {t("logistics")}
-                </Link>
-              </Button>
-            )}
-            {quickActions.includes("queueOperations") && (
-              <Button asChild variant="outline" className="justify-start">
-                <Link href="/queue">
-                  <TicketIcon className="size-4" aria-hidden="true" />
-                  {t("queueOperations")}
-                </Link>
-              </Button>
-            )}
-            {quickActions.includes("eventSettings") && (
-              <Button asChild variant="outline" className="justify-start">
-                <Link href="/settings/event">
-                  <SettingsIcon className="size-4" aria-hidden="true" />
-                  {t("eventSettings")}
-                </Link>
-              </Button>
-            )}
-            {quickActions.includes("schedule") && (
-              <Button asChild variant="outline" className="justify-start">
-                <Link href="/timetable">
-                  <CalendarDaysIcon className="size-4" aria-hidden="true" />
-                  {t("viewSchedule")}
-                </Link>
-              </Button>
-            )}
-          </SectionCard>
         </>
       )}
     </div>

@@ -668,6 +668,22 @@ const dict: Record<string, I18nText> = {
   loading: { es: "Cargando", gl: "Cargando", en: "Loading" },
   viewQueue: { es: "Ver mi cola", gl: "Ver a miña cola", en: "View my queue" },
   manageRoom: { es: "Gestionar", gl: "Xestionar", en: "Manage" },
+  nextAction: { es: "Siguiente acción", gl: "Seguinte acción", en: "Next action" },
+  needsAttention: {
+    es: "Necesita tu atención",
+    gl: "Precisa a túa atención",
+    en: "Needs attention",
+  },
+  moreWorkspaces: {
+    es: "Más espacios de trabajo",
+    gl: "Máis espazos de traballo",
+    en: "More workspaces",
+  },
+  continueApplication: {
+    es: "Continuar solicitud",
+    gl: "Continuar solicitude",
+    en: "Continue application",
+  },
 
   // ---- Entrance ticket & wallet badge ----
   entranceTicket: { es: "Entrada", gl: "Entrada", en: "Entrance ticket" },

@@ -50,6 +50,7 @@ import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
 import { exportUrls } from "@/lib/queue";
 import { useSessionContext } from "@/lib/session";
+import { useUrlTab } from "@/lib/url-tab";
 import {
   JudgingPanelBuilder,
   MultilingualInput,
@@ -79,6 +80,7 @@ const editSchema = z.object({
   availableFrom: z.string(),
 });
 type EditValues = z.infer<typeof editSchema>;
+const CHALLENGE_TABS = ["content", "prizes", "judging", "winners", "publish", "history"] as const;
 
 function toFormValues(challenge: Challenge): EditValues {
   return {
@@ -129,6 +131,7 @@ export function EditCard({
   onSaved: () => Promise<void>;
 }) {
   const { t } = useLocale();
+  const { tab, setTab } = useUrlTab({ values: CHALLENGE_TABS, defaultValue: "content" });
   const [prizes, setPrizes] = useState<Prize[]>(asPrizes(challenge.prizes));
   const [questions, setQuestions] = useState<Question[]>(
     asQuestions(challenge.judging_panel_criteria),
@@ -221,7 +224,7 @@ export function EditCard({
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <Tabs defaultValue="content">
+        <Tabs value={tab} onValueChange={setTab}>
           <TabBar className="w-full max-w-2xl">
             <TabsTrigger value="content">{t("contentTabLabel")}</TabsTrigger>
             <TabsTrigger value="prizes">{t("prizesTabLabel")}</TabsTrigger>

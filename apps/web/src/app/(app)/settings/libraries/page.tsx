@@ -9,16 +9,21 @@ import { PageHeader } from "@/components/common/page-header";
 import { TabBar } from "@/components/common/tab-bar";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useLocale } from "@/lib/i18n";
+import { useUrlTab } from "@/lib/url-tab";
 import { IntolerancesManager } from "./intolerances-manager";
 import { UniversitiesManager } from "./universities-manager";
 
 export default function LibrariesSettingsPage() {
   const { t } = useLocale();
+  const { tab, setTab } = useUrlTab({
+    values: ["intolerances", "universities"] as const,
+    defaultValue: "intolerances",
+  });
   return (
     <div className="space-y-6">
       <PageHeader title={t("libraries")} />
 
-      <Tabs defaultValue="intolerances">
+      <Tabs value={tab} onValueChange={setTab}>
         <TabBar className="w-full max-w-md">
           <TabsTrigger value="intolerances">{t("foodIntolerances")}</TabsTrigger>
           <TabsTrigger value="universities">{t("universitiesTab")}</TabsTrigger>
