@@ -29,7 +29,7 @@ capabilities with role assumptions.
 
 The audit has been implemented incrementally in these slices:
 
-- `3be1797` — exclusive workspace disclosure, dashboard attention/next-action
+- `3be1797` — initial shell simplification, dashboard attention/next-action
   hierarchy, and the shared URL-backed tab hook (`H8`, `H55`).
 - `2347e39` — overview-first application, user, enterprise, and permission
   records with capability-filtered tabs and preserved legacy user tab aliases
@@ -39,6 +39,32 @@ The audit has been implemented incrementally in these slices:
   (`H24`, `H44`, `H50`).
 - `00107b5` — explicit attendee timetable versus organizer schedule-management
   language (`H47`).
+- `1d2f64a` — enforced single-open workspace accordion behavior, removed the
+  dashboard’s duplicate primary action, migrated event settings to the shared
+  tab hook, and added mounted back/forward tab coverage (`H8`, `H55`).
+- `02bb3ef` — retained the latest successful presence scan for operator
+  recovery and added saved/unsaved/error feedback to the challenge editor
+  (`H24`, `H44`).
+
+### Requirement coverage
+
+| Requirement | Evidence in the final implementation |
+| --- | --- |
+| UX-01 | `app-sidebar.tsx` owns one `openWorkspace`, keeps the active workspace visible, restores only the last useful workspace, and preserves the collapsed rail. |
+| UX-02 | `dashboard/page.tsx` leads with event attention and one recommended action, keeps announcements/status/queue secondary, and exposes only a compact workspace trigger. |
+| UX-03 | `lib/url-tab.ts` is the shared `?tab=` implementation; all retained app tabs use it, legacy user aliases remain supported, and `url-tab.test.ts` covers direct links, invalid values, query preservation, and URL back/forward rerenders. |
+| UX-04 | Application detail is overview-first with capability-filtered builder, review, internal outbox, and communicated/sent decision views. |
+| UX-05 | User detail groups QR and permissions under Access, presence/activity passes under Attendance, and preserves `qr`, `permissions`, and `presence` deep links. |
+| UX-06 | Enterprise detail separates overview, profile/branding, challenges, members, and invitations; sponsor-only access defaults to overview. |
+| UX-07 | Permission groups separate overview, capabilities, members, included groups, and an explicit Advanced/danger area; capability changes explain their effect before saving. |
+| UX-08 | Challenge creation is a dedicated URL-backed Basics → Prizes → Judging → Publish stepper; detail separates editing from winners/publication/history and exposes local save state. |
+| UX-09 | Announcement list management is separate from dedicated create/edit routes, with focused status/search/delivery list columns and local form save/error state. |
+| UX-10 | Presence uses URL-backed Scan, Sessions, and Hours views, independent live-query retry paths, and a persistent latest-scan confirmation. |
+| UX-11 | Logistics statistics uses URL-backed Before, During, and After phases while retaining live updates, exports, freshness states, and capability gates. |
+| UX-12 | Queue generation/room operations, room administration, reviews, and active judging remain separate task surfaces; the active judging workflow was not split. |
+| UX-13 | Applications, challenges, enterprises, permissions, users, and migrated child content use the shared `PageHeader` hierarchy. |
+| UX-14 | Timetable and schedule-management routes now state attendee versus organizer intent in labels and descriptions. |
+| UX-15 | Changed surfaces use existing design tokens, sentence-case i18n copy, one primary action per scope, semantic status colors, responsive `TabBar`, and visible focus affordances. |
 
 Decisions made during implementation:
 
@@ -60,14 +86,21 @@ Running verification:
 - `pnpm lint` passes, including copy and page-size checks. Biome reports one
   existing non-failing warning in `e2e/mobile/detox.config.cjs`.
 - `pnpm --filter @hackos/web typecheck` passes.
-- `pnpm --filter @hackos/web test` passes: 30 files, 190 tests.
-- `E2E_WEB_URL=http://localhost:3001 pnpm test:ui:browser` passes: 8 browser
-  smoke tests across Chromium, Firefox, WebKit, and mobile Chromium.
-- Authenticated screenshots could not be captured in this environment: the
-  browser connector had no available browser, and the embedded Orca runtime
-  stopped immediately after launch. The browser suite therefore verified the
-  unauthenticated running app, but no screenshot is claimed for an
-  authenticated changed state.
+- `pnpm --filter @hackos/web test` passes: 30 files, 193 tests.
+- `pnpm test:ui:browser` passes: 8 browser smoke tests across Chromium,
+  Firefox, WebKit, and mobile Chromium.
+- A temporary Playwright fixture supplied a deterministic authenticated session
+  to the real Next.js app and captured the changed dashboard/shell at 375, 768,
+  1024, and 1440px, plus the expanded single-workspace state. The fixture was
+  removed after capture; screenshots remain in the local Playwright artifacts
+  directory for the UI review handoff. The API responses were route-mocked, so
+  these images are visual evidence of the running UI rather than a claim about
+  seeded production data.
+- Responsive review covered the loading boundary, compact dashboard hierarchy,
+  single primary action, mobile sidebar trigger, expanded workspace state,
+  shared tab focus styling, and the existing error/unsaved paths in the
+  changed components. No browser connector or seeded integration account was
+  available for a full authenticated data-flow run.
 
 ## Experience goals
 
