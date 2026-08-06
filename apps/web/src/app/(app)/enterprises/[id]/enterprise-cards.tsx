@@ -111,7 +111,13 @@ const ENTERPRISE_ACTION_COPY: Record<
   addDescription: "nextActionAddDescription",
 };
 
-export function CompletenessCard({ enterprise }: { enterprise: Enterprise }) {
+export function CompletenessCard({
+  enterprise,
+  onOpenProfile,
+}: {
+  enterprise: Enterprise;
+  onOpenProfile: () => void;
+}) {
   const { t } = useLocale();
   const nextAction = enterpriseNextAction(enterprise);
   return (
@@ -122,8 +128,8 @@ export function CompletenessCard({ enterprise }: { enterprise: Enterprise }) {
       {nextAction ? (
         <div className="flex items-center justify-between gap-3">
           <p className="text-sm">{t(ENTERPRISE_ACTION_COPY[nextAction])}</p>
-          <Button asChild size="sm" variant="outline">
-            <a href="#profile-edit">{t("complete")}</a>
+          <Button size="sm" variant="outline" onClick={onOpenProfile}>
+            {t("complete")}
           </Button>
         </div>
       ) : (

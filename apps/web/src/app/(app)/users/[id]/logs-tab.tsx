@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
-import { timeFmt } from "./shared";
+import { formatUserDate } from "./shared";
 
 export interface ActivityPass {
   id: number;
@@ -40,7 +40,7 @@ interface AuditRow {
 }
 
 export function AuditLogSection({ userId }: { userId: number }) {
-  const { t } = useLocale();
+  const { language, t } = useLocale();
   const canAudit = useCan(CAPABILITIES.AUDIT_READ);
   const [items, setItems] = useState<AuditRow[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "forbidden" | "error">("loading");
@@ -116,7 +116,7 @@ export function AuditLogSection({ userId }: { userId: number }) {
       id: "when",
       header: t("colWhen"),
       sortValue: (r) => r.created_at,
-      cell: (r) => <span className="text-sm">{timeFmt.format(new Date(r.created_at))}</span>,
+      cell: (r) => <span className="text-sm">{formatUserDate(r.created_at, language)}</span>,
     },
     {
       id: "source",

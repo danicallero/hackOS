@@ -38,7 +38,7 @@ import {
 } from "@/lib/logistics";
 import { conflictBounds, guaranteedMinutes, provisionalMinutes } from "@/lib/presence-timeline";
 import { useCan, useSessionContext } from "@/lib/session";
-import { timeFmt } from "./shared";
+import { formatUserDate } from "./shared";
 
 interface PresenceData {
   timeline: PresenceTimelineData;
@@ -358,7 +358,7 @@ export function DeleteTimeLogModal({
   onClose: () => void;
   onDeleted: () => void;
 }) {
-  const { t } = useLocale();
+  const { language, t } = useLocale();
   const [pending, setPending] = useState(false);
 
   async function remove() {
@@ -380,7 +380,7 @@ export function DeleteTimeLogModal({
       title={t("deleteThisScan")}
       description={t("removesEntryExitScan", {
         direction: log.kind === "in" ? t("entryLower") : t("exitLower"),
-        time: timeFmt.format(new Date(log.scannedAt)),
+        time: formatUserDate(log.scannedAt, language),
       })}
       cancelLabel={t("cancel")}
       confirmLabel={t("deleteAction")}
@@ -582,7 +582,7 @@ export function DeletePresenceActivityModal({
   onClose: () => void;
   onDeleted: () => void;
 }) {
-  const { t } = useLocale();
+  const { language, t } = useLocale();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
 
@@ -606,7 +606,7 @@ export function DeletePresenceActivityModal({
       title={t("deletePresenceSignal")}
       description={t("deletePresenceActivityDesc", {
         activity: signal.activityName ?? t("activitySignal"),
-        time: timeFmt.format(new Date(signal.occurredAt)),
+        time: formatUserDate(signal.occurredAt, language),
       })}
       cancelLabel={t("cancel")}
       confirmLabel={t("deleteAction")}

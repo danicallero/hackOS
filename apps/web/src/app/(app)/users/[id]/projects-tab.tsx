@@ -66,9 +66,9 @@ export function buildProjectColumns(t: Translate): Column<RepoWithExtras>[] {
 
         return (
           <div className="flex flex-wrap gap-2">
-            {devpostUrl && <ProjectLink href={devpostUrl} label="Devpost" />}
-            {demoUrl && <ProjectLink href={demoUrl} label="Demo" />}
-            {githubUrl && <ProjectLink href={githubUrl} label="Repo" />}
+            {devpostUrl && <ProjectLink href={devpostUrl} label={t("projectLinkDevpost")} />}
+            {demoUrl && <ProjectLink href={demoUrl} label={t("projectLinkDemo")} />}
+            {githubUrl && <ProjectLink href={githubUrl} label={t("projectLinkRepository")} />}
             {!devpostUrl && !demoUrl && !githubUrl && (
               <span className="text-muted-foreground text-sm">{t("none")}</span>
             )}

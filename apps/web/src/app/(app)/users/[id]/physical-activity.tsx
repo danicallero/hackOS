@@ -12,7 +12,7 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import type { ActivityPass, UserActivity } from "./logs-tab";
-import { timeFmt } from "./shared";
+import { formatUserDate } from "./shared";
 
 export function PhysicalActivity({
   userId,
@@ -23,7 +23,7 @@ export function PhysicalActivity({
   refreshKey?: number;
   embedded?: boolean;
 }) {
-  const { t } = useLocale();
+  const { language, t } = useLocale();
   const [data, setData] = useState<UserActivity | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
 
@@ -83,7 +83,7 @@ export function PhysicalActivity({
       id: "when",
       header: t("colWhen"),
       sortValue: (p) => p.loggedAt,
-      cell: (p) => <span className="text-sm">{timeFmt.format(new Date(p.loggedAt))}</span>,
+      cell: (p) => <span className="text-sm">{formatUserDate(p.loggedAt, language)}</span>,
     },
   ];
 

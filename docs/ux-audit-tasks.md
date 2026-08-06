@@ -45,6 +45,9 @@ The audit has been implemented incrementally in these slices:
 - `02bb3ef` — retained the latest successful presence scan for operator
   recovery and added saved/unsaved/error feedback to the challenge editor
   (`H24`, `H44`).
+- Follow-up — expanded the enterprise overview with live visibility, challenge,
+  profile, member, and metadata summaries; localized derived user-detail labels,
+  application states, project links, and profile dates (`H8`, `H43-H46`).
 
 ### Requirement coverage
 

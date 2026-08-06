@@ -67,6 +67,7 @@ import {
   MembersCard,
 } from "./enterprise-cards";
 import { InviteLinksCard } from "./invite-links-card";
+import { EnterpriseOverviewCard } from "./overview-card";
 
 export default function EnterpriseDetailPage() {
   const { t } = useLocale();
@@ -157,7 +158,8 @@ export default function EnterpriseDetailPage() {
           {canManage && <TabsTrigger value="invitations">{t("invitationManagement")}</TabsTrigger>}
         </TabBar>
         <TabsContent value="overview" className="space-y-6 pt-2">
-          <CompletenessCard enterprise={enterprise} />
+          <EnterpriseOverviewCard enterprise={enterprise} canManage={canManage} />
+          <CompletenessCard enterprise={enterprise} onOpenProfile={() => setTab("profile")} />
         </TabsContent>
         <TabsContent value="profile" className="space-y-6 pt-2">
           <LogoCard enterprise={enterprise} onChanged={load} />
