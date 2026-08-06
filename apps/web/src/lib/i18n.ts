@@ -89,6 +89,16 @@ const dict: Record<string, I18nText> = {
     gl: "Xestionar programa",
     en: "Manage schedule",
   },
+  publicScheduleDescription: {
+    es: "Consulta el programa publicado del evento.",
+    gl: "Consulta o programa publicado do evento.",
+    en: "Browse the event's published schedule.",
+  },
+  manageScheduleDescription: {
+    es: "Crea y publica los bloques que aparecen en el programa del evento.",
+    gl: "Crea e publica os bloques que aparecen no programa do evento.",
+    en: "Create and publish the blocks shown in the event schedule.",
+  },
   announcements: { es: "Avisos", gl: "Avisos", en: "Announcements" },
   enterprises: { es: "Empresas", gl: "Empresas", en: "Enterprises" },
   challenges: { es: "Retos", gl: "Retos", en: "Challenges" },
