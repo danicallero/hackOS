@@ -40,7 +40,7 @@ export function InviteUserDialog() {
   useEffect(() => {
     if (!open) return;
     api
-      .get<{ enterprises: EnterpriseSummary[] }>("/api/enterprises")
+      .get<{ enterprises: EnterpriseSummary[] }>("/api/invites/enterprise-options")
       .then((r) => setEnterprises(r.enterprises))
       .catch(() => setEnterprises([]));
     api

@@ -21,6 +21,11 @@ import {
   lockPermissionGraph,
   requireWildcardGraphAuthority,
 } from "../permission-graph.js";
+import {
+  enterpriseInviteLinkIsExpired,
+  findEnterpriseInviteLink,
+  registerEnterpriseInviteLinkRoutes,
+} from "./enterprise-invite-links.js";
 
 /**
  * Invitations (H9, H10): admin creates an invite by email + kind
@@ -142,6 +147,8 @@ async function enqueueInviteEmail(
 export function registerInviteRoutes(app: FastifyInstance): void {
   const api = app.withTypeProvider<ZodTypeProvider>();
   const manage = requireCapability(CAPABILITIES.INVITES_MANAGE);
+
+  registerEnterpriseInviteLinkRoutes(app);
 
   // ── create (H10; H9/H43 use kind=sponsor + enterpriseId) ─────────────────
 
@@ -534,8 +541,13 @@ export function registerInviteRoutes(app: FastifyInstance): void {
         querystring: z.object({ token: z.string().min(1) }),
         response: {
           200: z.object({
-            email: z.string(),
+            email: z.string().nullable(),
             kind: inviteKind,
+            enterpriseName: z.string().nullable(),
+            reusable: z.boolean(),
+            maxRedeems: z.number().nullable(),
+            redeemedCount: z.number(),
+            remainingRedeems: z.number().nullable(),
             expired: z.boolean(),
           }),
         },
@@ -548,11 +560,42 @@ export function registerInviteRoutes(app: FastifyInstance): void {
         [req.query.token],
       );
       const row = rows[0] as TokenRow | undefined;
-      if (!row || row.used_at !== null) throw new NotFoundError("Invite not found or already used");
+      if (row && row.used_at === null) {
+        let enterpriseName: string | null = null;
+        if (row.enterprise_id !== null) {
+          const { rows: enterprises } = await pool.query(
+            `SELECT name FROM enterprises WHERE id = $1`,
+            [row.enterprise_id],
+          );
+          enterpriseName = (enterprises[0] as { name?: string } | undefined)?.name ?? null;
+        }
+        return {
+          email: row.email,
+          kind: (row.kind ?? "staff") as z.infer<typeof inviteKind>,
+          enterpriseName,
+          reusable: false,
+          maxRedeems: null,
+          redeemedCount: 0,
+          remainingRedeems: null,
+          expired: row.expires_at < new Date(),
+        };
+      }
+
+      const link = await findEnterpriseInviteLink(pool, req.query.token);
+      if (!link) throw new NotFoundError("Invite not found or already used");
+      const { rows: enterprises } = await pool.query(`SELECT name FROM enterprises WHERE id = $1`, [
+        link.enterprise_id,
+      ]);
       return {
-        email: row.email,
-        kind: (row.kind ?? "staff") as z.infer<typeof inviteKind>,
-        expired: row.expires_at < new Date(),
+        email: null,
+        kind: "sponsor" as const,
+        enterpriseName: (enterprises[0] as { name?: string } | undefined)?.name ?? null,
+        reusable: true,
+        maxRedeems: link.max_redeems,
+        redeemedCount: link.redeemed_count,
+        remainingRedeems:
+          link.max_redeems === null ? null : Math.max(0, link.max_redeems - link.redeemed_count),
+        expired: enterpriseInviteLinkIsExpired(link),
       };
     },
   );
@@ -566,6 +609,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
       schema: {
         body: z.object({
           token: z.string().min(1),
+          email: z.string().email().optional(),
           name: z.string().min(1).max(200),
           surname: z.string().min(1).max(200),
           password: z.string().min(8).max(128),
@@ -607,16 +651,23 @@ export function registerInviteRoutes(app: FastifyInstance): void {
           [token],
         );
         const invite = rows[0] as TokenRow | undefined;
-        if (!invite) throw new NotFoundError("Invite not found");
-        if (invite.used_at !== null) {
+        const link = invite ? undefined : await findEnterpriseInviteLink(client, token, true);
+        if (!invite && !link) throw new NotFoundError("Invite not found");
+        if (invite && invite.used_at !== null) {
           throw new ConflictError("Invite already used", { inviteId: invite.id });
         }
-        if (invite.expires_at < new Date()) {
+        if (invite && invite.expires_at < new Date()) {
+          throw new ConflictError("Invite expired — ask the organization to send a new one", {
+            expired: true,
+          });
+        }
+        if (link && enterpriseInviteLinkIsExpired(link)) {
           throw new ConflictError("Invite expired — ask the organization to send a new one", {
             expired: true,
           });
         }
         if (
+          invite &&
           (await inviteContainsWildcardGroup(client, invite.group_ids)) &&
           !invite.wildcard_authorized
         ) {
@@ -624,10 +675,18 @@ export function registerInviteRoutes(app: FastifyInstance): void {
             "This invitation was not authorized to grant the wildcard capability",
           );
         }
-        const kind = (invite.kind ?? (invite.type === "sponsor_invite" ? "sponsor" : "staff")) as
-          | "staff"
-          | "sponsor"
-          | "participant";
+        const kind = invite
+          ? ((invite.kind ?? (invite.type === "sponsor_invite" ? "sponsor" : "staff")) as
+              | "staff"
+              | "sponsor"
+              | "participant")
+          : "sponsor";
+        const email = invite ? invite.email : req.body.email?.trim().toLowerCase();
+        if (!email) {
+          throw new BadRequestError("Email is required for an enterprise invite link", {
+            field: "email",
+          });
+        }
 
         // Only participants must provide a shirt size (catering/logistics for
         // attendees). Staff and sponsors don't need one. Dietary restrictions
@@ -637,27 +696,24 @@ export function registerInviteRoutes(app: FastifyInstance): void {
         }
 
         const { rows: clash } = await client.query(`SELECT id FROM users WHERE email = $1`, [
-          invite.email,
+          email,
         ]);
         if (clash.length > 0) {
-          throw new ConflictError("An account with this email already exists", {
-            email: invite.email,
-          });
+          throw new ConflictError("An account with this email already exists", { email });
         }
 
         // Account creation goes through Better Auth so the password hash /
         // credential account land exactly where sign-in expects them (H1, H10).
         const signup = await auth.api.signUpEmail({
-          body: { email: invite.email, password, name, surname },
+          body: { email, password, name, surname },
         });
         const userId = Number(signup.user.id);
 
-        // Following the emailed invite link proves mailbox ownership: mark
-        // verified and drop the redundant "verify your email" the sign-up
-        // hook just queued.
+        // The email-bound link proves mailbox ownership. A reusable enterprise
+        // link does not, so it keeps the verification email Better Auth queued.
         await client.query(
           `UPDATE users
-           SET email_verified = true,
+           SET email_verified = CASE WHEN $7 THEN true ELSE email_verified END,
                phone = COALESCE($2, phone),
                language = COALESCE($3, language),
                food_intolerances = COALESCE($4, food_intolerances),
@@ -677,32 +733,53 @@ export function registerInviteRoutes(app: FastifyInstance): void {
             req.body.foodIntolerances ?? null,
             req.body.foodIntoleranceNotes ?? null,
             req.body.shirtSize ?? null,
+            Boolean(invite),
           ],
         );
-        await client.query(
-          `DELETE FROM notification_outbox
-           WHERE user_id = $1 AND status = 'queued' AND payload->>'template' = 'auth.verify'`,
-          [userId],
-        );
+        if (invite) {
+          await client.query(
+            `DELETE FROM notification_outbox
+             WHERE user_id = $1 AND status = 'queued' AND payload->>'template' = 'auth.verify'`,
+            [userId],
+          );
+          await client.query(
+            `UPDATE email_verification_tokens SET used_at = now(), user_id = $2 WHERE id = $1`,
+            [invite.id, userId],
+          );
+        }
 
-        await client.query(
-          `UPDATE email_verification_tokens SET used_at = now(), user_id = $2 WHERE id = $1`,
-          [invite.id, userId],
-        );
-
-        if (kind === "sponsor" && invite.enterprise_id !== null) {
+        const enterpriseId = invite?.enterprise_id ?? link?.enterprise_id ?? null;
+        if (kind === "sponsor" && enterpriseId !== null) {
           // H9/H43: link to the enterprise automatically.
-          await client.query(`INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2)`, [
-            invite.enterprise_id,
-            userId,
-          ]);
+          await client.query(
+            `INSERT INTO sponsors (enterprise_id, user_id)
+             SELECT $1, $2
+             WHERE NOT EXISTS (
+               SELECT 1 FROM sponsors WHERE enterprise_id = $1 AND user_id = $2
+             )`,
+            [enterpriseId, userId],
+          );
           await issueTicket(client, userId);
+        }
+
+        if (link) {
+          await client.query(
+            `INSERT INTO enterprise_invite_link_redemptions (link_id, user_id, email, name)
+             VALUES ($1, $2, $3, $4)`,
+            [link.id, userId, email, [name, surname].filter(Boolean).join(" ")],
+          );
+          await client.query(
+            `UPDATE enterprise_invite_links
+                SET redeemed_count = redeemed_count + 1
+              WHERE id = $1`,
+            [link.id],
+          );
         }
 
         // H8/H10: pre-assigned capability groups. The invitation creator
         // validated every assignment under the same graph lock. A deleted
         // group is intentionally skipped: deletion revokes deferred grants.
-        for (const groupId of invite.group_ids ?? []) {
+        for (const groupId of invite?.group_ids ?? []) {
           await client.query(
             `INSERT INTO permission_group_members (user_id, group_id, assigned_by)
              SELECT $1, $2, NULL
@@ -733,14 +810,20 @@ export function registerInviteRoutes(app: FastifyInstance): void {
 
         await audit(client, {
           actorId: userId,
-          entityType: "invite",
-          entityId: invite.id,
+          entityType: link ? "enterprise_invite_link" : "invite",
+          entityId: invite?.id ?? link?.id ?? 0,
           action: "accept",
-          source: "email",
-          after: { userId, kind, enterpriseId: invite.enterprise_id, groupIds: invite.group_ids },
+          source: link ? "link" : "email",
+          after: {
+            userId,
+            kind,
+            enterpriseId,
+            groupIds: invite?.group_ids ?? [],
+            reusable: Boolean(link),
+          },
         });
 
-        return { userId, email: invite.email, kind };
+        return { userId, email, kind };
       });
 
       return reply.code(201).send(result);

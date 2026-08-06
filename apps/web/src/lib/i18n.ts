@@ -1669,6 +1669,16 @@ const dict: Record<string, I18nText> = {
     gl: "Convites activos",
     en: "Active invitations",
   },
+  invitationManagement: {
+    es: "Gestión de invitaciones",
+    gl: "Xestión de convites",
+    en: "Invitation management",
+  },
+  invitationManagementDesc: {
+    es: "Gestiona invitaciones por correo y enlaces reutilizables de empresa, incluidos sus usos, caducidad y retirada.",
+    gl: "Xestiona convites por correo e ligazóns reutilizables de empresa, incluídos os seus usos, caducidade e retirada.",
+    en: "Manage email invitations and reusable enterprise links, including usage, expiry, and withdrawal.",
+  },
   activeInvitationsDesc: {
     es: "Invitaciones pendientes que aún no se han aceptado. Renueva para ampliar el plazo, reenvía el correo, regenera para un enlace nuevo o expira para invalidarla al momento.",
     gl: "Convites pendentes que aínda non se aceptaron. Renova para ampliar o prazo, reenvía o correo, rexenera para unha ligazón nova ou caduca para invalidala ao momento.",
@@ -1682,6 +1692,11 @@ const dict: Record<string, I18nText> = {
     es: "Buscar por correo o tipo…",
     gl: "Buscar por correo ou tipo…",
     en: "Search by email or type…",
+  },
+  searchEnterpriseInviteLinks: {
+    es: "Buscar por enlace o empresa…",
+    gl: "Buscar por ligazón ou empresa…",
+    en: "Search by link or enterprise…",
   },
   renew: { es: "Renovar", gl: "Renovar", en: "Renew" },
   expiryExtended: {
@@ -1707,6 +1722,128 @@ const dict: Record<string, I18nText> = {
     es: "No hay invitaciones activas",
     gl: "Non hai convites activos",
     en: "No active invitations",
+  },
+  noEnterpriseInviteLinks: {
+    es: "Todavía no hay enlaces de acceso para esta empresa.",
+    gl: "Aínda non hai ligazóns de acceso para esta empresa.",
+    en: "There are no invite links for this enterprise yet.",
+  },
+  enterpriseInviteLinks: {
+    es: "Enlaces de acceso de la empresa",
+    gl: "Ligazóns de acceso da empresa",
+    en: "Enterprise invite links",
+  },
+  enterpriseInviteLinksDesc: {
+    es: "Crea enlaces reutilizables para que las personas creen su cuenta y se vinculen automáticamente a esta empresa.",
+    gl: "Crea ligazóns reutilizables para que as persoas creen a súa conta e se vinculen automaticamente a esta empresa.",
+    en: "Create reusable links so people can create an account and join this enterprise automatically.",
+  },
+  allEnterpriseInviteLinksDesc: {
+    es: "Gestiona los enlaces reutilizables de todas las empresas, sus usos, caducidad y retirada.",
+    gl: "Xestiona as ligazóns reutilizables de todas as empresas, os seus usos, caducidade e retirada.",
+    en: "Manage reusable links across all enterprises, including usage, expiry, and withdrawal.",
+  },
+  createEnterpriseInviteLink: {
+    es: "Crear enlace",
+    gl: "Crear ligazón",
+    en: "Create invite link",
+  },
+  maxRedeemsLabel: {
+    es: "Máximo de usos",
+    gl: "Máximo de usos",
+    en: "Maximum redeems",
+  },
+  maxRedeemsDesc: {
+    es: "Opcional. Déjalo vacío para permitir usos ilimitados.",
+    gl: "Opcional. Déixao baleiro para permitir usos ilimitados.",
+    en: "Optional. Leave empty for unlimited uses.",
+  },
+  unlimitedRedeems: { es: "Ilimitados", gl: "Ilimitados", en: "Unlimited" },
+  expiryMinutesLabel: {
+    es: "Caducidad en minutos",
+    gl: "Caducidade en minutos",
+    en: "Expiry in minutes",
+  },
+  expiryMinutesDesc: {
+    es: "Usa 1 para una caducidad muy corta.",
+    gl: "Usa 1 para unha caducidade moi curta.",
+    en: "Use 1 for a very short expiry.",
+  },
+  neverExpiresLabel: {
+    es: "Este enlace no caduca",
+    gl: "Esta ligazón non caduca",
+    en: "This link never expires",
+  },
+  createLink: { es: "Crear enlace", gl: "Crear ligazón", en: "Create link" },
+  linkCreated: {
+    es: "Enlace creado. Compártelo con las personas que deban unirse.",
+    gl: "Ligazón creada. Compártea coas persoas que deban unirse.",
+    en: "Link created. Share it with the people who should join.",
+  },
+  copyLink: { es: "Copiar enlace", gl: "Copiar ligazón", en: "Copy invite link" },
+  linkStatusActive: { es: "Activo", gl: "Activo", en: "Active" },
+  linkStatusExpired: { es: "Caducado", gl: "Caducado", en: "Expired" },
+  linkStatusExhausted: { es: "Agotado", gl: "Esgotado", en: "Limit reached" },
+  linkStatusWithdrawn: { es: "Retirado", gl: "Retirada", en: "Withdrawn" },
+  redemptionsLabel: { es: "Usos", gl: "Usos", en: "Redeems" },
+  redeemedCountLabel: {
+    es: "{used} de {maximum} usos",
+    gl: "{used} de {maximum} usos",
+    en: "{used} of {maximum} redeems",
+  },
+  redeemedUnlimitedLabel: {
+    es: "{used} usos",
+    gl: "{used} usos",
+    en: "{used} redeems",
+  },
+  linkExpiresAt: { es: "Caduca", gl: "Caduca", en: "Expires" },
+  linkNeverExpires: { es: "No caduca", gl: "Non caduca", en: "Never expires" },
+  noRedemptionsYet: {
+    es: "Todavía no se ha usado",
+    gl: "Aínda non se usou",
+    en: "No one has used this link yet",
+  },
+  withdrawLink: { es: "Retirar enlace", gl: "Retirar ligazón", en: "Withdraw link" },
+  withdrawLinkTitle: {
+    es: "¿Retirar este enlace?",
+    gl: "Queres retirar esta ligazón?",
+    en: "Withdraw this link?",
+  },
+  withdrawLinkDesc: {
+    es: "Las personas ya no podrán crear cuentas con este enlace. Los usos registrados se conservarán.",
+    gl: "As persoas xa non poderán crear contas con esta ligazón. Os usos rexistrados conservaranse.",
+    en: "People will no longer be able to create accounts with this link. Recorded redeems stay available.",
+  },
+  linkWithdrawn: { es: "Enlace retirado.", gl: "Ligazón retirada.", en: "Link withdrawn." },
+  couldNotLoadEnterpriseInviteLinks: {
+    es: "No se han podido cargar los enlaces de la empresa.",
+    gl: "Non se puideron cargar as ligazóns da empresa.",
+    en: "Could not load enterprise invite links.",
+  },
+  couldNotCreateEnterpriseInviteLink: {
+    es: "No se ha podido crear el enlace.",
+    gl: "Non se puido crear a ligazón.",
+    en: "Could not create the invite link.",
+  },
+  couldNotCopyLink: {
+    es: "No se ha podido copiar el enlace.",
+    gl: "Non se puido copiar a ligazón.",
+    en: "Could not copy the invite link.",
+  },
+  couldNotWithdrawLink: {
+    es: "No se ha podido retirar el enlace.",
+    gl: "Non se puido retirar a ligazón.",
+    en: "Could not withdraw the link.",
+  },
+  enterpriseInviteJoin: {
+    es: "Te unirás a {enterprise} cuando crees tu cuenta.",
+    gl: "Uniraste a {enterprise} cando crees a túa conta.",
+    en: "You will join {enterprise} when you create your account.",
+  },
+  enterpriseInviteEmailNote: {
+    es: "Usa un correo al que tengas acceso para completar la verificación.",
+    gl: "Usa un correo ao que teñas acceso para completar a verificación.",
+    en: "Use an email address you can access to complete verification.",
   },
 
   // ---- Judging panel: queue, room & scoring ----

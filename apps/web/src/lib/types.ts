@@ -164,10 +164,37 @@ export interface InviteListItem {
 
 /** GET /api/invites/lookup — what the invitee sees before accepting. */
 export interface InviteLookup {
-  email: string;
+  email: string | null;
   kind: InviteKind;
-  enterpriseName?: string | null;
-  expired?: boolean;
+  enterpriseName: string | null;
+  reusable: boolean;
+  maxRedeems: number | null;
+  redeemedCount: number;
+  remainingRedeems: number | null;
+  expired: boolean;
+}
+
+/** GET/POST /api/invites/enterprise-links. */
+export interface EnterpriseInviteLink {
+  id: number;
+  enterpriseId: number;
+  enterpriseName: string;
+  token: string;
+  url: string;
+  maxRedeems: number | null;
+  redeemedCount: number;
+  remainingRedeems: number | null;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+  status: "active" | "expired" | "exhausted" | "withdrawn";
+  redemptions: Array<{
+    id: number;
+    userId: number | null;
+    email: string;
+    name: string | null;
+    redeemedAt: string;
+  }>;
 }
 
 /** Minimal enterprise shape for the sponsor-invite picker (GET /api/enterprises). */

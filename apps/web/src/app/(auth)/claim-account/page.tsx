@@ -34,12 +34,13 @@ import { ApiError, api } from "@/lib/api";
 import { languageName, pickText, type Translate, useLocale } from "@/lib/i18n";
 import { destinationForKind } from "@/lib/invite-destination";
 import { withReturnPath } from "@/lib/return-path";
-import type { Intolerance, InviteKind, Language } from "@/lib/types";
+import type { Intolerance, InviteLookup, Language } from "@/lib/types";
 
 const SHIRT_SIZES = ["XS", "S", "M", "L", "XL", "XXL"] as const;
 
 function claimSchema(t: Translate) {
   return z.object({
+    email: z.string().email(t("validEmail")).or(z.literal("")),
     name: z.string().min(1, t("required")).max(200),
     surname: z.string().min(1, t("required")).max(200),
     password: z.string().min(8, t("atLeastEight")),
@@ -83,15 +84,14 @@ function ClaimInner() {
   const schema = useMemo(() => claimSchema(t), [t]);
   const token = useSearchParams().get("token");
   const router = useRouter();
-  const [lookup, setLookup] = useState<
-    { email: string; kind: InviteKind; expired?: boolean } | null | "error"
-  >(null);
+  const [lookup, setLookup] = useState<InviteLookup | null | "error">(null);
   const [intolerances, setIntolerances] = useState<Intolerance[]>([]);
   const [done, setDone] = useState(false);
 
   const form = useForm<Values>({
     resolver: zodResolver(schema),
     defaultValues: {
+      email: "",
       name: "",
       surname: "",
       password: "",
@@ -109,7 +109,7 @@ function ClaimInner() {
       return;
     }
     api
-      .get<{ email: string; kind: InviteKind; expired?: boolean }>("/api/invites/lookup", {
+      .get<InviteLookup>("/api/invites/lookup", {
         query: { token },
       })
       .then(setLookup)
@@ -123,6 +123,10 @@ function ClaimInner() {
   async function onSubmit(values: Values) {
     if (!token) return;
     const kind = lookup && lookup !== "error" ? lookup.kind : "staff";
+    if (lookup !== null && lookup !== "error" && lookup.reusable && !values.email?.trim()) {
+      form.setError("email", { message: t("validEmail") });
+      return;
+    }
     if (kind === "participant" && values.shirtSize === NONE) {
       form.setError("shirtSize", { message: t("shirtSizeRequiredDesc") });
       return;
@@ -130,6 +134,9 @@ function ClaimInner() {
     try {
       await api.post("/api/invites/accept", {
         token,
+        ...(lookup !== null && lookup !== "error" && lookup.reusable
+          ? { email: values.email?.trim().toLowerCase() }
+          : {}),
         name: values.name,
         surname: values.surname,
         password: values.password,
@@ -208,6 +215,11 @@ function ClaimInner() {
     <Card>
       <CardHeader>
         <CardTitle>{t("createYourAccount")}</CardTitle>
+        {lookup.reusable && lookup.enterpriseName && (
+          <p className="text-muted-foreground text-pretty text-sm">
+            {t("enterpriseInviteJoin", { enterprise: lookup.enterpriseName })}
+          </p>
+        )}
       </CardHeader>
       <CardContent>
         <Form {...form}>
@@ -216,6 +228,24 @@ function ClaimInner() {
               <Alert variant="destructive">
                 <AlertDescription>{form.formState.errors.root.message}</AlertDescription>
               </Alert>
+            )}
+            {lookup.reusable && (
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("email")}</FormLabel>
+                    <FormControl>
+                      <Input type="email" autoComplete="email" {...field} />
+                    </FormControl>
+                    <p className="text-muted-foreground text-xs">
+                      {t("enterpriseInviteEmailNote")}
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             )}
             <div className="grid gap-3 sm:grid-cols-2">
               <FormField

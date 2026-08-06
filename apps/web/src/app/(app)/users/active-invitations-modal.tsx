@@ -2,18 +2,25 @@
 
 import {
   BanIcon,
+  CopyIcon,
   MailIcon,
   MailPlusIcon,
   MoreHorizontalIcon,
+  PlusIcon,
   RefreshCwIcon,
   TimerResetIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { AlertModal } from "@/components/common/alert-modal";
+import { ContextualError } from "@/components/common/contextual-error";
 import { type Column, DataTable } from "@/components/common/data-table";
+import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
 import { StatusBadge } from "@/components/common/status-badge";
+import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,9 +28,18 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
-import type { InviteListItem } from "@/lib/types";
+import type { EnterpriseInviteLink, EnterpriseSummary, InviteListItem } from "@/lib/types";
 
 const dateFmt = new Intl.DateTimeFormat("en-GB", {
   day: "2-digit",
@@ -32,6 +48,16 @@ const dateFmt = new Intl.DateTimeFormat("en-GB", {
   hour: "2-digit",
   minute: "2-digit",
 });
+
+const LINK_STATUS_TONE: Record<
+  EnterpriseInviteLink["status"],
+  "success" | "warning" | "danger" | "neutral"
+> = {
+  active: "success",
+  expired: "warning",
+  exhausted: "warning",
+  withdrawn: "danger",
+};
 
 export function ActiveInvitationsModal() {
   const { t } = useLocale();
@@ -42,16 +68,32 @@ export function ActiveInvitationsModal() {
   };
   const [open, setOpen] = useState(false);
   const [invites, setInvites] = useState<InviteListItem[]>([]);
+  const [enterpriseLinks, setEnterpriseLinks] = useState<EnterpriseInviteLink[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState<Set<string>>(new Set());
+  const [withdrawLinkId, setWithdrawLinkId] = useState<number | null>(null);
+  const [createLinkOpen, setCreateLinkOpen] = useState(false);
+  const [enterprises, setEnterprises] = useState<EnterpriseSummary[]>([]);
+  const [enterpriseOptionsError, setEnterpriseOptionsError] = useState(false);
+  const [createEnterpriseId, setCreateEnterpriseId] = useState("");
+  const [maxRedeems, setMaxRedeems] = useState("");
+  const [expiryMinutes, setExpiryMinutes] = useState("10080");
+  const [neverExpires, setNeverExpires] = useState(false);
+  const [createLinkError, setCreateLinkError] = useState<string | null>(null);
+  const [createLinkPending, setCreateLinkPending] = useState(false);
+  const [mobileLinkQuery, setMobileLinkQuery] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
     try {
-      const data = await api.get<InviteListItem[]>("/api/invites");
-      setInvites(data);
+      const [inviteData, linkData] = await Promise.all([
+        api.get<InviteListItem[]>("/api/invites"),
+        api.get<EnterpriseInviteLink[]>("/api/invites/enterprise-links"),
+      ]);
+      setInvites(inviteData);
+      setEnterpriseLinks(linkData);
     } catch (err) {
       const message = err instanceof ApiError ? err.message : t("couldNotLoadInvitations");
       setLoadError(message);
@@ -64,6 +106,20 @@ export function ActiveInvitationsModal() {
   useEffect(() => {
     if (open) void load();
   }, [open, load]);
+
+  useEffect(() => {
+    if (!open || !createLinkOpen) return;
+    api
+      .get<{ enterprises: EnterpriseSummary[] }>("/api/invites/enterprise-options")
+      .then((data) => {
+        setEnterprises(data.enterprises);
+        setEnterpriseOptionsError(false);
+      })
+      .catch(() => {
+        setEnterprises([]);
+        setEnterpriseOptionsError(true);
+      });
+  }, [open, createLinkOpen]);
 
   async function doAction(id: number, action: string, successMsg: string) {
     const key = `${id}:${action}`;
@@ -80,6 +136,80 @@ export function ActiveInvitationsModal() {
         next.delete(key);
         return next;
       });
+    }
+  }
+
+  async function copyLink(url: string) {
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success(t("copied"));
+    } catch {
+      toast.error(t("couldNotCopyLink"));
+    }
+  }
+
+  async function withdrawLink(id: number) {
+    const key = `enterprise-link:${id}:withdraw`;
+    setBusy((prev) => new Set(prev).add(key));
+    try {
+      await api.post(`/api/invites/enterprise-links/${id}/withdraw`);
+      setWithdrawLinkId(null);
+      toast.success(t("linkWithdrawn"));
+      await load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotWithdrawLink"));
+    } finally {
+      setBusy((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    }
+  }
+
+  function resetCreateLinkForm() {
+    setCreateEnterpriseId("");
+    setMaxRedeems("");
+    setExpiryMinutes("10080");
+    setNeverExpires(false);
+    setCreateLinkError(null);
+  }
+
+  async function createEnterpriseLink(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setCreateLinkError(null);
+    const parsedMax = maxRedeems.trim() ? Number(maxRedeems) : null;
+    const parsedExpiry = expiryMinutes.trim() ? Number(expiryMinutes) : NaN;
+    if (!createEnterpriseId) {
+      setCreateLinkError(t("required"));
+      return;
+    }
+    if (parsedMax !== null && (!Number.isInteger(parsedMax) || parsedMax < 1)) {
+      setCreateLinkError(t("maxRedeemsDesc"));
+      return;
+    }
+    if (!neverExpires && (!Number.isInteger(parsedExpiry) || parsedExpiry < 1)) {
+      setCreateLinkError(t("expiryMinutesDesc"));
+      return;
+    }
+
+    setCreateLinkPending(true);
+    try {
+      await api.post<EnterpriseInviteLink>("/api/invites/enterprise-links", {
+        enterpriseId: Number(createEnterpriseId),
+        maxRedeems: parsedMax,
+        expiresInMinutes: neverExpires ? null : parsedExpiry,
+      });
+      setCreateLinkOpen(false);
+      resetCreateLinkForm();
+      toast.success(t("linkCreated"));
+      await load();
+    } catch (err) {
+      setCreateLinkError(
+        err instanceof ApiError ? err.message : t("couldNotCreateEnterpriseInviteLink"),
+      );
+    } finally {
+      setCreateLinkPending(false);
     }
   }
 
@@ -130,21 +260,119 @@ export function ActiveInvitationsModal() {
     },
   ];
 
+  const enterpriseLinkColumns: Column<EnterpriseInviteLink>[] = [
+    {
+      id: "link",
+      header: t("copyLink"),
+      sortValue: (link) => link.url,
+      cell: (link) => (
+        <span className="block max-w-56 truncate font-mono text-xs" title={link.url}>
+          {link.url}
+        </span>
+      ),
+    },
+    {
+      id: "enterprise",
+      header: t("colEnterprise"),
+      sortValue: (link) => link.enterpriseName.toLowerCase(),
+      cell: (link) => <span className="font-medium">{link.enterpriseName}</span>,
+    },
+    {
+      id: "status",
+      header: t("statusColumn"),
+      cell: (link) => {
+        const label =
+          link.status === "active"
+            ? t("linkStatusActive")
+            : link.status === "expired"
+              ? t("linkStatusExpired")
+              : link.status === "exhausted"
+                ? t("linkStatusExhausted")
+                : t("linkStatusWithdrawn");
+        return <StatusBadge tone={LINK_STATUS_TONE[link.status]}>{label}</StatusBadge>;
+      },
+    },
+    {
+      id: "usage",
+      header: t("redemptionsLabel"),
+      sortValue: (link) => link.redeemedCount,
+      cell: (link) => (
+        <span className="text-sm tabular-nums">
+          {link.maxRedeems === null
+            ? t("redeemedUnlimitedLabel", { used: link.redeemedCount })
+            : t("redeemedCountLabel", {
+                used: link.redeemedCount,
+                maximum: link.maxRedeems,
+              })}
+        </span>
+      ),
+    },
+    {
+      id: "expiresAt",
+      header: t("colExpires"),
+      sortValue: (link) => link.expiresAt ?? "",
+      cell: (link) => (
+        <span className="text-muted-foreground text-sm">
+          {link.expiresAt ? dateFmt.format(new Date(link.expiresAt)) : t("linkNeverExpires")}
+        </span>
+      ),
+    },
+    {
+      id: "createdAt",
+      header: t("colCreated"),
+      sortValue: (link) => link.createdAt,
+      cell: (link) => (
+        <span className="text-muted-foreground text-sm">
+          {dateFmt.format(new Date(link.createdAt))}
+        </span>
+      ),
+    },
+  ];
+
+  function linkStatusLabel(link: EnterpriseInviteLink): string {
+    return link.status === "active"
+      ? t("linkStatusActive")
+      : link.status === "expired"
+        ? t("linkStatusExpired")
+        : link.status === "exhausted"
+          ? t("linkStatusExhausted")
+          : t("linkStatusWithdrawn");
+  }
+
+  function linkUsageLabel(link: EnterpriseInviteLink): string {
+    return link.maxRedeems === null
+      ? t("redeemedUnlimitedLabel", { used: link.redeemedCount })
+      : t("redeemedCountLabel", { used: link.redeemedCount, maximum: link.maxRedeems });
+  }
+
+  const filteredMobileLinks = enterpriseLinks.filter((link) => {
+    const query = mobileLinkQuery.trim().toLowerCase();
+    return (
+      !query || `${link.url} ${link.enterpriseName} ${link.status}`.toLowerCase().includes(query)
+    );
+  });
+
   return (
     <Modal
       open={open}
       onOpenChange={(o) => {
         setOpen(o);
-        if (!o) setInvites([]);
+        if (!o) {
+          setInvites([]);
+          setEnterpriseLinks([]);
+          setCreateLinkOpen(false);
+          setMobileLinkQuery("");
+          resetCreateLinkForm();
+        }
       }}
       trigger={
         <Button variant="outline">
-          <MailIcon className="size-4" /> {t("activeInvitations")}
+          <MailIcon className="size-4" /> {t("invitationManagement")}
         </Button>
       }
       icon={MailIcon}
-      title={t("activeInvitations")}
-      description={t("activeInvitationsDesc")}
+      title={t("invitationManagement")}
+      description={t("invitationManagementDesc")}
       size="xl"
     >
       <DataTable
@@ -211,6 +439,299 @@ export function ActiveInvitationsModal() {
           title: t("noActiveInvitations"),
         }}
       />
+      <section className="mt-6 space-y-3" aria-labelledby="enterprise-invite-links-heading">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 id="enterprise-invite-links-heading" className="text-balance font-medium">
+              {t("enterpriseInviteLinks")}
+            </h3>
+            <p className="text-muted-foreground text-sm">{t("allEnterpriseInviteLinksDesc")}</p>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            className="w-full sm:w-auto"
+            onClick={() => setCreateLinkOpen((current) => !current)}
+          >
+            <PlusIcon className="size-4" aria-hidden="true" /> {t("createEnterpriseInviteLink")}
+          </Button>
+        </div>
+        {createLinkOpen && (
+          <form
+            onSubmit={createEnterpriseLink}
+            className="space-y-4 rounded-lg border p-4"
+            aria-label={t("createEnterpriseInviteLink")}
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="users-invite-link-enterprise">{t("enterpriseLabel")}</Label>
+                <Select value={createEnterpriseId} onValueChange={setCreateEnterpriseId}>
+                  <SelectTrigger
+                    id="users-invite-link-enterprise"
+                    className="w-full"
+                    aria-describedby={
+                      enterpriseOptionsError ? "users-invite-link-enterprise-error" : undefined
+                    }
+                    aria-invalid={enterpriseOptionsError || undefined}
+                  >
+                    <SelectValue placeholder={t("selectSponsorEnterprise")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {enterprises.map((enterprise) => (
+                      <SelectItem key={enterprise.id} value={String(enterprise.id)}>
+                        {enterprise.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {enterpriseOptionsError && (
+                  <p
+                    id="users-invite-link-enterprise-error"
+                    className="text-destructive text-xs"
+                    role="alert"
+                  >
+                    {t("couldNotLoadEnterprises")}
+                  </p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="users-invite-link-max-redeems">{t("maxRedeemsLabel")}</Label>
+                <Input
+                  id="users-invite-link-max-redeems"
+                  type="number"
+                  name="maxRedeems"
+                  min="1"
+                  step="1"
+                  inputMode="numeric"
+                  value={maxRedeems}
+                  onChange={(event) => setMaxRedeems(event.target.value)}
+                  placeholder={t("unlimitedRedeems")}
+                />
+                <p className="text-muted-foreground text-xs">{t("maxRedeemsDesc")}</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="users-invite-link-expiry">{t("expiryMinutesLabel")}</Label>
+                <Input
+                  id="users-invite-link-expiry"
+                  type="number"
+                  name="expiresInMinutes"
+                  min="1"
+                  step="1"
+                  inputMode="numeric"
+                  value={expiryMinutes}
+                  onChange={(event) => setExpiryMinutes(event.target.value)}
+                  disabled={neverExpires}
+                />
+                <p className="text-muted-foreground text-xs">{t("expiryMinutesDesc")}</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <Checkbox
+                id="users-invite-link-never-expires"
+                checked={neverExpires}
+                onCheckedChange={(checked) => setNeverExpires(checked === true)}
+              />
+              <Label htmlFor="users-invite-link-never-expires" className="leading-5">
+                {t("neverExpiresLabel")}
+              </Label>
+            </div>
+            {createLinkError && (
+              <p role="alert" className="text-destructive text-sm">
+                {createLinkError}
+              </p>
+            )}
+            <div className="grid gap-2 sm:flex sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full sm:w-auto"
+                disabled={createLinkPending}
+                onClick={() => {
+                  setCreateLinkOpen(false);
+                  resetCreateLinkForm();
+                }}
+              >
+                {t("cancel")}
+              </Button>
+              <SubmitButton pending={createLinkPending} className="w-full sm:w-auto">
+                {t("createLink")}
+              </SubmitButton>
+            </div>
+          </form>
+        )}
+        <div className="sm:hidden">
+          {!loadError && !loading && enterpriseLinks.length > 0 && (
+            <div className="mb-3">
+              <Label htmlFor="mobile-enterprise-invite-link-search" className="sr-only">
+                {t("searchEnterpriseInviteLinks")}
+              </Label>
+              <Input
+                id="mobile-enterprise-invite-link-search"
+                type="search"
+                value={mobileLinkQuery}
+                onChange={(event) => setMobileLinkQuery(event.target.value)}
+                placeholder={t("searchEnterpriseInviteLinks")}
+              />
+            </div>
+          )}
+          {loadError ? (
+            <ContextualError message={loadError} onRetry={load} />
+          ) : loading ? (
+            <p className="text-muted-foreground text-sm">{t("loading")}</p>
+          ) : enterpriseLinks.length === 0 ? (
+            <EmptyState icon={MailIcon} title={t("noEnterpriseInviteLinks")} />
+          ) : filteredMobileLinks.length === 0 ? (
+            <EmptyState
+              title={t("noFilteredResults")}
+              description={t("tryDifferentSearch")}
+              action={
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setMobileLinkQuery("")}
+                >
+                  {t("clearFilters")}
+                </Button>
+              }
+            />
+          ) : (
+            <div className="space-y-3">
+              {filteredMobileLinks.map((link) => {
+                const withdrawKey = `enterprise-link:${link.id}:withdraw`;
+                return (
+                  <article key={link.id} className="space-y-3 rounded-lg border p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 space-y-2">
+                        <StatusBadge tone={LINK_STATUS_TONE[link.status]}>
+                          {linkStatusLabel(link)}
+                        </StatusBadge>
+                        <p className="break-all font-mono text-xs" title={link.url}>
+                          {link.url}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="size-10"
+                          aria-label={t("copyLink")}
+                          title={t("copyLink")}
+                          onClick={() => void copyLink(link.url)}
+                        >
+                          <CopyIcon className="size-4" aria-hidden="true" />
+                        </Button>
+                        {link.status === "active" && (
+                          <AlertModal
+                            trigger={
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="size-10"
+                                aria-label={t("withdrawLink")}
+                                title={t("withdrawLink")}
+                              >
+                                <BanIcon className="size-4" aria-hidden="true" />
+                              </Button>
+                            }
+                            open={withdrawLinkId === link.id}
+                            onOpenChange={(nextOpen) =>
+                              setWithdrawLinkId(nextOpen ? link.id : null)
+                            }
+                            title={t("withdrawLinkTitle")}
+                            description={t("withdrawLinkDesc")}
+                            cancelLabel={t("cancel")}
+                            confirmLabel={t("withdrawLink")}
+                            destructive
+                            pending={busy.has(withdrawKey)}
+                            onConfirm={() => void withdrawLink(link.id)}
+                          />
+                        )}
+                      </div>
+                    </div>
+                    <dl className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <dt className="text-muted-foreground">{t("colEnterprise")}</dt>
+                        <dd className="truncate font-medium">{link.enterpriseName}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-muted-foreground">{t("redemptionsLabel")}</dt>
+                        <dd className="tabular-nums">{linkUsageLabel(link)}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-muted-foreground">{t("colExpires")}</dt>
+                        <dd>
+                          {link.expiresAt
+                            ? dateFmt.format(new Date(link.expiresAt))
+                            : t("linkNeverExpires")}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-muted-foreground">{t("colCreated")}</dt>
+                        <dd>{dateFmt.format(new Date(link.createdAt))}</dd>
+                      </div>
+                    </dl>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        <div className="hidden sm:block">
+          <DataTable
+            columns={enterpriseLinkColumns}
+            data={enterpriseLinks}
+            getRowId={(link) => String(link.id)}
+            searchable={(link) => `${link.url} ${link.enterpriseName} ${link.status}`}
+            searchPlaceholder={t("searchEnterpriseInviteLinks")}
+            rowActions={(link) => {
+              const withdrawKey = `enterprise-link:${link.id}:withdraw`;
+              return (
+                <div className="flex items-center justify-end gap-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-8"
+                    aria-label={t("copyLink")}
+                    title={t("copyLink")}
+                    onClick={() => void copyLink(link.url)}
+                  >
+                    <CopyIcon className="size-4" aria-hidden="true" />
+                  </Button>
+                  {link.status === "active" && (
+                    <AlertModal
+                      trigger={
+                        <Button type="button" variant="ghost" size="sm">
+                          {t("withdrawLink")}
+                        </Button>
+                      }
+                      open={withdrawLinkId === link.id}
+                      onOpenChange={(nextOpen) => setWithdrawLinkId(nextOpen ? link.id : null)}
+                      title={t("withdrawLinkTitle")}
+                      description={t("withdrawLinkDesc")}
+                      cancelLabel={t("cancel")}
+                      confirmLabel={t("withdrawLink")}
+                      destructive
+                      pending={busy.has(withdrawKey)}
+                      onConfirm={() => void withdrawLink(link.id)}
+                    />
+                  )}
+                </div>
+              );
+            }}
+            pageSize={5}
+            loading={loading}
+            error={loadError ? { message: loadError, onRetry: load } : undefined}
+            empty={{
+              icon: MailIcon,
+              title: t("noEnterpriseInviteLinks"),
+            }}
+          />
+        </div>
+      </section>
     </Modal>
   );
 }

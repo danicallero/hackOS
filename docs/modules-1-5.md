@@ -8,9 +8,11 @@ File references are `path:symbol` for quick navigation.
 
 ## Module 1 — Invitation & application flow
 
-**Schema.** None new. Reuses existing `users` columns (`dni`,
-`food_intolerance_notes`, `name`, `surname`) and the `application_responses`
-status enum.
+**Schema.** Reuses existing `users` columns (`dni`, `food_intolerance_notes`,
+`name`, `surname`) and the `application_responses` status enum. Migration
+`0108_enterprise_invite_links.sql` adds reusable enterprise links with optional
+`max_redeems`, nullable `expires_at`, `revoked_at`, an atomic redemption count,
+and redemption snapshots for admin tracking (H43).
 
 **Endpoints / hooks.**
 - `apps/api/src/modules/applications/service.ts:submitResponse` — on submit, in
@@ -24,6 +26,17 @@ status enum.
   Staff can still fix names via `PATCH /api/users/:id`.
 - `POST /api/invites/accept` already accepted `foodIntoleranceNotes` (optional);
   the onboarding form now sends it.
+- `GET/POST /api/invites/enterprise-links` lets administrators list or create
+  reusable enterprise account links with a redemption limit and minute-based
+  expiry; `null` expiry means no automatic expiry.
+- `GET /api/invites/enterprise-options` exposes only id/name choices to invite
+  managers, without granting enterprise administration access.
+- `POST /api/invites/enterprise-links/:id/withdraw` immediately disables a
+  reusable link while preserving its redemption history.
+- `/api/invites/lookup` and `/api/invites/accept` support reusable links. Their
+  account email is supplied by the invitee, while the enterprise membership is
+  created automatically. These accounts keep Better Auth's verification email
+  because a shared link does not prove mailbox ownership.
 
 **UI (`apps/web`).**
 - `components/common/template-field-control.tsx` — required-field `*` marker now
@@ -33,6 +46,12 @@ status enum.
 - `(auth)/login/page.tsx` — honours a **same-origin** `?next=` param
   (open-redirect guarded via `safeNext`), so the invited participant lands on
   the application form right after signing in.
+- `(app)/enterprises/[id]/invite-links-card.tsx` — creates copyable reusable
+  links and shows their status, limit, expiry, and account redemption history;
+  withdrawal uses an accessible destructive confirmation.
+- `(app)/users/active-invitations-modal.tsx` — unified invitation management for
+  email-bound invites and enterprise links, including link creation, usage,
+  copy, expiry status, and withdrawal.
 
 **State transitions.** Role is derived from relationships, never stored:
 new accounts are `unassigned`; submitting a participant or mentor application
