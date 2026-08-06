@@ -1,6 +1,6 @@
 # Web UX simplification audit and task plan
 
-Status: audit complete; implementation not started  
+Status: implementation complete; final repository and browser QA recorded below
 Scope: apps/web authenticated application  
 Reference pattern: the live judging workspace
 
@@ -24,6 +24,50 @@ rules in DESIGN.md, the capability/workspace model in navigation.md, and a
 source-level review of every web route. The product must remain
 capability-based and additive: simplification must not hide access or replace
 capabilities with role assumptions.
+
+## Implementation record
+
+The audit has been implemented incrementally in these slices:
+
+- `3be1797` — exclusive workspace disclosure, dashboard attention/next-action
+  hierarchy, and the shared URL-backed tab hook (`H8`, `H55`).
+- `2347e39` — overview-first application, user, enterprise, and permission
+  records with capability-filtered tabs and preserved legacy user tab aliases
+  (`H8`, `H11`, `H44`).
+- `2c02411` — route-backed challenge drafting, dedicated announcement create /
+  edit routes, and separate presence scan, sessions, and hours workflows
+  (`H24`, `H44`, `H50`).
+- `00107b5` — explicit attendee timetable versus organizer schedule-management
+  language (`H47`).
+
+Decisions made during implementation:
+
+- `?tab=` is the canonical deep-link format. Invalid values fall back to the
+  first authorized tab, and legacy user links for `qr`, `permissions`, and
+  `presence` resolve to `access` or `attendance`.
+- Challenge creation now creates the backend’s hidden draft on a dedicated
+  stepper. Publication remains a separate detail-tab action, preserving the
+  draft-versus-published state boundary.
+- Announcement drafting and publication settings share one dedicated form
+  route, while the list remains a status/search/delete surface. Delivery state
+  remains visible in the list but is not mixed into the writing flow.
+- Presence read models remain live and independently retryable; only their
+  navigation and visible task scope changed. Queue generation, room operation,
+  reviews, and the active judging workflow remain separate and unchanged.
+
+Running verification:
+
+- `pnpm lint` passes, including copy and page-size checks. Biome reports one
+  existing non-failing warning in `e2e/mobile/detox.config.cjs`.
+- `pnpm --filter @hackos/web typecheck` passes.
+- `pnpm --filter @hackos/web test` passes: 30 files, 190 tests.
+- `E2E_WEB_URL=http://localhost:3001 pnpm test:ui:browser` passes: 8 browser
+  smoke tests across Chromium, Firefox, WebKit, and mobile Chromium.
+- Authenticated screenshots could not be captured in this environment: the
+  browser connector had no available browser, and the embedded Orca runtime
+  stopped immediately after launch. The browser suite therefore verified the
+  unauthenticated running app, but no screenshot is claimed for an
+  authenticated changed state.
 
 ## Experience goals
 
@@ -389,4 +433,3 @@ participants, and sponsors:
 The target is fewer navigation decisions and less backtracking, not fewer
 features. The judging workflow should remain fast and reliable while the
 surrounding management surfaces become easier to understand.
-
