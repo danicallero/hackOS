@@ -89,6 +89,16 @@ const dict: Record<string, I18nText> = {
     gl: "Xestionar programa",
     en: "Manage schedule",
   },
+  publicScheduleDescription: {
+    es: "Consulta el programa publicado del evento.",
+    gl: "Consulta o programa publicado do evento.",
+    en: "Browse the event's published schedule.",
+  },
+  manageScheduleDescription: {
+    es: "Crea y publica los bloques que aparecen en el programa del evento.",
+    gl: "Crea e publica os bloques que aparecen no programa do evento.",
+    en: "Create and publish the blocks shown in the event schedule.",
+  },
   announcements: { es: "Avisos", gl: "Avisos", en: "Announcements" },
   enterprises: { es: "Empresas", gl: "Empresas", en: "Enterprises" },
   challenges: { es: "Retos", gl: "Retos", en: "Challenges" },
@@ -625,6 +635,17 @@ const dict: Record<string, I18nText> = {
   // ---- Account overview & capabilities ----
   accountRole: { es: "Rol", gl: "Rol", en: "Account role" },
   capabilities: { es: "Permisos", gl: "Permisos", en: "Capabilities" },
+  permissionGroupSections: {
+    es: "Secciones del grupo de permisos",
+    gl: "Seccións do grupo de permisos",
+    en: "Permission group sections",
+  },
+  capabilitiesChangeDesc: {
+    es: "Estos cambios modifican el acceso efectivo de todas las personas del grupo.",
+    gl: "Estas modificacións cambian o acceso efectivo de todas as persoas do grupo.",
+    en: "These changes update the effective access for everyone in the group.",
+  },
+  advancedTab: { es: "Avanzado", gl: "Avanzado", en: "Advanced" },
   verified: { es: "Verificado", gl: "Verificado", en: "Verified" },
   unverified: { es: "Sin verificar", gl: "Sen verificar", en: "Unverified" },
   yourCapabilities: { es: "Tus permisos", gl: "Os teus permisos", en: "Your capabilities" },
@@ -668,6 +689,22 @@ const dict: Record<string, I18nText> = {
   loading: { es: "Cargando", gl: "Cargando", en: "Loading" },
   viewQueue: { es: "Ver mi cola", gl: "Ver a miña cola", en: "View my queue" },
   manageRoom: { es: "Gestionar", gl: "Xestionar", en: "Manage" },
+  nextAction: { es: "Siguiente acción", gl: "Seguinte acción", en: "Next action" },
+  needsAttention: {
+    es: "Necesita tu atención",
+    gl: "Precisa a túa atención",
+    en: "Needs attention",
+  },
+  moreWorkspaces: {
+    es: "Más espacios de trabajo",
+    gl: "Máis espazos de traballo",
+    en: "More workspaces",
+  },
+  continueApplication: {
+    es: "Continuar solicitud",
+    gl: "Continuar solicitude",
+    en: "Continue application",
+  },
 
   // ---- Entrance ticket & wallet badge ----
   entranceTicket: { es: "Entrada", gl: "Entrada", en: "Entrance ticket" },
@@ -1190,6 +1227,19 @@ const dict: Record<string, I18nText> = {
     en: "Without an exit or activity in this window, provisional time stops counting.",
   },
   presentNow: { es: "Presentes ahora", gl: "Presentes agora", en: "Present now" },
+  presenceDescription: {
+    es: "Registra entradas, revisa sesiones abiertas y consulta las horas por separado.",
+    gl: "Rexistra entradas, revisa sesións abertas e consulta as horas por separado.",
+    en: "Record entries, review open sessions, and inspect hours as separate workflows.",
+  },
+  presenceSections: {
+    es: "Secciones de presencia",
+    gl: "Seccións de presenza",
+    en: "Presence sections",
+  },
+  presenceScanTab: { es: "Escanear", gl: "Escanear", en: "Scan" },
+  presenceSessionsTab: { es: "Sesiones abiertas", gl: "Sesións abertas", en: "Open sessions" },
+  presenceHoursTab: { es: "Horas", gl: "Horas", en: "Hours" },
   liveEstimate: { es: "Estimación en directo", gl: "Estimación en directo", en: "Live estimate" },
   reconnectsAutomatically: {
     es: "Se reconecta automáticamente",
@@ -1219,6 +1269,11 @@ const dict: Record<string, I18nText> = {
   },
   entryRecorded: { es: "Entrada registrada.", gl: "Entrada rexistrada.", en: "Entry recorded." },
   exitRecorded: { es: "Salida registrada.", gl: "Saída rexistrada.", en: "Exit recorded." },
+  lastPresenceScan: {
+    es: "{person} · {time}",
+    gl: "{person} · {time}",
+    en: "{person} · {time}",
+  },
   presenceScanFailed: {
     es: "No se ha podido registrar el escaneo.",
     gl: "Non se puido rexistrar o escaneo.",
@@ -2764,6 +2819,23 @@ const dict: Record<string, I18nText> = {
   deliverySending: { es: "Enviando…", gl: "Enviando…", en: "Sending…" },
   deliveryNotSent: { es: "Aún no enviado", gl: "Aínda non enviado", en: "Not sent yet" },
   newAnnouncement: { es: "Nuevo aviso", gl: "Novo aviso", en: "New announcement" },
+  backToAnnouncements: {
+    es: "Volver a avisos",
+    gl: "Volver aos avisos",
+    en: "Back to announcements",
+  },
+  newAnnouncementDescription: {
+    es: "Redacta el contenido, configura la entrega y revisa la ventana de publicación.",
+    gl: "Redacta o contido, configura a entrega e revisa a xanela de publicación.",
+    en: "Write the content, configure delivery, and review the publication window.",
+  },
+  editAnnouncementTitle: { es: "Editar aviso", gl: "Editar aviso", en: "Edit announcement" },
+  editAnnouncementDescription: {
+    es: "Actualiza el contenido o la publicación sin salir del flujo del aviso.",
+    gl: "Actualiza o contido ou a publicación sen saír do fluxo do aviso.",
+    en: "Update the content or publication window without leaving the announcement flow.",
+  },
+  publishAnnouncement: { es: "Guardar aviso", gl: "Gardar aviso", en: "Save announcement" },
   searchAnnouncementsPlaceholder: {
     es: "Buscar avisos…",
     gl: "Buscar avisos…",
@@ -2842,6 +2914,26 @@ const dict: Record<string, I18nText> = {
     es: "Enviar notificación a las personas",
     gl: "Enviar notificación ás persoas",
     en: "Notify people",
+  },
+  announcementContentSection: {
+    es: "Contenido",
+    gl: "Contido",
+    en: "Content",
+  },
+  announcementDeliverySection: {
+    es: "Entrega",
+    gl: "Entrega",
+    en: "Delivery",
+  },
+  announcementPublicationSection: {
+    es: "Publicación",
+    gl: "Publicación",
+    en: "Publication",
+  },
+  announcementPublicationHint: {
+    es: "Elige cuándo aparece y cuándo deja de estar visible. Las notificaciones respetan las preferencias de cada persona.",
+    gl: "Escolle cando aparece e cando deixa de estar visible. As notificacións respectan as preferencias de cada persoa.",
+    en: "Choose when it appears and when it stops being visible. Notifications follow each person's preferences.",
   },
   announcementNotifyUsersHelp: {
     es: "La bandeja de entrada, el correo y las notificaciones push siguen las preferencias de cada persona.",
@@ -3264,6 +3356,8 @@ const dict: Record<string, I18nText> = {
     en: "This profile could not be loaded.",
   },
   backToUsers: { es: "Volver a usuarios", gl: "Volver a usuarios", en: "Back to users" },
+  accessTab: { es: "Acceso", gl: "Acceso", en: "Access" },
+  attendanceTab: { es: "Asistencia", gl: "Asistencia", en: "Attendance" },
   tabLogs: { es: "Registros", gl: "Rexistros", en: "Logs" },
   tabApplication: { es: "Solicitud", gl: "Solicitude", en: "Application" },
   colProject: { es: "Proyecto", gl: "Proxecto", en: "Project" },
@@ -3338,6 +3432,13 @@ const dict: Record<string, I18nText> = {
     en: "Use these when the participant does not want to download a Wallet pass.",
   },
   profileDetails: { es: "Datos del perfil", gl: "Datos do perfil", en: "Profile details" },
+  projectLinkDevpost: { es: "Devpost", gl: "Devpost", en: "Devpost" },
+  projectLinkDemo: { es: "Demo", gl: "Demo", en: "Demo" },
+  projectLinkRepository: {
+    es: "Repositorio",
+    gl: "Repositorio",
+    en: "Repository",
+  },
   pendingShort: { es: "Pendiente", gl: "Pendente", en: "Pending" },
   dietaryNotesLabel: { es: "Notas dietéticas", gl: "Notas dietéticas", en: "Dietary notes" },
   staffNotesLabel: { es: "Notas del equipo", gl: "Notas do equipo", en: "Staff notes" },
@@ -4900,11 +5001,70 @@ const dict: Record<string, I18nText> = {
     en: "Could not load challenge data.",
   },
   // ── Sponsor workspace (H43-H46, #192) ────────────────────────────────────
-  profileCompletenessTitle: {
-    es: "Estado del perfil",
-    gl: "Estado do perfil",
-    en: "Profile status",
+  enterpriseOverviewTitle: {
+    es: "Resumen de la empresa",
+    gl: "Resumo da empresa",
+    en: "Enterprise overview",
   },
+  enterpriseVisibilityLabel: { es: "Visibilidad", gl: "Visibilidade", en: "Visibility" },
+  enterpriseVisibilityVisibleHint: {
+    es: "La empresa aparece en el sitio público.",
+    gl: "A empresa aparece no sitio público.",
+    en: "The enterprise appears on the public site.",
+  },
+  enterpriseVisibilityHiddenUntil: {
+    es: "Oculta hasta el {date}.",
+    gl: "Oculta ata o {date}.",
+    en: "Hidden until {date}.",
+  },
+  enterpriseVisibilityHiddenHint: {
+    es: "La empresa no aparece en el sitio público.",
+    gl: "A empresa non aparece no sitio público.",
+    en: "The enterprise does not appear on the public site.",
+  },
+  enterpriseChallengesLabel: { es: "Retos", gl: "Retos", en: "Challenges" },
+  enterpriseChallengeBreakdown: {
+    es: "{public} públicos · {scheduled} programados · {draft} borradores",
+    gl: "{public} públicos · {scheduled} programados · {draft} borradores",
+    en: "{public} public · {scheduled} scheduled · {draft} drafts",
+  },
+  enterpriseNoChallengesHint: {
+    es: "Todavía no hay retos.",
+    gl: "Aínda non hai retos.",
+    en: "No challenges yet.",
+  },
+  enterpriseChallengesUnavailable: {
+    es: "No se han podido cargar los retos.",
+    gl: "Non se puideron cargar os retos.",
+    en: "Challenges could not be loaded.",
+  },
+  enterpriseProfileLabel: { es: "Perfil", gl: "Perfil", en: "Profile" },
+  enterpriseProfileFieldsComplete: {
+    es: "{count} de 3 datos del perfil completos.",
+    gl: "{count} de 3 datos do perfil completos.",
+    en: "{count} of 3 profile details complete.",
+  },
+  enterpriseMembersHint: {
+    es: "Representantes vinculados.",
+    gl: "Representantes vinculados.",
+    en: "Linked sponsor representatives.",
+  },
+  enterpriseMembersUnavailable: {
+    es: "No se han podido cargar los miembros.",
+    gl: "Non se puideron cargar os membros.",
+    en: "Members could not be loaded.",
+  },
+  noDescriptionYet: {
+    es: "Todavía no hay una descripción.",
+    gl: "Aínda non hai unha descrición.",
+    en: "No description yet.",
+  },
+  websiteNotSet: {
+    es: "Sitio web no indicado.",
+    gl: "Sitio web non indicado.",
+    en: "Website not set.",
+  },
+  createdAtLabel: { es: "Creada", gl: "Creada", en: "Created" },
   nextActionAddLogo: {
     es: "Sube el logo de tu empresa.",
     gl: "Sube o logo da túa empresa.",
@@ -5260,6 +5420,27 @@ const dict: Record<string, I18nText> = {
     en: "Check the builder fields and try again.",
   },
   createChallenge: { es: "Crear reto", gl: "Crear reto", en: "Create challenge" },
+  saveChallengeDraft: {
+    es: "Guardar borrador",
+    gl: "Gardar borrador",
+    en: "Save draft",
+  },
+  challengeCreationSteps: {
+    es: "Pasos para crear el reto",
+    gl: "Pasos para crear o reto",
+    en: "Challenge creation steps",
+  },
+  challengeBasicsTitle: { es: "Datos básicos", gl: "Datos básicos", en: "Basics" },
+  challengeDraftSaveHint: {
+    es: "Puedes crear el reto como borrador y completar la publicación después.",
+    gl: "Podes crear o reto como borrador e completar a publicación despois.",
+    en: "You can create the challenge as a draft and finish publishing later.",
+  },
+  newChallengeDescription: {
+    es: "Define el reto paso a paso. Podrás revisar y publicar el borrador después.",
+    gl: "Define o reto paso a paso. Poderás revisar e publicar o borrador despois.",
+    en: "Define the challenge step by step. You can review and publish the draft later.",
+  },
   selectEnterprisePlaceholder: {
     es: "Selecciona una empresa",
     gl: "Selecciona unha empresa",
@@ -5512,6 +5693,12 @@ const dict: Record<string, I18nText> = {
     en: "Replace dark-background logo",
   },
   profileTitle: { es: "Perfil", gl: "Perfil", en: "Profile" },
+  enterpriseSections: {
+    es: "Secciones de la empresa",
+    gl: "Seccións da empresa",
+    en: "Enterprise sections",
+  },
+  enterpriseProfileTab: { es: "Perfil y marca", gl: "Perfil e marca", en: "Profile and branding" },
   contactStaffToChangeName: {
     es: "Contacta con el equipo para cambiar el nombre legal.",
     gl: "Contacta co equipo para cambiar o nome legal.",
@@ -6921,6 +7108,15 @@ const dict: Record<string, I18nText> = {
     en: "Form not found",
   },
   formTabLabel: { es: "Formulario", gl: "Formulario", en: "Form" },
+  applicationOverviewTitle: {
+    es: "Resumen de la solicitud",
+    gl: "Resumo da solicitude",
+    en: "Application overview",
+  },
+  applicationTypeLabel: { es: "Tipo", gl: "Tipo", en: "Type" },
+  applicationQuestionsLabel: { es: "Preguntas", gl: "Preguntas", en: "Questions" },
+  applicationCapacityLabel: { es: "Capacidad", gl: "Capacidade", en: "Capacity" },
+  unlimited: { es: "Sin límite", gl: "Sen límite", en: "Unlimited" },
   inactiveFormsDesc: {
     es: "Los formularios inactivos no admiten nuevas solicitudes.",
     gl: "Os formularios inactivos non admiten novas solicitudes.",

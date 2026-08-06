@@ -14,65 +14,25 @@ import {
   PlusIcon,
   Trash2Icon,
 } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AccessDenied } from "@/components/common/access-denied";
 import { ContextualError } from "@/components/common/contextual-error";
 import { type Column, DataTable } from "@/components/common/data-table";
-import { DateTimeInput } from "@/components/common/datetime-input";
 import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError } from "@/lib/api";
-import { formatScheduledDateTime, fromDatetimeLocal, getTimeZoneLabel } from "@/lib/datetime";
+import { formatScheduledDateTime } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
-import { type Announcement, type AnnouncementInput, notificationsApi } from "@/lib/notifications";
+import type { Announcement } from "@/lib/notifications";
+import { notificationsApi } from "@/lib/notifications";
 import { useCan } from "@/lib/session";
 import type { Tone } from "@/lib/tones";
-
-const EMPTY_FORM: AnnouncementInput = {
-  title: "",
-  body: "",
-  translations: {
-    es: { title: "", body: "" },
-    gl: { title: "", body: "" },
-    en: { title: "", body: "" },
-  },
-  notifyUsers: false,
-  screenPlacement: "none",
-  publishAt: null,
-  expiresAt: null,
-};
-
-function toForm(a: Announcement): AnnouncementInput {
-  return {
-    title: a.title,
-    body: a.body,
-    translations: {
-      es: a.translations?.es ?? { title: a.title, body: a.body },
-      gl: a.translations?.gl ?? { title: "", body: "" },
-      en: a.translations?.en ?? { title: "", body: "" },
-    },
-    notifyUsers: a.notify_users,
-    screenPlacement: a.screen_placement,
-    publishAt: a.publish_at,
-    expiresAt: a.expires_at,
-  };
-}
 
 type AnnouncementStatus = "scheduled" | "live" | "expired";
 
@@ -121,8 +81,6 @@ export default function AnnouncementsPage() {
   const [items, setItems] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [editing, setEditing] = useState<Announcement | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState<Announcement | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -241,9 +199,11 @@ export default function AnnouncementsPage() {
       <PageHeader
         title={t("announcements")}
         actions={
-          <Button onClick={() => setCreateOpen(true)}>
-            <PlusIcon className="size-4" />
-            {t("newAnnouncement")}
+          <Button asChild>
+            <Link href="/announcements/new">
+              <PlusIcon className="size-4" />
+              {t("newAnnouncement")}
+            </Link>
           </Button>
         }
       />
@@ -259,13 +219,11 @@ export default function AnnouncementsPage() {
         pageSize={15}
         rowActions={(a) => (
           <div className="flex justify-end gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={t("editAnnouncementAria")}
-              onClick={() => setEditing(a)}
-            >
-              <PencilIcon className="size-4" />
+            <Button asChild variant="ghost" size="icon">
+              <Link href={`/announcements/${a.id}`} aria-label={t("editAnnouncementAria")}>
+                <span className="sr-only">{t("editAnnouncementAria")}</span>
+                <PencilIcon className="size-4" aria-hidden="true" />
+              </Link>
             </Button>
             <Button
               variant="ghost"
@@ -287,36 +245,6 @@ export default function AnnouncementsPage() {
           description: t("publishFirstOne"),
         }}
       />
-
-      <AnnouncementFormModal
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        title={t("newAnnouncement")}
-        initial={EMPTY_FORM}
-        onSubmit={async (values) => {
-          await notificationsApi.createAnnouncement(values);
-          toast.success(t("announcementCreated"));
-          setCreateOpen(false);
-          await load();
-        }}
-      />
-
-      {editing && (
-        <AnnouncementFormModal
-          open={Boolean(editing)}
-          onOpenChange={(open) => {
-            if (!open) setEditing(null);
-          }}
-          title={t("editAnnouncementAria")}
-          initial={toForm(editing)}
-          onSubmit={async (values) => {
-            await notificationsApi.updateAnnouncement(editing.id, values);
-            toast.success(t("announcementUpdated"));
-            setEditing(null);
-            await load();
-          }}
-        />
-      )}
 
       {deleting && (
         <Modal
@@ -346,260 +274,6 @@ export default function AnnouncementsPage() {
           </div>
         </Modal>
       )}
-    </div>
-  );
-}
-
-function AnnouncementFormModal({
-  open,
-  onOpenChange,
-  title,
-  initial,
-  onSubmit,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  title: string;
-  initial: AnnouncementInput;
-  onSubmit: (values: AnnouncementInput) => Promise<void>;
-}) {
-  const { t } = useLocale();
-  const [values, setValues] = useState(initial);
-  const [pending, setPending] = useState(false);
-  const [contentError, setContentError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setValues(initial);
-    setContentError(null);
-  }, [initial]);
-
-  const invalidWindow =
-    Boolean(values.publishAt) &&
-    Boolean(values.expiresAt) &&
-    new Date(values.expiresAt as string).getTime() <=
-      new Date(values.publishAt as string).getTime();
-
-  async function submit() {
-    // `datetime-local` deliberately has no timezone.  Convert it here so the
-    // API always receives the offset-bearing ISO timestamp it validates.
-    const publishAt = values.publishAt ? fromDatetimeLocal(values.publishAt) : null;
-    const expiresAt = values.expiresAt ? fromDatetimeLocal(values.expiresAt) : null;
-    if ((values.publishAt && !publishAt) || (values.expiresAt && !expiresAt)) {
-      toast.error(t("enterValidDatesTimes"));
-      return;
-    }
-    if (invalidWindow) {
-      document.getElementById("announcement-expires-at")?.focus();
-      return;
-    }
-    const missingContent = (["es", "gl", "en"] as const).find(
-      (language) =>
-        !values.translations[language].title.trim() || !values.translations[language].body.trim(),
-    );
-    if (missingContent) {
-      setContentError(t("announcementTranslationsRequired"));
-      document
-        .getElementById(
-          !values.translations[missingContent].title.trim()
-            ? `announcement-title-${missingContent}`
-            : `announcement-body-${missingContent}`,
-        )
-        ?.focus();
-      return;
-    }
-    setContentError(null);
-    setPending(true);
-    try {
-      await onSubmit({ ...values, publishAt, expiresAt });
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveAnnouncement"));
-    } finally {
-      setPending(false);
-    }
-  }
-
-  return (
-    <Modal open={open} onOpenChange={onOpenChange} title={title} icon={MegaphoneIcon} size="lg">
-      <div className="space-y-4">
-        <Field id="announcement-title" label={`${t("titleLabel")} · ${t("spanishTag")}`}>
-          <Input
-            id="announcement-title"
-            value={values.title}
-            onChange={(e) =>
-              setValues((v) => ({
-                ...v,
-                title: e.target.value,
-                translations: {
-                  ...v.translations,
-                  es: { ...v.translations.es, title: e.target.value },
-                },
-              }))
-            }
-            placeholder={t("dinnerReadyPlaceholder")}
-            aria-invalid={Boolean(contentError)}
-            aria-describedby={contentError ? "announcement-content-error" : undefined}
-          />
-        </Field>
-        <Field id="announcement-body" label={`${t("messageLabel")} · ${t("spanishTag")}`}>
-          <Textarea
-            id="announcement-body"
-            rows={4}
-            value={values.body}
-            onChange={(e) =>
-              setValues((v) => ({
-                ...v,
-                body: e.target.value,
-                translations: {
-                  ...v.translations,
-                  es: { ...v.translations.es, body: e.target.value },
-                },
-              }))
-            }
-            placeholder={t("headToMainHallPlaceholder")}
-            aria-invalid={Boolean(contentError)}
-            aria-describedby={contentError ? "announcement-content-error" : undefined}
-          />
-        </Field>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="rounded-lg border p-4">
-            <div className="flex items-center justify-between gap-3">
-              <Label htmlFor="announcement-notify-users">{t("announcementNotifyUsers")}</Label>
-              <Switch
-                id="announcement-notify-users"
-                checked={values.notifyUsers}
-                onCheckedChange={(notifyUsers) => setValues((v) => ({ ...v, notifyUsers }))}
-              />
-            </div>
-            <p className="text-muted-foreground mt-2 text-sm text-pretty">
-              {t("announcementNotifyUsersHelp")}
-            </p>
-          </div>
-          <Field id="announcement-screen-placement" label={t("announcementScreenPlacement")}>
-            <Select
-              value={values.screenPlacement}
-              onValueChange={(screenPlacement) =>
-                setValues((v) => ({
-                  ...v,
-                  screenPlacement: screenPlacement as AnnouncementInput["screenPlacement"],
-                }))
-              }
-            >
-              <SelectTrigger id="announcement-screen-placement" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">{t("announcementPlacementNone")}</SelectItem>
-                <SelectItem value="embedded">{t("announcementPlacementEmbedded")}</SelectItem>
-                <SelectItem value="fullscreen">{t("announcementPlacementFullscreen")}</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-        </div>
-        <fieldset className="space-y-3 rounded-lg border p-4">
-          <legend className="px-1 text-sm font-medium">{t("translationsAndSettings")}</legend>
-          <div className="grid gap-4 md:grid-cols-2">
-            {(["gl", "en"] as const).map((language) => (
-              <div key={language} className="grid gap-3">
-                <Field
-                  id={`announcement-title-${language}`}
-                  label={`${t("titleLabel")} · ${t(language === "gl" ? "galicianTag" : "englishTag")}`}
-                >
-                  <Input
-                    id={`announcement-title-${language}`}
-                    value={values.translations[language]?.title ?? ""}
-                    aria-invalid={Boolean(contentError)}
-                    aria-describedby={contentError ? "announcement-content-error" : undefined}
-                    onChange={(event) =>
-                      setValues((v) => ({
-                        ...v,
-                        translations: {
-                          ...v.translations,
-                          [language]: {
-                            title: event.target.value,
-                            body: v.translations[language]?.body ?? "",
-                          },
-                        },
-                      }))
-                    }
-                  />
-                </Field>
-                <Field
-                  id={`announcement-body-${language}`}
-                  label={`${t("messageLabel")} · ${t(language === "gl" ? "galicianTag" : "englishTag")}`}
-                >
-                  <Textarea
-                    id={`announcement-body-${language}`}
-                    rows={3}
-                    value={values.translations[language]?.body ?? ""}
-                    aria-invalid={Boolean(contentError)}
-                    aria-describedby={contentError ? "announcement-content-error" : undefined}
-                    onChange={(event) =>
-                      setValues((v) => ({
-                        ...v,
-                        translations: {
-                          ...v.translations,
-                          [language]: {
-                            title: v.translations[language]?.title ?? "",
-                            body: event.target.value,
-                          },
-                        },
-                      }))
-                    }
-                  />
-                </Field>
-              </div>
-            ))}
-          </div>
-        </fieldset>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field id="announcement-publish-at" label={t("visibleFrom")}>
-            <DateTimeInput
-              id="announcement-publish-at"
-              value={values.publishAt ?? ""}
-              onChange={(publishAt) => setValues((v) => ({ ...v, publishAt: publishAt || null }))}
-              nullOption={{ label: t("immediatelyLabel") }}
-            />
-            <p className="text-muted-foreground text-sm text-pretty">
-              {t("publishDestinationsHint", { timezone: getTimeZoneLabel() })}
-            </p>
-          </Field>
-          <Field id="announcement-expires-at" label={t("visibleUntil")}>
-            <DateTimeInput
-              id="announcement-expires-at"
-              value={values.expiresAt ?? ""}
-              onChange={(expiresAt) => setValues((v) => ({ ...v, expiresAt: expiresAt || null }))}
-              nullOption={{ label: t("noEnd") }}
-            />
-          </Field>
-        </div>
-        {invalidWindow && (
-          <p className="text-destructive text-sm" role="alert">
-            {t("endTimeAfterStart")}
-          </p>
-        )}
-        {contentError && (
-          <p id="announcement-content-error" className="text-destructive text-sm" role="alert">
-            {contentError}
-          </p>
-        )}
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            {t("cancel")}
-          </Button>
-          <SubmitButton pending={pending} onClick={submit}>
-            {t("save")}
-          </SubmitButton>
-        </div>
-      </div>
-    </Modal>
-  );
-}
-
-function Field({ id, label, children }: { id: string; label: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-2">
-      <Label htmlFor={id}>{label}</Label>
-      {children}
     </div>
   );
 }

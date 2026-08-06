@@ -12,8 +12,9 @@ import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { ApiError, api } from "@/lib/api";
-import { useLocale } from "@/lib/i18n";
+import { LOCALE_CODES, type MessageKey, useLocale } from "@/lib/i18n";
 import type { ApplicationForm, ResponseRow, TemplateField } from "../../applications/lib";
+import { applicationStatusLabel } from "../../applications/workflow";
 
 interface UserApplicationRow {
   id: number;
@@ -38,8 +39,15 @@ interface ResponseDetailPayload {
   reviews: { score: number | null }[];
 }
 
+const APPLICATION_TYPE_COPY: Record<string, MessageKey> = {
+  participant: "applicationTypeParticipant",
+  mentor: "applicationTypeMentor",
+  sponsor: "applicationTypeSponsor",
+  volunteer: "applicationTypeVolunteer",
+};
+
 export function ApplicationTab({ userId }: { userId: number }) {
-  const { t } = useLocale();
+  const { language, t } = useLocale();
   const [rows, setRows] = useState<UserApplicationRow[] | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "forbidden" | "error">("loading");
   const [selected, setSelected] = useState<{
@@ -143,14 +151,18 @@ export function ApplicationTab({ userId }: { userId: number }) {
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{r.application_name}</p>
               <p className="text-muted-foreground text-xs capitalize">
-                {r.application_type}
+                {t(APPLICATION_TYPE_COPY[r.application_type] ?? "applicationTypeOther")}
                 {r.submitted_at
-                  ? t("submittedOnInline", { date: new Date(r.submitted_at).toLocaleDateString() })
+                  ? t("submittedOnInline", {
+                      date: new Intl.DateTimeFormat(LOCALE_CODES[language], {
+                        dateStyle: "medium",
+                      }).format(new Date(r.submitted_at)),
+                    })
                   : t("draftInline")}
               </p>
             </div>
             <StatusBadge tone={statusTone(r.status)} dot={false}>
-              {r.status.replace(/_/g, " ")}
+              {applicationStatusLabel(r.status, t)}
             </StatusBadge>
             <Button
               type="button"

@@ -18,7 +18,7 @@ import { useLocale } from "@/lib/i18n";
 import { type AccountRemovalEligibility, accountRemovalRequest } from "@/lib/privacy-removal";
 import { useCan, useMe } from "@/lib/session";
 import type { UserDetail } from "@/lib/types";
-import { fullName, initials, ROLE_TONE } from "./shared";
+import { fullName, initials, ROLE_COPY, ROLE_TONE } from "./shared";
 
 export function ProfileHeader({ user }: { user: UserDetail }) {
   const { t } = useLocale();
@@ -37,9 +37,7 @@ export function ProfileHeader({ user }: { user: UserDetail }) {
           <StatusBadge tone={user.emailVerified ? "success" : "warning"} dot={false}>
             {user.emailVerified ? t("verified") : t("unverified")}
           </StatusBadge>
-          <StatusBadge tone={ROLE_TONE[user.role]} className="capitalize">
-            {user.role}
-          </StatusBadge>
+          <StatusBadge tone={ROLE_TONE[user.role]}>{t(ROLE_COPY[user.role])}</StatusBadge>
           {user.badgeId && (
             <span className="text-muted-foreground font-mono text-xs">
               {t("badgeIdInline", { id: user.badgeId })}

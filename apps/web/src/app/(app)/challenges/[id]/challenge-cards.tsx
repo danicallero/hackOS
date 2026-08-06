@@ -20,6 +20,7 @@ import { DateTimeInput } from "@/components/common/datetime-input";
 import { DevpostTagsField } from "@/components/common/devpost-tags-field";
 import { DurationInput } from "@/components/common/duration-input";
 import { EmptyState } from "@/components/common/empty-state";
+import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -50,6 +51,7 @@ import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
 import { exportUrls } from "@/lib/queue";
 import { useSessionContext } from "@/lib/session";
+import { useUrlTab } from "@/lib/url-tab";
 import {
   JudgingPanelBuilder,
   MultilingualInput,
@@ -79,6 +81,7 @@ const editSchema = z.object({
   availableFrom: z.string(),
 });
 type EditValues = z.infer<typeof editSchema>;
+const CHALLENGE_TABS = ["content", "prizes", "judging", "winners", "publish", "history"] as const;
 
 function toFormValues(challenge: Challenge): EditValues {
   return {
@@ -129,6 +132,7 @@ export function EditCard({
   onSaved: () => Promise<void>;
 }) {
   const { t } = useLocale();
+  const { tab, setTab } = useUrlTab({ values: CHALLENGE_TABS, defaultValue: "content" });
   const [prizes, setPrizes] = useState<Prize[]>(asPrizes(challenge.prizes));
   const [questions, setQuestions] = useState<Question[]>(
     asQuestions(challenge.judging_panel_criteria),
@@ -152,10 +156,12 @@ export function EditCard({
     resolver: zodResolver(editSchema),
     defaultValues: toFormValues(challenge),
   });
+  const [saveError, setSaveError] = useState(false);
   const { reset } = form;
 
   useEffect(() => {
     reset(toFormValues(challenge));
+    setSaveError(false);
     setPrizes(asPrizes(challenge.prizes));
     setQuestions(asQuestions(challenge.judging_panel_criteria));
     setTitleI18n(asI18n(challenge.title_i18n ?? challenge.title, textForDisplay(challenge.title)));
@@ -181,6 +187,7 @@ export function EditCard({
     const descriptionEn = descriptionI18n.en.trim();
     const criteriaEn = criteriaI18n.en.trim();
     try {
+      setSaveError(false);
       const normalizedQuestions = normalizeQuestions(questions);
       await api.patch<Challenge>(`/api/challenges/${challenge.id}`, {
         ...(canEditGeneral
@@ -210,6 +217,7 @@ export function EditCard({
       await onSaved();
       toast.success(t("challengeUpdated"));
     } catch (err) {
+      setSaveError(true);
       toast.error(err instanceof Error ? err.message : t("checkBuilderFields"));
     }
   }
@@ -217,11 +225,31 @@ export function EditCard({
   const generalDisabled = !canAdmin && challenge.visibility === "visible";
   const watchedVisibility = form.watch("visibility");
   const watchedAvailableFrom = form.watch("availableFrom");
+  const hasUnsavedChanges =
+    form.formState.isDirty ||
+    JSON.stringify(titleI18n) !==
+      JSON.stringify(
+        asI18n(challenge.title_i18n ?? challenge.title, textForDisplay(challenge.title)),
+      ) ||
+    JSON.stringify(descriptionI18n) !==
+      JSON.stringify(
+        asI18n(
+          challenge.description_i18n ?? challenge.description,
+          textForDisplay(challenge.description),
+        ),
+      ) ||
+    JSON.stringify(criteriaI18n) !==
+      JSON.stringify(
+        asI18n(challenge.criteria_i18n ?? challenge.criteria, textForDisplay(challenge.criteria)),
+      ) ||
+    JSON.stringify(prizes) !== JSON.stringify(asPrizes(challenge.prizes)) ||
+    JSON.stringify(questions) !== JSON.stringify(asQuestions(challenge.judging_panel_criteria)) ||
+    JSON.stringify(devpostTags) !== JSON.stringify(challenge.devpost_tags ?? []);
 
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <Tabs defaultValue="content">
+        <Tabs value={tab} onValueChange={setTab}>
           <TabBar className="w-full max-w-2xl">
             <TabsTrigger value="content">{t("contentTabLabel")}</TabsTrigger>
             <TabsTrigger value="prizes">{t("prizesTabLabel")}</TabsTrigger>
@@ -428,7 +456,19 @@ export function EditCard({
           </TabsContent>
         </Tabs>
 
-        <div className="flex justify-end">
+        <div className="flex items-center justify-end gap-3">
+          <SaveStatus
+            state={
+              form.formState.isSubmitting
+                ? "saving"
+                : saveError && !hasUnsavedChanges
+                  ? "error"
+                  : hasUnsavedChanges
+                    ? "unsaved"
+                    : "saved"
+            }
+            className="mr-auto"
+          />
           <SubmitButton pending={form.formState.isSubmitting}>{t("saveChanges")}</SubmitButton>
         </div>
       </form>

@@ -12,12 +12,12 @@ import {
   UserCheckIcon,
   WalletCardsIcon,
 } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
 import { PageHeader } from "@/components/common/page-header";
 import { TabBar } from "@/components/common/tab-bar";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useLocale } from "@/lib/i18n";
+import { useUrlTab } from "@/lib/url-tab";
 import {
   confirmDiscardUnsavedChanges,
   useUnsavedChangesGuard,
@@ -39,10 +39,7 @@ function isCategory(value: string | null): value is Category {
 
 export default function EventSettingsPage() {
   const { t } = useLocale();
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const requested = searchParams.get("tab");
-  const [tab, setTab] = useState<Category>(isCategory(requested) ? requested : "event");
+  const { tab, setTab } = useUrlTab({ values: CATEGORIES, defaultValue: "event" });
 
   // Tracked per category so the beforeunload guard and the tab-switch confirm
   // both know exactly which category (if any) owns the unsaved edit.
@@ -67,9 +64,6 @@ export default function EventSettingsPage() {
     if (!isCategory(next) || next === tab) return;
     if (dirtyRef.current[tab] && !confirmDiscardUnsavedChanges(true, t)) return;
     setTab(next);
-    const params = new URLSearchParams(searchParams);
-    params.set("tab", next);
-    router.replace(`/settings/event?${params.toString()}`, { scroll: false });
   }
 
   return (

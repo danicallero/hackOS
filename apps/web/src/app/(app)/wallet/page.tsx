@@ -16,14 +16,18 @@ import { type Translate, useLocale } from "@/lib/i18n";
 import { logisticsApi, type TicketQrPayload } from "@/lib/logistics";
 import { useMe } from "@/lib/session";
 import type { Me } from "@/lib/types";
+import { useUrlTab } from "@/lib/url-tab";
 
 type Purpose = WalletPurpose;
 
 export default function WalletPage() {
   const me = useMe();
   const { t } = useLocale();
+  const { tab: purpose, setTab: setPurpose } = useUrlTab({
+    values: ["ticket", "badge"] as const,
+    defaultValue: "ticket",
+  });
   const [payload, setPayload] = useState<TicketQrPayload | null>(null);
-  const [purpose, setPurpose] = useState<Purpose>("ticket");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -72,7 +76,7 @@ export default function WalletPage() {
     <div className="space-y-6">
       <PageHeader title={t("wallet")} />
 
-      <Tabs value={purpose} onValueChange={(value) => setPurpose(value as Purpose)}>
+      <Tabs value={purpose} onValueChange={setPurpose}>
         <TabBar>
           <TabsTrigger value="ticket">{t("entranceTicket")}</TabsTrigger>
           <TabsTrigger value="badge">{t("badge")}</TabsTrigger>

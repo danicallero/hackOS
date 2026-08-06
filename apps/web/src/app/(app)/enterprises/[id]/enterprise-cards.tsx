@@ -7,14 +7,7 @@
 
 import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  Building2Icon,
-  CheckCircle2Icon,
-  CircleDashedIcon,
-  ImageIcon,
-  TrophyIcon,
-  UploadIcon,
-} from "lucide-react";
+import { Building2Icon, ImageIcon, TrophyIcon, UploadIcon } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -60,13 +53,7 @@ import {
   filterChallengesForEnterprise,
   textForDisplay,
 } from "../../challenges/shared";
-import {
-  type Enterprise,
-  enterpriseNextAction,
-  initials,
-  LOGO_ACCEPT,
-  LOGO_CONTENT_TYPES,
-} from "../shared";
+import { type Enterprise, initials, LOGO_ACCEPT, LOGO_CONTENT_TYPES } from "../shared";
 
 const optionalUrl = z.string().url("Enter a valid URL").or(z.literal(""));
 const optionalPositiveInt = z
@@ -101,37 +88,6 @@ function toFormValues(e: Enterprise): EditValues {
 }
 
 // ── Sponsor home: profile + challenge completeness (H43-H46) ────────────────
-
-const ENTERPRISE_ACTION_COPY: Record<
-  NonNullable<ReturnType<typeof enterpriseNextAction>>,
-  MessageKey
-> = {
-  addLogo: "nextActionAddLogo",
-  addWebsite: "nextActionAddWebsite",
-  addDescription: "nextActionAddDescription",
-};
-
-export function CompletenessCard({ enterprise }: { enterprise: Enterprise }) {
-  const { t } = useLocale();
-  const nextAction = enterpriseNextAction(enterprise);
-  return (
-    <SectionCard
-      icon={nextAction ? CircleDashedIcon : CheckCircle2Icon}
-      title={t("profileCompletenessTitle")}
-    >
-      {nextAction ? (
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-sm">{t(ENTERPRISE_ACTION_COPY[nextAction])}</p>
-          <Button asChild size="sm" variant="outline">
-            <a href="#profile-edit">{t("complete")}</a>
-          </Button>
-        </div>
-      ) : (
-        <p className="text-muted-foreground text-sm">{t("profileCompleteMessage")}</p>
-      )}
-    </SectionCard>
-  );
-}
 
 const CHALLENGE_ACTION_COPY: Record<
   NonNullable<ReturnType<typeof challengeNextAction>>,

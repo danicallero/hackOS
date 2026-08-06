@@ -17,6 +17,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
+import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
 import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -42,6 +43,7 @@ import {
   type StaffScanRankingRow,
 } from "@/lib/logistics";
 import { useCan } from "@/lib/session";
+import { useUrlTab } from "@/lib/url-tab";
 import {
   type ApplicationStats,
   type DataPhase,
@@ -108,14 +110,7 @@ function errorMessage(error: unknown, fallback: string) {
   return error instanceof ApiError ? error.message : fallback;
 }
 
-const PHASE_STORAGE_KEY = "hackos.logisticsStats.phase";
 const DATA_PHASES: DataPhase[] = ["before", "during", "after"];
-
-function loadStoredPhase(): DataPhase | null {
-  if (typeof window === "undefined") return null;
-  const stored = window.localStorage.getItem(PHASE_STORAGE_KEY);
-  return DATA_PHASES.includes(stored as DataPhase) ? (stored as DataPhase) : null;
-}
 
 export default function LogisticsStatsPage() {
   const { t } = useLocale();
@@ -123,8 +118,15 @@ export default function LogisticsStatsPage() {
   const canManageApplications = useCan(CAPABILITIES.APPLICATIONS_MANAGE);
   const canReviewApplications = useCan(CAPABILITIES.APPLICATIONS_REVIEW);
   const canApplications = canManageApplications || canReviewApplications;
-  const [phase, setPhase] = useState<DataPhase>("before");
-  const phaseWasChosen = useRef(false);
+  const {
+    tab: phase,
+    setTab: setPhase,
+    requested,
+  } = useUrlTab({
+    values: DATA_PHASES,
+    defaultValue: "before",
+  });
+  const phaseWasChosen = useRef(Boolean(requested && DATA_PHASES.includes(requested as DataPhase)));
   const [applications, setApplications] = useState<ApplicationOption[]>([]);
   const [applicationId, setApplicationId] = useState<number | null>(null);
   const [applicationStats, setApplicationStats] = useState<ApplicationStats | null>(null);
@@ -142,14 +144,6 @@ export default function LogisticsStatsPage() {
   );
 
   useEffect(() => {
-    const stored = loadStoredPhase();
-    if (stored) {
-      phaseWasChosen.current = true;
-      setPhase(stored);
-    }
-  }, []);
-
-  useEffect(() => {
     if (!canStats) return;
     api
       .get<PublicEvent>("/api/public/event")
@@ -157,7 +151,7 @@ export default function LogisticsStatsPage() {
         if (!phaseWasChosen.current) setPhase(defaultDataPhase(event));
       })
       .catch(() => undefined);
-  }, [canStats]);
+  }, [canStats, setPhase]);
 
   useEffect(() => {
     if (!canStats || !canApplications) return;
@@ -214,12 +208,12 @@ export default function LogisticsStatsPage() {
 
   const selectPhase = (value: string) => {
     phaseWasChosen.current = true;
-    setPhase(value as DataPhase);
-    window.localStorage.setItem(PHASE_STORAGE_KEY, value);
+    setPhase(value);
   };
 
   return (
     <div className="space-y-6" data-wide>
+      <PageHeader title={t("logisticsStats")} />
       <Tabs value={phase} onValueChange={selectPhase}>
         <TabBar aria-label={t("eventPhaseLabel")} className="w-full sm:w-fit">
           <TabsTrigger value="before">{t("phaseBefore")}</TabsTrigger>

@@ -57,6 +57,10 @@ Frontend (web & mobile):
   the copy rules `pnpm check:copy` enforces, web- and mobile-specific
   constraints, and an explicit don'ts list. Read before building or styling
   any screen; `apps/web/README.md` covers the component library itself.
+- [Web UX simplification audit and task plan](./ux-audit-tasks.md) — the
+  prioritized screen inventory, information-architecture changes, acceptance
+  criteria, and implementation sequence for reducing simultaneous choices
+  across the web app. The live judging workspace is the reference pattern.
 - [Navigation: capability-based workspaces](./navigation.md) — the personal
   area + additive work-workspace model on web, and the one-action mobile scan
   entry, with the full capability-to-workspace mapping.

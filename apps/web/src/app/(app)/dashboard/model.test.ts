@@ -1,6 +1,10 @@
 import { CAPABILITIES, type Capability } from "@hackos/shared/capabilities";
 import { describe, expect, it } from "vitest";
-import { type DashboardAccessContext, dashboardQuickActions } from "./model";
+import {
+  type DashboardAccessContext,
+  dashboardPrimaryAction,
+  dashboardQuickActions,
+} from "./model";
 
 function contextFor(
   capabilities: Capability[],
@@ -52,5 +56,16 @@ describe("dashboard quick actions (H8/H55)", () => {
       "eventSettings",
       "schedule",
     ]);
+  });
+});
+
+describe("dashboard primary action (UX-02)", () => {
+  it("prioritizes the active judging workflow", () => {
+    expect(dashboardPrimaryAction(contextFor([CAPABILITIES.QUEUE_OPERATE]))).toBe("judging");
+  });
+
+  it("keeps sponsor and participant destinations additive", () => {
+    expect(dashboardPrimaryAction(contextFor([], { isSponsorRep: true }))).toBe("challenges");
+    expect(dashboardPrimaryAction(contextFor([]))).toBe("schedule");
   });
 });

@@ -13,14 +13,18 @@ import { useCallback, useEffect, useState } from "react";
 import { z } from "zod";
 import { BackLink } from "@/components/common/back-link";
 import { EmptyState } from "@/components/common/empty-state";
+import { PageHeader } from "@/components/common/page-header";
 import { Spinner } from "@/components/common/spinner";
 import { SponsorLogo } from "@/components/common/sponsor-logo";
+import { TabBar } from "@/components/common/tab-bar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { toDatetimeLocal } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
+import { useUrlTab } from "@/lib/url-tab";
 import { type Enterprise, initials } from "../shared";
 
 const optionalUrl = z.string().url("Enter a valid URL").or(z.literal(""));
@@ -55,20 +59,19 @@ function _toFormValues(e: Enterprise): EditValues {
   };
 }
 
-import {
-  ChallengesSummaryCard,
-  CompletenessCard,
-  EditCard,
-  LogoCard,
-  MembersCard,
-} from "./enterprise-cards";
+import { ChallengesSummaryCard, EditCard, LogoCard, MembersCard } from "./enterprise-cards";
 import { InviteLinksCard } from "./invite-links-card";
+import { EnterpriseOverviewCard } from "./overview-card";
 
 export default function EnterpriseDetailPage() {
   const { t } = useLocale();
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
   const canManage = useCan(CAPABILITIES.SPONSORS_MANAGE);
+  const enterpriseTabs = canManage
+    ? (["overview", "profile", "challenges", "members", "invitations"] as const)
+    : (["overview", "profile", "challenges"] as const);
+  const { tab, setTab } = useUrlTab({ values: enterpriseTabs, defaultValue: "overview" });
 
   const [enterprise, setEnterprise] = useState<Enterprise | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -122,28 +125,57 @@ export default function EnterpriseDetailPage() {
   return (
     <div className="space-y-6">
       <BackLink href="/enterprises" label={t("backToEnterprises")} />
-      <div className="flex flex-wrap items-center gap-4">
-        <Avatar size="lg">
-          {enterprise.logo_url ? (
-            <SponsorLogo
-              logoUrl={enterprise.logo_url}
-              logoNegativeUrl={enterprise.logo_negative_url}
-              alt={enterprise.name}
-              className="size-full object-contain"
-            />
-          ) : (
-            <AvatarFallback>{initials(enterprise.name)}</AvatarFallback>
-          )}
-        </Avatar>
-        <h1 className="text-2xl font-semibold tracking-tight">{enterprise.name}</h1>
-      </div>
+      <PageHeader
+        leading={
+          <Avatar size="lg">
+            {enterprise.logo_url ? (
+              <SponsorLogo
+                logoUrl={enterprise.logo_url}
+                logoNegativeUrl={enterprise.logo_negative_url}
+                alt={enterprise.name}
+                className="size-full object-contain"
+              />
+            ) : (
+              <AvatarFallback>{initials(enterprise.name)}</AvatarFallback>
+            )}
+          </Avatar>
+        }
+        title={enterprise.name}
+      />
 
-      <CompletenessCard enterprise={enterprise} />
-      <LogoCard enterprise={enterprise} onChanged={load} />
-      <EditCard enterprise={enterprise} canManage={canManage} onSaved={load} />
-      <ChallengesSummaryCard enterprise={enterprise} canManage={canManage} />
-      {canManage && <MembersCard enterpriseId={enterprise.id} />}
-      {canManage && <InviteLinksCard enterpriseId={enterprise.id} />}
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabBar aria-label={t("enterpriseSections")} className="w-full justify-start">
+          <TabsTrigger value="overview">{t("tabOverview")}</TabsTrigger>
+          <TabsTrigger value="profile">{t("enterpriseProfileTab")}</TabsTrigger>
+          <TabsTrigger value="challenges">{t("challenges")}</TabsTrigger>
+          {canManage && <TabsTrigger value="members">{t("membersTitle")}</TabsTrigger>}
+          {canManage && <TabsTrigger value="invitations">{t("invitationManagement")}</TabsTrigger>}
+        </TabBar>
+        <TabsContent value="overview" className="space-y-6 pt-2">
+          <EnterpriseOverviewCard
+            enterprise={enterprise}
+            canManage={canManage}
+            onOpenProfile={() => setTab("profile")}
+          />
+        </TabsContent>
+        <TabsContent value="profile" className="space-y-6 pt-2">
+          <LogoCard enterprise={enterprise} onChanged={load} />
+          <EditCard enterprise={enterprise} canManage={canManage} onSaved={load} />
+        </TabsContent>
+        <TabsContent value="challenges" className="pt-2">
+          <ChallengesSummaryCard enterprise={enterprise} canManage={canManage} />
+        </TabsContent>
+        {canManage && (
+          <TabsContent value="members" className="pt-2">
+            <MembersCard enterpriseId={enterprise.id} />
+          </TabsContent>
+        )}
+        {canManage && (
+          <TabsContent value="invitations" className="pt-2">
+            <InviteLinksCard enterpriseId={enterprise.id} />
+          </TabsContent>
+        )}
+      </Tabs>
     </div>
   );
 }
