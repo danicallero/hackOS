@@ -4,6 +4,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
 import {
   AlertTriangleIcon,
+  CheckCircle2Icon,
   ClockIcon,
   DoorOpenIcon,
   LogInIcon,
@@ -43,6 +44,7 @@ import {
   type PresenceEstimate,
   type PresenceHours,
   type PresenceLookup,
+  personName,
 } from "@/lib/logistics";
 import { useCan } from "@/lib/session";
 import { useUrlTab } from "@/lib/url-tab";
@@ -196,6 +198,11 @@ function PresencePanel({
   const [manualOpen, setManualOpen] = useState(false);
   const [manualKind, setManualKind] = useState<"in" | "out">("in");
   const [manualScannedAt, setManualScannedAt] = useState("");
+  const [recentScan, setRecentScan] = useState<{
+    kind: "in" | "out";
+    person: string;
+    at: string;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -227,7 +234,8 @@ function PresencePanel({
     setBusy(true);
     setError("");
     try {
-      await logisticsApi.presenceScan({ badgeId: lookup.badgeId, kind });
+      const result = await logisticsApi.presenceScan({ badgeId: lookup.badgeId, kind });
+      setRecentScan({ kind, person: personName(lookup), at: result.scannedAt });
       toast.success(kind === "in" ? t("entryRecorded") : t("exitRecorded"));
       reset();
       onScanned();
@@ -243,11 +251,12 @@ function PresencePanel({
     setBusy(true);
     setError("");
     try {
-      await logisticsApi.presenceScan({
+      const result = await logisticsApi.presenceScan({
         badgeId: lookup.badgeId,
         kind: manualKind,
         scannedAt: new Date(manualScannedAt).toISOString(),
       });
+      setRecentScan({ kind: manualKind, person: personName(lookup), at: result.scannedAt });
       toast.success(t("manualRecordAdded"));
       reset();
       onScanned();
@@ -290,6 +299,30 @@ function PresencePanel({
           icon={DoorOpenIcon}
           bodyClassName="space-y-4"
         >
+          {recentScan && (
+            <div
+              className="border-success/40 bg-success/10 text-success-foreground flex items-start gap-3 rounded-lg border px-3 py-2.5 text-sm"
+              role="status"
+              aria-live="polite"
+            >
+              <CheckCircle2Icon
+                className="text-success mt-0.5 size-4 shrink-0"
+                aria-hidden="true"
+              />
+              <div className="min-w-0">
+                <p className="font-medium">
+                  {recentScan.kind === "in" ? t("entryRecorded") : t("exitRecorded")}
+                </p>
+                <p className="text-muted-foreground truncate">
+                  {t("lastPresenceScan", {
+                    person: recentScan.person,
+                    time: timeFmt.format(new Date(recentScan.at)),
+                  })}
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_140px]">
             <Field id="presence-badge" label={t("badge")}>
               <Input

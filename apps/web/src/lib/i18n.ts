@@ -1269,6 +1269,11 @@ const dict: Record<string, I18nText> = {
   },
   entryRecorded: { es: "Entrada registrada.", gl: "Entrada rexistrada.", en: "Entry recorded." },
   exitRecorded: { es: "Salida registrada.", gl: "Saída rexistrada.", en: "Exit recorded." },
+  lastPresenceScan: {
+    es: "{person} · {time}",
+    gl: "{person} · {time}",
+    en: "{person} · {time}",
+  },
   presenceScanFailed: {
     es: "No se ha podido registrar el escaneo.",
     gl: "Non se puido rexistrar o escaneo.",
