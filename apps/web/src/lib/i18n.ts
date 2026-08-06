@@ -625,6 +625,17 @@ const dict: Record<string, I18nText> = {
   // ---- Account overview & capabilities ----
   accountRole: { es: "Rol", gl: "Rol", en: "Account role" },
   capabilities: { es: "Permisos", gl: "Permisos", en: "Capabilities" },
+  permissionGroupSections: {
+    es: "Secciones del grupo de permisos",
+    gl: "Seccións do grupo de permisos",
+    en: "Permission group sections",
+  },
+  capabilitiesChangeDesc: {
+    es: "Estos cambios modifican el acceso efectivo de todas las personas del grupo.",
+    gl: "Estas modificacións cambian o acceso efectivo de todas as persoas do grupo.",
+    en: "These changes update the effective access for everyone in the group.",
+  },
+  advancedTab: { es: "Avanzado", gl: "Avanzado", en: "Advanced" },
   verified: { es: "Verificado", gl: "Verificado", en: "Verified" },
   unverified: { es: "Sin verificar", gl: "Sen verificar", en: "Unverified" },
   yourCapabilities: { es: "Tus permisos", gl: "Os teus permisos", en: "Your capabilities" },
@@ -5528,6 +5539,12 @@ const dict: Record<string, I18nText> = {
     en: "Replace dark-background logo",
   },
   profileTitle: { es: "Perfil", gl: "Perfil", en: "Profile" },
+  enterpriseSections: {
+    es: "Secciones de la empresa",
+    gl: "Seccións da empresa",
+    en: "Enterprise sections",
+  },
+  enterpriseProfileTab: { es: "Perfil y marca", gl: "Perfil e marca", en: "Profile and branding" },
   contactStaffToChangeName: {
     es: "Contacta con el equipo para cambiar el nombre legal.",
     gl: "Contacta co equipo para cambiar o nome legal.",
@@ -6937,6 +6954,15 @@ const dict: Record<string, I18nText> = {
     en: "Form not found",
   },
   formTabLabel: { es: "Formulario", gl: "Formulario", en: "Form" },
+  applicationOverviewTitle: {
+    es: "Resumen de la solicitud",
+    gl: "Resumo da solicitude",
+    en: "Application overview",
+  },
+  applicationTypeLabel: { es: "Tipo", gl: "Tipo", en: "Type" },
+  applicationQuestionsLabel: { es: "Preguntas", gl: "Preguntas", en: "Questions" },
+  applicationCapacityLabel: { es: "Capacidad", gl: "Capacidade", en: "Capacity" },
+  unlimited: { es: "Sin límite", gl: "Sen límite", en: "Unlimited" },
   inactiveFormsDesc: {
     es: "Los formularios inactivos no admiten nuevas solicitudes.",
     gl: "Os formularios inactivos non admiten novas solicitudes.",

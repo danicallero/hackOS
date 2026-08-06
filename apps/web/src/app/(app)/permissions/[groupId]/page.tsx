@@ -24,6 +24,7 @@ import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
+import { TabBar } from "@/components/common/tab-bar";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -41,6 +42,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
@@ -52,6 +54,7 @@ import type {
   UserList,
   UserListItem,
 } from "@/lib/types";
+import { useUrlTab } from "@/lib/url-tab";
 import { capabilityOptions, permissionTemplateName, userDisplayName } from "../helpers";
 import { canResetPermissionTemplate } from "./template-reset";
 import { TemplateResetSection } from "./template-reset-section";
@@ -73,6 +76,10 @@ export default function PermissionGroupDetailPage() {
   const router = useRouter();
   const params = useParams<{ groupId: string }>();
   const groupId = Number(params.groupId);
+  const { tab, setTab } = useUrlTab({
+    values: ["overview", "capabilities", "members", "included", "advanced"] as const,
+    defaultValue: "overview",
+  });
 
   const [group, setGroup] = useState<PermissionGroupDetail | null>(null);
   const [allGroups, setAllGroups] = useState<PermissionGroupSummary[]>([]);
@@ -322,7 +329,6 @@ export default function PermissionGroupDetailPage() {
     caps.length !== group.capabilities.length || caps.some((c) => !group.capabilities.includes(c));
   const templateName = group.templateKey ? permissionTemplateName(group.templateKey, t) : null;
   const canResetTemplate = canResetPermissionTemplate(group.templateKey, me?.capabilities ?? []);
-
   return (
     <div className="space-y-8">
       {/* The parent crumb lives in the header's context slot (issue #297). */}
@@ -357,184 +363,206 @@ export default function PermissionGroupDetailPage() {
 
       {loadError && <ContextualError message={loadError} onRetry={() => void load()} />}
 
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSaveDetails)}>
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabBar aria-label={t("permissionGroupSections")} className="w-full justify-start">
+          <TabsTrigger value="overview">{t("tabOverview")}</TabsTrigger>
+          <TabsTrigger value="capabilities">{t("capabilitiesLabel")}</TabsTrigger>
+          <TabsTrigger value="members">{t("membersTitle")}</TabsTrigger>
+          <TabsTrigger value="included">{t("includedGroupsTitle")}</TabsTrigger>
+          <TabsTrigger value="advanced">{t("advancedTab")}</TabsTrigger>
+        </TabBar>
+
+        <TabsContent value="overview" className="pt-2">
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSaveDetails)}>
+              <SectionCard
+                icon={SettingsIcon}
+                title={t("groupDetailsTitle")}
+                footer={
+                  <SubmitButton pending={form.formState.isSubmitting}>
+                    {t("saveChanges")}
+                  </SubmitButton>
+                }
+              >
+                <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("name")}</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("descriptionLabel")}</FormLabel>
+                      <FormControl>
+                        <Textarea rows={3} placeholder={t("whatGroupForPlaceholder")} {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </SectionCard>
+            </form>
+          </Form>
+        </TabsContent>
+
+        <TabsContent value="capabilities" className="pt-2">
           <SectionCard
-            icon={SettingsIcon}
-            title={t("groupDetailsTitle")}
+            icon={KeyRoundIcon}
+            title={t("capabilitiesLabel")}
+            description={t("capabilitiesChangeDesc")}
             footer={
-              <SubmitButton pending={form.formState.isSubmitting}>{t("saveChanges")}</SubmitButton>
+              <Button onClick={onSaveCaps} disabled={!capsDirty || savingCaps}>
+                {savingCaps && <Spinner />}
+                {t("saveCapabilities")}
+              </Button>
             }
           >
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("name")}</FormLabel>
-                  <FormControl>
-                    <Input {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="description"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("descriptionLabel")}</FormLabel>
-                  <FormControl>
-                    <Textarea rows={3} placeholder={t("whatGroupForPlaceholder")} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
+            <MultiSelect
+              options={capabilityOptions(t)}
+              value={caps}
+              onChange={setCaps}
+              placeholder={t("selectCapabilitiesPlaceholder")}
+              searchPlaceholder={t("searchCapabilitiesPlaceholder")}
+              emptyText={t("noMatchingCapability")}
             />
           </SectionCard>
-        </form>
-      </Form>
+        </TabsContent>
 
-      <SectionCard
-        icon={KeyRoundIcon}
-        title={t("capabilitiesLabel")}
-        footer={
-          <Button onClick={onSaveCaps} disabled={!capsDirty || savingCaps}>
-            {savingCaps && <Spinner />}
-            {t("saveCapabilities")}
-          </Button>
-        }
-      >
-        <MultiSelect
-          options={capabilityOptions(t)}
-          value={caps}
-          onChange={setCaps}
-          placeholder={t("selectCapabilitiesPlaceholder")}
-          searchPlaceholder={t("searchCapabilitiesPlaceholder")}
-          emptyText={t("noMatchingCapability")}
-        />
-      </SectionCard>
+        <TabsContent value="members" className="pt-2">
+          <SectionCard
+            icon={UsersIcon}
+            title={t("membersTitle")}
+            action={
+              <Button size="sm" variant="outline" onClick={() => setAddMemberOpen(true)}>
+                <UserPlusIcon /> {t("addMemberLabel")}
+              </Button>
+            }
+            bodyClassName={group.members.length === 0 ? undefined : "p-0"}
+          >
+            {group.members.length === 0 ? (
+              <p className="text-muted-foreground text-sm">{t("noMembersYetPeriod")}</p>
+            ) : (
+              <ul className="divide-border divide-y">
+                {group.members.map((id) => {
+                  const user = users.get(id);
+                  return (
+                    <li key={id} className="flex items-center justify-between gap-3 px-6 py-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">
+                          {user ? userDisplayName(user, t) : t("userNumberFallback", { id })}
+                        </p>
+                        {user?.email && (
+                          <p className="text-muted-foreground truncate text-xs">{user.email}</p>
+                        )}
+                      </div>
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        className="text-muted-foreground hover:text-destructive"
+                        onClick={() => removeMember(id)}
+                        aria-label={t("removeMemberAria", { id })}
+                      >
+                        <Trash2Icon />
+                      </Button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </SectionCard>
+        </TabsContent>
 
-      {templateName && (
-        <TemplateResetSection
-          group={group}
-          templateName={templateName}
-          canReset={canResetTemplate}
-          onGroupUpdated={applyGroup}
-        />
-      )}
-
-      <SectionCard
-        icon={UsersIcon}
-        title={t("membersTitle")}
-        action={
-          <Button size="sm" variant="outline" onClick={() => setAddMemberOpen(true)}>
-            <UserPlusIcon /> {t("addMemberLabel")}
-          </Button>
-        }
-        bodyClassName={group.members.length === 0 ? undefined : "p-0"}
-      >
-        {group.members.length === 0 ? (
-          <p className="text-muted-foreground text-sm">{t("noMembersYetPeriod")}</p>
-        ) : (
-          <ul className="divide-border divide-y">
-            {group.members.map((id) => {
-              const user = users.get(id);
-              return (
-                <li key={id} className="flex items-center justify-between gap-3 px-6 py-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">
-                      {user ? userDisplayName(user, t) : t("userNumberFallback", { id })}
-                    </p>
-                    {user?.email && (
-                      <p className="text-muted-foreground truncate text-xs">{user.email}</p>
-                    )}
-                  </div>
-                  <Button
-                    size="icon-sm"
-                    variant="ghost"
-                    className="text-muted-foreground hover:text-destructive"
-                    onClick={() => removeMember(id)}
-                    aria-label={t("removeMemberAria", { id })}
-                  >
-                    <Trash2Icon />
-                  </Button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </SectionCard>
-
-      <SectionCard
-        icon={LayersIcon}
-        title={t("includedGroupsTitle")}
-        description={t("membersInheritDesc")}
-        action={
-          includeOptions.length > 0 ? (
-            <Select
-              value={includeSel}
-              onValueChange={(v) => {
-                setIncludeSel("");
-                addInclude(Number(v));
-              }}
-            >
-              <SelectTrigger size="sm" className="w-48">
-                <SelectValue placeholder={t("includeGroupPlaceholder")} />
-              </SelectTrigger>
-              <SelectContent>
-                {includeOptions.map((g) => (
-                  <SelectItem key={g.id} value={String(g.id)}>
-                    {g.name}
-                  </SelectItem>
+        <TabsContent value="included" className="pt-2">
+          <SectionCard
+            icon={LayersIcon}
+            title={t("includedGroupsTitle")}
+            description={t("membersInheritDesc")}
+            action={
+              includeOptions.length > 0 ? (
+                <Select
+                  value={includeSel}
+                  onValueChange={(v) => {
+                    setIncludeSel("");
+                    addInclude(Number(v));
+                  }}
+                >
+                  <SelectTrigger size="sm" className="w-48">
+                    <SelectValue placeholder={t("includeGroupPlaceholder")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {includeOptions.map((g) => (
+                      <SelectItem key={g.id} value={String(g.id)}>
+                        {g.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : undefined
+            }
+            bodyClassName={group.includes.length === 0 ? undefined : "p-0"}
+          >
+            {group.includes.length === 0 ? (
+              <p className="text-muted-foreground text-sm">{t("noIncludedGroupsPeriod")}</p>
+            ) : (
+              <ul className="divide-border divide-y">
+                {group.includes.map((id) => (
+                  <li key={id} className="flex items-center justify-between gap-3 px-6 py-3">
+                    <button
+                      type="button"
+                      className="truncate text-sm font-medium hover:underline"
+                      onClick={() => router.push(`/permissions/${id}`)}
+                    >
+                      {groupName(id)}
+                    </button>
+                    <Button
+                      size="icon-sm"
+                      variant="ghost"
+                      className="text-muted-foreground hover:text-destructive"
+                      onClick={() => removeInclude(id)}
+                      aria-label={t("removeIncludedGroupAria", { id })}
+                    >
+                      <Trash2Icon />
+                    </Button>
+                  </li>
                 ))}
-              </SelectContent>
-            </Select>
-          ) : undefined
-        }
-        bodyClassName={group.includes.length === 0 ? undefined : "p-0"}
-      >
-        {group.includes.length === 0 ? (
-          <p className="text-muted-foreground text-sm">{t("noIncludedGroupsPeriod")}</p>
-        ) : (
-          <ul className="divide-border divide-y">
-            {group.includes.map((id) => (
-              <li key={id} className="flex items-center justify-between gap-3 px-6 py-3">
-                <button
-                  type="button"
-                  className="truncate text-sm font-medium hover:underline"
-                  onClick={() => router.push(`/permissions/${id}`)}
-                >
-                  {groupName(id)}
-                </button>
-                <Button
-                  size="icon-sm"
-                  variant="ghost"
-                  className="text-muted-foreground hover:text-destructive"
-                  onClick={() => removeInclude(id)}
-                  aria-label={t("removeIncludedGroupAria", { id })}
-                >
-                  <Trash2Icon />
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </SectionCard>
+              </ul>
+            )}
+          </SectionCard>
+        </TabsContent>
 
-      <SectionCard
-        icon={Trash2Icon}
-        title={t("dangerZoneTitle")}
-        description={t("deletingGroupRemovesDesc")}
-        action={
-          <Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)}>
-            {t("deleteGroup")}
-          </Button>
-        }
-      >
-        <p className="text-muted-foreground text-sm">{t("cannotBeUndoneMembersLose")}</p>
-      </SectionCard>
+        <TabsContent value="advanced" className="space-y-6 pt-2">
+          {templateName && (
+            <TemplateResetSection
+              group={group}
+              templateName={templateName}
+              canReset={canResetTemplate}
+              onGroupUpdated={applyGroup}
+            />
+          )}
+          <SectionCard
+            icon={Trash2Icon}
+            title={t("dangerZoneTitle")}
+            description={t("deletingGroupRemovesDesc")}
+            action={
+              <Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)}>
+                {t("deleteGroup")}
+              </Button>
+            }
+          >
+            <p className="text-muted-foreground text-sm">{t("cannotBeUndoneMembersLose")}</p>
+          </SectionCard>
+        </TabsContent>
+      </Tabs>
 
       <AddMemberModal
         open={addMemberOpen}

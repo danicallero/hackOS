@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import { z } from "zod";
 import { BackLink } from "@/components/common/back-link";
 import { EmptyState } from "@/components/common/empty-state";
+import { PageHeader } from "@/components/common/page-header";
 import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
@@ -151,15 +152,19 @@ export default function ChallengeDetailPage() {
   return (
     <div className="space-y-6">
       <BackLink href="/challenges" label={t("backToChallenges")} />
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-semibold">{textForDisplay(challenge.title)}</h1>
-        <StatusBadge tone={visibilityTone(challenge.visibility)} className="capitalize">
-          {challenge.visibility}
-        </StatusBadge>
-        {challenge.visibility === "hidden" && isScheduled(challenge.available_from) && (
-          <StatusBadge tone="warning">{t("dataStatusScheduled")}</StatusBadge>
-        )}
-      </div>
+      <PageHeader
+        title={textForDisplay(challenge.title)}
+        state={
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge tone={visibilityTone(challenge.visibility)} className="capitalize">
+              {challenge.visibility}
+            </StatusBadge>
+            {challenge.visibility === "hidden" && isScheduled(challenge.available_from) && (
+              <StatusBadge tone="warning">{t("dataStatusScheduled")}</StatusBadge>
+            )}
+          </div>
+        }
+      />
 
       <EditCard
         challenge={challenge}

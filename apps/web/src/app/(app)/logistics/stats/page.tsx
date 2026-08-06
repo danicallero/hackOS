@@ -17,6 +17,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
+import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
 import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -212,6 +213,7 @@ export default function LogisticsStatsPage() {
 
   return (
     <div className="space-y-6" data-wide>
+      <PageHeader title={t("logisticsStats")} />
       <Tabs value={phase} onValueChange={selectPhase}>
         <TabBar aria-label={t("eventPhaseLabel")} className="w-full sm:w-fit">
           <TabsTrigger value="before">{t("phaseBefore")}</TabsTrigger>

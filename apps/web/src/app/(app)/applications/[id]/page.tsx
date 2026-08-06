@@ -22,6 +22,8 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { BackLink } from "@/components/common/back-link";
 import { EmptyState } from "@/components/common/empty-state";
+import { PageHeader } from "@/components/common/page-header";
+import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -33,7 +35,6 @@ import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import { useUrlTab } from "@/lib/url-tab";
 import { type ApplicationForm, type ApplicationStats, windowState } from "../lib";
-import { defaultApplicationWorkspace } from "../workflow";
 
 import { MetadataCard } from "./metadata-card";
 import { QuestionsCard } from "./questions-card";
@@ -49,17 +50,15 @@ export default function ApplicationDetailPage() {
   const canDecide = useCan(CAPABILITIES.APPLICATIONS_DECIDE);
   const canStats = useCan(CAPABILITIES.LOGISTICS_STATS);
   const applicationTabs = [
+    "overview",
     canManage ? "builder" : null,
     canReview ? "review" : null,
     canDecide ? "outbox" : null,
     canDecide ? "sent" : null,
-  ].filter((value): value is "builder" | "review" | "outbox" | "sent" => value !== null);
-  const defaultTab =
-    defaultApplicationWorkspace({
-      manage: canManage,
-      review: canReview,
-      decide: canDecide,
-    }) ?? "builder";
+  ].filter(
+    (value): value is "overview" | "builder" | "review" | "outbox" | "sent" => value !== null,
+  );
+  const defaultTab = "overview" as const;
   const { tab, setTab } = useUrlTab({ values: applicationTabs, defaultValue: defaultTab });
 
   const [form, setForm] = useState<ApplicationForm | null>(null);
@@ -127,43 +126,71 @@ export default function ApplicationDetailPage() {
     <div className="space-y-6">
       <BackLink href="/applications" label={t("backToApplications")} />
 
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="space-y-2">
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {form ? form.name : t("applicationNumber", { id })}
-          </h1>
-          <div className="flex flex-wrap items-center gap-2">
-            {form && (
-              <>
-                <StatusBadge tone="neutral" className="capitalize">
-                  {form.type}
-                </StatusBadge>
-                {w && (
-                  <StatusBadge tone={w.tone} dot={false}>
-                    {w.label}
-                  </StatusBadge>
-                )}
-                {form.capacity != null && (
-                  <span className="text-muted-foreground text-xs">
-                    {t("quotaInline", { capacity: form.capacity })}
-                  </span>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        title={form ? form.name : t("applicationNumber", { id })}
+        state={
+          form && w ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge tone="neutral" className="capitalize">
+                {form.type}
+              </StatusBadge>
+              <StatusBadge tone={w.tone} dot={false}>
+                {w.label}
+              </StatusBadge>
+            </div>
+          ) : undefined
+        }
+        meta={
+          form?.capacity != null ? (
+            <span className="text-muted-foreground text-xs">
+              {t("quotaInline", { capacity: form.capacity })}
+            </span>
+          ) : undefined
+        }
+      />
 
       {canStats && stats && <StatsStrip stats={stats} />}
 
       {applicationTabs.length > 0 && (
         <Tabs value={tab} onValueChange={setTab}>
           <TabBar className="w-full justify-start">
+            <TabsTrigger value="overview">{t("tabOverview")}</TabsTrigger>
             {canManage && <TabsTrigger value="builder">{t("formTabLabel")}</TabsTrigger>}
             {canReview && <TabsTrigger value="review">{t("workspaceReview")}</TabsTrigger>}
             {canDecide && <TabsTrigger value="outbox">{t("workspaceOutbox")}</TabsTrigger>}
             {canDecide && <TabsTrigger value="sent">{t("workspaceSentDecisions")}</TabsTrigger>}
           </TabBar>
+
+          <TabsContent value="overview" className="pt-2">
+            <SectionCard title={t("applicationOverviewTitle")} icon={ClipboardListIcon}>
+              {form ? (
+                <dl className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <dt className="text-muted-foreground text-sm">{t("applicationTypeLabel")}</dt>
+                    <dd className="mt-1 font-medium capitalize">{form.type}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground text-sm">{t("statusColumn")}</dt>
+                    <dd className="mt-1 font-medium">{w?.label ?? t("unknownStatus")}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground text-sm">
+                      {t("applicationQuestionsLabel")}
+                    </dt>
+                    <dd className="mt-1 font-medium">{form.template.length}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground text-sm">
+                      {t("applicationCapacityLabel")}
+                    </dt>
+                    <dd className="mt-1 font-medium">{form.capacity ?? t("unlimited")}</dd>
+                  </div>
+                </dl>
+              ) : (
+                <EmptyState icon={LockIcon} title={t("metadataUnavailable")} />
+              )}
+            </SectionCard>
+          </TabsContent>
 
           {canManage && (
             <TabsContent value="builder" className="space-y-6 pt-2">
