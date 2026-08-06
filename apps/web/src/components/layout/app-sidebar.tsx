@@ -26,6 +26,7 @@ import {
   PERSONAL_NAV,
   readLastWorkspace,
   WORKSPACES,
+  workspaceForPath,
   writeLastWorkspace,
 } from "@/lib/nav";
 import { useSessionContext } from "@/lib/session";
@@ -203,10 +204,18 @@ export function AppSidebar() {
   const unreadCount = useUnreadCount();
   const [lastWorkspace, setLastWorkspace] = useState<string | null>(null);
   const [openWorkspace, setOpenWorkspace] = useState<string | null>(null);
+  const activeWorkspaceId = workspaceForPath(pathname)?.id ?? null;
 
   useEffect(() => {
     setLastWorkspace(readLastWorkspace());
   }, []);
+
+  useEffect(() => {
+    if (!activeWorkspaceId) return;
+    setOpenWorkspace(activeWorkspaceId);
+    setLastWorkspace(activeWorkspaceId);
+    writeLastWorkspace(activeWorkspaceId);
+  }, [activeWorkspaceId]);
 
   const personalItems = PERSONAL_NAV.filter(isVisible);
 
@@ -280,9 +289,7 @@ export function AppSidebar() {
                 items={items}
                 active={containsActiveRoute}
                 open={
-                  containsActiveRoute ||
-                  openWorkspace === workspace.id ||
-                  (openWorkspace === null && shouldOpenInitially)
+                  openWorkspace === workspace.id || (openWorkspace === null && shouldOpenInitially)
                 }
                 onOpen={(id, nextOpen) => {
                   const next = nextOpen ? id : null;

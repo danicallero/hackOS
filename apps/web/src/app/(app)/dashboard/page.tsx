@@ -273,17 +273,7 @@ export default function DashboardPage() {
       ) : (
         <>
           <div className="grid gap-4 lg:grid-cols-2">
-            <SectionCard
-              title={t("needsAttention")}
-              icon={BellIcon}
-              action={
-                recommendedAction ? (
-                  <Button asChild size="sm">
-                    <Link href={recommendedAction.href}>{recommendedAction.label}</Link>
-                  </Button>
-                ) : undefined
-              }
-            >
+            <SectionCard title={t("needsAttention")} icon={BellIcon}>
               {statuses.event === "loading" ? (
                 <ResourceLoading label={t("loadingPublicEventInfo")} />
               ) : errors.event ? (
