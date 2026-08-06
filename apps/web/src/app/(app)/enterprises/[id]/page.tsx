@@ -59,13 +59,7 @@ function _toFormValues(e: Enterprise): EditValues {
   };
 }
 
-import {
-  ChallengesSummaryCard,
-  CompletenessCard,
-  EditCard,
-  LogoCard,
-  MembersCard,
-} from "./enterprise-cards";
+import { ChallengesSummaryCard, EditCard, LogoCard, MembersCard } from "./enterprise-cards";
 import { InviteLinksCard } from "./invite-links-card";
 import { EnterpriseOverviewCard } from "./overview-card";
 
@@ -158,8 +152,11 @@ export default function EnterpriseDetailPage() {
           {canManage && <TabsTrigger value="invitations">{t("invitationManagement")}</TabsTrigger>}
         </TabBar>
         <TabsContent value="overview" className="space-y-6 pt-2">
-          <EnterpriseOverviewCard enterprise={enterprise} canManage={canManage} />
-          <CompletenessCard enterprise={enterprise} onOpenProfile={() => setTab("profile")} />
+          <EnterpriseOverviewCard
+            enterprise={enterprise}
+            canManage={canManage}
+            onOpenProfile={() => setTab("profile")}
+          />
         </TabsContent>
         <TabsContent value="profile" className="space-y-6 pt-2">
           <LogoCard enterprise={enterprise} onChanged={load} />

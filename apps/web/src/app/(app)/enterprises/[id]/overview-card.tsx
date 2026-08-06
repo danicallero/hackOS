@@ -12,9 +12,10 @@ import { useCallback, useEffect, useState } from "react";
 import { SectionCard } from "@/components/common/section-card";
 import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
+import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { api } from "@/lib/api";
-import { LOCALE_CODES, useLocale } from "@/lib/i18n";
+import { LOCALE_CODES, type MessageKey, useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 import { cn } from "@/lib/utils";
 import {
@@ -23,6 +24,15 @@ import {
   filterChallengesForEnterprise,
 } from "../../challenges/shared";
 import { type Enterprise, enterpriseNextAction, isScheduled, visibilityTone } from "../shared";
+
+const ENTERPRISE_ACTION_COPY: Record<
+  NonNullable<ReturnType<typeof enterpriseNextAction>>,
+  MessageKey
+> = {
+  addLogo: "nextActionAddLogo",
+  addWebsite: "nextActionAddWebsite",
+  addDescription: "nextActionAddDescription",
+};
 
 function formatDate(value: string | null, language: "es" | "gl" | "en"): string | null {
   if (!value) return null;
@@ -34,9 +44,11 @@ function formatDate(value: string | null, language: "es" | "gl" | "en"): string 
 export function EnterpriseOverviewCard({
   enterprise,
   canManage,
+  onOpenProfile,
 }: {
   enterprise: Enterprise;
   canManage: boolean;
+  onOpenProfile: () => void;
 }) {
   const { language, t } = useLocale();
   const { me } = useSessionContext();
@@ -122,11 +134,7 @@ export function EnterpriseOverviewCard({
         : t("enterpriseChallengeBreakdown", challengeCounts);
 
   return (
-    <SectionCard
-      icon={Globe2Icon}
-      title={t("enterpriseOverviewTitle")}
-      description={t("enterpriseOverviewDesc")}
-    >
+    <SectionCard icon={Globe2Icon} title={t("enterpriseOverviewTitle")}>
       <div
         className={cn("grid gap-4 sm:grid-cols-2", canManage ? "xl:grid-cols-4" : "xl:grid-cols-3")}
       >
@@ -168,7 +176,6 @@ export function EnterpriseOverviewCard({
 
       <div className="grid gap-6 border-t pt-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(16rem,1fr)]">
         <div className="space-y-3">
-          <h3 className="text-balance font-medium">{t("publicProfileSummaryTitle")}</h3>
           <p className="text-muted-foreground text-pretty text-sm">
             {enterprise.description || t("noDescriptionYet")}
           </p>
@@ -200,6 +207,15 @@ export function EnterpriseOverviewCard({
           </div>
         </dl>
       </div>
+
+      {nextAction && (
+        <div className="flex flex-col gap-3 border-t pt-5 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm">{t(ENTERPRISE_ACTION_COPY[nextAction])}</p>
+          <Button size="sm" variant="outline" onClick={onOpenProfile}>
+            {t("complete")}
+          </Button>
+        </div>
+      )}
     </SectionCard>
   );
 }

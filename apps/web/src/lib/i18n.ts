@@ -5001,20 +5001,10 @@ const dict: Record<string, I18nText> = {
     en: "Could not load challenge data.",
   },
   // ── Sponsor workspace (H43-H46, #192) ────────────────────────────────────
-  profileCompletenessTitle: {
-    es: "Estado del perfil",
-    gl: "Estado do perfil",
-    en: "Profile status",
-  },
   enterpriseOverviewTitle: {
     es: "Resumen de la empresa",
     gl: "Resumo da empresa",
     en: "Enterprise overview",
-  },
-  enterpriseOverviewDesc: {
-    es: "Consulta de un vistazo la visibilidad pública, los retos y los datos principales de esta empresa.",
-    gl: "Consulta dunha ollada a visibilidade pública, os retos e os datos principais desta empresa.",
-    en: "See this enterprise's public visibility, challenges, and key details at a glance.",
   },
   enterpriseVisibilityLabel: { es: "Visibilidad", gl: "Visibilidade", en: "Visibility" },
   enterpriseVisibilityVisibleHint: {
@@ -5063,11 +5053,6 @@ const dict: Record<string, I18nText> = {
     es: "No se han podido cargar los miembros.",
     gl: "Non se puideron cargar os membros.",
     en: "Members could not be loaded.",
-  },
-  publicProfileSummaryTitle: {
-    es: "Perfil público",
-    gl: "Perfil público",
-    en: "Public profile",
   },
   noDescriptionYet: {
     es: "Todavía no hay una descripción.",
