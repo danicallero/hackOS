@@ -1217,6 +1217,19 @@ const dict: Record<string, I18nText> = {
     en: "Without an exit or activity in this window, provisional time stops counting.",
   },
   presentNow: { es: "Presentes ahora", gl: "Presentes agora", en: "Present now" },
+  presenceDescription: {
+    es: "Registra entradas, revisa sesiones abiertas y consulta las horas por separado.",
+    gl: "Rexistra entradas, revisa sesións abertas e consulta as horas por separado.",
+    en: "Record entries, review open sessions, and inspect hours as separate workflows.",
+  },
+  presenceSections: {
+    es: "Secciones de presencia",
+    gl: "Seccións de presenza",
+    en: "Presence sections",
+  },
+  presenceScanTab: { es: "Escanear", gl: "Escanear", en: "Scan" },
+  presenceSessionsTab: { es: "Sesiones abiertas", gl: "Sesións abertas", en: "Open sessions" },
+  presenceHoursTab: { es: "Horas", gl: "Horas", en: "Hours" },
   liveEstimate: { es: "Estimación en directo", gl: "Estimación en directo", en: "Live estimate" },
   reconnectsAutomatically: {
     es: "Se reconecta automáticamente",
@@ -2791,6 +2804,23 @@ const dict: Record<string, I18nText> = {
   deliverySending: { es: "Enviando…", gl: "Enviando…", en: "Sending…" },
   deliveryNotSent: { es: "Aún no enviado", gl: "Aínda non enviado", en: "Not sent yet" },
   newAnnouncement: { es: "Nuevo aviso", gl: "Novo aviso", en: "New announcement" },
+  backToAnnouncements: {
+    es: "Volver a avisos",
+    gl: "Volver aos avisos",
+    en: "Back to announcements",
+  },
+  newAnnouncementDescription: {
+    es: "Redacta el contenido, configura la entrega y revisa la ventana de publicación.",
+    gl: "Redacta o contido, configura a entrega e revisa a xanela de publicación.",
+    en: "Write the content, configure delivery, and review the publication window.",
+  },
+  editAnnouncementTitle: { es: "Editar aviso", gl: "Editar aviso", en: "Edit announcement" },
+  editAnnouncementDescription: {
+    es: "Actualiza el contenido o la publicación sin salir del flujo del aviso.",
+    gl: "Actualiza o contido ou a publicación sen saír do fluxo do aviso.",
+    en: "Update the content or publication window without leaving the announcement flow.",
+  },
+  publishAnnouncement: { es: "Guardar aviso", gl: "Gardar aviso", en: "Save announcement" },
   searchAnnouncementsPlaceholder: {
     es: "Buscar avisos…",
     gl: "Buscar avisos…",
@@ -2869,6 +2899,26 @@ const dict: Record<string, I18nText> = {
     es: "Enviar notificación a las personas",
     gl: "Enviar notificación ás persoas",
     en: "Notify people",
+  },
+  announcementContentSection: {
+    es: "Contenido",
+    gl: "Contido",
+    en: "Content",
+  },
+  announcementDeliverySection: {
+    es: "Entrega",
+    gl: "Entrega",
+    en: "Delivery",
+  },
+  announcementPublicationSection: {
+    es: "Publicación",
+    gl: "Publicación",
+    en: "Publication",
+  },
+  announcementPublicationHint: {
+    es: "Elige cuándo aparece y cuándo deja de estar visible. Las notificaciones respetan las preferencias de cada persona.",
+    gl: "Escolle cando aparece e cando deixa de estar visible. As notificacións respectan as preferencias de cada persoa.",
+    en: "Choose when it appears and when it stops being visible. Notifications follow each person's preferences.",
   },
   announcementNotifyUsersHelp: {
     es: "La bandeja de entrada, el correo y las notificaciones push siguen las preferencias de cada persona.",
@@ -5287,6 +5337,27 @@ const dict: Record<string, I18nText> = {
     en: "Check the builder fields and try again.",
   },
   createChallenge: { es: "Crear reto", gl: "Crear reto", en: "Create challenge" },
+  saveChallengeDraft: {
+    es: "Guardar borrador",
+    gl: "Gardar borrador",
+    en: "Save draft",
+  },
+  challengeCreationSteps: {
+    es: "Pasos para crear el reto",
+    gl: "Pasos para crear o reto",
+    en: "Challenge creation steps",
+  },
+  challengeBasicsTitle: { es: "Datos básicos", gl: "Datos básicos", en: "Basics" },
+  challengeDraftSaveHint: {
+    es: "Puedes crear el reto como borrador y completar la publicación después.",
+    gl: "Podes crear o reto como borrador e completar a publicación despois.",
+    en: "You can create the challenge as a draft and finish publishing later.",
+  },
+  newChallengeDescription: {
+    es: "Define el reto paso a paso. Podrás revisar y publicar el borrador después.",
+    gl: "Define o reto paso a paso. Poderás revisar e publicar o borrador despois.",
+    en: "Define the challenge step by step. You can review and publish the draft later.",
+  },
   selectEnterprisePlaceholder: {
     es: "Selecciona una empresa",
     gl: "Selecciona unha empresa",

@@ -1,5 +1,6 @@
 "use client";
 
+import { CAPABILITIES } from "@hackos/shared/capabilities";
 import {
   BellIcon,
   CalendarDaysIcon,
@@ -231,13 +232,22 @@ export default function DashboardPage() {
       applications: { href: "/applications", label: t("applications") },
       challenges: { href: "/challenges", label: t("challenges") },
       judging: { href: "/judging", label: t("openJudging") },
-      logistics: { href: "/logistics/accreditation", label: t("logistics") },
+      logistics: {
+        href: can(CAPABILITIES.ACCREDIT_SCAN)
+          ? "/logistics/accreditation"
+          : can(CAPABILITIES.PRESENCE_SCAN)
+            ? "/logistics/presence"
+            : can(CAPABILITIES.ACTIVITY_SCAN)
+              ? "/logistics/activities"
+              : "/logistics/stats",
+        label: t("logistics"),
+      },
       queueOperations: { href: "/queue", label: t("queueOperations") },
       eventSettings: { href: "/settings/event", label: t("eventSettings") },
       schedule: { href: "/timetable", label: t("viewSchedule") },
     } as const;
     return actions[primaryAction];
-  }, [attentionQueues.length, data.applications, primaryAction, t]);
+  }, [attentionQueues.length, can, data.applications, primaryAction, t]);
   if (!me) return null;
 
   return (
