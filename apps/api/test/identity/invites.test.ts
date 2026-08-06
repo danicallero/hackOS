@@ -62,6 +62,21 @@ async function createInvite(
   return res.json();
 }
 
+async function createEnterpriseInviteLink(
+  a: App,
+  actor: number,
+  payload: Record<string, unknown>,
+): Promise<{ id: number; token: string }> {
+  const res = await a.inject({
+    method: "POST",
+    url: "/api/invites/enterprise-links",
+    headers: asUser(actor),
+    payload,
+  });
+  expect(res.statusCode).toBe(201);
+  return res.json();
+}
+
 const ACCEPT_BASE = {
   name: "Marie",
   surname: "Curie",
@@ -690,7 +705,16 @@ describe("H9 invite regeneration", () => {
       url: `/api/invites/lookup?token=${invite.token}`,
     });
     expect(look.statusCode).toBe(200);
-    expect(look.json()).toEqual({ email: "peek@example.com", kind: "participant", expired: false });
+    expect(look.json()).toEqual({
+      email: "peek@example.com",
+      kind: "participant",
+      enterpriseName: null,
+      reusable: false,
+      maxRedeems: null,
+      redeemedCount: 0,
+      remainingRedeems: null,
+      expired: false,
+    });
 
     await a.inject({
       method: "POST",
@@ -702,6 +726,149 @@ describe("H9 invite regeneration", () => {
       url: `/api/invites/lookup?token=${invite.token}`,
     });
     expect(after.statusCode).toBe(404);
+  });
+
+  it("creates, tracks, limits, and withdraws reusable enterprise links", async () => {
+    const a = await getApp();
+    const actor = await inviter();
+    const enterpriseId = await createEnterprise("ReusableCo");
+    const link = await createEnterpriseInviteLink(a, actor, {
+      enterpriseId,
+      maxRedeems: 2,
+      expiresInMinutes: 1,
+    });
+
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows: stored } = await pool.query(
+      `SELECT max_redeems, redeemed_count, expires_at, revoked_at
+         FROM enterprise_invite_links WHERE id = $1`,
+      [link.id],
+    );
+    expect(stored[0].max_redeems).toBe(2);
+    expect(stored[0].redeemed_count).toBe(0);
+    expect(stored[0].expires_at).toBeTruthy();
+    expect(stored[0].revoked_at).toBeNull();
+
+    const lookup = await a.inject({
+      method: "GET",
+      url: `/api/invites/lookup?token=${link.token}`,
+    });
+    expect(lookup.statusCode).toBe(200);
+    expect(lookup.json()).toMatchObject({
+      email: null,
+      kind: "sponsor",
+      enterpriseName: "ReusableCo",
+      reusable: true,
+      maxRedeems: 2,
+      redeemedCount: 0,
+      remainingRedeems: 2,
+      expired: false,
+    });
+
+    const missingEmail = await a.inject({
+      method: "POST",
+      url: "/api/invites/accept",
+      payload: { ...ACCEPT_BASE, token: link.token },
+    });
+    expect(missingEmail.statusCode).toBe(400);
+
+    const first = await a.inject({
+      method: "POST",
+      url: "/api/invites/accept",
+      payload: { ...ACCEPT_BASE, token: link.token, email: "first@reusable.test" },
+    });
+    expect(first.statusCode).toBe(201);
+    const second = await a.inject({
+      method: "POST",
+      url: "/api/invites/accept",
+      payload: {
+        ...ACCEPT_BASE,
+        name: "Second",
+        token: link.token,
+        email: "second@reusable.test",
+      },
+    });
+    expect(second.statusCode).toBe(201);
+
+    const exhausted = await a.inject({
+      method: "POST",
+      url: "/api/invites/accept",
+      payload: {
+        ...ACCEPT_BASE,
+        name: "Third",
+        token: link.token,
+        email: "third@reusable.test",
+      },
+    });
+    expect(exhausted.statusCode).toBe(409);
+
+    const list = await a.inject({
+      method: "GET",
+      url: `/api/invites/enterprise-links?enterpriseId=${enterpriseId}`,
+      headers: asUser(actor),
+    });
+    expect(list.statusCode).toBe(200);
+    expect(list.json()[0]).toMatchObject({
+      id: link.id,
+      enterpriseName: "ReusableCo",
+      redeemedCount: 2,
+      remainingRedeems: 0,
+      status: "exhausted",
+    });
+    expect(list.json()[0].redemptions).toHaveLength(2);
+
+    const { rows: members } = await pool.query(
+      `SELECT u.email FROM sponsors s JOIN users u ON u.id = s.user_id
+        WHERE s.enterprise_id = $1 ORDER BY u.email`,
+      [enterpriseId],
+    );
+    expect(members.map((row: { email: string }) => row.email)).toEqual([
+      "first@reusable.test",
+      "second@reusable.test",
+    ]);
+
+    const withdrawn = await a.inject({
+      method: "POST",
+      url: `/api/invites/enterprise-links/${link.id}/withdraw`,
+      headers: asUser(actor),
+    });
+    expect(withdrawn.statusCode).toBe(200);
+    const afterWithdraw = await a.inject({
+      method: "GET",
+      url: `/api/invites/enterprise-links?enterpriseId=${enterpriseId}`,
+      headers: asUser(actor),
+    });
+    expect(afterWithdraw.json()[0].status).toBe("withdrawn");
+  });
+
+  it("serializes reusable link redemptions so a one-redeem limit has one winner", async () => {
+    const a = await getApp();
+    const actor = await inviter();
+    const enterpriseId = await createEnterprise("RaceCo");
+    const link = await createEnterpriseInviteLink(a, actor, {
+      enterpriseId,
+      maxRedeems: 1,
+      expiresInMinutes: null,
+    });
+
+    const [first, second] = await Promise.all([
+      a.inject({
+        method: "POST",
+        url: "/api/invites/accept",
+        payload: { ...ACCEPT_BASE, token: link.token, email: "race-one@reusable.test" },
+      }),
+      a.inject({
+        method: "POST",
+        url: "/api/invites/accept",
+        payload: {
+          ...ACCEPT_BASE,
+          name: "Rival",
+          token: link.token,
+          email: "race-two@reusable.test",
+        },
+      }),
+    ]);
+    expect([first.statusCode, second.statusCode].sort()).toEqual([201, 409]);
   });
 
   it("fails closed if an ordinary deferred group later inherits wildcard access", async () => {

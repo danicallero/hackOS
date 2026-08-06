@@ -62,6 +62,7 @@ import {
   LogoCard,
   MembersCard,
 } from "./enterprise-cards";
+import { InviteLinksCard } from "./invite-links-card";
 
 export default function EnterpriseDetailPage() {
   const { t } = useLocale();
@@ -142,6 +143,7 @@ export default function EnterpriseDetailPage() {
       <EditCard enterprise={enterprise} canManage={canManage} onSaved={load} />
       <ChallengesSummaryCard enterprise={enterprise} canManage={canManage} />
       {canManage && <MembersCard enterpriseId={enterprise.id} />}
+      {canManage && <InviteLinksCard enterpriseId={enterprise.id} />}
     </div>
   );
 }
