@@ -533,7 +533,6 @@ function StaffRankingSection() {
   return (
     <SectionCard
       title={t("staffScanRanking")}
-      description={t("staffScanRankingDesc")}
       icon={TrophyIcon}
       action={
         <div className="flex flex-wrap gap-2">

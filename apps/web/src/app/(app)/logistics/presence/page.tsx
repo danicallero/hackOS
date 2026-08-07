@@ -121,7 +121,7 @@ export default function PresencePage() {
 
   return (
     <div className="space-y-6" data-wide>
-      <PageHeader title={t("presence")} description={t("presenceDescription")} />
+      <PageHeader title={t("presence")} />
       <Tabs value={tab} onValueChange={(value) => setTab(value)}>
         <TabBar aria-label={t("presenceSections")} className="w-full justify-start">
           <TabsTrigger value="scan">{t("presenceScanTab")}</TabsTrigger>

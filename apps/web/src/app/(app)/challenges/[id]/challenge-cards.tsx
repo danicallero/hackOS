@@ -36,6 +36,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -521,9 +522,7 @@ function RevealPreviewCard({
         {state === "public" && <p className="text-sm">{t("revealPublicNowDesc")}</p>}
 
         <div className="rounded-lg border p-4">
-          <p className="text-muted-foreground mb-2 text-xs uppercase tracking-wide">
-            {t("publicPreviewLabel")}
-          </p>
+          <p className="text-muted-foreground mb-2 text-xs uppercase">{t("publicPreviewLabel")}</p>
           <p className="font-medium">{titleEn || t("untitledChallenge")}</p>
           {descriptionEn && (
             <p className="text-muted-foreground mt-1 line-clamp-3 text-sm">{descriptionEn}</p>
@@ -807,25 +806,36 @@ function WinnersCard({ challengeId }: { challengeId: number }) {
           )}
 
           <div className="grid gap-2 sm:grid-cols-[100px_minmax(200px,1fr)_auto]">
-            <Input
-              type="number"
-              min={1}
-              placeholder={t("rankPlaceholder")}
-              value={newRank}
-              onChange={(e) => setNewRank(e.target.value)}
-            />
-            <Select value={newRepoId} onValueChange={setNewRepoId}>
-              <SelectTrigger>
-                <SelectValue placeholder={t("selectProjectPlaceholder")} />
-              </SelectTrigger>
-              <SelectContent>
-                {eligible.map((repo) => (
-                  <SelectItem key={repo.id} value={String(repo.id)}>
-                    {repo.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div>
+              <Label htmlFor="winner-rank-input" className="sr-only">
+                {t("rankInputLabel")}
+              </Label>
+              <Input
+                id="winner-rank-input"
+                type="number"
+                min={1}
+                placeholder={t("rankPlaceholder")}
+                value={newRank}
+                onChange={(e) => setNewRank(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="winner-project-select" className="sr-only">
+                {t("winnerProjectSelectLabel")}
+              </Label>
+              <Select value={newRepoId} onValueChange={setNewRepoId}>
+                <SelectTrigger id="winner-project-select">
+                  <SelectValue placeholder={t("selectProjectPlaceholder")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {eligible.map((repo) => (
+                    <SelectItem key={repo.id} value={String(repo.id)}>
+                      {repo.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <Button
               type="button"
               size="sm"

@@ -5,7 +5,8 @@
 // GET /api/challenges/:id/versions is populated by every update/publish/unpublish
 // (apps/api/src/modules/challenges/service.ts snapshotOf()).
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { Spinner } from "@/components/common/spinner";
 import { ApiError, api } from "@/lib/api";
@@ -56,22 +57,23 @@ export function VersionHistory({ challengeId }: { challengeId: number }) {
   const [versions, setVersions] = useState<Version[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let alive = true;
+  const load = useCallback(() => {
+    setError(null);
     api
       .get<{ versions: Version[] }>(`/api/challenges/${challengeId}/versions`)
       .then((r) => {
-        if (alive) setVersions(r.versions);
+        setVersions(r.versions);
       })
       .catch((err) => {
-        if (alive) setError(err instanceof ApiError ? err.message : t("couldNotLoadVersions"));
+        setError(err instanceof ApiError ? err.message : t("couldNotLoadVersions"));
       });
-    return () => {
-      alive = false;
-    };
   }, [challengeId, t]);
 
-  if (error) return <p className="text-destructive text-sm">{error}</p>;
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  if (error) return <ContextualError message={error} onRetry={load} />;
   if (versions === null) return <Spinner className="size-5" />;
   if (versions.length === 0) {
     return <EmptyState title={t("noVersionsYetTitle")} />;
