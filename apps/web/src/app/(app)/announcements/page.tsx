@@ -18,12 +18,11 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AccessDenied } from "@/components/common/access-denied";
+import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
 import { type Column, DataTable } from "@/components/common/data-table";
-import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
 import { StatusBadge } from "@/components/common/status-badge";
-import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError } from "@/lib/api";
@@ -247,7 +246,7 @@ export default function AnnouncementsPage() {
       />
 
       {deleting && (
-        <Modal
+        <AlertModal
           open={Boolean(deleting)}
           onOpenChange={(open) => {
             if (!open) {
@@ -257,22 +256,17 @@ export default function AnnouncementsPage() {
           }}
           title={t("deleteThisAnnouncement")}
           description={t("willStopAppearing", { title: deleting.title })}
-          footer={
-            <>
-              <Button variant="outline" onClick={() => setDeleting(null)}>
-                {t("cancel")}
-              </Button>
-              <SubmitButton variant="destructive" pending={busy} onClick={() => remove(deleting)}>
-                {t("deleteAction")}
-              </SubmitButton>
-            </>
-          }
+          cancelLabel={t("cancel")}
+          confirmLabel={t("deleteAction")}
+          destructive
+          pending={busy}
+          onConfirm={() => remove(deleting)}
         >
           <div className="space-y-4">
             {deleteError && <ContextualError message={deleteError} />}
             <p className="text-muted-foreground text-sm">{t("cantBeUndone")}</p>
           </div>
-        </Modal>
+        </AlertModal>
       )}
     </div>
   );

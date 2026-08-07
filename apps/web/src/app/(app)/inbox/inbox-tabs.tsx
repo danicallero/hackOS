@@ -23,12 +23,11 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
-import { Modal } from "@/components/common/modal";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
-import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -350,7 +349,7 @@ export function MessagesTab() {
       )}
 
       {deleting && (
-        <Modal
+        <AlertModal
           open={Boolean(deleting)}
           onOpenChange={(open) => {
             if (!open) {
@@ -360,23 +359,14 @@ export function MessagesTab() {
           }}
           title={t("deleteThisNotification")}
           description={t("deleteNotificationDesc")}
-          footer={
-            <>
-              <Button variant="outline" onClick={() => setDeleting(null)}>
-                {t("cancel")}
-              </Button>
-              <SubmitButton
-                variant="destructive"
-                pending={deleteBusy}
-                onClick={() => remove(deleting)}
-              >
-                {t("deleteAction")}
-              </SubmitButton>
-            </>
-          }
+          cancelLabel={t("cancel")}
+          confirmLabel={t("deleteAction")}
+          destructive
+          pending={deleteBusy}
+          onConfirm={() => remove(deleting)}
         >
           {deleteError && <ContextualError message={deleteError} />}
-        </Modal>
+        </AlertModal>
       )}
     </div>
   );
