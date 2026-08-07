@@ -15,20 +15,13 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/common/empty-state";
+import { EntityCombobox } from "@/components/common/entity-combobox";
 import { Modal } from "@/components/common/modal";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { StatCard } from "@/components/common/stat-card";
-import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
@@ -39,18 +32,11 @@ import {
   type OfflineScan,
   saveOfflineQueue,
 } from "./offline-queue";
+import { PersonSearchResults } from "./person-search-results";
 import { ScanResult } from "./scan-result";
 import { errorMessage, Field, InlineError } from "./ui";
 
 const SCAN_EVENTS = [EVENTS.LOGISTICS_ACTIVITY_SCAN, EVENTS.LOGISTICS_MEAL_SCAN_BATCH];
-
-/** i18n key for how a search result matched — null for the plain name/email fallback. */
-const MATCH_LABEL_KEY: Record<PersonSearchResult["matchedBy"], string | null> = {
-  ticket: "matchTicket",
-  badge: "matchBadge",
-  badge_history: "matchOldBadge",
-  profile: null,
-};
 
 /**
  * Meal (H25) / registrable-activity (H26) scanner station. Sources its list
@@ -315,20 +301,15 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
             </div>
             <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_minmax(180px,0.8fr)_140px]">
               <Field id="activity-scan-activity" label={t("colActivity")}>
-                <Select value={activityId} onValueChange={setActivityId}>
-                  <SelectTrigger id="activity-scan-activity" className="w-full">
-                    <SelectValue
-                      placeholder={isMeal ? t("chooseMeal") : t("chooseActivityOption")}
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {items.map((activity) => (
-                      <SelectItem key={activity.activityId} value={String(activity.activityId)}>
-                        {activity.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <EntityCombobox
+                  id="activity-scan-activity"
+                  options={items}
+                  value={activityId}
+                  onChange={setActivityId}
+                  getId={(activity) => activity.activityId}
+                  getLabel={(activity) => activity.name}
+                  placeholder={isMeal ? t("chooseMeal") : t("chooseActivityOption")}
+                />
               </Field>
               <Field id="activity-scan-badge" label={t("badge")}>
                 <div className="flex gap-2">
@@ -428,42 +409,9 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
 
                 {findError && <InlineError message={findError} />}
 
-                {findResults && findResults.length === 0 && (
-                  <p className="text-muted-foreground text-sm">{t("noResultsLabel")}</p>
-                )}
-                {findResults && findResults.length > 0 && (
-                  <div className="max-h-80 overflow-y-auto rounded-lg border">
-                    {findResults.map((person) => {
-                      const matchKey = MATCH_LABEL_KEY[person.matchedBy];
-                      return (
-                        <button
-                          key={person.userId}
-                          type="button"
-                          className="hover:bg-muted flex w-full items-center justify-between gap-3 border-b px-3 py-2 text-left last:border-b-0"
-                          onClick={() => pickFound(person)}
-                        >
-                          <span>
-                            <span className="block text-sm font-medium">
-                              {[person.name, person.surname].filter(Boolean).join(" ") ||
-                                person.email}
-                            </span>
-                            <span className="text-muted-foreground block text-xs">
-                              {person.email}
-                            </span>
-                          </span>
-                          <span className="flex flex-wrap justify-end gap-2">
-                            {matchKey && (
-                              <StatusBadge tone="info" dot={false}>
-                                {t(matchKey)}
-                              </StatusBadge>
-                            )}
-                            <StatusBadge tone={person.badgeId ? "info" : "neutral"} dot={false}>
-                              {person.badgeId ?? t("noBadge")}
-                            </StatusBadge>
-                          </span>
-                        </button>
-                      );
-                    })}
+                {findResults && (
+                  <div className="max-h-80 overflow-y-auto">
+                    <PersonSearchResults results={findResults} onSelect={pickFound} />
                   </div>
                 )}
               </div>

@@ -66,6 +66,13 @@ export function toProjectRepo(repo: RepoWithExtras): ProjectRepo {
   return repo as unknown as ProjectRepo;
 }
 
+/** A challenge as returned by `/api/challenges` or `/api/public/challenges` —
+ * the only fields the projects module's pickers/adders need. */
+export interface ChallengeOption {
+  id: number;
+  title: Record<string, string> | string;
+}
+
 /**
  * Unified project↔challenge/prize row (H16, H21). Prizes/challenges used to be
  * two separate lists on the project page, which duplicated any prize already

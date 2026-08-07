@@ -243,7 +243,7 @@ export function ReviewForm({
           {syncState === "offline" && (
             <div
               role="status"
-              className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100"
+              className="border-warning/40 bg-warning/10 text-warning-foreground rounded-md border p-3 text-sm"
             >
               {t("offlineEvaluationPending")}
             </div>
@@ -270,7 +270,7 @@ export function ReviewForm({
             </p>
           )}
           {requiredUnansweredCount > 0 && (
-            <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+            <div className="border-warning/40 bg-warning/10 text-warning-foreground flex items-center gap-2 rounded-md border p-3 text-sm">
               <AlertTriangleIcon className="size-4 shrink-0" />
               {requiredUnansweredCount === 1
                 ? t("requiredFieldUnansweredOne", { count: requiredUnansweredCount })

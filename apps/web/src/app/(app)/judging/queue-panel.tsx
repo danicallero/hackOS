@@ -96,15 +96,13 @@ export function QueueStatsCard({
         <p
           className={cn(
             "mt-0.5 text-lg font-semibold tabular-nums",
-            pace?.autoAdjusted && "text-amber-600 dark:text-amber-500",
+            pace?.autoAdjusted && "text-warning",
           )}
         >
           {pace ? t("queueStatsMinutes", { count: Math.round(pace.effectiveMinutesPerTeam) }) : "—"}
         </p>
         {pace?.autoAdjusted && (
-          <p className="text-xs text-amber-600 dark:text-amber-500">
-            {t("queueStatsAdjustedHint")}
-          </p>
+          <p className="text-warning text-xs">{t("queueStatsAdjustedHint")}</p>
         )}
       </div>
     </div>
@@ -170,7 +168,7 @@ export function QueuePanel({
         {view.state?.is_paused && (
           <div
             role="status"
-            className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100"
+            className="border-warning/40 bg-warning/10 text-warning-foreground rounded-md border p-3 text-sm"
           >
             {t("roomPausedQueueBehavior")}
           </div>
@@ -252,10 +250,7 @@ export function QueuePanel({
               return (
                 <div className="flex w-full flex-col gap-2">
                   {blocked ? (
-                    <p
-                      className="text-pretty text-xs text-amber-700 dark:text-amber-300"
-                      role="status"
-                    >
+                    <p className="text-warning text-pretty text-xs" role="status">
                       {t("teamBusyInOtherRoom", { room: blocked.blockingRoomName })}
                     </p>
                   ) : null}
@@ -489,7 +484,7 @@ export function QueueList({
                             entry.called_at,
                             desiredMinutesPerTeam ?? null,
                             calledTooLongThresholdMinutes ?? null,
-                          ) && "text-amber-700 dark:text-amber-400",
+                          ) && "text-warning",
                         )}
                       >
                         {t("calledAt", {

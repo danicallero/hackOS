@@ -8,6 +8,7 @@ import { Building2Icon, KeyRoundIcon, ShieldIcon, UsersIcon, XIcon } from "lucid
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { EntityCombobox } from "@/components/common/entity-combobox";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { Badge } from "@/components/ui/badge";
@@ -198,22 +199,18 @@ export function EnterpriseMemberships({
       title={t("enterprises")}
       action={
         canManage ? (
-          <Select value="" onValueChange={addEnterprise} disabled={busy || addable.length === 0}>
-            <SelectTrigger className="w-56">
-              <SelectValue
-                placeholder={
-                  addable.length > 0 ? t("addEnterprisePlaceholder") : t("noEnterprisesToAdd")
-                }
-              />
-            </SelectTrigger>
-            <SelectContent>
-              {addable.map((enterprise) => (
-                <SelectItem key={enterprise.id} value={String(enterprise.id)}>
-                  {enterprise.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <EntityCombobox
+            className="w-56"
+            options={addable}
+            value=""
+            onChange={addEnterprise}
+            disabled={busy || addable.length === 0}
+            getId={(enterprise) => enterprise.id}
+            getLabel={(enterprise) => enterprise.name}
+            placeholder={
+              addable.length > 0 ? t("addEnterprisePlaceholder") : t("noEnterprisesToAdd")
+            }
+          />
         ) : undefined
       }
     >

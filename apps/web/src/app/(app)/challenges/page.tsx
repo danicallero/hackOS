@@ -13,7 +13,8 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
-import { type Translate, useLocale } from "@/lib/i18n";
+import { formatScheduledDateTime } from "@/lib/datetime";
+import { LOCALE_CODES, type Translate, useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 import {
   type Challenge,
@@ -24,7 +25,7 @@ import {
   visibilityTone,
 } from "./shared";
 
-function buildColumns(t: Translate): Column<Challenge>[] {
+function buildColumns(t: Translate, locale: string): Column<Challenge>[] {
   return [
     {
       id: "title",
@@ -63,14 +64,7 @@ function buildColumns(t: Translate): Column<Challenge>[] {
             <div className="flex items-center gap-2">
               <StatusBadge tone="warning">{t("dataStatusScheduled")}</StatusBadge>
               <span className="text-muted-foreground text-sm">
-                {new Date(c.available_from as string).toLocaleString("es-ES", {
-                  day: "2-digit",
-                  month: "2-digit",
-                  year: "numeric",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  hour12: false,
-                })}
+                {formatScheduledDateTime(c.available_from as string, locale)}
               </span>
             </div>
           );
@@ -79,14 +73,7 @@ function buildColumns(t: Translate): Column<Challenge>[] {
           return (
             <span className="text-muted-foreground text-sm">
               {c.available_from
-                ? new Date(c.available_from).toLocaleString("es-ES", {
-                    day: "2-digit",
-                    month: "2-digit",
-                    year: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    hour12: false,
-                  })
+                ? formatScheduledDateTime(c.available_from, locale)
                 : t("immediate")}
             </span>
           );
@@ -99,11 +86,11 @@ function buildColumns(t: Translate): Column<Challenge>[] {
 
 export default function ChallengesPage() {
   const router = useRouter();
-  const { t } = useLocale();
+  const { t, language } = useLocale();
   const { canAny, me } = useSessionContext();
   const canAdmin = canAny(CAPABILITIES.SPONSORS_MANAGE, CAPABILITIES.QUEUE_ADMIN);
   const canSee = canAccessSponsorWorkspace(canAdmin, Boolean(me?.isSponsorRep));
-  const columns = useMemo(() => buildColumns(t), [t]);
+  const columns = useMemo(() => buildColumns(t, LOCALE_CODES[language]), [t, language]);
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);

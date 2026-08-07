@@ -44,8 +44,8 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
-import { fromDatetimeLocal } from "@/lib/datetime";
-import { type Translate, useLocale } from "@/lib/i18n";
+import { formatScheduledDateTime, fromDatetimeLocal } from "@/lib/datetime";
+import { LOCALE_CODES, type Translate, useLocale } from "@/lib/i18n";
 import { useCan, useMe } from "@/lib/session";
 import { type Enterprise, initials, isScheduled, visibilityTone } from "./shared";
 
@@ -69,7 +69,7 @@ const createSchema = z.object({
 });
 type CreateValues = z.infer<typeof createSchema>;
 
-function buildColumns(t: Translate): Column<Enterprise>[] {
+function buildColumns(t: Translate, locale: string): Column<Enterprise>[] {
   return [
     {
       id: "name",
@@ -125,7 +125,7 @@ function buildColumns(t: Translate): Column<Enterprise>[] {
             <div className="flex items-center gap-2">
               <StatusBadge tone="warning">{t("dataStatusScheduled")}</StatusBadge>
               <span className="text-muted-foreground text-sm">
-                {new Date(e.available_from as string).toLocaleString()}
+                {formatScheduledDateTime(e.available_from as string, locale)}
               </span>
             </div>
           );
@@ -133,7 +133,9 @@ function buildColumns(t: Translate): Column<Enterprise>[] {
         if (e.visibility === "visible") {
           return (
             <span className="text-muted-foreground text-sm">
-              {e.available_from ? new Date(e.available_from).toLocaleString() : t("immediate")}
+              {e.available_from
+                ? formatScheduledDateTime(e.available_from, locale)
+                : t("immediate")}
             </span>
           );
         }
@@ -156,7 +158,7 @@ function buildColumns(t: Translate): Column<Enterprise>[] {
 }
 
 export default function EnterprisesPage() {
-  const { t } = useLocale();
+  const { t, language } = useLocale();
   const router = useRouter();
   const canManage = useCan(CAPABILITIES.SPONSORS_MANAGE);
   const me = useMe();
@@ -168,7 +170,7 @@ export default function EnterprisesPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
 
-  const columns = useMemo(() => buildColumns(t), [t]);
+  const columns = useMemo(() => buildColumns(t, LOCALE_CODES[language]), [t, language]);
 
   const load = useCallback(async () => {
     setLoading(true);

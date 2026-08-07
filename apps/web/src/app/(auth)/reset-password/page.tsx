@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { PasswordInput } from "@/components/common/password-input";
 import { SubmitButton } from "@/components/common/submit-button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Form,
@@ -128,9 +129,9 @@ function ResetPasswordForm() {
                 )}
               />
               {form.formState.errors.root && (
-                <p role="alert" className="text-destructive text-sm">
-                  {form.formState.errors.root.message}
-                </p>
+                <Alert variant="destructive" role="alert">
+                  <AlertDescription>{form.formState.errors.root.message}</AlertDescription>
+                </Alert>
               )}
               <SubmitButton className="w-full" pending={form.formState.isSubmitting}>
                 {t("updatePassword")}

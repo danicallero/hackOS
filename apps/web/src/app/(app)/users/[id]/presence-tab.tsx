@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { AlertModal } from "@/components/common/alert-modal";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { EmptyState } from "@/components/common/empty-state";
+import { EntityCombobox } from "@/components/common/entity-combobox";
 import { Modal } from "@/components/common/modal";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
@@ -533,18 +534,16 @@ export function PresenceSignalModal({
         {kind === "activity" && (
           <div className="space-y-2">
             <Label htmlFor="presence-activity">{t("colActivity")}</Label>
-            <Select value={activityId} onValueChange={setActivityId}>
-              <SelectTrigger id="presence-activity" className="w-full">
-                <SelectValue placeholder={t("chooseActivityOption")} />
-              </SelectTrigger>
-              <SelectContent>
-                {activities.map((activity) => (
-                  <SelectItem key={activity.id} value={String(activity.id)}>
-                    {activity.name} · {activity.category}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <EntityCombobox
+              id="presence-activity"
+              inDialog
+              options={activities}
+              value={activityId}
+              onChange={setActivityId}
+              getId={(activity) => activity.id}
+              getLabel={(activity) => `${activity.name} · ${activity.category}`}
+              placeholder={t("chooseActivityOption")}
+            />
           </div>
         )}
         <div className="space-y-2">

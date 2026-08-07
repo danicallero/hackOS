@@ -39,6 +39,7 @@ import {
 import { useSessionContext } from "@/lib/session";
 import { ProjectFormDialog } from "../project-form-dialog";
 import {
+  type ChallengeOption,
   challengeTitleText,
   memberMatchLabel,
   memberName,
@@ -47,22 +48,16 @@ import {
   toProjectRepo,
   toUnifiedEntries,
 } from "../shared";
-
-type ChallengeOption = {
-  id: number;
-  title: Record<string, string> | string;
-};
-
-function manualMemberCount(repo: ProjectRepo): number {
-  return repo.members.filter((member) => member.mergeStatus === "manual").length;
-}
-
 import {
   DevpostParticipantActions,
   MemberRemoveButton,
   ProjectChallengeAdder,
   ProjectMemberAdder,
 } from "./project-actions";
+
+function manualMemberCount(repo: ProjectRepo): number {
+  return repo.members.filter((member) => member.mergeStatus === "manual").length;
+}
 
 export default function ProjectDetailPage() {
   const params = useParams<{ id: string }>();

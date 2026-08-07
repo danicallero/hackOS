@@ -28,16 +28,6 @@ import {
 import type { UserList } from "@/lib/types";
 import { type Challenge, textForDisplay } from "../../challenges/shared";
 
-type RoomEditor = {
-  name: string;
-  slug: string;
-  location: string;
-};
-
-function _emptyRoomEditor(): RoomEditor {
-  return { name: "", slug: "", location: "" };
-}
-
 /**
  * Read-only progress + search for the room's assigned challenge (H46):
  * the sponsor-ownership fallback on `requireChallengeJudgeOrCapability`

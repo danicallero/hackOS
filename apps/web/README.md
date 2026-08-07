@@ -121,13 +121,26 @@ re-implementing. Each is a **single canonical component configured by props**
 Key components: `PageHeader`, `SectionCard`, `StatCard`, `StatusBadge`,
 `EmptyState`, `DataTable`, `TabBar`, `Modal`, `AlertModal`, `ContextualError`,
 `CapabilityGate`, `AccessDenied`, `Spinner`, `SubmitButton`, `PasswordInput`,
-`QrCode`, `MultiSelect`, `TemplateFieldControl`, `FileUploadField`.
+`QrCode`, `MultiSelect`, `TemplateFieldControl`, `FileUploadField`, `UserPicker`,
+`EntityCombobox`.
 
-Popovers (`MultiSelect`, `UniversityPicker`, `TimezonePicker`) take an
-`inDialog` prop: inside a `Modal` it portals the list into the dialog panel via
-`useDialogPortal`, which is the only place that is both inside the dialog's
-scroll-lock and outside the modal body's scroller. Pass it, or the option list
-either refuses to scroll or spills past the dialog edge.
+Popovers (`MultiSelect`, `UniversityPicker`, `TimezonePicker`, `UserPicker`,
+`EntityCombobox`) take an `inDialog` prop: inside a `Modal` it portals the list
+into the dialog panel via `useDialogPortal`, which is the only place that is
+both inside the dialog's scroll-lock and outside the modal body's scroller.
+Pass it, or the option list either refuses to scroll or spills past the dialog
+edge.
+
+**Picking a user or an entity from a list — don't hand-roll a `<Select>`.**
+`UserPicker` is a type-ahead combobox over a server-searched user endpoint
+(`/api/users`, `/api/projects/member-candidates`, …) — pass it a `search`
+function, it debounces and renders results in a `Command` popover.
+`EntityCombobox` is the client-side-filtered counterpart for a list you've
+already fetched in full (enterprises, activities): pass `options`, `getId`,
+`getLabel`. Reach for a plain `Select` only for small, fixed, non-growing
+option sets (enums, status filters); anything backed by a table that a staff
+member could plausibly type into a search box should use one of these two
+instead — a flat `<Select>` over dozens/hundreds of rows is unusable.
 
 A capability-denied page is `<AccessDenied ask={t("…")} />` and nothing else —
 one heading for every page, one per-page ask naming the access to request. It

@@ -8,12 +8,12 @@
 import { CalendarXIcon, TriangleAlertIcon } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense } from "react";
 import { Spinner } from "@/components/common/spinner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
+import { isDeclineExpiredError, useTokenAction } from "../lib";
 
 interface DeclineResult {
   status: string;
@@ -23,59 +23,19 @@ interface DeclineResult {
 function DeclineInner() {
   const token = useSearchParams().get("token");
   const { t } = useLocale();
-  const [state, setState] = useState<"loading" | "done" | "error" | "expired">("loading");
-  const [result, setResult] = useState<DeclineResult | null>(null);
-  const [errorMsg, setErrorMsg] = useState("");
-  const [linkInvalid, setLinkInvalid] = useState(false);
-  const ran = useRef(false);
-  const idempotencyKey = useRef<string | null>(null);
-
-  const submit = useCallback(async () => {
-    setState("loading");
-    setErrorMsg("");
-    setLinkInvalid(false);
-    if (!token) {
-      setLinkInvalid(true);
-      setErrorMsg(t("confirmationLinkInvalidDesc"));
-      setState("error");
-      return;
-    }
-    idempotencyKey.current ??= crypto.randomUUID();
-    try {
-      const res = await api.post<DeclineResult>(
-        "/api/applications/decline",
-        { token },
-        {
-          headers: { "Idempotency-Key": idempotencyKey.current },
-        },
-      );
-      setResult(res);
-      setState("done");
-    } catch (err) {
-      if (err instanceof ApiError && err.code === "not_found") {
-        setLinkInvalid(true);
-        setErrorMsg(t("confirmationLinkInvalidDesc"));
-      } else {
-        setErrorMsg(err instanceof ApiError ? err.message : t("declineFailed"));
-      }
-      if (
-        err instanceof ApiError &&
-        err.details &&
-        typeof err.details === "object" &&
-        (err.details as { status?: unknown }).status === "expired"
-      ) {
-        setState("expired");
-        return;
-      }
-      setState("error");
-    }
-  }, [t, token]);
-
-  useEffect(() => {
-    if (ran.current) return;
-    ran.current = true;
-    void submit();
-  }, [submit]);
+  const {
+    state,
+    result,
+    errorMsg,
+    linkInvalid,
+    retry: submit,
+  } = useTokenAction<DeclineResult>({
+    token,
+    endpoint: "/api/applications/decline",
+    isExpired: isDeclineExpiredError,
+    invalidLinkMessage: t("confirmationLinkInvalidDesc"),
+    fallbackMessage: t("declineFailed"),
+  });
 
   if (state === "loading") {
     return (

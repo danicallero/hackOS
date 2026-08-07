@@ -10,6 +10,7 @@ import { z } from "zod";
 import { ContextualError } from "@/components/common/contextual-error";
 import { DevpostTagsField } from "@/components/common/devpost-tags-field";
 import { DurationInput } from "@/components/common/duration-input";
+import { EntityCombobox } from "@/components/common/entity-combobox";
 import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
@@ -25,13 +26,6 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
@@ -188,20 +182,16 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>{t("enterpriseLabel")}</FormLabel>
-                      <Select value={field.value} onValueChange={field.onChange}>
-                        <FormControl>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder={t("selectEnterprisePlaceholder")} />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {enterprises.map((enterprise) => (
-                            <SelectItem key={enterprise.id} value={String(enterprise.id)}>
-                              {enterprise.name} (#{enterprise.id})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <FormControl>
+                        <EntityCombobox
+                          options={enterprises}
+                          value={field.value}
+                          onChange={field.onChange}
+                          getId={(enterprise) => enterprise.id}
+                          getLabel={(enterprise) => `${enterprise.name} (#${enterprise.id})`}
+                          placeholder={t("selectEnterprisePlaceholder")}
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}

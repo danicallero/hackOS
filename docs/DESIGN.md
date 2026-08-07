@@ -179,7 +179,8 @@ in the running app.**
 | A metric | `StatCard` (delta/footer slots for meters/sparklines) | Bare big numbers in a `Surface` |
 | Comparative data, sorting, bulk selection | `DataTable<T>` | Custom table markup |
 | A horizontal tab bar | `TabBar` (scrolls itself when the triggers outgrow the container) | Bare `TabsList` with a per-page `overflow-x-auto` wrapper or `flex-wrap`, which the fixed pill height clips |
-| A combobox/multi-select inside a `Modal` | `MultiSelect`/`UniversityPicker` with `inDialog` | The same control without it — its list then either can't scroll or spills outside the dialog |
+| A combobox/multi-select inside a `Modal` | `MultiSelect`/`UniversityPicker`/`UserPicker`/`EntityCombobox` with `inDialog` | The same control without it — its list then either can't scroll or spills outside the dialog |
+| Pick one row from a table-backed list (users, enterprises, activities, …) | `UserPicker` (server-searched) or `EntityCombobox` (client-filtered, already-fetched list) | A `Select` dumping every row flat — unusable once the table grows past a handful of rows |
 | A set of same-shaped objects users drill into (esp. mobile) | Cards / drill-down list rows | A horizontally scrolling table |
 | Zero-state | `EmptyState` with one direct CTA | Prose explaining where to navigate |
 | Long-form save feedback | `SaveStatus` (`lib/save-state.ts`) | Silent autosave, per-section save buttons |

@@ -17,6 +17,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { useDialogPortal } from "@/hooks/use-dialog-portal";
 import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -70,17 +71,24 @@ export function TimezonePicker({
   value,
   onChange,
   disabled,
+  inDialog = false,
   className,
 }: {
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
+  /**
+   * Set true when this lives inside a <Modal>/<Dialog> so the popover portals
+   * into the dialog panel via `useDialogPortal` — see `MultiSelect`.
+   */
+  inDialog?: boolean;
   className?: string;
 }) {
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const zones = useMemo(() => allTimeZones(), []);
+  const { ref: anchorRef, portalProps, contentProps } = useDialogPortal(inDialog);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -99,6 +107,8 @@ export function TimezonePicker({
     <PopoverPrimitive.Content
       align="start"
       sideOffset={4}
+      collisionPadding={8}
+      {...contentProps}
       className="bg-popover text-popover-foreground z-50 flex max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] flex-col rounded-md border shadow-md outline-hidden"
     >
       <Command shouldFilter={false}>
@@ -129,6 +139,7 @@ export function TimezonePicker({
     <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
       <PopoverPrimitive.Trigger asChild>
         <Button
+          ref={anchorRef}
           type="button"
           variant="outline"
           disabled={disabled}
@@ -145,7 +156,7 @@ export function TimezonePicker({
           </span>
         </Button>
       </PopoverPrimitive.Trigger>
-      <PopoverPrimitive.Portal>{content}</PopoverPrimitive.Portal>
+      <PopoverPrimitive.Portal {...portalProps}>{content}</PopoverPrimitive.Portal>
     </PopoverPrimitive.Root>
   );
 }

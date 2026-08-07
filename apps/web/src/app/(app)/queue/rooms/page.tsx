@@ -43,6 +43,7 @@ import {
 import { useSessionContext } from "@/lib/session";
 import type { UserList } from "@/lib/types";
 import { type Challenge, canAccessSponsorWorkspace } from "../../challenges/shared";
+import { AssignmentsEditor, ChallengeResultsPanel } from "./room-panels";
 
 type RoomEditor = {
   name: string;
@@ -53,8 +54,6 @@ type RoomEditor = {
 function emptyRoomEditor(): RoomEditor {
   return { name: "", slug: "", location: "" };
 }
-
-import { AssignmentsEditor, ChallengeResultsPanel } from "./room-panels";
 
 export default function QueueRoomsPage() {
   const { t } = useLocale();

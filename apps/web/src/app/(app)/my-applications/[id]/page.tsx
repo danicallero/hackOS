@@ -54,6 +54,7 @@ import {
   isNotFoundError,
   type MutationKey,
   type MyResponseDetail,
+  missingRequiredFields,
   type PublicForm,
   SHIRT_TYPES,
   statusLabel,
@@ -221,18 +222,8 @@ export default function MyApplicationDetailPage() {
   }
 
   function checkRequired(): boolean {
-    const errors: Record<string, string> = {};
-    for (const f of template) {
-      if (!f.required) continue;
-      const v = values[f.key];
-      const empty =
-        v === undefined ||
-        v === null ||
-        (typeof v === "string" && v.trim() === "") ||
-        (Array.isArray(v) && v.length === 0) ||
-        (f.kind === "checkbox" && v !== true);
-      if (empty) errors[f.key] = t("fieldRequired");
-    }
+    const missing = missingRequiredFields(template, values);
+    const errors = Object.fromEntries(missing.map((key) => [key, t("fieldRequired")]));
     setFieldErrors(errors);
     const firstInvalid = template.find((field) => errors[field.key]);
     if (firstInvalid) {
@@ -240,7 +231,7 @@ export default function MyApplicationDetailPage() {
         document.getElementById(templateFieldId(firstInvalid.key, id))?.focus();
       });
     }
-    return Object.keys(errors).length === 0;
+    return missing.length === 0;
   }
 
   async function handleSaveDraft() {

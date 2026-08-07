@@ -335,7 +335,7 @@ export function PresentationTimer({
       <span
         className={cn(
           "font-mono text-sm font-semibold tabular-nums whitespace-nowrap",
-          timerTone === "warning" && "text-amber-600 dark:text-amber-400",
+          timerTone === "warning" && "text-warning",
           timerTone === "danger" && "text-destructive",
         )}
       >
@@ -348,14 +348,14 @@ export function PresentationTimer({
         value={progressValue}
         className={cn(
           "h-1.5 flex-1",
-          timerTone === "warning" && "[&_[data-slot=progress-indicator]]:bg-amber-500",
+          timerTone === "warning" && "[&_[data-slot=progress-indicator]]:bg-warning",
           timerTone === "danger" && "[&_[data-slot=progress-indicator]]:bg-destructive",
         )}
       />
       <span
         className={cn(
           "shrink-0 text-xs font-medium whitespace-nowrap",
-          timerTone === "warning" && "text-amber-600 dark:text-amber-400",
+          timerTone === "warning" && "text-warning",
           timerTone === "danger" && "text-destructive",
           timerTone === "default" && "text-muted-foreground",
         )}

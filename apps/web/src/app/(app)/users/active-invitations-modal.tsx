@@ -16,6 +16,7 @@ import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { EmptyState } from "@/components/common/empty-state";
+import { EntityCombobox } from "@/components/common/entity-combobox";
 import { Modal } from "@/components/common/modal";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
@@ -30,13 +31,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import type { EnterpriseInviteLink, EnterpriseSummary, InviteListItem } from "@/lib/types";
@@ -465,25 +459,19 @@ export function ActiveInvitationsModal() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="users-invite-link-enterprise">{t("enterpriseLabel")}</Label>
-                <Select value={createEnterpriseId} onValueChange={setCreateEnterpriseId}>
-                  <SelectTrigger
-                    id="users-invite-link-enterprise"
-                    className="w-full"
-                    aria-describedby={
-                      enterpriseOptionsError ? "users-invite-link-enterprise-error" : undefined
-                    }
-                    aria-invalid={enterpriseOptionsError || undefined}
-                  >
-                    <SelectValue placeholder={t("selectSponsorEnterprise")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {enterprises.map((enterprise) => (
-                      <SelectItem key={enterprise.id} value={String(enterprise.id)}>
-                        {enterprise.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <EntityCombobox
+                  id="users-invite-link-enterprise"
+                  inDialog
+                  options={enterprises}
+                  value={createEnterpriseId}
+                  onChange={setCreateEnterpriseId}
+                  getId={(enterprise) => enterprise.id}
+                  getLabel={(enterprise) => enterprise.name}
+                  placeholder={t("selectSponsorEnterprise")}
+                  aria-describedby={
+                    enterpriseOptionsError ? "users-invite-link-enterprise-error" : undefined
+                  }
+                />
                 {enterpriseOptionsError && (
                   <p
                     id="users-invite-link-enterprise-error"
