@@ -2,10 +2,11 @@
 
 // Queue admin surface for rooms and assignments (H46).
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
+import { UserPicker } from "@/components/common/user-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -188,6 +189,22 @@ export function AssignmentsEditor({
 
   const judges = assignments?.judges ?? [];
 
+  // `users` is the already-loaded judge-candidate list (no server-side query
+  // param on /judge-candidates), so UserPicker's "search" just filters it
+  // client-side by name/email instead of making a new request per keystroke.
+  const searchJudgeCandidates = useMemo(
+    () => async (query: string) => {
+      const q = query.trim().toLowerCase();
+      if (!q) return users.slice(0, 20);
+      return users
+        .filter((user) =>
+          [user.name, user.surname, user.email].filter(Boolean).join(" ").toLowerCase().includes(q),
+        )
+        .slice(0, 20);
+    },
+    [users],
+  );
+
   return (
     <div className="space-y-5">
       <div className="space-y-2">
@@ -237,18 +254,14 @@ export function AssignmentsEditor({
       <div className="space-y-2">
         <Label htmlFor={`judge-user-${roomId}`}>{t("assignJudgeLabel")}</Label>
         <div className="flex flex-col gap-2 sm:flex-row">
-          <Select value={userId} onValueChange={setUserId}>
-            <SelectTrigger id={`judge-user-${roomId}`} className="w-full min-w-0 sm:flex-1">
-              <SelectValue placeholder={t("selectJudgePlaceholder")} />
-            </SelectTrigger>
-            <SelectContent>
-              {users.map((user) => (
-                <SelectItem key={user.id} value={String(user.id)}>
-                  {user.email}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <UserPicker
+            id={`judge-user-${roomId}`}
+            className="w-full min-w-0 sm:flex-1"
+            value={userId}
+            onChange={setUserId}
+            search={searchJudgeCandidates}
+            placeholder={t("selectJudgePlaceholder")}
+          />
           <Button
             className="shrink-0"
             disabled={busy === "judge" || !userId || !effectiveChallengeId}
