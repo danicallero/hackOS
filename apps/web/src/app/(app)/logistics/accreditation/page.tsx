@@ -10,8 +10,8 @@ import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { StatCard } from "@/components/common/stat-card";
-import { StatusBadge } from "@/components/common/status-badge";
 import { PersonCardView } from "@/components/logistics/person-card";
+import { PersonSearchResults } from "@/components/logistics/person-search-results";
 import { errorMessage, InlineError } from "@/components/logistics/ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -81,14 +81,6 @@ export default function AccreditationPage() {
     </div>
   );
 }
-
-/** i18n key for how a search result matched — null for the plain name/email fallback. */
-const MATCH_LABEL_KEY: Record<PersonSearchResult["matchedBy"], string | null> = {
-  ticket: "matchTicket",
-  badge: "matchBadge",
-  badge_history: "matchOldBadge",
-  profile: null,
-};
 
 function AccreditationPanel({ onAccredited }: { onAccredited: () => void }) {
   const { t } = useLocale();
@@ -236,43 +228,8 @@ function AccreditationPanel({ onAccredited }: { onAccredited: () => void }) {
 
         {error && <InlineError message={error} />}
 
-        {results && results.length === 0 && (
-          <p className="text-muted-foreground text-sm">{t("noResultsLabel")}</p>
-        )}
-        {results && results.length > 0 && (
-          <div className="rounded-lg border">
-            {results.map((person) => {
-              const matchKey = MATCH_LABEL_KEY[person.matchedBy];
-              return (
-                <button
-                  key={person.userId}
-                  type="button"
-                  className="hover:bg-muted flex w-full items-center justify-between gap-3 border-b px-3 py-2 text-left last:border-b-0"
-                  onClick={() => void openCard(person.userId)}
-                >
-                  <span>
-                    <span className="block text-sm font-medium">
-                      {[person.name, person.surname].filter(Boolean).join(" ") || person.email}
-                    </span>
-                    <span className="text-muted-foreground block text-xs">{person.email}</span>
-                  </span>
-                  <span className="flex flex-wrap justify-end gap-2">
-                    {matchKey && (
-                      <StatusBadge tone="info" dot={false}>
-                        {t(matchKey)}
-                      </StatusBadge>
-                    )}
-                    <StatusBadge tone={person.badgeId ? "info" : "neutral"} dot={false}>
-                      {person.badgeId ?? t("noBadge")}
-                    </StatusBadge>
-                    <StatusBadge tone={person.confirmed ? "success" : "neutral"} dot={false}>
-                      {person.confirmed ? t("confirmedStatus") : t("noAppStatus")}
-                    </StatusBadge>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+        {results && (
+          <PersonSearchResults results={results} onSelect={(p) => void openCard(p.userId)} />
         )}
       </SectionCard>
 

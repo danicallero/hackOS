@@ -254,7 +254,7 @@ export default function SchedulePage() {
       <PageHeader
         title={t("manageSchedule")}
         description={t("manageScheduleDescription")}
-        actions={
+        primaryAction={
           <Button onClick={() => setCreateOpen(true)}>
             <PlusIcon className="size-4" />
             {t("newItem")}

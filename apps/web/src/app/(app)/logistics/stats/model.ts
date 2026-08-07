@@ -1,5 +1,6 @@
 import type { PublicEvent } from "@/components/public/public-types";
-import type { I18nText } from "@/lib/i18n";
+import { ApiError } from "@/lib/api";
+import type { I18nText, Translate } from "@/lib/i18n";
 
 export const DATA_PHASES = ["before", "during", "after"] as const;
 export type DataPhase = (typeof DATA_PHASES)[number];
@@ -24,6 +25,28 @@ export function defaultDataPhase(event: PublicEvent | null, now = Date.now()): D
   if (startsAt !== null && now < startsAt) return "before";
   if (endsAt !== null && now >= endsAt) return "after";
   return startsAt !== null || endsAt !== null ? "during" : "before";
+}
+
+/** Localize an application status code to its display label. */
+export function applicationStatusLabel(status: string, t: Translate): string {
+  const key: Record<string, string> = {
+    draft: "dataStatusDraft",
+    submitted: "dataStatusSubmitted",
+    review: "dataStatusReview",
+    accepted_internal: "acceptedUnsentStatus",
+    rejected_internal: "rejectedUnsentStatus",
+    accepted: "dataStatusAccepted",
+    rejected: "dataStatusRejected",
+    confirmed: "confirmed",
+    declined: "declined",
+    expired: "dataStatusExpired",
+  };
+  return t(key[status] ?? "dataStatusOther");
+}
+
+/** Turn an unknown thrown value into a message, preferring ApiError copy. */
+export function errorMessage(err: unknown, fallback: string): string {
+  return err instanceof ApiError ? err.message : fallback;
 }
 
 /** Use one normalized query for both the visible dataset and its export. */

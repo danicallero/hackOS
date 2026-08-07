@@ -196,7 +196,10 @@ export default function AuditPage() {
       <PageHeader title={t("auditLog")} />
 
       <div className="flex flex-wrap items-end gap-3">
-        <FilterField id="audit-action" label={t("colAction")}>
+        <div className="space-y-1">
+          <Label htmlFor="audit-action" className="text-muted-foreground text-xs">
+            {t("colAction")}
+          </Label>
           <Input
             id="audit-action"
             value={filters.action}
@@ -204,8 +207,11 @@ export default function AuditPage() {
             placeholder={`${t("egPrefix")} create, update`}
             className="h-9 w-40"
           />
-        </FilterField>
-        <FilterField id="audit-entity-type" label={t("entityTypeLabel")}>
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="audit-entity-type" className="text-muted-foreground text-xs">
+            {t("entityTypeLabel")}
+          </Label>
           <Input
             id="audit-entity-type"
             value={filters.entityType}
@@ -213,16 +219,22 @@ export default function AuditPage() {
             placeholder={`${t("egPrefix")} user, announcement`}
             className="h-9 w-44"
           />
-        </FilterField>
-        <FilterField id="audit-entity-id" label={t("entityIdLabel")}>
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="audit-entity-id" className="text-muted-foreground text-xs">
+            {t("entityIdLabel")}
+          </Label>
           <Input
             id="audit-entity-id"
             value={filters.entityId}
             onChange={(e) => setFilters((f) => ({ ...f, entityId: e.target.value }))}
             className="h-9 w-28"
           />
-        </FilterField>
-        <FilterField id="audit-actor-id" label={t("actorUserIdLabel")}>
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="audit-actor-id" className="text-muted-foreground text-xs">
+            {t("actorUserIdLabel")}
+          </Label>
           <Input
             id="audit-actor-id"
             type="number"
@@ -230,23 +242,29 @@ export default function AuditPage() {
             onChange={(e) => setFilters((f) => ({ ...f, actorId: e.target.value }))}
             className="h-9 w-28"
           />
-        </FilterField>
-        <FilterField id="audit-from" label={t("fromLabel")}>
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="audit-from" className="text-muted-foreground text-xs">
+            {t("fromLabel")}
+          </Label>
           <DateTimeInput
             id="audit-from"
             value={filters.dateFrom}
             onChange={(v) => setFilters((f) => ({ ...f, dateFrom: v }))}
             className="h-9"
           />
-        </FilterField>
-        <FilterField id="audit-to" label={t("toLabel")}>
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="audit-to" className="text-muted-foreground text-xs">
+            {t("toLabel")}
+          </Label>
           <DateTimeInput
             id="audit-to"
             value={filters.dateTo}
             onChange={(v) => setFilters((f) => ({ ...f, dateTo: v }))}
             className="h-9"
           />
-        </FilterField>
+        </div>
         {hasFilters && (
           <Button variant="ghost" size="sm" onClick={() => setFilters(EMPTY_FILTERS)}>
             {t("clearFilters")}
@@ -312,63 +330,56 @@ export default function AuditPage() {
         >
           <div className="space-y-4 text-sm">
             <dl className="grid grid-cols-2 gap-3">
-              <DetailField label={t("colWhen")}>
-                {timeFmt.format(new Date(selected.created_at))}
-              </DetailField>
-              <DetailField label={t("colSource")}>{selected.source ?? "—"}</DetailField>
-              <DetailField label={t("colActor")}>
-                {selected.actor_id ? t("userInline", { id: selected.actor_id }) : t("systemActor")}
-              </DetailField>
-              <DetailField label={t("reasonLabel")}>{selected.reason ?? "—"}</DetailField>
-              <DetailField label={t("ipLabel")}>{selected.ip ?? "—"}</DetailField>
-              <DetailField label={t("userAgentLabel")}>{selected.user_agent ?? "—"}</DetailField>
+              <div>
+                <dt className="text-muted-foreground text-xs">{t("colWhen")}</dt>
+                <dd className="break-words">{timeFmt.format(new Date(selected.created_at))}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground text-xs">{t("colSource")}</dt>
+                <dd className="break-words">{selected.source ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground text-xs">{t("colActor")}</dt>
+                <dd className="break-words">
+                  {selected.actor_id
+                    ? t("userInline", { id: selected.actor_id })
+                    : t("systemActor")}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground text-xs">{t("reasonLabel")}</dt>
+                <dd className="break-words">{selected.reason ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground text-xs">{t("ipLabel")}</dt>
+                <dd className="break-words">{selected.ip ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground text-xs">{t("userAgentLabel")}</dt>
+                <dd className="break-words">{selected.user_agent ?? "—"}</dd>
+              </div>
             </dl>
             <div className="grid gap-3 sm:grid-cols-2">
-              <JsonBlock label={t("beforeLabel")} value={selected.before} />
-              <JsonBlock label={t("afterLabel")} value={selected.after} />
+              <div className="space-y-1">
+                <p className="text-muted-foreground text-xs">{t("beforeLabel")}</p>
+                <pre className="bg-muted max-h-64 overflow-auto rounded-md p-3 text-xs">
+                  {selected.before === null || selected.before === undefined
+                    ? "—"
+                    : JSON.stringify(selected.before, null, 2)}
+                </pre>
+              </div>
+              <div className="space-y-1">
+                <p className="text-muted-foreground text-xs">{t("afterLabel")}</p>
+                <pre className="bg-muted max-h-64 overflow-auto rounded-md p-3 text-xs">
+                  {selected.after === null || selected.after === undefined
+                    ? "—"
+                    : JSON.stringify(selected.after, null, 2)}
+                </pre>
+              </div>
             </div>
           </div>
         </Modal>
       )}
-    </div>
-  );
-}
-
-function FilterField({
-  id,
-  label,
-  children,
-}: {
-  id: string;
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-1">
-      <Label htmlFor={id} className="text-muted-foreground text-xs">
-        {label}
-      </Label>
-      {children}
-    </div>
-  );
-}
-
-function DetailField({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <dt className="text-muted-foreground text-xs">{label}</dt>
-      <dd className="break-words">{children}</dd>
-    </div>
-  );
-}
-
-function JsonBlock({ label, value }: { label: string; value: unknown }) {
-  return (
-    <div className="space-y-1">
-      <p className="text-muted-foreground text-xs">{label}</p>
-      <pre className="bg-muted max-h-64 overflow-auto rounded-md p-3 text-xs">
-        {value === null || value === undefined ? "—" : JSON.stringify(value, null, 2)}
-      </pre>
     </div>
   );
 }

@@ -17,9 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { createMyProject, createRepo, updateRepo } from "@/lib/projects";
-import { challengeTitleText, type ProjectRepo } from "./shared";
-
-type ChallengeOption = { id: number; title: Record<string, string> | string };
+import { type ChallengeOption, challengeTitleText, type ProjectRepo } from "./shared";
 
 export type ProjectFormMode =
   | { kind: "create" } // org-side (PROJECTS_EDIT), full challenge catalogue

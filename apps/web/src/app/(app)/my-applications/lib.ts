@@ -185,6 +185,29 @@ export function enrichTemplate(
   return out;
 }
 
+/**
+ * Keys of required template fields left empty in `values` (H12: client-side
+ * check before submit — the API re-validates and stays the source of truth).
+ */
+export function missingRequiredFields(
+  template: TemplateField[],
+  values: Record<string, unknown>,
+): string[] {
+  return template
+    .filter((f) => f.required)
+    .filter((f) => {
+      const v = values[f.key];
+      return (
+        v === undefined ||
+        v === null ||
+        (typeof v === "string" && v.trim() === "") ||
+        (Array.isArray(v) && v.length === 0) ||
+        (f.kind === "checkbox" && v !== true)
+      );
+    })
+    .map((f) => f.key);
+}
+
 // ── status presentation (the masked applicant-visible set) ────────────────────
 
 const STATUS_TONE: Record<string, Tone> = {

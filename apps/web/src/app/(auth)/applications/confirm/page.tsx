@@ -10,10 +10,10 @@ import { WalletButtons } from "@/components/common/wallet-buttons";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ApiError, api } from "@/lib/api";
 import { signOut } from "@/lib/auth-client";
 import { useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
+import { isConfirmExpiredError, useTokenAction } from "../lib";
 
 // Public spot-confirmation landing page (H15). The acceptance email links here
 // with ?token=… (service.ts builds ${WEB_URL}/applications/confirm?token=…).
@@ -44,63 +44,22 @@ function ConfirmInner() {
   const router = useRouter();
   const { t } = useLocale();
   const { me, status: sessionStatus, refresh } = useSessionContext();
-  const [state, setState] = useState<"loading" | "done" | "error" | "expired">("loading");
-  const [result, setResult] = useState<ConfirmResult | null>(null);
-  const [errorMsg, setErrorMsg] = useState("");
-  const [linkInvalid, setLinkInvalid] = useState(false);
+  const {
+    state,
+    result,
+    errorMsg,
+    linkInvalid,
+    retry: submit,
+  } = useTokenAction<ConfirmResult>({
+    token,
+    endpoint: "/api/applications/confirm",
+    isExpired: isConfirmExpiredError,
+    invalidLinkMessage: t("confirmationLinkInvalidDesc"),
+    fallbackMessage: t("confirmationFailed"),
+  });
   const [sessionNotice, setSessionNotice] = useState<SessionNotice>("none");
   const [showQr, setShowQr] = useState(false);
-  const ran = useRef(false);
   const endedSession = useRef(false);
-  const idempotencyKey = useRef<string | null>(null);
-
-  const submit = useCallback(async () => {
-    setState("loading");
-    setErrorMsg("");
-    setLinkInvalid(false);
-    if (!token) {
-      setLinkInvalid(true);
-      setErrorMsg(t("confirmationLinkInvalidDesc"));
-      setState("error");
-      return;
-    }
-    idempotencyKey.current ??= crypto.randomUUID();
-    try {
-      const res = await api.post<ConfirmResult>(
-        "/api/applications/confirm",
-        { token },
-        {
-          headers: { "Idempotency-Key": idempotencyKey.current },
-        },
-      );
-      setResult(res);
-      setState("done");
-    } catch (err) {
-      if (
-        err instanceof ApiError &&
-        err.details &&
-        typeof err.details === "object" &&
-        ((err.details as { code?: unknown }).code === "confirmation_expired" ||
-          (err.details as { expired?: unknown }).expired === true)
-      ) {
-        setState("expired");
-        return;
-      }
-      if (err instanceof ApiError && err.code === "not_found") {
-        setLinkInvalid(true);
-        setErrorMsg(t("confirmationLinkInvalidDesc"));
-      } else {
-        setErrorMsg(err instanceof ApiError ? err.message : t("confirmationFailed"));
-      }
-      setState("error");
-    }
-  }, [t, token]);
-
-  useEffect(() => {
-    if (ran.current) return;
-    ran.current = true;
-    void submit();
-  }, [submit]);
 
   // No session leakage (issue #369): opening the email link ends whatever
   // session this browser had. If it belonged to a different account, the

@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useLiveQuery } from "@/hooks/use-event-source";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
 import { API_URL } from "@/lib/env";
 import { pickText, useLocale } from "@/lib/i18n";
 import {
@@ -46,8 +46,10 @@ import { useCan } from "@/lib/session";
 import { useUrlTab } from "@/lib/url-tab";
 import {
   type ApplicationStats,
+  applicationStatusLabel,
   type DataPhase,
   defaultDataPhase,
+  errorMessage,
   exportUrl,
   type FreshnessKind,
 } from "./model";
@@ -73,22 +75,7 @@ interface LiveStatsState {
   connected: boolean;
 }
 
-function applicationStatusLabel(status: string, t: ReturnType<typeof useLocale>["t"]) {
-  const key: Record<string, string> = {
-    draft: "dataStatusDraft",
-    submitted: "dataStatusSubmitted",
-    review: "dataStatusReview",
-    accepted_internal: "acceptedUnsentStatus",
-    rejected_internal: "rejectedUnsentStatus",
-    accepted: "dataStatusAccepted",
-    rejected: "dataStatusRejected",
-    confirmed: "confirmed",
-    declined: "declined",
-    expired: "dataStatusExpired",
-  };
-  return t(key[status] ?? "dataStatusOther");
-}
-
+/** UI component for freshness indicator badge (actual/estimated/provisional/incomplete). */
 function Freshness({ kind }: { kind: FreshnessKind }) {
   const { t } = useLocale();
   const tone =
@@ -104,10 +91,6 @@ function Freshness({ kind }: { kind: FreshnessKind }) {
       {t(`dataFreshness${kind[0].toUpperCase()}${kind.slice(1)}`)}
     </StatusBadge>
   );
-}
-
-function errorMessage(error: unknown, fallback: string) {
-  return error instanceof ApiError ? error.message : fallback;
 }
 
 const DATA_PHASES: DataPhase[] = ["before", "during", "after"];

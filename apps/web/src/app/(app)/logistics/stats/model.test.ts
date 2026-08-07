@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { PublicEvent } from "@/components/public/public-types";
-import { defaultDataPhase, exportUrl, FRESHNESS_KINDS, normalizedFilters } from "./model";
+import { ApiError } from "@/lib/api";
+import {
+  applicationStatusLabel,
+  defaultDataPhase,
+  errorMessage,
+  exportUrl,
+  FRESHNESS_KINDS,
+  normalizedFilters,
+} from "./model";
 
 const event: PublicEvent = {
   name: "hackOS",
@@ -12,6 +20,8 @@ const event: PublicEvent = {
   judgingEndsAt: "2026-07-19T12:00:00.000Z",
   showStartCountdown: false,
 };
+
+const mockTranslate = (key: string) => key; // Simple mock
 
 describe("data dashboard model", () => {
   it("selects before, during, and after from the configured event window", () => {
@@ -30,5 +40,18 @@ describe("data dashboard model", () => {
     expect(exportUrl("/api/exports/applications.csv", filters)).toBe(
       "/api/exports/applications.csv?applicationId=7&status=confirmed",
     );
+  });
+
+  it("localizes application statuses to i18n keys", () => {
+    expect(applicationStatusLabel("draft", mockTranslate)).toBe("dataStatusDraft");
+    expect(applicationStatusLabel("confirmed", mockTranslate)).toBe("confirmed");
+    expect(applicationStatusLabel("unknown_status", mockTranslate)).toBe("dataStatusOther");
+  });
+
+  it("extracts message from ApiError when available", () => {
+    const apiErr = new ApiError(400, "test_error", "API error message");
+    expect(errorMessage(apiErr, "fallback")).toBe("API error message");
+    expect(errorMessage(new Error("Regular error"), "fallback")).toBe("fallback");
+    expect(errorMessage(null, "fallback")).toBe("fallback");
   });
 });

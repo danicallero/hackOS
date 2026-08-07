@@ -83,10 +83,7 @@ export function TeamSearch({
                 )}
               </div>
               {entry.blocked_by_room_name ? (
-                <p
-                  className="mt-2 text-pretty text-xs text-amber-700 dark:text-amber-300"
-                  role="status"
-                >
+                <p className="text-warning mt-2 text-pretty text-xs" role="status">
                   {t("teamBusyInOtherRoom", { room: entry.blocked_by_room_name })}
                 </p>
               ) : null}
