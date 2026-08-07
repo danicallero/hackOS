@@ -13,7 +13,7 @@ import {
   ForbiddenError,
   NotFoundError,
 } from "../../../lib/errors.js";
-import type { RouteAccessPolicy } from "../../../lib/route-policy.js";
+import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import { issueTicket } from "../../logistics/tickets.js";
 import { auth } from "../auth.js";
 import {
@@ -84,8 +84,6 @@ function claimUrl(token: string): string {
   // invite and lets the person create their account.
   return `${config.WEB_URL}/claim-account?token=${token}`;
 }
-
-const routeAccess = (routeAccessPolicy: RouteAccessPolicy) => ({ routeAccessPolicy });
 
 /**
  * Deferred group grants need a fresh closure check at every privileged token

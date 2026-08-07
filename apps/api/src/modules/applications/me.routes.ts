@@ -3,7 +3,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool } from "../../db/pool.js";
 import { requireAuth } from "../../lib/capabilities.js";
 import { NotFoundError } from "../../lib/errors.js";
-import type { RouteAccessPolicy } from "../../lib/route-policy.js";
+import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import { idParamSchema, saveDraftSchema, submitSchema } from "./schemas.js";
 import {
   enrichTemplate,
@@ -20,7 +20,6 @@ import {
  */
 export function registerMeRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
-  const routeAccess = (routeAccessPolicy: RouteAccessPolicy) => ({ routeAccessPolicy });
 
   // List my responses across all forms.
   r.get(
@@ -28,6 +27,10 @@ export function registerMeRoutes(app: FastifyInstance): void {
     {
       preHandler: requireAuth,
       config: routeAccess({ kind: "authenticated" }),
+      schema: {
+        summary: "List my application responses",
+        description: "Every response the caller has started or submitted, across all forms (H12).",
+      },
     },
     async (req) => ({
       responses: await listMyResponses(req.userId as number),
@@ -40,7 +43,12 @@ export function registerMeRoutes(app: FastifyInstance): void {
     {
       preHandler: requireAuth,
       config: routeAccess({ kind: "authenticated" }),
-      schema: { params: idParamSchema },
+      schema: {
+        summary: "Get my response for one form",
+        description:
+          "The caller's own response to a form, including any unsubmitted draft, with the internal accepted/rejected status masked as 'review' until the decision is sent (H12, H14).",
+        params: idParamSchema,
+      },
     },
     async (req) => {
       const { rows } = await pool.query(
@@ -77,7 +85,13 @@ export function registerMeRoutes(app: FastifyInstance): void {
     {
       preHandler: requireAuth,
       config: routeAccess({ kind: "authenticated" }),
-      schema: { params: idParamSchema, body: saveDraftSchema },
+      schema: {
+        summary: "Save my draft response",
+        description:
+          "Creates or updates the caller's draft for a form (H12). 409 if the window is closed and no draft exists yet for this form.",
+        params: idParamSchema,
+        body: saveDraftSchema,
+      },
     },
     async (req) => {
       const row = await saveDraft(req.userId as number, req.params.id, req.body.responses);
@@ -91,7 +105,13 @@ export function registerMeRoutes(app: FastifyInstance): void {
     {
       preHandler: requireAuth,
       config: routeAccess({ kind: "authenticated" }),
-      schema: { params: idParamSchema, body: submitSchema },
+      schema: {
+        summary: "Submit my response",
+        description:
+          "Submits the caller's response for staff review (H12): validates the answers against the form's template and requires a verified email before accepting the submission.",
+        params: idParamSchema,
+        body: submitSchema,
+      },
     },
     async (req) => {
       const { response, privacyNotice } = await submitResponse(

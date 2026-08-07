@@ -11,7 +11,10 @@ import {
 } from "../../lib/capabilities.js";
 import { ForbiddenError, NotFoundError, UnauthorizedError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
-import type { RouteAccessPolicy } from "../../lib/route-policy.js";
+import {
+  type RouteAccessPolicy,
+  routeAccessOption as routeAccess,
+} from "../../lib/route-policy.js";
 import { subscribe } from "../../lib/sse.js";
 import {
   checkIn,
@@ -99,10 +102,6 @@ import { resolveWalletAccessToken } from "./wallet-access.js";
 function actor(userId: number | null): number {
   if (userId == null) throw new UnauthorizedError();
   return userId;
-}
-
-function routeAccess(routeAccessPolicy: RouteAccessPolicy) {
-  return { config: { routeAccessPolicy } };
 }
 
 /**

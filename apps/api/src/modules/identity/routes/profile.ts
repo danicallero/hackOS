@@ -11,7 +11,7 @@ import {
   requireCapability,
 } from "../../../lib/capabilities.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../../lib/errors.js";
-import type { RouteAccessPolicy } from "../../../lib/route-policy.js";
+import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import { issueTicket } from "../../logistics/tickets.js";
 import { reconcileDevpostParticipantsForUser } from "../../projects/reconciliation.js";
 import { myProjects } from "../../projects/service.js";
@@ -37,7 +37,6 @@ import { computeDerivedRole, computeMembershipFlags } from "../role.js";
 
 const LANGUAGES = ["en", "es", "gl"] as const;
 const DIETARY_DATA_STATES = ["not_provided", "present"] as const;
-const routeAccess = (routeAccessPolicy: RouteAccessPolicy) => ({ routeAccessPolicy });
 
 /** Fields a user may edit on themself (H7: "consultar mis datos… y si detecto un error"). */
 const selfPatchSchema = z

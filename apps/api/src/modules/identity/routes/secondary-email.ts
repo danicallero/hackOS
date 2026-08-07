@@ -9,7 +9,7 @@ import { pool, withTransaction } from "../../../db/pool.js";
 import { audit } from "../../../lib/audit.js";
 import { requireAuth, requireCapability } from "../../../lib/capabilities.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../../lib/errors.js";
-import type { RouteAccessPolicy } from "../../../lib/route-policy.js";
+import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import { reconcileDevpostParticipantsForUser } from "../../projects/reconciliation.js";
 import { enqueueAuthEmail } from "../outbox.js";
 
@@ -36,7 +36,6 @@ import { enqueueAuthEmail } from "../outbox.js";
  */
 
 const TOKEN_TTL_HOURS = 24;
-const routeAccess = (routeAccessPolicy: RouteAccessPolicy) => ({ routeAccessPolicy });
 
 export async function assertSecondaryEmailAvailable(
   email: string,

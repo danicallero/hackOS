@@ -13,7 +13,10 @@ import { pool } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { requireCapability } from "../../lib/capabilities.js";
 import { BadRequestError } from "../../lib/errors.js";
-import type { RouteAccessPolicy } from "../../lib/route-policy.js";
+import {
+  type RouteAccessPolicy,
+  routeAccessOption as routeAccess,
+} from "../../lib/route-policy.js";
 import { bumpAllAppleWalletUpdateTags } from "../logistics/wallet-passes.js";
 import { enqueueWalletSync } from "../logistics/wallet-sync.js";
 
@@ -88,10 +91,6 @@ const DEFAULTS = {
   pass_field_labels: {},
   pass_field_visibility: {},
 } as const;
-
-function routeAccess(routeAccessPolicy: RouteAccessPolicy) {
-  return { config: { routeAccessPolicy } };
-}
 
 interface EventConfigRow {
   name: string | null;
@@ -230,6 +229,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
       schema: {
         summary:
           "Read the full event config, including venue, Wi-Fi credentials and Wallet pass back fields.",
+        description:
+          "Staff-only counterpart of GET /api/public/event (SCHEDULE_MANAGE). Adds the venue Wi-Fi credentials on top of everything the public feed returns, for the settings page.",
       },
     },
     async () => toAdmin(await readConfig(), await readJudgingWindow()),
@@ -241,8 +242,9 @@ export function registerEventRoutes(app: FastifyInstance): void {
       ...routeAccess(scheduleManage),
       preHandler: requireCapability(CAPABILITIES.SCHEDULE_MANAGE),
       schema: {
-        summary:
-          "Update event config: name/tagline/timezone, event start (doors open — the time shown on the Wallet pass), hacking window, venue (name + GPS), the Wallet pass back-field list, field-label overrides, per-field show/hide toggles, and whether participants may create their own project (H19). Fields omitted from the body are left unchanged.",
+        summary: "Update event config",
+        description:
+          "Updates name/tagline/timezone, event start (doors open — the time shown on the Wallet pass), hacking window, venue (name + GPS), the Wallet pass back-field list, field-label overrides, per-field show/hide toggles, and whether participants may create their own project (H19). Fields omitted from the body are left unchanged. Issued Apple Wallet passes are pushed a refresh when the saved config actually changes.",
         body: eventConfigBody,
       },
     },

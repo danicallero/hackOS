@@ -243,3 +243,25 @@ export function openApiSecurityForPolicy(policy: RouteAccessPolicy): Array<Recor
     ? []
     : [{ sessionToken: [] }, { bearerToken: [] }];
 }
+
+/**
+ * Wraps a policy into the shape route registration's `config` field expects:
+ * `config: routeAccessConfig(policy)`. Every domain module was hand-rolling
+ * this same one-line closure; centralized here so the wrapping stays
+ * consistent as `RouteAccessPolicy` evolves.
+ */
+export function routeAccessConfig(routeAccessPolicy: RouteAccessPolicy): {
+  routeAccessPolicy: RouteAccessPolicy;
+} {
+  return { routeAccessPolicy };
+}
+
+/**
+ * Wraps a policy into a route-options fragment meant to be spread directly
+ * into the object passed to `r.get`/`r.post`/etc: `...routeAccessOption(policy)`.
+ */
+export function routeAccessOption(routeAccessPolicy: RouteAccessPolicy): {
+  config: { routeAccessPolicy: RouteAccessPolicy };
+} {
+  return { config: { routeAccessPolicy } };
+}

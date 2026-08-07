@@ -3,13 +3,9 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool } from "../../../db/pool.js";
 import { requireCapability } from "../../../lib/capabilities.js";
-import type { RouteAccessPolicy } from "../../../lib/route-policy.js";
+import { routeAccessOption as routeAccess } from "../../../lib/route-policy.js";
 import { queryAuditLog } from "../audit-service.js";
 import { auditQuerySchema } from "../schemas.js";
-
-function routeAccess(routeAccessPolicy: RouteAccessPolicy) {
-  return { config: { routeAccessPolicy } };
-}
 
 /** H53 audit surface: filtered, paginated read view over audit_log. */
 export function registerAuditRoutes(app: FastifyInstance): void {

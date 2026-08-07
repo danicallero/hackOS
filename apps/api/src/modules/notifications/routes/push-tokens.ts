@@ -3,12 +3,8 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { pool } from "../../../db/pool.js";
 import { requireAuth } from "../../../lib/capabilities.js";
-import type { RouteAccessPolicy } from "../../../lib/route-policy.js";
+import { routeAccessOption as routeAccess } from "../../../lib/route-policy.js";
 import { registerPushTokenBodySchema } from "../schemas.js";
-
-function routeAccess(routeAccessPolicy: RouteAccessPolicy) {
-  return { config: { routeAccessPolicy } };
-}
 
 /**
  * H4/H51/H55: mobile app registers its Expo push token here so operational

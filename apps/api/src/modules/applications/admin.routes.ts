@@ -5,7 +5,7 @@ import { pool } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { requireAnyCapability, requireCapability } from "../../lib/capabilities.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
-import type { RouteAccessPolicy } from "../../lib/route-policy.js";
+import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import { createApplicationSchema, idParamSchema, updateApplicationSchema } from "./schemas.js";
 import { isInvitedParticipant, isWindowOpen } from "./service.js";
 
@@ -16,7 +16,6 @@ import { isInvitedParticipant, isWindowOpen } from "./service.js";
  */
 export function registerAdminRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
-  const routeAccess = (routeAccessPolicy: RouteAccessPolicy) => ({ routeAccessPolicy });
 
   const COLUMNS = `id, name, type, template, description, active, open_at, close_at,
                    capacity, confirmation_window_hours, created_at`;
@@ -28,6 +27,11 @@ export function registerAdminRoutes(app: FastifyInstance): void {
     "/api/public/applications",
     {
       config: routeAccess({ kind: "public", anonymousCategory: "public-content" }),
+      schema: {
+        summary: "List open application forms",
+        description:
+          "Anonymous read of every active application form (H11). A form is included once its window is open, OR the caller is authenticated and already invited (H10) — the invitee bypass an admin/review capability would otherwise gate.",
+      },
     },
     async (req) => {
       const { rows } = await pool.query(`SELECT ${COLUMNS} FROM applications WHERE active = true`);
@@ -41,7 +45,12 @@ export function registerAdminRoutes(app: FastifyInstance): void {
     "/api/public/applications/:id",
     {
       config: routeAccess({ kind: "public", anonymousCategory: "public-content" }),
-      schema: { params: idParamSchema },
+      schema: {
+        summary: "Get one open application form",
+        description:
+          "Anonymous read of a single form's template (H11), so a client can render it. 404 while the window is closed, unless the caller is an already-invited participant (H10).",
+        params: idParamSchema,
+      },
     },
     async (req) => {
       const { rows } = await pool.query(`SELECT ${COLUMNS} FROM applications WHERE id = $1`, [
@@ -74,6 +83,11 @@ export function registerAdminRoutes(app: FastifyInstance): void {
           CAPABILITIES.APPLICATIONS_DECIDE,
         ],
       }),
+      schema: {
+        summary: "List every application form",
+        description:
+          "Staff read of all application forms regardless of window state (H11), open or closed, for management/review/decision workflows.",
+      },
     },
     async () => {
       const { rows } = await pool.query(`SELECT ${COLUMNS} FROM applications ORDER BY id`);
@@ -97,7 +111,11 @@ export function registerAdminRoutes(app: FastifyInstance): void {
           CAPABILITIES.APPLICATIONS_DECIDE,
         ],
       }),
-      schema: { params: idParamSchema },
+      schema: {
+        summary: "Get one application form",
+        description: "Staff read of a single form regardless of window state (H11).",
+        params: idParamSchema,
+      },
     },
     async (req) => {
       const { rows } = await pool.query(`SELECT ${COLUMNS} FROM applications WHERE id = $1`, [
@@ -113,7 +131,12 @@ export function registerAdminRoutes(app: FastifyInstance): void {
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_MANAGE),
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.APPLICATIONS_MANAGE }),
-      schema: { body: createApplicationSchema },
+      schema: {
+        summary: "Create an application form",
+        description:
+          "Defines a new application form (H11): its template, open/close window, capacity and confirmation window.",
+        body: createApplicationSchema,
+      },
     },
     async (req, reply) => {
       const b = req.body;
@@ -151,7 +174,13 @@ export function registerAdminRoutes(app: FastifyInstance): void {
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_MANAGE),
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.APPLICATIONS_MANAGE }),
-      schema: { params: idParamSchema, body: updateApplicationSchema },
+      schema: {
+        summary: "Update an application form",
+        description:
+          "Partial update of a form's template, window, capacity or active flag (H11). Fields omitted from the body are left unchanged.",
+        params: idParamSchema,
+        body: updateApplicationSchema,
+      },
     },
     async (req) => {
       const b = req.body;
@@ -203,7 +232,12 @@ export function registerAdminRoutes(app: FastifyInstance): void {
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_MANAGE),
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.APPLICATIONS_MANAGE }),
-      schema: { params: idParamSchema },
+      schema: {
+        summary: "Delete an application form",
+        description:
+          "Hard-deletes a form (H11). 409 if it already has responses — deactivate it (active: false) instead of deleting once people have applied.",
+        params: idParamSchema,
+      },
     },
     async (req, reply) => {
       const { rows: refs } = await pool.query(

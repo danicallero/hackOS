@@ -4,13 +4,9 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool } from "../../../db/pool.js";
 import { requireAuth, userHasCapability } from "../../../lib/capabilities.js";
 import { ForbiddenError } from "../../../lib/errors.js";
-import type { RouteAccessPolicy } from "../../../lib/route-policy.js";
+import { routeAccessOption as routeAccess } from "../../../lib/route-policy.js";
 import { setPreferencesBodySchema } from "../schemas.js";
 import { getPreferences, QUEUE_STAFF_CATEGORY, setPreferences } from "../service.js";
-
-function routeAccess(routeAccessPolicy: RouteAccessPolicy) {
-  return { config: { routeAccessPolicy } };
-}
 
 /** H51: participant-facing notification preference matrix, incl. schedule:<id> reminder opt-ins. */
 export function registerPreferenceRoutes(app: FastifyInstance): void {

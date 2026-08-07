@@ -6,7 +6,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { requireCapability, userHasCapability } from "../../lib/capabilities.js";
 import { ConflictError, ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
-import type { RouteAccessPolicy } from "../../lib/route-policy.js";
+import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import { subscribe } from "../../lib/sse.js";
 import { getObject } from "../../lib/storage.js";
 import { createRequest, getRequest, listRequests, serializeRequest } from "./requests.service.js";
@@ -27,7 +27,6 @@ import { enqueueDataSubjectRequest } from "./worker.js";
  */
 export function registerWorkflowRoutes(app: FastifyInstance): void {
   const typed = app.withTypeProvider<ZodTypeProvider>();
-  const routeAccess = (routeAccessPolicy: RouteAccessPolicy) => ({ routeAccessPolicy });
   const requireExportRequestAccess: preHandlerHookHandler = async (req) => {
     if (req.userId == null) throw new UnauthorizedError();
     if (!(await userHasCapability(req.userId, CAPABILITIES.EXPORTS_RUN, req))) {

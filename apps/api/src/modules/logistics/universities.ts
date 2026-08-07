@@ -6,7 +6,10 @@ import { pool } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
-import type { RouteAccessPolicy } from "../../lib/route-policy.js";
+import {
+  type RouteAccessPolicy,
+  routeAccessOption as routeAccess,
+} from "../../lib/route-policy.js";
 
 const idParam = z.object({ id: z.coerce.number().int().positive() });
 
@@ -18,10 +21,6 @@ const COLUMNS = "id, name, proposed_by, created_at";
 
 /** Postgres unique_violation — thrown by the unique `universities.name` index. */
 const PG_UNIQUE_VIOLATION = "23505";
-
-function routeAccess(routeAccessPolicy: RouteAccessPolicy) {
-  return { config: { routeAccessPolicy } };
-}
 
 export function registerUniversityRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();

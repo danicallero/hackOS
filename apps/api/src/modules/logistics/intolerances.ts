@@ -7,7 +7,10 @@ import { pool } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { requireCapability } from "../../lib/capabilities.js";
 import { NotFoundError } from "../../lib/errors.js";
-import type { RouteAccessPolicy } from "../../lib/route-policy.js";
+import {
+  type RouteAccessPolicy,
+  routeAccessOption as routeAccess,
+} from "../../lib/route-policy.js";
 
 /**
  * Food-intolerance dictionary (H12/H25). Administration maintains the shared
@@ -33,10 +36,6 @@ const updateBody = z
   .refine((b) => Object.keys(b).length > 0, { message: "no fields to update" });
 
 const COLUMNS = "id, label, description, proposed_by, created_at";
-
-function routeAccess(routeAccessPolicy: RouteAccessPolicy) {
-  return { config: { routeAccessPolicy } };
-}
 
 export function registerIntoleranceRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();

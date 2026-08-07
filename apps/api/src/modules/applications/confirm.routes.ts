@@ -3,7 +3,7 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
-import type { RouteAccessPolicy } from "../../lib/route-policy.js";
+import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import {
   confirmByEmailResponseSchema,
   confirmTokenSchema,
@@ -28,7 +28,6 @@ import {
  */
 export function registerConfirmRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
-  const routeAccess = (routeAccessPolicy: RouteAccessPolicy) => ({ routeAccessPolicy });
 
   // ── public via email link ───────────────────────────────────────────────────
   r.post(

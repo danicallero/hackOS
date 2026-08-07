@@ -12,7 +12,7 @@ import {
   requireCapability,
 } from "../../../lib/capabilities.js";
 import { ConflictError, NotFoundError } from "../../../lib/errors.js";
-import type { RouteAccessPolicy } from "../../../lib/route-policy.js";
+import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import { issueTicket } from "../../logistics/tickets.js";
 import {
   assertActiveWildcardHolder,
@@ -32,7 +32,6 @@ import { getPermissionGroupTemplate, PERMISSION_GROUP_TEMPLATES } from "../templ
  */
 
 const manage = requireCapability(CAPABILITIES.PERMISSIONS_MANAGE);
-const routeAccess = (routeAccessPolicy: RouteAccessPolicy) => ({ routeAccessPolicy });
 
 const groupIdParams = z.object({ groupId: z.coerce.number().int() });
 const templateKeyParams = z.object({ templateKey: z.string().min(1).max(120) });

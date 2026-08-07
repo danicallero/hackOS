@@ -4,7 +4,7 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool } from "../../db/pool.js";
 import { requireAnyCapability, requireCapability } from "../../lib/capabilities.js";
-import type { RouteAccessPolicy } from "../../lib/route-policy.js";
+import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import {
   batchDecideSchema,
   batchIdsSchema,
@@ -50,7 +50,6 @@ import {
  */
 export function registerReviewRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
-  const routeAccess = (routeAccessPolicy: RouteAccessPolicy) => ({ routeAccessPolicy });
   const capability = (value: Capability) => routeAccess({ kind: "capability", capability: value });
   const anyCapability = (...values: Capability[]) =>
     routeAccess({ kind: "capability", anyOf: values });

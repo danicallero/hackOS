@@ -2,7 +2,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { requireCapability } from "../../lib/capabilities.js";
-import type { RouteAccessPolicy } from "../../lib/route-policy.js";
+import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import {
   exportApplicationsCsv,
   exportAttendanceCsv,
@@ -14,7 +14,6 @@ import { applicationsCsvQuery } from "./schemas.js";
 /** H54: operational CSV exports, gated by exports:run (previously declared but unused). */
 export function registerOperationalRoutes(app: FastifyInstance): void {
   const typed = app.withTypeProvider<ZodTypeProvider>();
-  const routeAccess = (routeAccessPolicy: RouteAccessPolicy) => ({ routeAccessPolicy });
 
   typed.get(
     "/api/exports/attendance.csv",

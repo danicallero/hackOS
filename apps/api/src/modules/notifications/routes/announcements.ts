@@ -5,7 +5,10 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool, withTransaction } from "../../../db/pool.js";
 import { audit } from "../../../lib/audit.js";
 import { requireAuth, requireCapability } from "../../../lib/capabilities.js";
-import type { RouteAccessPolicy } from "../../../lib/route-policy.js";
+import {
+  type RouteAccessPolicy,
+  routeAccessOption as routeAccess,
+} from "../../../lib/route-policy.js";
 import { broadcast } from "../../../lib/sse.js";
 import {
   createAnnouncement,
@@ -22,10 +25,6 @@ import {
   announcementIdParamsSchema,
   announcementUpdateBodySchema,
 } from "../schemas.js";
-
-function routeAccess(routeAccessPolicy: RouteAccessPolicy) {
-  return { config: { routeAccessPolicy } };
-}
 
 /**
  * H50 announcements: CRUD behind ANNOUNCEMENTS_MANAGE, a public visibility-windowed
