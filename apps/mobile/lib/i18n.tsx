@@ -307,6 +307,35 @@ const dict = {
     es: "No se pudo cerrar la sesión. Vuelve a intentarlo.",
     gl: "Non se puido pechar a sesión. Téntao de novo.",
   },
+  storageTitle: { en: "Storage", es: "Almacenamiento", gl: "Almacenamento" },
+  storageOfflineData: { en: "Offline data", es: "Datos sin conexión", gl: "Datos sen conexión" },
+  storageDownloadedFiles: {
+    en: "Downloaded files",
+    es: "Archivos descargados",
+    gl: "Ficheiros descargados",
+  },
+  storageTotal: { en: "Total", es: "Total", gl: "Total" },
+  storageFooter: {
+    en: "Cached schedule, wallet passes, and (for staff) the attendance roster. Any scans still waiting to sync are kept regardless.",
+    es: "Horario, pases de wallet y (para el staff) el listado de asistencia en caché. Los escaneos pendientes de sincronizar se conservan siempre.",
+    gl: "Horario, pases de wallet e (para o persoal) o listado de asistencia en caché. Os escaneos pendentes de sincronizar consérvanse sempre.",
+  },
+  storageClearAction: { en: "Clear cache", es: "Borrar caché", gl: "Borrar caché" },
+  storageClearConfirmTitle: {
+    en: "Clear cache?",
+    es: "¿Borrar caché?",
+    gl: "Borrar caché?",
+  },
+  storageClearConfirmBody: {
+    en: "This frees up space by removing cached data and downloaded files. Nothing waiting to sync is affected.",
+    es: "Esto libera espacio eliminando los datos en caché y los archivos descargados. No afecta a nada pendiente de sincronizar.",
+    gl: "Isto libera espazo eliminando os datos en caché e os ficheiros descargados. Non afecta a nada pendente de sincronizar.",
+  },
+  storageClearError: {
+    en: "Couldn't clear the cache. Try again.",
+    es: "No se pudo borrar la caché. Vuelve a intentarlo.",
+    gl: "Non se puido borrar a caché. Téntao de novo.",
+  },
   scheduleEmpty: {
     en: "Nothing published yet.",
     es: "Todavía no hay nada publicado.",

@@ -43,6 +43,7 @@ const ANDROID_SYMBOL_NAMES: Record<string, string> = {
   "clock.badge.exclamationmark": "alarm",
   "clock.badge.questionmark": "more_time",
   "clock.fill": "schedule",
+  doc: "description",
   "door.left.hand.closed": "door_front",
   "door.left.hand.open": "meeting_room",
   envelope: "mail",

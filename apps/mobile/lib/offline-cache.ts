@@ -30,3 +30,22 @@ export async function writeCachedValue<T>(
     // Cache persistence must never turn a successful API response into an error.
   }
 }
+
+export async function getOfflineCacheBytes(): Promise<number> {
+  try {
+    const keys = (await Storage.getAllKeysAsync()).filter((key) => key.startsWith(PREFIX));
+    const entries = await Storage.multiGet(keys);
+    return entries.reduce((total, [, value]) => total + (value?.length ?? 0), 0);
+  } catch {
+    return 0;
+  }
+}
+
+export async function clearOfflineCache(): Promise<void> {
+  try {
+    const keys = (await Storage.getAllKeysAsync()).filter((key) => key.startsWith(PREFIX));
+    await Storage.multiRemove(keys);
+  } catch {
+    // Best-effort: clearing the cache must never throw into the UI.
+  }
+}
