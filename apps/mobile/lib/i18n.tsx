@@ -316,9 +316,9 @@ const dict = {
   },
   storageTotal: { en: "Total", es: "Total", gl: "Total" },
   storageFooter: {
-    en: "Cached schedule, wallet passes, and (for staff) the attendance roster. Any scans still waiting to sync are kept regardless.",
-    es: "Horario, pases de wallet y (para el staff) el listado de asistencia en caché. Los escaneos pendientes de sincronizar se conservan siempre.",
-    gl: "Horario, pases de wallet e (para o persoal) o listado de asistencia en caché. Os escaneos pendentes de sincronizar consérvanse sempre.",
+    en: "Cached schedule, wallet passes, and roster data. Pending actions are never affected.",
+    es: "Horario, pases de wallet y datos de listado en caché. Las acciones pendientes nunca se ven afectadas.",
+    gl: "Horario, pases de wallet e datos de listado en caché. As accións pendentes nunca se ven afectadas.",
   },
   storageClearAction: { en: "Clear cache", es: "Borrar caché", gl: "Borrar caché" },
   storageClearConfirmTitle: {
