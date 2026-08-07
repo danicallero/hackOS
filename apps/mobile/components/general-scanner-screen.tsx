@@ -92,13 +92,19 @@ export function GeneralScannerScreen() {
           }}
         >
           <Pressable
-            accessibilityLabel={t("close")}
+            accessibilityLabel={error}
+            accessibilityHint={t("close")}
             accessibilityRole="button"
             onPress={() => setError(null)}
             accessibilityLiveRegion="assertive"
             style={{ alignItems: "center", flex: 1, flexDirection: "row", gap: 9, padding: 14 }}
           >
-            <SymbolView name="xmark.circle.fill" tintColor={colors.destructive} size={20} />
+            <SymbolView
+              accessible={false}
+              name="xmark.circle.fill"
+              tintColor={colors.destructive}
+              size={20}
+            />
             <Text selectable style={{ color: "white", flex: 1, fontSize: 16, fontWeight: "700" }}>
               {error}
             </Text>

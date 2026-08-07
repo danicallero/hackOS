@@ -273,13 +273,19 @@ export function ActivityScannerScreen() {
           }}
         >
           <Pressable
-            accessibilityLabel={t("close")}
+            accessibilityLabel={error}
+            accessibilityHint={t("close")}
             accessibilityRole="button"
             accessibilityLiveRegion="assertive"
             onPress={() => setError(null)}
             style={{ alignItems: "center", flex: 1, flexDirection: "row", gap: 9, padding: 14 }}
           >
-            <SymbolView name="xmark.circle.fill" tintColor={colors.destructive} size={20} />
+            <SymbolView
+              accessible={false}
+              name="xmark.circle.fill"
+              tintColor={colors.destructive}
+              size={20}
+            />
             <Text selectable style={{ color: "white", flex: 1, fontSize: 15, fontWeight: "700" }}>
               {error}
             </Text>
@@ -360,6 +366,7 @@ function ActivityResultPanel({
             <View style={{ flex: 1, gap: 5 }}>
               <View style={{ alignItems: "center", flexDirection: "row", gap: 7 }}>
                 <SymbolView
+                  accessible={false}
                   name={
                     repeatPending
                       ? "clock.badge.exclamationmark"
@@ -644,7 +651,7 @@ function ActivityStatistics({
           }}
         >
           <View style={{ alignItems: "center", flexDirection: "row", gap: 6 }}>
-            <SymbolView name={item.icon} tintColor="white" size={14} />
+            <SymbolView accessible={false} name={item.icon} tintColor="white" size={14} />
             <Text
               selectable
               numberOfLines={1}

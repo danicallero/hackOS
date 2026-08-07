@@ -750,7 +750,7 @@ function RoomCard({
                   icon="bell.badge.fill"
                   label={t("queueOpsNotifyTeam")}
                   onPress={() => onNotify(entry.id)}
-                  style={{ alignSelf: "flex-start", minHeight: 40, paddingHorizontal: 0 }}
+                  style={{ alignSelf: "flex-start", minHeight: 44, paddingHorizontal: 0 }}
                 />
                 {notifiedEntryId === entry.id ? (
                   <Text

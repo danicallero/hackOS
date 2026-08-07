@@ -104,7 +104,12 @@ export function ScanLogScreen() {
       <View
         style={{ alignItems: "center", flex: 1, gap: 10, justifyContent: "center", padding: 32 }}
       >
-        <SymbolView name="clock.arrow.circlepath" size={36} tintColor={colors.tertiaryLabel} />
+        <SymbolView
+          accessible={false}
+          name="clock.arrow.circlepath"
+          size={36}
+          tintColor={colors.tertiaryLabel}
+        />
         <Text style={{ color: colors.secondaryLabel, fontSize: 15, textAlign: "center" }}>
           {t("scanLogEmpty")}
         </Text>

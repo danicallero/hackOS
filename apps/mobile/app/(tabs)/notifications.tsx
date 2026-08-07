@@ -857,7 +857,6 @@ function PreferencesView() {
                     label={removalState === "failed" ? t("retry") : t("notificationsTurnOff")}
                     busy={removalBusy}
                     disabled={savingKey !== null}
-                    destructive
                     haptic={false}
                     onPress={() => enqueueReminderRemoval(category, prefs.channels)}
                     style={{ minHeight: 54 }}

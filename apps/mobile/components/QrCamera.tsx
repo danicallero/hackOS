@@ -106,7 +106,12 @@ export function QrCamera({
           { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 },
         ]}
       >
-        <SymbolView name="camera.fill" tintColor={colors.secondaryLabel} size={42} />
+        <SymbolView
+          accessible={false}
+          name="camera.fill"
+          tintColor={colors.secondaryLabel}
+          size={42}
+        />
         <Text selectable style={styles.permissionTitle}>
           {t("scannerCameraAccess")}
         </Text>
@@ -284,6 +289,7 @@ export function QrCamera({
               {t("scannerManualEntryTitle")}
             </Text>
             <TextInput
+              accessibilityLabel={t("scannerManualEntryTitle")}
               autoCapitalize="characters"
               autoCorrect={false}
               autoFocus
