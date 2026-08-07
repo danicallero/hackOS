@@ -187,7 +187,13 @@ route below. No migration needed.
   (any scan capability, `lib/tabs.ts`'s `isOperator`) it also shows a "My
   stats" section (`/api/me/logistics/stats`) and a link to the scan-history
   screen (`app/(tabs)/scan/scan-log.tsx`, `/api/logistics/scan-log`, grouped by
-  day into `Section`s with a native list look). `wallet.tsx`
+  day into `Section`s with a native list look). It also carries a "Storage"
+  section (`lib/storage-usage.ts`) showing the size of the offline API
+  fallback cache (`lib/offline-cache.ts`) and of downloaded files sitting in
+  the OS cache directory (wallet passes, and for operators the attendance
+  roster), plus a confirmed "Clear cache" action. Clearing never touches the
+  offline scan queue — the only record of not-yet-synced scans — or the auth
+  session; see "Scanner cache encryption & isolation" below. `wallet.tsx`
   renders ticket/badge QR codes. The Apple Wallet action is the system
   `PKAddPassButton` control (`@premieroctet/react-native-wallet`'s
   `RNWalletView`, iOS only) — per Apple's Add to Apple Wallet guidelines, the
@@ -334,15 +340,18 @@ lifetimes, encryption keys, and OS backup treatment (`lib/scanner-crypto.ts`,
   iCloud/Google auto-backups by default — no config plugin or native code
   needed. The whole roster is disposable: `wipeAttendanceRoster()` deletes
   every table and retires the roster key, called from
-  `components/account-screen.tsx`'s sign-out handler, and a fresh
-  `GET /api/scanner/snapshot` fully reconstructs it on next sign-in. Since
+  `components/account-screen.tsx`'s sign-out handler and its "Storage" →
+  "Clear cache" action (`lib/storage-usage.ts`'s `clearAllCaches`, operators
+  only), and a fresh `GET /api/scanner/snapshot` fully reconstructs it on
+  next sign-in. Since
   encrypting `name`/`surname`/`email` rules out pushing search into SQL,
   `listScannerPeople` decrypts the (event-sized) roster once per call and
   filters/sorts in JS instead.
 - **Offline scan queue** (`hackos-scanner-queue.db`, `pending_scans`) — the
   only record of a not-yet-synced transaction, so it stays in the default
   (non-cache, backed-up) document directory and is **never** wiped on
-  sign-out. Every row is encrypted with its own `created_by_user_id`'s key
+  sign-out or by the account screen's "Clear cache" action. Every row is
+  encrypted with its own `created_by_user_id`'s key
   (a distinct `expo-crypto` key per staff member, also in `expo-secure-store`,
   marked `WHEN_UNLOCKED_THIS_DEVICE_ONLY` on iOS so a restored backup can't
   carry a usable key to a different device). `pendingScans`,

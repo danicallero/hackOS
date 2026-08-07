@@ -12,6 +12,12 @@ import { type Lang, useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { fetchMyScanStats, type MyScanStats } from "@/lib/scan-log";
 import { wipeAttendanceRoster } from "@/lib/scanner-db";
+import {
+  clearAllCaches,
+  formatBytes,
+  getStorageUsage,
+  type StorageUsage,
+} from "@/lib/storage-usage";
 import { isOperator } from "@/lib/tabs";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { colors } from "@/theme/colors";
@@ -37,6 +43,17 @@ export default function AccountScreen() {
   const [languageError, setLanguageError] = useState<Error | null>(null);
   const [languageRetry, setLanguageRetry] = useState<Lang | null>(null);
   const [myStats, setMyStats] = useState<MyScanStats | null>(null);
+  const [storageUsage, setStorageUsage] = useState<StorageUsage | null>(null);
+  const [clearingCache, setClearingCache] = useState(false);
+  const [storageError, setStorageError] = useState<Error | null>(null);
+
+  const loadStorageUsage = useCallback(async () => {
+    setStorageUsage(await getStorageUsage());
+  }, []);
+
+  useEffect(() => {
+    void loadStorageUsage();
+  }, [loadStorageUsage]);
 
   const loadSupportingData = useCallback(async () => {
     if (!me) return;
@@ -111,6 +128,26 @@ export default function AccountScreen() {
     ]);
   }
 
+  async function clearCache() {
+    setClearingCache(true);
+    setStorageError(null);
+    try {
+      await clearAllCaches(operator);
+      await loadStorageUsage();
+    } catch (cause) {
+      setStorageError(cause instanceof Error ? cause : new Error(t("storageClearError")));
+    } finally {
+      setClearingCache(false);
+    }
+  }
+
+  function confirmClearCache() {
+    Alert.alert(t("storageClearConfirmTitle"), t("storageClearConfirmBody"), [
+      { text: t("cancel"), style: "cancel" },
+      { text: t("storageClearAction"), style: "destructive", onPress: () => void clearCache() },
+    ]);
+  }
+
   if (loading && !me) return <RequestFeedback loading />;
   if (!me) return <RequestFeedback error={error} onRetry={() => void refetch()} />;
 
@@ -151,6 +188,14 @@ export default function AccountScreen() {
           message={t("accountLanguageError")}
           onRetry={languageRetry ? () => void changeLanguage(languageRetry) : undefined}
           retrying={savingLanguage}
+        />
+      ) : null}
+      {storageError ? (
+        <RequestFeedback
+          error={storageError}
+          message={t("storageClearError")}
+          onRetry={confirmClearCache}
+          retrying={clearingCache}
         />
       ) : null}
 
@@ -333,6 +378,34 @@ export default function AccountScreen() {
           destructive
           busy={signingOut}
           onPress={confirmSignOut}
+        />
+      </Section>
+
+      <Section title={t("storageTitle")} footer={t("storageFooter")}>
+        <InfoRow
+          label={t("storageOfflineData")}
+          value={storageUsage ? formatBytes(storageUsage.offlineDataBytes) : "—"}
+          icon="arrow.down.circle"
+        />
+        <Separator inset={48} />
+        <InfoRow
+          label={t("storageDownloadedFiles")}
+          value={storageUsage ? formatBytes(storageUsage.downloadedFilesBytes) : "—"}
+          icon="doc"
+        />
+        <Separator inset={48} />
+        <InfoRow
+          label={t("storageTotal")}
+          value={storageUsage ? formatBytes(storageUsage.totalBytes) : "—"}
+          icon="internaldrive.fill"
+        />
+        <Separator />
+        <ActionButton
+          label={t("storageClearAction")}
+          icon="trash"
+          destructive
+          busy={clearingCache}
+          onPress={confirmClearCache}
         />
       </Section>
     </ScrollView>
