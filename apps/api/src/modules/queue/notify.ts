@@ -2,6 +2,7 @@ import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import type { Queryable } from "../../db/pool.js";
 import { broadcast } from "../../lib/sse.js";
 import { notify, QUEUE_STAFF_CATEGORY } from "../notifications/service.js";
+import { REPO_MEMBER_RELATION_SQL } from "./membership.js";
 
 /**
  * Team members for a repo. `submissions` is the normal source, while the
@@ -10,20 +11,33 @@ import { notify, QUEUE_STAFF_CATEGORY } from "../notifications/service.js";
  */
 export async function repoMemberIds(client: Queryable, repoId: number): Promise<number[]> {
   const { rows } = await client.query(
-    `SELECT user_id FROM submissions WHERE repo_id = $1
-     UNION
-     SELECT user_id FROM devpost_participants WHERE repo_id = $1 AND user_id IS NOT NULL
-     UNION
-     SELECT u.id
-       FROM devpost_participants dp
-       JOIN users u
-         ON lower(dp.email) = lower(u.email)
-         OR (u.secondary_email_verified_at IS NOT NULL
-             AND lower(dp.email) = lower(u.secondary_email))
-      WHERE dp.repo_id = $1`,
+    `SELECT DISTINCT user_id FROM (${REPO_MEMBER_RELATION_SQL}) m WHERE repo_id = $1`,
     [repoId],
   );
   return rows.map((r: { user_id: number }) => r.user_id);
+}
+
+/** Shared context (challenge/team names + member id-to-name map) every notifyTeam* helper needs. */
+async function loadNotifyContext(
+  client: Queryable,
+  params: { challengeId: number; repoId: number; memberIds: number[] },
+): Promise<{ challengeName: string; teamName: string; nameById: Map<number, string | null> }> {
+  const { rows: ctxRows } = await client.query(
+    `SELECT c.title AS challenge_name, r.name AS team_name FROM challenges c, repos r
+      WHERE c.id = $1 AND r.id = $2`,
+    [params.challengeId, params.repoId],
+  );
+  const challengeName: string = ctxRows[0]?.challenge_name ?? "";
+  const teamName: string = ctxRows[0]?.team_name ?? "";
+
+  const { rows: userRows } = await client.query(`SELECT id, name FROM users WHERE id = ANY($1)`, [
+    params.memberIds,
+  ]);
+  const nameById = new Map<number, string | null>(
+    userRows.map((u: { id: number; name: string | null }) => [u.id, u.name]),
+  );
+
+  return { challengeName, teamName, nameById };
 }
 
 /**
@@ -48,20 +62,11 @@ export async function notifyTeamCalled(
   const memberIds = await repoMemberIds(client, params.repoId);
   if (memberIds.length === 0) return;
 
-  const { rows: ctxRows } = await client.query(
-    `SELECT c.title AS challenge_name, r.name AS team_name FROM challenges c, repos r
-      WHERE c.id = $1 AND r.id = $2`,
-    [params.challengeId, params.repoId],
-  );
-  const challengeName: string = ctxRows[0]?.challenge_name ?? "";
-  const teamName: string = ctxRows[0]?.team_name ?? "";
-
-  const { rows: userRows } = await client.query(`SELECT id, name FROM users WHERE id = ANY($1)`, [
+  const { challengeName, teamName, nameById } = await loadNotifyContext(client, {
+    challengeId: params.challengeId,
+    repoId: params.repoId,
     memberIds,
-  ]);
-  const nameById = new Map<number, string | null>(
-    userRows.map((u: { id: number; name: string | null }) => [u.id, u.name]),
-  );
+  });
 
   const payload = {
     entryId: params.entryId,
@@ -127,20 +132,11 @@ export async function notifyTeamPreCall(
   const memberIds = await repoMemberIds(client, params.repoId);
   if (memberIds.length === 0) return;
 
-  const { rows: ctxRows } = await client.query(
-    `SELECT c.title AS challenge_name, r.name AS team_name FROM challenges c, repos r
-      WHERE c.id = $1 AND r.id = $2`,
-    [params.challengeId, params.repoId],
-  );
-  const challengeName: string = ctxRows[0]?.challenge_name ?? "";
-  const teamName: string = ctxRows[0]?.team_name ?? "";
-
-  const { rows: userRows } = await client.query(`SELECT id, name FROM users WHERE id = ANY($1)`, [
+  const { challengeName, teamName, nameById } = await loadNotifyContext(client, {
+    challengeId: params.challengeId,
+    repoId: params.repoId,
     memberIds,
-  ]);
-  const nameById = new Map<number, string | null>(
-    userRows.map((u: { id: number; name: string | null }) => [u.id, u.name]),
-  );
+  });
 
   const payload = {
     entryId: params.entryId,
@@ -181,18 +177,7 @@ export async function notifyChallengeQueueChanged(
   const { rows } = await client.query(
     `SELECT DISTINCT members.user_id
        FROM queue_entries qe
-       JOIN (
-         SELECT repo_id, user_id FROM submissions
-         UNION
-         SELECT repo_id, user_id FROM devpost_participants WHERE user_id IS NOT NULL
-         UNION
-         SELECT dp.repo_id, u.id AS user_id
-           FROM devpost_participants dp
-           JOIN users u
-             ON lower(dp.email) = lower(u.email)
-             OR (u.secondary_email_verified_at IS NOT NULL
-                 AND lower(dp.email) = lower(u.secondary_email))
-       ) members ON members.repo_id = qe.repo_id
+       JOIN (${REPO_MEMBER_RELATION_SQL}) members ON members.repo_id = qe.repo_id
       WHERE qe.challenge_id = $1`,
     [challengeId],
   );
@@ -225,20 +210,11 @@ export async function notifyTeamMessage(
   const memberIds = await repoMemberIds(client, params.repoId);
   if (memberIds.length === 0) return 0;
 
-  const { rows: ctxRows } = await client.query(
-    `SELECT c.title AS challenge_name, r.name AS team_name FROM challenges c, repos r
-      WHERE c.id = $1 AND r.id = $2`,
-    [params.challengeId, params.repoId],
-  );
-  const challengeName: string = ctxRows[0]?.challenge_name ?? "";
-  const teamName: string = ctxRows[0]?.team_name ?? "";
-
-  const { rows: userRows } = await client.query(`SELECT id, name FROM users WHERE id = ANY($1)`, [
+  const { challengeName, teamName, nameById } = await loadNotifyContext(client, {
+    challengeId: params.challengeId,
+    repoId: params.repoId,
     memberIds,
-  ]);
-  const nameById = new Map<number, string | null>(
-    userRows.map((u: { id: number; name: string | null }) => [u.id, u.name]),
-  );
+  });
 
   const payload = {
     entryId: params.entryId,

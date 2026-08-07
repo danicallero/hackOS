@@ -3,6 +3,7 @@ import { pool } from "../../db/pool.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { notifyTeamPreCall } from "./notify.js";
+import { challengeEtaMinutesPerSlot } from "./reads.js";
 import { callNextForRoom } from "./service.js";
 
 /**
@@ -85,19 +86,6 @@ export async function pumpTick(): Promise<void> {
   }
 
   await emitPreCallWarnings();
-}
-
-async function challengeEtaMinutesPerSlot(challengeId: number): Promise<number> {
-  const { rows } = await pool.query(
-    `SELECT COALESCE(AVG(rqs.desired_minutes_per_team), 8) AS avg, COUNT(*)::int AS rooms
-       FROM room_challenges rc
-       JOIN room_queue_state rqs ON rqs.room_id = rc.room_id
-      WHERE rc.challenge_id = $1`,
-    [challengeId],
-  );
-  const avg = Number(rows[0].avg);
-  const roomCount = Math.max(1, Number(rows[0].rooms));
-  return avg / roomCount;
 }
 
 /** H38 pre-aviso: notify once per call cycle when ETA <= queue_settings.pre_call_notification_eta_minutes. */

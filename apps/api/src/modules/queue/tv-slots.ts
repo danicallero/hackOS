@@ -3,7 +3,7 @@ import { withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
-import { publishTvState, type TvSlot, type TvSlotItem } from "./tv.js";
+import { publishTvState, rowToSlot, type TvSlot, type TvSlotItem } from "./tv.js";
 
 /**
  * H42 timetable CRUD. Editing a slot can change what the screens show *right
@@ -21,16 +21,6 @@ export interface TvSlotInput {
 }
 
 const SELECT = `SELECT id, label, starts_at, ends_at, items FROM tv_slots`;
-
-function rowToSlot(row: Record<string, unknown>): TvSlot {
-  return {
-    id: Number(row.id),
-    label: (row.label as string | null) ?? null,
-    startsAt: (row.starts_at as Date).toISOString(),
-    endsAt: (row.ends_at as Date).toISOString(),
-    items: row.items as TvSlotItem[],
-  };
-}
 
 function normalizeItems(items: TvSlotInput["items"]): TvSlotItem[] {
   return items.map((item) => ({

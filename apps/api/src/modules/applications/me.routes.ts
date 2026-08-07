@@ -69,7 +69,7 @@ export function registerMeRoutes(app: FastifyInstance): void {
       );
       return {
         ...row,
-        status: maskStatus(row.status, row.decision_sent_at),
+        status: maskStatus(row.status),
         template: enriched,
         shirt_size: userRows[0]?.shirt_size ?? null,
         food_intolerances: userRows[0]?.food_intolerances ?? [],
@@ -95,7 +95,7 @@ export function registerMeRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const row = await saveDraft(req.userId as number, req.params.id, req.body.responses);
-      return { ...row, status: maskStatus(row.status, row.decision_sent_at) };
+      return { ...row, status: maskStatus(row.status) };
     },
   );
 
@@ -120,7 +120,7 @@ export function registerMeRoutes(app: FastifyInstance): void {
         req.body,
       );
       return {
-        response: { ...response, status: maskStatus(response.status, response.decision_sent_at) },
+        response: { ...response, status: maskStatus(response.status) },
         privacy_notice: privacyNotice,
       };
     },

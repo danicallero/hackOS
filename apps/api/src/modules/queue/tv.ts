@@ -86,7 +86,7 @@ function overrideIsLive(override: TvMode | null, now: number): override is TvMod
   return !override.expiresAt || new Date(override.expiresAt).getTime() > now;
 }
 
-function rowToSlot(row: Record<string, unknown>): TvSlot {
+export function rowToSlot(row: Record<string, unknown>): TvSlot {
   return {
     id: Number(row.id),
     label: (row.label as string | null) ?? null,

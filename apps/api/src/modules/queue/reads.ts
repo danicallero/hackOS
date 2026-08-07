@@ -325,7 +325,7 @@ export async function publicRoomViews() {
   }));
 }
 
-async function challengeEtaMinutesPerSlot(challengeId: number): Promise<number> {
+export async function challengeEtaMinutesPerSlot(challengeId: number): Promise<number> {
   const { rows } = await pool.query(
     `SELECT COALESCE(AVG(rqs.desired_minutes_per_team), 8) AS avg, COUNT(*)::int AS rooms
        FROM room_challenges rc

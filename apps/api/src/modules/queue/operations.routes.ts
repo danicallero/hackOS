@@ -23,9 +23,7 @@ export function registerOperationsRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => {
-      if (req.userId == null) {
-        return { challenges: [], inserted: 0, alreadyQueued: 0 };
-      }
+      const actorId = actor(req.userId);
 
       const { rows: challenges } = await pool.query(
         `SELECT id, devpost_tags FROM challenges ORDER BY id`,
@@ -44,7 +42,7 @@ export function registerOperationsRoutes(app: FastifyInstance): void {
       let alreadyQueued = 0;
 
       for (const challenge of eligible) {
-        const result = await enqueueChallenge(challenge.id, req.userId);
+        const result = await enqueueChallenge(challenge.id, actorId);
         perChallenge.push({
           challengeId: challenge.id,
           inserted: result.inserted.length,
