@@ -4,15 +4,30 @@ import { AppState } from "react-native";
 jest.mock("./api", () => ({
   ApiError: class ApiError extends Error {
     status: number;
-    constructor(status: number) {
-      super("api error");
+    constructor(message: string, status: number) {
+      super(message);
       this.status = status;
     }
   },
   apiFetch: jest.fn(),
 }));
 
-import { apiFetch } from "./api";
+const mockCacheStore = new Map<string, { data: unknown; updatedAt: string }>();
+jest.mock("./offline-cache", () => ({
+  readCachedValue: jest.fn((key: string) => Promise.resolve(mockCacheStore.get(key) ?? null)),
+  writeCachedValue: jest.fn(
+    (key: string, data: unknown, updatedAt = "2026-01-01T00:00:00.000Z") => {
+      mockCacheStore.set(key, { data, updatedAt });
+      return Promise.resolve();
+    },
+  ),
+}));
+
+jest.mock("expo-network", () => ({
+  addNetworkStateListener: jest.fn(() => ({ remove: () => {} })),
+}));
+
+import { ApiError, apiFetch } from "./api";
 import { useMe } from "./use-me";
 
 const mockApiFetch = apiFetch as jest.Mock;
@@ -39,6 +54,7 @@ function deferred<T>() {
 describe("useMe foreground revalidation (H55)", () => {
   beforeEach(() => {
     mockApiFetch.mockReset();
+    mockCacheStore.clear();
     listeners = new Set();
     jest.spyOn(AppState, "addEventListener").mockImplementation((_event, cb) => {
       const listener = cb as (state: string) => void;
@@ -93,5 +109,62 @@ describe("useMe foreground revalidation (H55)", () => {
     const { result } = await renderHook(() => useMe(true));
     expect(result.current.loading).toBe(true);
     expect(result.current.me).toBeNull();
+  });
+});
+
+describe("useMe offline fallback", () => {
+  beforeEach(() => {
+    mockApiFetch.mockReset();
+    mockCacheStore.clear();
+    listeners = new Set();
+    jest.spyOn(AppState, "addEventListener").mockImplementation((_event, cb) => {
+      const listener = cb as (state: string) => void;
+      listeners.add(listener);
+      return { remove: () => listeners.delete(listener) };
+    });
+    (AppState as { currentState: string }).currentState = "active";
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it("serves the last cached profile when the live fetch can't reach the server", async () => {
+    mockCacheStore.set("me", {
+      data: { id: 1, capabilities: ["accredit:scan"] },
+      updatedAt: "2025-12-01T00:00:00.000Z",
+    });
+    mockApiFetch.mockRejectedValue(new TypeError("Network request failed"));
+
+    const { result } = await renderHook(() => useMe(true));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.me).toEqual({ id: 1, capabilities: ["accredit:scan"] });
+    expect(result.current.offline).toBe(true);
+    expect(result.current.staleSince).toBe("2025-12-01T00:00:00.000Z");
+  });
+
+  it("leaves the app stuck on an error, not a stale profile, when nothing was ever cached", async () => {
+    mockApiFetch.mockRejectedValue(new TypeError("Network request failed"));
+
+    const { result } = await renderHook(() => useMe(true));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.me).toBeNull();
+    expect(result.current.error).not.toBeNull();
+  });
+
+  it("clears the cached profile on a confirmed 401 instead of falling back to it", async () => {
+    mockCacheStore.set("me", {
+      data: { id: 1, capabilities: [] },
+      updatedAt: "2025-12-01T00:00:00.000Z",
+    });
+    mockApiFetch.mockRejectedValue(new ApiError("api error", 401));
+
+    const { result } = await renderHook(() => useMe(true));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.me).toBeNull();
+    expect(result.current.offline).toBe(false);
   });
 });

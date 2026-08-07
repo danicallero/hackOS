@@ -6,6 +6,9 @@ interface MeContextValue {
   me: Me | null;
   loading: boolean;
   error: Error | null;
+  /** True when `me` is being served from on-device cache because the last live fetch couldn't confirm the session. */
+  offline: boolean;
+  staleSince: string | null;
   refetch: () => Promise<void>;
 }
 
