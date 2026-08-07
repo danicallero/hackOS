@@ -3,6 +3,7 @@
 import { CopyIcon, UserPlusIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { EntityCombobox } from "@/components/common/entity-combobox";
 import { Modal } from "@/components/common/modal";
 import { MultiSelect } from "@/components/common/multi-select";
 import { SubmitButton } from "@/components/common/submit-button";
@@ -165,18 +166,16 @@ export function InviteUserDialog() {
           {kind === "sponsor" && (
             <div className="space-y-2">
               <Label htmlFor="invite-enterprise">{t("enterpriseLabel")}</Label>
-              <Select value={enterpriseId} onValueChange={setEnterpriseId}>
-                <SelectTrigger id="invite-enterprise" className="w-full">
-                  <SelectValue placeholder={t("selectSponsorEnterprise")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {enterprises.map((e) => (
-                    <SelectItem key={e.id} value={String(e.id)}>
-                      {e.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <EntityCombobox
+                id="invite-enterprise"
+                inDialog
+                options={enterprises}
+                value={enterpriseId}
+                onChange={setEnterpriseId}
+                getId={(e) => e.id}
+                getLabel={(e) => e.name}
+                placeholder={t("selectSponsorEnterprise")}
+              />
               <p className="text-muted-foreground text-xs">{t("linkedAutomatically")}</p>
             </div>
           )}

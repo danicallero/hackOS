@@ -22,6 +22,7 @@ import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
+import { type UserOption, UserPicker } from "@/components/common/user-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -53,29 +54,15 @@ interface PublicChallenge {
   title: Record<string, string> | string;
 }
 
-interface UserOption {
-  id: number;
-  email: string;
-  name: string | null;
-  surname: string | null;
-}
-
-function userLabel(user: UserOption): string {
-  const name = [user.name, user.surname].filter(Boolean).join(" ").trim();
-  return name ? `${name} · ${user.email}` : user.email;
-}
-
 export default function UnmatchedProjectsPage() {
   const { t } = useLocale();
   const { can } = useSessionContext();
   const canImport = can(CAPABILITIES.PROJECTS_IMPORT);
   const [rows, setRows] = useState<UnmatchedRow[]>([]);
   const [prizes, setPrizes] = useState<DevpostPrize[]>([]);
-  const [users, setUsers] = useState<UserOption[]>([]);
   const [challenges, setChallenges] = useState<PublicChallenge[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
-  const [userQuery, setUserQuery] = useState("");
   const [selectedUsers, setSelectedUsers] = useState<Record<string, string>>({});
   const [selectedPrizeChallenges, setSelectedPrizeChallenges] = useState<Record<string, string>>(
     {},
@@ -107,16 +94,12 @@ export default function UnmatchedProjectsPage() {
     }
   }, [canImport, t]);
 
-  const searchUsers = useCallback(async () => {
-    try {
-      const res = await api.get<UserList>("/api/users", {
-        query: { q: userQuery.trim() || undefined, limit: 25 },
-      });
-      setUsers(res.users);
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSearchUsers"));
-    }
-  }, [userQuery, t]);
+  const searchUsers = useCallback(async (query: string): Promise<UserOption[]> => {
+    const res = await api.get<UserList>("/api/users", {
+      query: { q: query || undefined, limit: 25 },
+    });
+    return res.users;
+  }, []);
 
   // Soft, in-place refresh instead of a hard reload when a project/repo
   // changes elsewhere.
@@ -126,12 +109,6 @@ export default function UnmatchedProjectsPage() {
   useEffect(() => {
     void load();
   }, [load, liveRefresh]);
-
-  useEffect(() => {
-    if (!canImport) return;
-    const handle = setTimeout(() => void searchUsers(), 250);
-    return () => clearTimeout(handle);
-  }, [canImport, searchUsers]);
 
   const mutate = useCallback(
     async (key: string, action: () => Promise<unknown>, success: string) => {
@@ -291,16 +268,6 @@ export default function UnmatchedProjectsPage() {
       </SectionCard>
 
       <SectionCard title={t("unmatchedParticipantsTitle")} icon={UserPlusIcon}>
-        <div className="mb-4 space-y-2">
-          <Label htmlFor="user-search">{t("userSearchLabel")}</Label>
-          <Input
-            id="user-search"
-            value={userQuery}
-            onChange={(event) => setUserQuery(event.target.value)}
-            placeholder={t("searchUsersNameEmail")}
-          />
-        </div>
-
         {loading ? (
           <Spinner />
         ) : rows.length === 0 ? (
@@ -333,23 +300,14 @@ export default function UnmatchedProjectsPage() {
                   <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto_auto_auto] lg:items-end">
                     <div className="space-y-2">
                       <Label htmlFor={`user-${key}`}>{t("linkToUserLabel")}</Label>
-                      <Select
+                      <UserPicker
+                        id={`user-${key}`}
                         value={selectedUserId}
-                        onValueChange={(value) =>
+                        onChange={(value) =>
                           setSelectedUsers((current) => ({ ...current, [key]: value }))
                         }
-                      >
-                        <SelectTrigger id={`user-${key}`} className="w-full">
-                          <SelectValue placeholder={t("selectUserPlaceholder")} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {users.map((user) => (
-                            <SelectItem key={user.id} value={String(user.id)}>
-                              {userLabel(user)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        search={searchUsers}
+                      />
                     </div>
                     <Button
                       variant="outline"

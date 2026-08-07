@@ -1,10 +1,10 @@
 "use client";
-import { LinkIcon, SearchIcon, Trash2Icon, UserPlusIcon } from "lucide-react";
+import { LinkIcon, Trash2Icon, UserPlusIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AlertModal } from "@/components/common/alert-modal";
+import { type UserOption, UserPicker } from "@/components/common/user-picker";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -16,22 +16,13 @@ import {
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { linkSecondaryEmail, removeDevpostParticipant, removeRepoMember } from "@/lib/projects";
-import { challengeTitleText, type ProjectRepo } from "../shared";
+import { type ChallengeOption, challengeTitleText, type ProjectRepo } from "../shared";
 
-type ChallengeOption = {
-  id: number;
-  title: Record<string, string> | string;
-};
-
-function _manualMemberCount(repo: ProjectRepo): number {
-  return repo.members.filter((member) => member.mergeStatus === "manual").length;
-}
-
-type MemberCandidate = { id: number; email: string; name: string | null; surname: string | null };
-
-function userLabel(user: MemberCandidate): string {
-  const name = [user.name, user.surname].filter(Boolean).join(" ").trim();
-  return name ? `${name} · ${user.email}` : user.email;
+async function searchMemberCandidates(query: string): Promise<UserOption[]> {
+  const result = await api.get<{ users: UserOption[] }>("/api/projects/member-candidates", {
+    query: { q: query, limit: 20 },
+  });
+  return result.users;
 }
 
 export function MemberRemoveButton({
@@ -106,42 +97,8 @@ export function DevpostParticipantActions({
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState("");
-  const [query, setQuery] = useState("");
-  const [users, setUsers] = useState<MemberCandidate[]>([]);
-  const [searching, setSearching] = useState(false);
   const [busy, setBusy] = useState<"delete" | "link" | null>(null);
   const dialogId = `devpost-link-${repoId}-${email}`;
-
-  useEffect(() => {
-    const trimmed = query.trim();
-    if (!open || trimmed.length < 2) {
-      setUsers([]);
-      setSearching(false);
-      return;
-    }
-    let cancelled = false;
-    const handle = setTimeout(async () => {
-      setSearching(true);
-      try {
-        const result = await api.get<{ users: MemberCandidate[] }>(
-          "/api/projects/member-candidates",
-          { query: { q: trimmed, limit: 20 } },
-        );
-        if (!cancelled) setUsers(result.users);
-      } catch (err) {
-        if (!cancelled) {
-          setUsers([]);
-          toast.error(err instanceof ApiError ? err.message : t("couldNotSearchUsers"));
-        }
-      } finally {
-        if (!cancelled) setSearching(false);
-      }
-    }, 250);
-    return () => {
-      cancelled = true;
-      clearTimeout(handle);
-    };
-  }, [open, query, t]);
 
   async function deleteParticipant() {
     setBusy("delete");
@@ -192,29 +149,13 @@ export function DevpostParticipantActions({
               <Label htmlFor={`${dialogId}-user`} className="sr-only">
                 {t("userForEmail", { email })}
               </Label>
-              <Input
+              <UserPicker
                 id={`${dialogId}-user`}
-                value={query}
-                onChange={(event) => {
-                  setQuery(event.target.value);
-                  setSelectedUserId("");
-                }}
-                placeholder={t("searchUsersNameEmailPlaceholder")}
+                value={selectedUserId}
+                onChange={setSelectedUserId}
+                search={searchMemberCandidates}
+                minQueryLength={2}
               />
-              <Select value={selectedUserId} onValueChange={setSelectedUserId}>
-                <SelectTrigger aria-label={t("userForEmail", { email })}>
-                  <SelectValue
-                    placeholder={searching ? t("searchingEllipsis") : t("selectUserPlaceholder")}
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {users.map((user) => (
-                    <SelectItem key={user.id} value={String(user.id)}>
-                      {userLabel(user)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
               <Button
                 type="button"
                 size="sm"
@@ -259,117 +200,40 @@ export function ProjectMemberAdder({
   onAdd: (userId: number) => Promise<void>;
 }) {
   const { t } = useLocale();
-  const [query, setQuery] = useState("");
-  const [users, setUsers] = useState<MemberCandidate[]>([]);
-  const [selectedUser, setSelectedUser] = useState<MemberCandidate | null>(null);
-  const [searching, setSearching] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState("");
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    const trimmed = query.trim();
-    if (trimmed.length < 2) {
-      setUsers([]);
-      setSelectedUser(null);
-      setSearching(false);
-      return;
-    }
-
-    let cancelled = false;
-    const handle = setTimeout(async () => {
-      setSearching(true);
-      try {
-        const res = await api.get<{ users: MemberCandidate[] }>("/api/projects/member-candidates", {
-          query: { q: trimmed, limit: 10 },
-        });
-        if (!cancelled) setUsers(res.users);
-      } catch (err) {
-        if (!cancelled) {
-          setUsers([]);
-          toast.error(err instanceof ApiError ? err.message : t("couldNotSearchUsers"));
-        }
-      } finally {
-        if (!cancelled) setSearching(false);
-      }
-    }, 250);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(handle);
-    };
-  }, [query, t]);
 
   const memberUserIds = useMemo(
     () =>
       new Set(currentMembers.flatMap((member) => (member.userId === null ? [] : [member.userId]))),
     [currentMembers],
   );
-  const availableUsers = users.filter((user) => !memberUserIds.has(user.id));
-  const selectedUserId = selectedUser?.id ?? null;
+  const searchAvailableMembers = useMemo(
+    () => async (query: string) => {
+      const candidates = await searchMemberCandidates(query);
+      return candidates.filter((user) => !memberUserIds.has(user.id));
+    },
+    [memberUserIds],
+  );
 
   return (
     <div className="space-y-2 rounded-md border p-3">
       <Label htmlFor={`member-${repoId}`}>{t("addMemberLabel")}</Label>
       <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-        <div className="space-y-2">
-          <div className="relative">
-            <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
-            <Input
-              id={`member-${repoId}`}
-              value={query}
-              onChange={(event) => {
-                setQuery(event.target.value);
-                setSelectedUser(null);
-              }}
-              placeholder={t("searchUsersNameEmailPlaceholder")}
-              className="pl-9"
-            />
-          </div>
-          {query.trim().length >= 2 && (
-            <div className="max-h-56 overflow-auto rounded-md border">
-              {searching ? (
-                <p className="text-muted-foreground px-3 py-2 text-sm">{t("searchingEllipsis")}</p>
-              ) : availableUsers.length === 0 ? (
-                <p className="text-muted-foreground px-3 py-2 text-sm">
-                  {t("noMatchingUsersPeriod")}
-                </p>
-              ) : (
-                availableUsers.map((user) => {
-                  const selected = selectedUserId === user.id;
-                  const name = [user.name, user.surname].filter(Boolean).join(" ").trim();
-                  return (
-                    <button
-                      key={user.id}
-                      type="button"
-                      className={`hover:bg-muted flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm ${
-                        selected ? "bg-muted" : ""
-                      }`}
-                      onClick={() => setSelectedUser(user)}
-                    >
-                      <span className="min-w-0">
-                        <span className="block truncate font-medium">{name || user.email}</span>
-                        {name && (
-                          <span className="text-muted-foreground block truncate text-xs">
-                            {user.email}
-                          </span>
-                        )}
-                      </span>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-          )}
-        </div>
+        <UserPicker
+          id={`member-${repoId}`}
+          value={selectedUserId}
+          onChange={setSelectedUserId}
+          search={searchAvailableMembers}
+          minQueryLength={2}
+        />
         <Button
-          disabled={busy || selectedUserId === null}
+          disabled={busy || !selectedUserId}
           onClick={async () => {
             setBusy(true);
             try {
-              if (selectedUserId === null) return;
-              await onAdd(selectedUserId);
-              setQuery("");
-              setSelectedUser(null);
-              setUsers([]);
+              await onAdd(Number(selectedUserId));
+              setSelectedUserId("");
               toast.success(t("memberAdded"));
             } catch (err) {
               toast.error(err instanceof ApiError ? err.message : t("couldNotAddMember"));

@@ -4486,6 +4486,21 @@ const dict: Record<string, I18nText> = {
     gl: "Non hai usuarios coincidentes.",
     en: "No matching users.",
   },
+  typeToSearchUsers: {
+    es: "Escribe para buscar usuarios.",
+    gl: "Escribe para buscar usuarios.",
+    en: "Type to search users.",
+  },
+  noMatchingResultsPeriod: {
+    es: "No hay resultados coincidentes.",
+    gl: "Non hai resultados coincidentes.",
+    en: "No matching results.",
+  },
+  typeToFilterEllipsis: {
+    es: "Escribe para filtrar…",
+    gl: "Escribe para filtrar…",
+    en: "Type to filter…",
+  },
   addAction: { es: "Añadir", gl: "Engadir", en: "Add" },
   memberAdded: { es: "Miembro añadido.", gl: "Membro engadido.", en: "Member added." },
   couldNotAddMember: {
