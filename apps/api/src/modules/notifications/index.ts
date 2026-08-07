@@ -1,10 +1,5 @@
 import type { FastifyInstance } from "fastify";
 import { scheduleAnnouncementsPublisher } from "./announcements-publisher.js";
-// Side-effecting imports: each registers its BullMQ processor at import time
-// (src/lib/queues.ts convention — "never instantiate BullMQ directly").
-import "./dispatcher.js";
-import "./announcements-publisher.js";
-import "./schedule-reminders.js";
 import { scheduleOutboxDispatcher } from "./dispatcher.js";
 import { registerAnnouncementRoutes } from "./routes/announcements.js";
 import { registerAuditRoutes } from "./routes/audit.js";

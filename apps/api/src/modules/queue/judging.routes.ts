@@ -2,8 +2,8 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { requireCapability } from "../../lib/capabilities.js";
-import { UnauthorizedError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
+import { actor } from "./actor.js";
 import {
   requireChallengeExport,
   requireChallengeJudgeOrCapability,
@@ -38,11 +38,6 @@ import {
   searchQuery,
   sessionJoinBody,
 } from "./schemas.js";
-
-function actor(userId: number | null): number {
-  if (userId == null) throw new UnauthorizedError();
-  return userId;
-}
 
 /** Judging surface (H36, H37, H40): collaborative review, versions, presence, search, CSV. */
 export function registerJudgingRoutes(app: FastifyInstance): void {

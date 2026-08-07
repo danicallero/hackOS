@@ -15,6 +15,7 @@ import { valkey, valkeySub } from "./valkey.js";
  */
 
 const CHANNEL_PREFIX = "sse:";
+const HEARTBEAT_INTERVAL_MS = 25_000;
 const localSubscribers = new Map<string, Set<FastifyReply>>();
 let relayStarted = false;
 
@@ -129,7 +130,7 @@ export async function subscribe(topic: string, reply: FastifyReply): Promise<voi
 
   const heartbeat = setInterval(() => {
     reply.raw.write(`: ping\n\n`);
-  }, 25_000);
+  }, HEARTBEAT_INTERVAL_MS);
 
   reply.raw.on("close", () => {
     clearInterval(heartbeat);

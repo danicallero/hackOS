@@ -3,7 +3,7 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { requireAnyCapability, requireAuth } from "../../lib/capabilities.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
-import type { RouteAccessPolicy } from "../../lib/route-policy.js";
+import { routeAccessOption as access } from "../../lib/route-policy.js";
 import {
   challengeEditAccessFor,
   isChallengeAdmin,
@@ -35,7 +35,6 @@ import {
 } from "./service.js";
 import { getChallengeWinners, removeChallengeWinner, setChallengeWinner } from "./winners.js";
 
-const access = (routeAccessPolicy: RouteAccessPolicy) => ({ config: { routeAccessPolicy } });
 const challengeParam = { source: "params", field: "id" } as const;
 
 /**

@@ -16,7 +16,12 @@ export function registerAuditRoutes(app: FastifyInstance): void {
     {
       ...routeAccess({ kind: "capability", capability: CAPABILITIES.AUDIT_READ }),
       preHandler: requireCapability(CAPABILITIES.AUDIT_READ),
-      schema: { querystring: auditQuerySchema },
+      schema: {
+        summary: "Query audit log",
+        description:
+          "Filtered, paginated read view over H53 audit events for sensitive mutations (announcements, preferences, etc).",
+        querystring: auditQuerySchema,
+      },
     },
     async (req) => {
       const { limit, offset, ...rest } = req.query;

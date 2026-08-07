@@ -26,6 +26,26 @@ export interface PassRow {
   update_tag: string;
 }
 
+export interface PassIdentity {
+  fullName: string;
+  barcode: string;
+}
+
+export function resolvePassIdentity(
+  user: {
+    name: string | null;
+    surname: string | null;
+    badge_id: string | null;
+    token: string | null;
+  },
+  userId: number,
+  purpose: Purpose,
+): PassIdentity {
+  const fullName = [user.name, user.surname].filter(Boolean).join(" ") || `User ${userId}`;
+  const barcode = purpose === "ticket" ? user.token : user.badge_id;
+  return { fullName, barcode: barcode ?? "" };
+}
+
 async function assertEntitled(userId: number, purpose: Purpose): Promise<void> {
   if (purpose === "ticket") {
     const t = await pool.query(`SELECT 1 FROM tickets WHERE user_id = $1`, [userId]);

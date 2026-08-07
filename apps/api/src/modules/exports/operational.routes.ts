@@ -1,5 +1,5 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { requireCapability } from "../../lib/capabilities.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
@@ -10,6 +10,12 @@ import {
   exportStaffScanStatsCsv,
 } from "./csv.js";
 import { applicationsCsvQuery } from "./schemas.js";
+
+function sendCsv(reply: FastifyReply, filename: string, csv: string) {
+  reply.header("content-type", "text/csv; charset=utf-8");
+  reply.header("content-disposition", `attachment; filename="${filename}"`);
+  return reply.send(csv);
+}
 
 /** H54: operational CSV exports, gated by exports:run (previously declared but unused). */
 export function registerOperationalRoutes(app: FastifyInstance): void {
@@ -22,9 +28,7 @@ export function registerOperationalRoutes(app: FastifyInstance): void {
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.EXPORTS_RUN }),
     },
     async (_req, reply) => {
-      reply.header("content-type", "text/csv; charset=utf-8");
-      reply.header("content-disposition", `attachment; filename="attendance.csv"`);
-      return exportAttendanceCsv();
+      return sendCsv(reply, "attendance.csv", await exportAttendanceCsv());
     },
   );
 
@@ -35,9 +39,7 @@ export function registerOperationalRoutes(app: FastifyInstance): void {
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.EXPORTS_RUN }),
     },
     async (_req, reply) => {
-      reply.header("content-type", "text/csv; charset=utf-8");
-      reply.header("content-disposition", `attachment; filename="meals.csv"`);
-      return exportMealsCsv();
+      return sendCsv(reply, "meals.csv", await exportMealsCsv());
     },
   );
 
@@ -48,9 +50,7 @@ export function registerOperationalRoutes(app: FastifyInstance): void {
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.EXPORTS_RUN }),
     },
     async (_req, reply) => {
-      reply.header("content-type", "text/csv; charset=utf-8");
-      reply.header("content-disposition", `attachment; filename="staff-scan-stats.csv"`);
-      return exportStaffScanStatsCsv();
+      return sendCsv(reply, "staff-scan-stats.csv", await exportStaffScanStatsCsv());
     },
   );
 
@@ -62,9 +62,11 @@ export function registerOperationalRoutes(app: FastifyInstance): void {
       schema: { querystring: applicationsCsvQuery },
     },
     async (req, reply) => {
-      reply.header("content-type", "text/csv; charset=utf-8");
-      reply.header("content-disposition", `attachment; filename="applications.csv"`);
-      return exportApplicationsCsv(req.query.applicationId);
+      return sendCsv(
+        reply,
+        "applications.csv",
+        await exportApplicationsCsv(req.query.applicationId),
+      );
     },
   );
 }

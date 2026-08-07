@@ -4,6 +4,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool } from "../../db/pool.js";
 import { requireCapability } from "../../lib/capabilities.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
+import { actor } from "./actor.js";
 import { enqueueChallenge } from "./service.js";
 
 /** Queue operations dashboard mutations (queue generation for all challenges). */

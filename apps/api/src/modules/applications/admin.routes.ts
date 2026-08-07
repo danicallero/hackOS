@@ -17,6 +17,12 @@ import { isInvitedParticipant, isWindowOpen } from "./service.js";
 export function registerAdminRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
 
+  const manageReviewOrDecide = [
+    CAPABILITIES.APPLICATIONS_MANAGE,
+    CAPABILITIES.APPLICATIONS_REVIEW,
+    CAPABILITIES.APPLICATIONS_DECIDE,
+  ] as const;
+
   const COLUMNS = `id, name, type, template, description, active, open_at, close_at,
                    capacity, confirmation_window_hours, created_at`;
 
@@ -70,18 +76,10 @@ export function registerAdminRoutes(app: FastifyInstance): void {
   r.get(
     "/api/applications",
     {
-      preHandler: requireAnyCapability(
-        CAPABILITIES.APPLICATIONS_MANAGE,
-        CAPABILITIES.APPLICATIONS_REVIEW,
-        CAPABILITIES.APPLICATIONS_DECIDE,
-      ),
+      preHandler: requireAnyCapability(...manageReviewOrDecide),
       config: routeAccess({
         kind: "capability",
-        anyOf: [
-          CAPABILITIES.APPLICATIONS_MANAGE,
-          CAPABILITIES.APPLICATIONS_REVIEW,
-          CAPABILITIES.APPLICATIONS_DECIDE,
-        ],
+        anyOf: manageReviewOrDecide,
       }),
       schema: {
         summary: "List every application form",
@@ -98,18 +96,10 @@ export function registerAdminRoutes(app: FastifyInstance): void {
   r.get(
     "/api/applications/:id",
     {
-      preHandler: requireAnyCapability(
-        CAPABILITIES.APPLICATIONS_MANAGE,
-        CAPABILITIES.APPLICATIONS_REVIEW,
-        CAPABILITIES.APPLICATIONS_DECIDE,
-      ),
+      preHandler: requireAnyCapability(...manageReviewOrDecide),
       config: routeAccess({
         kind: "capability",
-        anyOf: [
-          CAPABILITIES.APPLICATIONS_MANAGE,
-          CAPABILITIES.APPLICATIONS_REVIEW,
-          CAPABILITIES.APPLICATIONS_DECIDE,
-        ],
+        anyOf: manageReviewOrDecide,
       }),
       schema: {
         summary: "Get one application form",

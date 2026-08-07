@@ -34,7 +34,10 @@ export const authContextPlugin = fp(async (app: FastifyInstance) => {
     if (config.isTest) {
       const testHeader = req.headers["x-test-user-id"];
       if (typeof testHeader === "string" && testHeader !== "") {
-        req.userId = Number(testHeader);
+        const parsed = Number(testHeader);
+        if (Number.isInteger(parsed)) {
+          req.userId = parsed;
+        }
         return;
       }
     }

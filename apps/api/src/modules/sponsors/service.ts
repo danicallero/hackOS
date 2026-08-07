@@ -20,6 +20,10 @@ const COLUMN_FOR: Record<string, string> = {
   availableFrom: "available_from",
 };
 
+function isUniqueViolation(err: unknown): boolean {
+  return typeof err === "object" && err !== null && (err as { code?: string }).code === "23505";
+}
+
 export async function getEnterprise(id: number) {
   const { rows } = await pool.query(`SELECT ${COLUMNS} FROM enterprises WHERE id = $1`, [id]);
   if (!rows[0]) throw new NotFoundError("Enterprise not found", { id });
@@ -45,33 +49,35 @@ export async function myEnterprise(userId: number) {
 
 export async function createEnterprise(input: CreateEnterpriseBody, actorId: number | null) {
   try {
-    const { rows } = await pool.query(
-      `INSERT INTO enterprises
-         (name, website, logo_url, logo_negative_url, description, tier_id, display_priority, visibility, available_from)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-       RETURNING ${COLUMNS}`,
-      [
-        input.name,
-        input.website ?? null,
-        input.logoUrl ?? null,
-        input.logoNegativeUrl ?? null,
-        input.description ?? null,
-        input.tierId ?? null,
-        input.displayPriority ?? null,
-        input.visibility,
-        input.availableFrom ?? null,
-      ],
-    );
-    await audit(pool, {
-      actorId,
-      entityType: "enterprise",
-      entityId: rows[0].id,
-      action: "created",
-      after: { name: input.name },
+    return await withTransaction(async (client) => {
+      const { rows } = await client.query(
+        `INSERT INTO enterprises
+           (name, website, logo_url, logo_negative_url, description, tier_id, display_priority, visibility, available_from)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         RETURNING ${COLUMNS}`,
+        [
+          input.name,
+          input.website ?? null,
+          input.logoUrl ?? null,
+          input.logoNegativeUrl ?? null,
+          input.description ?? null,
+          input.tierId ?? null,
+          input.displayPriority ?? null,
+          input.visibility,
+          input.availableFrom ?? null,
+        ],
+      );
+      await audit(client, {
+        actorId,
+        entityType: "enterprise",
+        entityId: rows[0].id,
+        action: "created",
+        after: { name: input.name },
+      });
+      return rows[0];
     });
-    return rows[0];
   } catch (err) {
-    if ((err as { code?: string }).code === "23505")
+    if (isUniqueViolation(err))
       throw new ConflictError("An enterprise with that name already exists", { name: input.name });
     throw err;
   }
@@ -95,21 +101,23 @@ export async function updateEnterprise(
   }
   values.push(id);
   try {
-    const { rows } = await pool.query(
-      `UPDATE enterprises SET ${sets.join(", ")} WHERE id = $${i} RETURNING ${COLUMNS}`,
-      values,
-    );
-    if (!rows[0]) throw new NotFoundError("Enterprise not found", { id });
-    await audit(pool, {
-      actorId,
-      entityType: "enterprise",
-      entityId: id,
-      action: "updated",
-      after: { fields: Object.keys(patch) },
+    return await withTransaction(async (client) => {
+      const { rows } = await client.query(
+        `UPDATE enterprises SET ${sets.join(", ")} WHERE id = $${i} RETURNING ${COLUMNS}`,
+        values,
+      );
+      if (!rows[0]) throw new NotFoundError("Enterprise not found", { id });
+      await audit(client, {
+        actorId,
+        entityType: "enterprise",
+        entityId: id,
+        action: "updated",
+        after: { fields: Object.keys(patch) },
+      });
+      return rows[0];
     });
-    return rows[0];
   } catch (err) {
-    if ((err as { code?: string }).code === "23505")
+    if (isUniqueViolation(err))
       throw new ConflictError("An enterprise with that name already exists");
     throw err;
   }
@@ -156,19 +164,21 @@ export async function setEnterpriseLogo(
   actorId: number | null,
 ) {
   const column = variant === "negative" ? "logo_negative_url" : "logo_url";
-  const { rows } = await pool.query(
-    `UPDATE enterprises SET ${column} = $1 WHERE id = $2 RETURNING ${COLUMNS}`,
-    [logoUrl, id],
-  );
-  if (!rows[0]) throw new NotFoundError("Enterprise not found", { id });
-  await audit(pool, {
-    actorId,
-    entityType: "enterprise",
-    entityId: id,
-    action: variant === "negative" ? "negative_logo_updated" : "logo_updated",
-    after: { logoUrl, variant },
+  return withTransaction(async (client) => {
+    const { rows } = await client.query(
+      `UPDATE enterprises SET ${column} = $1 WHERE id = $2 RETURNING ${COLUMNS}`,
+      [logoUrl, id],
+    );
+    if (!rows[0]) throw new NotFoundError("Enterprise not found", { id });
+    await audit(client, {
+      actorId,
+      entityType: "enterprise",
+      entityId: id,
+      action: variant === "negative" ? "negative_logo_updated" : "logo_updated",
+      after: { logoUrl, variant },
+    });
+    return rows[0];
   });
-  return rows[0];
 }
 
 // ── enterprise membership (M4: the sponsors table IS the user↔enterprise link) ─
@@ -265,22 +275,24 @@ export async function removeEnterpriseMember(
   userId: number,
   actorId: number | null,
 ): Promise<void> {
-  const { rowCount } = await pool.query(
-    `DELETE FROM sponsors WHERE enterprise_id = $1 AND user_id = $2`,
-    [enterpriseId, userId],
-  );
-  if (!rowCount) {
-    throw new NotFoundError("User is not affiliated with this enterprise", {
-      enterpriseId,
-      userId,
+  await withTransaction(async (client) => {
+    const { rowCount } = await client.query(
+      `DELETE FROM sponsors WHERE enterprise_id = $1 AND user_id = $2`,
+      [enterpriseId, userId],
+    );
+    if (!rowCount) {
+      throw new NotFoundError("User is not affiliated with this enterprise", {
+        enterpriseId,
+        userId,
+      });
+    }
+    await audit(client, {
+      actorId,
+      entityType: "enterprise",
+      entityId: enterpriseId,
+      action: "member_removed",
+      after: { userId },
     });
-  }
-  await audit(pool, {
-    actorId,
-    entityType: "enterprise",
-    entityId: enterpriseId,
-    action: "member_removed",
-    after: { userId },
   });
 }
 

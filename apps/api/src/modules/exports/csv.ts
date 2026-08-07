@@ -1,5 +1,5 @@
 import { pool } from "../../db/pool.js";
-import { toCsv } from "../../lib/csv.js";
+import { recordsToCsv, toCsv } from "../../lib/csv.js";
 import { staffScanRanking } from "../logistics/scan-log.js";
 
 /** H54: operational CSV exports, staff-wide (not scoped to one subject). */
@@ -26,10 +26,7 @@ export async function exportAttendanceCsv(): Promise<string> {
     "method",
     "logged_by",
   ];
-  return toCsv(
-    header,
-    rows.map((r: Record<string, unknown>) => header.map((h) => r[h])),
-  );
+  return toCsv(header, recordsToCsv(header, rows as Record<string, unknown>[]));
 }
 
 export async function exportMealsCsv(): Promise<string> {
@@ -52,10 +49,7 @@ export async function exportMealsCsv(): Promise<string> {
     "logged_by",
     "notes",
   ];
-  return toCsv(
-    header,
-    rows.map((r: Record<string, unknown>) => header.map((h) => r[h])),
-  );
+  return toCsv(header, recordsToCsv(header, rows as Record<string, unknown>[]));
 }
 
 export async function exportStaffScanStatsCsv(): Promise<string> {
@@ -112,8 +106,5 @@ export async function exportApplicationsCsv(applicationId?: number): Promise<str
     "dietary_data_state",
     "avg_score",
   ];
-  return toCsv(
-    header,
-    rows.map((r: Record<string, unknown>) => header.map((h) => r[h])),
-  );
+  return toCsv(header, recordsToCsv(header, rows as Record<string, unknown>[]));
 }

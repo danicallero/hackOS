@@ -2,7 +2,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { pool } from "../../db/pool.js";
+import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
@@ -10,8 +10,9 @@ import {
   type RouteAccessPolicy,
   routeAccessOption as routeAccess,
 } from "../../lib/route-policy.js";
+import { idParamSchema } from "./schemas.js";
 
-const idParam = z.object({ id: z.coerce.number().int().positive() });
+const idParam = idParamSchema;
 
 const createBody = z.object({
   name: z.string().min(1).max(200),
@@ -21,6 +22,24 @@ const COLUMNS = "id, name, proposed_by, created_at";
 
 /** Postgres unique_violation — thrown by the unique `universities.name` index. */
 const PG_UNIQUE_VIOLATION = "23505";
+
+async function createUniversity(actorId: number, name: string) {
+  return withTransaction(async (client) => {
+    const { rows } = await client.query(
+      `INSERT INTO universities (name, proposed_by)
+       VALUES ($1, $2) RETURNING ${COLUMNS}`,
+      [name, actorId],
+    );
+    await audit(client, {
+      actorId,
+      entityType: "university",
+      entityId: rows[0].id,
+      action: "created",
+      after: { name },
+    });
+    return rows[0];
+  });
+}
 
 export function registerUniversityRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
@@ -92,20 +111,9 @@ export function registerUniversityRoutes(app: FastifyInstance): void {
       },
     },
     async (req, reply) => {
-      const { rows } = await pool.query(
-        `INSERT INTO universities (name, proposed_by)
-         VALUES ($1, $2) RETURNING ${COLUMNS}`,
-        [req.body.name, req.userId],
-      );
-      await audit(pool, {
-        actorId: req.userId,
-        entityType: "university",
-        entityId: rows[0].id,
-        action: "created",
-        after: { name: req.body.name },
-      });
+      const row = await createUniversity(req.userId as number, req.body.name);
       reply.code(201);
-      return rows[0];
+      return row;
     },
   );
 
@@ -114,20 +122,9 @@ export function registerUniversityRoutes(app: FastifyInstance): void {
     "/api/universities",
     { ...routeAccess(manageAccess), preHandler: manage, schema: { body: createBody } },
     async (req, reply) => {
-      const { rows } = await pool.query(
-        `INSERT INTO universities (name, proposed_by)
-         VALUES ($1, $2) RETURNING ${COLUMNS}`,
-        [req.body.name, req.userId],
-      );
-      await audit(pool, {
-        actorId: req.userId,
-        entityType: "university",
-        entityId: rows[0].id,
-        action: "created",
-        after: { name: req.body.name },
-      });
+      const row = await createUniversity(req.userId as number, req.body.name);
       reply.code(201);
-      return rows[0];
+      return row;
     },
   );
 
@@ -141,19 +138,21 @@ export function registerUniversityRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       try {
-        const { rows } = await pool.query(
-          `UPDATE universities SET name = $2 WHERE id = $1 RETURNING ${COLUMNS}`,
-          [req.params.id, req.body.name],
-        );
-        if (!rows[0]) throw new NotFoundError("University not found", { id: req.params.id });
-        await audit(pool, {
-          actorId: req.userId,
-          entityType: "university",
-          entityId: req.params.id,
-          action: "updated",
-          after: { name: req.body.name },
+        return await withTransaction(async (client) => {
+          const { rows } = await client.query(
+            `UPDATE universities SET name = $2 WHERE id = $1 RETURNING ${COLUMNS}`,
+            [req.params.id, req.body.name],
+          );
+          if (!rows[0]) throw new NotFoundError("University not found", { id: req.params.id });
+          await audit(client, {
+            actorId: req.userId,
+            entityType: "university",
+            entityId: req.params.id,
+            action: "updated",
+            after: { name: req.body.name },
+          });
+          return rows[0];
         });
-        return rows[0];
       } catch (err) {
         if ((err as { code?: string }).code === PG_UNIQUE_VIOLATION) {
           throw new ConflictError("A university with that name already exists", {
@@ -170,15 +169,17 @@ export function registerUniversityRoutes(app: FastifyInstance): void {
     "/api/universities/:id",
     { ...routeAccess(manageAccess), preHandler: manage, schema: { params: idParam } },
     async (req, reply) => {
-      const { rowCount } = await pool.query(`DELETE FROM universities WHERE id = $1`, [
-        req.params.id,
-      ]);
-      if (rowCount === 0) throw new NotFoundError("University not found", { id: req.params.id });
-      await audit(pool, {
-        actorId: req.userId,
-        entityType: "university",
-        entityId: req.params.id,
-        action: "deleted",
+      await withTransaction(async (client) => {
+        const { rowCount } = await client.query(`DELETE FROM universities WHERE id = $1`, [
+          req.params.id,
+        ]);
+        if (rowCount === 0) throw new NotFoundError("University not found", { id: req.params.id });
+        await audit(client, {
+          actorId: req.userId,
+          entityType: "university",
+          entityId: req.params.id,
+          action: "deleted",
+        });
       });
       reply.code(204);
       return null;

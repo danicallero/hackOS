@@ -1,4 +1,5 @@
 import type { MailConfig, MailMessage } from "../email.js";
+import { assertOkResponse } from "../http.js";
 
 /**
  * Resend HTTP adapter (H52). Fully implemented against Resend's public API
@@ -25,8 +26,5 @@ export async function sendViaResend(mail: MailConfig, message: MailMessage): Pro
     }),
   });
 
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`Resend send failed: ${res.status} ${body}`);
-  }
+  await assertOkResponse(res, "Resend");
 }

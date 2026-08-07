@@ -63,7 +63,15 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
 
   typedApp.get(
     "/api/announcements",
-    { ...routeAccess(manage), preHandler: requireCapability(CAPABILITIES.ANNOUNCEMENTS_MANAGE) },
+    {
+      ...routeAccess(manage),
+      preHandler: requireCapability(CAPABILITIES.ANNOUNCEMENTS_MANAGE),
+      schema: {
+        summary: "List all announcements",
+        description:
+          "Lists all H50 announcements (regardless of publication window) for admin management and audit.",
+      },
+    },
     async () => {
       const items = await listAnnouncementsAdmin(pool);
       return { items };
@@ -75,7 +83,12 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
     {
       ...routeAccess(manage),
       preHandler: requireCapability(CAPABILITIES.ANNOUNCEMENTS_MANAGE),
-      schema: { params: announcementIdParamsSchema },
+      schema: {
+        summary: "Get announcement details",
+        description:
+          "Fetches a single H50 announcement including its full translations, delivery settings and publication window.",
+        params: announcementIdParamsSchema,
+      },
     },
     async (req) => {
       return getAnnouncement(pool, req.params.id);

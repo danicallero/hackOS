@@ -1,5 +1,6 @@
 import { i18nTextSchema, questionnaireSchema } from "@hackos/shared/questions";
 import { z } from "zod";
+import { visibilityEnum } from "../sponsors/schemas.js";
 
 /** Schemas for the challenge-editing surface (H44). */
 
@@ -28,7 +29,7 @@ export const updateChallengeBody = z
     judgingPanelCriteria: questionnaireSchema.optional(),
     maxPresentationSeconds: z.number().int().positive().nullable().optional(),
     maxInWaitingArea: z.number().int().min(0).nullable().optional(),
-    visibility: z.enum(["visible", "hidden"]).optional(),
+    visibility: visibilityEnum.optional(),
     availableFrom: z.coerce.date().nullish(),
   })
   .strict()

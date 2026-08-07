@@ -5,6 +5,13 @@ import { audit } from "../../lib/audit.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
 
+const SCHEDULE_COLUMNS =
+  "id, title, description, location, type, requires_scan, starts_at, ends_at, visibility, publish_at, reminded_at, created_at, updated_at";
+
+function toActivityCategory(type: string | null): string {
+  return type === "meal" ? "meal" : (type ?? "activity");
+}
+
 export interface ScheduleInput {
   title: string;
   description?: string | null;
@@ -82,8 +89,7 @@ export async function revealDueScheduleItems(client: Queryable = pool): Promise<
 
 export async function listSchedule() {
   const { rows } = await pool.query(
-    `SELECT id, title, description, location, type, requires_scan, starts_at, ends_at, visibility,
-            publish_at, reminded_at, created_at, updated_at
+    `SELECT ${SCHEDULE_COLUMNS}
        FROM schedule
       ORDER BY starts_at ASC, id ASC`,
   );
@@ -97,8 +103,7 @@ export async function createScheduleItem(actorId: number | null, input: Schedule
       `INSERT INTO schedule
          (title, description, location, type, requires_scan, starts_at, ends_at, visibility, publish_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-       RETURNING id, title, description, location, type, requires_scan, starts_at, ends_at, visibility,
-                 publish_at, reminded_at, created_at, updated_at`,
+       RETURNING ${SCHEDULE_COLUMNS}`,
       [
         input.title,
         input.description ?? null,
@@ -115,13 +120,7 @@ export async function createScheduleItem(actorId: number | null, input: Schedule
     await client.query(
       `INSERT INTO activities (name, description, category, requires_scan, schedule_id)
        VALUES ($1, $2, $3, $4, $5)`,
-      [
-        item.title,
-        item.description,
-        item.type === "meal" ? "meal" : (item.type ?? "activity"),
-        item.requiresScan,
-        item.id,
-      ],
+      [item.title, item.description, toActivityCategory(item.type), item.requiresScan, item.id],
     );
     await audit(client, {
       actorId,
@@ -139,8 +138,7 @@ export async function createScheduleItem(actorId: number | null, input: Schedule
 export async function updateScheduleItem(actorId: number | null, id: number, patch: SchedulePatch) {
   const item = await withTransaction(async (client) => {
     const current = await client.query(
-      `SELECT id, title, description, location, type, requires_scan, starts_at, ends_at, visibility,
-              publish_at, reminded_at, created_at, updated_at
+      `SELECT ${SCHEDULE_COLUMNS}
          FROM schedule WHERE id = $1 FOR UPDATE`,
       [id],
     );
@@ -168,8 +166,7 @@ export async function updateScheduleItem(actorId: number | null, id: number, pat
               visibility = $9,
               publish_at = $10
         WHERE id = $1
-        RETURNING id, title, description, location, type, requires_scan, starts_at, ends_at, visibility,
-                  publish_at, reminded_at, created_at, updated_at`,
+        RETURNING ${SCHEDULE_COLUMNS}`,
       [
         id,
         patch.title ?? current.rows[0].title,
@@ -191,13 +188,7 @@ export async function updateScheduleItem(actorId: number | null, id: number, pat
               category = $4,
               requires_scan = $5
         WHERE schedule_id = $1`,
-      [
-        id,
-        after.title,
-        after.description,
-        after.type === "meal" ? "meal" : (after.type ?? "activity"),
-        after.requiresScan,
-      ],
+      [id, after.title, after.description, toActivityCategory(after.type), after.requiresScan],
     );
     await audit(client, {
       actorId,
@@ -224,8 +215,7 @@ export async function deleteScheduleItem(actorId: number | null, id: number) {
     const { rows } = await client.query(
       `DELETE FROM schedule
         WHERE id = $1
-        RETURNING id, title, description, location, type, requires_scan, starts_at, ends_at, visibility,
-                  publish_at, reminded_at, created_at, updated_at`,
+        RETURNING ${SCHEDULE_COLUMNS}`,
       [id],
     );
     if (!rows[0]) throw new NotFoundError("Schedule item not found", { id });

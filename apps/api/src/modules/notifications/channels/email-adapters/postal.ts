@@ -1,4 +1,5 @@
 import type { MailConfig, MailMessage } from "../email.js";
+import { assertOkResponse } from "../http.js";
 
 /**
  * Postal HTTP adapter (H52) — self-hosted mail server, so `POSTAL_URL`
@@ -26,10 +27,7 @@ export async function sendViaPostal(mail: MailConfig, message: MailMessage): Pro
     }),
   });
 
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`Postal send failed: ${res.status} ${body}`);
-  }
+  await assertOkResponse(res, "Postal");
 
   const data = (await res.json().catch(() => null)) as { status?: string } | null;
   if (data?.status && data.status !== "success") {

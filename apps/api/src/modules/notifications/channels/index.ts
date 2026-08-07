@@ -1,5 +1,6 @@
 import type { Queryable } from "../../../db/pool.js";
 import { SupersededDispatchError } from "../errors.js";
+import { QUEUE_CATEGORY } from "../service.js";
 import type { EmailPayload } from "../templates.js";
 import { dispatchDiscord } from "./discord.js";
 import { sendEmail } from "./email.js";
@@ -56,7 +57,7 @@ export async function dispatchChannel(db: Queryable, row: OutboxRow): Promise<vo
     case "email":
       return sendEmail(db, row.user_id, payload);
     case "push":
-      if (row.category === "queue" && (await isStaleQueuePush(db, payload))) {
+      if (row.category === QUEUE_CATEGORY && (await isStaleQueuePush(db, payload))) {
         throw new SupersededDispatchError("Queue transition no longer current");
       }
       return dispatchPush(db, row.user_id, payload, row.category);

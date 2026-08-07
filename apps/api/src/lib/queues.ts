@@ -1,6 +1,7 @@
 import { type Processor, Queue, Worker } from "bullmq";
 import { Redis } from "ioredis";
 import { config } from "../config.js";
+import { REDIS_CONNECTION_OPTS } from "./valkey.js";
 
 /**
  * BullMQ scaffolding (plan/01: API = Fastify + BullMQ over Valkey).
@@ -14,7 +15,7 @@ import { config } from "../config.js";
  * expirer, scheduled-visibility publisher, notification dispatcher.
  */
 
-const connection = () => new Redis(config.VALKEY_URL, { maxRetriesPerRequest: null });
+const connection = () => new Redis(config.VALKEY_URL, REDIS_CONNECTION_OPTS);
 
 const queues = new Map<string, Queue>();
 const processors = new Map<string, Processor>();

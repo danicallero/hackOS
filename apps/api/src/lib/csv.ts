@@ -7,6 +7,10 @@ export function csvCell(v: unknown): string {
   return s;
 }
 
+export function recordsToCsv(header: string[], rows: Record<string, unknown>[]): unknown[][] {
+  return rows.map((r) => header.map((h) => r[h]));
+}
+
 export function toCsv(header: string[], rows: unknown[][]): string {
   const lines = [header.join(",")];
   for (const row of rows) lines.push(row.map(csvCell).join(","));

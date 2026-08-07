@@ -22,11 +22,15 @@ const uploadParamsSchema = z.object({
 
 const downloadQuerySchema = z.object({ key: z.string().min(1) });
 
+function isValidUploadKey(key: string): boolean {
+  return key.startsWith("uploads/") && !key.includes("..");
+}
+
 /** H12: an upload is readable only by its owner or an application reviewer. */
 const requireApplicationUploadAccess: preHandlerHookHandler = async (req) => {
   if (req.userId == null) throw new UnauthorizedError();
   const key = (req.query as { key?: string }).key;
-  if (!key?.startsWith("uploads/") || key.includes("..")) {
+  if (!key || !isValidUploadKey(key)) {
     throw new BadRequestError("Not a downloadable file key");
   }
   const ownerId = Number(key.split("/")[2]);
@@ -151,7 +155,7 @@ export function registerUploadRoutes(app: FastifyInstance): void {
     },
     async (req, reply) => {
       const { key } = req.query;
-      if (!key.startsWith("uploads/") || key.includes("..")) {
+      if (!isValidUploadKey(key)) {
         throw new BadRequestError("Not a downloadable file key");
       }
       let obj: Awaited<ReturnType<typeof getObject>>;
