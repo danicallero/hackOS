@@ -16,6 +16,7 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AccessDenied } from "@/components/common/access-denied";
+import { AlertModal } from "@/components/common/alert-modal";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { Modal } from "@/components/common/modal";
@@ -285,16 +286,26 @@ export default function SchedulePage() {
             >
               <PencilIcon className="size-4" />
             </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={t("deleteItemAria")}
-              className="text-destructive"
-              disabled={busy}
-              onClick={() => void remove(item)}
-            >
-              <Trash2Icon className="size-4" />
-            </Button>
+            <AlertModal
+              title={t("deleteScheduleItemConfirmTitle")}
+              description={t("deleteScheduleItemConfirmDesc")}
+              cancelLabel={t("cancel")}
+              confirmLabel={t("deleteAction")}
+              destructive
+              pending={busy}
+              trigger={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={t("deleteItemAria")}
+                  className="text-destructive"
+                  disabled={busy}
+                >
+                  <Trash2Icon className="size-4" />
+                </Button>
+              }
+              onConfirm={() => void remove(item)}
+            />
           </div>
         )}
         toolbar={

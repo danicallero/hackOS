@@ -3,6 +3,7 @@
 import { CalendarClockIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { AlertModal } from "@/components/common/alert-modal";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
@@ -217,15 +218,25 @@ export function Timetable({
                   <Button variant="outline" size="sm" onClick={() => setDraft(draftFrom(slot))}>
                     {t("edit")}
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={busy}
-                    aria-label={t("deleteSlot")}
-                    onClick={() => void remove(slot)}
-                  >
-                    <Trash2Icon aria-hidden="true" />
-                  </Button>
+                  <AlertModal
+                    title={t("deleteSlotConfirmTitle")}
+                    description={t("deleteSlotConfirmDesc")}
+                    cancelLabel={t("cancel")}
+                    confirmLabel={t("deleteSlot")}
+                    destructive
+                    pending={busy}
+                    trigger={
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={busy}
+                        aria-label={t("deleteSlot")}
+                      >
+                        <Trash2Icon aria-hidden="true" />
+                      </Button>
+                    }
+                    onConfirm={() => void remove(slot)}
+                  />
                 </div>
               </li>
             ))}

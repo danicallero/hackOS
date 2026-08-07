@@ -8,6 +8,7 @@ import { Building2Icon, PlusIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AccessDenied } from "@/components/common/access-denied";
+import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { EmptyState } from "@/components/common/empty-state";
@@ -381,10 +382,19 @@ export default function QueueRoomsPage() {
             </>
           ) : canAdmin ? (
             <div className="flex w-full flex-wrap items-center justify-between gap-2">
-              <Button
-                variant="destructive"
-                disabled={saving === `room-${selectedRoom?.id}`}
-                onClick={async () => {
+              <AlertModal
+                title={t("deleteRoomConfirmTitle")}
+                description={t("deleteRoomConfirmDesc")}
+                cancelLabel={t("cancel")}
+                confirmLabel={t("deleteRoom")}
+                destructive
+                pending={saving === `room-${selectedRoom?.id}`}
+                trigger={
+                  <Button variant="destructive" disabled={saving === `room-${selectedRoom?.id}`}>
+                    {t("deleteRoom")}
+                  </Button>
+                }
+                onConfirm={async () => {
                   if (!selectedRoom) return;
                   setSaving(`room-${selectedRoom.id}`);
                   try {
@@ -398,9 +408,7 @@ export default function QueueRoomsPage() {
                     setSaving(null);
                   }
                 }}
-              >
-                {t("deleteRoom")}
-              </Button>
+              />
               <div className="flex flex-wrap gap-2">
                 <Button
                   variant="outline"
