@@ -22,7 +22,6 @@ import { AlertModal } from "@/components/common/alert-modal";
 import { EmptyState } from "@/components/common/empty-state";
 import { Spinner } from "@/components/common/spinner";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,6 +36,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Surface } from "@/components/ui/surface";
 import { useLiveQuery } from "@/hooks/use-event-source";
 import { api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
@@ -247,7 +247,7 @@ export default function QueuePage() {
     // At xl we clamp the whole page to the viewport (100dvh minus the app chrome:
     // 3.5rem header + 2rem+2rem main py-8) so the outer page never scrolls.
     <div className="flex flex-col gap-5 xl:h-[calc(100dvh-7.5rem)]" data-wide>
-      <Card className="gap-0 p-5">
+      <Surface padding="none" className="p-5">
         {/* Fluid header (H29, issue #61): the two field columns grow/shrink and
             the action cluster drops to its own row under tight widths (tiling
             WMs, tablet/mobile) instead of overflowing the card. No fixed track
@@ -358,7 +358,7 @@ export default function QueuePage() {
             )}
           </div>
         </div>
-      </Card>
+      </Surface>
 
       {actionError && (
         <div

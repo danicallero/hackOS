@@ -354,7 +354,7 @@ export function ReviewModal({
             <div className="divide-border divide-y">
               {template.map((f) => (
                 <div key={f.key} className="py-3 first:pt-0 last:pb-0">
-                  <p className="text-muted-foreground mb-1 text-xs font-medium uppercase tracking-wide">
+                  <p className="text-muted-foreground mb-1 text-xs font-medium uppercase">
                     {pickText(f.label, lang) || f.key}
                   </p>
                   <div className="text-sm">
@@ -372,9 +372,7 @@ export function ReviewModal({
             <div className="divide-border divide-y">
               {Object.entries(response.responses).map(([k, v]) => (
                 <div key={k} className="py-3 first:pt-0 last:pb-0">
-                  <p className="text-muted-foreground mb-1 text-xs font-medium uppercase tracking-wide">
-                    {k}
-                  </p>
+                  <p className="text-muted-foreground mb-1 text-xs font-medium uppercase">{k}</p>
                   <div className="whitespace-pre-wrap text-sm">
                     {typeof v === "object" ? JSON.stringify(v) : String(v)}
                   </div>
@@ -393,7 +391,7 @@ export function ReviewModal({
             <div className="divide-border divide-y">
               {response.food_intolerances?.length > 0 && (
                 <div className="py-3 first:pt-0">
-                  <p className="text-muted-foreground mb-1 text-xs font-medium uppercase tracking-wide">
+                  <p className="text-muted-foreground mb-1 text-xs font-medium uppercase">
                     {t("dietaryRestrictions")}
                   </p>
                   <div className="flex flex-wrap gap-1.5">
@@ -410,7 +408,7 @@ export function ReviewModal({
               )}
               {response.food_intolerance_notes && (
                 <div className="py-3 first:pt-0">
-                  <p className="text-muted-foreground mb-1 text-xs font-medium uppercase tracking-wide">
+                  <p className="text-muted-foreground mb-1 text-xs font-medium uppercase">
                     {t("dietaryNotes")}
                   </p>
                   <p className="text-sm whitespace-pre-wrap">{response.food_intolerance_notes}</p>

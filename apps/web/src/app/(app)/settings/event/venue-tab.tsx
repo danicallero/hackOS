@@ -68,9 +68,7 @@ function VenuePreview({
 
   return (
     <div className="rounded-lg border p-4">
-      <p className="text-muted-foreground mb-2 text-xs uppercase tracking-wide">
-        {t("venuePreviewLabel")}
-      </p>
+      <p className="text-muted-foreground mb-2 text-xs uppercase">{t("venuePreviewLabel")}</p>
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-2">
           <MapPinIcon className="text-muted-foreground mt-0.5 size-4 shrink-0" />

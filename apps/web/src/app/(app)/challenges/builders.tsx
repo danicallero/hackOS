@@ -22,7 +22,6 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,6 +37,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Surface } from "@/components/ui/surface";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -244,7 +244,7 @@ export function JudgingPanelBuilder({
           setOpenTranslations((state) => ({ ...state, [index]: open }));
         return (
           // biome-ignore lint/suspicious/noArrayIndexKey: fields are positional; a key tied to question.key would remount inputs and drop focus while typing.
-          <Card key={index} className="gap-4 p-4 shadow-none">
+          <Surface key={index} padding="compact" className="flex flex-col gap-4">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-2">
                 <QuestionIcon kind={question.kind} />
@@ -344,7 +344,7 @@ export function JudgingPanelBuilder({
               />
               <Label htmlFor={`required-${index}`}>{t("requiredCheckboxLabel")}</Label>
             </div>
-          </Card>
+          </Surface>
         );
       })}
       {addField}

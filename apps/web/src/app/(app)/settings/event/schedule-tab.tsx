@@ -80,9 +80,7 @@ function CountdownPreview({
 
   return (
     <div className="rounded-lg border p-4">
-      <p className="text-muted-foreground mb-2 text-xs uppercase tracking-wide">
-        {t("publicPreviewLabel")}
-      </p>
+      <p className="text-muted-foreground mb-2 text-xs uppercase">{t("publicPreviewLabel")}</p>
       {phase.kind === "none" ? (
         <p className="text-muted-foreground text-sm">{t("countdownPreviewEmpty")}</p>
       ) : (

@@ -68,9 +68,7 @@ function PacePreview({ startsAt, endsAt }: { startsAt: string; endsAt: string })
 
   return (
     <div className="rounded-lg border p-4">
-      <p className="text-muted-foreground mb-2 text-xs uppercase tracking-wide">
-        {t("judgingPacePreviewLabel")}
-      </p>
+      <p className="text-muted-foreground mb-2 text-xs uppercase">{t("judgingPacePreviewLabel")}</p>
       {!start || !end ? (
         <p className="text-muted-foreground text-sm">{t("judgingWindowUnsetDesc")}</p>
       ) : (

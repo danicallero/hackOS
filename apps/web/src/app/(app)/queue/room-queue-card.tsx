@@ -14,9 +14,9 @@ import { QueueStatusBadge } from "@/components/common/queue-status-badge";
 import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { Surface } from "@/components/ui/surface";
 import { ApiError } from "@/lib/api";
 import { type Translate, useLocale } from "@/lib/i18n";
 import {
@@ -98,7 +98,7 @@ export function RoomQueueCard({
   };
 
   return (
-    <Card className="gap-0 overflow-hidden p-0 shadow-none">
+    <Surface padding="none" className="overflow-hidden">
       <div className="flex items-start justify-between gap-2 px-3.5 py-2.5">
         <div className="min-w-0 space-y-0.5">
           <div className="flex flex-wrap items-center gap-1.5">
@@ -356,7 +356,7 @@ export function RoomQueueCard({
         entry={selectedEntry}
         onOpenChange={(open) => !open && setSelectedEntry(null)}
       />
-    </Card>
+    </Surface>
   );
 }
 
@@ -401,9 +401,7 @@ function QueueEntryBlock({
 }) {
   return (
     <div className="space-y-1.5 rounded-md border p-2.5">
-      <div className="text-muted-foreground text-[0.65rem] font-medium tracking-wide uppercase">
-        {label}
-      </div>
+      <div className="text-muted-foreground text-[0.65rem] font-medium uppercase">{label}</div>
       {entry ? (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
@@ -434,9 +432,7 @@ function QueueGroup({
 }) {
   return (
     <div className="space-y-1.5 rounded-md border p-2.5">
-      <div className="text-muted-foreground text-[0.65rem] font-medium tracking-wide uppercase">
-        {label}
-      </div>
+      <div className="text-muted-foreground text-[0.65rem] font-medium uppercase">{label}</div>
       {entries.length === 0 ? (
         <p className="text-muted-foreground text-xs">{empty}</p>
       ) : (

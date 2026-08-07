@@ -1518,6 +1518,16 @@ const dict: Record<string, I18nText> = {
     en: "Could not delete room.",
   },
   deleteRoom: { es: "Eliminar sala", gl: "Eliminar sala", en: "Delete room" },
+  deleteRoomConfirmTitle: {
+    es: "¿Eliminar esta sala?",
+    gl: "¿Eliminar esta sala?",
+    en: "Delete this room?",
+  },
+  deleteRoomConfirmDesc: {
+    es: "Esta acción no se puede deshacer. Se eliminarán la sala y sus asignaciones de reto y jueces.",
+    gl: "Esta acción non se pode desfacer. Eliminaranse a sala e as súas asignacións de reto e xuíces.",
+    en: "This action cannot be undone. The room and its challenge and judge assignments will be deleted.",
+  },
   saveRoom: { es: "Guardar sala", gl: "Gardar sala", en: "Save room" },
   slugLabel: { es: "Slug", gl: "Slug", en: "Slug" },
   locationLabel: { es: "Ubicación", gl: "Localización", en: "Location" },
@@ -2677,6 +2687,16 @@ const dict: Record<string, I18nText> = {
     gl: "Non se puido eliminar o elemento do programa.",
     en: "Could not delete schedule item.",
   },
+  deleteScheduleItemConfirmTitle: {
+    es: "¿Eliminar este elemento del programa?",
+    gl: "¿Eliminar este elemento do programa?",
+    en: "Delete this schedule item?",
+  },
+  deleteScheduleItemConfirmDesc: {
+    es: "Esta acción no se puede deshacer. El elemento dejará de estar disponible en la agenda pública.",
+    gl: "Esta acción non se pode desfacer. O elemento deixará de estar dispoñible na axenda pública.",
+    en: "This action cannot be undone. The item will no longer appear on the public agenda.",
+  },
   scheduleDeniedDesc: {
     es: "Pide a un administrador acceso a la gestión del programa.",
     gl: "Pide a un administrador acceso á xestión do programa.",
@@ -3161,6 +3181,16 @@ const dict: Record<string, I18nText> = {
   addSlot: { es: "Añadir franja", gl: "Engadir franxa", en: "Add slot" },
   editSlot: { es: "Editar franja", gl: "Editar franxa", en: "Edit slot" },
   deleteSlot: { es: "Eliminar franja", gl: "Eliminar franxa", en: "Delete slot" },
+  deleteSlotConfirmTitle: {
+    es: "¿Eliminar esta franja?",
+    gl: "¿Eliminar esta franxa?",
+    en: "Delete this slot?",
+  },
+  deleteSlotConfirmDesc: {
+    es: "Esta acción no se puede deshacer. La franja dejará de mostrarse en las pantallas.",
+    gl: "Esta acción non se pode desfacer. A franxa deixará de amosarse nas pantallas.",
+    en: "This action cannot be undone. The slot will stop showing on the screens.",
+  },
   slotLabel: { es: "Nombre", gl: "Nome", en: "Name" },
   slotLabelPlaceholder: {
     es: "Noche de hackeo",
@@ -5286,6 +5316,12 @@ const dict: Record<string, I18nText> = {
   },
   rankLabel: { es: "Puesto {rank}", gl: "Posto {rank}", en: "Rank {rank}" },
   rankPlaceholder: { es: "Puesto", gl: "Posto", en: "Rank" },
+  rankInputLabel: { es: "Puesto del ganador", gl: "Posto do gañador", en: "Winner rank" },
+  winnerProjectSelectLabel: {
+    es: "Proyecto ganador",
+    gl: "Proxecto gañador",
+    en: "Winning project",
+  },
   selectProjectPlaceholder: {
     es: "Selecciona un proyecto",
     gl: "Selecciona un proxecto",
