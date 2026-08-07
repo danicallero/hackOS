@@ -476,30 +476,9 @@ export async function enqueueLocalScan(payload: ScanPayload, ownerUserId: number
   // intentionally excluded: it is never final locally and only becomes
   // assigned after server OK.
   if (payload.kind === "badge_rotation") {
-    const roster = await rosterDb();
-    await withSerializedTransaction(rosterChainRef, roster, async () => {
-      await roster.runAsync(
-        `INSERT OR IGNORE INTO revoked_badges (badge_id) VALUES (?)`,
-        payload.currentBadgeId,
-      );
-      await roster.runAsync(
-        `UPDATE scanner_people SET badge_id = ? WHERE user_id = ?`,
-        payload.newBadgeId,
-        payload.userId,
-      );
-    });
+    await revokeBadgeAndSetLocal(payload.currentBadgeId, payload.userId, payload.newBadgeId);
   } else if (payload.kind === "badge_removal") {
-    const roster = await rosterDb();
-    await withSerializedTransaction(rosterChainRef, roster, async () => {
-      await roster.runAsync(
-        `INSERT OR IGNORE INTO revoked_badges (badge_id) VALUES (?)`,
-        payload.currentBadgeId,
-      );
-      await roster.runAsync(
-        `UPDATE scanner_people SET badge_id = NULL WHERE user_id = ?`,
-        payload.userId,
-      );
-    });
+    await revokeBadgeAndSetLocal(payload.currentBadgeId, payload.userId, null);
   } else if (payload.kind === "presence") {
     await updatePersonPayload("badge_id", payload.badgeId, (person) => ({
       ...person,
@@ -524,6 +503,28 @@ export async function enqueueLocalScan(payload: ScanPayload, ownerUserId: number
     }
   }
   return id;
+}
+
+/**
+ * Shared local-roster effect of badge_rotation (newBadgeId set) and
+ * badge_removal (newBadgeId null): the old badge is revoked immediately so a
+ * still-offline scanner on another device rejects it before the mutation
+ * ever reaches the server.
+ */
+async function revokeBadgeAndSetLocal(
+  oldBadgeId: string,
+  userId: number,
+  newBadgeId: string | null,
+): Promise<void> {
+  const roster = await rosterDb();
+  await withSerializedTransaction(rosterChainRef, roster, async () => {
+    await roster.runAsync(`INSERT OR IGNORE INTO revoked_badges (badge_id) VALUES (?)`, oldBadgeId);
+    await roster.runAsync(
+      `UPDATE scanner_people SET badge_id = ? WHERE user_id = ?`,
+      newBadgeId,
+      userId,
+    );
+  });
 }
 
 type PendingScanRow = {

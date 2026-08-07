@@ -555,7 +555,49 @@ export function ScannerQueueStatus({
                           </Text>
                           <ScannerTransactionStatus scan={scan} bare />
                           {deletable ? (
-                            <ManualLogDetails scan={scan} people={people} activities={activities} />
+                            <>
+                              <ManualLogDetails
+                                scan={scan}
+                                people={people}
+                                activities={activities}
+                              />
+                              {/* Swiping the row (above) is the primary gesture, but a
+                                  swipe-only control has no path for VoiceOver/TalkBack or
+                                  switch control, so this stays reachable without it. */}
+                              <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel={t("scannerDeleteScan")}
+                                onPress={() => {
+                                  void haptic("warning");
+                                  onDelete(scan.id);
+                                }}
+                                style={({ pressed }) => ({
+                                  alignItems: "center",
+                                  alignSelf: "flex-end",
+                                  flexDirection: "row",
+                                  gap: 5,
+                                  minHeight: 32,
+                                  opacity: pressed ? 0.6 : 1,
+                                  paddingHorizontal: 4,
+                                })}
+                              >
+                                <SymbolView
+                                  accessible={false}
+                                  name="trash"
+                                  size={13}
+                                  tintColor={colors.destructive}
+                                />
+                                <Text
+                                  style={{
+                                    color: colors.destructive,
+                                    fontSize: 13,
+                                    fontWeight: "600",
+                                  }}
+                                >
+                                  {t("scannerDeleteScan")}
+                                </Text>
+                              </Pressable>
+                            </>
                           ) : null}
                         </View>
                       </SwipeableQueueRow>

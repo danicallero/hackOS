@@ -483,7 +483,7 @@ export function PersonOperationsScreen() {
               width: 74,
             }}
           >
-            <SymbolView name="person.fill" tintColor={colors.accent} size={34} />
+            <SymbolView accessible={false} name="person.fill" tintColor={colors.accent} size={34} />
           </View>
           <Text
             selectable
