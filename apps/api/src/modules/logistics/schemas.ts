@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { PERSON_FIELDS } from "./people.js";
 
+export const idParamSchema = z.object({ id: z.coerce.number().int().positive() });
 export const activityIdParam = z.object({ id: z.coerce.number().int().positive() });
 export const userIdParam = z.object({ userId: z.coerce.number().int().positive() });
 

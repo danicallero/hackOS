@@ -4,6 +4,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool } from "../../db/pool.js";
 import { requireCapability } from "../../lib/capabilities.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
+import { actor } from "./actor.js";
 import { enqueueChallenge } from "./service.js";
 
 /** Queue operations dashboard mutations (queue generation for all challenges). */
@@ -22,9 +23,7 @@ export function registerOperationsRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => {
-      if (req.userId == null) {
-        return { challenges: [], inserted: 0, alreadyQueued: 0 };
-      }
+      const actorId = actor(req.userId);
 
       const { rows: challenges } = await pool.query(
         `SELECT id, devpost_tags FROM challenges ORDER BY id`,
@@ -43,7 +42,7 @@ export function registerOperationsRoutes(app: FastifyInstance): void {
       let alreadyQueued = 0;
 
       for (const challenge of eligible) {
-        const result = await enqueueChallenge(challenge.id, req.userId);
+        const result = await enqueueChallenge(challenge.id, actorId);
         perChallenge.push({
           challengeId: challenge.id,
           inserted: result.inserted.length,

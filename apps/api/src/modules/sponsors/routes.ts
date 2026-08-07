@@ -4,7 +4,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { BadRequestError, ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
-import type { RouteAccessPolicy } from "../../lib/route-policy.js";
+import { routeAccessOption as access } from "../../lib/route-policy.js";
 import { putObject } from "../../lib/storage.js";
 import { enterpriseAccessFor, requireEnterpriseAccess } from "./access.js";
 import {
@@ -37,7 +37,6 @@ function actor(userId: number | null): number {
   return userId;
 }
 
-const access = (routeAccessPolicy: RouteAccessPolicy) => ({ config: { routeAccessPolicy } });
 const enterpriseParam = { source: "params", field: "id" } as const;
 
 /**

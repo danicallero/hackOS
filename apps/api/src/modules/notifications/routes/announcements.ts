@@ -5,7 +5,10 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool, withTransaction } from "../../../db/pool.js";
 import { audit } from "../../../lib/audit.js";
 import { requireAuth, requireCapability } from "../../../lib/capabilities.js";
-import type { RouteAccessPolicy } from "../../../lib/route-policy.js";
+import {
+  type RouteAccessPolicy,
+  routeAccessOption as routeAccess,
+} from "../../../lib/route-policy.js";
 import { broadcast } from "../../../lib/sse.js";
 import {
   createAnnouncement,
@@ -22,10 +25,6 @@ import {
   announcementIdParamsSchema,
   announcementUpdateBodySchema,
 } from "../schemas.js";
-
-function routeAccess(routeAccessPolicy: RouteAccessPolicy) {
-  return { config: { routeAccessPolicy } };
-}
 
 /**
  * H50 announcements: CRUD behind ANNOUNCEMENTS_MANAGE, a public visibility-windowed
@@ -64,7 +63,15 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
 
   typedApp.get(
     "/api/announcements",
-    { ...routeAccess(manage), preHandler: requireCapability(CAPABILITIES.ANNOUNCEMENTS_MANAGE) },
+    {
+      ...routeAccess(manage),
+      preHandler: requireCapability(CAPABILITIES.ANNOUNCEMENTS_MANAGE),
+      schema: {
+        summary: "List all announcements",
+        description:
+          "Lists all H50 announcements (regardless of publication window) for admin management and audit.",
+      },
+    },
     async () => {
       const items = await listAnnouncementsAdmin(pool);
       return { items };
@@ -76,7 +83,12 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
     {
       ...routeAccess(manage),
       preHandler: requireCapability(CAPABILITIES.ANNOUNCEMENTS_MANAGE),
-      schema: { params: announcementIdParamsSchema },
+      schema: {
+        summary: "Get announcement details",
+        description:
+          "Fetches a single H50 announcement including its full translations, delivery settings and publication window.",
+        params: announcementIdParamsSchema,
+      },
     },
     async (req) => {
       return getAnnouncement(pool, req.params.id);

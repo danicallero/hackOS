@@ -569,6 +569,44 @@ async function lockResponse(client: pg.PoolClient, responseId: number): Promise<
   return rows[0];
 }
 
+/** Invalidates a pending confirmation token, if one exists. */
+async function invalidateConfirmationToken(client: pg.PoolClient, tokenId: number): Promise<void> {
+  await client.query(
+    `UPDATE email_verification_tokens SET used_at = now() WHERE id = $1 AND used_at IS NULL`,
+    [tokenId],
+  );
+}
+
+/**
+ * Throws ConflictError when `capacity` is already reached. Takes the
+ * already-loaded capacity rather than loading it itself, since callers load
+ * the application row under different locking strategies (e.g. `decide`'s
+ * `FOR UPDATE` serializes concurrent accepts — this helper must not weaken
+ * that by re-reading it unlocked).
+ */
+async function assertCapacityAvailable(
+  client: pg.PoolClient,
+  applicationId: number,
+  capacity: number,
+  excludeResponseId?: number,
+): Promise<void> {
+  const { rows: countRows } = await client.query(
+    excludeResponseId === undefined
+      ? `SELECT count(*)::int AS n FROM application_responses
+         WHERE application_id = $1 AND status IN ('accepted_internal', 'accepted', 'confirmed')`
+      : `SELECT count(*)::int AS n FROM application_responses
+         WHERE application_id = $1 AND id <> $2
+           AND status IN ('accepted_internal', 'accepted', 'confirmed')`,
+    excludeResponseId === undefined ? [applicationId] : [applicationId, excludeResponseId],
+  );
+  if (countRows[0].n >= capacity) {
+    throw new ConflictError("Capacity reached for this application", {
+      code: "capacity_full",
+      capacity,
+    });
+  }
+}
+
 // ── decide (H14) ─────────────────────────────────────────────────────────────
 
 export async function decide(
@@ -595,17 +633,7 @@ export async function decide(
     }
 
     if (decision === "accepted" && app.capacity != null) {
-      const { rows: countRows } = await client.query(
-        `SELECT count(*)::int AS n FROM application_responses
-         WHERE application_id = $1 AND status IN ('accepted_internal', 'accepted', 'confirmed')`,
-        [resp.application_id],
-      );
-      if (countRows[0].n >= app.capacity) {
-        throw new ConflictError("Capacity reached for this application", {
-          code: "capacity_full",
-          capacity: app.capacity,
-        });
-      }
+      await assertCapacityAvailable(client, resp.application_id, app.capacity);
     }
 
     const internalStatus = decision === "accepted" ? "accepted_internal" : "rejected_internal";
@@ -652,10 +680,7 @@ export async function revertDecision(
       }
       // Invalidate any pending confirmation token
       if (resp.confirmation_token_id) {
-        await client.query(
-          `UPDATE email_verification_tokens SET used_at = now() WHERE id = $1 AND used_at IS NULL`,
-          [resp.confirmation_token_id],
-        );
+        await invalidateConfirmationToken(client, resp.confirmation_token_id);
       }
       const updated = await client.query(
         `UPDATE application_responses
@@ -700,28 +725,14 @@ export async function revertDecision(
       );
       const app = appRows[0] as ApplicationRow;
       if (app.capacity != null) {
-        const { rows: countRows } = await client.query(
-          `SELECT count(*)::int AS n FROM application_responses
-           WHERE application_id = $1 AND id <> $2
-             AND status IN ('accepted_internal', 'accepted', 'confirmed')`,
-          [resp.application_id, responseId],
-        );
-        if (countRows[0].n >= app.capacity) {
-          throw new ConflictError("Capacity reached for this application", {
-            code: "capacity_full",
-            capacity: app.capacity,
-          });
-        }
+        await assertCapacityAvailable(client, resp.application_id, app.capacity, responseId);
       }
     }
 
     // If it had already been sent, un-send it: clear the sent marker, any
     // pending confirmation token, and confirm/decline stamps.
     if (resp.confirmation_token_id) {
-      await client.query(
-        `UPDATE email_verification_tokens SET used_at = now() WHERE id = $1 AND used_at IS NULL`,
-        [resp.confirmation_token_id],
-      );
+      await invalidateConfirmationToken(client, resp.confirmation_token_id);
     }
     const updated = await client.query(
       `UPDATE application_responses
@@ -912,17 +923,7 @@ export async function reAccept(
     const app = await requireApplication(client, resp.application_id);
 
     if (app.capacity != null) {
-      const { rows: countRows } = await client.query(
-        `SELECT count(*)::int AS n FROM application_responses
-         WHERE application_id = $1 AND status IN ('accepted_internal', 'accepted', 'confirmed')`,
-        [resp.application_id],
-      );
-      if (countRows[0].n >= app.capacity) {
-        throw new ConflictError("Capacity reached for this application", {
-          code: "capacity_full",
-          capacity: app.capacity,
-        });
-      }
+      await assertCapacityAvailable(client, resp.application_id, app.capacity);
     }
 
     const user = await loadUserComms(client, resp.user_id);
@@ -974,10 +975,7 @@ export async function revokeSpot(actorId: number, responseId: number): Promise<R
     const app = await requireApplication(client, resp.application_id);
 
     if (resp.confirmation_token_id) {
-      await client.query(
-        `UPDATE email_verification_tokens SET used_at = now() WHERE id = $1 AND used_at IS NULL`,
-        [resp.confirmation_token_id],
-      );
+      await invalidateConfirmationToken(client, resp.confirmation_token_id);
     }
     const updated = await client.query(
       `UPDATE application_responses
@@ -1024,7 +1022,7 @@ export interface DecisionPool {
 }
 
 async function loadDecisionPoolRows(
-  client: pg.PoolClient,
+  client: Queryable,
   applicationId: number,
   statuses: string[],
 ): Promise<DecisionPoolRow[]> {
@@ -1050,12 +1048,12 @@ export async function getDecisionPool(applicationId: number): Promise<DecisionPo
 
   const [acceptedUns, acceptedSent, rejectedUns, rejectedSent, declinedManual, declinedExpired] =
     await Promise.all([
-      loadDecisionPoolRows(pool as unknown as pg.PoolClient, applicationId, ["accepted_internal"]),
-      loadDecisionPoolRows(pool as unknown as pg.PoolClient, applicationId, ["accepted"]),
-      loadDecisionPoolRows(pool as unknown as pg.PoolClient, applicationId, ["rejected_internal"]),
-      loadDecisionPoolRows(pool as unknown as pg.PoolClient, applicationId, ["rejected"]),
-      loadDecisionPoolRows(pool as unknown as pg.PoolClient, applicationId, ["declined"]),
-      loadDecisionPoolRows(pool as unknown as pg.PoolClient, applicationId, ["expired"]),
+      loadDecisionPoolRows(pool, applicationId, ["accepted_internal"]),
+      loadDecisionPoolRows(pool, applicationId, ["accepted"]),
+      loadDecisionPoolRows(pool, applicationId, ["rejected_internal"]),
+      loadDecisionPoolRows(pool, applicationId, ["rejected"]),
+      loadDecisionPoolRows(pool, applicationId, ["declined"]),
+      loadDecisionPoolRows(pool, applicationId, ["expired"]),
     ]);
 
   return {
@@ -1455,10 +1453,7 @@ async function doConfirm(
     [resp.id],
   );
   if (resp.confirmation_token_id) {
-    await client.query(
-      `UPDATE email_verification_tokens SET used_at = now() WHERE id = $1 AND used_at IS NULL`,
-      [resp.confirmation_token_id],
-    );
+    await invalidateConfirmationToken(client, resp.confirmation_token_id);
   }
   await audit(client, {
     actorId,
@@ -1489,10 +1484,7 @@ async function doDecline(
     [resp.id],
   );
   if (resp.confirmation_token_id) {
-    await client.query(
-      `UPDATE email_verification_tokens SET used_at = now() WHERE id = $1 AND used_at IS NULL`,
-      [resp.confirmation_token_id],
-    );
+    await invalidateConfirmationToken(client, resp.confirmation_token_id);
   }
   await audit(client, {
     actorId,
@@ -1611,10 +1603,7 @@ export async function expireDueConfirmations(): Promise<{ expired: number }> {
         resp.id,
       ]);
       if (resp.confirmation_token_id) {
-        await client.query(
-          `UPDATE email_verification_tokens SET used_at = now() WHERE id = $1 AND used_at IS NULL`,
-          [resp.confirmation_token_id],
-        );
+        await invalidateConfirmationToken(client, resp.confirmation_token_id);
       }
       await audit(client, {
         actorId: null,
@@ -1633,7 +1622,7 @@ export async function expireDueConfirmations(): Promise<{ expired: number }> {
 // ── read helpers ──────────────────────────────────────────────────────────────
 
 /** Applicant-facing status masks internal decisions as "review" until sent (H14). */
-export function maskStatus(status: string, _decisionSentAt: Date | null): string {
+export function maskStatus(status: string): string {
   if (status === "accepted_internal" || status === "rejected_internal") return "review";
   return status;
 }
@@ -1713,7 +1702,7 @@ export async function listMyResponses(userId: number): Promise<
       id: r.id,
       application_id: r.application_id,
       application_name: r.application_name,
-      status: maskStatus(r.status, r.decision_sent_at),
+      status: maskStatus(r.status),
       submitted_at: r.submitted_at,
     }),
   );

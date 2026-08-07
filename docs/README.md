@@ -11,10 +11,30 @@ Reading order for a new agent/contributor: [`AGENTS.md`](../AGENTS.md)
 follow) → root [`README.md`](../README.md) (setup) → the **one-paragraph
 orientation** below → whichever module doc matches your task.
 
+**One-paragraph orientation.** hackOS is a Fastify API (`apps/api`, raw SQL,
+no ORM) plus a Next.js web app and an Expo mobile app, all reading/writing the
+same Postgres database and sharing capability names and realtime event names
+from `packages/shared`. Every domain — applications, projects, queue,
+logistics, notifications, identity, sponsors, challenges, event, exports —
+lives in its own `apps/api/src/modules/<domain>/` directory and follows the
+same conventions: capability-based authorization (never role checks),
+audited mutations in the same transaction as the write, `SELECT ... FOR
+UPDATE` + idempotency keys on state transitions, and SSE realtime fan-out
+through Valkey. [`api-reference.md`](./api-reference.md) is the map of what
+each module owns and where those conventions live in code; the rest of this
+folder goes deeper on one system, module, or client at a time.
+
 ## Index
 
 Architecture & modules:
 
+- [API reference — module and convention overview](./api-reference.md) — what
+  each `apps/api` module owns, and the conventions that hold across all of
+  them: capability-based authorization, route-access-policy kinds, the
+  `AppError` shape, audit, concurrency/idempotency, realtime, and background
+  work. Start here for "what does the API do and how is it organized";
+  `/documentation` (Swagger UI, generated from route schemas) is the
+  route-by-route reference this page deliberately doesn't duplicate.
 - [Architecture & infrastructure](./architecture.md) — the system view: the six
   services and their stacks, the two-network security boundary, state ownership
   (Postgres truth vs. ephemeral Valkey), realtime SSE fan-out, the one-image

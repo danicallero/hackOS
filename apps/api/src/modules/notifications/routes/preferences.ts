@@ -4,13 +4,9 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool } from "../../../db/pool.js";
 import { requireAuth, userHasCapability } from "../../../lib/capabilities.js";
 import { ForbiddenError } from "../../../lib/errors.js";
-import type { RouteAccessPolicy } from "../../../lib/route-policy.js";
+import { routeAccessOption as routeAccess } from "../../../lib/route-policy.js";
 import { setPreferencesBodySchema } from "../schemas.js";
 import { getPreferences, QUEUE_STAFF_CATEGORY, setPreferences } from "../service.js";
-
-function routeAccess(routeAccessPolicy: RouteAccessPolicy) {
-  return { config: { routeAccessPolicy } };
-}
 
 /** H51: participant-facing notification preference matrix, incl. schedule:<id> reminder opt-ins. */
 export function registerPreferenceRoutes(app: FastifyInstance): void {
@@ -18,7 +14,15 @@ export function registerPreferenceRoutes(app: FastifyInstance): void {
 
   typedApp.get(
     "/api/me/notification-preferences",
-    { ...routeAccess({ kind: "authenticated" }), preHandler: requireAuth },
+    {
+      ...routeAccess({ kind: "authenticated" }),
+      preHandler: requireAuth,
+      schema: {
+        summary: "Get notification preferences",
+        description:
+          "Fetches the H51 preference matrix for the authenticated user, showing all available channels and any overrides from their stored preference rows.",
+      },
+    },
     async (req) => {
       return getPreferences(pool, req.userId as number);
     },
@@ -29,7 +33,12 @@ export function registerPreferenceRoutes(app: FastifyInstance): void {
     {
       ...routeAccess({ kind: "authenticated" }),
       preHandler: requireAuth,
-      schema: { body: setPreferencesBodySchema },
+      schema: {
+        summary: "Update notification preferences",
+        description:
+          "Sets H51 notification preference overrides for the authenticated user; queue-category notifications are mandatory and cannot be overridden. Staff-category push is restricted to users with queue/judge access.",
+        body: setPreferencesBodySchema,
+      },
     },
     async (req) => {
       if (req.body.preferences.some((item) => item.category === QUEUE_STAFF_CATEGORY)) {

@@ -11,7 +11,7 @@ import {
   requireCapability,
 } from "../../../lib/capabilities.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../../lib/errors.js";
-import type { RouteAccessPolicy } from "../../../lib/route-policy.js";
+import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import { issueTicket } from "../../logistics/tickets.js";
 import { reconcileDevpostParticipantsForUser } from "../../projects/reconciliation.js";
 import { myProjects } from "../../projects/service.js";
@@ -37,7 +37,16 @@ import { computeDerivedRole, computeMembershipFlags } from "../role.js";
 
 const LANGUAGES = ["en", "es", "gl"] as const;
 const DIETARY_DATA_STATES = ["not_provided", "present"] as const;
-const routeAccess = (routeAccessPolicy: RouteAccessPolicy) => ({ routeAccessPolicy });
+
+const derivedRoleSchema = z.enum([
+  "admin",
+  "judge",
+  "sponsor",
+  "staff",
+  "mentor",
+  "participant",
+  "unassigned",
+]);
 
 /** Fields a user may edit on themself (H7: "consultar mis datos… y si detecto un error"). */
 const selfPatchSchema = z
@@ -259,15 +268,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         summary: "Get my profile",
         response: {
           200: userResponseSchema.extend({
-            role: z.enum([
-              "admin",
-              "judge",
-              "sponsor",
-              "staff",
-              "mentor",
-              "participant",
-              "unassigned",
-            ]),
+            role: derivedRoleSchema,
             mobileAccess: z.boolean(),
             // Effective capabilities (H8) so the web/mobile UI can gate by
             // capability, never by the illustrative role (H55). Authoritative
@@ -368,15 +369,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
                 name: z.string().nullable(),
                 surname: z.string().nullable(),
                 badgeId: z.string().nullable(),
-                role: z.enum([
-                  "admin",
-                  "judge",
-                  "sponsor",
-                  "staff",
-                  "mentor",
-                  "participant",
-                  "unassigned",
-                ]),
+                role: derivedRoleSchema,
                 phone: z.string().nullable(),
                 language: z.string(),
                 shirtSize: z.string().nullable(),
@@ -468,15 +461,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         params: z.object({ id: z.coerce.number().int() }),
         response: {
           200: userResponseSchema.extend({
-            role: z.enum([
-              "admin",
-              "judge",
-              "sponsor",
-              "staff",
-              "mentor",
-              "participant",
-              "unassigned",
-            ]),
+            role: derivedRoleSchema,
             capabilities: z.array(z.string()),
             groups: z.array(z.object({ id: z.number(), name: z.string() })),
           }),

@@ -2,17 +2,13 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool } from "../../../db/pool.js";
 import { requireAuth } from "../../../lib/capabilities.js";
-import type { RouteAccessPolicy } from "../../../lib/route-policy.js";
+import { routeAccessOption as routeAccess } from "../../../lib/route-policy.js";
 import { inboxQuerySchema, notificationIdParamsSchema } from "../schemas.js";
 import {
   deleteInboxNotification,
   listInboxNotifications,
   markNotificationRead,
 } from "../service.js";
-
-function routeAccess(routeAccessPolicy: RouteAccessPolicy) {
-  return { config: { routeAccessPolicy } };
-}
 
 /** H50/H51 in-app inbox: the outbox row itself is the inbox item, read_at is the read marker. */
 export function registerInboxRoutes(app: FastifyInstance): void {
@@ -23,7 +19,12 @@ export function registerInboxRoutes(app: FastifyInstance): void {
     {
       ...routeAccess({ kind: "authenticated" }),
       preHandler: requireAuth,
-      schema: { querystring: inboxQuerySchema },
+      schema: {
+        summary: "List in-app notifications",
+        description:
+          "Paginated H50/H51 in-app inbox for the authenticated user, optionally filtered to unread items only. The outbox row itself is the inbox item.",
+        querystring: inboxQuerySchema,
+      },
     },
     async (req) => {
       const { unread, limit, offset } = req.query;
@@ -40,7 +41,12 @@ export function registerInboxRoutes(app: FastifyInstance): void {
     {
       ...routeAccess({ kind: "authenticated" }),
       preHandler: requireAuth,
-      schema: { params: notificationIdParamsSchema },
+      schema: {
+        summary: "Mark notification as read",
+        description:
+          "Sets the read_at timestamp on a single H50/H51 in-app inbox item belonging to the caller (idempotent).",
+        params: notificationIdParamsSchema,
+      },
     },
     async (req) => {
       return markNotificationRead(pool, req.userId as number, req.params.id);

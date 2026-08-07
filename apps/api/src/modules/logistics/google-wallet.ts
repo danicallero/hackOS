@@ -2,7 +2,7 @@ import { createSign, randomBytes } from "node:crypto";
 import { config } from "../../config.js";
 import { pool } from "../../db/pool.js";
 import { NotFoundError, ServiceUnavailableError } from "../../lib/errors.js";
-import { ensurePassRecord, type Purpose } from "./wallet-passes.js";
+import { ensurePassRecord, type Purpose, resolvePassIdentity } from "./wallet-passes.js";
 
 /**
  * Google Wallet (H28). Uses the "Generic" pass type — unlike Event Ticket
@@ -84,9 +84,7 @@ async function passContent(
   );
   const u = rows[0];
   if (!u) throw new NotFoundError("User not found");
-  const fullName = [u.name, u.surname].filter(Boolean).join(" ") || `User ${userId}`;
-  const barcode = purpose === "ticket" ? u.token : u.badge_id;
-  return { fullName, barcode };
+  return resolvePassIdentity(u, userId, purpose);
 }
 
 /**

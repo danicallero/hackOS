@@ -4,7 +4,7 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool } from "../../db/pool.js";
 import { requireAnyCapability, requireCapability } from "../../lib/capabilities.js";
-import type { RouteAccessPolicy } from "../../lib/route-policy.js";
+import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import {
   batchDecideSchema,
   batchIdsSchema,
@@ -50,21 +50,31 @@ import {
  */
 export function registerReviewRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
-  const routeAccess = (routeAccessPolicy: RouteAccessPolicy) => ({ routeAccessPolicy });
   const capability = (value: Capability) => routeAccess({ kind: "capability", capability: value });
   const anyCapability = (...values: Capability[]) =>
     routeAccess({ kind: "capability", anyOf: values });
+  const reviewOrDecide = requireAnyCapability(
+    CAPABILITIES.APPLICATIONS_REVIEW,
+    CAPABILITIES.APPLICATIONS_DECIDE,
+  );
+  const reviewOrDecideAccess = anyCapability(
+    CAPABILITIES.APPLICATIONS_REVIEW,
+    CAPABILITIES.APPLICATIONS_DECIDE,
+  );
 
   // ── H13: list responses for a form, with filters ───────────────────────────
   r.get(
     "/api/applications/:id/responses",
     {
-      preHandler: requireAnyCapability(
-        CAPABILITIES.APPLICATIONS_REVIEW,
-        CAPABILITIES.APPLICATIONS_DECIDE,
-      ),
-      config: anyCapability(CAPABILITIES.APPLICATIONS_REVIEW, CAPABILITIES.APPLICATIONS_DECIDE),
-      schema: { params: idParamSchema, querystring: listResponsesQuerySchema },
+      preHandler: reviewOrDecide,
+      config: reviewOrDecideAccess,
+      schema: {
+        summary: "List a form's responses",
+        description:
+          "Staff read of every response to a form (H13), with optional status and name/email search filters, plus each response's aggregate review score.",
+        params: idParamSchema,
+        querystring: listResponsesQuerySchema,
+      },
     },
     async (req) => {
       const params: unknown[] = [req.params.id];
@@ -106,7 +116,12 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_REVIEW),
       config: capability(CAPABILITIES.APPLICATIONS_REVIEW),
-      schema: { params: responseIdParamSchema, body: reviewUpsertSchema },
+      schema: {
+        summary: "Score a response",
+        description: "Upserts the caller's own review (score + notes) for one response (H13).",
+        params: responseIdParamSchema,
+        body: reviewUpsertSchema,
+      },
     },
     async (req) => {
       await upsertReview(
@@ -125,7 +140,13 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_REVIEW),
       config: capability(CAPABILITIES.APPLICATIONS_REVIEW),
-      schema: { params: responseIdParamSchema, body: staffNotesSchema },
+      schema: {
+        summary: "Set shared staff notes",
+        description:
+          "Replaces the shared (non-reviewer-specific) staff notes on one response (H13).",
+        params: responseIdParamSchema,
+        body: staffNotesSchema,
+      },
     },
     async (req) => {
       await setStaffNotes(
@@ -143,7 +164,13 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
       config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
-      schema: { params: responseIdParamSchema, body: decideSchema },
+      schema: {
+        summary: "Record an internal decision",
+        description:
+          "Sets a response's internal accept/reject decision (H14). Not yet visible to the applicant — see send-decision.",
+        params: responseIdParamSchema,
+        body: decideSchema,
+      },
     },
     async (req) => decide(req.userId as number, req.params.responseId, req.body.decision),
   );
@@ -154,7 +181,12 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
       config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
-      schema: { params: responseIdParamSchema },
+      schema: {
+        summary: "Send a decision to the applicant",
+        description:
+          "Sends the already-recorded internal decision as the applicant-facing accept/reject email (H14). No-op if there is no unsent internal decision.",
+        params: responseIdParamSchema,
+      },
     },
     async (req) => sendDecision(req.userId as number, req.params.responseId),
   );
@@ -165,7 +197,13 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
       config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
-      schema: { params: idParamSchema, body: sendDecisionsSchema },
+      schema: {
+        summary: "Send all unsent decisions for a form",
+        description:
+          "Sends the applicant-facing email for every response with an unsent internal decision (H14); `include_rejected` controls whether rejections are sent too.",
+        params: idParamSchema,
+        body: sendDecisionsSchema,
+      },
     },
     async (req) =>
       sendDecisionsBatch(req.userId as number, req.params.id, req.body.include_rejected),
@@ -177,7 +215,12 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
       config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
-      schema: { params: responseIdParamSchema },
+      schema: {
+        summary: "Resend a decision",
+        description:
+          "Re-sends the decision email for a response already at accepted, rejected, or expired (H15) — an expired one returns to accepted, giving a second chance.",
+        params: responseIdParamSchema,
+      },
     },
     async (req) => resendDecision(req.userId as number, req.params.responseId),
   );
@@ -188,7 +231,12 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
       config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
-      schema: { params: responseIdParamSchema },
+      schema: {
+        summary: "Re-accept a response",
+        description:
+          "Moves a declined, rejected, or expired response back to accepted with a fresh confirmation token and email; re-checks capacity.",
+        params: responseIdParamSchema,
+      },
     },
     async (req) => reAccept(req.userId as number, req.params.responseId),
   );
@@ -199,7 +247,12 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
       config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
-      schema: { params: responseIdParamSchema },
+      schema: {
+        summary: "Revoke an accepted or confirmed spot",
+        description:
+          "Moves an accepted or confirmed response to rejected. Works post-confirmation, unlike a normal decision reversal.",
+        params: responseIdParamSchema,
+      },
     },
     async (req) => revokeSpot(req.userId as number, req.params.responseId),
   );
@@ -208,12 +261,14 @@ export function registerReviewRoutes(app: FastifyInstance): void {
   r.get(
     "/api/users/:id/applications",
     {
-      preHandler: requireAnyCapability(
-        CAPABILITIES.APPLICATIONS_REVIEW,
-        CAPABILITIES.APPLICATIONS_DECIDE,
-      ),
-      config: anyCapability(CAPABILITIES.APPLICATIONS_REVIEW, CAPABILITIES.APPLICATIONS_DECIDE),
-      schema: { params: idParamSchema },
+      preHandler: reviewOrDecide,
+      config: reviewOrDecideAccess,
+      schema: {
+        summary: "Get a user's application responses",
+        description:
+          "Every response a user has submitted, across all forms — what the admin panel's profile Application tab shows.",
+        params: idParamSchema,
+      },
     },
     async (req) => ({ responses: await listUserResponsesForStaff(req.params.id) }),
   );
@@ -222,12 +277,14 @@ export function registerReviewRoutes(app: FastifyInstance): void {
   r.get(
     "/api/applications/:id/decision-pool",
     {
-      preHandler: requireAnyCapability(
-        CAPABILITIES.APPLICATIONS_REVIEW,
-        CAPABILITIES.APPLICATIONS_DECIDE,
-      ),
-      config: anyCapability(CAPABILITIES.APPLICATIONS_REVIEW, CAPABILITIES.APPLICATIONS_DECIDE),
-      schema: { params: idParamSchema },
+      preHandler: reviewOrDecide,
+      config: reviewOrDecideAccess,
+      schema: {
+        summary: "Get a form's decision pool",
+        description:
+          "Responses for a form grouped by decision outcome (accepted/rejected/declined/expired, internal and sent), for the review UI's decision-pool view.",
+        params: idParamSchema,
+      },
     },
     async (req) => getDecisionPool(req.params.id),
   );
@@ -238,7 +295,13 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
       config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
-      schema: { params: responseIdParamSchema, body: revertDecisionSchema },
+      schema: {
+        summary: "Revert a decision",
+        description:
+          "Sends a decided response back to review, or flips/un-sends an internal decision to the other outcome (H14).",
+        params: responseIdParamSchema,
+        body: revertDecisionSchema,
+      },
     },
     async (req) => revertDecision(req.userId as number, req.params.responseId, req.body.decision),
   );
@@ -249,7 +312,12 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
       config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
-      schema: { params: responseIdParamSchema },
+      schema: {
+        summary: "Get a response's confirm link",
+        description:
+          "Returns the H15 confirmation link and its expiry for a response still holding an unexpired token, so staff can hand it to an applicant directly.",
+        params: responseIdParamSchema,
+      },
     },
     async (req) => {
       const link = await getConfirmLink(req.params.responseId);
@@ -265,12 +333,14 @@ export function registerReviewRoutes(app: FastifyInstance): void {
   r.get(
     "/api/responses/:responseId",
     {
-      preHandler: requireAnyCapability(
-        CAPABILITIES.APPLICATIONS_REVIEW,
-        CAPABILITIES.APPLICATIONS_DECIDE,
-      ),
-      config: anyCapability(CAPABILITIES.APPLICATIONS_REVIEW, CAPABILITIES.APPLICATIONS_DECIDE),
-      schema: { params: responseIdParamSchema },
+      preHandler: reviewOrDecide,
+      config: reviewOrDecideAccess,
+      schema: {
+        summary: "Get response detail",
+        description:
+          "Full staff-facing detail for one response, including its available next actions given its current status.",
+        params: responseIdParamSchema,
+      },
     },
     async (req) => getResponseDetail(req.params.responseId),
   );
@@ -281,7 +351,12 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_EDIT_RESPONSE),
       config: capability(CAPABILITIES.APPLICATIONS_EDIT_RESPONSE),
-      schema: { params: responseIdParamSchema, body: saveDraftSchema },
+      schema: {
+        summary: "Edit a response's form data",
+        description: "Staff correction of a response's submitted form answers.",
+        params: responseIdParamSchema,
+        body: saveDraftSchema,
+      },
     },
     async (req) => editResponse(req.userId as number, req.params.responseId, req.body.responses),
   );
@@ -292,7 +367,12 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
       config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
-      schema: { body: batchDecideSchema },
+      schema: {
+        summary: "Batch internal decision",
+        description:
+          "Records the same internal accept/reject decision (H14) for each response id; per-row failures are collected rather than aborting the batch.",
+        body: batchDecideSchema,
+      },
     },
     async (req) => batchDecide(req.userId as number, req.body.response_ids, req.body.decision),
   );
@@ -302,7 +382,12 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
       config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
-      schema: { body: batchSendDecisionsSchema },
+      schema: {
+        summary: "Batch send never-sent decisions",
+        description:
+          "Sends the applicant-facing decision email for each response id, only for responses with an unsent internal decision (H14).",
+        body: batchSendDecisionsSchema,
+      },
     },
     async (req) => batchSendDecisions(req.userId as number, req.body.response_ids),
   );
@@ -331,7 +416,12 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
       config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
-      schema: { body: batchRevertDecisionSchema },
+      schema: {
+        summary: "Batch revert decisions",
+        description:
+          "Reverts the decision for each response id — to review, or to the other internal decision (H14).",
+        body: batchRevertDecisionSchema,
+      },
     },
     async (req) =>
       batchRevertDecisions(req.userId as number, req.body.response_ids, req.body.decision),
@@ -343,7 +433,12 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
       config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
-      schema: { body: batchIdsSchema },
+      schema: {
+        summary: "Batch re-accept",
+        description:
+          "Moves each declined, rejected, or expired response id back to accepted, re-checking capacity for each.",
+        body: batchIdsSchema,
+      },
     },
     async (req) => batchReAccept(req.userId as number, req.body.response_ids),
   );
@@ -354,7 +449,11 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     {
       preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
       config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
-      schema: { body: batchIdsSchema },
+      schema: {
+        summary: "Batch revoke spots",
+        description: "Moves each accepted or confirmed response id to rejected.",
+        body: batchIdsSchema,
+      },
     },
     async (req) => batchRevokeSpots(req.userId as number, req.body.response_ids),
   );

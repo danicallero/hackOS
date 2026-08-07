@@ -3,8 +3,8 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool } from "../../db/pool.js";
 import { requireCapability } from "../../lib/capabilities.js";
-import { UnauthorizedError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
+import { actor } from "./actor.js";
 import { requireEntryJudgeOrCapability } from "./contextual-access.js";
 import { scheduleTopUp } from "./pump.js";
 import { entryHistory } from "./reads.js";
@@ -34,11 +34,6 @@ import {
   startPresentation,
 } from "./service.js";
 import type { QueueEntryRow } from "./types.js";
-
-function actor(userId: number | null): number {
-  if (userId == null) throw new UnauthorizedError();
-  return userId;
-}
 
 /**
  * Runs a queue transition, then immediately tops up the affected room's waiting

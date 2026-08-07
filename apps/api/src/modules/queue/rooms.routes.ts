@@ -4,9 +4,10 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { requireCapability } from "../../lib/capabilities.js";
-import { ConflictError, NotFoundError } from "../../lib/errors.js";
+import { NotFoundError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { requireAnyCapability } from "./access.js";
+import { actor } from "./actor.js";
 import {
   accessibleRoomIds,
   requireRoomAccessOrCapability,
@@ -404,8 +405,8 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
       schema: { params: roomIdParam },
     },
     async (req) => {
-      if (req.userId == null) throw new ConflictError("Missing actor");
-      await pauseRoom(req.params.roomId, req.userId);
+      const userId = actor(req.userId);
+      await pauseRoom(req.params.roomId, userId);
       return { roomId: req.params.roomId, isPaused: true };
     },
   );
@@ -427,8 +428,8 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
       schema: { params: roomIdParam },
     },
     async (req) => {
-      if (req.userId == null) throw new ConflictError("Missing actor");
-      await resumeRoom(req.params.roomId, req.userId);
+      const userId = actor(req.userId);
+      await resumeRoom(req.params.roomId, userId);
       // H35: a resumed room fills back to capacity immediately, not on the tick.
       await scheduleTopUp(req.params.roomId);
       return { roomId: req.params.roomId, isPaused: false };
@@ -490,8 +491,8 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
       schema: { params: challengeIdParam, body: enqueueChallengeBody },
     },
     async (req) => {
-      if (req.userId == null) throw new ConflictError("Missing actor");
-      return enqueueChallenge(req.params.challengeId, req.userId, req.body.repoIds);
+      const userId = actor(req.userId);
+      return enqueueChallenge(req.params.challengeId, userId, req.body.repoIds);
     },
   );
 }

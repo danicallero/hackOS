@@ -170,9 +170,3 @@ export const batchRevertDecisionSchema = batchIdsSchema.extend({
 export const revertDecisionSchema = z.object({
   decision: z.enum(["accepted", "rejected", "review"]),
 });
-
-// ── confirm link retrieval ───────────────────────────────────────────────────
-
-export const getConfirmLinkSchema = z.object({
-  params: responseIdParamSchema,
-});

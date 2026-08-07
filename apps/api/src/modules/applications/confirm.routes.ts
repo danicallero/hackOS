@@ -3,7 +3,7 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
-import type { RouteAccessPolicy } from "../../lib/route-policy.js";
+import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import {
   confirmByEmailResponseSchema,
   confirmTokenSchema,
@@ -28,7 +28,6 @@ import {
  */
 export function registerConfirmRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
-  const routeAccess = (routeAccessPolicy: RouteAccessPolicy) => ({ routeAccessPolicy });
 
   // ── public via email link ───────────────────────────────────────────────────
   r.post(
@@ -64,7 +63,12 @@ export function registerConfirmRoutes(app: FastifyInstance): void {
     {
       preHandler: idempotencyGuard,
       config: routeAccess({ kind: "token", policy: "application-confirmation" }),
-      schema: { body: confirmTokenSchema },
+      schema: {
+        body: confirmTokenSchema,
+        summary: "Decline a spot from the acceptance email",
+        description:
+          "Public decline for the token in the acceptance email (H15), the counterpart to /api/applications/confirm. Moves the response to declined; a second decline is idempotent (`already_declined`).",
+      },
     },
     async (req) => {
       const res = await declineByToken(req.body.token);
@@ -81,7 +85,12 @@ export function registerConfirmRoutes(app: FastifyInstance): void {
     {
       preHandler: [requireAuth, idempotencyGuard],
       config: routeAccess({ kind: "authenticated" }),
-      schema: { params: responseIdParamSchema },
+      schema: {
+        summary: "Confirm my own spot",
+        description:
+          "Authenticated owner confirms their own accepted response (H15), the web counterpart to the email-link confirm route.",
+        params: responseIdParamSchema,
+      },
     },
     async (req) => {
       const uid = req.userId as number;
@@ -99,7 +108,11 @@ export function registerConfirmRoutes(app: FastifyInstance): void {
     {
       preHandler: requireAuth,
       config: routeAccess({ kind: "authenticated" }),
-      schema: { params: responseIdParamSchema },
+      schema: {
+        summary: "Decline my own spot",
+        description: "Authenticated owner declines their own accepted response (H15).",
+        params: responseIdParamSchema,
+      },
     },
     async (req) => {
       const uid = req.userId as number;
@@ -120,7 +133,12 @@ export function registerConfirmRoutes(app: FastifyInstance): void {
         kind: "capability",
         capability: CAPABILITIES.APPLICATIONS_CONFIRM_OVERRIDE,
       }),
-      schema: { params: responseIdParamSchema },
+      schema: {
+        summary: "Confirm a spot on the applicant's behalf",
+        description:
+          "Staff override that confirms any accepted response (H15), for a participant who can't complete the confirm flow themselves.",
+        params: responseIdParamSchema,
+      },
     },
     async (req) => {
       const res = await confirmByResponseId(
@@ -144,7 +162,11 @@ export function registerConfirmRoutes(app: FastifyInstance): void {
         kind: "capability",
         capability: CAPABILITIES.APPLICATIONS_CONFIRM_OVERRIDE,
       }),
-      schema: { params: responseIdParamSchema },
+      schema: {
+        summary: "Decline a spot on the applicant's behalf",
+        description: "Staff override that declines any accepted response (H15).",
+        params: responseIdParamSchema,
+      },
     },
     async (req) => {
       const res = await declineByResponseId(

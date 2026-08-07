@@ -9,9 +9,12 @@ import {
   requireCapability,
   userHasCapability,
 } from "../../lib/capabilities.js";
-import { ForbiddenError, NotFoundError, UnauthorizedError } from "../../lib/errors.js";
+import { ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
-import type { RouteAccessPolicy } from "../../lib/route-policy.js";
+import {
+  type RouteAccessPolicy,
+  routeAccessOption as routeAccess,
+} from "../../lib/route-policy.js";
 import { subscribe } from "../../lib/sse.js";
 import {
   checkIn,
@@ -86,6 +89,7 @@ import {
   walletPurposeParam,
 } from "./schemas.js";
 import { accreditationCountsByRole, logisticsStats, scannableActivities } from "./stats.js";
+import { ticketQrPayload } from "./tickets.js";
 import {
   appleChangedSerials,
   appleLog,
@@ -99,10 +103,6 @@ import { resolveWalletAccessToken } from "./wallet-access.js";
 function actor(userId: number | null): number {
   if (userId == null) throw new UnauthorizedError();
   return userId;
-}
-
-function routeAccess(routeAccessPolicy: RouteAccessPolicy) {
-  return { config: { routeAccessPolicy } };
 }
 
 /**
@@ -888,41 +888,4 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       return { saveUrl: await buildGoogleSaveUrl(userId, req.params.purpose) };
     },
   );
-}
-
-async function ticketQrPayload(userId: number) {
-  const [{ rows }, { rows: acceptedRows }] = await Promise.all([
-    pool.query(
-      `SELECT u.id, u.badge_id, t.token
-       FROM users u
-       LEFT JOIN tickets t ON t.user_id = u.id
-      WHERE u.id = $1`,
-      [userId],
-    ),
-    pool.query(
-      `SELECT r.id AS response_id, a.name AS application_name, a.type AS application_type,
-              evt.expires_at
-         FROM application_responses r
-         JOIN applications a ON a.id = r.application_id
-         LEFT JOIN email_verification_tokens evt ON evt.id = r.confirmation_token_id
-        WHERE r.user_id = $1
-          AND r.status = 'accepted'
-          AND r.decision_sent_at IS NOT NULL
-        ORDER BY r.id DESC`,
-      [userId],
-    ),
-  ]);
-  const row = rows[0];
-  if (!row) throw new NotFoundError("User not found");
-  return {
-    userId: row.id as number,
-    ticketToken: (row.token as string | null) ?? null,
-    badgeId: (row.badge_id as string | null) ?? null,
-    acceptedSpots: acceptedRows.map((accepted) => ({
-      responseId: accepted.response_id as number,
-      applicationName: accepted.application_name as string,
-      applicationType: accepted.application_type as string,
-      expiresAt: accepted.expires_at ? (accepted.expires_at as Date).toISOString() : null,
-    })),
-  };
 }

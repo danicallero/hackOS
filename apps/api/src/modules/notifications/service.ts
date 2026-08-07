@@ -24,7 +24,7 @@ export const ALL_CHANNELS: NotificationChannel[] = ["in_app", "email", "push", "
 /** Channels used when a caller doesn't name any explicitly. Discord opts in only when asked (post-MVP no-op). */
 export const DEFAULT_CHANNELS: NotificationChannel[] = ["in_app", "email", "push"];
 
-const MANDATORY_CATEGORY = "queue";
+export const QUEUE_CATEGORY = "queue";
 export const QUEUE_STAFF_CATEGORY = "queue.staff";
 /**
  * Shared channel config for every activity reminder (H51 rework): individual
@@ -48,7 +48,7 @@ export async function resolveChannels(
   category: string,
   candidates: NotificationChannel[],
 ): Promise<NotificationChannel[]> {
-  if (category === MANDATORY_CATEGORY) return candidates;
+  if (category === QUEUE_CATEGORY) return candidates;
 
   const { rows } = await db.query(
     `SELECT channel, enabled FROM notification_preferences WHERE user_id = $1 AND category = $2`,
@@ -133,7 +133,7 @@ export async function getPreferences(
   );
   return {
     channels: ALL_CHANNELS,
-    mandatoryCategories: [MANDATORY_CATEGORY],
+    mandatoryCategories: [QUEUE_CATEGORY],
     overrides: rows,
   };
 }
@@ -144,9 +144,9 @@ export async function setPreferences(
   items: PreferenceRow[],
 ): Promise<void> {
   for (const item of items) {
-    if (item.category === MANDATORY_CATEGORY) {
+    if (item.category === QUEUE_CATEGORY) {
       throw new BadRequestError(
-        `Category "${MANDATORY_CATEGORY}" is mandatory (H51) and cannot be overridden`,
+        `Category "${QUEUE_CATEGORY}" is mandatory (H51) and cannot be overridden`,
       );
     }
     if (item.category === QUEUE_STAFF_CATEGORY && item.channel !== "push") {

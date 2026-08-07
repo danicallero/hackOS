@@ -3,11 +3,15 @@ import { i18nTextSchema } from "@hackos/shared/questions";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { pool } from "../../db/pool.js";
+import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { requireCapability } from "../../lib/capabilities.js";
 import { NotFoundError } from "../../lib/errors.js";
-import type { RouteAccessPolicy } from "../../lib/route-policy.js";
+import {
+  type RouteAccessPolicy,
+  routeAccessOption as routeAccess,
+} from "../../lib/route-policy.js";
+import { idParamSchema } from "./schemas.js";
 
 /**
  * Food-intolerance dictionary (H12/H25). Administration maintains the shared
@@ -17,7 +21,7 @@ import type { RouteAccessPolicy } from "../../lib/route-policy.js";
  * stop resolving in the meal-planning stats.
  */
 
-const idParam = z.object({ id: z.coerce.number().int().positive() });
+const idParam = idParamSchema;
 
 const createBody = z.object({
   label: i18nTextSchema,
@@ -33,10 +37,6 @@ const updateBody = z
   .refine((b) => Object.keys(b).length > 0, { message: "no fields to update" });
 
 const COLUMNS = "id, label, description, proposed_by, created_at";
-
-function routeAccess(routeAccessPolicy: RouteAccessPolicy) {
-  return { config: { routeAccessPolicy } };
-}
 
 export function registerIntoleranceRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
@@ -74,24 +74,27 @@ export function registerIntoleranceRoutes(app: FastifyInstance): void {
     { ...routeAccess(manageAccess), preHandler: manage, schema: { body: createBody } },
     async (req, reply) => {
       const userId = req.userId as number;
-      const { rows } = await pool.query(
-        `INSERT INTO food_intolerances (label, description, proposed_by)
-       VALUES ($1::jsonb, $2::jsonb, $3) RETURNING ${COLUMNS}`,
-        [
-          JSON.stringify(req.body.label),
-          req.body.description ? JSON.stringify(req.body.description) : null,
-          userId,
-        ],
-      );
-      await audit(pool, {
-        actorId: userId,
-        entityType: "food_intolerance",
-        entityId: rows[0].id,
-        action: "created",
-        after: { label: req.body.label },
+      const row = await withTransaction(async (client) => {
+        const { rows } = await client.query(
+          `INSERT INTO food_intolerances (label, description, proposed_by)
+         VALUES ($1::jsonb, $2::jsonb, $3) RETURNING ${COLUMNS}`,
+          [
+            JSON.stringify(req.body.label),
+            req.body.description ? JSON.stringify(req.body.description) : null,
+            userId,
+          ],
+        );
+        await audit(client, {
+          actorId: userId,
+          entityType: "food_intolerance",
+          entityId: rows[0].id,
+          action: "created",
+          after: { label: req.body.label },
+        });
+        return rows[0];
       });
       reply.code(201);
-      return rows[0];
+      return row;
     },
   );
 
@@ -103,33 +106,35 @@ export function registerIntoleranceRoutes(app: FastifyInstance): void {
       schema: { params: idParam, body: updateBody },
     },
     async (req) => {
-      const sets: string[] = [];
-      const values: unknown[] = [];
-      let i = 1;
-      if (req.body.label !== undefined) {
-        sets.push(`label = $${i}::jsonb`);
-        values.push(JSON.stringify(req.body.label));
-        i += 1;
-      }
-      if (req.body.description !== undefined) {
-        sets.push(`description = $${i}::jsonb`);
-        values.push(req.body.description === null ? null : JSON.stringify(req.body.description));
-        i += 1;
-      }
-      values.push(req.params.id);
-      const { rows } = await pool.query(
-        `UPDATE food_intolerances SET ${sets.join(", ")} WHERE id = $${i} RETURNING ${COLUMNS}`,
-        values,
-      );
-      if (!rows[0]) throw new NotFoundError("Food intolerance not found", { id: req.params.id });
-      await audit(pool, {
-        actorId: req.userId,
-        entityType: "food_intolerance",
-        entityId: req.params.id,
-        action: "updated",
-        after: req.body,
+      return await withTransaction(async (client) => {
+        const sets: string[] = [];
+        const values: unknown[] = [];
+        let i = 1;
+        if (req.body.label !== undefined) {
+          sets.push(`label = $${i}::jsonb`);
+          values.push(JSON.stringify(req.body.label));
+          i += 1;
+        }
+        if (req.body.description !== undefined) {
+          sets.push(`description = $${i}::jsonb`);
+          values.push(req.body.description === null ? null : JSON.stringify(req.body.description));
+          i += 1;
+        }
+        values.push(req.params.id);
+        const { rows } = await client.query(
+          `UPDATE food_intolerances SET ${sets.join(", ")} WHERE id = $${i} RETURNING ${COLUMNS}`,
+          values,
+        );
+        if (!rows[0]) throw new NotFoundError("Food intolerance not found", { id: req.params.id });
+        await audit(client, {
+          actorId: req.userId,
+          entityType: "food_intolerance",
+          entityId: req.params.id,
+          action: "updated",
+          after: req.body,
+        });
+        return rows[0];
       });
-      return rows[0];
     },
   );
 
@@ -137,16 +142,18 @@ export function registerIntoleranceRoutes(app: FastifyInstance): void {
     "/api/food-intolerances/:id",
     { ...routeAccess(manageAccess), preHandler: manage, schema: { params: idParam } },
     async (req, reply) => {
-      const { rowCount } = await pool.query(`DELETE FROM food_intolerances WHERE id = $1`, [
-        req.params.id,
-      ]);
-      if (rowCount === 0)
-        throw new NotFoundError("Food intolerance not found", { id: req.params.id });
-      await audit(pool, {
-        actorId: req.userId,
-        entityType: "food_intolerance",
-        entityId: req.params.id,
-        action: "deleted",
+      await withTransaction(async (client) => {
+        const { rowCount } = await client.query(`DELETE FROM food_intolerances WHERE id = $1`, [
+          req.params.id,
+        ]);
+        if (rowCount === 0)
+          throw new NotFoundError("Food intolerance not found", { id: req.params.id });
+        await audit(client, {
+          actorId: req.userId,
+          entityType: "food_intolerance",
+          entityId: req.params.id,
+          action: "deleted",
+        });
       });
       reply.code(204);
       return null;

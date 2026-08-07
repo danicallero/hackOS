@@ -8,7 +8,7 @@ import { pool, type Queryable, withTransaction } from "../../../db/pool.js";
 import { audit } from "../../../lib/audit.js";
 import { requireAnyCapability } from "../../../lib/capabilities.js";
 import { ConflictError, NotFoundError } from "../../../lib/errors.js";
-import type { RouteAccessPolicy } from "../../../lib/route-policy.js";
+import { routeAccessOption as routeAccess } from "../../../lib/route-policy.js";
 
 export interface EnterpriseInviteLinkRow {
   id: number;
@@ -53,10 +53,6 @@ export async function findEnterpriseInviteLink(
 export function enterpriseInviteClaimUrl(token: string): string {
   return `${config.WEB_URL}/claim-account?token=${token}`;
 }
-
-const routeAccess = (routeAccessPolicy: RouteAccessPolicy) => ({
-  config: { routeAccessPolicy },
-});
 
 const enterpriseInviteLinkStatus = z.enum(["active", "expired", "exhausted", "withdrawn"]);
 

@@ -103,17 +103,18 @@ async function main(): Promise<void> {
       `SELECT id FROM permission_groups WHERE name = $1`,
       [groupName],
     );
-    const groupId =
-      existingGroupRows.length > 0
-        ? (existingGroupRows[0].id as number)
-        : (
-            await client.query(
-              `INSERT INTO permission_groups (name, description)
-               VALUES ($1, $2)
-               RETURNING id`,
-              [groupName, "System bootstrap group for superadmin users"],
-            )
-          ).rows[0].id;
+    let groupId: number;
+    if (existingGroupRows.length > 0) {
+      groupId = existingGroupRows[0].id as number;
+    } else {
+      const { rows: createdGroupRows } = await client.query(
+        `INSERT INTO permission_groups (name, description)
+         VALUES ($1, $2)
+         RETURNING id`,
+        [groupName, "System bootstrap group for superadmin users"],
+      );
+      groupId = createdGroupRows[0].id as number;
+    }
 
     await client.query(
       `INSERT INTO group_capabilities (group_id, capability)

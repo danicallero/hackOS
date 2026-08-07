@@ -65,6 +65,27 @@ export async function userHasWildcard(
   return rows.length > 0;
 }
 
+/** Returns whether a user holds any effective capability at all. */
+export async function userHasAnyCapability(
+  client: PermissionGraphClient,
+  userId: number,
+): Promise<boolean> {
+  const { rows } = await client.query(
+    `WITH RECURSIVE effective_groups(group_id) AS (
+       SELECT group_id FROM permission_group_members WHERE user_id = $1
+       UNION
+       SELECT pgi.child_group_id
+         FROM effective_groups eg
+         JOIN permission_group_includes pgi ON pgi.parent_group_id = eg.group_id
+     )
+     SELECT 1 FROM effective_groups eg
+      JOIN group_capabilities gc ON gc.group_id = eg.group_id
+     LIMIT 1`,
+    [userId],
+  );
+  return rows.length > 0;
+}
+
 export async function requireWildcardGraphAuthority(
   client: PermissionGraphClient,
   actorId: number,

@@ -11,6 +11,15 @@ import { enqueueWalletSync } from "./wallet-sync.js";
 /** Postgres unique_violation — thrown by the unique `users.badge_id` index. */
 const PG_UNIQUE_VIOLATION = "23505";
 
+async function voidBadgePasses(client: pg.PoolClient, userId: number): Promise<void> {
+  await client.query(
+    `UPDATE wallet_passes
+        SET status = 'voided', last_updated_at = now(), update_tag = extract(epoch from now())::text
+      WHERE user_id = $1 AND purpose = 'badge' AND status <> 'voided'`,
+    [userId],
+  );
+}
+
 export type CheckInMethod = "qr" | "manual" | "nfc";
 
 // ── H22: lookup by ticket ─────────────────────────────────────────────────
@@ -291,10 +300,10 @@ export async function rotateBadge(
 
     // H28: badge passes are voided on rotation, both Apple and Google (not
     // filtered by platform), and pushed to their devices after commit below.
+    await voidBadgePasses(client, userId);
     const voided = await client.query(
-      `UPDATE wallet_passes
-          SET status = 'voided', last_updated_at = now(), update_tag = extract(epoch from now())::text
-        WHERE user_id = $1 AND purpose = 'badge' AND status <> 'voided' RETURNING id`,
+      `SELECT id FROM wallet_passes
+       WHERE user_id = $1 AND purpose = 'badge' AND status = 'voided'`,
       [userId],
     );
     voidedPassIds = voided.rows.map((r: { id: number }) => r.id);
@@ -345,10 +354,10 @@ export async function removeBadge(actorId: number, input: { userId: number; reas
       history,
       input.userId,
     ]);
+    await voidBadgePasses(client, input.userId);
     const voided = await client.query(
-      `UPDATE wallet_passes
-          SET status = 'voided', last_updated_at = now(), update_tag = extract(epoch from now())::text
-        WHERE user_id = $1 AND purpose = 'badge' AND status <> 'voided' RETURNING id`,
+      `SELECT id FROM wallet_passes
+       WHERE user_id = $1 AND purpose = 'badge' AND status = 'voided'`,
       [input.userId],
     );
     voidedPassIds = voided.rows.map((row: { id: number }) => row.id);

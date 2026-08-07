@@ -533,5 +533,3 @@ export function renderPushTemplate(payload: EmailPayload, language: Language): R
     body: interpolate(variant.body, vars),
   };
 }
-
-export const TEMPLATE_NAMES = Object.keys(TEMPLATES);

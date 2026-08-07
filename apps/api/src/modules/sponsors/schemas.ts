@@ -73,10 +73,6 @@ const LOGO_CONTENT_TYPES = [
   "image/gif",
 ] as const;
 
-export const logoUploadBody = z.object({
-  contentType: z.enum(LOGO_CONTENT_TYPES),
-});
-
 export const CONTENT_TYPE_EXT: Record<(typeof LOGO_CONTENT_TYPES)[number], string> = {
   "image/png": "png",
   "image/jpeg": "jpg",

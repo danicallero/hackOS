@@ -1170,6 +1170,47 @@ export async function addRepoChallenge(actorId: number, repoId: number, challeng
   return result;
 }
 
+/**
+ * Transitions one queue entry out of a challenge (waiting/called -> cancelled,
+ * anything further along -> disqualified), writing the matching history row
+ * and audit entry. Shared by the single and bulk removal paths.
+ */
+async function terminateQueueEntry(
+  client: Queryable,
+  entry: { id: number; repo_id: number; status: string },
+  actorId: number,
+  options: { challengeId: number; reason: string },
+): Promise<Record<string, unknown>> {
+  const nextStatus = ["waiting", "called"].includes(entry.status) ? "cancelled" : "disqualified";
+  const updated = await client.query(
+    `UPDATE queue_entries
+        SET status = $1, assigned_room_id = NULL, position = NULL, called_at = NULL,
+            precalled_at = NULL, presentation_started_at = NULL, completed_at = NULL
+      WHERE id = $2
+      RETURNING *`,
+    [nextStatus, entry.id],
+  );
+  await writeQueueHistory(client, {
+    entryId: entry.id,
+    actorId,
+    previousStatus: entry.status,
+    newStatus: nextStatus,
+    action: "remove_from_challenge",
+    reason: options.reason,
+  });
+  await audit(client, {
+    actorId,
+    entityType: "queue_entry",
+    entityId: entry.id,
+    action: "remove_from_challenge",
+    before: { status: entry.status, challengeId: options.challengeId, repoId: entry.repo_id },
+    after: { status: nextStatus },
+    reason: options.reason,
+    source: "admin",
+  });
+  return updated.rows[0];
+}
+
 export async function removeRepoChallenge(actorId: number, repoId: number, challengeId: number) {
   const result = await withTransaction(async (client) => {
     const entryRes = await client.query(
@@ -1180,38 +1221,15 @@ export async function removeRepoChallenge(actorId: number, repoId: number, chall
     if (!entry)
       throw new NotFoundError(`Repo ${repoId} is not assigned to challenge ${challengeId}`);
 
-    const nextStatus = ["waiting", "called"].includes(entry.status) ? "cancelled" : "disqualified";
-    const updated = await client.query(
-      `UPDATE queue_entries
-          SET status = $1, assigned_room_id = NULL, position = NULL, called_at = NULL,
-              precalled_at = NULL, presentation_started_at = NULL, completed_at = NULL
-        WHERE id = $2
-        RETURNING *`,
-      [nextStatus, entry.id],
-    );
-    await writeQueueHistory(client, {
-      entryId: entry.id,
-      actorId,
-      previousStatus: entry.status,
-      newStatus: nextStatus,
-      action: "remove_from_challenge",
+    const updatedEntry = await terminateQueueEntry(client, entry, actorId, {
+      challengeId,
       reason: "Removed from challenge",
-    });
-    await audit(client, {
-      actorId,
-      entityType: "queue_entry",
-      entityId: entry.id,
-      action: "remove_from_challenge",
-      before: { status: entry.status, challengeId, repoId },
-      after: { status: nextStatus },
-      reason: "Removed from challenge",
-      source: "admin",
     });
     await compactChallengePositions(client, challengeId);
-    return { repoId, challengeId, entry: updated.rows[0], removed: true };
+    return { repoId, challengeId, entry: updatedEntry, removed: true };
   });
   await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ENTRY_CHANGED, result.entry);
-  await notifyChallengeQueueChanged(pool, result.entry.challenge_id);
+  await notifyChallengeQueueChanged(pool, result.challengeId);
   return result;
 }
 
@@ -1293,36 +1311,11 @@ export async function bulkRemoveRepoChallenge(
 
     const updatedEntries: Array<Record<string, unknown> & { challenge_id: number }> = [];
     for (const entry of removable) {
-      const nextStatus = ["waiting", "called"].includes(entry.status)
-        ? "cancelled"
-        : "disqualified";
-      const updated = await client.query(
-        `UPDATE queue_entries
-            SET status = $1, assigned_room_id = NULL, position = NULL, called_at = NULL,
-                precalled_at = NULL, presentation_started_at = NULL, completed_at = NULL
-          WHERE id = $2
-          RETURNING *`,
-        [nextStatus, entry.id],
-      );
-      await writeQueueHistory(client, {
-        entryId: entry.id,
-        actorId,
-        previousStatus: entry.status,
-        newStatus: nextStatus,
-        action: "remove_from_challenge",
+      const updatedEntry = await terminateQueueEntry(client, entry, actorId, {
+        challengeId,
         reason: "Removed from challenge (bulk)",
       });
-      await audit(client, {
-        actorId,
-        entityType: "queue_entry",
-        entityId: entry.id,
-        action: "remove_from_challenge",
-        before: { status: entry.status, challengeId, repoId: entry.repo_id },
-        after: { status: nextStatus },
-        reason: "Removed from challenge (bulk)",
-        source: "admin",
-      });
-      updatedEntries.push(updated.rows[0]);
+      updatedEntries.push(updatedEntry as Record<string, unknown> & { challenge_id: number });
     }
     if (removable.length > 0) await compactChallengePositions(client, challengeId);
 
@@ -1360,6 +1353,14 @@ interface EnqueuedChallenge {
   challengeId: number;
   entryId: number;
   position: number | null;
+}
+
+function toEnqueuedChallenge(outcome: EnqueueOutcome): EnqueuedChallenge {
+  return {
+    challengeId: outcome.entry.challenge_id,
+    entryId: outcome.entry.id,
+    position: (outcome.entry.position as number | null) ?? null,
+  };
 }
 
 /** Enqueued entries a caller must announce (SSE + notify) after commit. */
@@ -1461,11 +1462,7 @@ export async function createRepoNative(
   return {
     repo,
     memberUserIds,
-    challenges: outcomes.map((o) => ({
-      challengeId: o.entry.challenge_id,
-      entryId: o.entry.id,
-      position: (o.entry.position as number | null) ?? null,
-    })),
+    challenges: outcomes.map(toEnqueuedChallenge),
   };
 }
 
@@ -1585,11 +1582,7 @@ export async function createMyProject(
   await announceQueueOutcomes(outcomes);
   return {
     repo,
-    challenges: outcomes.map((o) => ({
-      challengeId: o.entry.challenge_id,
-      entryId: o.entry.id,
-      position: (o.entry.position as number | null) ?? null,
-    })),
+    challenges: outcomes.map(toEnqueuedChallenge),
   };
 }
 

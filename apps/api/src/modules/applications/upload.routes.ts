@@ -11,7 +11,7 @@ import {
   NotFoundError,
   UnauthorizedError,
 } from "../../lib/errors.js";
-import type { RouteAccessPolicy } from "../../lib/route-policy.js";
+import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import { getObject, putObject } from "../../lib/storage.js";
 import type { TemplateField } from "./schemas.js";
 
@@ -21,13 +21,16 @@ const uploadParamsSchema = z.object({
 });
 
 const downloadQuerySchema = z.object({ key: z.string().min(1) });
-const routeAccess = (routeAccessPolicy: RouteAccessPolicy) => ({ routeAccessPolicy });
+
+function isValidUploadKey(key: string): boolean {
+  return key.startsWith("uploads/") && !key.includes("..");
+}
 
 /** H12: an upload is readable only by its owner or an application reviewer. */
 const requireApplicationUploadAccess: preHandlerHookHandler = async (req) => {
   if (req.userId == null) throw new UnauthorizedError();
   const key = (req.query as { key?: string }).key;
-  if (!key?.startsWith("uploads/") || key.includes("..")) {
+  if (!key || !isValidUploadKey(key)) {
     throw new BadRequestError("Not a downloadable file key");
   }
   const ownerId = Number(key.split("/")[2]);
@@ -67,7 +70,12 @@ export function registerUploadRoutes(app: FastifyInstance): void {
     {
       preHandler: requireAuth,
       config: routeAccess({ kind: "authenticated" }),
-      schema: { params: uploadParamsSchema },
+      schema: {
+        summary: "Upload a file for an application field",
+        description:
+          "Uploads a file for a template field of kind 'file' on one of the caller's application forms (H12). Validated against that field's allowed_file_types and max_file_size_mb before being stored privately in MinIO; the response key is not a public URL — reads go through GET /api/files/download.",
+        params: uploadParamsSchema,
+      },
     },
     async (req) => {
       const { applicationId, fieldKey } = req.params;
@@ -138,11 +146,16 @@ export function registerUploadRoutes(app: FastifyInstance): void {
         policy: "application-upload-access",
         resource: { source: "query", field: "key" },
       }),
-      schema: { querystring: downloadQuerySchema },
+      schema: {
+        summary: "Download a private application upload",
+        description:
+          "Proxies the bytes for an uploads/ storage key (H12) — never a presigned URL. Access is checked on this request: the caller must be the upload's owner (from the userId segment encoded in the key) or hold APPLICATIONS_REVIEW.",
+        querystring: downloadQuerySchema,
+      },
     },
     async (req, reply) => {
       const { key } = req.query;
-      if (!key.startsWith("uploads/") || key.includes("..")) {
+      if (!isValidUploadKey(key)) {
         throw new BadRequestError("Not a downloadable file key");
       }
       let obj: Awaited<ReturnType<typeof getObject>>;

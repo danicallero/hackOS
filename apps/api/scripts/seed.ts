@@ -5,8 +5,9 @@
  * module lands; until then the user row exists for FK/testing purposes.
  */
 import pg from "pg";
+import { DEFAULT_DATABASE_URL } from "./default-database-url.js";
 
-const url = process.env.DATABASE_URL ?? "postgres://hackos:hackos@localhost:5433/hackos";
+const url = process.env.DATABASE_URL ?? DEFAULT_DATABASE_URL;
 const client = new pg.Client({ connectionString: url });
 await client.connect();
 

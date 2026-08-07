@@ -4,7 +4,7 @@ import multipart from "@fastify/multipart";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
 import {
   jsonSchemaTransform,
   jsonSchemaTransformObject,
@@ -44,7 +44,11 @@ const TAG_DESCRIPTIONS: Record<string, string> = {
   api: "Everything not yet grouped under a more specific tag above.",
 };
 
-function docsTagFor(url: string): string {
+function logSoftFailure(req: FastifyRequest, err: unknown, message: string): void {
+  req.log.warn({ err, method: req.method, url: req.url }, message);
+}
+
+function docsTagFor(url: string): keyof typeof TAG_DESCRIPTIONS {
   if (url === "/healthz") return "foundation";
   if (url.startsWith("/api/public/")) return "public";
   if (url.startsWith("/api/auth/")) return "auth";
@@ -258,7 +262,7 @@ export async function buildApp(): Promise<App> {
       reply.header("x-read-cache", "MISS");
     } catch (err) {
       // Cache availability must never prevent a normal API read.
-      req.log.warn({ err, method: req.method, url: req.url }, "read cache lookup failed");
+      logSoftFailure(req, err, "read cache lookup failed");
     }
   });
   app.addHook("preSerialization", async (req, reply, payload) => {
@@ -266,7 +270,7 @@ export async function buildApp(): Promise<App> {
     try {
       await cacheJson(req.readCacheKey, payload);
     } catch (err) {
-      req.log.warn({ err, method: req.method, url: req.url }, "read cache write failed");
+      logSoftFailure(req, err, "read cache write failed");
     }
     return payload;
   });
@@ -280,7 +284,7 @@ export async function buildApp(): Promise<App> {
         await invalidateReadCache();
         await broadcast(SSE_TOPICS.GLOBAL, EVENTS.DATA_CHANGED, { at: new Date().toISOString() });
       } catch (err) {
-        req.log.warn({ err, method: req.method, url: req.url }, "global SSE broadcast failed");
+        logSoftFailure(req, err, "global SSE broadcast failed");
       }
     }
   });

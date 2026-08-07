@@ -1,6 +1,8 @@
 import type { Queryable } from "../../../db/pool.js";
+import { QUEUE_CATEGORY, QUEUE_STAFF_CATEGORY } from "../service.js";
 import type { EmailPayload } from "../templates.js";
 import { normalizeLanguage, renderPushTemplate } from "../templates.js";
+import { assertOkResponse } from "./http.js";
 
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 
@@ -45,7 +47,7 @@ export async function dispatchPush(
   // foreground refetch without having to guess from the vars shape alone.
   const data = { ...(payload.vars ?? {}), category, template: payload.template };
   const timeSensitive =
-    category === "queue" || category === "queue.staff"
+    category === QUEUE_CATEGORY || category === QUEUE_STAFF_CATEGORY
       ? {
           priority: "high" as const,
           interruptionLevel: "time-sensitive" as const,
@@ -76,10 +78,7 @@ export async function dispatchPush(
       cause instanceof Error ? cause.message : cause ? String(cause) : (err as Error)?.message;
     throw new Error(`Expo push request failed: ${detail ?? "unknown network error"}`);
   });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`Expo push send failed: ${res.status} ${body}`);
-  }
+  await assertOkResponse(res, "Expo push");
 
   const json = (await res.json()) as { data?: ExpoTicket[] };
   const tickets = json.data ?? [];

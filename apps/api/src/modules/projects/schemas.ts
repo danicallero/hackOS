@@ -9,14 +9,20 @@ export type ImportCsvBody = z.infer<typeof importCsvBodySchema>;
 
 export const linkParticipantBodySchema = z.object({
   repoId: z.number().int().positive(),
-  email: z.string().email(),
+  email: z
+    .string()
+    .email()
+    .transform((v) => v.toLowerCase()),
   userId: z.number().int().positive(),
 });
 export type LinkParticipantBody = z.infer<typeof linkParticipantBodySchema>;
 
 export const claimEmailBodySchema = z.object({
   repoId: z.number().int().positive(),
-  email: z.string().email(),
+  email: z
+    .string()
+    .email()
+    .transform((v) => v.toLowerCase()),
 });
 export type ClaimEmailBody = z.infer<typeof claimEmailBodySchema>;
 
@@ -40,7 +46,7 @@ export const repoMemberParamsSchema = z.object({
 
 export const repoDevpostParticipantParamsSchema = z.object({
   repoId: z.coerce.number().int().positive(),
-  email: z.email(),
+  email: z.email().transform((v) => v.toLowerCase()),
 });
 
 export const repoChallengeParamsSchema = z.object({

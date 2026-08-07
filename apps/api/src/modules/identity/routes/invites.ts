@@ -3,7 +3,6 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { config } from "../../../config.js";
 import { pool, withTransaction } from "../../../db/pool.js";
 import { audit } from "../../../lib/audit.js";
 import { requireCapability } from "../../../lib/capabilities.js";
@@ -13,15 +12,17 @@ import {
   ForbiddenError,
   NotFoundError,
 } from "../../../lib/errors.js";
-import type { RouteAccessPolicy } from "../../../lib/route-policy.js";
+import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import { issueTicket } from "../../logistics/tickets.js";
 import { auth } from "../auth.js";
 import {
   groupContainsWildcard,
   lockPermissionGraph,
   requireWildcardGraphAuthority,
+  userHasAnyCapability,
 } from "../permission-graph.js";
 import {
+  enterpriseInviteClaimUrl,
   enterpriseInviteLinkIsExpired,
   findEnterpriseInviteLink,
   registerEnterpriseInviteLinkRoutes,
@@ -79,14 +80,6 @@ interface TokenRow {
   created_at: Date;
 }
 
-function claimUrl(token: string): string {
-  // Link to the WEB app's claim page (not the API host); it looks up the
-  // invite and lets the person create their account.
-  return `${config.WEB_URL}/claim-account?token=${token}`;
-}
-
-const routeAccess = (routeAccessPolicy: RouteAccessPolicy) => ({ routeAccessPolicy });
-
 /**
  * Deferred group grants need a fresh closure check at every privileged token
  * operation. Missing groups intentionally mean a deleted assignment (and no
@@ -122,6 +115,18 @@ async function requireWildcardInviteAuthority(
   return containsWildcard;
 }
 
+async function loadInviteForUpdate(
+  client: Parameters<typeof groupContainsWildcard>[0],
+  id: number,
+): Promise<TokenRow | undefined> {
+  const { rows } = await client.query(
+    `SELECT * FROM email_verification_tokens
+     WHERE id = $1 AND type IN ('sponsor_invite', 'account_claim') FOR UPDATE`,
+    [id],
+  );
+  return rows[0] as TokenRow | undefined;
+}
+
 async function enqueueInviteEmail(
   db: Parameters<typeof audit>[0],
   actorId: number,
@@ -138,7 +143,7 @@ async function enqueueInviteEmail(
         template: "auth.invite",
         recipient,
         language,
-        vars: { claimUrl: claimUrl(token) },
+        vars: { claimUrl: enterpriseInviteClaimUrl(token) },
       }),
     ],
   );
@@ -309,12 +314,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
       const { id } = req.params;
       const result = await withTransaction(async (client) => {
         await lockPermissionGraph(client);
-        const { rows } = await client.query(
-          `SELECT * FROM email_verification_tokens
-           WHERE id = $1 AND type IN ('sponsor_invite', 'account_claim') FOR UPDATE`,
-          [id],
-        );
-        const old = rows[0] as TokenRow | undefined;
+        const old = await loadInviteForUpdate(client, id);
         if (!old) throw new NotFoundError("Invite not found", { id });
         if (old.used_at !== null && old.user_id !== null) {
           // user_id gets stamped on acceptance; used_at alone can also mean
@@ -394,12 +394,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
     async (req, reply) => {
       const { id } = req.params;
       await withTransaction(async (client) => {
-        const { rows } = await client.query(
-          `SELECT * FROM email_verification_tokens
-           WHERE id = $1 AND type IN ('sponsor_invite', 'account_claim') FOR UPDATE`,
-          [id],
-        );
-        const invite = rows[0] as TokenRow | undefined;
+        const invite = await loadInviteForUpdate(client, id);
         if (!invite) throw new NotFoundError("Invite not found", { id });
         if (invite.user_id !== null) {
           throw new ConflictError("Invite already accepted — cannot expire", { id });
@@ -436,12 +431,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
       const { id } = req.params;
       const result = await withTransaction(async (client) => {
         await lockPermissionGraph(client);
-        const { rows } = await client.query(
-          `SELECT * FROM email_verification_tokens
-           WHERE id = $1 AND type IN ('sponsor_invite', 'account_claim') FOR UPDATE`,
-          [id],
-        );
-        const invite = rows[0] as TokenRow | undefined;
+        const invite = await loadInviteForUpdate(client, id);
         if (!invite) throw new NotFoundError("Invite not found", { id });
         if (invite.used_at !== null) {
           throw new ConflictError("Invite already used — cannot renew", { id });
@@ -493,12 +483,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
       const { id } = req.params;
       await withTransaction(async (client) => {
         await lockPermissionGraph(client);
-        const { rows } = await client.query(
-          `SELECT * FROM email_verification_tokens
-           WHERE id = $1 AND type IN ('sponsor_invite', 'account_claim') FOR UPDATE`,
-          [id],
-        );
-        const invite = rows[0] as TokenRow | undefined;
+        const invite = await loadInviteForUpdate(client, id);
         if (!invite) throw new NotFoundError("Invite not found", { id });
         if (invite.used_at !== null) {
           throw new ConflictError("Invite already used — cannot resend", { id });
@@ -792,20 +777,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
         // Staff status starts only once an effective capability is assigned.
         // Sponsors are already ticketed above regardless of capability grants.
         if (kind === "staff") {
-          const { rows: staffRows } = await client.query(
-            `WITH RECURSIVE effective_groups(group_id) AS (
-               SELECT group_id FROM permission_group_members WHERE user_id = $1
-               UNION
-               SELECT pgi.child_group_id
-                 FROM effective_groups eg
-                 JOIN permission_group_includes pgi ON pgi.parent_group_id = eg.group_id
-             )
-             SELECT 1 FROM effective_groups eg
-              JOIN group_capabilities gc ON gc.group_id = eg.group_id
-             LIMIT 1`,
-            [userId],
-          );
-          if (staffRows.length > 0) await issueTicket(client, userId);
+          if (await userHasAnyCapability(client, userId)) await issueTicket(client, userId);
         }
 
         await audit(client, {

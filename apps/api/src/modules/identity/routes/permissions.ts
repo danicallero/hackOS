@@ -12,7 +12,7 @@ import {
   requireCapability,
 } from "../../../lib/capabilities.js";
 import { ConflictError, NotFoundError } from "../../../lib/errors.js";
-import type { RouteAccessPolicy } from "../../../lib/route-policy.js";
+import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import { issueTicket } from "../../logistics/tickets.js";
 import {
   assertActiveWildcardHolder,
@@ -20,6 +20,7 @@ import {
   lockPermissionGraph,
   requireGroupMutationAuthority,
   requireWildcardGraphAuthority,
+  userHasAnyCapability,
 } from "../permission-graph.js";
 import { getPermissionGroupTemplate, PERMISSION_GROUP_TEMPLATES } from "../templates.js";
 
@@ -32,7 +33,6 @@ import { getPermissionGroupTemplate, PERMISSION_GROUP_TEMPLATES } from "../templ
  */
 
 const manage = requireCapability(CAPABILITIES.PERMISSIONS_MANAGE);
-const routeAccess = (routeAccessPolicy: RouteAccessPolicy) => ({ routeAccessPolicy });
 
 const groupIdParams = z.object({ groupId: z.coerce.number().int() });
 const templateKeyParams = z.object({ templateKey: z.string().min(1).max(120) });
@@ -651,20 +651,7 @@ export function registerPermissionGroupRoutes(app: FastifyInstance): void {
         );
         // A capability holder is staff (H8); issue their permanent entrance
         // ticket in the same transaction as the role-producing assignment.
-        const { rows: capabilities } = await client.query(
-          `WITH RECURSIVE effective_groups(group_id) AS (
-             SELECT group_id FROM permission_group_members WHERE user_id = $1
-             UNION
-             SELECT pgi.child_group_id
-               FROM effective_groups eg
-               JOIN permission_group_includes pgi ON pgi.parent_group_id = eg.group_id
-           )
-           SELECT 1 FROM effective_groups eg
-            JOIN group_capabilities gc ON gc.group_id = eg.group_id
-           LIMIT 1`,
-          [userId],
-        );
-        if (capabilities.length > 0) await issueTicket(client, userId);
+        if (await userHasAnyCapability(client, userId)) await issueTicket(client, userId);
         await audit(client, {
           actorId: req.userId,
           entityType: "permission_group",

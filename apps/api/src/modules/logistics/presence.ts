@@ -9,6 +9,7 @@ import { loadPersonCard } from "./cards.js";
 import {
   buildCertaintyWindows,
   buildPresenceIntervals,
+  DEFAULT_SUSPICIOUS_GAP_MS,
   isPresentAt,
   type PresenceEvent,
   totalPresenceMs,
@@ -29,7 +30,10 @@ async function certaintyWindowMs(): Promise<number> {
   const { rows } = await pool.query(
     `SELECT presence_certainty_window_minutes FROM event_config WHERE id = 1`,
   );
-  return Number(rows[0]?.presence_certainty_window_minutes ?? 720) * 60_000;
+  return (
+    Number(rows[0]?.presence_certainty_window_minutes ?? DEFAULT_SUSPICIOUS_GAP_MS / 60_000) *
+    60_000
+  );
 }
 
 // ── H24: raw session ground truth — never inferred, only closed by a real `out` ──
