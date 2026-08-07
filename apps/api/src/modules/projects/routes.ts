@@ -164,7 +164,7 @@ export function registerProjectRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const { repoId, email, userId } = req.body;
-      return linkParticipant(req.userId as number, repoId, email.toLowerCase(), userId);
+      return linkParticipant(req.userId as number, repoId, email, userId);
     },
   );
 
@@ -184,7 +184,7 @@ export function registerProjectRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const { repoId, email, userId } = req.body;
-      return linkParticipantSecondary(req.userId as number, repoId, email.toLowerCase(), userId);
+      return linkParticipantSecondary(req.userId as number, repoId, email, userId);
     },
   );
 
@@ -201,7 +201,7 @@ export function registerProjectRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const { repoId, email } = req.body;
-      return sendClaimEmail(req.userId as number, repoId, email.toLowerCase());
+      return sendClaimEmail(req.userId as number, repoId, email);
     },
   );
 
@@ -385,11 +385,7 @@ export function registerProjectRoutes(app: FastifyInstance): void {
       },
     },
     async (req) =>
-      removeDevpostParticipant(
-        req.userId as number,
-        req.params.repoId,
-        req.params.email.toLowerCase(),
-      ),
+      removeDevpostParticipant(req.userId as number, req.params.repoId, req.params.email),
   );
 
   r.post(
