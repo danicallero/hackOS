@@ -12,13 +12,13 @@ import { readdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
+import { DEFAULT_DATABASE_URL } from "./default-database-url.js";
 
 const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "db", "migrations");
 const ADVISORY_LOCK_KEY = 815_001;
 
 export async function migrate(databaseUrl?: string): Promise<string[]> {
-  const url =
-    databaseUrl ?? process.env.DATABASE_URL ?? "postgres://hackos:hackos@localhost:5433/hackos";
+  const url = databaseUrl ?? process.env.DATABASE_URL ?? DEFAULT_DATABASE_URL;
   const client = new pg.Client({ connectionString: url });
   await client.connect();
   const applied: string[] = [];
