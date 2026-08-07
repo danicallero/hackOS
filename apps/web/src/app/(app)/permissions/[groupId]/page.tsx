@@ -16,8 +16,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
-import { Modal } from "@/components/common/modal";
+import { EntityCombobox } from "@/components/common/entity-combobox";
 import { MultiSelect } from "@/components/common/multi-select";
 import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
@@ -35,13 +36,6 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
@@ -490,24 +484,18 @@ export default function PermissionGroupDetailPage() {
             description={t("membersInheritDesc")}
             action={
               includeOptions.length > 0 ? (
-                <Select
+                <EntityCombobox
+                  className="w-48"
+                  options={includeOptions}
                   value={includeSel}
-                  onValueChange={(v) => {
+                  onChange={(v) => {
                     setIncludeSel("");
                     addInclude(Number(v));
                   }}
-                >
-                  <SelectTrigger size="sm" className="w-48">
-                    <SelectValue placeholder={t("includeGroupPlaceholder")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {includeOptions.map((g) => (
-                      <SelectItem key={g.id} value={String(g.id)}>
-                        {g.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  getId={(g) => g.id}
+                  getLabel={(g) => g.name}
+                  placeholder={t("includeGroupPlaceholder")}
+                />
               ) : undefined
             }
             bodyClassName={group.includes.length === 0 ? undefined : "p-0"}
@@ -572,28 +560,21 @@ export default function PermissionGroupDetailPage() {
         onAdd={addMember}
       />
 
-      <Modal
+      <AlertModal
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
-        icon={Trash2Icon}
         title={t("deleteGroupQuestionInline", { name: group.name })}
         description={t("permanentlyRemovesGroupDesc")}
-        footer={
-          <>
-            <Button variant="outline" onClick={() => setDeleteOpen(false)}>
-              {t("cancel")}
-            </Button>
-            <Button variant="destructive" onClick={onDelete} disabled={deleting}>
-              {deleting && <Spinner />}
-              {t("deleteGroup")}
-            </Button>
-          </>
-        }
+        cancelLabel={t("cancel")}
+        confirmLabel={t("deleteGroup")}
+        destructive
+        pending={deleting}
+        onConfirm={onDelete}
       >
         <p className="text-muted-foreground text-sm">
           {t("typeFreeConfirmInline", { name: group.name })}
         </p>
-      </Modal>
+      </AlertModal>
     </div>
   );
 }
