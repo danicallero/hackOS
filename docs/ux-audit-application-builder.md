@@ -78,3 +78,57 @@ then confirming each finding against the source.
       tab after cancelling; the page header showed an aggregate "Unsaved
       changes" indicator the whole time; the Overview tab (no edits) showed
       "Ask for t-shirt size: Yes" / "Ask for dietary restrictions: Yes".
+
+## Follow-up: shirt-size list + builder layout (user-requested)
+
+Two more rounds on the same surface, same session.
+
+### Event-configurable shirt-size list
+
+The shirt-size picker was hardcoded (`["XS","S","M","L","XL","XXL"]`) in six
+places: `applications/service.ts` (API, the actual submit-time field/validation),
+and five web spots — `my-applications/lib.ts` (participant form), `applications/[id]/shared.ts`
+(builder preview), `claim-account/page.tsx` (invite claim), `settings/profile/page.tsx`
+(self-edit), `users/[id]/overview-tab.tsx` (staff edit). Made `event_config.shirt_sizes`
+(migration `0110`) the single source of truth:
+
+- API: `GET /api/public/event` now returns `shirtSizes` (public — invite-claim
+  and participant pages are unauthenticated/low-privilege contexts); `PUT /api/event`
+  accepts and validates it (unique, 1–20 entries). `applications/service.ts`'s
+  `enrichTemplate` reads it live instead of a hardcoded const, so the
+  submit-time select field's options — and therefore validation — follow
+  whatever is currently configured.
+- Web: new `hooks/use-shirt-sizes.ts` fetches once with a same-as-DB-default
+  fallback; all six consumers now call it instead of a local const.
+- Settings UI: a new "T-shirt sizes" group at the top of the Invited-accounts
+  tab (`invites-tab.tsx`), a `useFieldArray`-backed add/remove list, saved
+  together with the existing sponsor/staff toggles.
+- Verified backend end-to-end via direct API calls (not just typecheck): set
+  the list to `["S","M","L","3XL"]`, confirmed a submit with the now-removed
+  `"XXL"` got `400 invalid option` and one with the new `"3XL"` succeeded.
+  Verified in-browser that adding "3XL" in the settings tab immediately shows
+  up in the profile self-edit picker.
+
+### Builder layout pass (Questions card)
+
+User feedback: no way to add a question from the bottom of a long list, and
+the live-preview sidebar felt thin/unlabeled. Changes:
+
+- Added a matching "Add question" button below the last question (and as the
+  primary action in the empty state, previously absent there entirely).
+- Lowered the breakpoint that shows the live-preview sidebar from `xl`
+  (1280px) to `lg` (1024px) and rebalanced the split
+  (`lg:grid-cols-[minmax(0,1.3fr)_minmax(22rem,1fr)]`, up from
+  `xl:grid-cols-[minmax(0,1fr)_minmax(20rem,0.8fr)]`), and gave the preview
+  panel a visual identity of its own (`bg-muted/30 rounded-xl`, an "Live
+  preview" label with an eye icon) instead of reading as a bare leftover
+  column.
+- That rebalancing exposed a **real, pre-existing regression risk**: the
+  question editor's own "Applicant question"/"Kind" row used a *viewport*
+  breakpoint (`sm:grid-cols-[minmax(0,1fr)_14rem]`) to decide when to go
+  two-column, not the width of its own (now-narrower) column — at 1024px
+  viewport width the label and input visibly overlapped. Fixed properly with
+  a Tailwind v4 container query (`@container` on the editor column,
+  `@lg:grid-cols-[...]` on the row) so it responds to the space it actually
+  has, matching the pattern already used in `components/ui/card.tsx`.
+  Verified at 1024px, 1440px, and 1600px viewports.
