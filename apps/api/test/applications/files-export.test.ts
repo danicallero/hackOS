@@ -182,6 +182,41 @@ describe("bulk file export (H56)", () => {
       entity_id: `${appId}:cv`,
     });
   });
+
+  it("skips a file that's missing from storage instead of crashing the whole export", async () => {
+    // Regression: a 502 was reported in production for scope=all — one row's
+    // file_key pointed at an object storage never actually has (deleted,
+    // migrated, etc). getObject() throwing for that ONE row used to abort the
+    // whole streamed response after headers were already sent, which a proxy
+    // in front of the API sees as a broken connection (502), not a clean error.
+    const a = await getApp();
+    const staff = await createUserWithCapabilities([CAPABILITIES.EXPORTS_RUN]);
+    const appId = await createApplication({ template: shareableCvField() });
+
+    const ok = await createUser({ email: "ok@test.local" });
+    const missing = await createUser({ email: "missing@test.local" });
+    const okKey = await putUpload(appId, ok, "resume.pdf");
+    const missingKey = `uploads/${appId}/${missing}/cv/${Date.now()}-${missing}/never-uploaded.pdf`;
+
+    await createResponse(ok, appId, {
+      status: "submitted",
+      responses: { cv: okKey, [sponsorShareKey("cv")]: true },
+    });
+    await createResponse(missing, appId, {
+      status: "submitted",
+      // No putObject for this key — simulates an object gone from storage.
+      responses: { cv: missingKey, [sponsorShareKey("cv")]: true },
+    });
+
+    const res = await a.inject({
+      method: "GET",
+      url: `/api/applications/${appId}/fields/cv/files.zip?scope=all`,
+      headers: asUser(staff),
+    });
+    expect(res.statusCode).toBe(200);
+    const entries = await readZipEntries(res.rawPayload);
+    expect(Object.keys(entries)).toEqual(["ok@test.local.pdf"]);
+  });
 });
 
 describe("sponsor-share consent validation (H56)", () => {

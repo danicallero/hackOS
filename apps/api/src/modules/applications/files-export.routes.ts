@@ -96,14 +96,35 @@ export function registerFilesExportRoutes(app: FastifyInstance): void {
       reply.header("cache-control", "private, no-store");
 
       const archive = new ZipArchive({ zlib: { level: 9 } });
+      // Headers are already committed once reply.send(archive) runs below, so
+      // ANY error past this point can no longer become a clean HTTP error
+      // response — it just kills the connection mid-stream (a 502 at any
+      // reverse proxy in front of this). One missing/unreadable object (e.g.
+      // deleted from storage after upload) must never take the whole export
+      // down with it, so each file is fetched defensively and skipped on
+      // failure — matches the "one row's failure never aborts the rest"
+      // convention used by the batch decide/send/revert helpers.
       const sent = reply.send(archive);
-      for (const row of rows) {
-        if (!row.file_key) continue;
-        const obj = await getObject(row.file_key);
-        if (!obj.Body) continue;
-        archive.append(obj.Body as Readable, { name: `${row.email}${keyExtension(row.file_key)}` });
+      try {
+        for (const row of rows) {
+          if (!row.file_key) continue;
+          try {
+            const obj = await getObject(row.file_key);
+            if (!obj.Body) continue;
+            archive.append(obj.Body as Readable, {
+              name: `${row.email}${keyExtension(row.file_key)}`,
+            });
+          } catch (err) {
+            req.log.warn(
+              { err, fieldKey, fileKey: row.file_key, email: row.email },
+              "files-export: skipping a file that could not be read from storage",
+            );
+          }
+        }
+        await archive.finalize();
+      } catch (err) {
+        req.log.error({ err, fieldKey }, "files-export: failed to finalize the zip");
       }
-      await archive.finalize();
       return sent;
     },
   );
