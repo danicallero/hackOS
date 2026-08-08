@@ -30,13 +30,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useShirtSizes } from "@/hooks/use-shirt-sizes";
 import { ApiError, api } from "@/lib/api";
 import { languageName, pickText, type Translate, useLocale } from "@/lib/i18n";
 import { destinationForKind } from "@/lib/invite-destination";
 import { withReturnPath } from "@/lib/return-path";
 import type { Intolerance, InviteLookup, Language } from "@/lib/types";
-
-const SHIRT_SIZES = ["XS", "S", "M", "L", "XL", "XXL"] as const;
 
 function claimSchema(t: Translate) {
   return z.object({
@@ -87,6 +86,7 @@ function ClaimInner() {
   const [lookup, setLookup] = useState<InviteLookup | null | "error">(null);
   const [intolerances, setIntolerances] = useState<Intolerance[]>([]);
   const [done, setDone] = useState(false);
+  const shirtSizes = useShirtSizes();
 
   const form = useForm<Values>({
     resolver: zodResolver(schema),
@@ -122,12 +122,12 @@ function ClaimInner() {
 
   async function onSubmit(values: Values) {
     if (!token) return;
-    const kind = lookup && lookup !== "error" ? lookup.kind : "staff";
     if (lookup !== null && lookup !== "error" && lookup.reusable && !values.email?.trim()) {
       form.setError("email", { message: t("validEmail") });
       return;
     }
-    if (kind === "participant" && values.shirtSize === NONE) {
+    const requireShirtSize = lookup !== null && lookup !== "error" && lookup.requireShirtSize;
+    if (requireShirtSize && values.shirtSize === NONE) {
       form.setError("shirtSize", { message: t("shirtSizeRequiredDesc") });
       return;
     }
@@ -312,7 +312,7 @@ function ClaimInner() {
                 </FormItem>
               )}
             />
-            {lookup.kind !== "sponsor" && (
+            {lookup.requireShirtSize && (
               <FormField
                 control={form.control}
                 name="shirtSize"
@@ -327,7 +327,7 @@ function ClaimInner() {
                       </FormControl>
                       <SelectContent>
                         <SelectItem value={NONE}>{t("notSet")}</SelectItem>
-                        {SHIRT_SIZES.map((s) => (
+                        {shirtSizes.map((s) => (
                           <SelectItem key={s} value={s}>
                             {s}
                           </SelectItem>
@@ -339,40 +339,46 @@ function ClaimInner() {
                 )}
               />
             )}
-            <FormField
-              control={form.control}
-              name="foodIntolerances"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("foodIntolerances")}</FormLabel>
-                  <FormControl>
-                    <MultiSelect
-                      options={intoleranceOptions}
-                      value={field.value}
-                      onChange={field.onChange}
-                      placeholder={t("selectIntolerances")}
-                      searchPlaceholder={t("searchIntolerances")}
-                      emptyText={t("noIntolerances")}
-                    />
-                  </FormControl>
-                  <p className="text-muted-foreground text-xs">{t("dietaryDataHandlingNote")}</p>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="foodIntoleranceNotes"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("otherDietaryNotes")}</FormLabel>
-                  <FormControl>
-                    <Textarea rows={3} placeholder={t("cateringNotes")} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {lookup.requireDietary && (
+              <>
+                <FormField
+                  control={form.control}
+                  name="foodIntolerances"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("foodIntolerances")}</FormLabel>
+                      <FormControl>
+                        <MultiSelect
+                          options={intoleranceOptions}
+                          value={field.value}
+                          onChange={field.onChange}
+                          placeholder={t("selectIntolerances")}
+                          searchPlaceholder={t("searchIntolerances")}
+                          emptyText={t("noIntolerances")}
+                        />
+                      </FormControl>
+                      <p className="text-muted-foreground text-xs">
+                        {t("dietaryDataHandlingNote")}
+                      </p>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="foodIntoleranceNotes"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("otherDietaryNotes")}</FormLabel>
+                      <FormControl>
+                        <Textarea rows={3} placeholder={t("cateringNotes")} {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </>
+            )}
             <SubmitButton className="w-full" pending={form.formState.isSubmitting}>
               {t("createAccount")}
             </SubmitButton>

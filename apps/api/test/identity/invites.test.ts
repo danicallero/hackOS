@@ -567,6 +567,134 @@ describe("H9/H10 invite acceptance", () => {
   });
 });
 
+describe("H10 event-configurable shirt/dietary requirements for invited sponsors/staff", () => {
+  async function setInviteRequirements(a: App, overrides: Record<string, boolean>): Promise<void> {
+    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const res = await a.inject({
+      method: "PUT",
+      url: "/api/event",
+      headers: asUser(manager),
+      payload: overrides,
+    });
+    expect(res.statusCode).toBe(200);
+  }
+
+  it("off by default: lookup reports no requirement, accept succeeds without a shirt size", async () => {
+    const a = await getApp();
+    const actor = await inviter();
+    const entId = await createEnterprise("DefaultCo");
+    const invite = await createInvite(a, actor, {
+      email: "sponsor-default@example.com",
+      kind: "sponsor",
+      enterpriseId: entId,
+    });
+
+    const look = await a.inject({
+      method: "GET",
+      url: `/api/invites/lookup?token=${invite.token}`,
+    });
+    expect(look.json().requireShirtSize).toBe(false);
+    expect(look.json().requireDietary).toBe(false);
+
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/invites/accept",
+      payload: { ...ACCEPT_BASE, token: invite.token },
+    });
+    expect(res.statusCode).toBe(201);
+  });
+
+  it("requireSponsorShirtSize blocks a sponsor claim without a shirt size once enabled", async () => {
+    const a = await getApp();
+    await setInviteRequirements(a, { requireSponsorShirtSize: true });
+    const actor = await inviter();
+    const entId = await createEnterprise("ReqCo");
+    const invite = await createInvite(a, actor, {
+      email: "sponsor-req@example.com",
+      kind: "sponsor",
+      enterpriseId: entId,
+    });
+
+    const look = await a.inject({
+      method: "GET",
+      url: `/api/invites/lookup?token=${invite.token}`,
+    });
+    expect(look.json().requireShirtSize).toBe(true);
+
+    const noShirt = await a.inject({
+      method: "POST",
+      url: "/api/invites/accept",
+      payload: { ...ACCEPT_BASE, token: invite.token },
+    });
+    expect(noShirt.statusCode).toBe(400);
+    expect(noShirt.json().error.details.field).toBe("shirtSize");
+
+    const ok = await a.inject({
+      method: "POST",
+      url: "/api/invites/accept",
+      payload: { ...ACCEPT_BASE, token: invite.token, shirtSize: "M" },
+    });
+    expect(ok.statusCode).toBe(201);
+  });
+
+  it("requireStaffShirtSize blocks a staff claim without a shirt size once enabled, independent of sponsors", async () => {
+    const a = await getApp();
+    await setInviteRequirements(a, { requireStaffShirtSize: true });
+    const actor = await inviter();
+    const entId = await createEnterprise("UnaffectedCo");
+
+    const sponsorInvite = await createInvite(a, actor, {
+      email: "sponsor-unaffected@example.com",
+      kind: "sponsor",
+      enterpriseId: entId,
+    });
+    const sponsorRes = await a.inject({
+      method: "POST",
+      url: "/api/invites/accept",
+      payload: { ...ACCEPT_BASE, token: sponsorInvite.token },
+    });
+    expect(sponsorRes.statusCode).toBe(201);
+
+    const staffInvite = await createInvite(a, actor, {
+      email: "staff-req@example.com",
+      kind: "staff",
+    });
+    const noShirt = await a.inject({
+      method: "POST",
+      url: "/api/invites/accept",
+      payload: { ...ACCEPT_BASE, token: staffInvite.token },
+    });
+    expect(noShirt.statusCode).toBe(400);
+    expect(noShirt.json().error.details.field).toBe("shirtSize");
+  });
+
+  it("requireSponsorDietary only affects lookup visibility, never blocks acceptance", async () => {
+    const a = await getApp();
+    await setInviteRequirements(a, { requireSponsorDietary: true });
+    const actor = await inviter();
+    const entId = await createEnterprise("DietCo");
+    const invite = await createInvite(a, actor, {
+      email: "sponsor-diet@example.com",
+      kind: "sponsor",
+      enterpriseId: entId,
+    });
+
+    const look = await a.inject({
+      method: "GET",
+      url: `/api/invites/lookup?token=${invite.token}`,
+    });
+    expect(look.json().requireDietary).toBe(true);
+
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/invites/accept",
+      // No foodIntolerances/foodIntoleranceNotes at all — dietary is never a hard block.
+      payload: { ...ACCEPT_BASE, token: invite.token },
+    });
+    expect(res.statusCode).toBe(201);
+  });
+});
+
 describe("H10 late participant reaches a closed application form", () => {
   it("an invited participant can still save a draft and submit once the window has closed", async () => {
     const a = await getApp();
@@ -714,6 +842,8 @@ describe("H9 invite regeneration", () => {
       redeemedCount: 0,
       remainingRedeems: null,
       expired: false,
+      requireShirtSize: true,
+      requireDietary: true,
     });
 
     await a.inject({

@@ -1781,6 +1781,74 @@ const dict: Record<string, I18nText> = {
     gl: "Nova ligazón de convite creada e enviada.",
     en: "New invite link created and emailed.",
   },
+  invitesSectionTitle: {
+    es: "Cuentas invitadas",
+    gl: "Contas convidadas",
+    en: "Invited accounts",
+  },
+  invitesSectionDesc: {
+    es: "Qué debe indicar el personal y las empresas patrocinadoras invitadas al crear su cuenta.",
+    gl: "Que debe indicar o persoal e as empresas patrocinadoras convidadas ao crear a súa conta.",
+    en: "What invited staff and sponsor accounts must fill in when they claim their account.",
+  },
+  shirtSizesGroup: { es: "Tallas de camiseta", gl: "Tallas de camiseta", en: "T-shirt sizes" },
+  shirtSizesGroupDesc: {
+    es: "Las opciones que se muestran en cualquier selector de talla de camiseta de la aplicación (formularios, invitaciones, perfil).",
+    gl: "As opcións que se mostran en calquera selector de talla de camiseta da aplicación (formularios, convites, perfil).",
+    en: "The options shown in every t-shirt size picker in the app (forms, invites, profile).",
+  },
+  addSize: { es: "Añadir talla", gl: "Engadir talla", en: "Add size" },
+  shirtSizesDuplicateError: {
+    es: "Las tallas no pueden repetirse.",
+    gl: "As tallas non poden repetirse.",
+    en: "Sizes can't repeat.",
+  },
+  invitesSponsorsGroup: {
+    es: "Patrocinadores",
+    gl: "Patrocinadores",
+    en: "Sponsors",
+  },
+  invitesStaffGroup: { es: "Personal", gl: "Persoal", en: "Staff" },
+  requireSponsorShirtSizeLabel: {
+    es: "Exigir talla de camiseta",
+    gl: "Esixir talla de camiseta",
+    en: "Require shirt size",
+  },
+  requireSponsorShirtSizeDesc: {
+    es: "Los patrocinadores invitados deben indicar su talla de camiseta al crear la cuenta.",
+    gl: "Os patrocinadores convidados deben indicar a súa talla de camiseta ao crear a conta.",
+    en: "Invited sponsors must supply a shirt size when creating their account.",
+  },
+  requireSponsorDietaryLabel: {
+    es: "Pedir restricciones alimenticias",
+    gl: "Pedir restricións alimenticias",
+    en: "Ask for dietary restrictions",
+  },
+  requireSponsorDietaryDesc: {
+    es: "Muestra el campo de restricciones alimenticias a los patrocinadores invitados (opcional).",
+    gl: "Mostra o campo de restricións alimenticias aos patrocinadores convidados (opcional).",
+    en: "Shows the dietary-restrictions field to invited sponsors (optional to fill in).",
+  },
+  requireStaffShirtSizeLabel: {
+    es: "Exigir talla de camiseta",
+    gl: "Esixir talla de camiseta",
+    en: "Require shirt size",
+  },
+  requireStaffShirtSizeDesc: {
+    es: "El personal invitado debe indicar su talla de camiseta al crear la cuenta.",
+    gl: "O persoal convidado debe indicar a súa talla de camiseta ao crear a conta.",
+    en: "Invited staff must supply a shirt size when creating their account.",
+  },
+  requireStaffDietaryLabel: {
+    es: "Pedir restricciones alimenticias",
+    gl: "Pedir restricións alimenticias",
+    en: "Ask for dietary restrictions",
+  },
+  requireStaffDietaryDesc: {
+    es: "Muestra el campo de restricciones alimenticias al personal invitado (opcional).",
+    gl: "Mostra o campo de restricións alimenticias ao persoal convidado (opcional).",
+    en: "Shows the dietary-restrictions field to invited staff (optional to fill in).",
+  },
   expire: { es: "Caducar", gl: "Caducar", en: "Expire" },
   inviteExpired: { es: "Invitación caducada.", gl: "Convite caducado.", en: "Invite expired." },
   noActiveInvitations: {
@@ -7261,6 +7329,11 @@ const dict: Record<string, I18nText> = {
     gl: "Sen opcións definidas",
     en: "No options defined",
   },
+  chooseAnyHint: {
+    es: "Elige las que correspondan",
+    gl: "Elixe as que correspondan",
+    en: "Choose any that apply",
+  },
   noQuestionsYet: {
     es: "Aún no hay preguntas",
     gl: "Aínda non hai preguntas",
@@ -7468,6 +7541,32 @@ const dict: Record<string, I18nText> = {
   notSentYet: { es: "Sin enviar", gl: "Sen enviar", en: "Not sent" },
   builderBasics: { es: "Datos básicos", gl: "Datos básicos", en: "Basics" },
   builderAvailability: { es: "Disponibilidad", gl: "Dispoñibilidade", en: "Availability" },
+  builderLogistics: { es: "Logística", gl: "Loxística", en: "Logistics" },
+  askShirtSizeLabel: {
+    es: "Pedir talla de camiseta",
+    gl: "Pedir talla de camiseta",
+    en: "Ask for t-shirt size",
+  },
+  askShirtSizeDesc: {
+    es: "Añade la talla de camiseta al formulario y la exige al enviar.",
+    gl: "Engade a talla de camiseta ao formulario e esíxea ao enviar.",
+    en: "Adds shirt size to the form and requires it at submit.",
+  },
+  requiredAtSubmitBadge: {
+    es: "Obligatorio al enviar",
+    gl: "Obrigatorio ao enviar",
+    en: "Required at submit",
+  },
+  askFoodIntolerancesLabel: {
+    es: "Pedir restricciones alimenticias",
+    gl: "Pedir restricións alimenticias",
+    en: "Ask for dietary restrictions",
+  },
+  askFoodIntolerancesDesc: {
+    es: "Añade restricciones alimenticias y notas dietéticas al formulario (opcional para quien lo rellena).",
+    gl: "Engade restricións alimenticias e notas dietéticas ao formulario (opcional para quen o cobre).",
+    en: "Adds dietary restrictions and notes to the form (optional for the applicant).",
+  },
   builderReview: {
     es: "Revisión y publicación",
     gl: "Revisión e publicación",
@@ -7493,6 +7592,7 @@ const dict: Record<string, I18nText> = {
     gl: "Idioma da vista previa",
     en: "Preview language",
   },
+  livePreviewLabel: { es: "Vista previa en vivo", gl: "Vista previa en vivo", en: "Live preview" },
   internalDecisionNotice: {
     es: "Solo interno — la persona solicitante todavía no ha recibido esta decisión.",
     gl: "Só interno — a persoa solicitante aínda non recibiu esta decisión.",

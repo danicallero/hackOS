@@ -37,6 +37,7 @@ import { TemplateFieldControl, templateFieldId } from "@/components/common/templ
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { useShirtSizes } from "@/hooks/use-shirt-sizes";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { withReturnPath } from "@/lib/return-path";
@@ -56,7 +57,6 @@ import {
   type MyResponseDetail,
   missingRequiredFields,
   type PublicForm,
-  SHIRT_TYPES,
   statusLabel,
   statusTone,
 } from "../lib";
@@ -72,6 +72,7 @@ export default function MyApplicationDetailPage() {
   const [form, setForm] = useState<PublicForm | null>(null);
   const [response, setResponse] = useState<MyResponseDetail | null>(null);
   const [intolerances, setIntolerances] = useState<IntoleranceOption[]>([]);
+  const shirtSizes = useShirtSizes();
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -159,8 +160,10 @@ export default function MyApplicationDetailPage() {
     // and dietary fields from the profile so the applicant doesn't re-enter data
     // the API already knows (H12). Saved values always win over the profile.
     const seeded: Record<string, unknown> = { ...(nextResponse?.responses ?? {}) };
-    if (nextForm && SHIRT_TYPES.includes(nextForm.type)) {
-      if (seeded.shirt_size == null && me?.shirtSize) seeded.shirt_size = me.shirtSize;
+    if (nextForm?.ask_shirt_size && seeded.shirt_size == null && me?.shirtSize) {
+      seeded.shirt_size = me.shirtSize;
+    }
+    if (nextForm?.ask_food_intolerances) {
       if (seeded.food_intolerances == null && me?.foodIntolerances?.length) {
         seeded.food_intolerances = me.foodIntolerances.map(String);
       }
@@ -203,7 +206,15 @@ export default function MyApplicationDetailPage() {
 
   // Mirror the API's enrichment so shirt-size + dietary fields render in the form
   // (participant/mentor) rather than being pulled silently from the profile (H12).
-  const template = form ? enrichTemplate(form.type, form.template, intolerances) : [];
+  const template = form
+    ? enrichTemplate(
+        form.ask_shirt_size,
+        form.ask_food_intolerances,
+        form.template,
+        intolerances,
+        shirtSizes,
+      )
+    : [];
   const status = confirmationExpired ? "expired" : response?.status; // already masked by the API
   const timelineResponse =
     confirmationExpired && response ? { ...response, status: "expired" } : response;

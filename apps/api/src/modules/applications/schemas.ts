@@ -11,9 +11,6 @@ import { z } from "zod";
 export const APPLICATION_TYPES = ["participant", "mentor", "sponsor", "volunteer"] as const;
 export type ApplicationType = (typeof APPLICATION_TYPES)[number];
 
-/** Types that must supply a shirt size at submit (logistics: shirt order — H12). */
-export const SHIRT_TYPES: ApplicationType[] = ["participant", "mentor"];
-
 export const FIELD_KINDS = [
   "text",
   "textarea",
@@ -77,6 +74,8 @@ export const createApplicationSchema = z
     close_at: timestampCoerce,
     capacity: z.number().int().positive().nullish(),
     confirmation_window_hours: z.number().int().positive().default(168),
+    ask_shirt_size: z.boolean().default(false),
+    ask_food_intolerances: z.boolean().default(false),
   })
   .strict();
 
@@ -91,6 +90,8 @@ export const updateApplicationSchema = z
     close_at: timestampCoerce,
     capacity: z.number().int().positive().nullish(),
     confirmation_window_hours: z.number().int().positive().optional(),
+    ask_shirt_size: z.boolean().optional(),
+    ask_food_intolerances: z.boolean().optional(),
   })
   .strict();
 

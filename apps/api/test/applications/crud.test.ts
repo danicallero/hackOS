@@ -257,6 +257,33 @@ describe("applications CRUD (H11)", () => {
     expect(single.statusCode).toBe(404);
   });
 
+  it("H12: ask_shirt_size/ask_food_intolerances default false and are independently togglable per form, regardless of type", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);
+
+    const create = await a.inject({
+      method: "POST",
+      url: "/api/applications",
+      headers: asUser(manager),
+      payload: { name: "Volunteer form", type: "volunteer", template: sampleTemplate() },
+    });
+    expect(create.statusCode).toBe(201);
+    expect(create.json().ask_shirt_size).toBe(false);
+    expect(create.json().ask_food_intolerances).toBe(false);
+    const id = create.json().id;
+
+    const patch = await a.inject({
+      method: "PATCH",
+      url: `/api/applications/${id}`,
+      headers: asUser(manager),
+      payload: { ask_shirt_size: true },
+    });
+    expect(patch.statusCode).toBe(200);
+    expect(patch.json().ask_shirt_size).toBe(true);
+    // Untouched field stays as-is (partial update).
+    expect(patch.json().ask_food_intolerances).toBe(false);
+  });
+
   it("blocks deleting a form that already has responses", async () => {
     const a = await getApp();
     const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);

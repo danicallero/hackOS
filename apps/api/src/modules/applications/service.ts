@@ -7,7 +7,7 @@ import { audit } from "../../lib/audit.js";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { issueTicket } from "../logistics/tickets.js";
 import { issueWalletAccessToken } from "../logistics/wallet-access.js";
-import { type ApplicationType, SHIRT_TYPES, type TemplateField } from "./schemas.js";
+import type { ApplicationType, TemplateField } from "./schemas.js";
 
 /**
  * Applications domain service (H11-H15, H27). Holds the state-machine
@@ -28,6 +28,8 @@ export interface ApplicationRow {
   close_at: Date | null;
   capacity: number | null;
   confirmation_window_hours: number;
+  ask_shirt_size: boolean;
+  ask_food_intolerances: boolean;
   created_at: Date;
 }
 
@@ -165,29 +167,30 @@ export function stripDietaryResponses(responses: Record<string, unknown>): Recor
   return sanitized;
 }
 
-const SHIRT_SIZE_FIELD: TemplateField = {
-  key: "shirt_size",
-  label: { en: "T-shirt size", es: "Talla de camiseta", gl: "Talla de camiseta" },
-  kind: "select",
-  required: true,
-  options: [
-    { value: "XS", label: { en: "XS", es: "XS", gl: "XS" } },
-    { value: "S", label: { en: "S", es: "S", gl: "S" } },
-    { value: "M", label: { en: "M", es: "M", gl: "M" } },
-    { value: "L", label: { en: "L", es: "L", gl: "L" } },
-    { value: "XL", label: { en: "XL", es: "XL", gl: "XL" } },
-    { value: "XXL", label: { en: "XXL", es: "XXL", gl: "XXL" } },
-  ],
-};
+/** The event's configured shirt-size options (H12) — same source every picker in the app reads from. */
+async function readShirtSizes(): Promise<string[]> {
+  const { rows } = await pool.query(`SELECT shirt_sizes FROM event_config WHERE id = 1`);
+  return rows[0]?.shirt_sizes ?? ["XS", "S", "M", "L", "XL", "XXL"];
+}
 
-/** If the application type requires a shirt size, append the field to the template. */
-export function augmentTemplate(
-  appType: ApplicationType,
+function shirtSizeField(sizes: string[]): TemplateField {
+  return {
+    key: "shirt_size",
+    label: { en: "T-shirt size", es: "Talla de camiseta", gl: "Talla de camiseta" },
+    kind: "select",
+    required: true,
+    options: sizes.map((s) => ({ value: s, label: { en: s, es: s, gl: s } })),
+  };
+}
+
+/** If the application asks for a shirt size, append the field to the template. */
+export async function augmentTemplate(
+  askShirtSize: boolean,
   template: TemplateField[],
-): TemplateField[] {
-  if (!SHIRT_TYPES.includes(appType)) return template;
+): Promise<TemplateField[]> {
+  if (!askShirtSize) return template;
   if (template.some((f) => f.key === "shirt_size")) return template;
-  return [...template, SHIRT_SIZE_FIELD];
+  return [...template, shirtSizeField(await readShirtSizes())];
 }
 
 const FOOD_NOTES_FIELD: TemplateField = {
@@ -199,15 +202,15 @@ const FOOD_NOTES_FIELD: TemplateField = {
 
 /**
  * Enrich the template with dynamically-loaded fields (food intolerances) when
- * the application type requires them. Async because it queries the DB for the
+ * the application asks for them. Async because it queries the DB for the
  * current set of food-intolerance options.
  */
 export async function enrichTemplate(
-  appType: ApplicationType,
+  app: Pick<ApplicationRow, "ask_shirt_size" | "ask_food_intolerances">,
   template: TemplateField[],
 ): Promise<TemplateField[]> {
-  let enriched = augmentTemplate(appType, template);
-  if (SHIRT_TYPES.includes(appType) && !enriched.some((f) => f.key === "food_intolerances")) {
+  let enriched = await augmentTemplate(app.ask_shirt_size, template);
+  if (app.ask_food_intolerances && !enriched.some((f) => f.key === "food_intolerances")) {
     const { rows } = await pool.query(`SELECT id, label FROM food_intolerances ORDER BY id`);
     const intolerances: TemplateField = {
       key: "food_intolerances",
@@ -416,7 +419,7 @@ export async function submitResponse(
 
     // Invited participants already gave shirt & food at invite accept; skip
     // the required check and preserve existing values when not re-submitted.
-    if (!invited && SHIRT_TYPES.includes(app.type) && !shirtSize) {
+    if (!invited && app.ask_shirt_size && !shirtSize) {
       throw new BadRequestError("Shirt size is required for this application type", {
         code: "shirt_size_required",
       });
@@ -451,7 +454,7 @@ export async function submitResponse(
     // typo for DNI). Only non-empty string answers overwrite an existing value.
     const dni = extractDni(merged);
 
-    const enrichedTemplate = await enrichTemplate(app.type, app.template);
+    const enrichedTemplate = await enrichTemplate(app, app.template);
     validateResponses(enrichedTemplate, merged);
     const storedResponses = stripDietaryResponses(merged);
 
@@ -1274,7 +1277,8 @@ export async function getResponseDetail(responseId: number): Promise<ResponseDet
   const { rows } = await pool.query(
     `SELECT r.*, u.name, u.email, u.shirt_size,
             u.food_intolerances, u.food_intolerance_notes, u.dietary_data_state,
-            a.id AS app_id, a.name AS app_name, a.type AS app_type, a.template
+            a.id AS app_id, a.name AS app_name, a.type AS app_type, a.template,
+            a.ask_shirt_size, a.ask_food_intolerances
      FROM application_responses r
      JOIN users u ON u.id = r.user_id
      JOIN applications a ON a.id = r.application_id
@@ -1293,6 +1297,8 @@ export async function getResponseDetail(responseId: number): Promise<ResponseDet
     app_name,
     app_type,
     template,
+    ask_shirt_size,
+    ask_food_intolerances,
     ...response
   } = rows[0];
 
@@ -1301,7 +1307,7 @@ export async function getResponseDetail(responseId: number): Promise<ResponseDet
     [responseId],
   );
 
-  const enriched = await enrichTemplate(app_type, template);
+  const enriched = await enrichTemplate({ ask_shirt_size, ask_food_intolerances }, template);
   return {
     response,
     user: {

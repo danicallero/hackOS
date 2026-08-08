@@ -33,21 +33,30 @@ export async function createApplication(
     close_at: string | null;
     capacity: number | null;
     confirmation_window_hours: number;
+    ask_shirt_size: boolean;
+    ask_food_intolerances: boolean;
   }> = {},
 ): Promise<number> {
+  const type = overrides.type ?? "participant";
+  // Mirrors the old hardcoded SHIRT_TYPES default, now admin-configurable —
+  // keeps every existing test's implicit "participant/mentor asks" assumption.
+  const asksByDefault = type === "participant" || type === "mentor";
   const { rows } = await pool.query(
     `INSERT INTO applications
-       (name, type, template, description, active, open_at, close_at, capacity, confirmation_window_hours)
-     VALUES ($1, $2, $3::jsonb, '', $4, $5, $6, $7, $8) RETURNING id`,
+       (name, type, template, description, active, open_at, close_at, capacity,
+        confirmation_window_hours, ask_shirt_size, ask_food_intolerances)
+     VALUES ($1, $2, $3::jsonb, '', $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
     [
       overrides.name ?? "Participant form",
-      overrides.type ?? "participant",
+      type,
       JSON.stringify(overrides.template ?? sampleTemplate()),
       overrides.active ?? true,
       overrides.open_at ?? null,
       overrides.close_at ?? null,
       overrides.capacity ?? null,
       overrides.confirmation_window_hours ?? 168,
+      overrides.ask_shirt_size ?? asksByDefault,
+      overrides.ask_food_intolerances ?? asksByDefault,
     ],
   );
   return rows[0].id;

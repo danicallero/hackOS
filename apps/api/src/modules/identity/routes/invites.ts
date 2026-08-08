@@ -29,6 +29,39 @@ import {
 } from "./enterprise-invite-links.js";
 
 /**
+ * Whether an invited sponsor/staff account is asked for a shirt size and/or
+ * dietary restrictions before claiming — event-configurable per kind, since
+ * not every event caters on-site sponsors/staff (H10). `requireShirtSize`
+ * blocks the claim when missing; `requireDietary` only controls whether the
+ * claim form shows the dietary fields for this kind — like everywhere else
+ * in the app (H12), dietary answers are never a hard block, since an
+ * invitee may simply have none. Participants are unaffected: their shirt
+ * size is always required, their dietary fields always shown.
+ */
+async function inviteRequirements(
+  kind: "staff" | "sponsor" | "participant",
+): Promise<{ requireShirtSize: boolean; requireDietary: boolean }> {
+  if (kind === "participant") return { requireShirtSize: true, requireDietary: true };
+  const { rows } = await pool.query(
+    `SELECT require_sponsor_shirt_size, require_sponsor_dietary,
+            require_staff_shirt_size, require_staff_dietary
+       FROM event_config WHERE id = 1`,
+  );
+  const row = rows[0] ?? {
+    require_sponsor_shirt_size: false,
+    require_sponsor_dietary: false,
+    require_staff_shirt_size: false,
+    require_staff_dietary: false,
+  };
+  return kind === "sponsor"
+    ? {
+        requireShirtSize: row.require_sponsor_shirt_size,
+        requireDietary: row.require_sponsor_dietary,
+      }
+    : { requireShirtSize: row.require_staff_shirt_size, requireDietary: row.require_staff_dietary };
+}
+
+/**
  * Invitations (H9, H10): admin creates an invite by email + kind
  * (staff | sponsor | participant); the invited person follows the link and
  * creates their OWN account (name, surname, password, food intolerances,
@@ -534,6 +567,8 @@ export function registerInviteRoutes(app: FastifyInstance): void {
             redeemedCount: z.number(),
             remainingRedeems: z.number().nullable(),
             expired: z.boolean(),
+            requireShirtSize: z.boolean(),
+            requireDietary: z.boolean(),
           }),
         },
       },
@@ -554,15 +589,17 @@ export function registerInviteRoutes(app: FastifyInstance): void {
           );
           enterpriseName = (enterprises[0] as { name?: string } | undefined)?.name ?? null;
         }
+        const kind = (row.kind ?? "staff") as z.infer<typeof inviteKind>;
         return {
           email: row.email,
-          kind: (row.kind ?? "staff") as z.infer<typeof inviteKind>,
+          kind,
           enterpriseName,
           reusable: false,
           maxRedeems: null,
           redeemedCount: 0,
           remainingRedeems: null,
           expired: row.expires_at < new Date(),
+          ...(await inviteRequirements(kind)),
         };
       }
 
@@ -581,6 +618,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
         remainingRedeems:
           link.max_redeems === null ? null : Math.max(0, link.max_redeems - link.redeemed_count),
         expired: enterpriseInviteLinkIsExpired(link),
+        ...(await inviteRequirements("sponsor")),
       };
     },
   );
@@ -673,10 +711,13 @@ export function registerInviteRoutes(app: FastifyInstance): void {
           });
         }
 
-        // Only participants must provide a shirt size (catering/logistics for
-        // attendees). Staff and sponsors don't need one. Dietary restrictions
-        // are NEVER required — an invitee may simply have none.
-        if (kind === "participant" && !req.body.shirtSize) {
+        // Participants always require a shirt size (logistics — H12). Whether
+        // an invited sponsor/staff account must supply one too is
+        // event-configurable (H10). Dietary restrictions are collected
+        // whenever the event asks for them but — like everywhere else in the
+        // app (H12) — are never a hard block: an invitee may simply have none.
+        const { requireShirtSize } = await inviteRequirements(kind);
+        if (requireShirtSize && !req.body.shirtSize) {
           throw new BadRequestError("Shirt size is required", { field: "shirtSize" });
         }
 

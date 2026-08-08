@@ -66,7 +66,7 @@ export function FormPreviewPanel({
 }) {
   const { t } = useLocale();
   return (
-    <div className="space-y-4 rounded-lg border p-4">
+    <div className="bg-muted/30 space-y-4 rounded-xl border p-4">
       {fields.map((f) => {
         const label = pickText(f.label, locale) || t("primaryApplicantLabel");
         const opts = f.options ?? [];
@@ -110,7 +110,7 @@ export function FormPreviewPanel({
                     </span>
                   ))
                 )}
-                {f.kind === "multiselect" && (
+                {f.kind === "multiselect" && opts.length > 0 && (
                   <span className="text-muted-foreground text-xs">{t("chooseAnyHint")}</span>
                 )}
               </div>

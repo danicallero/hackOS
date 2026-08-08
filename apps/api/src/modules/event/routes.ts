@@ -67,6 +67,22 @@ const eventConfigBody = z
     passBackFields: z.array(backFieldSchema).max(20).optional(),
     passFieldLabels: passFieldLabelsSchema.optional(),
     passFieldVisibility: passFieldVisibilitySchema.optional(),
+    // H10: whether an invited sponsor/staff account must supply a shirt size,
+    // and whether their claim form shows dietary-restriction fields at all.
+    requireSponsorShirtSize: z.boolean().optional(),
+    requireSponsorDietary: z.boolean().optional(),
+    requireStaffShirtSize: z.boolean().optional(),
+    requireStaffDietary: z.boolean().optional(),
+    // H12: the options offered by every shirt-size picker in the app
+    // (applications, invite claim, profile self-edit, staff user-edit).
+    shirtSizes: z
+      .array(z.string().trim().min(1).max(10))
+      .min(1)
+      .max(20)
+      .refine((sizes) => new Set(sizes).size === sizes.length, {
+        message: "shirt sizes must be unique",
+      })
+      .optional(),
   })
   .strict();
 
@@ -90,6 +106,11 @@ const DEFAULTS = {
   pass_back_fields: [],
   pass_field_labels: {},
   pass_field_visibility: {},
+  require_sponsor_shirt_size: false,
+  require_sponsor_dietary: false,
+  require_staff_shirt_size: false,
+  require_staff_dietary: false,
+  shirt_sizes: ["XS", "S", "M", "L", "XL", "XXL"],
 } as const;
 
 interface EventConfigRow {
@@ -112,6 +133,11 @@ interface EventConfigRow {
   pass_back_fields: { label: string; value: string }[];
   pass_field_labels: PassFieldLabels;
   pass_field_visibility: PassFieldVisibility;
+  require_sponsor_shirt_size: boolean;
+  require_sponsor_dietary: boolean;
+  require_staff_shirt_size: boolean;
+  require_staff_dietary: boolean;
+  shirt_sizes: string[];
 }
 
 async function readConfig(): Promise<EventConfigRow> {
@@ -122,7 +148,9 @@ async function readConfig(): Promise<EventConfigRow> {
             presence_auto_entry_at, presence_certainty_window_minutes,
             venue_name, venue_latitude, venue_longitude,
             wifi_ssid, wifi_password,
-            pass_back_fields, pass_field_labels, pass_field_visibility
+            pass_back_fields, pass_field_labels, pass_field_visibility,
+            require_sponsor_shirt_size, require_sponsor_dietary,
+            require_staff_shirt_size, require_staff_dietary, shirt_sizes
        FROM event_config WHERE id = 1`,
   );
   return rows[0] ?? DEFAULTS;
@@ -176,6 +204,9 @@ function toPublic(
     // with (deploy-time APPLE_PASS_ORGANIZATION), surfaced so the settings
     // page can show it instead of a mystery placeholder.
     organizerName: config.APPLE_PASS_ORGANIZATION,
+    // H12: public so every shirt-size picker (applications, invite claim,
+    // profile self-edit, staff user-edit) can render the same options.
+    shirtSizes: row.shirt_sizes,
   };
 }
 
@@ -193,6 +224,10 @@ function toAdmin(
     ...toPublic(row, judging),
     wifiSsid: row.wifi_ssid,
     wifiPassword: row.wifi_password,
+    requireSponsorShirtSize: row.require_sponsor_shirt_size,
+    requireSponsorDietary: row.require_sponsor_dietary,
+    requireStaffShirtSize: row.require_staff_shirt_size,
+    requireStaffDietary: row.require_staff_dietary,
   };
 }
 
@@ -244,7 +279,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Update event config",
         description:
-          "Updates name/tagline/timezone, event start (doors open — the time shown on the Wallet pass), hacking window, venue (name + GPS), the Wallet pass back-field list, field-label overrides, per-field show/hide toggles, and whether participants may create their own project (H19). Fields omitted from the body are left unchanged. Issued Apple Wallet passes are pushed a refresh when the saved config actually changes.",
+          "Updates name/tagline/timezone, event start (doors open — the time shown on the Wallet pass), hacking window, venue (name + GPS), the Wallet pass back-field list, field-label overrides, per-field show/hide toggles, whether participants may create their own project (H19), whether invited sponsors/staff must supply a shirt size and/or see dietary-restriction fields when claiming their account (H10), and the shirt-size options offered by every picker in the app (H12). Fields omitted from the body are left unchanged. Issued Apple Wallet passes are pushed a refresh when the saved config actually changes.",
         body: eventConfigBody,
       },
     },
@@ -286,6 +321,23 @@ export function registerEventRoutes(app: FastifyInstance): void {
           b.passFieldVisibility === undefined
             ? current.pass_field_visibility
             : b.passFieldVisibility,
+        require_sponsor_shirt_size:
+          b.requireSponsorShirtSize === undefined
+            ? current.require_sponsor_shirt_size
+            : b.requireSponsorShirtSize,
+        require_sponsor_dietary:
+          b.requireSponsorDietary === undefined
+            ? current.require_sponsor_dietary
+            : b.requireSponsorDietary,
+        require_staff_shirt_size:
+          b.requireStaffShirtSize === undefined
+            ? current.require_staff_shirt_size
+            : b.requireStaffShirtSize,
+        require_staff_dietary:
+          b.requireStaffDietary === undefined
+            ? current.require_staff_dietary
+            : b.requireStaffDietary,
+        shirt_sizes: b.shirtSizes === undefined ? current.shirt_sizes : b.shirtSizes,
       };
 
       if (
@@ -314,8 +366,10 @@ export function registerEventRoutes(app: FastifyInstance): void {
              presence_auto_entry_at, presence_certainty_window_minutes,
              venue_name, venue_latitude, venue_longitude,
              wifi_ssid, wifi_password,
-             pass_back_fields, pass_field_labels, pass_field_visibility)
-         VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb, $18::jsonb, $19::jsonb)
+             pass_back_fields, pass_field_labels, pass_field_visibility,
+             require_sponsor_shirt_size, require_sponsor_dietary,
+             require_staff_shirt_size, require_staff_dietary, shirt_sizes)
+         VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb, $18::jsonb, $19::jsonb, $20, $21, $22, $23, $24)
          ON CONFLICT (id) DO UPDATE
             SET name = EXCLUDED.name, tagline = EXCLUDED.tagline, timezone = EXCLUDED.timezone,
                 event_starts_at = EXCLUDED.event_starts_at,
@@ -333,14 +387,21 @@ export function registerEventRoutes(app: FastifyInstance): void {
                 wifi_password = EXCLUDED.wifi_password,
                 pass_back_fields = EXCLUDED.pass_back_fields,
                 pass_field_labels = EXCLUDED.pass_field_labels,
-                pass_field_visibility = EXCLUDED.pass_field_visibility
+                pass_field_visibility = EXCLUDED.pass_field_visibility,
+                require_sponsor_shirt_size = EXCLUDED.require_sponsor_shirt_size,
+                require_sponsor_dietary = EXCLUDED.require_sponsor_dietary,
+                require_staff_shirt_size = EXCLUDED.require_staff_shirt_size,
+                require_staff_dietary = EXCLUDED.require_staff_dietary,
+                shirt_sizes = EXCLUDED.shirt_sizes
          RETURNING name, tagline, timezone, event_starts_at, event_ends_at,
                    hacking_starts_at, hacking_ends_at,
                    show_start_countdown, participants_can_create_projects,
                    presence_auto_entry_at, presence_certainty_window_minutes,
                    venue_name, venue_latitude, venue_longitude,
                    wifi_ssid, wifi_password,
-                   pass_back_fields, pass_field_labels, pass_field_visibility`,
+                   pass_back_fields, pass_field_labels, pass_field_visibility,
+                   require_sponsor_shirt_size, require_sponsor_dietary,
+                   require_staff_shirt_size, require_staff_dietary, shirt_sizes`,
         [
           next.name,
           next.tagline,
@@ -361,6 +422,11 @@ export function registerEventRoutes(app: FastifyInstance): void {
           JSON.stringify(next.pass_back_fields),
           JSON.stringify(next.pass_field_labels),
           JSON.stringify(next.pass_field_visibility),
+          next.require_sponsor_shirt_size,
+          next.require_sponsor_dietary,
+          next.require_staff_shirt_size,
+          next.require_staff_dietary,
+          next.shirt_sizes,
         ],
       );
       const judging = await readJudgingWindow();
