@@ -12,6 +12,7 @@
 //   POST /api/me/responses/:responseId/confirm   → confirm my place (H15)
 //   POST /api/me/responses/:responseId/decline   → decline my place (H15)
 
+import { sponsorShareKey } from "@hackos/shared/applications";
 import { EVENTS } from "@hackos/shared/events";
 import {
   CheckCircle2Icon,
@@ -642,6 +643,8 @@ export default function MyApplicationDetailPage() {
               disabled={!editable}
               lang={lang}
               error={fieldErrors[field.key]}
+              sharedWithSponsors={values[sponsorShareKey(field.key)] === true}
+              onSharedWithSponsorsChange={(v) => setValue(sponsorShareKey(field.key), v)}
             />
           ))
         ) : form ? (

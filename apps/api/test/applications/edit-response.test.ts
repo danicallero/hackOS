@@ -1,4 +1,5 @@
 import "./env.js";
+import { sponsorShareKey } from "@hackos/shared/applications";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
@@ -121,6 +122,81 @@ describe("staff edit response", () => {
     const res = await editAnswers(responseId, { age: "not-a-number" });
     expect(res.statusCode).toBe(400);
     expect(JSON.parse(res.body).error.message).toBe("Response fails template validation");
+  });
+
+  it("rejects an editor without APPLICATIONS_EDIT_RESPONSE", async () => {
+    const outsider = await createUser();
+    const applicant = await createUser({ emailVerified: true });
+    const appId = await createApplication({ type: "participant", template });
+    const responseId = await createResponse(applicant, appId, {
+      status: "review",
+      responses: { field_1: "old" },
+    });
+
+    const a = await getApp();
+    const res = await a.inject({
+      method: "PUT",
+      url: `/api/responses/${responseId}`,
+      headers: asUser(outsider),
+      payload: { responses: { field_1: "new" } },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("audits every staff edit (H53)", async () => {
+    const applicant = await createUser({ emailVerified: true });
+    const appId = await createApplication({ type: "participant", template });
+    const responseId = await createResponse(applicant, appId, {
+      status: "review",
+      responses: { field_1: "old" },
+    });
+
+    const res = await editAnswers(responseId, { field_1: "new" });
+    expect(res.statusCode).toBe(200);
+
+    const { rows } = await pool.query(
+      `SELECT actor_id, entity_type, entity_id, action FROM audit_log
+       WHERE entity_type = 'application_response' AND entity_id = $1 AND action = 'edited'`,
+      [String(responseId)],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      actor_id: editor,
+      entity_type: "application_response",
+      action: "edited",
+    });
+  });
+
+  it("H56: staff can flip an applicant's sponsor-share consent post-submit, audited", async () => {
+    const shareableTemplate: TemplateField[] = [
+      {
+        key: "cv",
+        label: { en: "CV", es: "", gl: "" },
+        kind: "file",
+        required: false,
+        shareable_with_sponsors: true,
+      },
+    ];
+    const applicant = await createUser({ emailVerified: true });
+    const appId = await createApplication({ type: "participant", template: shareableTemplate });
+    const responseId = await createResponse(applicant, appId, {
+      status: "review",
+      responses: { cv: "uploads/x/y/cv/1/r.pdf", [sponsorShareKey("cv")]: false },
+    });
+
+    const res = await editAnswers(responseId, {
+      cv: "uploads/x/y/cv/1/r.pdf",
+      [sponsorShareKey("cv")]: true,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).responses[sponsorShareKey("cv")]).toBe(true);
+
+    const { rows } = await pool.query(
+      `SELECT action FROM audit_log
+       WHERE entity_type = 'application_response' AND entity_id = $1 AND action = 'edited'`,
+      [String(responseId)],
+    );
+    expect(rows).toHaveLength(1);
   });
 });
 

@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { sponsorShareKey } from "@hackos/shared/applications";
 import type pg from "pg";
 import { config } from "../../config.js";
 import type { Queryable } from "../../db/pool.js";
@@ -10,7 +11,7 @@ import { issueWalletAccessToken } from "../logistics/wallet-access.js";
 import type { ApplicationType, TemplateField } from "./schemas.js";
 
 /**
- * Applications domain service (H11-H15, H27). Holds the state-machine
+ * Applications domain service (H11-H15, H27, H56). Holds the state-machine
  * transitions (plan/07 §3: draft -> submitted -> review -> accepted|rejected;
  * accepted -> confirmed|declined|expired), the sensitive-data privacy
  * semantics (H12) and the confirm/decline/expire mechanics shared by the
@@ -148,6 +149,14 @@ export function validateResponses(
         break;
       default:
         if (typeof value !== "string") errors[field.key] = "must be a string";
+    }
+    // H56: an applicant's consent to share a file with sponsors is optional,
+    // never required, and only meaningful on a field the organizer marked so.
+    if (field.kind === "file" && field.shareable_with_sponsors) {
+      const shared = responses[sponsorShareKey(field.key)];
+      if (shared !== undefined && typeof shared !== "boolean") {
+        errors[sponsorShareKey(field.key)] = "must be a boolean";
+      }
     }
   }
   if (Object.keys(errors).length > 0) {

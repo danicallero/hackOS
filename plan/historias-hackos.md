@@ -357,6 +357,17 @@ the queue system I can opt out, my challenges won't block any project call in
 other rooms, and I'll get a CSV export of projects with relevant data to manage
 evaluation as I see fit.
 
+**H56. Share applicant files with sponsors**
+As administration I want to mark a file field on an application form (e.g. CV)
+as shareable with sponsors when I design the form. An applicant filling that
+field then sees an explicit "allow organizers to share this file with
+sponsors" checkbox next to the upload and decides per file, matching the
+authorisation clause already in our privacy policy ("or where you have
+expressly authorised us to share your application or CV"). For any such field
+I want to export every uploaded file at once, named by applicant email, or
+just the ones applicants agreed to share, so I can hand sponsors CVs without
+touching files one by one or without breaching consent for the rest.
+
 ---
 
 ## 8. Schedule & public content

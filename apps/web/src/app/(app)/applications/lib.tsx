@@ -58,6 +58,9 @@ export interface TemplateField {
   /** For kind "file": allowed extensions (".pdf") and size cap in MB (H12). */
   allowed_file_types?: string[];
   max_file_size_mb?: number;
+  /** For kind "file": lets the applicant consent to sharing this upload with
+   *  sponsors (H56); see sponsorShareKey for the response-key convention. */
+  shareable_with_sponsors?: boolean;
 }
 
 export interface ApplicationForm {

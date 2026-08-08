@@ -7,6 +7,7 @@ import { EVENTS } from "@hackos/shared/events";
 import {
   AlertCircleIcon,
   CheckCheckIcon,
+  DownloadIcon,
   FileTextIcon,
   RotateCcwIcon,
   SendIcon,
@@ -38,7 +39,8 @@ import {
 } from "@/components/ui/select";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
-import { useLocale } from "@/lib/i18n";
+import { API_URL } from "@/lib/env";
+import { pickText, useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import { fmtDateTime, fmtScore, type ResponseRow, statusTone, type TemplateField } from "../lib";
 import {
@@ -66,8 +68,15 @@ export function ResponsesTab({
   template: TemplateField[] | null;
   workspace: ApplicationWorkspace;
 }) {
-  const { t } = useLocale();
+  const { t, language } = useLocale();
   const canDecide = useCan(CAPABILITIES.APPLICATIONS_DECIDE);
+  const canExportFiles = useCan(CAPABILITIES.EXPORTS_RUN);
+  const fileFields = useMemo(() => (template ?? []).filter((f) => f.kind === "file"), [template]);
+  const exportUrl = useCallback(
+    (fieldKey: string, scope: "all" | "shared") =>
+      `${API_URL}/api/applications/${id}/fields/${encodeURIComponent(fieldKey)}/files.zip?scope=${scope}`,
+    [id],
+  );
   const [allRows, setAllRows] = useState<ResponseRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -288,12 +297,42 @@ export function ResponsesTab({
             ))}
           </SelectContent>
         </Select>
-        {canDecide && workspace === "outbox" && (
-          <Button className="ml-auto" variant="outline" onClick={() => setSendOpen(true)}>
-            <SendIcon />
-            {t("sendDecisions")}
-          </Button>
-        )}
+        <div className="ml-auto flex items-center gap-2">
+          {canExportFiles && fileFields.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <DownloadIcon />
+                  {t("exportFiles")}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {fileFields.map((field, index) => (
+                  <div key={field.key}>
+                    {index > 0 && <DropdownMenuSeparator />}
+                    <DropdownMenuLabel>
+                      {pickText(field.label, language) || field.key}
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem asChild>
+                      <a href={exportUrl(field.key, "all")}>{t("exportAllFiles")}</a>
+                    </DropdownMenuItem>
+                    {field.shareable_with_sponsors && (
+                      <DropdownMenuItem asChild>
+                        <a href={exportUrl(field.key, "shared")}>{t("exportSharedFiles")}</a>
+                      </DropdownMenuItem>
+                    )}
+                  </div>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+          {canDecide && workspace === "outbox" && (
+            <Button variant="outline" onClick={() => setSendOpen(true)}>
+              <SendIcon />
+              {t("sendDecisions")}
+            </Button>
+          )}
+        </div>
       </div>
 
       {canDecide && selectedIds.size > 0 && (
