@@ -37,6 +37,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
@@ -44,6 +45,7 @@ import { useCan } from "@/lib/session";
 import {
   APPLICATION_TYPES,
   type ApplicationForm,
+  DEFAULT_SHIRT_DIETARY_TYPES,
   fmtDateTime,
   fromLocalInput,
   windowState,
@@ -61,6 +63,8 @@ const createSchema = z.object({
   close_at: z.string(),
   capacity: z.string(),
   confirmation_window_hours: z.string(),
+  ask_shirt_size: z.boolean(),
+  ask_food_intolerances: z.boolean(),
 });
 type CreateValues = z.infer<typeof createSchema>;
 
@@ -71,6 +75,8 @@ const EMPTY: CreateValues = {
   close_at: "",
   capacity: "",
   confirmation_window_hours: "168",
+  ask_shirt_size: DEFAULT_SHIRT_DIETARY_TYPES.includes("participant"),
+  ask_food_intolerances: DEFAULT_SHIRT_DIETARY_TYPES.includes("participant"),
 };
 
 export default function ApplicationsPage() {
@@ -91,6 +97,8 @@ export default function ApplicationsPage() {
         close_at: z.string(),
         capacity: z.string(),
         confirmation_window_hours: z.string(),
+        ask_shirt_size: z.boolean(),
+        ask_food_intolerances: z.boolean(),
       }),
     [t],
   );
@@ -152,6 +160,8 @@ export default function ApplicationsPage() {
         close_at: fromLocalInput(values.close_at),
         capacity: capacityNum,
         confirmation_window_hours: windowHours,
+        ask_shirt_size: values.ask_shirt_size,
+        ask_food_intolerances: values.ask_food_intolerances,
       });
       toast.success(t("formCreated"));
       setCreating(false);
@@ -297,7 +307,19 @@ export default function ApplicationsPage() {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>{t("personTypeLabel")}</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
+                  <Select
+                    onValueChange={(value) => {
+                      field.onChange(value);
+                      // Re-suggest the logistics defaults for the new type —
+                      // still just a starting point, editable below.
+                      const asksByDefault = DEFAULT_SHIRT_DIETARY_TYPES.includes(
+                        value as CreateValues["type"],
+                      );
+                      form.setValue("ask_shirt_size", asksByDefault);
+                      form.setValue("ask_food_intolerances", asksByDefault);
+                    }}
+                    value={field.value}
+                  >
                     <FormControl>
                       <SelectTrigger className="w-full capitalize">
                         <SelectValue />
@@ -312,6 +334,45 @@ export default function ApplicationsPage() {
                     </SelectContent>
                   </Select>
                   <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="ask_shirt_size"
+              render={({ field }) => (
+                <FormItem>
+                  <div className="flex items-center justify-between gap-4 rounded-md border p-3">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <FormLabel className="font-normal">{t("askShirtSizeLabel")}</FormLabel>
+                        <StatusBadge tone="neutral" dot={false}>
+                          {t("requiredAtSubmitBadge")}
+                        </StatusBadge>
+                      </div>
+                      <FormDescription>{t("askShirtSizeDesc")}</FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch checked={field.value} onCheckedChange={field.onChange} />
+                    </FormControl>
+                  </div>
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="ask_food_intolerances"
+              render={({ field }) => (
+                <FormItem>
+                  <div className="flex items-center justify-between gap-4 rounded-md border p-3">
+                    <div>
+                      <FormLabel className="font-normal">{t("askFoodIntolerancesLabel")}</FormLabel>
+                      <FormDescription>{t("askFoodIntolerancesDesc")}</FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch checked={field.value} onCheckedChange={field.onChange} />
+                    </FormControl>
+                  </div>
                 </FormItem>
               )}
             />

@@ -81,6 +81,9 @@ Frontend (web & mobile):
   prioritized screen inventory, information-architecture changes, acceptance
   criteria, and implementation sequence for reducing simultaneous choices
   across the web app. The live judging workspace is the reference pattern.
+- [Application form builder UX audit](./ux-audit-application-builder.md) —
+  findings and fix plan for the create-form modal, Form settings/Questions
+  builder, preview, and Overview tab under `applications/[id]`.
 - [Navigation: capability-based workspaces](./navigation.md) — the personal
   area + additive work-workspace model on web, and the one-action mobile scan
   entry, with the full capability-to-workspace mapping.

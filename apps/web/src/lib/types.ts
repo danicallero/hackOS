@@ -135,6 +135,11 @@ export interface EventConfig {
   passFieldVisibility: PassFieldVisibility;
   /** Read-only: what the pass's "Organized by" back field is filled with. */
   organizerName: string;
+  /** H10: whether an invited sponsor/staff account must supply a shirt size / sees dietary fields when claiming. */
+  requireSponsorShirtSize: boolean;
+  requireSponsorDietary: boolean;
+  requireStaffShirtSize: boolean;
+  requireStaffDietary: boolean;
 }
 
 export type InviteKind = "staff" | "sponsor" | "participant";
@@ -172,6 +177,9 @@ export interface InviteLookup {
   redeemedCount: number;
   remainingRedeems: number | null;
   expired: boolean;
+  /** Whether this claim must supply a shirt size / should show dietary fields (H10). */
+  requireShirtSize: boolean;
+  requireDietary: boolean;
 }
 
 /** GET/POST /api/invites/enterprise-links. */

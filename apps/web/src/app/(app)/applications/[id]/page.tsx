@@ -19,10 +19,11 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
 import { ClipboardListIcon, LockIcon, UsersIcon } from "lucide-react";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { BackLink } from "@/components/common/back-link";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
+import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { StatCard } from "@/components/common/stat-card";
@@ -34,6 +35,10 @@ import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import { useUrlTab } from "@/lib/url-tab";
+import {
+  confirmDiscardUnsavedChanges,
+  useUnsavedChangesGuard,
+} from "@/lib/use-unsaved-changes-guard";
 import { type ApplicationForm, type ApplicationStats, windowState } from "../lib";
 
 import { MetadataCard } from "./metadata-card";
@@ -65,6 +70,43 @@ export default function ApplicationDetailPage() {
   const [stats, setStats] = useState<ApplicationStats | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [errorMsg, setErrorMsg] = useState("");
+
+  // The builder (Form settings + Questions) is the only tab with local
+  // unsaved edits — track both cards' dirtiness so leaving the page (or
+  // switching to another tab) while either is dirty asks for confirmation
+  // instead of silently discarding the draft, matching the event-settings
+  // builder's guard.
+  const metadataDirtyRef = useRef(false);
+  const questionsDirtyRef = useRef(false);
+  const [builderDirty, setBuilderDirty] = useState(false);
+  const recomputeBuilderDirty = useCallback(() => {
+    setBuilderDirty(metadataDirtyRef.current || questionsDirtyRef.current);
+  }, []);
+  const setMetadataDirty = useCallback(
+    (dirty: boolean) => {
+      metadataDirtyRef.current = dirty;
+      recomputeBuilderDirty();
+    },
+    [recomputeBuilderDirty],
+  );
+  const setQuestionsDirty = useCallback(
+    (dirty: boolean) => {
+      questionsDirtyRef.current = dirty;
+      recomputeBuilderDirty();
+    },
+    [recomputeBuilderDirty],
+  );
+  useUnsavedChangesGuard(builderDirty);
+
+  function isApplicationTab(value: string): value is (typeof applicationTabs)[number] {
+    return (applicationTabs as readonly string[]).includes(value);
+  }
+
+  function changeTab(next: string) {
+    if (!isApplicationTab(next) || next === tab) return;
+    if (tab === "builder" && builderDirty && !confirmDiscardUnsavedChanges(true, t)) return;
+    setTab(next);
+  }
 
   const loadForm = useCallback(async () => {
     try {
@@ -137,6 +179,11 @@ export default function ApplicationDetailPage() {
               <StatusBadge tone={w.tone} dot={false}>
                 {w.label}
               </StatusBadge>
+              {/* Form settings and Questions save independently (two buttons,
+                  two local statuses) — this aggregate keeps either one's
+                  unsaved edit visible even while looking at the other card,
+                  or after switching away to a different tab. */}
+              {builderDirty && <SaveStatus state="unsaved" />}
             </div>
           ) : undefined
         }
@@ -152,7 +199,7 @@ export default function ApplicationDetailPage() {
       {canStats && stats && <StatsStrip stats={stats} />}
 
       {applicationTabs.length > 0 && (
-        <Tabs value={tab} onValueChange={setTab}>
+        <Tabs value={tab} onValueChange={changeTab}>
           <TabBar className="w-full justify-start">
             <TabsTrigger value="overview">{t("tabOverview")}</TabsTrigger>
             {canManage && <TabsTrigger value="builder">{t("formTabLabel")}</TabsTrigger>}
@@ -185,6 +232,20 @@ export default function ApplicationDetailPage() {
                     </dt>
                     <dd className="mt-1 font-medium">{form.capacity ?? t("unlimited")}</dd>
                   </div>
+                  <div>
+                    <dt className="text-muted-foreground text-sm">{t("askShirtSizeLabel")}</dt>
+                    <dd className="mt-1 font-medium">
+                      {form.ask_shirt_size ? t("yesLabel") : t("noLabel")}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground text-sm">
+                      {t("askFoodIntolerancesLabel")}
+                    </dt>
+                    <dd className="mt-1 font-medium">
+                      {form.ask_food_intolerances ? t("yesLabel") : t("noLabel")}
+                    </dd>
+                  </div>
                 </dl>
               ) : (
                 <EmptyState icon={LockIcon} title={t("metadataUnavailable")} />
@@ -196,8 +257,8 @@ export default function ApplicationDetailPage() {
             <TabsContent value="builder" className="space-y-6 pt-2">
               {form ? (
                 <>
-                  <MetadataCard form={form} onSaved={loadForm} />
-                  <QuestionsCard form={form} onSaved={loadForm} />
+                  <MetadataCard form={form} onSaved={loadForm} onDirtyChange={setMetadataDirty} />
+                  <QuestionsCard form={form} onSaved={loadForm} onDirtyChange={setQuestionsDirty} />
                 </>
               ) : (
                 <EmptyState

@@ -4,13 +4,14 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { SettingsIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
+import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
 import {
   Form,
@@ -34,13 +35,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import type { SaveState } from "@/lib/save-state";
-import {
-  APPLICATION_TYPES,
-  type ApplicationForm,
-  fromLocalInput,
-  SHIRT_TYPES,
-  toLocalInput,
-} from "../lib";
+import { APPLICATION_TYPES, type ApplicationForm, fromLocalInput, toLocalInput } from "../lib";
 
 const metaSchema = z.object({
   name: z.string().min(1, "Required").max(200),
@@ -51,15 +46,19 @@ const metaSchema = z.object({
   close_at: z.string(),
   capacity: z.string(),
   confirmation_window_hours: z.string(),
+  ask_shirt_size: z.boolean(),
+  ask_food_intolerances: z.boolean(),
 });
 type MetaValues = z.infer<typeof metaSchema>;
 
 export function MetadataCard({
   form,
   onSaved,
+  onDirtyChange,
 }: {
   form: ApplicationForm;
   onSaved: () => Promise<void>;
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const { t } = useLocale();
   const [saveState, setSaveState] = useState<SaveState>("saved");
@@ -74,6 +73,8 @@ export function MetadataCard({
         close_at: z.string(),
         capacity: z.string(),
         confirmation_window_hours: z.string(),
+        ask_shirt_size: z.boolean(),
+        ask_food_intolerances: z.boolean(),
       }),
     [t],
   );
@@ -88,8 +89,14 @@ export function MetadataCard({
       close_at: toLocalInput(form.close_at),
       capacity: form.capacity != null ? String(form.capacity) : "",
       confirmation_window_hours: String(form.confirmation_window_hours),
+      ask_shirt_size: form.ask_shirt_size,
+      ask_food_intolerances: form.ask_food_intolerances,
     },
   });
+
+  useEffect(() => {
+    onDirtyChange?.(rhf.formState.isDirty);
+  }, [rhf.formState.isDirty, onDirtyChange]);
 
   async function onSubmit(values: MetaValues) {
     const capacityNum = values.capacity.trim() ? Number(values.capacity) : null;
@@ -114,6 +121,8 @@ export function MetadataCard({
         close_at: fromLocalInput(values.close_at),
         capacity: capacityNum,
         confirmation_window_hours: windowHours,
+        ask_shirt_size: values.ask_shirt_size,
+        ask_food_intolerances: values.ask_food_intolerances,
       });
       await onSaved();
       rhf.reset(values);
@@ -183,9 +192,6 @@ export function MetadataCard({
                     ))}
                   </SelectContent>
                 </Select>
-                {SHIRT_TYPES.includes(field.value) && (
-                  <FormDescription>{t("shirtSizeRequiredDesc")}</FormDescription>
-                )}
                 <FormMessage />
               </FormItem>
             )}
@@ -200,6 +206,44 @@ export function MetadataCard({
                   <Textarea rows={2} placeholder={t("shownToApplicantsPlaceholder")} {...field} />
                 </FormControl>
                 <FormMessage />
+              </FormItem>
+            )}
+          />
+          <h3 className="border-t pt-4 text-balance text-sm font-semibold">
+            {t("builderLogistics")}
+          </h3>
+          <FormField
+            control={rhf.control}
+            name="ask_shirt_size"
+            render={({ field }) => (
+              <FormItem className="flex items-center justify-between gap-4 rounded-md border p-3">
+                <div className="space-y-0.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <FormLabel className="font-normal">{t("askShirtSizeLabel")}</FormLabel>
+                    <StatusBadge tone="neutral" dot={false}>
+                      {t("requiredAtSubmitBadge")}
+                    </StatusBadge>
+                  </div>
+                  <FormDescription>{t("askShirtSizeDesc")}</FormDescription>
+                </div>
+                <FormControl>
+                  <Switch checked={field.value} onCheckedChange={field.onChange} />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={rhf.control}
+            name="ask_food_intolerances"
+            render={({ field }) => (
+              <FormItem className="flex items-center justify-between gap-4 rounded-md border p-3">
+                <div className="space-y-0.5">
+                  <FormLabel className="font-normal">{t("askFoodIntolerancesLabel")}</FormLabel>
+                  <FormDescription>{t("askFoodIntolerancesDesc")}</FormDescription>
+                </div>
+                <FormControl>
+                  <Switch checked={field.value} onCheckedChange={field.onChange} />
+                </FormControl>
               </FormItem>
             )}
           />

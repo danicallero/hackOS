@@ -21,8 +21,8 @@ export interface I18nText {
 export const APPLICATION_TYPES = ["participant", "mentor", "sponsor", "volunteer"] as const;
 export type ApplicationType = (typeof APPLICATION_TYPES)[number];
 
-/** Types that require a shirt size at submit (logistics) — shown as a hint. */
-export const SHIRT_TYPES: ApplicationType[] = ["participant", "mentor"];
+/** Types that ask for a shirt size/dietary data by default when creating a new form. */
+export const DEFAULT_SHIRT_DIETARY_TYPES: ApplicationType[] = ["participant", "mentor"];
 
 export const FIELD_KINDS = [
   "text",
@@ -71,6 +71,9 @@ export interface ApplicationForm {
   close_at: string | null;
   capacity: number | null;
   confirmation_window_hours: number;
+  /** Whether this form asks for shirt size / dietary restrictions (H12). */
+  ask_shirt_size: boolean;
+  ask_food_intolerances: boolean;
   created_at: string;
 }
 

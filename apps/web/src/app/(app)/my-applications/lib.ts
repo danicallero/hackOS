@@ -53,6 +53,8 @@ export interface PublicForm {
   close_at: string | null;
   capacity: number | null;
   confirmation_window_hours: number;
+  ask_shirt_size: boolean;
+  ask_food_intolerances: boolean;
   created_at: string;
 }
 
@@ -128,13 +130,11 @@ export type MutationKey = { responseId: number; status: string; key: string };
 // ── client mirror of the API's enrichTemplate (service.ts) ────────────────────
 //
 // The public form endpoint serves the RAW template; the server appends shirt
-// size + dietary fields for participant/mentor forms only when returning a saved
-// response. To show them in the form from the first render — before any draft
-// exists — we mirror that enrichment here. The server re-enriches and validates
-// on submit (it stays the source of truth), so this only governs presentation.
-
-/** Application types that get shirt-size + dietary fields appended (H12). */
-export const SHIRT_TYPES = ["participant", "mentor"];
+// size + dietary fields only when the form's ask_shirt_size/ask_food_intolerances
+// flags are on, when returning a saved response. To show them in the form from
+// the first render — before any draft exists — we mirror that enrichment here.
+// The server re-enriches and validates on submit (it stays the source of
+// truth), so this only governs presentation.
 
 const SHIRT_SIZE_FIELD: TemplateField = {
   key: "shirt_size",
@@ -161,14 +161,14 @@ export interface IntoleranceOption {
 }
 
 export function enrichTemplate(
-  type: string,
+  askShirtSize: boolean,
+  askFoodIntolerances: boolean,
   template: TemplateField[],
   intolerances: IntoleranceOption[],
 ): TemplateField[] {
-  if (!SHIRT_TYPES.includes(type)) return template;
   let out = template;
-  if (!out.some((f) => f.key === "shirt_size")) out = [...out, SHIRT_SIZE_FIELD];
-  if (!out.some((f) => f.key === "food_intolerances")) {
+  if (askShirtSize && !out.some((f) => f.key === "shirt_size")) out = [...out, SHIRT_SIZE_FIELD];
+  if (askFoodIntolerances && !out.some((f) => f.key === "food_intolerances")) {
     const foodField: TemplateField = {
       key: "food_intolerances",
       label: {

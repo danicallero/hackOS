@@ -42,7 +42,7 @@ import {
 } from "../lib";
 import { generatedFieldKey } from "../workflow";
 import { FormPreviewModal, FormPreviewPanel } from "./form-preview";
-import { EMPTY_I18N, LOCALES } from "./shared";
+import { EMPTY_I18N, type IntoleranceOption, LOCALES, logisticsPreviewFields } from "./shared";
 
 export function newField(index: number): TemplateField {
   return {
@@ -56,9 +56,11 @@ export function newField(index: number): TemplateField {
 export function QuestionsCard({
   form,
   onSaved,
+  onDirtyChange,
 }: {
   form: ApplicationForm;
   onSaved: () => Promise<void>;
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const { t, language } = useLocale();
   const [fields, setFields] = useState<TemplateField[]>(form.template);
@@ -66,12 +68,35 @@ export function QuestionsCard({
   const [preview, setPreview] = useState(false);
   const [previewLocale, setPreviewLocale] = useState<Language>(language);
   const [saveState, setSaveState] = useState<SaveState>("saved");
+  const [intolerances, setIntolerances] = useState<IntoleranceOption[]>([]);
 
   // Re-seed if the form reloads (e.g. after a metadata save).
   useEffect(() => {
     if (saveState !== "saved") return;
     setFields(form.template);
   }, [form.template, saveState]);
+
+  // The dictionary backing the dietary-restrictions preview options, so the
+  // preview matches what an applicant will actually pick from (H12).
+  useEffect(() => {
+    api
+      .get<{ intolerances: IntoleranceOption[] }>("/api/public/food-intolerances")
+      .then((r) => setIntolerances(r.intolerances))
+      .catch(() => setIntolerances([]));
+  }, []);
+
+  useEffect(() => {
+    onDirtyChange?.(saveState !== "saved");
+  }, [saveState, onDirtyChange]);
+
+  // What the applicant actually sees: custom questions plus whatever
+  // shirt-size/dietary fields Form settings' logistics toggles add at submit
+  // (mirrors the server's enrichTemplate — H12). Previewing only `fields`
+  // would silently hide the very fields those toggles turn on.
+  const previewFields = [
+    ...fields,
+    ...logisticsPreviewFields(form.ask_shirt_size, form.ask_food_intolerances, intolerances),
+  ];
 
   const update = (i: number, patch: Partial<TemplateField>) =>
     setFields((prev) => prev.map((f, idx) => (idx === i ? { ...f, ...patch } : f)));
@@ -183,7 +208,7 @@ export function QuestionsCard({
             variant="outline"
             size="sm"
             onClick={() => setPreview(true)}
-            disabled={fields.length === 0}
+            disabled={previewFields.length === 0}
           >
             <EyeIcon />
             {t("preview")}
@@ -196,7 +221,7 @@ export function QuestionsCard({
             open={preview}
             onOpenChange={setPreview}
             name={form.name}
-            fields={fields}
+            fields={previewFields}
           />
         </div>
       }
@@ -253,7 +278,7 @@ export function QuestionsCard({
                 </SelectContent>
               </Select>
             </div>
-            <FormPreviewPanel fields={fields} locale={previewLocale} />
+            <FormPreviewPanel fields={previewFields} locale={previewLocale} />
           </div>
         </div>
       )}

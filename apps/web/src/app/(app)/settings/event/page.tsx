@@ -7,6 +7,7 @@
 import {
   CalendarClockIcon,
   GavelIcon,
+  MailPlusIcon,
   MapPinIcon,
   TagIcon,
   UserCheckIcon,
@@ -24,13 +25,22 @@ import {
 } from "@/lib/use-unsaved-changes-guard";
 import { EventConfigProvider } from "./event-config-context";
 import { IdentityTab } from "./identity-tab";
+import { InvitesTab } from "./invites-tab";
 import { JudgingTab } from "./judging-tab";
 import { PresenceTab } from "./presence-tab";
 import { ScheduleTab } from "./schedule-tab";
 import { VenueTab } from "./venue-tab";
 import { WalletTab } from "./wallet-tab";
 
-const CATEGORIES = ["event", "schedule", "venue", "wallet", "judging", "presence"] as const;
+const CATEGORIES = [
+  "event",
+  "schedule",
+  "venue",
+  "wallet",
+  "judging",
+  "presence",
+  "invites",
+] as const;
 type Category = (typeof CATEGORIES)[number];
 
 function isCategory(value: string | null): value is Category {
@@ -50,6 +60,7 @@ export default function EventSettingsPage() {
     wallet: false,
     judging: false,
     presence: false,
+    invites: false,
   });
   const [anyDirty, setAnyDirty] = useState(false);
 
@@ -79,6 +90,7 @@ export default function EventSettingsPage() {
             <TabsTrigger value="wallet">{t("walletPassSectionTitle")}</TabsTrigger>
             <TabsTrigger value="judging">{t("judgingWindowTitle")}</TabsTrigger>
             <TabsTrigger value="presence">{t("presencePolicyTitle")}</TabsTrigger>
+            <TabsTrigger value="invites">{t("invitesSectionTitle")}</TabsTrigger>
           </TabBar>
 
           <TabsContent value="event" className="pt-4">
@@ -107,6 +119,9 @@ export default function EventSettingsPage() {
               icon={UserCheckIcon}
               onDirtyChange={(dirty) => setDirty("presence", dirty)}
             />
+          </TabsContent>
+          <TabsContent value="invites" className="pt-4">
+            <InvitesTab icon={MailPlusIcon} onDirtyChange={(dirty) => setDirty("invites", dirty)} />
           </TabsContent>
         </Tabs>
       </div>

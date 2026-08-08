@@ -56,7 +56,6 @@ import {
   type MyResponseDetail,
   missingRequiredFields,
   type PublicForm,
-  SHIRT_TYPES,
   statusLabel,
   statusTone,
 } from "../lib";
@@ -159,8 +158,10 @@ export default function MyApplicationDetailPage() {
     // and dietary fields from the profile so the applicant doesn't re-enter data
     // the API already knows (H12). Saved values always win over the profile.
     const seeded: Record<string, unknown> = { ...(nextResponse?.responses ?? {}) };
-    if (nextForm && SHIRT_TYPES.includes(nextForm.type)) {
-      if (seeded.shirt_size == null && me?.shirtSize) seeded.shirt_size = me.shirtSize;
+    if (nextForm?.ask_shirt_size && seeded.shirt_size == null && me?.shirtSize) {
+      seeded.shirt_size = me.shirtSize;
+    }
+    if (nextForm?.ask_food_intolerances) {
       if (seeded.food_intolerances == null && me?.foodIntolerances?.length) {
         seeded.food_intolerances = me.foodIntolerances.map(String);
       }
@@ -203,7 +204,9 @@ export default function MyApplicationDetailPage() {
 
   // Mirror the API's enrichment so shirt-size + dietary fields render in the form
   // (participant/mentor) rather than being pulled silently from the profile (H12).
-  const template = form ? enrichTemplate(form.type, form.template, intolerances) : [];
+  const template = form
+    ? enrichTemplate(form.ask_shirt_size, form.ask_food_intolerances, form.template, intolerances)
+    : [];
   const status = confirmationExpired ? "expired" : response?.status; // already masked by the API
   const timelineResponse =
     confirmationExpired && response ? { ...response, status: "expired" } : response;

@@ -110,7 +110,7 @@ export function FormPreviewPanel({
                     </span>
                   ))
                 )}
-                {f.kind === "multiselect" && (
+                {f.kind === "multiselect" && opts.length > 0 && (
                   <span className="text-muted-foreground text-xs">{t("chooseAnyHint")}</span>
                 )}
               </div>
