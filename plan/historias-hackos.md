@@ -121,6 +121,13 @@ email, and they decide whether to give me another chance. On confirmation I
 become a full participant and my ticket is issued. Everything is logged: who
 confirmed, when, and via which channel.
 
+**H57. See decisions without the power to make them**
+As a reviewer without decision-making rights I want to see the outbox
+(internal, not-yet-communicated decisions) and sent-decisions views so I
+understand where every application stands, without being able to send,
+resend, revert, re-accept, revoke, or override any decision — those actions
+stay restricted to whoever holds decision-making access.
+
 ---
 
 ## 3. Teams and projects
