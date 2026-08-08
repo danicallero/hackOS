@@ -3291,6 +3291,21 @@ const dict: Record<string, I18nText> = {
     en: "Use the event end time",
   },
   currentBroadcast: { es: "Emisión actual", gl: "Emisión actual", en: "Current broadcast" },
+  draftPreviewLabel: {
+    es: "Vista previa del borrador",
+    gl: "Vista previa do borrador",
+    en: "Draft preview",
+  },
+  draftPreviewHint: {
+    es: "Así se verá en las pantallas cuando pulses «Mostrar en las TV».",
+    gl: "Así se verá nas pantallas cando premas «Amosar nas TV».",
+    en: "This is how it will look on the screens once you press “Show on TVs”.",
+  },
+  draftPreviewUnavailable: {
+    es: "La vista previa no está disponible ahora mismo.",
+    gl: "A vista previa non está dispoñible agora mesmo.",
+    en: "The preview isn't available right now.",
+  },
   liveTvPreview: {
     es: "Vista previa en directo de la TV",
     gl: "Vista previa en directo da TV",

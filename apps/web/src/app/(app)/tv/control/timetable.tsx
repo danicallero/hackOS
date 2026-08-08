@@ -1,9 +1,10 @@
 "use client";
 
 import { CalendarClockIcon, PlusIcon, Trash2Icon } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AlertModal } from "@/components/common/alert-modal";
+import { ContextualError } from "@/components/common/contextual-error";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
@@ -20,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError } from "@/lib/api";
 import { formatScheduledDateTime, fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
@@ -91,14 +93,16 @@ export function Timetable({
   modes,
   onChanged,
 }: {
-  modes: Array<{ value: TvControlMode; label: string }>;
+  modes: Array<{ value: TvControlMode; label: string; detail?: string }>;
   onChanged: () => void;
 }) {
   const { t } = useLocale();
   const [slots, setSlots] = useState<TvSlot[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const hasLoadedRef = useRef(false);
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 30_000);
@@ -109,8 +113,15 @@ export function Timetable({
     try {
       const { items } = await listTvSlots();
       setSlots(items);
+      setLoadError(null);
+      hasLoadedRef.current = true;
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadTvTimetable"));
+      const message = err instanceof ApiError ? err.message : t("couldNotLoadTvTimetable");
+      // Same rule as the parent page: a background refresh failure still has
+      // a list on screen and just toasts; a failed first load blocks the
+      // region instead of rendering a silently-empty list.
+      if (!hasLoadedRef.current) setLoadError(message);
+      else toast.error(message);
     }
   }, [t]);
 
@@ -181,7 +192,14 @@ export function Timetable({
           </Button>
         }
       >
-        {slots && slots.length === 0 ? (
+        {loadError && !slots ? (
+          <ContextualError message={loadError} onRetry={() => void load()} />
+        ) : slots === null ? (
+          <div className="space-y-3 py-1">
+            <Skeleton className="h-14 w-full" />
+            <Skeleton className="h-14 w-full" />
+          </div>
+        ) : slots.length === 0 ? (
           <EmptyState
             icon={CalendarClockIcon}
             title={t("tvTimetableEmptyTitle")}
@@ -189,7 +207,7 @@ export function Timetable({
           />
         ) : (
           <ul className="divide-y">
-            {(slots ?? []).map((slot) => (
+            {slots.map((slot) => (
               <li key={slot.id} className="flex flex-wrap items-center gap-3 py-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
@@ -328,6 +346,11 @@ export function Timetable({
                           ))}
                         </SelectContent>
                       </Select>
+                      {modes.find((m) => m.value === item.mode)?.detail && (
+                        <p className="text-muted-foreground text-sm">
+                          {modes.find((m) => m.value === item.mode)?.detail}
+                        </p>
+                      )}
                     </div>
                     {draft.items.length > 1 && (
                       <>

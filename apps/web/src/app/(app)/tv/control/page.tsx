@@ -6,6 +6,7 @@ import { MonitorUpIcon, RadioIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AccessDenied } from "@/components/common/access-denied";
+import { ContextualError } from "@/components/common/contextual-error";
 import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -35,6 +36,7 @@ import {
   type TvControlMode,
   type TvState,
 } from "@/lib/tv";
+import { LiveModePreview } from "./live-preview";
 import { LiveSettings } from "./live-settings";
 import { Timetable } from "./timetable";
 
@@ -69,12 +71,14 @@ export default function TvControlPage() {
   const [expiryOption, setExpiryOption] = useState<ExpiryOption>("none");
   const [busy, setBusy] = useState(false);
   const [timetableKey, setTimetableKey] = useState(0);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const initializedRef = useRef(false);
 
   const load = useCallback(async () => {
     try {
       const next = await getTvState();
       setCurrent(next);
+      setLoadError(null);
       // Only seed the draft from reality on first load — later live updates
       // (another admin changing the mode, or a timetable slot taking over)
       // must not clobber an in-progress edit.
@@ -84,7 +88,13 @@ export default function TvControlPage() {
         if (next.mode === "live") setLiveConfig(liveConfigFrom(next.payload));
       }
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadTvMode"));
+      const message = err instanceof ApiError ? err.message : t("couldNotLoadTvMode");
+      // A background refresh failure (SSE hiccup) still has data on screen and
+      // just toasts; only a failed *initial* load blocks the region. Checking
+      // the ref (not `current`, which would make `load` itself unstable and
+      // re-trigger the effect that calls it) keeps this a one-shot decision.
+      if (!initializedRef.current) setLoadError(message);
+      else toast.error(message);
     }
   }, [t]);
 
@@ -146,7 +156,15 @@ export default function TvControlPage() {
   const currentModeLabel = current
     ? (MODES.find((item) => item.value === current.mode)?.label ?? current.mode)
     : null;
-  const isDraftUnbroadcast = current ? current.mode !== mode : false;
+  // A "live" draft can drift from the broadcast payload without the mode
+  // itself changing (an operator hides a block, retargets the timer, …) — the
+  // comparison has to reach into the payload, not just the mode name, or the
+  // page silently looks up to date while an edited draft sits unpublished.
+  const isDraftUnbroadcast = current
+    ? current.mode !== mode ||
+      (mode === "live" &&
+        JSON.stringify(liveConfig) !== JSON.stringify(liveConfigFrom(current.payload)))
+    : false;
   const isOverridden = current?.source === "override";
 
   return (
@@ -179,62 +197,66 @@ export default function TvControlPage() {
           ) : undefined
         }
       >
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
-          <div className="aspect-video w-full overflow-hidden rounded-lg border bg-black">
-            <iframe
-              src="/tv"
-              title={t("liveTvPreview")}
-              className="h-full w-full"
-              // The public TV page has no interactive controls; this is a read-only mirror.
-              sandbox="allow-scripts allow-same-origin"
-            />
-          </div>
-          <div className="space-y-3 text-sm">
-            <div className="flex items-center gap-2">
-              <span
-                className={`size-2 rounded-full ${connected ? "bg-success" : "bg-destructive"}`}
-                aria-hidden="true"
+        {loadError && !current ? (
+          <ContextualError message={loadError} onRetry={() => void load()} />
+        ) : (
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
+            <div className="aspect-video w-full overflow-hidden rounded-lg border bg-black">
+              <iframe
+                src="/tv"
+                title={t("liveTvPreview")}
+                className="h-full w-full"
+                // The public TV page has no interactive controls; this is a read-only mirror.
+                sandbox="allow-scripts allow-same-origin"
               />
-              <span className="text-muted-foreground">
-                {connected ? t("tvFeedConnected") : t("tvFeedReconnecting")}
-              </span>
             </div>
-            {/* Why the screens show what they show: an operator broadcast, the
+            <div className="space-y-3 text-sm">
+              <div className="flex items-center gap-2">
+                <span
+                  className={`size-2 rounded-full ${connected ? "bg-success" : "bg-destructive"}`}
+                  aria-hidden="true"
+                />
+                <span className="text-muted-foreground">
+                  {connected ? t("tvFeedConnected") : t("tvFeedReconnecting")}
+                </span>
+              </div>
+              {/* Why the screens show what they show: an operator broadcast, the
                 timetable, or neither. */}
-            <div>
+              <div>
+                {current?.source === "override" && (
+                  <StatusBadge tone="warning">{t("sourceOverride")}</StatusBadge>
+                )}
+                {current?.source === "slot" && (
+                  <StatusBadge tone="success">
+                    {current.slot?.label
+                      ? t("sourceSlotNamed", { label: current.slot.label })
+                      : t("sourceSlot")}
+                  </StatusBadge>
+                )}
+                {current?.source === "default" && (
+                  <StatusBadge tone="neutral">{t("sourceDefault")}</StatusBadge>
+                )}
+              </div>
+              {current?.slot && current.source === "slot" && (
+                <p className="text-muted-foreground">
+                  {t("slotEndsAt", { time: formatScheduledDateTime(current.slot.endsAt) })}
+                </p>
+              )}
+              {current?.broadcastAt && current.source === "override" && (
+                <p className="text-muted-foreground">
+                  {t("lastBroadcastAt", { time: formatScheduledDateTime(current.broadcastAt) })}
+                </p>
+              )}
               {current?.source === "override" && (
-                <StatusBadge tone="warning">{t("sourceOverride")}</StatusBadge>
-              )}
-              {current?.source === "slot" && (
-                <StatusBadge tone="success">
-                  {current.slot?.label
-                    ? t("sourceSlotNamed", { label: current.slot.label })
-                    : t("sourceSlot")}
-                </StatusBadge>
-              )}
-              {current?.source === "default" && (
-                <StatusBadge tone="neutral">{t("sourceDefault")}</StatusBadge>
+                <p className="text-muted-foreground">
+                  {current.expiresAt
+                    ? t("autoRevertsAt", { time: formatScheduledDateTime(current.expiresAt) })
+                    : t("noAutoRevert")}
+                </p>
               )}
             </div>
-            {current?.slot && current.source === "slot" && (
-              <p className="text-muted-foreground">
-                {t("slotEndsAt", { time: formatScheduledDateTime(current.slot.endsAt) })}
-              </p>
-            )}
-            {current?.broadcastAt && current.source === "override" && (
-              <p className="text-muted-foreground">
-                {t("lastBroadcastAt", { time: formatScheduledDateTime(current.broadcastAt) })}
-              </p>
-            )}
-            {current?.source === "override" && (
-              <p className="text-muted-foreground">
-                {current.expiresAt
-                  ? t("autoRevertsAt", { time: formatScheduledDateTime(current.expiresAt) })
-                  : t("noAutoRevert")}
-              </p>
-            )}
           </div>
-        </div>
+        )}
       </SectionCard>
 
       <SectionCard
@@ -275,8 +297,9 @@ export default function TvControlPage() {
           </div>
         </fieldset>
         {mode === "live" && (
-          <div className="pt-2">
+          <div className="grid gap-4 pt-2 lg:grid-cols-[minmax(0,1fr)_320px]">
             <LiveSettings value={liveConfig} onChange={setLiveConfig} />
+            <LiveModePreview config={liveConfig} />
           </div>
         )}
         {EXPIRABLE_MODES.includes(mode) && (
