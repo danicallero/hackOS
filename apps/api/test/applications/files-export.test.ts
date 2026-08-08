@@ -264,6 +264,50 @@ describe("bulk file export (H56)", () => {
     expect(res.statusCode).toBe(200);
     expect(res.headers["x-export-file-failures"]).toBeUndefined();
   });
+
+  it("ignores applicants who never touched the field — not a failure, not in the zip", async () => {
+    // Not every applicant fills in every optional field. A response with no
+    // "cv" key at all (never uploaded) must be silently excluded, same as
+    // one with the key present but empty — neither is a storage failure.
+    const a = await getApp();
+    const staff = await createUserWithCapabilities([CAPABILITIES.EXPORTS_RUN]);
+    const appId = await createApplication({ template: shareableCvField() });
+
+    const withFile = await createUser({ email: "withfile@test.local" });
+    const noKeyAtAll = await createUser({ email: "nokey@test.local" });
+    const emptyValue = await createUser({ email: "emptyvalue@test.local" });
+    const withFileKey = await putUpload(appId, withFile, "resume.pdf");
+
+    await createResponse(withFile, appId, {
+      status: "submitted",
+      responses: { cv: withFileKey, [sponsorShareKey("cv")]: true },
+    });
+    await createResponse(noKeyAtAll, appId, {
+      status: "submitted",
+      responses: { motivation: "no cv field touched" },
+    });
+    await createResponse(emptyValue, appId, {
+      status: "submitted",
+      responses: { cv: "" },
+    });
+
+    const res = await a.inject({
+      method: "GET",
+      url: `/api/applications/${appId}/fields/cv/files.zip?scope=all`,
+      headers: asUser(staff),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["x-export-file-failures"]).toBeUndefined();
+    const entries = await readZipEntries(res.rawPayload);
+    expect(Object.keys(entries)).toEqual(["withfile@test.local.pdf"]);
+
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows: summaryAudit } = await pool.query(
+      `SELECT after FROM audit_log
+       WHERE entity_type = 'application_field_export' ORDER BY id DESC LIMIT 1`,
+    );
+    expect(summaryAudit[0].after).toMatchObject({ file_count: 1, failed_count: 0 });
+  });
 });
 
 describe("sponsor-share consent validation (H56)", () => {
