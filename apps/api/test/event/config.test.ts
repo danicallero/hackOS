@@ -10,7 +10,16 @@ import {
   truncateAll,
 } from "../helpers.js";
 
-/** H45/H47: event config — public hacking window + admin edit. */
+/**
+ * H45/H47: event config — public hacking window + admin edit.
+ *
+ * PUT /api/event enforces one capability per field group (H8) instead of a
+ * single blanket gate: EVENT_MANAGE (identity/timing), VENUE_MANAGE
+ * (venue/Wi-Fi), WALLET_MANAGE (Apple Wallet pass), PRESENCE_MANAGE,
+ * INVITES_MANAGE (sponsor/staff invite-claim requirements), INTOLERANCES_MANAGE
+ * (the shirt-size catalogue). GET /api/event is readable by anyone holding at
+ * least one of them.
+ */
 
 let app: App;
 
@@ -47,10 +56,11 @@ describe("event config (H45/H47)", () => {
       showStartCountdown: false,
       judgingStartsAt: null,
       judgingEndsAt: null,
+      shirtSizes: ["XS", "S", "M", "L", "XL", "XXL"],
     });
   });
 
-  it("requires SCHEDULE_MANAGE to edit", async () => {
+  it("requires an authenticated session, then an event-settings capability, to edit", async () => {
     const a = await getApp();
     expect(
       (await a.inject({ method: "PUT", url: "/api/event", payload: { name: "hackOS" } }))
@@ -64,6 +74,37 @@ describe("event config (H45/H47)", () => {
       payload: { name: "hackOS" },
     });
     expect(res.statusCode).toBe(403);
+  });
+
+  it("H8: a capability from one field group cannot write another group's fields", async () => {
+    const a = await getApp();
+    const venueOnly = await createUserWithCapabilities([CAPABILITIES.VENUE_MANAGE]);
+    const res = await a.inject({
+      method: "PUT",
+      url: "/api/event",
+      headers: asUser(venueOnly),
+      payload: { name: "Should be rejected" },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error.details.missing).toEqual([
+      { field: "name", capability: CAPABILITIES.EVENT_MANAGE },
+    ]);
+
+    // The venue fields that capability *does* own still work.
+    const ok = await a.inject({
+      method: "PUT",
+      url: "/api/event",
+      headers: asUser(venueOnly),
+      payload: { venueName: "Facultade de Informática, UDC" },
+    });
+    expect(ok.statusCode).toBe(200);
+  });
+
+  it("H8: GET is readable by anyone holding at least one event-settings capability", async () => {
+    const a = await getApp();
+    const presenceOnly = await createUserWithCapabilities([CAPABILITIES.PRESENCE_MANAGE]);
+    const res = await a.inject({ method: "GET", url: "/api/event", headers: asUser(presenceOnly) });
+    expect(res.statusCode).toBe(200);
   });
 
   it("accepts the administrator wildcard for event configuration", async () => {
@@ -80,7 +121,7 @@ describe("event config (H45/H47)", () => {
 
   it("upserts the hacking window and reveals it publicly", async () => {
     const a = await getApp();
-    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const manager = await createUserWithCapabilities([CAPABILITIES.EVENT_MANAGE]);
     const start = "2026-07-04T09:00:00.000Z";
     const end = "2026-07-05T09:00:00.000Z";
     const put = await a.inject({
@@ -99,7 +140,7 @@ describe("event config (H45/H47)", () => {
 
   it("rejects an end before the start", async () => {
     const a = await getApp();
-    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const manager = await createUserWithCapabilities([CAPABILITIES.EVENT_MANAGE]);
     const res = await a.inject({
       method: "PUT",
       url: "/api/event",
@@ -114,7 +155,7 @@ describe("event config (H45/H47)", () => {
 
   it("round-trips showStartCountdown, defaulting to false", async () => {
     const a = await getApp();
-    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const manager = await createUserWithCapabilities([CAPABILITIES.EVENT_MANAGE]);
     const put = await a.inject({
       method: "PUT",
       url: "/api/event",
@@ -130,7 +171,10 @@ describe("event config (H45/H47)", () => {
 
   it("upserts the venue and Wallet pass back fields", async () => {
     const a = await getApp();
-    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const manager = await createUserWithCapabilities([
+      CAPABILITIES.VENUE_MANAGE,
+      CAPABILITIES.WALLET_MANAGE,
+    ]);
     const put = await a.inject({
       method: "PUT",
       url: "/api/event",
@@ -162,7 +206,7 @@ describe("event config (H45/H47)", () => {
 
   it("round-trips the venue Wi-Fi without leaking it to the public feed (H42)", async () => {
     const a = await getApp();
-    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const manager = await createUserWithCapabilities([CAPABILITIES.VENUE_MANAGE]);
     const put = await a.inject({
       method: "PUT",
       url: "/api/event",
@@ -189,7 +233,7 @@ describe("event config (H45/H47)", () => {
   it("audits a Wi-Fi password change without recording the password (H53)", async () => {
     const a = await getApp();
     const { pool } = await import("../../src/db/pool.js");
-    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const manager = await createUserWithCapabilities([CAPABILITIES.VENUE_MANAGE]);
     await a.inject({
       method: "PUT",
       url: "/api/event",
@@ -206,7 +250,7 @@ describe("event config (H45/H47)", () => {
 
   it("upserts Wallet pass field-label overrides", async () => {
     const a = await getApp();
-    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const manager = await createUserWithCapabilities([CAPABILITIES.WALLET_MANAGE]);
     const put = await a.inject({
       method: "PUT",
       url: "/api/event",
@@ -222,7 +266,7 @@ describe("event config (H45/H47)", () => {
 
   it("round-trips the event start (doors open) independently of the hacking window", async () => {
     const a = await getApp();
-    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const manager = await createUserWithCapabilities([CAPABILITIES.EVENT_MANAGE]);
     const doorsOpen = "2026-07-04T08:00:00.000Z";
     const put = await a.inject({
       method: "PUT",
@@ -239,7 +283,7 @@ describe("event config (H45/H47)", () => {
 
   it("round-trips the event end (pass expiry) independently of the hacking end", async () => {
     const a = await getApp();
-    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const manager = await createUserWithCapabilities([CAPABILITIES.EVENT_MANAGE]);
     const eventEnd = "2026-07-06T18:00:00.000Z";
     const put = await a.inject({
       method: "PUT",
@@ -258,7 +302,7 @@ describe("event config (H45/H47)", () => {
 
   it("rejects an event end before the event start", async () => {
     const a = await getApp();
-    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const manager = await createUserWithCapabilities([CAPABILITIES.EVENT_MANAGE]);
     const res = await a.inject({
       method: "PUT",
       url: "/api/event",
@@ -273,7 +317,7 @@ describe("event config (H45/H47)", () => {
 
   it("round-trips Wallet pass field-visibility toggles, defaulting to visible", async () => {
     const a = await getApp();
-    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const manager = await createUserWithCapabilities([CAPABILITIES.WALLET_MANAGE]);
 
     const before = await a.inject({ method: "GET", url: "/api/public/event" });
     expect(before.json().passFieldVisibility).toEqual({});
@@ -290,7 +334,7 @@ describe("event config (H45/H47)", () => {
 
   it("rejects an unknown Wallet pass field-visibility key", async () => {
     const a = await getApp();
-    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const manager = await createUserWithCapabilities([CAPABILITIES.WALLET_MANAGE]);
     const res = await a.inject({
       method: "PUT",
       url: "/api/event",
@@ -302,7 +346,7 @@ describe("event config (H45/H47)", () => {
 
   it("exposes the organizer name the pass's 'Organized by' field is filled with", async () => {
     const a = await getApp();
-    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const manager = await createUserWithCapabilities([CAPABILITIES.EVENT_MANAGE]);
     const res = await a.inject({ method: "GET", url: "/api/event", headers: asUser(manager) });
     expect(res.statusCode).toBe(200);
     expect(typeof res.json().organizerName).toBe("string");
@@ -311,7 +355,7 @@ describe("event config (H45/H47)", () => {
 
   it("rejects an unknown Wallet pass field-label key", async () => {
     const a = await getApp();
-    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const manager = await createUserWithCapabilities([CAPABILITIES.WALLET_MANAGE]);
     const res = await a.inject({
       method: "PUT",
       url: "/api/event",
@@ -323,7 +367,7 @@ describe("event config (H45/H47)", () => {
 
   it("rejects venue coordinates set on only one axis", async () => {
     const a = await getApp();
-    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const manager = await createUserWithCapabilities([CAPABILITIES.VENUE_MANAGE]);
     const res = await a.inject({
       method: "PUT",
       url: "/api/event",
@@ -331,6 +375,51 @@ describe("event config (H45/H47)", () => {
       payload: { venueLatitude: 43.3332 },
     });
     expect(res.statusCode).toBe(400);
+  });
+
+  it("round-trips the shirt-size catalogue via INTOLERANCES_MANAGE (H12)", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.INTOLERANCES_MANAGE]);
+    const put = await a.inject({
+      method: "PUT",
+      url: "/api/event",
+      headers: asUser(manager),
+      payload: { shirtSizes: ["S", "M", "L", "3XL"] },
+    });
+    expect(put.statusCode).toBe(200);
+    expect(put.json().shirtSizes).toEqual(["S", "M", "L", "3XL"]);
+
+    const pub = await a.inject({ method: "GET", url: "/api/public/event" });
+    expect(pub.json().shirtSizes).toEqual(["S", "M", "L", "3XL"]);
+  });
+
+  it("round-trips the sponsor/staff invite-claim requirements via INVITES_MANAGE (H10)", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.INVITES_MANAGE]);
+    const put = await a.inject({
+      method: "PUT",
+      url: "/api/event",
+      headers: asUser(manager),
+      payload: { requireStaffShirtSize: true, requireStaffDietary: true },
+    });
+    expect(put.statusCode).toBe(200);
+    expect(put.json()).toMatchObject({
+      requireStaffShirtSize: true,
+      requireStaffDietary: true,
+    });
+  });
+
+  it("round-trips the presence policy via PRESENCE_MANAGE (H24)", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.PRESENCE_MANAGE]);
+    const put = await a.inject({
+      method: "PUT",
+      url: "/api/event",
+      headers: asUser(manager),
+      payload: { presenceCertaintyWindowMinutes: 90 },
+    });
+    expect(put.statusCode).toBe(200);
+    expect(put.json().presenceCertaintyWindowMinutes).toBe(90);
   });
 
   it("exposes the judging window (queue_settings) publicly, read-only", async () => {

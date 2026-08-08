@@ -85,7 +85,7 @@ describe("H8 permission groups", () => {
         capabilities: [...template.capabilities],
       })),
     );
-    expect(templates).toHaveLength(19);
+    expect(templates).toHaveLength(20);
     expect(templates.flatMap((template) => template.capabilities)).not.toContain(
       CAPABILITIES.SPONSOR_PORTAL,
     );

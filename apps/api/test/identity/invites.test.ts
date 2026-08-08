@@ -569,7 +569,7 @@ describe("H9/H10 invite acceptance", () => {
 
 describe("H10 event-configurable shirt/dietary requirements for invited sponsors/staff", () => {
   async function setInviteRequirements(a: App, overrides: Record<string, boolean>): Promise<void> {
-    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const manager = await createUserWithCapabilities([CAPABILITIES.INVITES_MANAGE]);
     const res = await a.inject({
       method: "PUT",
       url: "/api/event",

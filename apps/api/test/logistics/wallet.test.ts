@@ -357,7 +357,7 @@ describe("H28 Apple Wallet PassKit", () => {
       payload: { pushToken: "push-refresh" },
     });
 
-    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const manager = await createUserWithCapabilities([CAPABILITIES.EVENT_MANAGE]);
 
     // A no-op save (identical values) must not bump update_tag or push.
     const noop = await app.inject({
@@ -542,7 +542,7 @@ describe("H28 Apple Wallet PassKit", () => {
 
     // Event config changes (what an organiser edits before wondering why
     // their iPhone won't refresh)…
-    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const manager = await createUserWithCapabilities([CAPABILITIES.EVENT_MANAGE]);
     const put = await app.inject({
       method: "PUT",
       url: "/api/event",

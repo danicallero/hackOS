@@ -1,4 +1,4 @@
-import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { CAPABILITIES, type Capability } from "@hackos/shared/capabilities";
 import {
   PASS_FIELD_LABEL_KEYS,
   PASS_FIELD_VISIBILITY_KEYS,
@@ -11,8 +11,8 @@ import { z } from "zod";
 import { config } from "../../config.js";
 import { pool } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
-import { requireCapability } from "../../lib/capabilities.js";
-import { BadRequestError } from "../../lib/errors.js";
+import { requireAnyCapability, userHasCapability } from "../../lib/capabilities.js";
+import { BadRequestError, ForbiddenError } from "../../lib/errors.js";
 import {
   type RouteAccessPolicy,
   routeAccessOption as routeAccess,
@@ -25,7 +25,72 @@ import { enqueueWalletSync } from "../logistics/wallet-sync.js";
  * countdown surfaced on the website and TV panels — distinct from the judging
  * window (queue_settings) and the agenda (schedule). Reads are resilient to a
  * missing singleton; writes upsert it.
+ *
+ * One row backs six independently-owned settings sections (identity/timing,
+ * venue, wallet pass, presence policy, invited-account requirements, the
+ * shirt-size catalogue) — rather than splitting into six endpoints, GET/PUT
+ * stay a single resource (matching how the merge logic below already treats
+ * every field independently) and PUT enforces one capability per field
+ * group at request time. See EVENT_SETTINGS_CAPABILITIES below.
  */
+
+/** Every writable field's owning capability (H8) — one entry per `eventConfigBody` key. */
+const EVENT_SETTINGS_CAPABILITIES: Record<string, Capability> = {
+  name: CAPABILITIES.EVENT_MANAGE,
+  tagline: CAPABILITIES.EVENT_MANAGE,
+  timezone: CAPABILITIES.EVENT_MANAGE,
+  eventStartsAt: CAPABILITIES.EVENT_MANAGE,
+  eventEndsAt: CAPABILITIES.EVENT_MANAGE,
+  hackingStartsAt: CAPABILITIES.EVENT_MANAGE,
+  hackingEndsAt: CAPABILITIES.EVENT_MANAGE,
+  showStartCountdown: CAPABILITIES.EVENT_MANAGE,
+  participantsCanCreateProjects: CAPABILITIES.EVENT_MANAGE,
+  venueName: CAPABILITIES.VENUE_MANAGE,
+  venueLatitude: CAPABILITIES.VENUE_MANAGE,
+  venueLongitude: CAPABILITIES.VENUE_MANAGE,
+  wifiSsid: CAPABILITIES.VENUE_MANAGE,
+  wifiPassword: CAPABILITIES.VENUE_MANAGE,
+  passBackFields: CAPABILITIES.WALLET_MANAGE,
+  passFieldLabels: CAPABILITIES.WALLET_MANAGE,
+  passFieldVisibility: CAPABILITIES.WALLET_MANAGE,
+  presenceAutoEntryAt: CAPABILITIES.PRESENCE_MANAGE,
+  presenceCertaintyWindowMinutes: CAPABILITIES.PRESENCE_MANAGE,
+  requireSponsorShirtSize: CAPABILITIES.INVITES_MANAGE,
+  requireSponsorDietary: CAPABILITIES.INVITES_MANAGE,
+  requireStaffShirtSize: CAPABILITIES.INVITES_MANAGE,
+  requireStaffDietary: CAPABILITIES.INVITES_MANAGE,
+  shirtSizes: CAPABILITIES.INTOLERANCES_MANAGE,
+};
+
+const EVENT_SETTINGS_ANY_CAPABILITY = [
+  ...new Set(Object.values(EVENT_SETTINGS_CAPABILITIES)),
+] as Capability[];
+
+/**
+ * Rejects the request unless the caller holds every field group's owning
+ * capability for the fields actually present in the body — a wallet-only
+ * admin can save `passBackFields` but gets a 403 naming the field/capability
+ * if the same request also carries `venueName`.
+ */
+async function assertFieldCapabilities(
+  userId: number,
+  body: Record<string, unknown>,
+): Promise<void> {
+  const missing: { field: string; capability: Capability }[] = [];
+  for (const field of Object.keys(body)) {
+    const capability = EVENT_SETTINGS_CAPABILITIES[field];
+    if (!capability) continue; // unknown keys are already rejected by .strict()
+    if (!(await userHasCapability(userId, capability))) {
+      missing.push({ field, capability });
+    }
+  }
+  if (missing.length > 0) {
+    throw new ForbiddenError(
+      `Missing capability for: ${missing.map((m) => `${m.field} (${m.capability})`).join(", ")}`,
+      { missing },
+    );
+  }
+}
 
 const backFieldSchema = z.object({
   label: z.string().min(1).max(80),
@@ -237,9 +302,14 @@ export function registerEventRoutes(app: FastifyInstance): void {
     kind: "public",
     anonymousCategory: "public-content",
   } as const satisfies RouteAccessPolicy;
-  const scheduleManage = {
+  // Anyone who manages at least one event-settings section can read the
+  // whole config — the settings page fetches it once for every tab, and
+  // each tab's own visibility is what actually narrows what a given caller
+  // can see/edit (see assertFieldCapabilities for the write-side, per-field
+  // enforcement).
+  const eventSettingsRead = {
     kind: "capability",
-    capability: CAPABILITIES.SCHEDULE_MANAGE,
+    anyOf: EVENT_SETTINGS_ANY_CAPABILITY,
   } as const satisfies RouteAccessPolicy;
 
   // Anonymous: the public countdown feed for web / TV.
@@ -259,13 +329,13 @@ export function registerEventRoutes(app: FastifyInstance): void {
   r.get(
     "/api/event",
     {
-      ...routeAccess(scheduleManage),
-      preHandler: requireCapability(CAPABILITIES.SCHEDULE_MANAGE),
+      ...routeAccess(eventSettingsRead),
+      preHandler: requireAnyCapability(...EVENT_SETTINGS_ANY_CAPABILITY),
       schema: {
         summary:
           "Read the full event config, including venue, Wi-Fi credentials and Wallet pass back fields.",
         description:
-          "Staff-only counterpart of GET /api/public/event (SCHEDULE_MANAGE). Adds the venue Wi-Fi credentials on top of everything the public feed returns, for the settings page.",
+          "Staff-only counterpart of GET /api/public/event, readable by anyone holding at least one event-settings capability (EVENT_MANAGE, VENUE_MANAGE, WALLET_MANAGE, PRESENCE_MANAGE, INVITES_MANAGE, INTOLERANCES_MANAGE). Adds the venue Wi-Fi credentials on top of everything the public feed returns, for the settings page.",
       },
     },
     async () => toAdmin(await readConfig(), await readJudgingWindow()),
@@ -274,17 +344,18 @@ export function registerEventRoutes(app: FastifyInstance): void {
   r.put(
     "/api/event",
     {
-      ...routeAccess(scheduleManage),
-      preHandler: requireCapability(CAPABILITIES.SCHEDULE_MANAGE),
+      ...routeAccess(eventSettingsRead),
+      preHandler: requireAnyCapability(...EVENT_SETTINGS_ANY_CAPABILITY),
       schema: {
         summary: "Update event config",
         description:
-          "Updates name/tagline/timezone, event start (doors open — the time shown on the Wallet pass), hacking window, venue (name + GPS), the Wallet pass back-field list, field-label overrides, per-field show/hide toggles, whether participants may create their own project (H19), whether invited sponsors/staff must supply a shirt size and/or see dietary-restriction fields when claiming their account (H10), and the shirt-size options offered by every picker in the app (H12). Fields omitted from the body are left unchanged. Issued Apple Wallet passes are pushed a refresh when the saved config actually changes.",
+          "Updates name/tagline/timezone, event start (doors open — the time shown on the Wallet pass), hacking window, venue (name + GPS), the Wallet pass back-field list, field-label overrides, per-field show/hide toggles, whether participants may create their own project (H19), presence-detection policy, whether invited sponsors/staff must supply a shirt size and/or see dietary-restriction fields when claiming their account (H10), and the shirt-size options offered by every picker in the app (H12). Fields omitted from the body are left unchanged. Each field is additionally gated by its own owning capability (EVENT_MANAGE for identity/timing, VENUE_MANAGE, WALLET_MANAGE, PRESENCE_MANAGE, INVITES_MANAGE for the sponsor/staff requirements, INTOLERANCES_MANAGE for shirtSizes) — a 403 names exactly which field(s) the caller lacks rights to. Issued Apple Wallet passes are pushed a refresh when the saved config actually changes.",
         body: eventConfigBody,
       },
     },
     async (req) => {
       const b = req.body;
+      await assertFieldCapabilities(req.userId as number, b);
       const current = await readConfig();
       const next = {
         name: b.name === undefined ? current.name : b.name,

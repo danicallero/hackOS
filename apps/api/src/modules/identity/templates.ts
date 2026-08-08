@@ -129,6 +129,17 @@ export const PERMISSION_GROUP_TEMPLATES: readonly PermissionGroupTemplate[] = [
     [CAPABILITIES.SCHEDULE_MANAGE],
   ),
   template(
+    "event-settings-manager",
+    "permissionTemplateEventSettingsManager",
+    "permissionTemplateEventSettingsManagerDescription",
+    [
+      CAPABILITIES.EVENT_MANAGE,
+      CAPABILITIES.VENUE_MANAGE,
+      CAPABILITIES.WALLET_MANAGE,
+      CAPABILITIES.PRESENCE_MANAGE,
+    ],
+  ),
+  template(
     "tv-operator",
     "permissionTemplateTvOperator",
     "permissionTemplateTvOperatorDescription",
