@@ -223,7 +223,6 @@ export function VenueTab({
                       }}
                     />
                   </FormControl>
-                  <FormDescription>{t("coordsFormatsHint")}</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -244,12 +243,12 @@ export function VenueTab({
                       }}
                     />
                   </FormControl>
-                  <FormDescription>{t("venueCoordsBothOrNeither")}</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
           </div>
+          <p className="text-muted-foreground text-sm">{t("coordsFormatsHint")}</p>
           <VenuePreview name={values.venueName.trim()} lat={previewLat} lon={previewLon} />
         </SectionCard>
         <SectionCard

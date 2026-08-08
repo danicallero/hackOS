@@ -109,6 +109,11 @@ const dict: Record<string, I18nText> = {
     gl: "Configuración do evento",
     en: "Event settings",
   },
+  noEventSettingsAccessDesc: {
+    es: "Pide a un administrador acceso a la configuración del evento.",
+    gl: "Pide a un administrador acceso á configuración do evento.",
+    en: "Ask an administrator for event settings access.",
+  },
   tvControl: { es: "Control de TV", gl: "Control de TV", en: "TV control" },
   rooms: { es: "Salas", gl: "Salas", en: "Rooms" },
   libraries: { es: "Catálogos", gl: "Catálogos", en: "Libraries" },
@@ -1443,6 +1448,11 @@ const dict: Record<string, I18nText> = {
     es: "Pide a un administrador acceso a la administración de salas.",
     gl: "Pide a un administrador acceso á administración de salas.",
     en: "Ask an administrator for room-admin access.",
+  },
+  judgingWindowDeniedDesc: {
+    es: "Pide a un administrador acceso a la ventana de evaluación.",
+    gl: "Pide a un administrador acceso á ventá de avaliación.",
+    en: "Ask an administrator for judging-window access.",
   },
   couldNotLoadRoomAdminData: {
     es: "No se han podido cargar los datos de administración de salas.",
@@ -6157,6 +6167,16 @@ const dict: Record<string, I18nText> = {
     gl: "Xestiona o programa do evento.",
     en: "Manage the event schedule.",
   },
+  permissionTemplateEventSettingsManager: {
+    es: "Responsable de configuración del evento",
+    gl: "Responsable de configuración do evento",
+    en: "Event settings manager",
+  },
+  permissionTemplateEventSettingsManagerDescription: {
+    es: "Gestiona la configuración del evento.",
+    gl: "Xestiona a configuración do evento.",
+    en: "Manage event settings.",
+  },
   permissionTemplateTvOperator: {
     es: "Operador de TV",
     gl: "Operador de TV",
@@ -6446,19 +6466,14 @@ const dict: Record<string, I18nText> = {
   venueLatitudeLabel: { es: "Latitud", gl: "Latitude", en: "Latitude" },
   venueLongitudeLabel: { es: "Longitud", gl: "Lonxitude", en: "Longitude" },
   coordsFormatsHint: {
-    es: "Acepta grados decimales (43.3328) o GMS (43°19′58″N). Pega las dos coordenadas juntas en cualquiera de los campos y se repartirán solas.",
-    gl: "Acepta graos decimais (43.3328) ou GMS (43°19′58″N). Pega as dúas coordenadas xuntas en calquera dos campos e repartiranse soas.",
-    en: "Accepts decimal degrees (43.3328) or DMS (43°19′58″N). Paste both coordinates together into either box and they'll split automatically.",
+    es: "Acepta grados decimales (43.3328) o GMS (43°19′58″N). Indica las dos coordenadas o ninguna — pega las dos juntas en cualquiera de los campos y se repartirán solas.",
+    gl: "Acepta graos decimais (43.3328) ou GMS (43°19′58″N). Indica as dúas coordenadas ou ningunha — pega as dúas xuntas en calquera dos campos e repartiranse soas.",
+    en: "Accepts decimal degrees (43.3328) or DMS (43°19′58″N). Set both or neither — paste both coordinates into either box to split them automatically.",
   },
   invalidCoordinate: {
     es: "Coordenada no válida. Usa grados decimales (43.3328) o GMS (43°19′58″N).",
     gl: "Coordenada non válida. Usa graos decimais (43.3328) ou GMS (43°19′58″N).",
     en: "Invalid coordinate. Use decimal degrees (43.3328) or DMS (43°19′58″N).",
-  },
-  venueCoordsBothOrNeither: {
-    es: "La latitud y la longitud deben indicarse juntas.",
-    gl: "A latitude e a lonxitude deben indicarse xuntas.",
-    en: "Latitude and longitude must be set together.",
   },
   walletPassSectionTitle: {
     es: "Pase de Apple Wallet",

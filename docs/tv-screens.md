@@ -126,7 +126,7 @@ tested in `apps/web/src/lib/tv.test.ts`).
 
 Credentials live in `event_config` (`wifi_ssid`, `wifi_password`,
 migration 0008), edited in **Settings → Event → Venue** behind
-`SCHEDULE_MANAGE`. `GET /api/tv/config` serves them to the screens; both the
+`VENUE_MANAGE`. `GET /api/tv/config` serves them to the screens; both the
 `live` screen and the full-screen `wifi` mode read from there, so a *scheduled*
 Wi-Fi slot works with nobody at the control page.
 

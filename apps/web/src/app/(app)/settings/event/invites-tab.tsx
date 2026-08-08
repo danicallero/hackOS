@@ -1,21 +1,22 @@
 "use client";
 
-// Invited-account logistics category (H10): whether an invited sponsor/staff
-// account must supply a shirt size, and whether their claim form shows
-// dietary-restriction fields at all. Off by default — not every event caters
-// on-site sponsors/staff.
+// Invited-account requirements category (INVITES_MANAGE, H10): whether an
+// invited sponsor/staff account must supply a shirt size, and whether their
+// claim form shows dietary-restriction fields at all. Off by default — not
+// every event caters on-site sponsors/staff. The shirt-size catalogue itself
+// lives in Settings → Libraries, next to the other shared reference lists
+// (food intolerances, universities) that feed application forms and
+// profiles — this tab only owns the two invite-claim requirement toggles.
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { LucideIcon } from "lucide-react";
-import { PlusIcon, XIcon } from "lucide-react";
 import { useEffect } from "react";
-import { useFieldArray, useForm } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
 import { SubmitButton } from "@/components/common/submit-button";
-import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
@@ -23,9 +24,7 @@ import {
   FormField,
   FormItem,
   FormLabel,
-  FormMessage,
 } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
@@ -38,13 +37,6 @@ const schema = z.object({
   requireSponsorDietary: z.boolean(),
   requireStaffShirtSize: z.boolean(),
   requireStaffDietary: z.boolean(),
-  shirtSizes: z
-    .array(z.object({ value: z.string().trim().min(1).max(10) }))
-    .min(1)
-    .refine(
-      (sizes) => new Set(sizes.map((s) => s.value.toLowerCase())).size === sizes.length,
-      "duplicate",
-    ),
 });
 
 type Values = z.infer<typeof schema>;
@@ -55,7 +47,6 @@ function fromConfig(cfg: EventConfig): Values {
     requireSponsorDietary: cfg.requireSponsorDietary,
     requireStaffShirtSize: cfg.requireStaffShirtSize,
     requireStaffDietary: cfg.requireStaffDietary,
-    shirtSizes: cfg.shirtSizes.map((value) => ({ value })),
   };
 }
 
@@ -75,17 +66,9 @@ export function InvitesTab({
       requireSponsorDietary: false,
       requireStaffShirtSize: false,
       requireStaffDietary: false,
-      shirtSizes: [
-        { value: "XS" },
-        { value: "S" },
-        { value: "M" },
-        { value: "L" },
-        { value: "XL" },
-      ],
     },
   });
-  const { reset, formState, control } = form;
-  const shirtSizeFields = useFieldArray({ control, name: "shirtSizes" });
+  const { reset, formState } = form;
   const [saveState, setSaveState] = useCategorySaveState(formState.isDirty, onDirtyChange);
 
   useEffect(() => {
@@ -95,10 +78,7 @@ export function InvitesTab({
   async function onSubmit(values: Values) {
     setSaveState("saving");
     try {
-      const next = await api.put<EventConfig>("/api/event", {
-        ...values,
-        shirtSizes: values.shirtSizes.map((s) => s.value.trim()),
-      });
+      const next = await api.put<EventConfig>("/api/event", values);
       applyConfig(next);
       reset(fromConfig(next));
       setSaveState("saved");
@@ -122,53 +102,7 @@ export function InvitesTab({
           state={<SaveStatus state={saveState} />}
           footer={<SubmitButton pending={formState.isSubmitting}>{t("saveChanges")}</SubmitButton>}
         >
-          <h3 className="text-balance text-sm font-semibold">{t("shirtSizesGroup")}</h3>
-          <FormDescription>{t("shirtSizesGroupDesc")}</FormDescription>
-          <div className="flex flex-wrap gap-2">
-            {shirtSizeFields.fields.map((item, index) => (
-              <FormField
-                key={item.id}
-                control={form.control}
-                name={`shirtSizes.${index}.value`}
-                render={({ field }) => (
-                  <FormItem>
-                    <div className="flex items-center gap-1">
-                      <FormControl>
-                        <Input {...field} className="w-20" maxLength={10} />
-                      </FormControl>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="text-destructive size-8 shrink-0"
-                        disabled={shirtSizeFields.fields.length <= 1}
-                        onClick={() => shirtSizeFields.remove(index)}
-                      >
-                        <XIcon className="size-4" />
-                        <span className="sr-only">{t("remove")}</span>
-                      </Button>
-                    </div>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            ))}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => shirtSizeFields.append({ value: "" })}
-            >
-              <PlusIcon />
-              {t("addSize")}
-            </Button>
-          </div>
-          {form.formState.errors.shirtSizes?.root?.message && (
-            <p className="text-destructive text-sm">{t("shirtSizesDuplicateError")}</p>
-          )}
-          <h3 className="border-t pt-4 text-balance text-sm font-semibold">
-            {t("invitesSponsorsGroup")}
-          </h3>
+          <h3 className="text-balance text-sm font-semibold">{t("invitesSponsorsGroup")}</h3>
           <FormField
             control={form.control}
             name="requireSponsorShirtSize"

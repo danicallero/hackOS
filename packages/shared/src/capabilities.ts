@@ -52,6 +52,15 @@ export const CAPABILITIES = {
   ANNOUNCEMENTS_MANAGE: "announcements:manage",
   TV_CONTROL: "tv:control",
 
+  // event settings (H45, H47, H19, H24, H42) — split from the former
+  // catch-all SCHEDULE_MANAGE gate on /api/event, one capability per
+  // settings tab so access can be granted per actual job (a venue lead
+  // isn't necessarily the wallet-pass designer).
+  EVENT_MANAGE: "event:manage", // identity + timing (name, tagline, timezone, event/hacking windows)
+  VENUE_MANAGE: "venue:manage", // venue name/GPS + Wi-Fi credentials
+  WALLET_MANAGE: "wallet:manage", // Apple Wallet pass fields/labels
+  PRESENCE_MANAGE: "presence:manage", // H24 automatic-presence policy
+
   // comms & admin (H50-H54)
   NOTIFICATIONS_SEND: "notifications:send",
   AUDIT_READ: "audit:read",

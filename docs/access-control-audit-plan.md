@@ -63,7 +63,7 @@ The initial audit recorded:
 - 41 routes without an explicit `preHandler`. Some are intentionally public;
   others perform authentication or relationship checks inside handlers, which
   prevents mechanical verification.
-- 29 named capabilities plus the `*` administrator wildcard, nested permission
+- 32 named capabilities plus the `*` administrator wildcard, nested permission
   groups, and only a development `admin` seed. There are no production-ready
   group presets.
 - Permission-group and invitation APIs that can accept arbitrary capability

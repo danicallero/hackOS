@@ -232,6 +232,12 @@ export const WORKSPACES: Workspace[] = [
         anyCapability: [CAPABILITIES.QUEUE_ADMIN],
         sponsorVisible: true,
       },
+      {
+        title: "judgingWindowTitle",
+        href: "/queue/settings",
+        icon: GavelIcon,
+        anyCapability: [CAPABILITIES.QUEUE_ADMIN],
+      },
     ],
   },
   {
@@ -329,7 +335,13 @@ export const WORKSPACES: Workspace[] = [
         title: "eventSettings",
         href: "/settings/event",
         icon: SettingsIcon,
-        capability: CAPABILITIES.SCHEDULE_MANAGE,
+        anyCapability: [
+          CAPABILITIES.EVENT_MANAGE,
+          CAPABILITIES.VENUE_MANAGE,
+          CAPABILITIES.WALLET_MANAGE,
+          CAPABILITIES.PRESENCE_MANAGE,
+          CAPABILITIES.INVITES_MANAGE,
+        ],
       },
       {
         title: "libraries",

@@ -86,8 +86,8 @@ Public/token snapshot: public rows are health, public content/announcement/TV/in
 | DELETE | `/api/enterprises/:id/members/:userId` | capability:sponsors:manage |
 | GET | `/api/enterprises/mine` | authenticated |
 | POST | `/api/enterprises/visibility` | capability:sponsors:manage |
-| GET | `/api/event` | capability:schedule:manage |
-| PUT | `/api/event` | capability:schedule:manage |
+| GET | `/api/event` | capability:anyOf(event:manage,venue:manage,wallet:manage,presence:manage,invites:manage,intolerances:manage) |
+| PUT | `/api/event` | capability:anyOf(event:manage,venue:manage,wallet:manage,presence:manage,invites:manage,intolerances:manage) |
 | GET | `/api/events/stream` | authenticated |
 | GET | `/api/exports/applications.csv` | capability:exports:run |
 | GET | `/api/exports/attendance.csv` | capability:exports:run |

@@ -220,9 +220,11 @@ export function MetadataCard({
                 <div className="space-y-0.5">
                   <div className="flex flex-wrap items-center gap-2">
                     <FormLabel className="font-normal">{t("askShirtSizeLabel")}</FormLabel>
-                    <StatusBadge tone="neutral" dot={false}>
-                      {t("requiredAtSubmitBadge")}
-                    </StatusBadge>
+                    {field.value && (
+                      <StatusBadge tone="neutral" dot={false}>
+                        {t("requiredAtSubmitBadge")}
+                      </StatusBadge>
+                    )}
                   </div>
                   <FormDescription>{t("askShirtSizeDesc")}</FormDescription>
                 </div>
