@@ -13,6 +13,7 @@ export interface AuditFilters {
   entityType?: string;
   entityId?: string;
   actorId?: number;
+  actorQuery?: string;
   action?: string;
   dateFrom?: string;
   dateTo?: string;
@@ -37,23 +38,35 @@ export async function queryAuditLog(
     conditions.push(sqlFragment.replace("?", `$${params.length}`));
   }
 
-  if (filters.entityType) addCondition("entity_type = ?", filters.entityType);
-  if (filters.entityId) addCondition("entity_id = ?", filters.entityId);
-  if (filters.actorId !== undefined) addCondition("actor_id = ?", filters.actorId);
-  if (filters.action) addCondition("action = ?", filters.action);
-  if (filters.dateFrom) addCondition("created_at >= ?", filters.dateFrom);
-  if (filters.dateTo) addCondition("created_at <= ?", filters.dateTo);
+  if (filters.entityType) addCondition("al.entity_type = ?", filters.entityType);
+  if (filters.entityId) addCondition("al.entity_id = ?", filters.entityId);
+  if (filters.actorId !== undefined) addCondition("al.actor_id = ?", filters.actorId);
+  if (filters.actorQuery) {
+    const needle = `%${filters.actorQuery}%`;
+    params.push(needle, needle);
+    conditions.push(
+      `(u.name || ' ' || u.surname ILIKE $${params.length - 1} OR u.email ILIKE $${params.length})`,
+    );
+  }
+  if (filters.action) addCondition("al.action = ?", filters.action);
+  if (filters.dateFrom) addCondition("al.created_at >= ?", filters.dateFrom);
+  if (filters.dateTo) addCondition("al.created_at <= ?", filters.dateTo);
 
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const from = "FROM audit_log al LEFT JOIN users u ON u.id = al.actor_id";
 
   const limitParamIdx = params.length + 1;
   const offsetParamIdx = params.length + 2;
   const { rows } = await db.query(
-    `SELECT * FROM audit_log ${where} ORDER BY id DESC LIMIT $${limitParamIdx} OFFSET $${offsetParamIdx}`,
+    `SELECT al.*, u.name AS actor_name, u.surname AS actor_surname, u.email AS actor_email
+     ${from}
+     ${where}
+     ORDER BY al.id DESC
+     LIMIT $${limitParamIdx} OFFSET $${offsetParamIdx}`,
     [...params, filters.limit, filters.offset],
   );
   const { rows: countRows } = await db.query(
-    `SELECT count(*)::int AS count FROM audit_log ${where}`,
+    `SELECT count(*)::int AS count ${from} ${where}`,
     params,
   );
   return { items: rows, total: countRows[0].count };

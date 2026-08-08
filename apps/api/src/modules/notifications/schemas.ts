@@ -59,6 +59,7 @@ export const auditQuerySchema = z.object({
   entityType: z.string().optional(),
   entityId: z.string().optional(),
   actorId: z.coerce.number().int().optional(),
+  actorQuery: z.string().optional(),
   action: z.string().optional(),
   dateFrom: z.iso.datetime({ offset: true }).optional(),
   dateTo: z.iso.datetime({ offset: true }).optional(),

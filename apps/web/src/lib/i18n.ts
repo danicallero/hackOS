@@ -7004,7 +7004,7 @@ const dict: Record<string, I18nText> = {
   systemActor: { es: "sistema", gl: "sistema", en: "system" },
   entityTypeLabel: { es: "Tipo de entidad", gl: "Tipo de entidade", en: "Entity type" },
   entityIdLabel: { es: "ID de entidad", gl: "ID de entidade", en: "Entity ID" },
-  actorUserIdLabel: { es: "ID de usuario autor", gl: "ID de usuario autor", en: "Actor user ID" },
+  actorUserIdLabel: { es: "Autor", gl: "Autor", en: "Actor" },
   fromLabel: { es: "Desde", gl: "Desde", en: "From" },
   toLabel: { es: "Hasta", gl: "Ata", en: "To" },
   clearFilters: { es: "Borrar filtros", gl: "Borrar filtros", en: "Clear filters" },

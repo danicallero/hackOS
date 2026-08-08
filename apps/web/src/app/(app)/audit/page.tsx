@@ -37,10 +37,15 @@ const timeFmt = new Intl.DateTimeFormat("en-GB", {
   minute: "2-digit",
 });
 
+function actorLabel(row: Pick<AuditRow, "actor_name" | "actor_surname" | "actor_email">) {
+  const fullName = [row.actor_name, row.actor_surname].filter(Boolean).join(" ").trim();
+  return fullName || row.actor_email || null;
+}
+
 interface FilterState {
   entityType: string;
   entityId: string;
-  actorId: string;
+  actorQuery: string;
   action: string;
   dateFrom: string;
   dateTo: string;
@@ -49,7 +54,7 @@ interface FilterState {
 const EMPTY_FILTERS: FilterState = {
   entityType: "",
   entityId: "",
-  actorId: "",
+  actorQuery: "",
   action: "",
   dateFrom: "",
   dateTo: "",
@@ -95,7 +100,7 @@ export default function AuditPage() {
       .queryAudit({
         entityType: debounced.entityType.trim() || undefined,
         entityId: debounced.entityId.trim() || undefined,
-        actorId: debounced.actorId.trim() ? Number(debounced.actorId.trim()) : undefined,
+        actorQuery: debounced.actorQuery.trim() || undefined,
         action: debounced.action.trim() || undefined,
         dateFrom: fromDatetimeLocal(debounced.dateFrom) ?? undefined,
         dateTo: fromDatetimeLocal(debounced.dateTo) ?? undefined,
@@ -138,7 +143,11 @@ export default function AuditPage() {
     {
       id: "action",
       header: t("colAction"),
-      cell: (r) => <span className="font-mono text-xs">{r.action}</span>,
+      cell: (r) => (
+        <Badge variant="secondary" className="font-mono text-xs">
+          {r.action}
+        </Badge>
+      ),
     },
     {
       id: "entity",
@@ -167,8 +176,9 @@ export default function AuditPage() {
             href={`/users/${r.actor_id}`}
             className="text-sm hover:underline"
             onClick={(e) => e.stopPropagation()}
+            title={`#${r.actor_id}`}
           >
-            #{r.actor_id}
+            {actorLabel(r) ?? `#${r.actor_id}`}
           </Link>
         ) : (
           <span className="text-muted-foreground text-sm">{t("systemActor")}</span>
@@ -232,15 +242,15 @@ export default function AuditPage() {
           />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="audit-actor-id" className="text-muted-foreground text-xs">
+          <Label htmlFor="audit-actor" className="text-muted-foreground text-xs">
             {t("actorUserIdLabel")}
           </Label>
           <Input
-            id="audit-actor-id"
-            type="number"
-            value={filters.actorId}
-            onChange={(e) => setFilters((f) => ({ ...f, actorId: e.target.value }))}
-            className="h-9 w-28"
+            id="audit-actor"
+            value={filters.actorQuery}
+            onChange={(e) => setFilters((f) => ({ ...f, actorQuery: e.target.value }))}
+            placeholder={`${t("egPrefix")} Daniel, daniel@...`}
+            className="h-9 w-44"
           />
         </div>
         <div className="space-y-1">
@@ -339,11 +349,35 @@ export default function AuditPage() {
                 <dd className="break-words">{selected.source ?? "—"}</dd>
               </div>
               <div>
+                <dt className="text-muted-foreground text-xs">{t("colEntity")}</dt>
+                <dd className="break-words">
+                  {selected.entity_type === "user" ? (
+                    <Link
+                      href={`/users/${selected.entity_id}`}
+                      className="hover:underline"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {t("userInline", { id: selected.entity_id })}
+                    </Link>
+                  ) : (
+                    `${selected.entity_type} #${selected.entity_id}`
+                  )}
+                </dd>
+              </div>
+              <div>
                 <dt className="text-muted-foreground text-xs">{t("colActor")}</dt>
                 <dd className="break-words">
-                  {selected.actor_id
-                    ? t("userInline", { id: selected.actor_id })
-                    : t("systemActor")}
+                  {selected.actor_id ? (
+                    <Link
+                      href={`/users/${selected.actor_id}`}
+                      className="hover:underline"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {actorLabel(selected) ?? `#${selected.actor_id}`}
+                    </Link>
+                  ) : (
+                    t("systemActor")
+                  )}
                 </dd>
               </div>
               <div>
