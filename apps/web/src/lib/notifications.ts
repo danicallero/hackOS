@@ -69,6 +69,9 @@ export const STATIC_CATEGORIES = ["announcements", "application", "schedule"];
 export interface AuditRow {
   id: number;
   actor_id: number | null;
+  actor_name: string | null;
+  actor_surname: string | null;
+  actor_email: string | null;
   entity_type: string;
   entity_id: string;
   action: string;
@@ -85,6 +88,7 @@ export interface AuditFilters {
   entityType?: string;
   entityId?: string;
   actorId?: number;
+  actorQuery?: string;
   action?: string;
   dateFrom?: string;
   dateTo?: string;

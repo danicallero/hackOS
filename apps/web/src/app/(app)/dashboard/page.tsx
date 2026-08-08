@@ -21,7 +21,6 @@ import { StatusBadge } from "@/components/common/status-badge";
 import type { PublicAnnouncement, PublicEvent } from "@/components/public/public-types";
 import { EventPhaseDisplay, useEventPhase } from "@/components/public/timer";
 import { Button } from "@/components/ui/button";
-import { SidebarTrigger } from "@/components/ui/sidebar";
 import { ApiError, api } from "@/lib/api";
 import { LOCALE_CODES, useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem } from "@/lib/logistics";
@@ -262,7 +261,6 @@ export default function DashboardPage() {
             </Button>
           ) : undefined
         }
-        secondaryActions={<SidebarTrigger aria-label={t("moreWorkspaces")} />}
       />
 
       {loading ? (
@@ -318,6 +316,8 @@ export default function DashboardPage() {
                     </p>
                   )}
                 </div>
+              ) : data.schedule.length === 0 ? (
+                <EmptyState icon={CalendarDaysIcon} title={t("eventTimingPending")} />
               ) : (
                 <EmptyState icon={CalendarDaysIcon} title={t("noUpcomingSchedule")} />
               )}

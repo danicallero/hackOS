@@ -1,16 +1,18 @@
 "use client";
 
-// Application form detail (H11–H15). Up to four tabs, gated per capability:
+// Application form detail (H11–H15, H57). Up to four tabs, gated per capability:
 //   • Form (applications:manage) — edit metadata (window, quota, type) and a
 //     questions editor (add/remove/reorder template fields with i18n labels).
 //     Persists via PATCH /api/applications/:id.
 //   • Review (applications:review) — submitted responses: my-review score/
 //     notes, shared staff-notes, and (for deciders) the accept/reject call.
-//   • Outbox / Sent decisions (applications:decide) — internal decisions not
-//     yet sent vs. every already-communicated final status, with
-//     send/resend/re-accept/revoke/confirm-override actions gated by each
-//     row's actual status (see ../workflow.ts). Optional stats strip needs
-//     logistics:stats.
+//   • Outbox / Sent decisions (applications:review OR applications:decide) —
+//     internal decisions not yet sent vs. every already-communicated final
+//     status. A reviewer without applications:decide sees the same rows
+//     read-only: ResponsesTab and ReviewModal both already gate every
+//     send/resend/re-accept/revoke/confirm-override action strictly on
+//     applications:decide, so widening tab *visibility* to reviewers doesn't
+//     widen what they can do (H57). Optional stats strip needs logistics:stats.
 //
 // NOTE: the applications template uses templateFieldSchema (FIELD_KINDS), not
 // the judging questionSchema. i18n labels carry {en,es,gl} (plan/07 §2).
@@ -54,12 +56,15 @@ export default function ApplicationDetailPage() {
   const canReview = useCan(CAPABILITIES.APPLICATIONS_REVIEW);
   const canDecide = useCan(CAPABILITIES.APPLICATIONS_DECIDE);
   const canStats = useCan(CAPABILITIES.LOGISTICS_STATS);
+  // H57: a reviewer can see the outbox/sent rows read-only, not just deciders —
+  // ResponsesTab/ReviewModal independently gate every actual action on canDecide.
+  const canSeeDecisions = canReview || canDecide;
   const applicationTabs = [
     "overview",
     canManage ? "builder" : null,
     canReview ? "review" : null,
-    canDecide ? "outbox" : null,
-    canDecide ? "sent" : null,
+    canSeeDecisions ? "outbox" : null,
+    canSeeDecisions ? "sent" : null,
   ].filter(
     (value): value is "overview" | "builder" | "review" | "outbox" | "sent" => value !== null,
   );
@@ -204,8 +209,10 @@ export default function ApplicationDetailPage() {
             <TabsTrigger value="overview">{t("tabOverview")}</TabsTrigger>
             {canManage && <TabsTrigger value="builder">{t("formTabLabel")}</TabsTrigger>}
             {canReview && <TabsTrigger value="review">{t("workspaceReview")}</TabsTrigger>}
-            {canDecide && <TabsTrigger value="outbox">{t("workspaceOutbox")}</TabsTrigger>}
-            {canDecide && <TabsTrigger value="sent">{t("workspaceSentDecisions")}</TabsTrigger>}
+            {canSeeDecisions && <TabsTrigger value="outbox">{t("workspaceOutbox")}</TabsTrigger>}
+            {canSeeDecisions && (
+              <TabsTrigger value="sent">{t("workspaceSentDecisions")}</TabsTrigger>
+            )}
           </TabBar>
 
           <TabsContent value="overview" className="pt-2">
@@ -275,12 +282,12 @@ export default function ApplicationDetailPage() {
               <ResponsesTab id={id} template={form?.template ?? null} workspace="review" />
             </TabsContent>
           )}
-          {canDecide && (
+          {canSeeDecisions && (
             <TabsContent value="outbox" className="pt-2">
               <ResponsesTab id={id} template={form?.template ?? null} workspace="outbox" />
             </TabsContent>
           )}
-          {canDecide && (
+          {canSeeDecisions && (
             <TabsContent value="sent" className="pt-2">
               <ResponsesTab id={id} template={form?.template ?? null} workspace="sent" />
             </TabsContent>

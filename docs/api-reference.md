@@ -209,7 +209,11 @@ action, before?, after? })` from `lib/audit.ts` **inside the same transaction**
 as the domain write it's recording — never as a fire-and-forget side effect
 after commit, so the audit row and the mutation it describes can never
 diverge. Read access to the resulting trail is itself capability-gated
-(`audit:read`) via `GET /api/audit`.
+(`audit:read`) via `GET /api/audit`. Each row is left-joined to `users` so the
+response carries `actor_name`/`actor_surname`/`actor_email` alongside the raw
+`actor_id` (null for system-originated rows); the query surface also accepts
+an `actorQuery` filter that matches actor name/email instead of requiring the
+numeric id.
 
 ### Concurrency & idempotency (`plan/07` §2)
 State transitions (queue actions, confirmations, badge/ticket mutations,

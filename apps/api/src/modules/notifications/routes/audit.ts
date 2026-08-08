@@ -19,7 +19,7 @@ export function registerAuditRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Query audit log",
         description:
-          "Filtered, paginated read view over H53 audit events for sensitive mutations (announcements, preferences, etc).",
+          "Filtered, paginated read view over H53 audit events for sensitive mutations (announcements, preferences, etc). Each row includes the acting user's name/surname/email (actor_name/actor_surname/actor_email) alongside actor_id, resolved via a left join so system-originated rows (actor_id null) still return.",
         querystring: auditQuerySchema,
       },
     },

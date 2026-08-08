@@ -38,6 +38,9 @@ export interface TemplateFieldLike {
   options?: { value: string; label: I18nText }[];
   allowed_file_types?: string[];
   max_file_size_mb?: number;
+  /** For kind "file": lets the applicant consent to sharing this upload with
+   *  sponsors (H56); see sponsorShareKey for the response-key convention. */
+  shareable_with_sponsors?: boolean;
 }
 
 const NONE = "__none__";
@@ -58,6 +61,8 @@ export function TemplateFieldControl({
   error,
   applicationId,
   inDialog = false,
+  sharedWithSponsors,
+  onSharedWithSponsorsChange,
 }: {
   field: TemplateFieldLike;
   value: FieldValue;
@@ -72,6 +77,14 @@ export function TemplateFieldControl({
    */
   applicationId?: number;
   inDialog?: boolean;
+  /**
+   * H56: whether the applicant has consented to share this "file" field's
+   * upload with sponsors. Only rendered when field.shareable_with_sponsors —
+   * a checkbox when applicationId is set (applicant editing), a read-only
+   * badge otherwise (staff view).
+   */
+  sharedWithSponsors?: boolean;
+  onSharedWithSponsorsChange?: (value: boolean) => void;
 }) {
   const { t } = useLocale();
   const label = pickText(field.label, lang);
@@ -228,30 +241,55 @@ export function TemplateFieldControl({
         />
       );
       break;
-    case "file":
+    case "file": {
       // Applicant (applicationId set): upload. Staff editing: read-only link.
-      control =
-        applicationId != null ? (
-          <FileUploadField
-            applicationId={applicationId}
-            fieldKey={field.key}
-            value={typeof value === "string" ? value : ""}
-            onChange={(url) => onChange(url)}
-            allowedTypes={field.allowed_file_types}
-            maxSizeMb={field.max_file_size_mb}
-            disabled={disabled}
-            id={id}
-            aria-label={t("chooseFileForField", { field: label })}
-            aria-labelledby={labelId}
-            aria-describedby={describedBy}
-            aria-invalid={hasError || undefined}
-          />
-        ) : value ? (
-          <FileLink value={String(value)} />
-        ) : (
-          <p className="text-muted-foreground text-sm">{t("noFileUploadedPeriod")}</p>
-        );
+      const shareId = `${id}-shared-with-sponsors`;
+      control = (
+        <div className="space-y-2">
+          {applicationId != null ? (
+            <FileUploadField
+              applicationId={applicationId}
+              fieldKey={field.key}
+              value={typeof value === "string" ? value : ""}
+              onChange={(url) => onChange(url)}
+              allowedTypes={field.allowed_file_types}
+              maxSizeMb={field.max_file_size_mb}
+              disabled={disabled}
+              id={id}
+              aria-label={t("chooseFileForField", { field: label })}
+              aria-labelledby={labelId}
+              aria-describedby={describedBy}
+              aria-invalid={hasError || undefined}
+            />
+          ) : value ? (
+            <FileLink value={String(value)} />
+          ) : (
+            <p className="text-muted-foreground text-sm">{t("noFileUploadedPeriod")}</p>
+          )}
+          {field.shareable_with_sponsors &&
+            (applicationId != null ? (
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id={shareId}
+                  checked={sharedWithSponsors === true}
+                  onCheckedChange={(c) => onSharedWithSponsorsChange?.(c === true)}
+                  disabled={disabled}
+                />
+                <Label htmlFor={shareId} className="text-sm font-normal">
+                  {t("shareWithSponsorsConsentLabel")}
+                </Label>
+              </div>
+            ) : value ? (
+              <p className="text-muted-foreground text-xs">
+                {sharedWithSponsors
+                  ? t("shareWithSponsorsStaffYes")
+                  : t("shareWithSponsorsStaffNo")}
+              </p>
+            ) : null)}
+        </div>
+      );
       break;
+    }
     case "university":
       // The API stores/validates a university as a numeric id; the picker works
       // in string ids — convert on the way in and out.

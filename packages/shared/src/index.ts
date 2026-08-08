@@ -1,4 +1,5 @@
 export * from "./activity-kinds.js";
+export * from "./applications.js";
 export * from "./capabilities.js";
 export * from "./events.js";
 export * from "./questions.js";
