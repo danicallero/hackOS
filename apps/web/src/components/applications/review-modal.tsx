@@ -6,6 +6,7 @@
 // the same modal from a person's profile; a route's page.tsx must not be
 // imported by another route.
 
+import { sponsorShareKey } from "@hackos/shared/applications";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { FileTextIcon, LockIcon, PencilIcon, SendIcon } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -93,11 +94,14 @@ export function AnswerValue({
   value,
   universities,
   lang,
+  sharedWithSponsors,
 }: {
   field: TemplateField;
   value: unknown;
   universities: { id: number; name: string }[];
   lang: Language;
+  /** H56: applicant's consent to share this "file" field's upload with sponsors. */
+  sharedWithSponsors?: boolean;
 }) {
   const { t } = useLocale();
   // A file-url is a link the applicant typed: show the URL itself so staff can
@@ -116,7 +120,16 @@ export function AnswerValue({
     );
   }
   if (field.kind === "file" && typeof value === "string" && value) {
-    return <FileLink value={value} />;
+    return (
+      <div className="space-y-1">
+        <FileLink value={value} />
+        {field.shareable_with_sponsors && (
+          <p className="text-muted-foreground text-xs">
+            {sharedWithSponsors ? t("shareWithSponsorsStaffYes") : t("shareWithSponsorsStaffNo")}
+          </p>
+        )}
+      </div>
+    );
   }
   const rendered = renderAnswer(field, value, universities, lang, t);
   return <span className="whitespace-pre-wrap">{rendered}</span>;
@@ -331,6 +344,10 @@ export function ReviewModal({
                   applicationId={applicationId}
                   value={editValues[f.key] as FieldValue}
                   onChange={(v) => setEditValues((prev) => ({ ...prev, [f.key]: v }))}
+                  sharedWithSponsors={editValues[sponsorShareKey(f.key)] === true}
+                  onSharedWithSponsorsChange={(v) =>
+                    setEditValues((prev) => ({ ...prev, [sponsorShareKey(f.key)]: v }))
+                  }
                   lang={lang}
                   inDialog
                 />
@@ -363,6 +380,7 @@ export function ReviewModal({
                       value={response.responses[f.key]}
                       universities={universities}
                       lang={lang}
+                      sharedWithSponsors={response.responses[sponsorShareKey(f.key)] === true}
                     />
                   </div>
                 </div>

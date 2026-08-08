@@ -7246,6 +7246,38 @@ const dict: Record<string, I18nText> = {
     gl: "Restricións do ficheiro",
     en: "File restrictions",
   },
+  shareableWithSponsorsLabel: {
+    es: "Compartible con patrocinadores",
+    gl: "Compartible con patrocinadores",
+    en: "Shareable with sponsors",
+  },
+  shareableWithSponsorsDesc: {
+    es: "Si se activa, quien complete este campo podrá autorizar que compartamos su archivo con patrocinadores.",
+    gl: "Se se activa, quen complete este campo poderá autorizar que compartamos o seu ficheiro con patrocinadores.",
+    en: "When enabled, whoever fills in this field can authorise us to share their file with sponsors.",
+  },
+  shareWithSponsorsConsentLabel: {
+    es: "Permito que la organización comparta este archivo con patrocinadores",
+    gl: "Permito que a organización comparta este ficheiro con patrocinadores",
+    en: "Allow organizers to share this file with sponsors",
+  },
+  shareWithSponsorsStaffYes: {
+    es: "La persona solicitante autorizó compartir este archivo con patrocinadores",
+    gl: "A persoa solicitante autorizou compartir este ficheiro con patrocinadores",
+    en: "The applicant authorised sharing this file with sponsors",
+  },
+  shareWithSponsorsStaffNo: {
+    es: "La persona solicitante no autorizó compartir este archivo con patrocinadores",
+    gl: "A persoa solicitante non autorizou compartir este ficheiro con patrocinadores",
+    en: "The applicant did not authorise sharing this file with sponsors",
+  },
+  exportFiles: { es: "Exportar archivos", gl: "Exportar ficheiros", en: "Export files" },
+  exportAllFiles: { es: "Exportar todos", gl: "Exportar todos", en: "Export all" },
+  exportSharedFiles: {
+    es: "Exportar solo compartibles",
+    gl: "Exportar só compartibles",
+    en: "Export shareable only",
+  },
   formCouldNotBeLoaded: {
     es: "No se ha podido cargar este formulario de solicitud.",
     gl: "Non se puido cargar este formulario de solicitude.",

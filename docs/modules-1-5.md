@@ -275,5 +275,52 @@ alias of `review`, see above).
 
 ---
 
+## Module 7 — Sponsor-shareable file fields & bulk export (H56)
+
+**Schema.** None new — reuses the existing jsonb columns. A "file" template
+field on `applications.template` may now carry
+`shareable_with_sponsors: boolean`
+(`apps/api/src/modules/applications/schemas.ts:templateFieldSchema`), the same
+way `allowed_file_types`/`max_file_size_mb` already do. An applicant's consent
+to share a given upload is stored as a sibling key in the response's
+free-form `application_responses.responses` jsonb, next to the file's own
+storage-key value:
+`` `${fieldKey}__shared_with_sponsors` -> boolean `` (the convention lives in
+`packages/shared/src/applications.ts:sponsorShareKey`, imported by both API and
+web so the suffix never drifts). The stored file value itself is never
+changed — it stays the plain string object key it always was.
+
+**Endpoints.**
+- `service.ts:validateResponses` — for a "file" field the organizer marked
+  `shareable_with_sponsors`, the sibling consent key (if present) must be a
+  boolean; it's optional, never `required`.
+- `GET /api/applications/:id/fields/:fieldKey/files.zip?scope=all|shared`
+  (`apps/api/src/modules/applications/files-export.routes.ts`, gated by
+  `exports:run`) — streams a zip (via `archiver`) of every uploaded file for
+  that field, one entry per applicant named `<email><ext>`. `scope=shared`
+  filters to responses where the sibling consent key is `true`, and 400s if
+  the field isn't marked `shareable_with_sponsors`. Each call writes an
+  `audit_log` row (`application_field_export`).
+
+**UI (`apps/web`).**
+- `(app)/applications/[id]/questions-card.tsx` `FileRestrictionsEditor` — a
+  "Shareable with sponsors" switch alongside the existing file-restriction
+  inputs; `QuestionsCard.save()` includes it in the file-kind PATCH whitelist.
+- `components/common/template-field-control.tsx` — for a "file" field marked
+  shareable, renders a consent checkbox under the upload widget in
+  applicant-editable contexts, or a read-only "shared/not shared" note in
+  staff-only contexts.
+- `components/applications/review-modal.tsx` `AnswerValue` — shows the same
+  read-only consent note next to a submitted file answer.
+- `(app)/applications/[id]/responses-tab.tsx` — an "Export files" menu (only
+  for staff holding `exports:run`, and only when the form has at least one
+  file field) offers "Export all" and, for shareable fields, "Export
+  shareable only", linking straight to the zip endpoint.
+
+**State transitions.** None — this is response metadata and a read-only bulk
+export, not a status transition.
+
+---
+
 See [background-workers.md](./background-workers.md) for which of the above run
 synchronously in the request vs. are handed to a worker.

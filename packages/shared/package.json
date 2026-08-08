@@ -7,6 +7,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./activity-kinds": "./src/activity-kinds.ts",
+    "./applications": "./src/applications.ts",
     "./capabilities": "./src/capabilities.ts",
     "./events": "./src/events.ts",
     "./questions": "./src/questions.ts",

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * Zod schemas for the applications module (H11-H15, H27).
+ * Zod schemas for the applications module (H11-H15, H27, H56).
  *
  * The application `template` is a form schema: an ordered array of field
  * definitions the client renders dynamically. Response values are keyed by
@@ -47,6 +47,9 @@ export const templateFieldSchema = z
     options: z.array(optionSchema).optional(),
     allowed_file_types: z.array(z.string()).optional(),
     max_file_size_mb: z.number().int().positive().optional(),
+    /** File fields only (H56): lets an applicant consent to sharing this
+     *  upload with sponsors; see sponsorShareKey for the response convention. */
+    shareable_with_sponsors: z.boolean().optional(),
   })
   .refine(
     (f) => !(f.kind === "select" || f.kind === "multiselect") || (f.options?.length ?? 0) > 0,

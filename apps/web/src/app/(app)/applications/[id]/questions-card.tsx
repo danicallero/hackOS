@@ -189,6 +189,7 @@ export function QuestionsCard({
                   ? { allowed_file_types: f.allowed_file_types }
                   : {}),
                 ...(f.max_file_size_mb ? { max_file_size_mb: f.max_file_size_mb } : {}),
+                ...(f.shareable_with_sponsors ? { shareable_with_sponsors: true } : {}),
               }
             : {}),
         })),
@@ -593,42 +594,55 @@ export function FileRestrictionsEditor({
 }) {
   const { t } = useLocale();
   return (
-    <div className="border-border grid gap-4 rounded-md border border-dashed p-3 sm:grid-cols-2">
-      <div className="space-y-1.5">
-        <Label htmlFor="allowed-file-types" className="text-muted-foreground text-xs uppercase">
-          {t("allowedFileTypesLabel")}
-        </Label>
-        <Input
-          id="allowed-file-types"
-          value={(field.allowed_file_types ?? []).join(", ")}
-          onChange={(e) =>
-            onChange({
-              allowed_file_types: e.target.value
-                .split(",")
-                .map((s) => s.trim().toLowerCase())
-                .filter(Boolean),
-            })
-          }
-          placeholder=".pdf, .png, .jpg"
-        />
-        <p className="text-muted-foreground text-xs">{t("allowedFileTypesDesc")}</p>
+    <div className="space-y-4">
+      <div className="border-border grid gap-4 rounded-md border border-dashed p-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="allowed-file-types" className="text-muted-foreground text-xs uppercase">
+            {t("allowedFileTypesLabel")}
+          </Label>
+          <Input
+            id="allowed-file-types"
+            value={(field.allowed_file_types ?? []).join(", ")}
+            onChange={(e) =>
+              onChange({
+                allowed_file_types: e.target.value
+                  .split(",")
+                  .map((s) => s.trim().toLowerCase())
+                  .filter(Boolean),
+              })
+            }
+            placeholder=".pdf, .png, .jpg"
+          />
+          <p className="text-muted-foreground text-xs">{t("allowedFileTypesDesc")}</p>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="max-file-size-mb" className="text-muted-foreground text-xs uppercase">
+            {t("maxSizeMbLabel")}
+          </Label>
+          <Input
+            id="max-file-size-mb"
+            type="number"
+            min={1}
+            value={field.max_file_size_mb ?? ""}
+            onChange={(e) =>
+              onChange({ max_file_size_mb: e.target.value ? Number(e.target.value) : undefined })
+            }
+            placeholder="10"
+          />
+          <p className="text-muted-foreground text-xs">{t("blankMax10MbDesc")}</p>
+        </div>
       </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="max-file-size-mb" className="text-muted-foreground text-xs uppercase">
-          {t("maxSizeMbLabel")}
-        </Label>
-        <Input
-          id="max-file-size-mb"
-          type="number"
-          min={1}
-          value={field.max_file_size_mb ?? ""}
-          onChange={(e) =>
-            onChange({ max_file_size_mb: e.target.value ? Number(e.target.value) : undefined })
-          }
-          placeholder="10"
+      <div className="flex items-center gap-2">
+        <Switch
+          checked={field.shareable_with_sponsors ?? false}
+          onCheckedChange={(v) => onChange({ shareable_with_sponsors: v })}
+          id="shareable-with-sponsors"
         />
-        <p className="text-muted-foreground text-xs">{t("blankMax10MbDesc")}</p>
+        <Label htmlFor="shareable-with-sponsors" className="text-sm">
+          {t("shareableWithSponsorsLabel")}
+        </Label>
       </div>
+      <p className="text-muted-foreground text-xs">{t("shareableWithSponsorsDesc")}</p>
     </div>
   );
 }
