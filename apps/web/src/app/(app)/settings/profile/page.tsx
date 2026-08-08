@@ -7,6 +7,7 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 import { MultiSelect } from "@/components/common/multi-select";
+import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
 import { SubmitButton } from "@/components/common/submit-button";
 import {
@@ -123,6 +124,7 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
 
   return (
     <div className="space-y-6">
+      <PageHeader title={t("myProfile")} />
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)}>
           <SectionCard

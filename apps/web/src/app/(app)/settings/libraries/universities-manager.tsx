@@ -13,6 +13,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { AlertModal } from "@/components/common/alert-modal";
 import type { Column } from "@/components/common/data-table";
 import { DataTable } from "@/components/common/data-table";
 import { Modal } from "@/components/common/modal";
@@ -262,26 +263,19 @@ export function UniversitiesManager() {
       </Modal>
 
       {/* Delete confirm */}
-      <Modal
+      <AlertModal
         open={deleteTarget !== null}
         onOpenChange={(o) => !o && setDeleteTarget(null)}
         title={t("deleteUniversityTitle")}
         description={
-          deleteTarget ? t("removeFromDirectoryInline", { name: deleteTarget.name }) : undefined
+          deleteTarget ? t("removeFromDirectoryInline", { name: deleteTarget.name }) : ""
         }
-        footer={
-          <>
-            <Button type="button" variant="outline" onClick={() => setDeleteTarget(null)}>
-              {t("cancel")}
-            </Button>
-            <Button variant="destructive" disabled={deleting} onClick={onDelete}>
-              {t("deleteAction")}
-            </Button>
-          </>
-        }
-      >
-        <span className="sr-only">{t("confirmDeletionAria")}</span>
-      </Modal>
+        cancelLabel={t("cancel")}
+        confirmLabel={t("deleteAction")}
+        destructive
+        pending={deleting}
+        onConfirm={onDelete}
+      />
     </div>
   );
 }

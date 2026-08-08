@@ -24,13 +24,24 @@ import { MarqueeText } from "./marquee-text";
 export function TvScreen({
   children,
   className,
+  fill = false,
 }: {
   children: React.ReactNode | ((layout: { portrait: boolean }) => React.ReactNode);
   className?: string;
+  /** Renders into its parent's box instead of the viewport — the TV control
+   * page's draft preview embeds the real kiosk view at preview size rather
+   * than reimplementing its layout. */
+  fill?: boolean;
 }) {
   const { ref, scale, portrait } = useTvScale();
   return (
-    <div ref={ref} className="bg-background text-foreground h-dvh w-dvw overflow-hidden">
+    <div
+      ref={ref}
+      className={cn(
+        "bg-background text-foreground overflow-hidden",
+        fill ? "h-full w-full" : "h-dvh w-dvw",
+      )}
+    >
       {/* `leading-*` is not cosmetic here: globals.css sets a fixed
           `line-height: 1.25rem` on body, which every `em`-sized TV text would
           otherwise inherit — a 30px paragraph inside a 20px line box, i.e.

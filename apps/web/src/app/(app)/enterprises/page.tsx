@@ -290,7 +290,7 @@ export default function EnterprisesPage() {
       <PageHeader
         title={t("enterprises")}
         description={t("enterprisesDesc")}
-        actions={
+        primaryAction={
           <Button onClick={() => setCreateOpen(true)}>
             <PlusIcon className="size-4" />
             {t("newEnterprise")}

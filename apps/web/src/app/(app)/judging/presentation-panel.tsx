@@ -17,9 +17,9 @@ import { QueueStatusBadge } from "@/components/common/queue-status-badge";
 import { StatusBadge } from "@/components/common/status-badge";
 import { ProjectDescription } from "@/components/projects/project-description";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
+import { Surface } from "@/components/ui/surface";
 import { useLocale } from "@/lib/i18n";
 import { freezeTotalMinutes, presentationTimerState } from "@/lib/judging-workspace";
 import { getRepoChallenges, type QueueEntry, type RepoChallenge, type RoomPace } from "@/lib/queue";
@@ -68,7 +68,10 @@ export function PresentationPanel({
   const canSendBack = isPresenting || isReady;
 
   return (
-    <Card className={cn("gap-0 overflow-hidden p-0", entry && "border-primary/30 bg-primary/5")}>
+    <Surface
+      padding="none"
+      className={cn("overflow-hidden", entry && "border-primary/30 bg-primary/5")}
+    >
       <div className="flex items-start justify-between gap-4 px-5 pt-5 pb-4">
         <div className="min-w-0">
           <h2 className="truncate text-xl font-semibold text-balance">
@@ -176,7 +179,7 @@ export function PresentationPanel({
           </>
         )}
       </div>
-    </Card>
+    </Surface>
   );
 }
 

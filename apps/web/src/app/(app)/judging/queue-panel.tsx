@@ -17,7 +17,6 @@ import {
 import { useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,6 +25,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
+import { Surface } from "@/components/ui/surface";
 import { useLocale } from "@/lib/i18n";
 import { hasWaitedTooLong } from "@/lib/judging-workspace";
 import type {
@@ -161,7 +161,7 @@ export function QueuePanel({
   const trimmed = query.trim();
 
   return (
-    <Card className="gap-0 overflow-hidden p-0">
+    <Surface padding="none" className="overflow-hidden">
       <QueueStatsCard progress={progress} pace={pace} />
       <Separator />
       <div className="space-y-5 p-5">
@@ -287,7 +287,7 @@ export function QueuePanel({
           />
         </div>
       </div>
-    </Card>
+    </Surface>
   );
 }
 

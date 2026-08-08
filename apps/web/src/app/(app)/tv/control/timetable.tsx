@@ -1,8 +1,10 @@
 "use client";
 
 import { CalendarClockIcon, PlusIcon, Trash2Icon } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { AlertModal } from "@/components/common/alert-modal";
+import { ContextualError } from "@/components/common/contextual-error";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
@@ -19,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError } from "@/lib/api";
 import { formatScheduledDateTime, fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
@@ -86,18 +89,38 @@ function isRunning(slot: TvSlot, now: number) {
   return new Date(slot.startsAt).getTime() <= now && new Date(slot.endsAt).getTime() > now;
 }
 
+/**
+ * Overlaps are legal (see the module docblock), but a slot created without
+ * realizing it steps on another one is still the most likely way to break a
+ * schedule during a live event. Surfaced as an inline warning, not blocked.
+ */
+function findOverlaps(draft: Draft, slots: TvSlot[] | null): TvSlot[] {
+  const start = fromDatetimeLocal(draft.startsAt);
+  const end = fromDatetimeLocal(draft.endsAt);
+  if (!start || !end || !slots) return [];
+  const startMs = new Date(start).getTime();
+  const endMs = new Date(end).getTime();
+  if (endMs <= startMs) return [];
+  return slots.filter((slot) => {
+    if (slot.id === draft.id) return false;
+    return new Date(slot.startsAt).getTime() < endMs && new Date(slot.endsAt).getTime() > startMs;
+  });
+}
+
 export function Timetable({
   modes,
   onChanged,
 }: {
-  modes: Array<{ value: TvControlMode; label: string }>;
+  modes: Array<{ value: TvControlMode; label: string; detail?: string }>;
   onChanged: () => void;
 }) {
   const { t } = useLocale();
   const [slots, setSlots] = useState<TvSlot[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const hasLoadedRef = useRef(false);
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 30_000);
@@ -108,8 +131,15 @@ export function Timetable({
     try {
       const { items } = await listTvSlots();
       setSlots(items);
+      setLoadError(null);
+      hasLoadedRef.current = true;
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadTvTimetable"));
+      const message = err instanceof ApiError ? err.message : t("couldNotLoadTvTimetable");
+      // Same rule as the parent page: a background refresh failure still has
+      // a list on screen and just toasts; a failed first load blocks the
+      // region instead of rendering a silently-empty list.
+      if (!hasLoadedRef.current) setLoadError(message);
+      else toast.error(message);
     }
   }, [t]);
 
@@ -166,6 +196,33 @@ export function Timetable({
   }
 
   const modeLabel = (mode: TvModeName) => modes.find((item) => item.value === mode)?.label ?? mode;
+  const slotName = (slot: TvSlot) =>
+    slot.label || slot.items.map((item) => modeLabel(item.mode)).join(" · ");
+
+  function applyDuration(minutes: number) {
+    if (!draft) return;
+    const start = fromDatetimeLocal(draft.startsAt);
+    if (!start) return;
+    const end = new Date(new Date(start).getTime() + minutes * 60_000);
+    setDraft({ ...draft, endsAt: toDatetimeLocal(end.toISOString()) });
+  }
+
+  function applyRestOfDay() {
+    if (!draft) return;
+    const start = fromDatetimeLocal(draft.startsAt);
+    if (!start) return;
+    const startDate = new Date(start);
+    const endOfDay = new Date(
+      startDate.getFullYear(),
+      startDate.getMonth(),
+      startDate.getDate(),
+      23,
+      59,
+    );
+    setDraft({ ...draft, endsAt: toDatetimeLocal(endOfDay.toISOString()) });
+  }
+
+  const overlaps = draft ? findOverlaps(draft, slots) : [];
 
   return (
     <>
@@ -180,7 +237,14 @@ export function Timetable({
           </Button>
         }
       >
-        {slots && slots.length === 0 ? (
+        {loadError && !slots ? (
+          <ContextualError message={loadError} onRetry={() => void load()} />
+        ) : slots === null ? (
+          <div className="space-y-3 py-1">
+            <Skeleton className="h-14 w-full" />
+            <Skeleton className="h-14 w-full" />
+          </div>
+        ) : slots.length === 0 ? (
           <EmptyState
             icon={CalendarClockIcon}
             title={t("tvTimetableEmptyTitle")}
@@ -188,13 +252,11 @@ export function Timetable({
           />
         ) : (
           <ul className="divide-y">
-            {(slots ?? []).map((slot) => (
+            {slots.map((slot) => (
               <li key={slot.id} className="flex flex-wrap items-center gap-3 py-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium">
-                      {slot.label || slot.items.map((item) => modeLabel(item.mode)).join(" · ")}
-                    </span>
+                    <span className="font-medium">{slotName(slot)}</span>
                     {isRunning(slot, now) && (
                       <StatusBadge tone="success">{t("slotRunningNow")}</StatusBadge>
                     )}
@@ -217,15 +279,25 @@ export function Timetable({
                   <Button variant="outline" size="sm" onClick={() => setDraft(draftFrom(slot))}>
                     {t("edit")}
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={busy}
-                    aria-label={t("deleteSlot")}
-                    onClick={() => void remove(slot)}
-                  >
-                    <Trash2Icon aria-hidden="true" />
-                  </Button>
+                  <AlertModal
+                    title={t("deleteSlotConfirmTitle")}
+                    description={t("deleteSlotConfirmDesc")}
+                    cancelLabel={t("cancel")}
+                    confirmLabel={t("deleteSlot")}
+                    destructive
+                    pending={busy}
+                    trigger={
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={busy}
+                        aria-label={t("deleteSlot")}
+                      >
+                        <Trash2Icon aria-hidden="true" />
+                      </Button>
+                    }
+                    onConfirm={() => void remove(slot)}
+                  />
                 </div>
               </li>
             ))}
@@ -253,16 +325,17 @@ export function Timetable({
       >
         {draft && (
           <div className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div className="grid gap-2">
-                <Label htmlFor="slot-label">{t("slotLabel")}</Label>
-                <Input
-                  id="slot-label"
-                  value={draft.label}
-                  placeholder={t("slotLabelPlaceholder")}
-                  onChange={(event) => setDraft({ ...draft, label: event.target.value })}
-                />
-              </div>
+            <div className="grid gap-2">
+              <Label htmlFor="slot-label">{t("slotLabel")}</Label>
+              <Input
+                id="slot-label"
+                value={draft.label}
+                placeholder={t("slotLabelPlaceholder")}
+                onChange={(event) => setDraft({ ...draft, label: event.target.value })}
+              />
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
               <div className="grid gap-2">
                 <Label htmlFor="slot-start">{t("colStarts")}</Label>
                 <DateTimeInput
@@ -280,6 +353,46 @@ export function Timetable({
                 />
               </div>
             </div>
+
+            <div className="grid gap-2">
+              <p className="text-sm font-medium">{t("quickDurationLabel")}</p>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => applyDuration(30)}>
+                  {t("duration30Min")}
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => applyDuration(60)}>
+                  {t("duration1Hour")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => applyDuration(120)}
+                >
+                  {t("duration2Hours")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => applyDuration(240)}
+                >
+                  {t("duration4Hours")}
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={applyRestOfDay}>
+                  {t("durationRestOfDay")}
+                </Button>
+              </div>
+            </div>
+
+            {overlaps.length > 0 && (
+              <div
+                role="status"
+                className="border-warning/40 bg-warning/10 text-warning-foreground rounded-md border p-3 text-sm"
+              >
+                {t("slotOverlapsExisting", { labels: overlaps.map(slotName).join(", ") })}
+              </div>
+            )}
 
             <fieldset className="space-y-3">
               <legend className="text-sm font-medium">{t("slotContent")}</legend>
@@ -317,6 +430,11 @@ export function Timetable({
                           ))}
                         </SelectContent>
                       </Select>
+                      {modes.find((m) => m.value === item.mode)?.detail && (
+                        <p className="text-muted-foreground text-sm">
+                          {modes.find((m) => m.value === item.mode)?.detail}
+                        </p>
+                      )}
                     </div>
                     {draft.items.length > 1 && (
                       <>

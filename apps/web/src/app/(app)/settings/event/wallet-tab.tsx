@@ -258,9 +258,7 @@ function PassPreview({
 
   return (
     <div className="rounded-lg border p-4">
-      <p className="text-muted-foreground mb-3 text-xs uppercase tracking-wide">
-        {t("walletPreviewLabel")}
-      </p>
+      <p className="text-muted-foreground mb-3 text-xs uppercase">{t("walletPreviewLabel")}</p>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="rounded-md border p-3">
           <p className="text-muted-foreground mb-2 text-xs font-medium">

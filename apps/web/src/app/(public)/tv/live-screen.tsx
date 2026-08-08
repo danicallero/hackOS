@@ -387,6 +387,7 @@ export function LiveScreen({
   sponsors,
   venue,
   announcement,
+  fill = false,
 }: {
   config: LiveScreenConfig;
   event: PublicEvent;
@@ -394,10 +395,12 @@ export function LiveScreen({
   sponsors: PublicSponsor[];
   venue: TvVenueConfig | null;
   announcement?: PublicAnnouncement;
+  /** See `TvScreen`'s `fill` prop — used by the TV control page's draft preview. */
+  fill?: boolean;
 }) {
   const showWifi = config.wifi.show && Boolean(venue?.wifi);
   return (
-    <TvScreen>
+    <TvScreen fill={fill}>
       {({ portrait }) => (
         <>
           <TvHeader eventName={event.name} />

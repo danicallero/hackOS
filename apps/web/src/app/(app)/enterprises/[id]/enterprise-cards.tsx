@@ -9,7 +9,7 @@ import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Building2Icon, ImageIcon, TrophyIcon, UploadIcon } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -20,6 +20,7 @@ import { Spinner } from "@/components/common/spinner";
 import { SponsorLogo } from "@/components/common/sponsor-logo";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
+import { type UserOption, UserPicker } from "@/components/common/user-picker";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,6 +33,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -46,6 +48,7 @@ import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { API_URL } from "@/lib/env";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
+import type { UserList } from "@/lib/types";
 import {
   type Challenge,
   challengeNextAction,
@@ -205,17 +208,11 @@ interface Member {
   email: string;
   joinedAt: string;
 }
-interface UserSearchResult {
-  id: number;
-  name: string | null;
-  email: string;
-}
 
 export function MembersCard({ enterpriseId }: { enterpriseId: number }) {
   const { t } = useLocale();
   const [members, setMembers] = useState<Member[] | null>(null);
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<UserSearchResult[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState("");
   const [busy, setBusy] = useState(false);
 
   const loadMembers = useCallback(async () => {
@@ -236,28 +233,28 @@ export function MembersCard({ enterpriseId }: { enterpriseId: number }) {
     loadMembers();
   }, [loadMembers, liveRefresh]);
 
-  async function search() {
-    if (!query.trim()) return;
-    try {
-      const r = await api.get<{ users: UserSearchResult[] }>("/api/users", {
-        query: { q: query.trim(), limit: 8 },
-      });
-      setResults(r.users);
-    } catch (err) {
-      toast.error(
-        err instanceof ApiError && err.status === 403
-          ? t("needUsersReadSearch")
-          : t("searchFailedGeneric"),
-      );
-    }
-  }
+  const memberUserIds = useMemo(() => new Set((members ?? []).map((m) => m.userId)), [members]);
+  const searchAvailableUsers = useCallback(
+    async (query: string): Promise<UserOption[]> => {
+      try {
+        const r = await api.get<UserList>("/api/users", {
+          query: { q: query || undefined, limit: 8 },
+        });
+        return r.users.filter((u) => !memberUserIds.has(u.id));
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 403) toast.error(t("needUsersReadSearch"));
+        else toast.error(t("searchFailedGeneric"));
+        return [];
+      }
+    },
+    [memberUserIds, t],
+  );
 
   async function add(userId: number) {
     setBusy(true);
     try {
       await api.post(`/api/enterprises/${enterpriseId}/members`, { userId });
-      setQuery("");
-      setResults([]);
+      setSelectedUserId("");
       await loadMembers();
       toast.success(t("userAffiliated"));
     } catch (err) {
@@ -283,39 +280,26 @@ export function MembersCard({ enterpriseId }: { enterpriseId: number }) {
   return (
     <SectionCard icon={Building2Icon} title={t("affiliatedUsersTitle")}>
       <div className="space-y-4">
-        <div className="flex flex-wrap gap-2">
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                search();
-              }
-            }}
-            placeholder={t("searchUserByNameEmail")}
-            className="h-9 max-w-xs"
-          />
-          <Button variant="outline" size="sm" onClick={search} disabled={busy}>
-            {t("search")}
-          </Button>
+        <div className="space-y-2">
+          <Label htmlFor={`enterprise-member-${enterpriseId}`}>{t("addMemberLabel")}</Label>
+          <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+            <UserPicker
+              id={`enterprise-member-${enterpriseId}`}
+              value={selectedUserId}
+              onChange={setSelectedUserId}
+              search={searchAvailableUsers}
+              minQueryLength={2}
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy || !selectedUserId}
+              onClick={() => add(Number(selectedUserId))}
+            >
+              {t("addAction")}
+            </Button>
+          </div>
         </div>
-
-        {results.length > 0 && (
-          <ul className="divide-border divide-y rounded-md border">
-            {results.map((u) => (
-              <li key={u.id} className="flex items-center gap-3 px-3 py-2">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{u.name ?? u.email}</p>
-                  <p className="text-muted-foreground truncate text-xs">{u.email}</p>
-                </div>
-                <Button size="sm" variant="outline" disabled={busy} onClick={() => add(u.id)}>
-                  {t("addAction")}
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
 
         {members === null ? (
           <div className="flex justify-center py-6">

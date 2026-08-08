@@ -22,6 +22,7 @@ import { Spinner } from "@/components/common/spinner";
 import { StatCard } from "@/components/common/stat-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
@@ -394,7 +395,11 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
                     void doFind();
                   }}
                 >
+                  <Label htmlFor="person-search-find" className="sr-only">
+                    {t("personSearchTitle")}
+                  </Label>
                   <Input
+                    id="person-search-find"
                     value={findQuery}
                     onChange={(e) => setFindQuery(e.target.value)}
                     placeholder={t("personSearchPlaceholder")}

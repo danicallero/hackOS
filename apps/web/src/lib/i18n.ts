@@ -1518,6 +1518,16 @@ const dict: Record<string, I18nText> = {
     en: "Could not delete room.",
   },
   deleteRoom: { es: "Eliminar sala", gl: "Eliminar sala", en: "Delete room" },
+  deleteRoomConfirmTitle: {
+    es: "¿Eliminar esta sala?",
+    gl: "¿Eliminar esta sala?",
+    en: "Delete this room?",
+  },
+  deleteRoomConfirmDesc: {
+    es: "Esta acción no se puede deshacer. Se eliminarán la sala y sus asignaciones de reto y jueces.",
+    gl: "Esta acción non se pode desfacer. Eliminaranse a sala e as súas asignacións de reto e xuíces.",
+    en: "This action cannot be undone. The room and its challenge and judge assignments will be deleted.",
+  },
   saveRoom: { es: "Guardar sala", gl: "Gardar sala", en: "Save room" },
   slugLabel: { es: "Slug", gl: "Slug", en: "Slug" },
   locationLabel: { es: "Ubicación", gl: "Localización", en: "Location" },
@@ -2677,6 +2687,16 @@ const dict: Record<string, I18nText> = {
     gl: "Non se puido eliminar o elemento do programa.",
     en: "Could not delete schedule item.",
   },
+  deleteScheduleItemConfirmTitle: {
+    es: "¿Eliminar este elemento del programa?",
+    gl: "¿Eliminar este elemento do programa?",
+    en: "Delete this schedule item?",
+  },
+  deleteScheduleItemConfirmDesc: {
+    es: "Esta acción no se puede deshacer. El elemento dejará de estar disponible en la agenda pública.",
+    gl: "Esta acción non se pode desfacer. O elemento deixará de estar dispoñible na axenda pública.",
+    en: "This action cannot be undone. The item will no longer appear on the public agenda.",
+  },
   scheduleDeniedDesc: {
     es: "Pide a un administrador acceso a la gestión del programa.",
     gl: "Pide a un administrador acceso á xestión do programa.",
@@ -3161,6 +3181,16 @@ const dict: Record<string, I18nText> = {
   addSlot: { es: "Añadir franja", gl: "Engadir franxa", en: "Add slot" },
   editSlot: { es: "Editar franja", gl: "Editar franxa", en: "Edit slot" },
   deleteSlot: { es: "Eliminar franja", gl: "Eliminar franxa", en: "Delete slot" },
+  deleteSlotConfirmTitle: {
+    es: "¿Eliminar esta franja?",
+    gl: "¿Eliminar esta franxa?",
+    en: "Delete this slot?",
+  },
+  deleteSlotConfirmDesc: {
+    es: "Esta acción no se puede deshacer. La franja dejará de mostrarse en las pantallas.",
+    gl: "Esta acción non se pode desfacer. A franxa deixará de amosarse nas pantallas.",
+    en: "This action cannot be undone. The slot will stop showing on the screens.",
+  },
   slotLabel: { es: "Nombre", gl: "Nome", en: "Name" },
   slotLabelPlaceholder: {
     es: "Noche de hackeo",
@@ -3189,6 +3219,21 @@ const dict: Record<string, I18nText> = {
     es: "Indica cuándo empieza y cuándo termina la franja.",
     gl: "Indica cando empeza e cando remata a franxa.",
     en: "Set when the slot starts and ends.",
+  },
+  quickDurationLabel: { es: "Duración rápida", gl: "Duración rápida", en: "Quick duration" },
+  duration30Min: { es: "+30 min", gl: "+30 min", en: "+30 min" },
+  duration1Hour: { es: "+1 hora", gl: "+1 hora", en: "+1 hour" },
+  duration2Hours: { es: "+2 horas", gl: "+2 horas", en: "+2 hours" },
+  duration4Hours: { es: "+4 horas", gl: "+4 horas", en: "+4 hours" },
+  durationRestOfDay: {
+    es: "Resto del día",
+    gl: "Resto do día",
+    en: "Rest of day",
+  },
+  slotOverlapsExisting: {
+    es: "Se solapa con {labels}. Como esta franja empieza más tarde, tomará el control durante ese tramo.",
+    gl: "Solápase con {labels}. Como esta franxa empeza máis tarde, tomará o control durante ese tramo.",
+    en: "Overlaps with {labels}. Since this slot starts later, it takes over for that window.",
   },
   dwellSeconds: { es: "Segundos", gl: "Segundos", en: "Seconds" },
   addToRotation: { es: "Añadir vista", gl: "Engadir vista", en: "Add view" },
@@ -3261,6 +3306,21 @@ const dict: Record<string, I18nText> = {
     en: "Use the event end time",
   },
   currentBroadcast: { es: "Emisión actual", gl: "Emisión actual", en: "Current broadcast" },
+  draftPreviewLabel: {
+    es: "Vista previa del borrador",
+    gl: "Vista previa do borrador",
+    en: "Draft preview",
+  },
+  draftPreviewHint: {
+    es: "Así se verá en las pantallas cuando pulses «Mostrar en las TV».",
+    gl: "Así se verá nas pantallas cando premas «Amosar nas TV».",
+    en: "This is how it will look on the screens once you press “Show on TVs”.",
+  },
+  draftPreviewUnavailable: {
+    es: "La vista previa no está disponible ahora mismo.",
+    gl: "A vista previa non está dispoñible agora mesmo.",
+    en: "The preview isn't available right now.",
+  },
   liveTvPreview: {
     es: "Vista previa en directo de la TV",
     gl: "Vista previa en directo da TV",
@@ -5286,6 +5346,12 @@ const dict: Record<string, I18nText> = {
   },
   rankLabel: { es: "Puesto {rank}", gl: "Posto {rank}", en: "Rank {rank}" },
   rankPlaceholder: { es: "Puesto", gl: "Posto", en: "Rank" },
+  rankInputLabel: { es: "Puesto del ganador", gl: "Posto do gañador", en: "Winner rank" },
+  winnerProjectSelectLabel: {
+    es: "Proyecto ganador",
+    gl: "Proxecto gañador",
+    en: "Winning project",
+  },
   selectProjectPlaceholder: {
     es: "Selecciona un proyecto",
     gl: "Selecciona un proxecto",
