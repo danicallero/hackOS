@@ -322,5 +322,27 @@ export, not a status transition.
 
 ---
 
+## Module 8 — Reviewers can see decisions read-only (H57)
+
+**Schema.** None — no route or capability changed; this is purely a frontend
+tab-visibility change, `apps/web/src/app/(app)/applications/[id]/page.tsx`.
+
+**UI.** The Outbox and Sent decisions tabs used to require `applications:decide`
+to even appear. They now also appear for `applications:review` holders
+(`canSeeDecisions = canReview || canDecide`), so a reviewer can see where every
+application stands — internal decisions not yet sent, and every already-
+communicated final status — without gaining any new capability. This is safe
+because every actual action in that view was already gated on `canDecide`
+alone, independently of tab visibility: `ResponsesTab`'s batch bar, row
+selection, and "Send decisions" button, and `ReviewModal`'s Decision-controls
+block for `workspace !== "review"`, all still render nothing for a
+review-only caller. No backend route changed: the GET routes those tabs call
+(`/api/applications/:id/responses`, `/api/responses/:responseId`) already
+accepted either `applications:review` or `applications:decide`.
+
+**State transitions.** None.
+
+---
+
 See [background-workers.md](./background-workers.md) for which of the above run
 synchronously in the request vs. are handed to a worker.
