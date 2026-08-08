@@ -89,6 +89,24 @@ function isRunning(slot: TvSlot, now: number) {
   return new Date(slot.startsAt).getTime() <= now && new Date(slot.endsAt).getTime() > now;
 }
 
+/**
+ * Overlaps are legal (see the module docblock), but a slot created without
+ * realizing it steps on another one is still the most likely way to break a
+ * schedule during a live event. Surfaced as an inline warning, not blocked.
+ */
+function findOverlaps(draft: Draft, slots: TvSlot[] | null): TvSlot[] {
+  const start = fromDatetimeLocal(draft.startsAt);
+  const end = fromDatetimeLocal(draft.endsAt);
+  if (!start || !end || !slots) return [];
+  const startMs = new Date(start).getTime();
+  const endMs = new Date(end).getTime();
+  if (endMs <= startMs) return [];
+  return slots.filter((slot) => {
+    if (slot.id === draft.id) return false;
+    return new Date(slot.startsAt).getTime() < endMs && new Date(slot.endsAt).getTime() > startMs;
+  });
+}
+
 export function Timetable({
   modes,
   onChanged,
@@ -178,6 +196,33 @@ export function Timetable({
   }
 
   const modeLabel = (mode: TvModeName) => modes.find((item) => item.value === mode)?.label ?? mode;
+  const slotName = (slot: TvSlot) =>
+    slot.label || slot.items.map((item) => modeLabel(item.mode)).join(" · ");
+
+  function applyDuration(minutes: number) {
+    if (!draft) return;
+    const start = fromDatetimeLocal(draft.startsAt);
+    if (!start) return;
+    const end = new Date(new Date(start).getTime() + minutes * 60_000);
+    setDraft({ ...draft, endsAt: toDatetimeLocal(end.toISOString()) });
+  }
+
+  function applyRestOfDay() {
+    if (!draft) return;
+    const start = fromDatetimeLocal(draft.startsAt);
+    if (!start) return;
+    const startDate = new Date(start);
+    const endOfDay = new Date(
+      startDate.getFullYear(),
+      startDate.getMonth(),
+      startDate.getDate(),
+      23,
+      59,
+    );
+    setDraft({ ...draft, endsAt: toDatetimeLocal(endOfDay.toISOString()) });
+  }
+
+  const overlaps = draft ? findOverlaps(draft, slots) : [];
 
   return (
     <>
@@ -211,9 +256,7 @@ export function Timetable({
               <li key={slot.id} className="flex flex-wrap items-center gap-3 py-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium">
-                      {slot.label || slot.items.map((item) => modeLabel(item.mode)).join(" · ")}
-                    </span>
+                    <span className="font-medium">{slotName(slot)}</span>
                     {isRunning(slot, now) && (
                       <StatusBadge tone="success">{t("slotRunningNow")}</StatusBadge>
                     )}
@@ -282,16 +325,17 @@ export function Timetable({
       >
         {draft && (
           <div className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div className="grid gap-2">
-                <Label htmlFor="slot-label">{t("slotLabel")}</Label>
-                <Input
-                  id="slot-label"
-                  value={draft.label}
-                  placeholder={t("slotLabelPlaceholder")}
-                  onChange={(event) => setDraft({ ...draft, label: event.target.value })}
-                />
-              </div>
+            <div className="grid gap-2">
+              <Label htmlFor="slot-label">{t("slotLabel")}</Label>
+              <Input
+                id="slot-label"
+                value={draft.label}
+                placeholder={t("slotLabelPlaceholder")}
+                onChange={(event) => setDraft({ ...draft, label: event.target.value })}
+              />
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
               <div className="grid gap-2">
                 <Label htmlFor="slot-start">{t("colStarts")}</Label>
                 <DateTimeInput
@@ -309,6 +353,46 @@ export function Timetable({
                 />
               </div>
             </div>
+
+            <div className="grid gap-2">
+              <p className="text-sm font-medium">{t("quickDurationLabel")}</p>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => applyDuration(30)}>
+                  {t("duration30Min")}
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => applyDuration(60)}>
+                  {t("duration1Hour")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => applyDuration(120)}
+                >
+                  {t("duration2Hours")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => applyDuration(240)}
+                >
+                  {t("duration4Hours")}
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={applyRestOfDay}>
+                  {t("durationRestOfDay")}
+                </Button>
+              </div>
+            </div>
+
+            {overlaps.length > 0 && (
+              <div
+                role="status"
+                className="border-warning/40 bg-warning/10 text-warning-foreground rounded-md border p-3 text-sm"
+              >
+                {t("slotOverlapsExisting", { labels: overlaps.map(slotName).join(", ") })}
+              </div>
+            )}
 
             <fieldset className="space-y-3">
               <legend className="text-sm font-medium">{t("slotContent")}</legend>
