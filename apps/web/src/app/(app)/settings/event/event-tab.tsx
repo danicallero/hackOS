@@ -1,12 +1,15 @@
 "use client";
 
-// Schedule category: doors-open/event window and the hacking window that
-// drives the public countdown (H47, H49) and TV panels (H42). Each
-// date/time field shows both the browser-local instant being edited and its
-// event-timezone reading, and the section previews exactly what the public
-// countdown will show once saved (H45's "reveal, no manual toggling" idea
-// applied to the countdown handoff) by reusing the same phase logic the
-// public site and TV run.
+// Event category (EVENT_MANAGE): identity (name, tagline, timezone),
+// whether participants may self-create projects (H19), the doors-open/event
+// window, and the hacking window that drives the public countdown (H47,
+// H49) and TV panels (H42). Merged from the former separate Event/Schedule
+// tabs — both are edited by the same "event lead" persona and now share one
+// capability and one save scope. Each date/time field shows both the
+// browser-local instant being edited and its event-timezone reading, and the
+// section previews exactly what the public countdown will show once saved
+// (H45's "reveal, no manual toggling" idea applied to the countdown handoff)
+// by reusing the same phase logic the public site and TV run.
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { LucideIcon } from "lucide-react";
@@ -18,6 +21,7 @@ import { DateTimeInput } from "@/components/common/datetime-input";
 import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
 import { SubmitButton } from "@/components/common/submit-button";
+import { TimezonePicker } from "@/components/common/timezone-picker";
 import { EventPhaseDisplay, useEventPhase } from "@/components/public/timer";
 import {
   Form,
@@ -28,6 +32,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { ApiError, api } from "@/lib/api";
 import { fromLocalInputValue, toLocalInputValue } from "@/lib/event-datetime";
@@ -38,6 +43,10 @@ import { useCategorySaveState } from "./use-category-save-state";
 import { ZonedTimePreview } from "./zoned-time-preview";
 
 const schema = z.object({
+  name: z.string().max(200),
+  tagline: z.string().max(500),
+  timezone: z.string().min(1, "Required").max(100),
+  participantsCanCreateProjects: z.boolean(),
   eventStartsAt: z.string(),
   eventEndsAt: z.string(),
   hackingStartsAt: z.string(),
@@ -49,6 +58,10 @@ type Values = z.infer<typeof schema>;
 
 function fromConfig(cfg: EventConfig): Values {
   return {
+    name: cfg.name ?? "",
+    tagline: cfg.tagline ?? "",
+    timezone: cfg.timezone || "Europe/Madrid",
+    participantsCanCreateProjects: cfg.participantsCanCreateProjects,
     eventStartsAt: toLocalInputValue(cfg.eventStartsAt),
     eventEndsAt: toLocalInputValue(cfg.eventEndsAt),
     hackingStartsAt: toLocalInputValue(cfg.hackingStartsAt),
@@ -90,7 +103,7 @@ function CountdownPreview({
   );
 }
 
-export function ScheduleTab({
+export function EventTab({
   icon,
   onDirtyChange,
 }: {
@@ -102,6 +115,10 @@ export function ScheduleTab({
   const form = useForm<Values>({
     resolver: zodResolver(schema),
     defaultValues: {
+      name: "",
+      tagline: "",
+      timezone: "Europe/Madrid",
+      participantsCanCreateProjects: false,
       eventStartsAt: "",
       eventEndsAt: "",
       hackingStartsAt: "",
@@ -120,6 +137,10 @@ export function ScheduleTab({
     setSaveState("saving");
     try {
       const next = await api.put<EventConfig>("/api/event", {
+        name: values.name.trim() || null,
+        tagline: values.tagline.trim() || null,
+        timezone: values.timezone.trim(),
+        participantsCanCreateProjects: values.participantsCanCreateProjects,
         eventStartsAt: fromLocalInputValue(values.eventStartsAt),
         eventEndsAt: fromLocalInputValue(values.eventEndsAt),
         hackingStartsAt: fromLocalInputValue(values.hackingStartsAt),
@@ -136,20 +157,81 @@ export function ScheduleTab({
   }
 
   if (status !== "ready" || !config) {
-    return <EventConfigLoadState icon={icon} title={t("scheduleSectionTitle")} />;
+    return <EventConfigLoadState icon={icon} title={t("eventTitle")} />;
   }
   const timezone = config.timezone;
   const values = watch();
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(onSubmit)}>
         <SectionCard
           icon={icon}
-          title={t("scheduleSectionTitle")}
+          title={t("eventTitle")}
           state={<SaveStatus state={saveState} />}
           footer={<SubmitButton pending={formState.isSubmitting}>{t("saveChanges")}</SubmitButton>}
         >
+          <h3 className="text-balance text-sm font-semibold">{t("builderBasics")}</h3>
+          <FormField
+            control={form.control}
+            name="name"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t("name")}</FormLabel>
+                <FormControl>
+                  <Input placeholder={`${t("egPrefix")} HackUDC 2026`} {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="tagline"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t("taglineLabel")}</FormLabel>
+                <FormControl>
+                  <Input placeholder={t("taglineShortLinePlaceholder")} {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="timezone"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t("timezoneLabel")}</FormLabel>
+                <FormControl>
+                  <TimezonePicker value={field.value} onChange={field.onChange} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="participantsCanCreateProjects"
+            render={({ field }) => (
+              <FormItem>
+                <div className="flex items-center justify-between gap-4 rounded-md border p-3">
+                  <FormLabel className="font-normal">
+                    {t("participantsCanCreateProjectsLabel")}
+                  </FormLabel>
+                  <FormControl>
+                    <Switch checked={field.value} onCheckedChange={field.onChange} />
+                  </FormControl>
+                </div>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <h3 className="border-t pt-4 text-balance text-sm font-semibold">
+            {t("scheduleSectionTitle")}
+          </h3>
           <FormField
             control={form.control}
             name="eventStartsAt"

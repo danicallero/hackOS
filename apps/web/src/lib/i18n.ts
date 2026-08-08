@@ -109,6 +109,11 @@ const dict: Record<string, I18nText> = {
     gl: "Configuración do evento",
     en: "Event settings",
   },
+  noEventSettingsAccessDesc: {
+    es: "No tienes acceso a ninguna sección de la configuración del evento.",
+    gl: "Non tes acceso a ningunha sección da configuración do evento.",
+    en: "You don't have access to any event settings section.",
+  },
   tvControl: { es: "Control de TV", gl: "Control de TV", en: "TV control" },
   rooms: { es: "Salas", gl: "Salas", en: "Rooms" },
   libraries: { es: "Catálogos", gl: "Catálogos", en: "Libraries" },
@@ -1443,6 +1448,11 @@ const dict: Record<string, I18nText> = {
     es: "Pide a un administrador acceso a la administración de salas.",
     gl: "Pide a un administrador acceso á administración de salas.",
     en: "Ask an administrator for room-admin access.",
+  },
+  judgingWindowDeniedDesc: {
+    es: "Pide a un administrador acceso a la ventana de evaluación.",
+    gl: "Pide a un administrador acceso á ventá de avaliación.",
+    en: "Ask an administrator for judging-window access.",
   },
   couldNotLoadRoomAdminData: {
     es: "No se han podido cargar los datos de administración de salas.",
@@ -6156,6 +6166,16 @@ const dict: Record<string, I18nText> = {
     es: "Gestiona el programa del evento.",
     gl: "Xestiona o programa do evento.",
     en: "Manage the event schedule.",
+  },
+  permissionTemplateEventSettingsManager: {
+    es: "Responsable de configuración del evento",
+    gl: "Responsable de configuración do evento",
+    en: "Event settings manager",
+  },
+  permissionTemplateEventSettingsManagerDescription: {
+    es: "Gestiona la identidad del evento, el recinto, el pase de Apple Wallet y la política de presencia.",
+    gl: "Xestiona a identidade do evento, o recinto, o pase de Apple Wallet e a política de presenza.",
+    en: "Manage event identity/timing, venue, the Apple Wallet pass, and presence policy.",
   },
   permissionTemplateTvOperator: {
     es: "Operador de TV",

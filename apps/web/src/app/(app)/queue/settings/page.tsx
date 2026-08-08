@@ -1,18 +1,22 @@
 "use client";
 
-// Judging category: the window that sizes room pace (H39) — separate resource
-// (queue_settings, capability QUEUE_ADMIN) from the rest of event_config, so
-// it keeps its own save scope here too. Previews the live phase and total
-// window duration; the actual per-team minutes budget is computed per room
-// on the queue workspace, not editable from here.
+// Judging window (QUEUE_ADMIN): the window that sizes room pace (H39) — a
+// separate resource (queue_settings) from event_config, so it lives in the
+// Live Judging workspace next to rooms/reviews rather than in Event
+// Settings, where it was only ever visually co-located before. Previews the
+// live phase and total window duration; the actual per-team minutes budget
+// is computed per room on the queue workspace, not editable from here.
 
+import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { zodResolver } from "@hookform/resolvers/zod";
-import type { LucideIcon } from "lucide-react";
+import { GavelIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { AccessDenied } from "@/components/common/access-denied";
 import { DateTimeInput } from "@/components/common/datetime-input";
+import { PageHeader } from "@/components/common/page-header";
 import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
 import { SubmitButton } from "@/components/common/submit-button";
@@ -29,7 +33,8 @@ import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { fromLocalInputValue } from "@/lib/event-datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { getQueueSettings, type QueueSettings, updateQueueSettings } from "@/lib/queue";
-import { useCategorySaveState } from "./use-category-save-state";
+import type { SaveState } from "@/lib/save-state";
+import { useCan } from "@/lib/session";
 
 const schema = z.object({
   judgingStartsAt: z.string(),
@@ -105,21 +110,16 @@ function PacePreview({ startsAt, endsAt }: { startsAt: string; endsAt: string })
   );
 }
 
-export function JudgingTab({
-  icon,
-  onDirtyChange,
-}: {
-  icon: LucideIcon;
-  onDirtyChange: (dirty: boolean) => void;
-}) {
+export default function JudgingWindowSettingsPage() {
   const { t } = useLocale();
+  const canManage = useCan(CAPABILITIES.QUEUE_ADMIN);
   const [loaded, setLoaded] = useState(false);
+  const [saveState, setSaveState] = useState<SaveState>("saved");
   const form = useForm<Values>({
     resolver: zodResolver(schema),
     defaultValues: { judgingStartsAt: "", judgingEndsAt: "" },
   });
   const { reset, formState, watch } = form;
-  const [saveState, setSaveState] = useCategorySaveState(formState.isDirty, onDirtyChange);
 
   useEffect(() => {
     getQueueSettings()
@@ -147,48 +147,58 @@ export function JudgingTab({
     }
   }
 
-  if (!loaded) return null;
   const values = watch();
 
+  if (!canManage) {
+    return <AccessDenied ask={t("judgingWindowDeniedDesc")} />;
+  }
+
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <SectionCard
-          icon={icon}
-          title={t("judgingWindowTitle")}
-          description={t("judgingWindowDesc")}
-          state={<SaveStatus state={saveState} />}
-          footer={<SubmitButton pending={formState.isSubmitting}>{t("saveChanges")}</SubmitButton>}
-        >
-          <FormField
-            control={form.control}
-            name="judgingStartsAt"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("judgingStartsLabel")}</FormLabel>
-                <FormControl>
-                  <DateTimeInput value={field.value} onChange={field.onChange} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="judgingEndsAt"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("judgingEndsLabel")}</FormLabel>
-                <FormControl>
-                  <DateTimeInput value={field.value} onChange={field.onChange} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <PacePreview startsAt={values.judgingStartsAt} endsAt={values.judgingEndsAt} />
-        </SectionCard>
-      </form>
-    </Form>
+    <div className="space-y-6">
+      <PageHeader title={t("judgingWindowTitle")} />
+      {!loaded ? null : (
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <SectionCard
+              icon={GavelIcon}
+              title={t("judgingWindowTitle")}
+              description={t("judgingWindowDesc")}
+              state={<SaveStatus state={formState.isSubmitting ? "saving" : saveState} />}
+              footer={
+                <SubmitButton pending={formState.isSubmitting}>{t("saveChanges")}</SubmitButton>
+              }
+            >
+              <FormField
+                control={form.control}
+                name="judgingStartsAt"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("judgingStartsLabel")}</FormLabel>
+                    <FormControl>
+                      <DateTimeInput value={field.value} onChange={field.onChange} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="judgingEndsAt"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("judgingEndsLabel")}</FormLabel>
+                    <FormControl>
+                      <DateTimeInput value={field.value} onChange={field.onChange} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <PacePreview startsAt={values.judgingStartsAt} endsAt={values.judgingEndsAt} />
+            </SectionCard>
+          </form>
+        </Form>
+      )}
+    </div>
   );
 }

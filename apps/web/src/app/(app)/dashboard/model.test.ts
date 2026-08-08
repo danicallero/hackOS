@@ -39,9 +39,16 @@ describe("dashboard quick actions (H8/H55)", () => {
       "queueOperations",
       "schedule",
     ]);
-    expect(dashboardQuickActions(contextFor([CAPABILITIES.SCHEDULE_MANAGE]))).toEqual([
+    expect(dashboardQuickActions(contextFor([CAPABILITIES.VENUE_MANAGE]))).toEqual([
       "wallet",
       "eventSettings",
+      "schedule",
+    ]);
+    // SCHEDULE_MANAGE's own domain is agenda items — it no longer unlocks
+    // Event Settings (that split into EVENT_MANAGE/VENUE_MANAGE/WALLET_MANAGE/
+    // PRESENCE_MANAGE/INVITES_MANAGE, one per settings tab).
+    expect(dashboardQuickActions(contextFor([CAPABILITIES.SCHEDULE_MANAGE]))).toEqual([
+      "wallet",
       "schedule",
     ]);
   });

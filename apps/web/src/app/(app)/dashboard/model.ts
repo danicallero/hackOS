@@ -22,6 +22,15 @@ function canAny(context: DashboardAccessContext, capabilities: Capability[]): bo
   return capabilities.some((capability) => context.can(capability));
 }
 
+/** The capabilities that unlock at least one Event Settings tab (H8). */
+const EVENT_SETTINGS_CAPABILITIES: Capability[] = [
+  CAPABILITIES.EVENT_MANAGE,
+  CAPABILITIES.VENUE_MANAGE,
+  CAPABILITIES.WALLET_MANAGE,
+  CAPABILITIES.PRESENCE_MANAGE,
+  CAPABILITIES.INVITES_MANAGE,
+];
+
 /**
  * Dashboard shortcuts mirror the additive workspaces. `role` remains a
  * display field only: association facts and effective capabilities decide
@@ -69,7 +78,7 @@ export function dashboardQuickActions(context: DashboardAccessContext): Dashboar
     actions.push("queueOperations");
   }
 
-  if (context.can(CAPABILITIES.SCHEDULE_MANAGE)) actions.push("eventSettings");
+  if (canAny(context, EVENT_SETTINGS_CAPABILITIES)) actions.push("eventSettings");
 
   actions.push("schedule");
   return actions;
@@ -106,6 +115,6 @@ export function dashboardPrimaryAction(context: DashboardAccessContext): Dashboa
   ) {
     return "logistics";
   }
-  if (context.can(CAPABILITIES.SCHEDULE_MANAGE)) return "eventSettings";
+  if (canAny(context, EVENT_SETTINGS_CAPABILITIES)) return "eventSettings";
   return "schedule";
 }

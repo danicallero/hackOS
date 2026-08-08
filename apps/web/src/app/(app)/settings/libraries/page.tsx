@@ -1,9 +1,10 @@
 "use client";
 
 // Libraries (H12/H25): the shared reference catalogues that feed application
-// forms and profiles — food intolerances and the university directory — under
-// one page, both guarded by INTOLERANCES_MANAGE. Each tab is a self-contained
-// manager (list + create/edit/delete).
+// forms and profiles — food intolerances, t-shirt sizes, and the university
+// directory — under one page, all guarded by INTOLERANCES_MANAGE. Each tab is
+// a self-contained manager (list + create/edit/delete, or for shirt sizes a
+// single ordered list saved as one event_config field).
 
 import { PageHeader } from "@/components/common/page-header";
 import { TabBar } from "@/components/common/tab-bar";
@@ -11,12 +12,13 @@ import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useLocale } from "@/lib/i18n";
 import { useUrlTab } from "@/lib/url-tab";
 import { IntolerancesManager } from "./intolerances-manager";
+import { ShirtSizesManager } from "./shirt-sizes-manager";
 import { UniversitiesManager } from "./universities-manager";
 
 export default function LibrariesSettingsPage() {
   const { t } = useLocale();
   const { tab, setTab } = useUrlTab({
-    values: ["intolerances", "universities"] as const,
+    values: ["intolerances", "shirt-sizes", "universities"] as const,
     defaultValue: "intolerances",
   });
   return (
@@ -26,10 +28,14 @@ export default function LibrariesSettingsPage() {
       <Tabs value={tab} onValueChange={setTab}>
         <TabBar className="w-full max-w-md">
           <TabsTrigger value="intolerances">{t("foodIntolerances")}</TabsTrigger>
+          <TabsTrigger value="shirt-sizes">{t("shirtSizesGroup")}</TabsTrigger>
           <TabsTrigger value="universities">{t("universitiesTab")}</TabsTrigger>
         </TabBar>
         <TabsContent value="intolerances" className="pt-2">
           <IntolerancesManager />
+        </TabsContent>
+        <TabsContent value="shirt-sizes" className="pt-2">
+          <ShirtSizesManager />
         </TabsContent>
         <TabsContent value="universities" className="pt-2">
           <UniversitiesManager />
