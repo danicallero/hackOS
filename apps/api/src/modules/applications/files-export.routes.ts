@@ -10,7 +10,7 @@ import { audit } from "../../lib/audit.js";
 import { requireCapability } from "../../lib/capabilities.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
-import { getObject } from "../../lib/storage.js";
+import { getObject, objectExists } from "../../lib/storage.js";
 import type { TemplateField } from "./schemas.js";
 
 const exportParamsSchema = z.object({
@@ -29,6 +29,24 @@ function keyExtension(key: string): string {
   return dot === -1 ? "" : name.slice(dot).toLowerCase();
 }
 
+interface ExportRow {
+  response_id: number;
+  user_id: number;
+  email: string;
+  file_key: string;
+}
+
+interface ExportFailure {
+  responseId: number;
+  userId: number;
+  email: string;
+}
+
+/** Response headers can't grow unbounded — cap the inline failure list and
+ *  let the count speak for the rest; every failure is still fully recorded
+ *  in audit_log, not just this header. */
+const MAX_FAILURES_IN_HEADER = 50;
+
 /**
  * H56: bulk-export every file uploaded to one "file" template field, or only
  * the ones applicants agreed to share with sponsors, zipped and named by
@@ -46,7 +64,7 @@ export function registerFilesExportRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Bulk-export a file field's uploads as a zip",
         description:
-          "Streams every uploaded file for a template field of kind 'file' as a zip, one entry per applicant named '<email><ext>' (H56). `scope=shared` restricts the export to responses where the applicant consented to share that file with sponsors — only valid for fields the organizer marked shareable_with_sponsors.",
+          "Streams every uploaded file for a template field of kind 'file' as a zip, one entry per applicant named '<email><ext>' (H56). `scope=shared` restricts the export to responses where the applicant consented to share that file with sponsors — only valid for fields the organizer marked shareable_with_sponsors. Any upload missing from storage is skipped rather than failing the whole export; when that happens the response carries an `x-export-file-failures` header (JSON: `{ total, items: [{ responseId, userId, email }] }`, capped at 50 items) and each failure is recorded in the audit log against its response, so staff can find and fix the affected applications.",
         params: exportParamsSchema,
         querystring: exportQuerySchema,
       },
@@ -71,8 +89,8 @@ export function registerFilesExportRoutes(app: FastifyInstance): void {
       }
 
       const consentKey = sponsorShareKey(fieldKey);
-      const { rows } = await pool.query<{ email: string; file_key: string }>(
-        `SELECT u.email, r.responses->>$2 AS file_key
+      const { rows } = await pool.query<ExportRow>(
+        `SELECT r.id AS response_id, r.user_id, u.email, r.responses->>$2 AS file_key
            FROM application_responses r
            JOIN users u ON u.id = r.user_id
           WHERE r.application_id = $1
@@ -82,32 +100,70 @@ export function registerFilesExportRoutes(app: FastifyInstance): void {
         [applicationId, fieldKey, scope, consentKey],
       );
 
+      // Pre-flight: find out which files are actually readable BEFORE
+      // committing to the streamed zip response below. Past that point,
+      // headers are sent and an error can no longer become a clean HTTP
+      // response — a missing object would instead hang the connection (the
+      // proxy in front of this API sees that as a 502). Checking first lets
+      // every failure be reported (audit_log, per-response) and surfaced to
+      // the caller via a response header instead.
+      const goodRows: ExportRow[] = [];
+      const failures: ExportFailure[] = [];
+      for (const row of rows) {
+        if (!row.file_key) continue;
+        if (await objectExists(row.file_key)) {
+          goodRows.push(row);
+        } else {
+          failures.push({ responseId: row.response_id, userId: row.user_id, email: row.email });
+        }
+      }
+
+      for (const failure of failures) {
+        await audit(pool, {
+          actorId: req.userId,
+          entityType: "application_response",
+          entityId: failure.responseId,
+          action: "export_file_unreadable",
+          reason: `Field '${fieldKey}' upload missing from storage during export`,
+        });
+      }
       await audit(pool, {
         actorId: req.userId,
         entityType: "application_field_export",
         entityId: `${applicationId}:${fieldKey}`,
         action: "export",
-        after: { scope, field_key: fieldKey, file_count: rows.length },
+        after: {
+          scope,
+          field_key: fieldKey,
+          file_count: goodRows.length,
+          failed_count: failures.length,
+        },
       });
 
       const filename = `${fieldKey}-${scope}.zip`;
       reply.header("content-type", "application/zip");
       reply.header("content-disposition", `attachment; filename="${filename}"`);
       reply.header("cache-control", "private, no-store");
+      // Read by the web client to surface exactly which applications need
+      // manual attention (their upload is missing from storage) — set before
+      // reply.send() below since headers can't change once streaming starts.
+      if (failures.length > 0) {
+        reply.header(
+          "x-export-file-failures",
+          JSON.stringify({
+            total: failures.length,
+            items: failures.slice(0, MAX_FAILURES_IN_HEADER),
+          }),
+        );
+      }
 
       const archive = new ZipArchive({ zlib: { level: 9 } });
-      // Headers are already committed once reply.send(archive) runs below, so
-      // ANY error past this point can no longer become a clean HTTP error
-      // response — it just kills the connection mid-stream (a 502 at any
-      // reverse proxy in front of this). One missing/unreadable object (e.g.
-      // deleted from storage after upload) must never take the whole export
-      // down with it, so each file is fetched defensively and skipped on
-      // failure — matches the "one row's failure never aborts the rest"
-      // convention used by the batch decide/send/revert helpers.
+      // Still defensive from here on: an object can vanish between the check
+      // above and this read (rare, but the same "one row's failure never
+      // aborts the rest" guard as before costs nothing to keep).
       const sent = reply.send(archive);
       try {
-        for (const row of rows) {
-          if (!row.file_key) continue;
+        for (const row of goodRows) {
           try {
             const obj = await getObject(row.file_key);
             if (!obj.Body) continue;

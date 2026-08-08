@@ -7293,6 +7293,37 @@ const dict: Record<string, I18nText> = {
     gl: "Exportar só compartibles",
     en: "Export shareable only",
   },
+  exportFailed: {
+    es: "No se ha podido exportar los archivos",
+    gl: "Non se puido exportar os ficheiros",
+    en: "Could not export the files",
+  },
+  exportFilesDownloaded: {
+    es: "Archivos exportados",
+    gl: "Ficheiros exportados",
+    en: "Files exported",
+  },
+  exportFilesFailedToast: {
+    es: "{count} archivo(s) no se pudieron incluir en la exportación",
+    gl: "{count} ficheiro(s) non se puideron incluír na exportación",
+    en: "{count} file(s) could not be included in the export",
+  },
+  exportFailuresTitle: {
+    es: "Archivos no encontrados en {field}",
+    gl: "Ficheiros non atopados en {field}",
+    en: "Files missing from storage in {field}",
+  },
+  exportFailuresDesc: {
+    es: "{count} archivo(s) no se pudieron leer del almacenamiento y se omitieron de la exportación. Revisa estas solicitudes manualmente.",
+    gl: "{count} ficheiro(s) non se puideron ler do almacenamento e omitíronse da exportación. Revisa estas solicitudes manualmente.",
+    en: "{count} file(s) could not be read from storage and were left out of the export. Review these applications manually.",
+  },
+  exportFailuresMoreNotShown: {
+    es: "y {count} más no mostrados aquí",
+    gl: "e {count} máis non amosados aquí",
+    en: "and {count} more not shown here",
+  },
+  viewProfile: { es: "Ver perfil", gl: "Ver perfil", en: "View profile" },
   formCouldNotBeLoaded: {
     es: "No se ha podido cargar este formulario de solicitud.",
     gl: "Non se puido cargar este formulario de solicitude.",

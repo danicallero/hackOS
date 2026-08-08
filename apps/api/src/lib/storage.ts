@@ -1,6 +1,7 @@
 import {
   GetObjectCommand,
   type GetObjectCommandOutput,
+  HeadObjectCommand,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -35,6 +36,20 @@ const PRESIGN_TTL_S = 300;
  */
 export async function getObject(key: string): Promise<GetObjectCommandOutput> {
   return s3.send(new GetObjectCommand({ Bucket: config.S3_BUCKET, Key: key }));
+}
+
+/**
+ * Cheap existence check (metadata only, no body) — used to pre-flight a batch
+ * of keys before committing to a streamed response, where a failure can no
+ * longer become a clean HTTP error once headers are sent (H56 bulk export).
+ */
+export async function objectExists(key: string): Promise<boolean> {
+  try {
+    await s3.send(new HeadObjectCommand({ Bucket: config.S3_BUCKET, Key: key }));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**

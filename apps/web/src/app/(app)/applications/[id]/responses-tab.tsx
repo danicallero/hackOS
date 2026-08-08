@@ -13,6 +13,7 @@ import {
   SendIcon,
   XIcon,
 } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ReviewModal } from "@/components/applications/review-modal";
@@ -59,6 +60,19 @@ interface DurableBatchResult {
   skipped: Array<{ id: number; reason: string; applicant: string }>;
 }
 
+interface ExportFileFailure {
+  responseId: number;
+  userId: number;
+  email: string;
+}
+
+interface ExportFailuresState {
+  fieldKey: string;
+  fieldLabel: string;
+  total: number;
+  items: ExportFileFailure[];
+}
+
 export function ResponsesTab({
   id,
   template,
@@ -88,6 +102,8 @@ export function ResponsesTab({
   const [batchBusy, setBatchBusy] = useState(false);
   const [batchResult, setBatchResult] = useState<DurableBatchResult | null>(null);
   const [confirmBatchRevoke, setConfirmBatchRevoke] = useState(false);
+  const [exportingKey, setExportingKey] = useState<string | null>(null);
+  const [exportFailures, setExportFailures] = useState<ExportFailuresState | null>(null);
 
   const rows = useMemo(() => rowsForWorkspace(allRows, workspace), [allRows, workspace]);
 
@@ -213,6 +229,54 @@ export function ResponsesTab({
     });
   }
 
+  // Downloads via fetch (not a plain <a href>) so we can read the
+  // x-export-file-failures response header and surface it in the UI —
+  // browsers give JS no way to inspect headers of a navigation-triggered
+  // download (H56 follow-up: report + let staff manually handle failures).
+  async function exportField(field: TemplateField, scope: "all" | "shared") {
+    const busyKey = `${field.key}:${scope}`;
+    setExportingKey(busyKey);
+    try {
+      const res = await fetch(exportUrl(field.key, scope), { credentials: "include" });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as {
+          error?: { message?: string };
+        } | null;
+        throw new Error(body?.error?.message ?? t("exportFailed"));
+      }
+      const failuresHeader = res.headers.get("x-export-file-failures");
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = `${field.key}-${scope}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(blobUrl);
+
+      if (failuresHeader) {
+        const parsed = JSON.parse(failuresHeader) as {
+          total: number;
+          items: ExportFileFailure[];
+        };
+        setExportFailures({
+          fieldKey: field.key,
+          fieldLabel: pickText(field.label, language) || field.key,
+          total: parsed.total,
+          items: parsed.items,
+        });
+        toast.error(t("exportFilesFailedToast", { count: parsed.total }));
+      } else {
+        toast.success(t("exportFilesDownloaded"));
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("exportFailed"));
+    } finally {
+      setExportingKey(null);
+    }
+  }
+
   async function batchAction(label: string, fn: () => Promise<unknown>) {
     setBatchBusy(true);
     try {
@@ -313,12 +377,18 @@ export function ResponsesTab({
                     <DropdownMenuLabel>
                       {pickText(field.label, language) || field.key}
                     </DropdownMenuLabel>
-                    <DropdownMenuItem asChild>
-                      <a href={exportUrl(field.key, "all")}>{t("exportAllFiles")}</a>
+                    <DropdownMenuItem
+                      disabled={exportingKey === `${field.key}:all`}
+                      onClick={() => void exportField(field, "all")}
+                    >
+                      {t("exportAllFiles")}
                     </DropdownMenuItem>
                     {field.shareable_with_sponsors && (
-                      <DropdownMenuItem asChild>
-                        <a href={exportUrl(field.key, "shared")}>{t("exportSharedFiles")}</a>
+                      <DropdownMenuItem
+                        disabled={exportingKey === `${field.key}:shared`}
+                        onClick={() => void exportField(field, "shared")}
+                      >
+                        {t("exportSharedFiles")}
                       </DropdownMenuItem>
                     )}
                   </div>
@@ -540,6 +610,44 @@ export function ResponsesTab({
             </Button>
           </div>
         </div>
+      )}
+
+      {exportFailures && (
+        <Alert variant="destructive">
+          <AlertCircleIcon aria-hidden="true" />
+          <AlertTitle>{t("exportFailuresTitle", { field: exportFailures.fieldLabel })}</AlertTitle>
+          <AlertDescription>
+            <p>{t("exportFailuresDesc", { count: exportFailures.total })}</p>
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              {exportFailures.items.map((item) => (
+                <li key={item.responseId} className="flex flex-wrap items-center gap-2">
+                  <span>{item.email}</span>
+                  <Link
+                    href={`/users/${item.userId}?tab=application`}
+                    className="text-primary text-xs underline underline-offset-4"
+                  >
+                    {t("viewProfile")}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+            {exportFailures.total > exportFailures.items.length && (
+              <p className="text-muted-foreground mt-2 text-xs">
+                {t("exportFailuresMoreNotShown", {
+                  count: exportFailures.total - exportFailures.items.length,
+                })}
+              </p>
+            )}
+            <Button
+              className="mt-3"
+              size="sm"
+              variant="outline"
+              onClick={() => setExportFailures(null)}
+            >
+              {t("dismissResult")}
+            </Button>
+          </AlertDescription>
+        </Alert>
       )}
 
       {batchResult && (

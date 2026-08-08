@@ -202,7 +202,7 @@ describe("bulk file export (H56)", () => {
       status: "submitted",
       responses: { cv: okKey, [sponsorShareKey("cv")]: true },
     });
-    await createResponse(missing, appId, {
+    const missingResponseId = await createResponse(missing, appId, {
       status: "submitted",
       // No putObject for this key — simulates an object gone from storage.
       responses: { cv: missingKey, [sponsorShareKey("cv")]: true },
@@ -216,6 +216,53 @@ describe("bulk file export (H56)", () => {
     expect(res.statusCode).toBe(200);
     const entries = await readZipEntries(res.rawPayload);
     expect(Object.keys(entries)).toEqual(["ok@test.local.pdf"]);
+
+    // Reported so staff can find and manually fix the affected application,
+    // instead of silently disappearing from the zip.
+    const failuresHeader = JSON.parse(res.headers["x-export-file-failures"] as string);
+    expect(failuresHeader).toEqual({
+      total: 1,
+      items: [{ responseId: missingResponseId, userId: missing, email: "missing@test.local" }],
+    });
+
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows: failureAudit } = await pool.query(
+      `SELECT actor_id, entity_type, entity_id, action, reason FROM audit_log
+       WHERE entity_type = 'application_response' AND entity_id = $1
+         AND action = 'export_file_unreadable'`,
+      [String(missingResponseId)],
+    );
+    expect(failureAudit).toHaveLength(1);
+    expect(failureAudit[0]).toMatchObject({
+      actor_id: staff,
+      action: "export_file_unreadable",
+    });
+
+    const { rows: summaryAudit } = await pool.query(
+      `SELECT after FROM audit_log
+       WHERE entity_type = 'application_field_export' ORDER BY id DESC LIMIT 1`,
+    );
+    expect(summaryAudit[0].after).toMatchObject({ file_count: 1, failed_count: 1 });
+  });
+
+  it("omits the failures header entirely when nothing failed", async () => {
+    const a = await getApp();
+    const staff = await createUserWithCapabilities([CAPABILITIES.EXPORTS_RUN]);
+    const appId = await createApplication({ template: shareableCvField() });
+    const ok = await createUser({ email: "clean@test.local" });
+    const okKey = await putUpload(appId, ok, "resume.pdf");
+    await createResponse(ok, appId, {
+      status: "submitted",
+      responses: { cv: okKey, [sponsorShareKey("cv")]: true },
+    });
+
+    const res = await a.inject({
+      method: "GET",
+      url: `/api/applications/${appId}/fields/cv/files.zip?scope=all`,
+      headers: asUser(staff),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["x-export-file-failures"]).toBeUndefined();
   });
 });
 
