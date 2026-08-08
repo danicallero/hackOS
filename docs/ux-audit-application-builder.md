@@ -100,9 +100,11 @@ and five web spots — `my-applications/lib.ts` (participant form), `application
   whatever is currently configured.
 - Web: new `hooks/use-shirt-sizes.ts` fetches once with a same-as-DB-default
   fallback; all six consumers now call it instead of a local const.
-- Settings UI: a new "T-shirt sizes" group at the top of the Invited-accounts
-  tab (`invites-tab.tsx`), a `useFieldArray`-backed add/remove list, saved
-  together with the existing sponsor/staff toggles.
+- Settings UI: a `useFieldArray`-backed add/remove list. Originally added to
+  the Invited-accounts tab; relocated to Settings → Libraries
+  (`shirt-sizes-manager.tsx`) in the Event Settings restructuring that moved
+  every shared reference catalogue to one place — see
+  `docs/event-config-wallet.md`.
 - Verified backend end-to-end via direct API calls (not just typecheck): set
   the list to `["S","M","L","3XL"]`, confirmed a submit with the now-removed
   `"XXL"` got `400 invalid option` and one with the new `"3XL"` succeeded.

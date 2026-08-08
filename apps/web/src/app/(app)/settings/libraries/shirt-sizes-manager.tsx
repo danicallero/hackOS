@@ -18,7 +18,6 @@ import { SaveStatus } from "@/components/common/save-status";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
@@ -102,28 +101,32 @@ export function ShirtSizesManager() {
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
         <p className="text-muted-foreground text-sm">{t("shirtSizesGroupDesc")}</p>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-start gap-2">
           {shirtSizeFields.fields.map((item, index) => (
             <FormField
               key={item.id}
               control={form.control}
               name={`shirtSizes.${index}.value`}
               render={({ field }) => (
-                <FormItem>
-                  <div className="flex items-center gap-1">
+                <FormItem className="gap-1">
+                  <div className="border-input bg-background focus-within:border-ring focus-within:ring-ring/50 flex h-9 items-center gap-0.5 rounded-full border pl-3 pr-1 focus-within:ring-[3px]">
                     <FormControl>
-                      <Input {...field} className="w-20" maxLength={10} />
+                      <input
+                        {...field}
+                        maxLength={10}
+                        className="w-14 bg-transparent text-sm outline-none"
+                      />
                     </FormControl>
                     <Button
                       type="button"
                       variant="ghost"
                       size="icon"
-                      className="text-destructive size-8 shrink-0"
+                      aria-label={t("removeItemLabel", { name: field.value })}
+                      className="hover:text-foreground text-muted-foreground size-6 shrink-0 rounded-full"
                       disabled={shirtSizeFields.fields.length <= 1}
                       onClick={() => shirtSizeFields.remove(index)}
                     >
-                      <XIcon className="size-4" />
-                      <span className="sr-only">{t("remove")}</span>
+                      <XIcon aria-hidden="true" className="size-3" />
                     </Button>
                   </div>
                   <FormMessage />
@@ -135,6 +138,7 @@ export function ShirtSizesManager() {
             type="button"
             variant="outline"
             size="sm"
+            className="h-9 rounded-full"
             onClick={() => shirtSizeFields.append({ value: "" })}
           >
             <PlusIcon />

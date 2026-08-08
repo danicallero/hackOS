@@ -110,9 +110,9 @@ const dict: Record<string, I18nText> = {
     en: "Event settings",
   },
   noEventSettingsAccessDesc: {
-    es: "No tienes acceso a ninguna sección de la configuración del evento.",
-    gl: "Non tes acceso a ningunha sección da configuración do evento.",
-    en: "You don't have access to any event settings section.",
+    es: "Pide a un administrador acceso a la configuración del evento.",
+    gl: "Pide a un administrador acceso á configuración do evento.",
+    en: "Ask an administrator for event settings access.",
   },
   tvControl: { es: "Control de TV", gl: "Control de TV", en: "TV control" },
   rooms: { es: "Salas", gl: "Salas", en: "Rooms" },
@@ -6173,9 +6173,9 @@ const dict: Record<string, I18nText> = {
     en: "Event settings manager",
   },
   permissionTemplateEventSettingsManagerDescription: {
-    es: "Gestiona la identidad del evento, el recinto, el pase de Apple Wallet y la política de presencia.",
-    gl: "Xestiona a identidade do evento, o recinto, o pase de Apple Wallet e a política de presenza.",
-    en: "Manage event identity/timing, venue, the Apple Wallet pass, and presence policy.",
+    es: "Gestiona la configuración del evento.",
+    gl: "Xestiona a configuración do evento.",
+    en: "Manage event settings.",
   },
   permissionTemplateTvOperator: {
     es: "Operador de TV",
@@ -6466,19 +6466,14 @@ const dict: Record<string, I18nText> = {
   venueLatitudeLabel: { es: "Latitud", gl: "Latitude", en: "Latitude" },
   venueLongitudeLabel: { es: "Longitud", gl: "Lonxitude", en: "Longitude" },
   coordsFormatsHint: {
-    es: "Acepta grados decimales (43.3328) o GMS (43°19′58″N). Pega las dos coordenadas juntas en cualquiera de los campos y se repartirán solas.",
-    gl: "Acepta graos decimais (43.3328) ou GMS (43°19′58″N). Pega as dúas coordenadas xuntas en calquera dos campos e repartiranse soas.",
-    en: "Accepts decimal degrees (43.3328) or DMS (43°19′58″N). Paste both coordinates together into either box and they'll split automatically.",
+    es: "Acepta grados decimales (43.3328) o GMS (43°19′58″N). Indica las dos coordenadas o ninguna — pega las dos juntas en cualquiera de los campos y se repartirán solas.",
+    gl: "Acepta graos decimais (43.3328) ou GMS (43°19′58″N). Indica as dúas coordenadas ou ningunha — pega as dúas xuntas en calquera dos campos e repartiranse soas.",
+    en: "Accepts decimal degrees (43.3328) or DMS (43°19′58″N). Set both or neither — paste both coordinates into either box to split them automatically.",
   },
   invalidCoordinate: {
     es: "Coordenada no válida. Usa grados decimales (43.3328) o GMS (43°19′58″N).",
     gl: "Coordenada non válida. Usa graos decimais (43.3328) ou GMS (43°19′58″N).",
     en: "Invalid coordinate. Use decimal degrees (43.3328) or DMS (43°19′58″N).",
-  },
-  venueCoordsBothOrNeither: {
-    es: "La latitud y la longitud deben indicarse juntas.",
-    gl: "A latitude e a lonxitude deben indicarse xuntas.",
-    en: "Latitude and longitude must be set together.",
   },
   walletPassSectionTitle: {
     es: "Pase de Apple Wallet",

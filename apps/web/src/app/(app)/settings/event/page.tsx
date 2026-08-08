@@ -15,6 +15,7 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { MailPlusIcon, MapPinIcon, TagIcon, UserCheckIcon, WalletCardsIcon } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
+import { AccessDenied } from "@/components/common/access-denied";
 import { PageHeader } from "@/components/common/page-header";
 import { TabBar } from "@/components/common/tab-bar";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
@@ -84,61 +85,59 @@ export default function EventSettingsPage() {
     setTab(next);
   }
 
+  if (visibleCategories.length === 0) {
+    return <AccessDenied ask={t("noEventSettingsAccessDesc")} />;
+  }
+
   return (
     <EventConfigProvider>
       <div className="space-y-6">
         <PageHeader title={t("eventSettings")} />
 
-        {visibleCategories.length === 0 ? (
-          <p className="text-muted-foreground text-sm">{t("noEventSettingsAccessDesc")}</p>
-        ) : (
-          <Tabs value={tab} onValueChange={changeTab}>
-            <TabBar className="w-full">
-              {canEvent && <TabsTrigger value="event">{t("eventTitle")}</TabsTrigger>}
-              {canVenue && <TabsTrigger value="venue">{t("venueSectionTitle")}</TabsTrigger>}
-              {canWallet && <TabsTrigger value="wallet">{t("walletPassSectionTitle")}</TabsTrigger>}
-              {canPresence && (
-                <TabsTrigger value="presence">{t("presencePolicyTitle")}</TabsTrigger>
-              )}
-              {canInvites && <TabsTrigger value="invites">{t("invitesSectionTitle")}</TabsTrigger>}
-            </TabBar>
+        <Tabs value={tab} onValueChange={changeTab}>
+          <TabBar className="w-full">
+            {canEvent && <TabsTrigger value="event">{t("eventTitle")}</TabsTrigger>}
+            {canVenue && <TabsTrigger value="venue">{t("venueSectionTitle")}</TabsTrigger>}
+            {canWallet && <TabsTrigger value="wallet">{t("walletPassSectionTitle")}</TabsTrigger>}
+            {canPresence && <TabsTrigger value="presence">{t("presencePolicyTitle")}</TabsTrigger>}
+            {canInvites && <TabsTrigger value="invites">{t("invitesSectionTitle")}</TabsTrigger>}
+          </TabBar>
 
-            {canEvent && (
-              <TabsContent value="event" className="pt-4">
-                <EventTab icon={TagIcon} onDirtyChange={(dirty) => setDirty("event", dirty)} />
-              </TabsContent>
-            )}
-            {canVenue && (
-              <TabsContent value="venue" className="pt-4">
-                <VenueTab icon={MapPinIcon} onDirtyChange={(dirty) => setDirty("venue", dirty)} />
-              </TabsContent>
-            )}
-            {canWallet && (
-              <TabsContent value="wallet" className="pt-4">
-                <WalletTab
-                  icon={WalletCardsIcon}
-                  onDirtyChange={(dirty) => setDirty("wallet", dirty)}
-                />
-              </TabsContent>
-            )}
-            {canPresence && (
-              <TabsContent value="presence" className="pt-4">
-                <PresenceTab
-                  icon={UserCheckIcon}
-                  onDirtyChange={(dirty) => setDirty("presence", dirty)}
-                />
-              </TabsContent>
-            )}
-            {canInvites && (
-              <TabsContent value="invites" className="pt-4">
-                <InvitesTab
-                  icon={MailPlusIcon}
-                  onDirtyChange={(dirty) => setDirty("invites", dirty)}
-                />
-              </TabsContent>
-            )}
-          </Tabs>
-        )}
+          {canEvent && (
+            <TabsContent value="event" className="pt-4">
+              <EventTab icon={TagIcon} onDirtyChange={(dirty) => setDirty("event", dirty)} />
+            </TabsContent>
+          )}
+          {canVenue && (
+            <TabsContent value="venue" className="pt-4">
+              <VenueTab icon={MapPinIcon} onDirtyChange={(dirty) => setDirty("venue", dirty)} />
+            </TabsContent>
+          )}
+          {canWallet && (
+            <TabsContent value="wallet" className="pt-4">
+              <WalletTab
+                icon={WalletCardsIcon}
+                onDirtyChange={(dirty) => setDirty("wallet", dirty)}
+              />
+            </TabsContent>
+          )}
+          {canPresence && (
+            <TabsContent value="presence" className="pt-4">
+              <PresenceTab
+                icon={UserCheckIcon}
+                onDirtyChange={(dirty) => setDirty("presence", dirty)}
+              />
+            </TabsContent>
+          )}
+          {canInvites && (
+            <TabsContent value="invites" className="pt-4">
+              <InvitesTab
+                icon={MailPlusIcon}
+                onDirtyChange={(dirty) => setDirty("invites", dirty)}
+              />
+            </TabsContent>
+          )}
+        </Tabs>
       </div>
     </EventConfigProvider>
   );

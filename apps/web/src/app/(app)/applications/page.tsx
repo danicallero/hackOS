@@ -346,9 +346,11 @@ export default function ApplicationsPage() {
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
                         <FormLabel className="font-normal">{t("askShirtSizeLabel")}</FormLabel>
-                        <StatusBadge tone="neutral" dot={false}>
-                          {t("requiredAtSubmitBadge")}
-                        </StatusBadge>
+                        {field.value && (
+                          <StatusBadge tone="neutral" dot={false}>
+                            {t("requiredAtSubmitBadge")}
+                          </StatusBadge>
+                        )}
                       </div>
                       <FormDescription>{t("askShirtSizeDesc")}</FormDescription>
                     </div>
