@@ -73,6 +73,16 @@ const eventConfigBody = z
     requireSponsorDietary: z.boolean().optional(),
     requireStaffShirtSize: z.boolean().optional(),
     requireStaffDietary: z.boolean().optional(),
+    // H12: the options offered by every shirt-size picker in the app
+    // (applications, invite claim, profile self-edit, staff user-edit).
+    shirtSizes: z
+      .array(z.string().trim().min(1).max(10))
+      .min(1)
+      .max(20)
+      .refine((sizes) => new Set(sizes).size === sizes.length, {
+        message: "shirt sizes must be unique",
+      })
+      .optional(),
   })
   .strict();
 
@@ -100,6 +110,7 @@ const DEFAULTS = {
   require_sponsor_dietary: false,
   require_staff_shirt_size: false,
   require_staff_dietary: false,
+  shirt_sizes: ["XS", "S", "M", "L", "XL", "XXL"],
 } as const;
 
 interface EventConfigRow {
@@ -126,6 +137,7 @@ interface EventConfigRow {
   require_sponsor_dietary: boolean;
   require_staff_shirt_size: boolean;
   require_staff_dietary: boolean;
+  shirt_sizes: string[];
 }
 
 async function readConfig(): Promise<EventConfigRow> {
@@ -138,7 +150,7 @@ async function readConfig(): Promise<EventConfigRow> {
             wifi_ssid, wifi_password,
             pass_back_fields, pass_field_labels, pass_field_visibility,
             require_sponsor_shirt_size, require_sponsor_dietary,
-            require_staff_shirt_size, require_staff_dietary
+            require_staff_shirt_size, require_staff_dietary, shirt_sizes
        FROM event_config WHERE id = 1`,
   );
   return rows[0] ?? DEFAULTS;
@@ -192,6 +204,9 @@ function toPublic(
     // with (deploy-time APPLE_PASS_ORGANIZATION), surfaced so the settings
     // page can show it instead of a mystery placeholder.
     organizerName: config.APPLE_PASS_ORGANIZATION,
+    // H12: public so every shirt-size picker (applications, invite claim,
+    // profile self-edit, staff user-edit) can render the same options.
+    shirtSizes: row.shirt_sizes,
   };
 }
 
@@ -264,7 +279,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Update event config",
         description:
-          "Updates name/tagline/timezone, event start (doors open — the time shown on the Wallet pass), hacking window, venue (name + GPS), the Wallet pass back-field list, field-label overrides, per-field show/hide toggles, whether participants may create their own project (H19), and whether invited sponsors/staff must supply a shirt size and/or see dietary-restriction fields when claiming their account (H10). Fields omitted from the body are left unchanged. Issued Apple Wallet passes are pushed a refresh when the saved config actually changes.",
+          "Updates name/tagline/timezone, event start (doors open — the time shown on the Wallet pass), hacking window, venue (name + GPS), the Wallet pass back-field list, field-label overrides, per-field show/hide toggles, whether participants may create their own project (H19), whether invited sponsors/staff must supply a shirt size and/or see dietary-restriction fields when claiming their account (H10), and the shirt-size options offered by every picker in the app (H12). Fields omitted from the body are left unchanged. Issued Apple Wallet passes are pushed a refresh when the saved config actually changes.",
         body: eventConfigBody,
       },
     },
@@ -322,6 +337,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
           b.requireStaffDietary === undefined
             ? current.require_staff_dietary
             : b.requireStaffDietary,
+        shirt_sizes: b.shirtSizes === undefined ? current.shirt_sizes : b.shirtSizes,
       };
 
       if (
@@ -352,8 +368,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
              wifi_ssid, wifi_password,
              pass_back_fields, pass_field_labels, pass_field_visibility,
              require_sponsor_shirt_size, require_sponsor_dietary,
-             require_staff_shirt_size, require_staff_dietary)
-         VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb, $18::jsonb, $19::jsonb, $20, $21, $22, $23)
+             require_staff_shirt_size, require_staff_dietary, shirt_sizes)
+         VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb, $18::jsonb, $19::jsonb, $20, $21, $22, $23, $24)
          ON CONFLICT (id) DO UPDATE
             SET name = EXCLUDED.name, tagline = EXCLUDED.tagline, timezone = EXCLUDED.timezone,
                 event_starts_at = EXCLUDED.event_starts_at,
@@ -375,7 +391,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
                 require_sponsor_shirt_size = EXCLUDED.require_sponsor_shirt_size,
                 require_sponsor_dietary = EXCLUDED.require_sponsor_dietary,
                 require_staff_shirt_size = EXCLUDED.require_staff_shirt_size,
-                require_staff_dietary = EXCLUDED.require_staff_dietary
+                require_staff_dietary = EXCLUDED.require_staff_dietary,
+                shirt_sizes = EXCLUDED.shirt_sizes
          RETURNING name, tagline, timezone, event_starts_at, event_ends_at,
                    hacking_starts_at, hacking_ends_at,
                    show_start_countdown, participants_can_create_projects,
@@ -384,7 +401,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
                    wifi_ssid, wifi_password,
                    pass_back_fields, pass_field_labels, pass_field_visibility,
                    require_sponsor_shirt_size, require_sponsor_dietary,
-                   require_staff_shirt_size, require_staff_dietary`,
+                   require_staff_shirt_size, require_staff_dietary, shirt_sizes`,
         [
           next.name,
           next.tagline,
@@ -409,6 +426,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
           next.require_sponsor_dietary,
           next.require_staff_shirt_size,
           next.require_staff_dietary,
+          next.shirt_sizes,
         ],
       );
       const judging = await readJudgingWindow();

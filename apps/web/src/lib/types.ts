@@ -140,6 +140,8 @@ export interface EventConfig {
   requireSponsorDietary: boolean;
   requireStaffShirtSize: boolean;
   requireStaffDietary: boolean;
+  /** H12: the options every shirt-size picker in the app renders. */
+  shirtSizes: string[];
 }
 
 export type InviteKind = "staff" | "sponsor" | "participant";

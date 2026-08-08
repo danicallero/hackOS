@@ -27,13 +27,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useShirtSizes } from "@/hooks/use-shirt-sizes";
 import { ApiError, api } from "@/lib/api";
 import { languageName, pickText, useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 import type { Intolerance, Language, Me } from "@/lib/types";
 import { EmailCard } from "./email-card";
 
-const SHIRT_SIZES = ["XS", "S", "M", "L", "XL", "XXL"] as const;
 const LANGS: Language[] = ["es", "gl", "en"];
 
 function profileSchema(t: (key: string) => string) {
@@ -92,6 +92,7 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
   const { t } = useLocale();
   const lang = (me.language as Language) ?? "es";
   const schema = useMemo(() => profileSchema(t), [t]);
+  const shirtSizes = useShirtSizes();
 
   const form = useForm<Values>({
     resolver: zodResolver(schema),
@@ -211,7 +212,7 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
                     </FormControl>
                     <SelectContent>
                       <SelectItem value={NONE}>{t("notSet")}</SelectItem>
-                      {SHIRT_SIZES.map((s) => (
+                      {shirtSizes.map((s) => (
                         <SelectItem key={s} value={s}>
                           {s}
                         </SelectItem>

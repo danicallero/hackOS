@@ -17,16 +17,15 @@ export interface IntoleranceOption {
   label: I18nText;
 }
 
-const SHIRT_SIZE_PREVIEW_FIELD: TemplateField = {
-  key: "shirt_size",
-  label: { en: "T-shirt size", es: "Talla de camiseta", gl: "Talla de camiseta" },
-  kind: "select",
-  required: true,
-  options: ["XS", "S", "M", "L", "XL", "XXL"].map((s) => ({
-    value: s,
-    label: { en: s, es: s, gl: s },
-  })),
-};
+function shirtSizePreviewField(sizes: string[]): TemplateField {
+  return {
+    key: "shirt_size",
+    label: { en: "T-shirt size", es: "Talla de camiseta", gl: "Talla de camiseta" },
+    kind: "select",
+    required: true,
+    options: sizes.map((s) => ({ value: s, label: { en: s, es: s, gl: s } })),
+  };
+}
 
 const FOOD_NOTES_PREVIEW_FIELD: TemplateField = {
   key: "food_intolerance_notes",
@@ -45,9 +44,10 @@ export function logisticsPreviewFields(
   askShirtSize: boolean,
   askFoodIntolerances: boolean,
   intolerances: IntoleranceOption[],
+  shirtSizes: string[],
 ): TemplateField[] {
   const extra: TemplateField[] = [];
-  if (askShirtSize) extra.push(SHIRT_SIZE_PREVIEW_FIELD);
+  if (askShirtSize) extra.push(shirtSizePreviewField(shirtSizes));
   if (askFoodIntolerances) {
     extra.push({
       key: "food_intolerances",

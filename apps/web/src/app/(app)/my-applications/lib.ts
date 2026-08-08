@@ -136,16 +136,15 @@ export type MutationKey = { responseId: number; status: string; key: string };
 // The server re-enriches and validates on submit (it stays the source of
 // truth), so this only governs presentation.
 
-const SHIRT_SIZE_FIELD: TemplateField = {
-  key: "shirt_size",
-  label: { en: "T-shirt size", es: "Talla de camiseta", gl: "Talla de camiseta" },
-  kind: "select",
-  required: true,
-  options: ["XS", "S", "M", "L", "XL", "XXL"].map((s) => ({
-    value: s,
-    label: { en: s, es: s, gl: s },
-  })),
-};
+function shirtSizeField(sizes: string[]): TemplateField {
+  return {
+    key: "shirt_size",
+    label: { en: "T-shirt size", es: "Talla de camiseta", gl: "Talla de camiseta" },
+    kind: "select",
+    required: true,
+    options: sizes.map((s) => ({ value: s, label: { en: s, es: s, gl: s } })),
+  };
+}
 
 const FOOD_NOTES_FIELD: TemplateField = {
   key: "food_intolerance_notes",
@@ -165,9 +164,11 @@ export function enrichTemplate(
   askFoodIntolerances: boolean,
   template: TemplateField[],
   intolerances: IntoleranceOption[],
+  shirtSizes: string[],
 ): TemplateField[] {
   let out = template;
-  if (askShirtSize && !out.some((f) => f.key === "shirt_size")) out = [...out, SHIRT_SIZE_FIELD];
+  if (askShirtSize && !out.some((f) => f.key === "shirt_size"))
+    out = [...out, shirtSizeField(shirtSizes)];
   if (askFoodIntolerances && !out.some((f) => f.key === "food_intolerances")) {
     const foodField: TemplateField = {
       key: "food_intolerances",

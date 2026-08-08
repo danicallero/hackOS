@@ -37,6 +37,7 @@ import { TemplateFieldControl, templateFieldId } from "@/components/common/templ
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { useShirtSizes } from "@/hooks/use-shirt-sizes";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { withReturnPath } from "@/lib/return-path";
@@ -71,6 +72,7 @@ export default function MyApplicationDetailPage() {
   const [form, setForm] = useState<PublicForm | null>(null);
   const [response, setResponse] = useState<MyResponseDetail | null>(null);
   const [intolerances, setIntolerances] = useState<IntoleranceOption[]>([]);
+  const shirtSizes = useShirtSizes();
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -205,7 +207,13 @@ export default function MyApplicationDetailPage() {
   // Mirror the API's enrichment so shirt-size + dietary fields render in the form
   // (participant/mentor) rather than being pulled silently from the profile (H12).
   const template = form
-    ? enrichTemplate(form.ask_shirt_size, form.ask_food_intolerances, form.template, intolerances)
+    ? enrichTemplate(
+        form.ask_shirt_size,
+        form.ask_food_intolerances,
+        form.template,
+        intolerances,
+        shirtSizes,
+      )
     : [];
   const status = confirmationExpired ? "expired" : response?.status; // already masked by the API
   const timelineResponse =

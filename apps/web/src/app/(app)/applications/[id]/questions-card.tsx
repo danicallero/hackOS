@@ -28,6 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { useShirtSizes } from "@/hooks/use-shirt-sizes";
 import { ApiError, api } from "@/lib/api";
 import { type Translate, useLocale } from "@/lib/i18n";
 import type { SaveState } from "@/lib/save-state";
@@ -69,6 +70,7 @@ export function QuestionsCard({
   const [previewLocale, setPreviewLocale] = useState<Language>(language);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [intolerances, setIntolerances] = useState<IntoleranceOption[]>([]);
+  const shirtSizes = useShirtSizes();
 
   // Re-seed if the form reloads (e.g. after a metadata save).
   useEffect(() => {
@@ -95,7 +97,12 @@ export function QuestionsCard({
   // would silently hide the very fields those toggles turn on.
   const previewFields = [
     ...fields,
-    ...logisticsPreviewFields(form.ask_shirt_size, form.ask_food_intolerances, intolerances),
+    ...logisticsPreviewFields(
+      form.ask_shirt_size,
+      form.ask_food_intolerances,
+      intolerances,
+      shirtSizes,
+    ),
   ];
 
   const update = (i: number, patch: Partial<TemplateField>) =>
@@ -239,10 +246,16 @@ export function QuestionsCard({
           icon={ListChecksIcon}
           title={t("noQuestionsYet")}
           description={t("noQuestionsYetDesc")}
+          action={
+            <Button type="button" variant="outline" size="sm" onClick={add}>
+              <PlusIcon />
+              {t("addQuestion")}
+            </Button>
+          }
         />
       ) : (
-        <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(20rem,0.8fr)]">
-          <div className="space-y-4">
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(22rem,1fr)]">
+          <div className="@container space-y-4">
             {fields.map((field, i) => (
               <FieldEditor
                 // biome-ignore lint/suspicious/noArrayIndexKey: fields are positional and reorderable
@@ -258,15 +271,22 @@ export function QuestionsCard({
                 onRemove={() => remove(i)}
               />
             ))}
+            <Button type="button" variant="outline" onClick={add} className="w-full">
+              <PlusIcon />
+              {t("addQuestion")}
+            </Button>
           </div>
-          <div className="hidden space-y-3 xl:sticky xl:top-4 xl:block">
+          <div className="hidden space-y-3 lg:sticky lg:top-4 lg:block">
             <div className="flex items-center justify-between gap-3">
-              <Label htmlFor="preview-locale">{t("previewLocale")}</Label>
+              <div className="flex items-center gap-1.5 text-sm font-medium">
+                <EyeIcon className="text-muted-foreground size-4" aria-hidden="true" />
+                {t("livePreviewLabel")}
+              </div>
               <Select
                 value={previewLocale}
                 onValueChange={(value) => setPreviewLocale(value as Language)}
               >
-                <SelectTrigger id="preview-locale" className="w-36">
+                <SelectTrigger id="preview-locale" className="w-24" aria-label={t("previewLocale")}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -378,7 +398,7 @@ export function FieldEditor({
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_14rem]">
+      <div className="grid gap-4 @lg:grid-cols-[minmax(0,1fr)_14rem]">
         <div className="space-y-1.5">
           <Label htmlFor={`question-${index}-${primaryLocale}`}>{t("primaryApplicantLabel")}</Label>
           <Input

@@ -1791,6 +1791,18 @@ const dict: Record<string, I18nText> = {
     gl: "Que debe indicar o persoal e as empresas patrocinadoras convidadas ao crear a súa conta.",
     en: "What invited staff and sponsor accounts must fill in when they claim their account.",
   },
+  shirtSizesGroup: { es: "Tallas de camiseta", gl: "Tallas de camiseta", en: "T-shirt sizes" },
+  shirtSizesGroupDesc: {
+    es: "Las opciones que se muestran en cualquier selector de talla de camiseta de la aplicación (formularios, invitaciones, perfil).",
+    gl: "As opcións que se mostran en calquera selector de talla de camiseta da aplicación (formularios, convites, perfil).",
+    en: "The options shown in every t-shirt size picker in the app (forms, invites, profile).",
+  },
+  addSize: { es: "Añadir talla", gl: "Engadir talla", en: "Add size" },
+  shirtSizesDuplicateError: {
+    es: "Las tallas no pueden repetirse.",
+    gl: "As tallas non poden repetirse.",
+    en: "Sizes can't repeat.",
+  },
   invitesSponsorsGroup: {
     es: "Patrocinadores",
     gl: "Patrocinadores",
@@ -7580,6 +7592,7 @@ const dict: Record<string, I18nText> = {
     gl: "Idioma da vista previa",
     en: "Preview language",
   },
+  livePreviewLabel: { es: "Vista previa en vivo", gl: "Vista previa en vivo", en: "Live preview" },
   internalDecisionNotice: {
     es: "Solo interno — la persona solicitante todavía no ha recibido esta decisión.",
     gl: "Só interno — a persoa solicitante aínda non recibiu esta decisión.",

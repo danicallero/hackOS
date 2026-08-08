@@ -35,11 +35,11 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
+import { useShirtSizes } from "@/hooks/use-shirt-sizes";
 import { ApiError, api } from "@/lib/api";
 import { isLanguage, LANGS, languageName, pickText, useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import type { Intolerance, Language, UserDetail } from "@/lib/types";
-import { SHIRT_SIZES } from "./shared";
 
 const editSchema = z.object({
   name: z.string().min(1, "Required").max(200),
@@ -150,6 +150,7 @@ export function StaffEditForm({
 }) {
   const { t } = useLocale();
   const lang = (LANGS.includes(user.language as Language) ? user.language : "es") as Language;
+  const shirtSizes = useShirtSizes();
 
   const localizedEditSchema = useMemo(
     () =>
@@ -327,7 +328,7 @@ export function StaffEditForm({
                   </FormControl>
                   <SelectContent>
                     <SelectItem value={NONE}>{t("notSet")}</SelectItem>
-                    {SHIRT_SIZES.map((s) => (
+                    {shirtSizes.map((s) => (
                       <SelectItem key={s} value={s}>
                         {s}
                       </SelectItem>

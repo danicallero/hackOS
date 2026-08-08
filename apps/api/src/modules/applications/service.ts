@@ -167,26 +167,30 @@ export function stripDietaryResponses(responses: Record<string, unknown>): Recor
   return sanitized;
 }
 
-const SHIRT_SIZE_FIELD: TemplateField = {
-  key: "shirt_size",
-  label: { en: "T-shirt size", es: "Talla de camiseta", gl: "Talla de camiseta" },
-  kind: "select",
-  required: true,
-  options: [
-    { value: "XS", label: { en: "XS", es: "XS", gl: "XS" } },
-    { value: "S", label: { en: "S", es: "S", gl: "S" } },
-    { value: "M", label: { en: "M", es: "M", gl: "M" } },
-    { value: "L", label: { en: "L", es: "L", gl: "L" } },
-    { value: "XL", label: { en: "XL", es: "XL", gl: "XL" } },
-    { value: "XXL", label: { en: "XXL", es: "XXL", gl: "XXL" } },
-  ],
-};
+/** The event's configured shirt-size options (H12) — same source every picker in the app reads from. */
+async function readShirtSizes(): Promise<string[]> {
+  const { rows } = await pool.query(`SELECT shirt_sizes FROM event_config WHERE id = 1`);
+  return rows[0]?.shirt_sizes ?? ["XS", "S", "M", "L", "XL", "XXL"];
+}
+
+function shirtSizeField(sizes: string[]): TemplateField {
+  return {
+    key: "shirt_size",
+    label: { en: "T-shirt size", es: "Talla de camiseta", gl: "Talla de camiseta" },
+    kind: "select",
+    required: true,
+    options: sizes.map((s) => ({ value: s, label: { en: s, es: s, gl: s } })),
+  };
+}
 
 /** If the application asks for a shirt size, append the field to the template. */
-export function augmentTemplate(askShirtSize: boolean, template: TemplateField[]): TemplateField[] {
+export async function augmentTemplate(
+  askShirtSize: boolean,
+  template: TemplateField[],
+): Promise<TemplateField[]> {
   if (!askShirtSize) return template;
   if (template.some((f) => f.key === "shirt_size")) return template;
-  return [...template, SHIRT_SIZE_FIELD];
+  return [...template, shirtSizeField(await readShirtSizes())];
 }
 
 const FOOD_NOTES_FIELD: TemplateField = {
@@ -205,7 +209,7 @@ export async function enrichTemplate(
   app: Pick<ApplicationRow, "ask_shirt_size" | "ask_food_intolerances">,
   template: TemplateField[],
 ): Promise<TemplateField[]> {
-  let enriched = augmentTemplate(app.ask_shirt_size, template);
+  let enriched = await augmentTemplate(app.ask_shirt_size, template);
   if (app.ask_food_intolerances && !enriched.some((f) => f.key === "food_intolerances")) {
     const { rows } = await pool.query(`SELECT id, label FROM food_intolerances ORDER BY id`);
     const intolerances: TemplateField = {

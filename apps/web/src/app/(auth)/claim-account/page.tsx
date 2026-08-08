@@ -30,13 +30,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useShirtSizes } from "@/hooks/use-shirt-sizes";
 import { ApiError, api } from "@/lib/api";
 import { languageName, pickText, type Translate, useLocale } from "@/lib/i18n";
 import { destinationForKind } from "@/lib/invite-destination";
 import { withReturnPath } from "@/lib/return-path";
 import type { Intolerance, InviteLookup, Language } from "@/lib/types";
-
-const SHIRT_SIZES = ["XS", "S", "M", "L", "XL", "XXL"] as const;
 
 function claimSchema(t: Translate) {
   return z.object({
@@ -87,6 +86,7 @@ function ClaimInner() {
   const [lookup, setLookup] = useState<InviteLookup | null | "error">(null);
   const [intolerances, setIntolerances] = useState<Intolerance[]>([]);
   const [done, setDone] = useState(false);
+  const shirtSizes = useShirtSizes();
 
   const form = useForm<Values>({
     resolver: zodResolver(schema),
@@ -327,7 +327,7 @@ function ClaimInner() {
                       </FormControl>
                       <SelectContent>
                         <SelectItem value={NONE}>{t("notSet")}</SelectItem>
-                        {SHIRT_SIZES.map((s) => (
+                        {shirtSizes.map((s) => (
                           <SelectItem key={s} value={s}>
                             {s}
                           </SelectItem>

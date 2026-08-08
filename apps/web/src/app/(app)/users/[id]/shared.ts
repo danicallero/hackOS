@@ -6,8 +6,6 @@ import { LOCALE_CODES, type MessageKey } from "@/lib/i18n";
 import type { Tone } from "@/lib/tones";
 import type { DerivedRole, UserDetail } from "@/lib/types";
 
-export const SHIRT_SIZES = ["XS", "S", "M", "L", "XL", "XXL"] as const;
-
 /** Illustrative role → tone (never used for gating, only for the header pill). */
 export const ROLE_TONE: Record<DerivedRole, Tone> = {
   admin: "brand",
