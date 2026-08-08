@@ -24,7 +24,8 @@ export function registerAdminRoutes(app: FastifyInstance): void {
   ] as const;
 
   const COLUMNS = `id, name, type, template, description, active, open_at, close_at,
-                   capacity, confirmation_window_hours, created_at`;
+                   capacity, confirmation_window_hours, ask_shirt_size, ask_food_intolerances,
+                   created_at`;
 
   // ── public: open forms with their template ──────────────────────────────────
   // A late invited participant (H10) can also discover/fetch a closed form —
@@ -124,7 +125,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Create an application form",
         description:
-          "Defines a new application form (H11): its template, open/close window, capacity and confirmation window.",
+          "Defines a new application form (H11): its template, open/close window, capacity, confirmation window, and whether it asks for a shirt size and/or dietary restrictions (H12) — both off by default, independent of `type`.",
         body: createApplicationSchema,
       },
     },
@@ -132,8 +133,9 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       const b = req.body;
       const { rows } = await pool.query(
         `INSERT INTO applications
-           (name, type, template, description, active, open_at, close_at, capacity, confirmation_window_hours)
-         VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8, $9)
+           (name, type, template, description, active, open_at, close_at, capacity,
+            confirmation_window_hours, ask_shirt_size, ask_food_intolerances)
+         VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8, $9, $10, $11)
          RETURNING ${COLUMNS}`,
         [
           b.name,
@@ -145,6 +147,8 @@ export function registerAdminRoutes(app: FastifyInstance): void {
           b.close_at ?? null,
           b.capacity ?? null,
           b.confirmation_window_hours,
+          b.ask_shirt_size,
+          b.ask_food_intolerances,
         ],
       );
       await audit(pool, {
@@ -167,7 +171,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Update an application form",
         description:
-          "Partial update of a form's template, window, capacity or active flag (H11). Fields omitted from the body are left unchanged.",
+          "Partial update of a form's template, window, capacity, active flag, or shirt-size/dietary-restriction toggles (H11, H12). Fields omitted from the body are left unchanged.",
         params: idParamSchema,
         body: updateApplicationSchema,
       },
@@ -192,6 +196,9 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       if (b.capacity !== undefined) put("capacity", b.capacity ?? null);
       if (b.confirmation_window_hours !== undefined)
         put("confirmation_window_hours", b.confirmation_window_hours);
+      if (b.ask_shirt_size !== undefined) put("ask_shirt_size", b.ask_shirt_size);
+      if (b.ask_food_intolerances !== undefined)
+        put("ask_food_intolerances", b.ask_food_intolerances);
 
       if (sets.length === 0) {
         const { rows } = await pool.query(`SELECT ${COLUMNS} FROM applications WHERE id = $1`, [

@@ -95,9 +95,44 @@ describe("application responses (H12)", () => {
     expect(res.json().error.details.fields.motivation).toBe("required");
   });
 
-  it("requires shirt size for participant/mentor types", async () => {
+  it("requires shirt size when the form asks for it (ask_shirt_size)", async () => {
     const a = await getApp();
-    const appId = await createApplication({ type: "participant" });
+    const appId = await createApplication({ type: "participant" }); // fixture defaults ask_shirt_size true for participant
+    const user = await createUser({ emailVerified: true });
+    await saveDraft(a, appId, user, { motivation: "x" });
+
+    const res = await a.inject({
+      method: "POST",
+      url: `/api/applications/${appId}/response/submit`,
+      headers: asUser(user),
+      payload: { food_intolerances: [] },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.details.code).toBe("shirt_size_required");
+  });
+
+  it("does not require shirt size when the form doesn't ask for it, even for participant type", async () => {
+    const a = await getApp();
+    const appId = await createApplication({
+      type: "participant",
+      ask_shirt_size: false,
+      ask_food_intolerances: false,
+    });
+    const user = await createUser({ emailVerified: true });
+    await saveDraft(a, appId, user, { motivation: "x" });
+
+    const res = await a.inject({
+      method: "POST",
+      url: `/api/applications/${appId}/response/submit`,
+      headers: asUser(user),
+      payload: { food_intolerances: [] },
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("volunteer forms can opt in to asking for shirt size", async () => {
+    const a = await getApp();
+    const appId = await createApplication({ type: "volunteer", ask_shirt_size: true });
     const user = await createUser({ emailVerified: true });
     await saveDraft(a, appId, user, { motivation: "x" });
 
