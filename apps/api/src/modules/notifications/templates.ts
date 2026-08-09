@@ -132,6 +132,20 @@ const TEMPLATES: Record<string, TemplateDefinition> = {
       body: "Ola,\n\nCrea a túa conta para continuar:\n\n[Crear conta]({{claimUrl}})\n\nCaemos en spam? Move esta mensaxe á caixa de entrada e engade {{fromAddress}} aos teus contactos para non perder ningunha mensaxe.\n\nDende alí fixa o teu contrasinal, nome e o resto dos teus datos.",
     },
   },
+  "project.invite": {
+    en: {
+      subject: "You've been invited to join {{projectName}}",
+      body: "Hi,\n\n{{inviterName}} invited you to join their project {{projectName}} on hackOS.\n\nOpen My Project to accept or decline the invite.",
+    },
+    es: {
+      subject: "Te han invitado a unirte a {{projectName}}",
+      body: "Hola,\n\n{{inviterName}} te ha invitado a unirte a su proyecto {{projectName}} en hackOS.\n\nAbre Mi proyecto para aceptar o rechazar la invitación.",
+    },
+    gl: {
+      subject: "Convidáronte a unirte a {{projectName}}",
+      body: "Ola,\n\n{{inviterName}} convidoute a unirte ao seu proxecto {{projectName}} en hackOS.\n\nAbre O meu proxecto para aceptar ou rexeitar o convite.",
+    },
+  },
   "queue.called": {
     en: {
       subject: "Your team was called",

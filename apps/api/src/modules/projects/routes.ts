@@ -17,6 +17,7 @@ import {
   createMyProjectBodySchema,
   createRepoBodySchema,
   importCsvBodySchema,
+  inviteProjectMemberBodySchema,
   linkParticipantBodySchema,
   mapPrizeBodySchema,
   prizeParamsSchema,
@@ -30,14 +31,20 @@ import {
   updateRepoBodySchema,
 } from "./schemas.js";
 import {
+  acceptProjectInvite,
   addRepoChallenge,
   addRepoMember,
   bulkAddRepoChallenge,
   bulkRemoveRepoChallenge,
+  canCreateMyProject,
   confirmImport,
   createMyProject,
   createRepoNative,
+  declineProjectInvite,
+  deleteMyProject,
   getRepoForScope,
+  inviteProjectMember,
+  leaveMyProject,
   linkParticipant,
   linkParticipantSecondary,
   listProjectMemberCandidates,
@@ -45,14 +52,15 @@ import {
   listReposForScope,
   listUnmatchedParticipants,
   mapPrizeToChallenge,
+  myPendingInvites,
   myProjects,
-  participantsCanCreateProjects,
   previewImport,
   removeDevpostParticipant,
   removeRepoChallenge,
   removeRepoMember,
   removeRepoPrize,
   sendClaimEmail,
+  updateMyProject,
   updateRepo,
 } from "./service.js";
 
@@ -472,16 +480,15 @@ export function registerProjectRoutes(app: FastifyInstance): void {
       ...access({ kind: "authenticated" }),
       preHandler: requireAuth,
       schema: {
-        summary: "My projects (H20): team roster, challenges and queue status. Read-only.",
+        summary: "My projects (H19/H20): team roster, challenges and queue status.",
         description:
-          "Projects the caller belongs to, with team members, challenge lineup and live queue positions. Teammate emails come back as null — only the caller's own address is included. `canCreate` reflects the event's H19 policy AND whether the caller may still create one (they don't belong to a project yet).",
+          "Projects the caller is an ACTIVE member of (a pending invite doesn't count — see GET .../invites), with team members, challenge lineup and live queue positions. Teammate emails come back as null — only the caller's own address is included. `canCreate` reflects the event's H19 policy AND the caller's own eligibility (admitted participant) AND whether the hacking window is currently open; it no longer requires the caller to have zero projects, since self-service now allows more than one.",
       },
     },
-    async (req) => {
-      const projects = await myProjects(req.userId as number);
-      const policyEnabled = await participantsCanCreateProjects();
-      return { projects, canCreate: policyEnabled && projects.length === 0 };
-    },
+    async (req) => ({
+      projects: await myProjects(req.userId as number),
+      canCreate: await canCreateMyProject(req.userId as number),
+    }),
   );
 
   r.post(
@@ -490,12 +497,125 @@ export function registerProjectRoutes(app: FastifyInstance): void {
       ...access({ kind: "authenticated" }),
       preHandler: [requireAuth, idempotencyGuard],
       schema: {
-        summary: "Create my own project (H19) — only while the event policy allows it.",
+        summary: "Create my own project (H19) — policy, eligibility and window gated.",
         description:
-          "403 unless event settings enable participant project creation; 409 if the caller already belongs to a project. The caller becomes the first team member; chosen (publicly visible) challenges enqueue the team at the bottom of their queues. Audited; idempotent via Idempotency-Key.",
+          "403 unless event settings enable participant project creation, the caller is an admitted participant, and the event's hacking window is open. A participant may now belong to more than one project — there is no longer a 409 for already belonging to one. The caller becomes the first team member; chosen (publicly visible) challenges enqueue the team at the bottom of their queues. Audited; idempotent via Idempotency-Key.",
         body: createMyProjectBodySchema,
       },
     },
     async (req) => createMyProject(req.userId as number, req.body),
+  );
+
+  // ── H19/H20: policy-gated participant self-service (edit, invites, leave,
+  // delete) — product decision superseding H20's literal read-only text
+  // while the event's H19 policy is on; recorded in docs/challenges-devpost.md.
+  // Every mutation here is additionally gated by the hacking window and by
+  // "admitted participant" eligibility (assertWithinHackingWindow /
+  // isAdmittedParticipant in service.ts).
+
+  r.patch(
+    "/api/me/projects/:id",
+    {
+      ...access({ kind: "authenticated" }),
+      preHandler: requireAuth,
+      schema: {
+        params: repoIdParamsSchema,
+        body: updateRepoBodySchema,
+        summary: "Edit my own project (H19/H20) — active members only.",
+        description:
+          "Updates only the fields present in the body. 403 if the caller isn't an active member of this project or the hacking window is closed. Audited (source: participant).",
+      },
+    },
+    async (req) => updateMyProject(req.userId as number, req.params.id, req.body),
+  );
+
+  r.post(
+    "/api/me/projects/:id/invites",
+    {
+      ...access({ kind: "authenticated" }),
+      preHandler: [requireAuth, idempotencyGuard],
+      schema: {
+        params: repoIdParamsSchema,
+        body: inviteProjectMemberBodySchema,
+        summary: "Invite a teammate to my project (H19/H20).",
+        description:
+          "Only an active member may invite; the invitee must have an account and be an admitted participant, and must not already be an active member of this project. Creates a pending invite (submissions.status='invited') and notifies the invitee; idempotent for a repeat invite to the same person. 403 outside the hacking window.",
+      },
+    },
+    async (req) => inviteProjectMember(req.userId as number, req.params.id, req.body.email),
+  );
+
+  r.get(
+    "/api/me/projects/invites",
+    {
+      ...access({ kind: "authenticated" }),
+      preHandler: requireAuth,
+      schema: {
+        summary: "My pending project invites (H19/H20).",
+        description:
+          "Lists project invites addressed to the caller that haven't been accepted or declined yet, newest first.",
+      },
+    },
+    async (req) => ({ invites: await myPendingInvites(req.userId as number) }),
+  );
+
+  r.post(
+    "/api/me/projects/invites/:id/accept",
+    {
+      ...access({ kind: "authenticated" }),
+      preHandler: [requireAuth, idempotencyGuard],
+      schema: {
+        params: repoIdParamsSchema,
+        summary: "Accept a pending project invite (H19/H20).",
+        description:
+          "Flips the caller's own pending invite for this exact project to an active membership. 404 if the caller has no pending invite for it (including when it's someone else's invite). 403 outside the hacking window.",
+      },
+    },
+    async (req) => acceptProjectInvite(req.userId as number, req.params.id),
+  );
+
+  r.post(
+    "/api/me/projects/invites/:id/decline",
+    {
+      ...access({ kind: "authenticated" }),
+      preHandler: [requireAuth, idempotencyGuard],
+      schema: {
+        params: repoIdParamsSchema,
+        summary: "Decline a pending project invite (H19/H20).",
+        description:
+          "Removes the caller's own pending invite for this exact project entirely. 404 if the caller has no pending invite for it. 403 outside the hacking window.",
+      },
+    },
+    async (req) => declineProjectInvite(req.userId as number, req.params.id),
+  );
+
+  r.delete(
+    "/api/me/projects/:id/leave",
+    {
+      ...access({ kind: "authenticated" }),
+      preHandler: [requireAuth, idempotencyGuard],
+      schema: {
+        params: repoIdParamsSchema,
+        summary: "Leave my own project (H19/H20).",
+        description:
+          "Removes the caller from the project's active roster. 409 if the caller is the last remaining member — delete the project instead. 403 if not a member, or outside the hacking window.",
+      },
+    },
+    async (req) => leaveMyProject(req.userId as number, req.params.id),
+  );
+
+  r.delete(
+    "/api/me/projects/:id",
+    {
+      ...access({ kind: "authenticated" }),
+      preHandler: [requireAuth, idempotencyGuard],
+      schema: {
+        params: repoIdParamsSchema,
+        summary: "Delete my own project (H19/H20) — sole member only.",
+        description:
+          "Deletes the project outright, including its queue entries, judging data and roster. Only allowed when the caller is the project's sole remaining active member; 409 otherwise. 403 outside the hacking window.",
+      },
+    },
+    async (req) => deleteMyProject(req.userId as number, req.params.id),
   );
 }

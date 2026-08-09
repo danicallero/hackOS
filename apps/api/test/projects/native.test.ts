@@ -8,7 +8,7 @@ import {
   createUserWithCapabilities,
   truncateAll,
 } from "../helpers.js";
-import { createChallenge } from "./fixtures.js";
+import { admitParticipant, createChallenge, setHackingWindow } from "./fixtures.js";
 
 /**
  * Native project lifecycle (H18-H20): org-side creation + metadata edits,
@@ -223,7 +223,7 @@ describe("PATCH /api/repos/:id (H18 metadata edit)", () => {
   });
 });
 
-describe("POST /api/me/projects (H19 policy-gated self-creation)", () => {
+describe("POST /api/me/projects (H19 policy/eligibility/window-gated self-creation)", () => {
   it("403s while the event policy is disabled", async () => {
     const server = await getApp();
     const participant = await createUser();
@@ -236,10 +236,43 @@ describe("POST /api/me/projects (H19 policy-gated self-creation)", () => {
     expect(res.statusCode).toBe(403);
   });
 
+  it("403s for a non-admitted participant even with the policy on and window open", async () => {
+    const server = await getApp();
+    await enableSelfCreation();
+    await setHackingWindow(true);
+    const notAdmitted = await createUser();
+
+    const res = await server.inject({
+      method: "POST",
+      url: "/api/me/projects",
+      headers: asUser(notAdmitted),
+      payload: { name: "My Project" },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("403s outside the hacking window even when policy-on and admitted", async () => {
+    const server = await getApp();
+    await enableSelfCreation();
+    await setHackingWindow(false);
+    const participant = await createUser();
+    await admitParticipant(participant);
+
+    const res = await server.inject({
+      method: "POST",
+      url: "/api/me/projects",
+      headers: asUser(participant),
+      payload: { name: "My Project" },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
   it("creates the caller's project with them as sole member and enqueues visible challenges", async () => {
     const server = await getApp();
     await enableSelfCreation();
+    await setHackingWindow(true);
     const participant = await createUser();
+    await admitParticipant(participant);
     const challengeId = await createChallenge("Open Challenge", []);
     await makeVisible(challengeId);
 
@@ -254,7 +287,8 @@ describe("POST /api/me/projects (H19 policy-gated self-creation)", () => {
     expect(body.repo.source).toBe("native");
     expect(body.challenges).toEqual([expect.objectContaining({ challengeId, position: 1 })]);
 
-    // H20 self-view: team + challenges, and canCreate flips off.
+    // H20 self-view: team + challenges, and canCreate now stays true — a
+    // participant may hold more than one project under self-service.
     const mine = await server.inject({
       method: "GET",
       url: "/api/me/projects",
@@ -262,7 +296,7 @@ describe("POST /api/me/projects (H19 policy-gated self-creation)", () => {
     });
     expect(mine.statusCode).toBe(200);
     const view = mine.json();
-    expect(view.canCreate).toBe(false);
+    expect(view.canCreate).toBe(true);
     expect(view.projects).toHaveLength(1);
     expect(view.projects[0].members.map((m: { userId: number }) => m.userId)).toEqual([
       participant,
@@ -270,41 +304,42 @@ describe("POST /api/me/projects (H19 policy-gated self-creation)", () => {
     expect(view.projects[0].challenges[0]).toMatchObject({ id: challengeId, status: "waiting" });
   });
 
-  it("409s when the caller already belongs to a project, also under concurrency", async () => {
+  it("allows creating more than one project (multi-membership, no more 409)", async () => {
     const server = await getApp();
     await enableSelfCreation();
+    await setHackingWindow(true);
     const participant = await createUser();
+    await admitParticipant(participant);
 
-    const [a, b] = await Promise.all([
-      server.inject({
-        method: "POST",
-        url: "/api/me/projects",
-        headers: asUser(participant),
-        payload: { name: "Race A" },
-      }),
-      server.inject({
-        method: "POST",
-        url: "/api/me/projects",
-        headers: asUser(participant),
-        payload: { name: "Race B" },
-      }),
-    ]);
-    // Exactly one winner (plan/07 §2): the other request sees the membership.
-    expect([a.statusCode, b.statusCode].sort()).toEqual([200, 409]);
-
-    const again = await server.inject({
+    const a = await server.inject({
       method: "POST",
       url: "/api/me/projects",
       headers: asUser(participant),
-      payload: { name: "Another" },
+      payload: { name: "First Project" },
     });
-    expect(again.statusCode).toBe(409);
+    const b = await server.inject({
+      method: "POST",
+      url: "/api/me/projects",
+      headers: asUser(participant),
+      payload: { name: "Second Project" },
+    });
+    expect(a.statusCode).toBe(200);
+    expect(b.statusCode).toBe(200);
+
+    const mine = await server.inject({
+      method: "GET",
+      url: "/api/me/projects",
+      headers: asUser(participant),
+    });
+    expect(mine.json().projects).toHaveLength(2);
   });
 
   it("hides unpublished challenges from self-creation (404, no existence leak)", async () => {
     const server = await getApp();
     await enableSelfCreation();
+    await setHackingWindow(true);
     const participant = await createUser();
+    await admitParticipant(participant);
     const hidden = await createChallenge("Hidden Challenge", []);
 
     const res = await server.inject({
@@ -318,7 +353,7 @@ describe("POST /api/me/projects (H19 policy-gated self-creation)", () => {
 });
 
 describe("GET /api/me/projects canCreate (H19/H20)", () => {
-  it("reflects the policy for members-less users and stays false when disabled", async () => {
+  it("requires the policy, eligibility and window all together", async () => {
     const server = await getApp();
     const participant = await createUser();
 
@@ -330,6 +365,22 @@ describe("GET /api/me/projects canCreate (H19/H20)", () => {
     expect(off.json()).toMatchObject({ projects: [], canCreate: false });
 
     await enableSelfCreation();
+    const notAdmittedYet = await server.inject({
+      method: "GET",
+      url: "/api/me/projects",
+      headers: asUser(participant),
+    });
+    expect(notAdmittedYet.json().canCreate).toBe(false);
+
+    await admitParticipant(participant);
+    const windowClosed = await server.inject({
+      method: "GET",
+      url: "/api/me/projects",
+      headers: asUser(participant),
+    });
+    expect(windowClosed.json().canCreate).toBe(false);
+
+    await setHackingWindow(true);
     const on = await server.inject({
       method: "GET",
       url: "/api/me/projects",

@@ -98,6 +98,12 @@ export const repoMemberBodySchema = z.object({
   userId: z.coerce.number().int().positive(),
 });
 
+/** POST /api/me/projects/:id/invites (H19/H20) — invite a teammate by email. */
+export const inviteProjectMemberBodySchema = z.object({
+  email: z.string().email(),
+});
+export type InviteProjectMemberBody = z.infer<typeof inviteProjectMemberBodySchema>;
+
 export const repoChallengeBodySchema = z.object({
   challengeId: z.coerce.number().int().positive(),
 });

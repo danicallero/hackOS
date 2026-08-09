@@ -129,8 +129,14 @@ judging deadline, but the public/general fields (`title`, `description`,
 | `POST /api/repos/:id/members` / `DELETE …/members/:userId` | `projects:edit` | H21 | hot-edit manually-added membership |
 | `DELETE /api/repos/:id/devpost-participants/:email` | `projects:edit` | H21 | remove one exact imported roster row |
 | `POST /api/repos/:id/challenges` / `DELETE …/challenges/:challengeId` | `projects:edit` | H21 | enqueue at queue bottom / remove + compact positions |
-| `GET /api/me/projects` | authenticated | H20 | participant self-view: team roster (teammate emails redacted to `null`), challenges, live queue status, plus `canCreate` (H19 policy ∧ no project yet) |
-| `POST /api/me/projects` | authenticated + idempotency | H19 | participant self-creation, only while the event policy allows it |
+| `GET /api/me/projects` | authenticated | H20 | participant self-view: team roster (teammate emails redacted to `null`), challenges, live queue status, plus `canCreate` (H19 policy ∧ admitted participant ∧ hacking window open) |
+| `POST /api/me/projects` | authenticated + idempotency | H19 | participant self-creation, gated by the event policy, admitted-participant eligibility, and the hacking window; a participant may now hold more than one project |
+| `PATCH /api/me/projects/:id` | authenticated | H19/H20 | participant self-edit of their own project's metadata — active members only |
+| `POST /api/me/projects/:id/invites` | authenticated + idempotency | H19/H20 | active member invites a teammate by email; pending until accepted |
+| `GET /api/me/projects/invites` | authenticated | H19/H20 | pending invites addressed to the caller |
+| `POST /api/me/projects/invites/:id/accept` \| `.../decline` | authenticated + idempotency | H19/H20 | invitee accepts (becomes an active member) or declines (row deleted) their own invite |
+| `DELETE /api/me/projects/:id/leave` | authenticated + idempotency | H19/H20 | active member leaves; 409 if they're the last member |
+| `DELETE /api/me/projects/:id` | authenticated + idempotency | H19/H20 | the project's sole remaining member deletes it outright, cascading queue/judging rows |
 
 **Native lifecycle (H18-H19).** `repos.source` distinguishes `'devpost'` from
 `'native'` rows (migration `0301`), and the import's name-dedupe skips native
@@ -144,15 +150,57 @@ mutation. Participant self-creation is gated by
 one project per participant (advisory-locked, exactly one winner under
 concurrency), and only accepts publicly visible challenges.
 
-**H20 stays read-only for participants.** A participant can *see* their
-project, team and challenges (web: `/my-project`) but cannot mutate an existing
-project — corrections go through queue-management/admin (H21). The only
-participant-side write is the H19 creation itself, and only while the event
-policy is on. The self-view is also the only read that redacts the roster:
-`myProjects()` nulls every member `email` except the caller's own, so teammates
-are listed by name alone and a participant never learns another participant's
-address. Staff reads (`GET /api/repos`, `GET /api/repos/:id`) keep the full
-roster — they need it for linking and accreditation.
+**H19/H20 self-service (supersedes H20's "read-only" text — product decision,
+not a `plan/` edit).** `plan/historias-hackos.md` still literally says a
+participant "no puedo modificar nada de esto yo mismo" for H20. That framing
+predates H19's policy-gated self-creation; once an event turns the H19 policy
+on, participants get full self-service on their **own** project — edit
+metadata, invite/accept/decline teammates, leave, and (as the sole remaining
+member) delete it — not just view it. `plan/` is read-only and stays exactly
+as written; this doc records the deliberate supersession instead. Two gates
+apply to every self-service mutation, on top of `participants_can_create_projects`:
+
+- **Admitted-participant eligibility** (`isAdmittedParticipant` in
+  `service.ts`) — a thin wrapper around `computeDerivedRole` +
+  `hasMobileAccess` (identity module), reused verbatim rather than
+  reimplemented. An account that isn't an accepted/confirmed applicant (or an
+  operational role) can't create, be invited into, or otherwise touch a
+  project this way.
+- **Hacking window** (`assertWithinHackingWindow` /
+  `isWithinHackingWindow`, `src/lib/hacking-window.ts`) — both
+  `event_config.hacking_starts_at` and `hacking_ends_at` must be set and
+  `now()` must fall between them; an unset window reads as closed, not
+  unrestricted. Staff (`PROJECTS_EDIT`) routes are NOT subject to this gate —
+  operators can still correct teams/challenges any time (H21).
+
+**Invites are opt-in, not instant adds.** `submissions` (migration `0303`,
+`DELTA(H19,H20)`) gained `status` (`invited` | `active`, default `active` so
+every pre-existing/H18/H21 row needs no backfill), `invited_by`, and
+`responded_at`. `inviteProjectMember` inserts a `status='invited'` row and
+notifies the invitee (`notify(... category: "project", template:
+"project.invite" ...)`); the invitee must `accept` (flips to `active`,
+stamps `responded_at`) or `decline` (deletes the row) themselves — nobody
+else can act on their invite (wrong-user attempts read as 404, not 403, so a
+participant can't probe whether an invite exists for someone else).
+`isActiveProjectMember`/`activeProjectMemberCount` and every other roster
+read (`attachMembersAndPrizes`, `myProjects`, the queue's
+`REPO_MEMBER_RELATION_SQL`, `myQueueStatus`) all exclude `status='invited'`
+rows — a pending invite is not yet a team member anywhere in the platform
+(roster, queue notifications, "who may act on this queue entry").
+
+**Delete only reaches a sole-member project.** `leaveMyProject` 409s if the
+caller is the last active member (delete instead); `deleteMyProject` re-checks
+membership and the sole-member count inside its own transaction, then cascades
+every FK-referencing row (`queue_entries`, `queue_history`, `attempt_review`,
+`attempt_review_versions`, `judging_session`, `submissions`,
+`devpost_participants`, `repo_devpost_prizes`, `challenge_winners` — none of
+those FKs cascade at the schema level) before deleting the repo itself.
+
+The self-view is still the only read that redacts the roster: `myProjects()`
+nulls every member `email` except the caller's own, so teammates are listed by
+name alone and a participant never learns another participant's address.
+Staff reads (`GET /api/repos`, `GET /api/repos/:id`) keep the full roster —
+they need it for linking and accreditation.
 
 ---
 
@@ -288,12 +336,15 @@ which per `CLAUDE.md` overrides any conflicting instruction. They were **not**
 implemented:
 
 1. **Participant "max challenges per project" + "freeze participant edits at a
-   deadline."** H20 states participants cannot modify their project, team, or
-   challenges ("*No puedo modificar nada de esto yo mismo*"); corrections flow
-   through operators (H21). The post-MVP extension is now built: native
-   creation (H18) and policy-gated participant self-creation (H19) — see §1.3 —
-   but the participant surface for *existing* projects stays read-only, and no
-   limit/lock flow exists because the stories don't name one.
+   deadline."** H20's literal text says participants cannot modify their
+   project, team, or challenges ("*No puedo modificar nada de esto yo
+   mismo*"). A later product decision (§1.3, "H19/H20 self-service") supersedes
+   that for *existing* projects once the H19 policy is on: participants can
+   edit, invite/accept/decline teammates, leave, and delete their own project,
+   gated by admitted-participant eligibility and the hacking window. There is
+   still no "max challenges per project" or numeric edit-freeze-at-a-deadline
+   flow — the hacking-window gate is the deadline mechanism the stories and
+   this decision actually call for, not an extra lock/limit the brief invented.
 2. **Generic challenge Delete CRUD.** Challenges are created and owned through
    the sponsor lifecycle (H43/H44), and publication is an admin-controlled
    status/visibility transition. There is still no delete endpoint; the "prevent

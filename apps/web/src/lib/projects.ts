@@ -166,6 +166,38 @@ export const updateRepo = (
 export const createMyProject = (input: NativeProjectInput, idempotencyKey?: string) =>
   api.post<CreatedProject>("/api/me/projects", { ...input }, idem(idempotencyKey));
 
+// ── H19/H20 participant self-service: edit, invite, leave, delete ──────────
+/** PATCH /api/me/projects/:id — active members only, hacking-window gated. */
+export const updateMyProject = (
+  repoId: number,
+  patch: Partial<Pick<NativeProjectInput, "name" | "description" | "githubUrl" | "demoUrl">>,
+) => api.patch<RepoWithExtras>(`/api/me/projects/${repoId}`, patch);
+
+/** POST /api/me/projects/:id/invites — invite a teammate by email. */
+export const inviteProjectMember = (repoId: number, email: string, idempotencyKey?: string) =>
+  api.post(`/api/me/projects/${repoId}/invites`, { email }, idem(idempotencyKey));
+
+export interface PendingInvite {
+  repoId: number;
+  repoName: string;
+  invitedByName: string | null;
+  invitedAt: string;
+}
+
+/** GET /api/me/projects/invites — invites addressed to the caller. */
+export const myPendingInvites = () =>
+  api.get<{ invites: PendingInvite[] }>("/api/me/projects/invites");
+
+export const acceptProjectInvite = (repoId: number, idempotencyKey?: string) =>
+  api.post(`/api/me/projects/invites/${repoId}/accept`, {}, idem(idempotencyKey));
+export const declineProjectInvite = (repoId: number, idempotencyKey?: string) =>
+  api.post(`/api/me/projects/invites/${repoId}/decline`, {}, idem(idempotencyKey));
+
+export const leaveMyProject = (repoId: number, idempotencyKey?: string) =>
+  api.delete(`/api/me/projects/${repoId}/leave`, idem(idempotencyKey));
+export const deleteMyProject = (repoId: number, idempotencyKey?: string) =>
+  api.delete(`/api/me/projects/${repoId}`, idem(idempotencyKey));
+
 export const addRepoMember = (repoId: number, userId: number, idempotencyKey?: string) =>
   api.post(`/api/repos/${repoId}/members`, { userId }, idem(idempotencyKey));
 export const removeRepoMember = (repoId: number, userId: number) =>
