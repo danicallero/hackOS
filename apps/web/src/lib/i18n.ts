@@ -2020,11 +2020,6 @@ const dict: Record<string, I18nText> = {
     gl: "Os equipos chamados volven arriba da cola. O equipo de dentro pode rematar e non se chamará a ninguén ata reanudar.",
     en: "Called teams return to the top of the queue. The team inside may finish, and nobody else is called until resuming.",
   },
-  roomPausedQueueBehavior: {
-    es: "Sala pausada: el equipo dentro puede terminar; no se llamará a nadie más.",
-    gl: "Sala pausada: o equipo de dentro pode rematar; non se chamará a ninguén máis.",
-    en: "Room paused: the team inside may finish; nobody else will be called.",
-  },
   exportData: { es: "Exportar datos", gl: "Exportar datos", en: "Export Data" },
   queueExportLabel: { es: "Cola", gl: "Cola", en: "Queue" },
   evaluationsExport: { es: "Evaluaciones", gl: "Avaliacións", en: "Evaluations" },

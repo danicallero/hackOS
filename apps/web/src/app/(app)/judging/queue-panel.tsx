@@ -165,14 +165,6 @@ export function QueuePanel({
       <QueueStatsCard progress={progress} pace={pace} />
       <Separator />
       <div className="space-y-5 p-5">
-        {view.state?.is_paused && (
-          <div
-            role="status"
-            className="border-warning/40 bg-warning/10 text-warning-foreground rounded-md border p-3 text-sm"
-          >
-            {t("roomPausedQueueBehavior")}
-          </div>
-        )}
         <QueueList
           title={t("waitingRoomCount", { count: calledEntries.length })}
           entries={calledEntries}
