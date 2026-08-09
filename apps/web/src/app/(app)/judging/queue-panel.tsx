@@ -288,10 +288,10 @@ export function QueuePanel({
 }
 
 /**
- * Actions for a team at the door, compacted to two button rows: a primary
- * row (Call in / Bring in) and a "More" menu for the rarer moves (requeue,
- * no-show, disqualify) instead of five separate buttons wrapping across
- * three rows in the 360px sidebar.
+ * Actions for a team at the door: Call in / Bring in / a "More" menu for the
+ * rarer moves (requeue, no-show, disqualify). The three buttons flex-wrap so
+ * "More actions" sits next to Bring in when the column is wide enough, and
+ * drops to its own row when it isn't, instead of five separate buttons.
  */
 export function CalledEntryActions({
   entry,
@@ -318,10 +318,11 @@ export function CalledEntryActions({
   const canModerate = !canJudge && !canOperate;
 
   return (
-    <div className="grid grid-cols-2 gap-2">
+    <div className="flex flex-wrap gap-2">
       <Button
         size="sm"
         variant="outline"
+        className="min-w-28 flex-1"
         disabled={busy != null || canModerate}
         onClick={() => onEntryAction(entry, "notify-enter", undefined, t("entranceNoticeSent"))}
       >
@@ -330,6 +331,7 @@ export function CalledEntryActions({
       </Button>
       <Button
         size="sm"
+        className="min-w-28 flex-1"
         disabled={busy != null || !canJudge}
         onClick={() => onEntryAction(entry, "bring-in", undefined, t("teamBroughtInShort"))}
       >
@@ -341,7 +343,7 @@ export function CalledEntryActions({
           <Button
             size="sm"
             variant="outline"
-            className="col-span-2"
+            className="min-w-28 flex-1"
             disabled={busy != null || canModerate}
           >
             <MoreHorizontalIcon className="size-4" />
