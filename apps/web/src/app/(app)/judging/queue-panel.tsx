@@ -200,10 +200,6 @@ export function QueuePanel({
               <h3 className="text-sm font-semibold">
                 {t("challengeQueueCount", { count: waitingEntries.length })}
               </h3>
-              <p className="text-muted-foreground text-xs">{t("upcomingTeamsRoom")}</p>
-              <p className="text-muted-foreground text-pretty text-xs">
-                {t("crossRoomSkipPositionPreserved")}
-              </p>
             </div>
             <Button
               size="icon"

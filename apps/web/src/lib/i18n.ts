@@ -2150,16 +2150,6 @@ const dict: Record<string, I18nText> = {
     gl: "Cola do reto ({count})",
     en: "Challenge queue ({count})",
   },
-  upcomingTeamsRoom: {
-    es: "Próximos equipos para esta sala.",
-    gl: "Próximos equipos para esta sala.",
-    en: "Upcoming teams for this room.",
-  },
-  crossRoomSkipPositionPreserved: {
-    es: "Si un miembro está ocupado en otra sala, el sistema pasa al siguiente sin cambiar su posición.",
-    gl: "Se un membro está ocupado noutra sala, o sistema pasa ao seguinte sen cambiar a súa posición.",
-    en: "If a member is busy in another room, the system moves on without changing this team's position.",
-  },
   teamBusyInOtherRoom: {
     es: "No se puede llamar ahora: el equipo tiene un miembro ocupado en {room}.",
     gl: "Non se pode chamar agora: o equipo ten un membro ocupado en {room}.",
