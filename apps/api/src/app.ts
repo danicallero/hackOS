@@ -241,8 +241,9 @@ export async function buildApp(): Promise<App> {
     // Custom request headers the app sends (idempotency on critical mutations).
     allowedHeaders: ["content-type", "idempotency-key"],
     // Response headers the browser must be able to read cross-origin: rate
-    // limit backoff (H3) and idempotent-replay signalling.
-    exposedHeaders: ["retry-after", "idempotency-replayed"],
+    // limit backoff (H3), idempotent-replay signalling, and per-file export
+    // failures (H56) the web client surfaces so staff can act on them.
+    exposedHeaders: ["retry-after", "idempotency-replayed", "x-export-file-failures"],
   });
   // File uploads (H44 sponsor logos) proxied through the API so the browser
   // never needs to reach the object store directly. 5 MB cap on a logo.

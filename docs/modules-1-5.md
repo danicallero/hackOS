@@ -320,6 +320,29 @@ changed — it stays the plain string object key it always was.
 **State transitions.** None — this is response metadata and a read-only bulk
 export, not a status transition.
 
+**Bug fix — 502 on export when a stored file is missing (H56).**
+`getObject()` for a single row's `file_key` used to run unguarded *after*
+`reply.send(archive)` had already committed headers and started streaming;
+one missing/unreadable object threw, left the zip unfinalized, and hung the
+connection — a reverse proxy in front of the API (Cloudflare, in the reported
+incident) sees that as a broken upstream and returns 502. Fixed by
+pre-flighting every `file_key` with `storage.ts:objectExists` (a `HEAD`, no
+body) before committing to the streamed response at all, so failures can
+still become a clean signal instead of killing the connection.
+
+**Follow-up — failures are reported, not silently dropped.** Each unreadable
+file writes an `audit_log` row (`application_response` /
+`export_file_unreadable`, tied to that specific response) and the response
+carries an `x-export-file-failures` header (`{ total, items: [{ responseId,
+userId, email }] }`, capped at 50 items, exposed via CORS in `app.ts`).
+`(app)/applications/[id]/responses-tab.tsx`'s export buttons switched from a
+plain `<a href>` download (headers unreadable by JS) to a `fetch` + blob
+download so they can read that header: on failure it shows a dismissible
+`Alert` listing each affected applicant with a "View profile" link to
+`/users/:id?tab=application`, so staff can find and manually fix the
+specific application instead of the file just vanishing from the zip with no
+trace.
+
 ---
 
 ## Module 8 — Reviewers can see decisions read-only (H57)
