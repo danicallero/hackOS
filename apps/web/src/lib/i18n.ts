@@ -8293,6 +8293,42 @@ const dict: Record<string, I18nText> = {
     gl: "A conta nova eliminarase por completo porque non ten historial operativo.",
     en: "The fresh account will be fully deleted because it has no operational history.",
   },
+  dangerZone: { es: "Zona de peligro", gl: "Zona de perigo", en: "Danger zone" },
+  showDangerZone: {
+    es: "Mostrar zona de peligro",
+    gl: "Amosar zona de perigo",
+    en: "Show danger zone",
+  },
+  hideDangerZone: {
+    es: "Ocultar zona de peligro",
+    gl: "Agochar zona de perigo",
+    en: "Hide danger zone",
+  },
+  deleteMyAccount: {
+    es: "Eliminar mi cuenta",
+    gl: "Eliminar a miña conta",
+    en: "Delete my account",
+  },
+  deleteMyAccountDesc: {
+    es: "Tu cuenta no tiene historial operativo (aplicación, acreditación…), así que puedes eliminarla tú mismo/a. Esto también eliminará cualquier solicitud que hayas presentado.",
+    gl: "A túa conta non ten historial operativo (aplicación, acreditación…), así que podes eliminala ti mesmo/a. Isto tamén eliminará calquera solicitude que presentases.",
+    en: "Your account has no operational history (application, accreditation…), so you can delete it yourself. This will also delete any application you submitted.",
+  },
+  deleteMyAccountConfirmTitle: {
+    es: "¿Eliminar tu cuenta?",
+    gl: "¿Eliminar a túa conta?",
+    en: "Delete your account?",
+  },
+  areYouSureCantBeUndone: {
+    es: "¿Estás seguro? Esta acción no se puede deshacer.",
+    gl: "¿Tes certeza? Esta acción non se pode desfacer.",
+    en: "Are you sure? This action can't be undone.",
+  },
+  cannotSelfDeleteAccount: {
+    es: "Tu cuenta no se puede eliminar automáticamente por tener historial operativo (por ejemplo, acreditación en el evento). Contacta con la administración en hackudc@gpul.org para solicitar el ejercicio de tu derecho a la anonimización según nuestra política de privacidad.",
+    gl: "A túa conta non se pode eliminar automaticamente por ter historial operativo (por exemplo, acreditación no evento). Contacta coa administración en hackudc@gpul.org para solicitar o exercicio do teu dereito á anonimización segundo a nosa política de privacidade.",
+    en: "Your account can't be deleted automatically because it has operational history (for example, event accreditation). Contact the organisers at hackudc@gpul.org to request anonymization under our privacy policy.",
+  },
   dataStatusDraft: { es: "Borrador", gl: "Borrador", en: "Draft" },
   dataStatusSubmitted: { es: "Enviada", gl: "Enviada", en: "Submitted" },
   dataStatusReview: { es: "En revisión", gl: "En revisión", en: "In review" },

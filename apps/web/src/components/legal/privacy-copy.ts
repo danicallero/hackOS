@@ -60,6 +60,10 @@ La información principal de hackOS —incluidas las cuentas, solicitudes, bases
 
 Conservaremos tus datos mientras tu cuenta o relación con GPUL permanezca activa y, después, durante los plazos necesarios para atender responsabilidades legales. Cuando finalicen, los datos serán eliminados o anonimizados.
 
+Si tu cuenta nunca llegó a ser aceptada ni acreditada en el evento, puedes eliminarla tú mismo/a desde los ajustes de tu cuenta («Zona de peligro»); esa eliminación borra también las solicitudes que hayas presentado.
+
+Si has sido acreditado/a en el evento, no siempre podemos eliminar tus datos de inmediato: GPUL recibe subvenciones públicas que exigen justificar la participación real —incluyendo registros de acceso y datos demográficos— ante la administración y la universidad durante el plazo legal de rendición de cuentas. Mientras dure ese plazo, el tratamiento se basa en el cumplimiento de esa obligación legal y, en lugar de eliminarlos, aplicaremos una limitación del tratamiento anonimizando tus datos personales (nombre, contacto, documento identificativo…) y conservando únicamente los datos agregados necesarios para la justificación. Puedes solicitar esta anonimización en cualquier momento escribiendo a [hackudc@gpul.org](mailto:hackudc@gpul.org); no es una acción que puedas ejecutar tú mismo/a desde la aplicación.
+
 ## 7. Cookies y almacenamiento local
 
 hackOS utiliza una cookie de sesión propia, imprescindible para autenticarte y proteger tu cuenta. También guarda localmente preferencias como el idioma, el tema, el estado de la navegación y la confirmación de que has visto el aviso de cookies. No utilizamos estos mecanismos para publicidad comportamental ni para vender información sobre tu navegación.
@@ -138,6 +142,10 @@ A información principal de hackOS —incluídas as contas, solicitudes, bases d
 
 Conservaremos os teus datos mentres a túa conta ou relación con GPUL permaneza activa e, despois, durante os prazos necesarios para atender responsabilidades legais. Cando finalicen, os datos serán eliminados ou anonimizados.
 
+Se a túa conta nunca chegou a ser aceptada nin acreditada no evento, podes eliminala ti mesmo/a desde os axustes da túa conta («Zona de perigo»); esa eliminación borra tamén as solicitudes que presentases.
+
+Se fuches acreditado/a no evento, non sempre podemos eliminar os teus datos de inmediato: GPUL recibe subvencións públicas que esixen xustificar a participación real —incluíndo rexistros de acceso e datos demográficos— ante a administración e a universidade durante o prazo legal de rendición de contas. Mentres dure ese prazo, o tratamento baséase no cumprimento desa obriga legal e, no canto de eliminalos, aplicaremos unha limitación do tratamento anonimizando os teus datos persoais (nome, contacto, documento identificativo…) e conservando unicamente os datos agregados necesarios para a xustificación. Podes solicitar esta anonimización en calquera momento escribindo a [hackudc@gpul.org](mailto:hackudc@gpul.org); non é unha acción que poidas executar ti mesmo/a desde a aplicación.
+
 ## 7. Cookies e almacenamento local
 
 hackOS utiliza unha cookie de sesión propia, imprescindible para autenticarte e protexer a túa conta. Tamén garda localmente preferencias como o idioma, o tema, o estado da navegación e a confirmación de que viches o aviso de cookies. Non utilizamos estes mecanismos para publicidade comportamental nin para vender información sobre a túa navegación.
@@ -215,6 +223,10 @@ Core hackOS information —including accounts, applications, databases and files
 ## 6. Retention
 
 We retain your data while your account or relationship with GPUL remains active and afterwards for the periods necessary to address legal liabilities. Once those periods end, the data is deleted or anonymised.
+
+If your account was never accepted or accredited at the event, you can delete it yourself from your account settings ("Danger zone"); that deletion also removes any applications you submitted.
+
+If you were accredited at the event, we cannot always delete your data immediately: GPUL receives public grants that require justifying real participation — including access records and demographic data — to the administration and the university during the legal accountability period. While that period lasts, processing is based on compliance with that legal obligation and, instead of deletion, we will restrict processing by anonymising your personal data (name, contact details, identity document…) while keeping only the aggregate data needed for justification purposes. You can request this anonymisation at any time by emailing [hackudc@gpul.org](mailto:hackudc@gpul.org); it is not an action you can carry out yourself from the application.
 
 ## 7. Cookies and local storage
 

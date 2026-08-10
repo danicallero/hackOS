@@ -22,7 +22,7 @@ import {
   lockPermissionGraph,
   userHasWildcard,
 } from "../permission-graph.js";
-import { getAccountRemovalEligibility } from "../removal.js";
+import { deleteOwnApplicationData, getAccountRemovalEligibility } from "../removal.js";
 import { computeDerivedRole, computeMembershipFlags, hasEventAccess } from "../role.js";
 
 /**
@@ -87,6 +87,13 @@ const COLUMN_BY_FIELD: Record<string, string> = {
   dni: "dni",
   notes: "notes",
 };
+
+const removalEligibilityResponseSchema = z.object({
+  action: z.enum(["delete", "anonymize"]),
+  reasonCode: z.enum(["fresh_account", "operational_history"]),
+  accessRevoked: z.literal(true),
+  operationalHistoryRetained: z.boolean(),
+});
 
 const userResponseSchema = z.object({
   id: z.number(),
@@ -355,6 +362,89 @@ export function registerProfileRoutes(app: FastifyInstance): void {
   );
 
   api.get(
+    "/api/me/removal-eligibility",
+    {
+      preHandler: requireAuth,
+      config: routeAccess({ kind: "authenticated" }),
+      schema: {
+        description:
+          "H54 self-service preflight: whether the caller can delete their own account outright, " +
+          "or whether it can only be anonymized on request (retained history) — never both.",
+        summary: "Get my account-removal eligibility",
+        response: { 200: removalEligibilityResponseSchema },
+      },
+    },
+    async (req) => getAccountRemovalEligibility(pool, req.userId as number),
+  );
+
+  // Self-service deletion (H54) — a participant who was never accepted/given
+  // a role has no operational history worth retaining, so they can delete
+  // their own account outright (danger-zone UI). Anyone with retained history
+  // (ticket, scans, submissions…) can't self-serve: only an admin can
+  // anonymize on request (privacy policy §6) — this route 409s for them.
+  api.delete(
+    "/api/me",
+    {
+      preHandler: requireAuth,
+      config: routeAccess({ kind: "authenticated" }),
+      schema: {
+        description:
+          "H54 self-service account deletion. Only allowed when the account has no retained " +
+          "operational history; otherwise 409 — the privacy policy points accredited " +
+          "participants to requesting anonymization from an administrator instead.",
+        summary: "Delete my account",
+        response: { 200: z.object({ deleted: z.literal(true) }) },
+      },
+    },
+    async (req) => {
+      const userId = req.userId as number;
+      const eligibility = await getAccountRemovalEligibility(pool, userId);
+      if (eligibility.action === "anonymize") {
+        throw new ConflictError(
+          "This account has retained history and can't self-delete — request anonymization from an administrator instead.",
+          { userId, reasonCode: eligibility.reasonCode },
+        );
+      }
+      try {
+        await withTransaction(async (client) => {
+          await lockPermissionGraph(client);
+          const wasWildcardHolder = await userHasWildcard(client, userId);
+          const target = await fetchUser(userId);
+          // actorId: null — actor and target are the same row, which is
+          // about to be deleted in this transaction; audit_log.actor_id
+          // references users(id), so pointing it at the row being removed
+          // would self-block the DELETE below with a FK violation.
+          await audit(client, {
+            actorId: null,
+            entityType: "user",
+            entityId: userId,
+            action: "delete",
+            source: "web",
+            before: { email: target.email },
+          });
+          await deleteOwnApplicationData(client, userId);
+          await client.query(`DELETE FROM users WHERE id = $1`, [userId]);
+          if (wasWildcardHolder) await assertActiveWildcardHolder(client);
+        });
+      } catch (err) {
+        if (
+          typeof err === "object" &&
+          err !== null &&
+          (err as { code?: string }).code === "23503"
+        ) {
+          throw new ConflictError(
+            "This account has retained history and can't self-delete — request anonymization from an administrator instead.",
+            { userId },
+          );
+        }
+        throw err;
+      }
+      await invalidateCapabilities(userId);
+      return { deleted: true as const };
+    },
+  );
+
+  api.get(
     "/api/users",
     {
       preHandler: requireCapability(CAPABILITIES.USERS_READ),
@@ -577,14 +667,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           "Read-only H54 preflight selecting the one safe account-removal action from retained references.",
         summary: "Get account-removal eligibility",
         params: z.object({ id: z.coerce.number().int() }),
-        response: {
-          200: z.object({
-            action: z.enum(["delete", "anonymize"]),
-            reasonCode: z.enum(["fresh_account", "operational_history"]),
-            accessRevoked: z.literal(true),
-            operationalHistoryRetained: z.boolean(),
-          }),
-        },
+        response: { 200: removalEligibilityResponseSchema },
       },
     },
     async (req) => {
@@ -602,7 +685,10 @@ export function registerProfileRoutes(app: FastifyInstance): void {
   // user who has *done* anything cannot be hard-deleted without corrupting
   // history: we surface a clear 409 in that case (H54 anonymization is the
   // proper path for those). Fresh/inactive accounts delete cleanly (sessions,
-  // accounts and group memberships cascade).
+  // accounts and group memberships cascade); an unaccepted applicant with no
+  // ticket/role also deletes cleanly — deleteOwnApplicationData removes their
+  // own application_responses/applicant_reviews first, since a never-accepted
+  // application isn't operational history worth retaining (H54).
   api.delete(
     "/api/users/:id",
     {
@@ -638,6 +724,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             source: "admin",
             before: { email: target.email },
           });
+          await deleteOwnApplicationData(client, targetId);
           await client.query(`DELETE FROM users WHERE id = $1`, [targetId]);
           if (wasWildcardHolder) await assertActiveWildcardHolder(client);
         });
