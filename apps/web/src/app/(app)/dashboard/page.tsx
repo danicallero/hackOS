@@ -10,6 +10,7 @@ import {
   TicketIcon,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
@@ -86,7 +87,8 @@ function ResourceLoading({ label }: { label: string }) {
 }
 
 export default function DashboardPage() {
-  const { can, me } = useSessionContext();
+  const { can, me, isPureApplicant } = useSessionContext();
+  const router = useRouter();
   const { language, t } = useLocale();
   const [data, setData] = useState<DashboardData>(initialData);
   const [loading, setLoading] = useState(true);
@@ -188,6 +190,13 @@ export default function DashboardPage() {
     void load();
   }, [load]);
 
+  // A pure applicant (no confirmed spot, no operational role) has nothing to
+  // do on the dashboard — send them to My applications instead, which is
+  // where they can actually open/continue an application.
+  useEffect(() => {
+    if (isPureApplicant) router.replace("/my-applications");
+  }, [isPureApplicant, router]);
+
   const phase = useEventPhase(data.event);
   const nextActivity = useMemo(() => {
     const now = Date.now();
@@ -247,7 +256,7 @@ export default function DashboardPage() {
     } as const;
     return actions[primaryAction];
   }, [attentionQueues.length, can, data.applications, primaryAction, t]);
-  if (!me) return null;
+  if (!me || isPureApplicant) return null;
 
   return (
     <div className="space-y-6">

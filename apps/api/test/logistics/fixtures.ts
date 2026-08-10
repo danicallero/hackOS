@@ -17,10 +17,20 @@ export async function createMeal(name = "Dinner"): Promise<number> {
   return createActivity({ category: "meal", requiresScan: true, name });
 }
 
-/** Issue an entrance ticket for a user; returns the QR token. */
+/**
+ * Issue an entrance ticket for a user; returns the QR token. Also grants a
+ * manual attendee role, mirroring how a real ticket is never issued without
+ * some form of event access (confirmed application or manual role) —
+ * otherwise wallet-pass issuance would reject it as not currently entitled.
+ */
 export async function issueTicket(userId: number, token?: string): Promise<string> {
   const t = token ?? `tkt-${crypto.randomUUID()}`;
   await pool.query(`INSERT INTO tickets (user_id, token) VALUES ($1, $2)`, [userId, t]);
+  await pool.query(
+    `INSERT INTO manual_attendee_roles (user_id, role) VALUES ($1, 'participant')
+     ON CONFLICT (user_id) DO NOTHING`,
+    [userId],
+  );
   return t;
 }
 

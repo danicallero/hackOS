@@ -1,13 +1,18 @@
 import { randomBytes } from "node:crypto";
 import { sponsorShareKey } from "@hackos/shared/applications";
+import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import type pg from "pg";
 import { config } from "../../config.js";
 import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import { broadcast } from "../../lib/sse.js";
+import { hasEventAccess } from "../identity/role.js";
 import { issueTicket } from "../logistics/tickets.js";
 import { issueWalletAccessToken } from "../logistics/wallet-access.js";
+import { voidTicketPasses } from "../logistics/wallet-passes.js";
+import { enqueueWalletSync } from "../logistics/wallet-sync.js";
 import type { ApplicationType, FormSection, TemplateField } from "./schemas.js";
 
 /**
@@ -1014,6 +1019,32 @@ export async function reAccept(
 }
 
 /**
+ * Voids ticket-purpose wallet passes for a user who just lost their confirmed
+ * spot, but only if they don't hold event access through some other route
+ * (another confirmed response, or a manual attendee role) — the `tickets` row
+ * itself is never touched (plan/07 invariant 10). Returns the voided pass ids
+ * so the caller can push the update to devices after its transaction commits.
+ */
+async function voidTicketAccessIfLost(client: pg.PoolClient, userId: number): Promise<number[]> {
+  if (await hasEventAccess(client, userId)) return [];
+  await voidTicketPasses(client, userId);
+  const voided = await client.query(
+    `SELECT id FROM wallet_passes WHERE user_id = $1 AND purpose = 'ticket' AND status = 'voided'`,
+    [userId],
+  );
+  return voided.rows.map((r: { id: number }) => r.id);
+}
+
+async function pushTicketVoid(userId: number, voidedPassIds: number[]): Promise<void> {
+  if (voidedPassIds.length === 0) return;
+  await broadcast(`${SSE_TOPICS.USER_PREFIX}${userId}`, EVENTS.LOGISTICS_WALLET_PASS_UPDATED, {
+    purpose: "ticket",
+    status: "voided",
+  });
+  await enqueueWalletSync(voidedPassIds);
+}
+
+/**
  * Revoke an already-sent acceptance — the "reject / decline spot" action that
  * must work EVEN AFTER the participant has confirmed (M2). Moves accepted or
  * confirmed → rejected: invalidates any pending confirmation token, frees the
@@ -1023,7 +1054,8 @@ export async function reAccept(
  * Admin operation (APPLICATIONS_DECIDE).
  */
 export async function revokeSpot(actorId: number, responseId: number): Promise<ResponseRow> {
-  return withTransaction(async (client) => {
+  let voidedPassIds: number[] = [];
+  const result = await withTransaction(async (client) => {
     const resp = await lockResponse(client, responseId);
     if (resp.status !== "accepted" && resp.status !== "confirmed") {
       throw new ConflictError("Only accepted or confirmed spots can be revoked", {
@@ -1054,8 +1086,16 @@ export async function revokeSpot(actorId: number, responseId: number): Promise<R
       after: { status: "rejected" },
       reason: resp.status === "confirmed" ? "revoked after confirmation" : "revoked before confirm",
     });
-    return updated.rows[0];
+
+    // A ticket was only ever issued for a confirmed spot — void its wallet
+    // pass(es) if this was the user's last remaining event access.
+    if (resp.status === "confirmed") {
+      voidedPassIds = await voidTicketAccessIfLost(client, resp.user_id);
+    }
+    return updated.rows[0] as ResponseRow;
   });
+  await pushTicketVoid(result.user_id, voidedPassIds);
+  return result;
 }
 
 // ── decision pool (review dashboard) ─────────────────────────────────────────
@@ -1548,9 +1588,9 @@ async function doDecline(
   resp: ResponseRow,
   via: ConfirmVia,
   actorId: number | null,
-): Promise<{ status: string; alreadyDeclined: boolean }> {
+): Promise<{ status: string; alreadyDeclined: boolean; voidedPassIds: number[] }> {
   if (resp.status === "declined") {
-    return { status: "declined", alreadyDeclined: true };
+    return { status: "declined", alreadyDeclined: true, voidedPassIds: [] };
   }
   if (resp.status !== "accepted" && resp.status !== "confirmed") {
     throw new ConflictError("This spot is not in a declinable state", { status: resp.status });
@@ -1571,7 +1611,12 @@ async function doDecline(
     before: { status: resp.status },
     after: { status: "declined" },
   });
-  return { status: "declined", alreadyDeclined: false };
+
+  // A ticket was only ever issued once this spot was confirmed — void its
+  // wallet pass(es) if this was the user's last remaining event access.
+  const voidedPassIds =
+    resp.status === "confirmed" ? await voidTicketAccessIfLost(client, resp.user_id) : [];
+  return { status: "declined", alreadyDeclined: false, voidedPassIds };
 }
 
 /**
@@ -1625,7 +1670,7 @@ export async function declineByToken(token: string): Promise<{
   status: string;
   alreadyDeclined: boolean;
 }> {
-  return withTransaction(async (client) => {
+  const result = await withTransaction(async (client) => {
     const { rows } = await client.query(
       `SELECT r.* FROM email_verification_tokens t
        JOIN application_responses r ON r.id =
@@ -1636,8 +1681,11 @@ export async function declineByToken(token: string): Promise<{
     );
     const resp = rows[0] as ResponseRow | undefined;
     if (!resp) throw new NotFoundError("Invalid decline token");
-    return doDecline(client, resp, "email_link", resp.user_id);
+    const decline = await doDecline(client, resp, "email_link", resp.user_id);
+    return { ...decline, userId: resp.user_id };
   });
+  await pushTicketVoid(result.userId, result.voidedPassIds);
+  return { status: result.status, alreadyDeclined: result.alreadyDeclined };
 }
 
 export async function declineByResponseId(
@@ -1646,13 +1694,16 @@ export async function declineByResponseId(
   actorId: number | null,
   requireOwner?: number,
 ): Promise<{ status: string; alreadyDeclined: boolean }> {
-  return withTransaction(async (client) => {
+  const result = await withTransaction(async (client) => {
     const resp = await lockResponse(client, responseId);
     if (requireOwner != null && resp.user_id !== requireOwner) {
       throw new ForbiddenError("Not your application");
     }
-    return doDecline(client, resp, via, actorId);
+    const decline = await doDecline(client, resp, via, actorId);
+    return { ...decline, userId: resp.user_id };
   });
+  await pushTicketVoid(result.userId, result.voidedPassIds);
+  return { status: result.status, alreadyDeclined: result.alreadyDeclined };
 }
 
 // ── expirer (plan/07 §5.2) ────────────────────────────────────────────────────
