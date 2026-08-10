@@ -112,7 +112,7 @@ export default function EnterpriseDetailPage() {
   if (status === "error" || !enterprise) {
     return (
       <div className="space-y-6">
-        <BackLink href="/enterprises" label={t("backToEnterprises")} />
+        {canManage && <BackLink href="/enterprises" label={t("backToEnterprises")} />}
         <EmptyState
           icon={Building2Icon}
           title={t("enterpriseNotFoundTitle")}
@@ -124,7 +124,7 @@ export default function EnterpriseDetailPage() {
 
   return (
     <div className="space-y-6">
-      <BackLink href="/enterprises" label={t("backToEnterprises")} />
+      {canManage && <BackLink href="/enterprises" label={t("backToEnterprises")} />}
       <PageHeader
         leading={
           <Avatar size="lg">
