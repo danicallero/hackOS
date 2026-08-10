@@ -62,8 +62,12 @@ function manualMemberCount(repo: ProjectRepo): number {
 export default function ProjectDetailPage() {
   const params = useParams<{ id: string }>();
   const { t } = useLocale();
-  const { can } = useSessionContext();
-  const canRead = can(CAPABILITIES.PROJECTS_READ);
+  const { can, me } = useSessionContext();
+  // H8/H44/H46: mirrors the list page's gate (issue #427) — judges + sponsor
+  // reps reach a scoped detail view via the same association the backend
+  // already checks (requireRepositoryAccess), not just projects:read.
+  const canRead =
+    can(CAPABILITIES.PROJECTS_READ) || Boolean(me?.isRoomJudge) || Boolean(me?.isSponsorRep);
   const canEdit = can(CAPABILITIES.PROJECTS_EDIT);
   const canImport = can(CAPABILITIES.PROJECTS_IMPORT);
   const id = Number(params.id);
