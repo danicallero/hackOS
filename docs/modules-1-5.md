@@ -229,6 +229,66 @@ foreign-keys on the email string.
   the same row being deleted in that transaction, and a non-null self-FK would
   block the `DELETE FROM users` it's part of.
 
+**Diagnosing a stuck "anonymize" verdict.** `SELF_CLEANABLE_REFERENCES` in
+`removal.ts` is a manually maintained allowlist, not derived from the schema —
+each new restrictive FK into `users(id)` is a blocker by default, and someone
+has to judge it's bookkeeping rather than operational history before adding it
+there (see the found-in-production gaps this history came from: account-claim
+tokens and self-authored audit rows in #418, `notification_outbox` in #419).
+If an account that looks like it should be deletable keeps getting
+`"anonymize"`, run this against the target database (`docker exec -i
+<postgres-container> psql -U hackos -d hackos`, replacing the `32` literal
+with the account's `users.id`) to list every table/column actually holding it
+back — it reproduces `hasRetainedReference`'s catalog scan directly in SQL,
+skipping nothing:
+
+```sql
+DO $$
+DECLARE
+  r RECORD;
+  cnt BIGINT;
+BEGIN
+  DROP TABLE IF EXISTS blocking_refs;
+  CREATE TEMP TABLE blocking_refs (table_name text, column_name text, row_count bigint);
+
+  FOR r IN
+    SELECT child_table.relname AS table_name,
+           child_attribute.attname AS column_name
+      FROM pg_constraint AS foreign_key
+      JOIN pg_class AS parent_table ON parent_table.oid = foreign_key.confrelid
+      JOIN pg_namespace AS parent_namespace ON parent_namespace.oid = parent_table.relnamespace
+      JOIN pg_class AS child_table ON child_table.oid = foreign_key.conrelid
+      JOIN LATERAL unnest(foreign_key.conkey) WITH ORDINALITY AS child_key(attribute_number, position) ON true
+      JOIN LATERAL unnest(foreign_key.confkey) WITH ORDINALITY AS parent_key(attribute_number, position) ON parent_key.position = child_key.position
+      JOIN pg_attribute AS child_attribute ON child_attribute.attrelid = child_table.oid AND child_attribute.attnum = child_key.attribute_number
+      JOIN pg_attribute AS parent_attribute ON parent_attribute.attrelid = parent_table.oid AND parent_attribute.attnum = parent_key.attribute_number
+     WHERE foreign_key.contype = 'f'
+       AND foreign_key.confdeltype IN ('a','r')
+       AND parent_namespace.nspname = current_schema()
+       AND parent_table.relname = 'users'
+       AND parent_attribute.attname = 'id'
+  LOOP
+    EXECUTE format('SELECT count(*) FROM %I WHERE %I = $1', r.table_name, r.column_name)
+      INTO cnt USING 32; -- replace 32 with the target users.id
+    IF cnt > 0 THEN
+      INSERT INTO blocking_refs VALUES (r.table_name, r.column_name, cnt);
+    END IF;
+  END LOOP;
+END $$;
+
+SELECT * FROM blocking_refs ORDER BY row_count DESC;
+```
+
+Every `table_name.column_name` this prints is either already in
+`SELF_CLEANABLE_REFERENCES` (so `clearOwnUnretainedReferences` should have
+handled it — a real bug, code and fix pattern both live in `removal.ts`) or
+genuinely retained operational history (ticket, scan, submission, review…),
+in which case `"anonymize"` is the correct verdict and admin anonymization
+(`POST /api/users/:id/anonymize`) is the right next step, not a code change.
+Run it non-interactively (`docker exec -i <container> psql ... <<'SQL' … SQL`
+from the host shell) rather than pasting into an interactive `psql` prompt —
+paste artifacts there can silently corrupt the buffered statement.
+
 **State transitions.** None (identity/account lifecycle only).
 
 ---
