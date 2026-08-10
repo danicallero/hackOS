@@ -261,6 +261,7 @@ export function AssignmentsEditor({
             onChange={setUserId}
             search={searchJudgeCandidates}
             placeholder={t("selectJudgePlaceholder")}
+            inDialog
           />
           <Button
             className="shrink-0"
