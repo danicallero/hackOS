@@ -914,6 +914,22 @@ export async function getRepoForScope(
  * submission, so all membership surfaces stop agreeing that the user belongs to
  * the project at the same time.
  */
+/**
+ * H55/nav: cheap existence check backing the "My project" nav item — same
+ * membership definition as {@link myProjects}, without the roster join.
+ */
+export async function hasMyProject(userId: number): Promise<boolean> {
+  const { rows } = await pool.query(
+    `SELECT EXISTS (
+       SELECT 1 FROM submissions WHERE user_id = $1 AND status = 'active'
+       UNION
+       SELECT 1 FROM devpost_participants WHERE user_id = $1
+     ) AS exists`,
+    [userId],
+  );
+  return rows[0].exists as boolean;
+}
+
 export async function myProjects(userId: number): Promise<RepoWithExtras[]> {
   const { rows } = await pool.query(
     `SELECT r.id, r.name, r.description, r.github_url, r.devpost_url, r.demo_url, r.source

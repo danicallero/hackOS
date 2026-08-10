@@ -43,6 +43,19 @@ an application's status) is exactly what they still need. The dashboard page
 itself also redirects a pure applicant straight to My applications, so the
 Home link never dead-ends there.
 
+My project and My queue also hide independently of `isPureApplicant` for
+**any** account — participant, judge, or sponsor rep — that currently has no
+project/queue data of its own (issue [#424](https://github.com/danicallero/hackOS/issues/424)):
+`GET /api/me`'s `hasProject`/`hasQueueItems` booleans
+(`apps/api/src/modules/projects/service.ts#hasMyProject`,
+`apps/api/src/modules/queue/reads.ts#hasMyQueueItems`) back
+`NavItem.hideIfNoProject`/`hideIfNoQueueItems` in `nav.ts`. My project stays
+visible without a project yet when `canCreateProject` is true (H19
+self-creation currently open to the caller) — otherwise hiding the link would
+remove their only entry point to create one. Sponsor reps have no H19
+self-creation path, so for them My project hides exactly when they have no
+project.
+
 ### Work workspaces (`WORKSPACES`)
 
 Eight capability-gated groups replace the old flat "operations" +

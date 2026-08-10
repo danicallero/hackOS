@@ -14,7 +14,8 @@ import { BadRequestError, ConflictError, NotFoundError } from "../../../lib/erro
 import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import { issueTicket } from "../../logistics/tickets.js";
 import { reconcileDevpostParticipantsForUser } from "../../projects/reconciliation.js";
-import { myProjects } from "../../projects/service.js";
+import { canCreateMyProject, hasMyProject, myProjects } from "../../projects/service.js";
+import { hasMyQueueItems } from "../../queue/reads.js";
 import { anonymizeUser } from "../anonymize.js";
 import { hasMobileAccess } from "../mobile-access.js";
 import {
@@ -272,7 +273,9 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           "The caller's own profile, illustrative role, effective capabilities (H8), " +
           "the isRoomJudge/isSponsorRep association facts nav uses for multi-capability " +
           "accounts (H55), whether they currently hold event access (confirmed spot or " +
-          "manual attendee role), and mobile access eligibility.",
+          "manual attendee role), whether they have a project/queue entry of their own " +
+          "(drives hiding the My project/My queue nav items, issue #424), and mobile " +
+          "access eligibility.",
         summary: "Get my profile",
         response: {
           200: userResponseSchema.extend({
@@ -290,6 +293,15 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             // Confirmed spot or manual attendee role — drives ticket/wallet
             // exposure and hides participant-only nav for pure applicants.
             hasEventAccess: z.boolean(),
+            // issue #424: My project/My queue nav items are hidden until the
+            // caller actually has one — visible-but-empty misleads sponsors
+            // and participants who hold the capability but nothing to show.
+            hasProject: z.boolean(),
+            hasQueueItems: z.boolean(),
+            // My project stays visible without a project yet when H19
+            // self-creation is currently open to this caller — otherwise
+            // hiding it would remove their only entry point to create one.
+            canCreateProject: z.boolean(),
           }),
         },
       },
@@ -297,11 +309,22 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     async (req) => {
       const userId = req.userId as number;
       const row = await fetchUser(userId);
-      const [role, capabilities, membership, eventAccess] = await Promise.all([
+      const [
+        role,
+        capabilities,
+        membership,
+        eventAccess,
+        hasProject,
+        hasQueueItems,
+        canCreateProject,
+      ] = await Promise.all([
         computeDerivedRole(pool, userId),
         getEffectiveCapabilities(userId),
         computeMembershipFlags(pool, userId),
         hasEventAccess(pool, userId),
+        hasMyProject(userId),
+        hasMyQueueItems(userId),
+        canCreateMyProject(userId),
       ]);
       const mobileAccess = await hasMobileAccess(pool, userId, role);
       return {
@@ -311,6 +334,9 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         capabilities: [...capabilities],
         ...membership,
         hasEventAccess: eventAccess,
+        hasProject,
+        hasQueueItems,
+        canCreateProject,
       };
     },
   );

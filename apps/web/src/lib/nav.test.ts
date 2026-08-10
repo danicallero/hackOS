@@ -18,6 +18,8 @@ function contextFor(
     isRoomJudge?: boolean;
     isSponsorRep?: boolean;
     isPureApplicant?: boolean;
+    hasProject?: boolean;
+    hasQueueItems?: boolean;
   } = {},
 ): NavVisibilityContext {
   const caps = new Set<string>(capabilities);
@@ -28,6 +30,8 @@ function contextFor(
     isRoomJudge: associations.isRoomJudge ?? false,
     isSponsorRep: associations.isSponsorRep ?? false,
     isPureApplicant: associations.isPureApplicant ?? false,
+    hasProject: associations.hasProject ?? true,
+    hasQueueItems: associations.hasQueueItems ?? true,
   };
 }
 
@@ -83,6 +87,35 @@ describe("pure applicant (no confirmed spot, no operational role)", () => {
       expect(isNavItemVisible(item, judge)).toBe(true);
       expect(isNavItemVisible(item, sponsor)).toBe(true);
     }
+  });
+});
+
+describe("no project / no queue data yet (issue #424)", () => {
+  it("hides My project and My queue when the caller has neither, sponsor or not", () => {
+    const participant = contextFor([], { hasProject: false, hasQueueItems: false });
+    const sponsor = contextFor([], {
+      isSponsorRep: true,
+      hasProject: false,
+      hasQueueItems: false,
+    });
+    for (const ctx of [participant, sponsor]) {
+      const visible = PERSONAL_NAV.filter((item) => isNavItemVisible(item, ctx)).map(
+        (item) => item.href,
+      );
+      expect(visible).not.toContain("/my-project");
+      expect(visible).not.toContain("/my-queue");
+    }
+  });
+
+  it("keeps My project and My queue once the caller has data, independent of each other", () => {
+    const onlyProject = contextFor([], { hasProject: true, hasQueueItems: false });
+    const onlyQueue = contextFor([], { hasProject: false, hasQueueItems: true });
+    expect(
+      PERSONAL_NAV.filter((item) => isNavItemVisible(item, onlyProject)).map((i) => i.href),
+    ).toEqual(expect.arrayContaining(["/my-project"]));
+    expect(
+      PERSONAL_NAV.filter((item) => isNavItemVisible(item, onlyQueue)).map((i) => i.href),
+    ).toEqual(expect.arrayContaining(["/my-queue"]));
   });
 });
 

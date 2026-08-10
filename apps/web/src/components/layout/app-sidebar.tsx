@@ -60,6 +60,10 @@ function useVisible() {
       isRoomJudge: me?.isRoomJudge ?? false,
       isSponsorRep: me?.isSponsorRep ?? false,
       isPureApplicant,
+      // Default true while `me` is still loading, matching isPureApplicant's
+      // "show, then narrow down" pattern so the sidebar doesn't flash empty.
+      hasProject: me ? me.hasProject || me.canCreateProject : true,
+      hasQueueItems: me ? me.hasQueueItems : true,
     });
 }
 
