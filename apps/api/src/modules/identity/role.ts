@@ -71,12 +71,13 @@ export async function computeMembershipFlags(
 
 /**
  * Whether this user currently holds real event access: a confirmed
- * application response, or a staff-assigned attendee role (mentor/participant
- * granted without going through the applications flow). User-level, not
- * response-level — declining one of several applications doesn't strip
- * access if another stays confirmed. Drives ticket/wallet exposure and
- * participant-only nav gating; the underlying `tickets` row is never touched
- * by this (plan/07 invariant 10: a ticket is neither consumed nor revoked).
+ * application response, a staff-assigned attendee role (mentor/participant
+ * granted without going through the applications flow), or a sponsor
+ * representative membership (H43). User-level, not response-level —
+ * declining one of several applications doesn't strip access if another
+ * stays confirmed. Drives ticket/wallet exposure and participant-only nav
+ * gating; the underlying `tickets` row is never touched by this (plan/07
+ * invariant 10: a ticket is neither consumed nor revoked).
  */
 export async function hasEventAccess(db: Queryable, userId: number): Promise<boolean> {
   const { rows } = await db.query(
@@ -84,6 +85,8 @@ export async function hasEventAccess(db: Queryable, userId: number): Promise<boo
         SELECT 1 FROM application_responses WHERE user_id = $1 AND status = 'confirmed'
       ) OR EXISTS (
         SELECT 1 FROM manual_attendee_roles WHERE user_id = $1
+      ) OR EXISTS (
+        SELECT 1 FROM sponsors WHERE user_id = $1
       )`,
     [userId],
   );
