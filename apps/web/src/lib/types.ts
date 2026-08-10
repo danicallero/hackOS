@@ -28,6 +28,12 @@ export interface Me {
   isSponsorRep: boolean;
   /** Confirmed spot or manual attendee role — drives ticket/wallet exposure and participant-only nav. */
   hasEventAccess: boolean;
+  /** Has a project of their own (submission or Devpost participant) — drives My project nav visibility (issue #424). */
+  hasProject: boolean;
+  /** Has at least one active queue entry — drives My queue nav visibility (issue #424). */
+  hasQueueItems: boolean;
+  /** H19 self-creation is currently open to this caller — keeps My project visible without a project yet. */
+  canCreateProject: boolean;
 }
 
 export type Language = "en" | "es" | "gl";

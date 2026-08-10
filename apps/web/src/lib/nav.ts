@@ -43,6 +43,10 @@ export interface NavItem {
   judgeVisible?: boolean;
   /** Hidden from applicants with no confirmed spot and no operational role. */
   hideForPureApplicant?: boolean;
+  /** Hidden until the caller actually has a project of their own (issue #424). */
+  hideIfNoProject?: boolean;
+  /** Hidden until the caller actually has a queue entry of their own (issue #424). */
+  hideIfNoQueueItems?: boolean;
   /** Not built yet — shown disabled with a "Soon" badge. */
   soon?: boolean;
 }
@@ -107,6 +111,10 @@ export interface NavVisibilityContext {
   isRoomJudge: boolean;
   /** No confirmed spot and no operational role — see NavItem.hideForPureApplicant. */
   isPureApplicant: boolean;
+  /** Has a project of their own, or is currently eligible to self-create one — see NavItem.hideIfNoProject (issue #424). */
+  hasProject: boolean;
+  /** Has a queue entry of their own — see NavItem.hideIfNoQueueItems (issue #424). */
+  hasQueueItems: boolean;
 }
 
 /**
@@ -116,6 +124,8 @@ export interface NavVisibilityContext {
  */
 export function isNavItemVisible(item: NavItem, ctx: NavVisibilityContext): boolean {
   if (item.hideForPureApplicant && ctx.isPureApplicant) return false;
+  if (item.hideIfNoProject && !ctx.hasProject) return false;
+  if (item.hideIfNoQueueItems && !ctx.hasQueueItems) return false;
   if (item.sponsorVisible && ctx.isSponsorRep) return true;
   if (item.judgeVisible && ctx.isRoomJudge) return true;
   if (item.capability) return ctx.can(item.capability);
@@ -137,15 +147,24 @@ export const PERSONAL_NAV: NavItem[] = [
   // Participant-facing: everyone can apply (H12-H15). No capability gate.
   { title: "myApplications", href: "/my-applications", icon: FileTextIcon },
   // Participant project self-view (H20) + policy-gated creation (H19). Hidden
-  // without a confirmed spot — nothing to see or create yet.
+  // without a confirmed spot, and hidden for anyone (participant, sponsor
+  // rep, judge) who doesn't actually have a project yet — issue #424.
   {
     title: "myProject",
     href: "/my-project",
     icon: FolderGitIcon,
     hideForPureApplicant: true,
+    hideIfNoProject: true,
   },
-  // Participant-facing queue status (H38). Hidden without a confirmed spot.
-  { title: "myQueue", href: "/my-queue", icon: TicketIcon, hideForPureApplicant: true },
+  // Participant-facing queue status (H38). Hidden without a confirmed spot,
+  // and hidden for anyone with no queue entry of their own — issue #424.
+  {
+    title: "myQueue",
+    href: "/my-queue",
+    icon: TicketIcon,
+    hideForPureApplicant: true,
+    hideIfNoQueueItems: true,
+  },
   // Entrance ticket only exists once a spot is confirmed (plan/07 invariant 10).
   { title: "wallet", href: "/wallet", icon: WalletCardsIcon, hideForPureApplicant: true },
   // Hidden for pure applicants — decision emails go out regardless (H50/H51).

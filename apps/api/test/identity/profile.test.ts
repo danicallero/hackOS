@@ -225,6 +225,36 @@ describe("GET /api/me (H7)", () => {
     expect(judgeOnlyRes.json().isRoomJudge).toBe(true);
     expect(judgeOnlyRes.json().isSponsorRep).toBe(false);
   });
+
+  it("exposes hasProject/hasQueueItems so nav can hide My project/My queue with nothing to show (issue #424)", async () => {
+    const a = await getApp();
+    const { createChallenge, createRepoWithTeam, enqueueRepo } = await import(
+      "../queue/fixtures.js"
+    );
+
+    const bystander = await createUser();
+    const empty = await a.inject({ method: "GET", url: "/api/me", headers: asUser(bystander) });
+    expect(empty.json().hasProject).toBe(false);
+    expect(empty.json().hasQueueItems).toBe(false);
+
+    const member = await createUser();
+    const { repoId } = await createRepoWithTeam([member]);
+    const withProjectOnly = await a.inject({
+      method: "GET",
+      url: "/api/me",
+      headers: asUser(member),
+    });
+    expect(withProjectOnly.json().hasProject).toBe(true);
+    expect(withProjectOnly.json().hasQueueItems).toBe(false);
+
+    const challengeId = await createChallenge();
+    await enqueueRepo(challengeId, repoId, 1);
+    const { invalidateReadCache } = await import("../../src/lib/read-cache.js");
+    await invalidateReadCache();
+    const withQueueToo = await a.inject({ method: "GET", url: "/api/me", headers: asUser(member) });
+    expect(withQueueToo.json().hasProject).toBe(true);
+    expect(withQueueToo.json().hasQueueItems).toBe(true);
+  });
 });
 
 describe("self-service account removal (H54)", () => {

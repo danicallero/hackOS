@@ -361,6 +361,33 @@ async function withEtaMinutes<T extends { challenge_id: number; position: number
   }));
 }
 
+/**
+ * H55/nav: cheap existence check backing the "My queue" nav item — same repo
+ * resolution and status filter as {@link myQueueStatus}, without the join.
+ */
+export async function hasMyQueueItems(userId: number): Promise<boolean> {
+  const { rows } = await pool.query(
+    `SELECT EXISTS (
+       SELECT 1 FROM queue_entries qe
+        WHERE qe.status NOT IN ('cancelled', 'disqualified')
+          AND qe.repo_id IN (
+            SELECT repo_id FROM submissions WHERE user_id = $1 AND status = 'active'
+            UNION
+            SELECT repo_id FROM devpost_participants WHERE user_id = $1
+            UNION
+            SELECT dp.repo_id
+              FROM devpost_participants dp
+              JOIN users u ON u.id = $1
+             WHERE lower(dp.email) = lower(u.email)
+                OR (u.secondary_email_verified_at IS NOT NULL
+                    AND lower(dp.email) = lower(u.secondary_email))
+          )
+     ) AS exists`,
+    [userId],
+  );
+  return rows[0].exists as boolean;
+}
+
 /** H38: for each repo the user is in, their status/position/ETA in that challenge's queue. */
 export async function myQueueStatus(userId: number) {
   const repoIds = (
