@@ -704,8 +704,11 @@ async function loadEligibleRepos(challengeId: number): Promise<EligibleRepo[]> {
       challenges: Array<{ id: number; status: string | null }>;
     }>;
   }>("/api/repos");
+  // H46: a repo is eligible whether it arrived via the queue or only via
+  // devpost prize-tag mapping (sponsors may opt out of the queue system
+  // entirely) — any association with this challenge counts.
   return repos
-    .filter((repo) => repo.challenges.some((c) => c.id === challengeId && c.status !== null))
+    .filter((repo) => repo.challenges.some((c) => c.id === challengeId))
     .map((repo) => ({ id: repo.id, name: repo.name }));
 }
 

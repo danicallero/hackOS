@@ -55,8 +55,16 @@ export async function setChallengeWinner(
     ]);
     if (challenge.rowCount === 0) throw new NotFoundError("Challenge not found", { challengeId });
 
+    // H46: a sponsor may opt out of the queue system entirely, so a repo can
+    // be a legitimate winner candidate either through a queue entry or
+    // through the devpost prize-tag mapping (repo_devpost_prizes / challenge
+    // devpost_tags), same "entered" test loadEligibleRepos uses on the web.
     const entrant = await client.query(
-      `SELECT 1 FROM queue_entries WHERE challenge_id = $1 AND repo_id = $2`,
+      `SELECT 1 FROM queue_entries WHERE challenge_id = $1 AND repo_id = $2
+       UNION
+       SELECT 1 FROM repo_devpost_prizes p
+        JOIN challenges c ON c.id = $1
+       WHERE p.repo_id = $2 AND p.prize IN (SELECT jsonb_array_elements_text(c.devpost_tags))`,
       [challengeId, repoId],
     );
     if (entrant.rowCount === 0) {
