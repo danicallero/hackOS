@@ -96,3 +96,40 @@ export async function createChallenge(title: string, devpostTags: string[]): Pro
   );
   return challenge.rows[0].id;
 }
+
+/**
+ * H19/H20 self-service eligibility: `isAdmittedParticipant` only needs an
+ * `application_responses` row in ('accepted', 'confirmed') for that user —
+ * any application type. Inserts a throwaway `applications` row to hang it
+ * off, mirroring what a real accepted participant application looks like.
+ */
+export async function admitParticipant(userId: number): Promise<void> {
+  const application = await pool.query(
+    `INSERT INTO applications (name, type, template) VALUES ($1, 'participant', '{}'::jsonb) RETURNING id`,
+    [`Test application ${crypto.randomUUID()}`],
+  );
+  await pool.query(
+    `INSERT INTO application_responses (user_id, application_id, status) VALUES ($1, $2, 'accepted')`,
+    [userId, application.rows[0].id],
+  );
+}
+
+/**
+ * H19/H20 hacking-window gate: writes `event_config.hacking_starts_at` /
+ * `hacking_ends_at` directly. `open=true` sets a window comfortably
+ * spanning "now"; `open=false` clears both bounds (unset reads as closed,
+ * not unrestricted — see `src/lib/hacking-window.ts`). Direct SQL bypasses
+ * the API, so the GET read cache is dropped by hand afterwards.
+ */
+export async function setHackingWindow(open: boolean): Promise<void> {
+  const [startsAt, endsAt] = open
+    ? [new Date(Date.now() - 60 * 60 * 1000), new Date(Date.now() + 60 * 60 * 1000)]
+    : [null, null];
+  await pool.query(
+    `INSERT INTO event_config (id, hacking_starts_at, hacking_ends_at) VALUES (1, $1, $2)
+     ON CONFLICT (id) DO UPDATE SET hacking_starts_at = $1, hacking_ends_at = $2`,
+    [startsAt, endsAt],
+  );
+  const { invalidateReadCache } = await import("../../src/lib/read-cache.js");
+  await invalidateReadCache();
+}

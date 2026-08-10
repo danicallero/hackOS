@@ -117,7 +117,12 @@ export interface PreferenceRow {
  * (`schedule:<id>`, `schedule:type:<kind>`) are membership markers, not
  * channel rows, and stay out of this table.
  */
-export const STATIC_CATEGORIES = ["announcements", "application", REMINDER_CHANNEL_CATEGORY];
+export const STATIC_CATEGORIES = [
+  "announcements",
+  "application",
+  "project",
+  REMINDER_CHANNEL_CATEGORY,
+];
 
 export async function getPreferences(
   db: Queryable,

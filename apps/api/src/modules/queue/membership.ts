@@ -10,6 +10,7 @@
 export const REPO_MEMBER_RELATION_SQL = `
   SELECT s.repo_id, s.user_id
     FROM submissions s
+   WHERE s.status = 'active'
   UNION
   SELECT dp.repo_id, dp.user_id
     FROM devpost_participants dp

@@ -36,6 +36,7 @@ const QUEUE_ENTRY_SELECT = `qe.*, r.name AS repo_name, r.description AS repo_des
             FROM submissions s
             JOIN users u ON u.id = s.user_id
            WHERE s.repo_id = qe.repo_id
+             AND s.status = 'active'
              AND NOT EXISTS (
                SELECT 1 FROM devpost_participants dp
                 WHERE dp.repo_id = s.repo_id AND dp.user_id = s.user_id
@@ -364,7 +365,7 @@ async function withEtaMinutes<T extends { challenge_id: number; position: number
 export async function myQueueStatus(userId: number) {
   const repoIds = (
     await pool.query(
-      `SELECT repo_id FROM submissions WHERE user_id = $1
+      `SELECT repo_id FROM submissions WHERE user_id = $1 AND status = 'active'
        UNION
        SELECT repo_id FROM devpost_participants WHERE user_id = $1
        UNION

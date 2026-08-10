@@ -16,13 +16,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
-import { createMyProject, createRepo, updateRepo } from "@/lib/projects";
+import { createMyProject, createRepo, updateMyProject, updateRepo } from "@/lib/projects";
 import { type ChallengeOption, challengeTitleText, type ProjectRepo } from "./shared";
 
 export type ProjectFormMode =
   | { kind: "create" } // org-side (PROJECTS_EDIT), full challenge catalogue
   | { kind: "self" } // participant (H19), public challenges only
-  | { kind: "edit"; repo: ProjectRepo }; // metadata only
+  | { kind: "edit"; repo: ProjectRepo } // org-side metadata edit (PROJECTS_EDIT)
+  | { kind: "self-edit"; repo: ProjectRepo }; // participant self-edit (H19/H20)
 
 export function ProjectFormDialog({
   mode,
@@ -32,7 +33,7 @@ export function ProjectFormDialog({
   onSaved: (repoId: number) => void | Promise<void>;
 }) {
   const { t } = useLocale();
-  const isEdit = mode.kind === "edit";
+  const isEdit = mode.kind === "edit" || mode.kind === "self-edit";
   const initial = isEdit ? mode.repo : null;
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(initial?.name ?? "");
@@ -67,12 +68,16 @@ export function ProjectFormDialog({
         githubUrl: githubUrl.trim() || null,
         demoUrl: demoUrl.trim() || null,
       };
-      if (mode.kind === "edit") {
-        const updated = await updateRepo(mode.repo.id, {
+      if (mode.kind === "edit" || mode.kind === "self-edit") {
+        const patch = {
           name: name.trim(),
           description: description.trim(),
           ...urls,
-        });
+        };
+        const updated =
+          mode.kind === "edit"
+            ? await updateRepo(mode.repo.id, patch)
+            : await updateMyProject(mode.repo.id, patch);
         toast.success(t("projectSaved"));
         setOpen(false);
         await onSaved(updated.id as number);

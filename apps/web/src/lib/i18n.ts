@@ -4409,6 +4409,100 @@ const dict: Record<string, I18nText> = {
     gl: "Os participantes poden crear proxectos",
     en: "Participants can create projects",
   },
+  // ---- H19/H20 participant self-service: invites, edit, leave, delete ----
+  pendingInvitesTitle: {
+    es: "Invitaciones pendientes",
+    gl: "Convites pendentes",
+    en: "Pending invites",
+  },
+  invitedToProjectLabel: {
+    es: "{inviterName} te invitó a {projectName}",
+    gl: "{inviterName} convidoute a {projectName}",
+    en: "{inviterName} invited you to {projectName}",
+  },
+  acceptInvite: { es: "Aceptar", gl: "Aceptar", en: "Accept" },
+  declineInvite: { es: "Rechazar", gl: "Rexeitar", en: "Decline" },
+  inviteAccepted: {
+    es: "Te has unido al proyecto.",
+    gl: "Uníchete ao proxecto.",
+    en: "You've joined the project.",
+  },
+  inviteDeclined: { es: "Invitación rechazada.", gl: "Convite rexeitado.", en: "Invite declined." },
+  couldNotAcceptInvite: {
+    es: "No se ha podido aceptar la invitación.",
+    gl: "Non se puido aceptar o convite.",
+    en: "Could not accept the invite.",
+  },
+  couldNotDeclineInvite: {
+    es: "No se ha podido rechazar la invitación.",
+    gl: "Non se puido rexeitar o convite.",
+    en: "Could not decline the invite.",
+  },
+  inviteMemberCta: { es: "Invitar a alguien", gl: "Convidar a alguén", en: "Invite someone" },
+  inviteMemberTitle: {
+    es: "Invitar a un miembro",
+    gl: "Convidar a un membro",
+    en: "Invite a member",
+  },
+  inviteMemberDesc: {
+    es: "Escribe el correo de la cuenta de hackOS de la persona que quieres invitar. Deberá aceptar la invitación para unirse.",
+    gl: "Escribe o correo da conta de hackOS da persoa que queres convidar. Deberá aceptar o convite para unirse.",
+    en: "Enter the hackOS account email of the person you want to invite. They'll need to accept before joining.",
+  },
+  inviteEmailLabel: { es: "Correo electrónico", gl: "Correo electrónico", en: "Email address" },
+  inviteSentMsg: { es: "Invitación enviada.", gl: "Convite enviado.", en: "Invite sent." },
+  couldNotSendInvite: {
+    es: "No se ha podido enviar la invitación.",
+    gl: "Non se puido enviar o convite.",
+    en: "Could not send the invite.",
+  },
+  leaveProjectCta: { es: "Salir del proyecto", gl: "Saír do proxecto", en: "Leave project" },
+  leaveProjectTitle: {
+    es: "Salir del proyecto",
+    gl: "Saír do proxecto",
+    en: "Leave this project",
+  },
+  leaveProjectDesc: {
+    es: "Dejarás de aparecer en el equipo y en sus colas. El resto del equipo se mantiene.",
+    gl: "Deixarás de aparecer no equipo e nas súas colas. O resto do equipo mantense.",
+    en: "You'll be removed from the team and its queues. The rest of the team stays.",
+  },
+  leftProjectMsg: {
+    es: "Has salido del proyecto.",
+    gl: "Saíches do proxecto.",
+    en: "You've left the project.",
+  },
+  couldNotLeaveProject: {
+    es: "No se ha podido salir del proyecto.",
+    gl: "Non se puido saír do proxecto.",
+    en: "Could not leave the project.",
+  },
+  deleteProjectCta: { es: "Eliminar proyecto", gl: "Eliminar proxecto", en: "Delete project" },
+  deleteProjectTitle: {
+    es: "Eliminar este proyecto",
+    gl: "Eliminar este proxecto",
+    en: "Delete this project",
+  },
+  deleteProjectDesc: {
+    es: "Eres la única persona del equipo. Esto elimina el proyecto, su cola y sus datos de evaluación de forma permanente.",
+    gl: "Es a única persoa do equipo. Isto elimina o proxecto, a súa cola e os seus datos de avaliación de forma permanente.",
+    en: "You're the only person on the team. This permanently deletes the project, its queue entries and judging data.",
+  },
+  projectDeletedMsg: {
+    es: "Proyecto eliminado.",
+    gl: "Proxecto eliminado.",
+    en: "Project deleted.",
+  },
+  couldNotDeleteProject: {
+    es: "No se ha podido eliminar el proyecto.",
+    gl: "Non se puido eliminar o proxecto.",
+    en: "Could not delete the project.",
+  },
+  outsideHackingWindowHint: {
+    es: "Estas acciones solo están disponibles durante la ventana de hacking del evento.",
+    gl: "Estas accións só están dispoñibles durante a xanela de hacking do evento.",
+    en: "These actions are only available during the event's hacking window.",
+  },
   couldNotLoadProject: {
     es: "No se ha podido cargar el proyecto.",
     gl: "Non se puido cargar o proxecto.",

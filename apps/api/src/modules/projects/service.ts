@@ -6,9 +6,13 @@ import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import { assertWithinHackingWindow, isWithinHackingWindow } from "../../lib/hacking-window.js";
 import { broadcast } from "../../lib/sse.js";
+import { hasMobileAccess } from "../identity/mobile-access.js";
 import { enqueueAuthEmail } from "../identity/outbox.js";
+import { computeDerivedRole } from "../identity/role.js";
 import { assertSecondaryEmailAvailable } from "../identity/routes/secondary-email.js";
+import { notify } from "../notifications/service.js";
 import { writeQueueHistory } from "../queue/history.js";
 import { notifyChallengeQueueChanged } from "../queue/notify.js";
 import { compactChallengePositions, nextBottomPosition } from "../queue/ordering.js";
@@ -663,6 +667,10 @@ async function attachMembersAndPrizes(
        FROM submissions s
        JOIN users u ON u.id = s.user_id
       WHERE s.repo_id = ANY($1::int[])
+        -- H19/H20: a pending invite (status='invited') is not yet a member
+        -- of the roster — it only shows up via myPendingInvites/GET
+        -- /api/me/projects/invites until accepted.
+        AND s.status = 'active'
         AND NOT EXISTS (
           SELECT 1
             FROM devpost_participants dp
@@ -911,7 +919,10 @@ export async function myProjects(userId: number): Promise<RepoWithExtras[]> {
     `SELECT r.id, r.name, r.description, r.github_url, r.devpost_url, r.demo_url, r.source
      FROM repos r
      WHERE r.id IN (
-       SELECT repo_id FROM submissions WHERE user_id = $1
+       -- H19/H20: a project the caller was merely invited to (status='invited')
+       -- is not "my project" yet — it only shows via myPendingInvites until
+       -- they accept it.
+       SELECT repo_id FROM submissions WHERE user_id = $1 AND status = 'active'
        UNION
        SELECT repo_id FROM devpost_participants WHERE user_id = $1
      )
@@ -926,6 +937,50 @@ export async function myProjects(userId: number): Promise<RepoWithExtras[]> {
     ...repo,
     members: repo.members.map((m) => (m.userId === userId ? m : { ...m, email: null })),
   }));
+}
+
+/**
+ * H19/H20 self-service eligibility: reuses the mobile-access "admitted
+ * attendee" check verbatim (accepted/confirmed applicant, or an operational
+ * relationship) rather than reimplementing the underlying SQL.
+ */
+export async function isAdmittedParticipant(db: Queryable, userId: number): Promise<boolean> {
+  const role = await computeDerivedRole(db, userId);
+  return hasMobileAccess(db, userId, role);
+}
+
+/**
+ * True when userId is a non-invited member of repoId — either an 'active'
+ * `submissions` row or a matched Devpost participant. Mirrors the membership
+ * definition `myProjects`/`attachMembersAndPrizes` already use, minus rows
+ * still awaiting an invite response (H19/H20).
+ */
+export async function isActiveProjectMember(
+  db: Queryable,
+  repoId: number,
+  userId: number,
+): Promise<boolean> {
+  const { rows } = await db.query(
+    `SELECT (
+       EXISTS (SELECT 1 FROM submissions WHERE repo_id = $1 AND user_id = $2 AND status = 'active')
+       OR EXISTS (SELECT 1 FROM devpost_participants WHERE repo_id = $1 AND user_id = $2)
+     ) AS member`,
+    [repoId, userId],
+  );
+  return rows[0]?.member === true;
+}
+
+/** Distinct active-member count for repoId; used by leave/delete to detect "last member" (H19/H20). */
+export async function activeProjectMemberCount(db: Queryable, repoId: number): Promise<number> {
+  const { rows } = await db.query(
+    `SELECT count(*)::int AS n FROM (
+       SELECT user_id FROM submissions WHERE repo_id = $1 AND status = 'active'
+       UNION
+       SELECT user_id FROM devpost_participants WHERE repo_id = $1 AND user_id IS NOT NULL
+     ) members`,
+    [repoId],
+  );
+  return rows[0]?.n ?? 0;
 }
 
 export async function addRepoMember(actorId: number, repoId: number, userId: number) {
@@ -1473,45 +1528,89 @@ export interface UpdateRepoPatch {
   demoUrl?: string | null;
 }
 
+/**
+ * Shared metadata-update core for both the staff PATCH (`updateRepo`, H18)
+ * and the participant self-edit (`updateMyProject`, H19/H20) — same fields,
+ * different callers audit it with their own actor/source. Locks the row
+ * first so a concurrent edit can't interleave with the read-modify-write.
+ */
+async function applyRepoUpdate(
+  client: Queryable,
+  repoId: number,
+  patch: UpdateRepoPatch,
+): Promise<{ before: RepoRow; after: RepoRow }> {
+  const existing = await client.query(`${REPO_SELECT} WHERE id = $1 FOR UPDATE`, [repoId]);
+  const before = existing.rows[0] as RepoRow | undefined;
+  if (!before) throw new NotFoundError(`Repo ${repoId} not found`);
+
+  const next = {
+    name: patch.name ?? before.name,
+    description: patch.description ?? before.description,
+    github_url: patch.githubUrl === undefined ? before.github_url : patch.githubUrl,
+    demo_url: patch.demoUrl === undefined ? before.demo_url : patch.demoUrl,
+  };
+  const { rows } = await client.query(
+    `UPDATE repos SET name = $2, description = $3, github_url = $4, demo_url = $5
+      WHERE id = $1
+      RETURNING id, name, description, github_url, devpost_url, demo_url, source`,
+    [repoId, next.name, next.description, next.github_url, next.demo_url],
+  );
+  return { before, after: rows[0] as RepoRow };
+}
+
+function repoAuditFields(repo: RepoRow) {
+  return {
+    name: repo.name,
+    description: repo.description,
+    githubUrl: repo.github_url,
+    demoUrl: repo.demo_url,
+  };
+}
+
 /** H18: edit a project's own metadata (title, description, links). Audited. */
 export async function updateRepo(actorId: number, repoId: number, patch: UpdateRepoPatch) {
   return withTransaction(async (client) => {
-    const existing = await client.query(`${REPO_SELECT} WHERE id = $1 FOR UPDATE`, [repoId]);
-    const before = existing.rows[0] as RepoRow | undefined;
-    if (!before) throw new NotFoundError(`Repo ${repoId} not found`);
-
-    const next = {
-      name: patch.name ?? before.name,
-      description: patch.description ?? before.description,
-      github_url: patch.githubUrl === undefined ? before.github_url : patch.githubUrl,
-      demo_url: patch.demoUrl === undefined ? before.demo_url : patch.demoUrl,
-    };
-    const { rows } = await client.query(
-      `UPDATE repos SET name = $2, description = $3, github_url = $4, demo_url = $5
-        WHERE id = $1
-        RETURNING id, name, description, github_url, devpost_url, demo_url, source`,
-      [repoId, next.name, next.description, next.github_url, next.demo_url],
-    );
+    const { before, after } = await applyRepoUpdate(client, repoId, patch);
     await audit(client, {
       actorId,
       entityType: "repo",
       entityId: repoId,
       action: "update",
-      before: {
-        name: before.name,
-        description: before.description,
-        githubUrl: before.github_url,
-        demoUrl: before.demo_url,
-      },
-      after: {
-        name: next.name,
-        description: next.description,
-        githubUrl: next.github_url,
-        demoUrl: next.demo_url,
-      },
+      before: repoAuditFields(before),
+      after: repoAuditFields(after),
       source: "admin",
     });
-    return rows[0] as RepoRow;
+    return after;
+  });
+}
+
+/**
+ * H19/H20: a participant edits their own project's metadata — only while
+ * within the hacking window and only for a project they're an active member
+ * of. Product decision superseding H20's literal "read-only" text (see
+ * docs/challenges-devpost.md); plan/historias-hackos.md is left unedited.
+ */
+export async function updateMyProject(
+  userId: number,
+  repoId: number,
+  patch: UpdateRepoPatch,
+): Promise<RepoRow> {
+  return withTransaction(async (client) => {
+    await assertWithinHackingWindow(client);
+    if (!(await isActiveProjectMember(client, repoId, userId))) {
+      throw new ForbiddenError("Not a member of this project");
+    }
+    const { before, after } = await applyRepoUpdate(client, repoId, patch);
+    await audit(client, {
+      actorId: userId,
+      entityType: "repo",
+      entityId: repoId,
+      action: "update",
+      before: repoAuditFields(before),
+      after: repoAuditFields(after),
+      source: "participant",
+    });
+    return after;
   });
 }
 
@@ -1524,11 +1623,30 @@ export async function participantsCanCreateProjects(): Promise<boolean> {
 }
 
 /**
+ * H19/H20: whether userId may self-create a project right now — the event
+ * policy is on, they're an admitted participant, and the hacking window is
+ * open. No longer also requires "doesn't already belong to a project": since
+ * self-service allows multiple memberships, GET /api/me/projects.canCreate
+ * must reflect exactly the same gate createMyProject enforces, not a
+ * leftover "one project only" restriction.
+ */
+export async function canCreateMyProject(userId: number): Promise<boolean> {
+  if (!(await participantsCanCreateProjects())) return false;
+  if (!(await isAdmittedParticipant(pool, userId))) return false;
+  return isWithinHackingWindow(pool);
+}
+
+/**
  * H19: a participant creates THEIR OWN project — only while the event policy
- * (event_config.participants_can_create_projects) is enabled, and only if they
- * don't already belong to one (H20 speaks of "mi proyecto", singular; team
- * corrections stay with queue management per H21). The creator becomes the
- * project's first member; chosen challenges enqueue exactly like a hot edit.
+ * (event_config.participants_can_create_projects) is enabled. Product
+ * decision (see docs/challenges-devpost.md) now also allows a participant to
+ * belong to more than one project — H20's original "singular mi proyecto"
+ * framing assumed the read-only surface; self-service supersedes it, so
+ * there is no longer a "you already belong to a project" check here.
+ * Self-creation is further gated to admitted participants (same check as
+ * mobile access) and to the configured hacking window. The creator becomes
+ * the project's first member; chosen challenges enqueue exactly like a hot
+ * edit.
  */
 export async function createMyProject(
   userId: number,
@@ -1536,7 +1654,8 @@ export async function createMyProject(
 ): Promise<{ repo: RepoRow; challenges: EnqueuedChallenge[] }> {
   const challengeIds = [...new Set(input.challengeIds)];
   const { repo, outcomes } = await withTransaction(async (client) => {
-    // Serialize per-user: two concurrent creates must yield exactly one project.
+    // Serialized per-user — harmless now that multiple projects are allowed,
+    // kept for symmetry with the rest of this transaction's row locks.
     await client.query(`SELECT pg_advisory_xact_lock(hashtext('my_project_create'), $1)`, [userId]);
 
     const policy = await client.query(
@@ -1546,16 +1665,11 @@ export async function createMyProject(
       throw new ForbiddenError("Participant project creation is disabled for this event");
     }
 
-    const membership = await client.query(
-      `SELECT repo_id FROM submissions WHERE user_id = $1
-       UNION
-       SELECT repo_id FROM devpost_participants WHERE user_id = $1
-       LIMIT 1`,
-      [userId],
-    );
-    if (membership.rows[0]) {
-      throw new ConflictError("You already belong to a project; ask queue management for changes");
+    if (!(await isAdmittedParticipant(client, userId))) {
+      throw new ForbiddenError("Only admitted participants can create a project");
     }
+    await assertWithinHackingWindow(client);
+
     await assertChallengesExist(client, challengeIds, true);
 
     const created = await insertNativeRepo(client, input, userId);
@@ -1584,6 +1698,293 @@ export async function createMyProject(
     repo,
     challenges: outcomes.map(toEnqueuedChallenge),
   };
+}
+
+// ── H19/H20 self-service membership: invite, accept/decline, leave, delete ──
+
+function displayName(row: {
+  name?: string | null;
+  surname?: string | null;
+  email: string;
+}): string {
+  const full = [row.name, row.surname].filter(Boolean).join(" ").trim();
+  return full || row.email;
+}
+
+/**
+ * H19/H20: an active member invites a teammate by email. The invitee must be
+ * an account holder AND an admitted participant, and must not already be an
+ * active member of this exact project. The invite is a pending `submissions`
+ * row (status='invited') until the invitee accepts or declines it.
+ */
+export async function inviteProjectMember(
+  userId: number,
+  repoId: number,
+  email: string,
+): Promise<{ invited: true }> {
+  return withTransaction(async (client) => {
+    await assertWithinHackingWindow(client);
+    if (!(await isActiveProjectMember(client, repoId, userId))) {
+      throw new ForbiddenError("Not a member of this project");
+    }
+
+    const repoRes = await client.query(`SELECT id, name FROM repos WHERE id = $1`, [repoId]);
+    const repo = repoRes.rows[0] as { id: number; name: string } | undefined;
+    if (!repo) throw new NotFoundError(`Repo ${repoId} not found`);
+
+    const inviteeRes = await client.query(`SELECT id FROM users WHERE lower(email) = lower($1)`, [
+      email,
+    ]);
+    const inviteeId = inviteeRes.rows[0]?.id as number | undefined;
+    if (!inviteeId) throw new NotFoundError(`No account for ${email}`);
+
+    if (!(await isAdmittedParticipant(client, inviteeId))) {
+      throw new ForbiddenError(`${email} is not an admitted participant`);
+    }
+    if (await isActiveProjectMember(client, repoId, inviteeId)) {
+      throw new ConflictError(`${email} is already a member of this project`);
+    }
+
+    // A prior still-pending invite to the same person is idempotent success,
+    // not an error — ON CONFLICT DO NOTHING covers the (repo_id, user_id)
+    // primary key without a duplicate row or a spurious 409.
+    await client.query(
+      `INSERT INTO submissions (repo_id, user_id, imported_from, status, invited_by)
+       VALUES ($1, $2, 'manual', 'invited', $3)
+       ON CONFLICT (repo_id, user_id) DO NOTHING
+       RETURNING repo_id`,
+      [repoId, inviteeId, userId],
+    );
+
+    await audit(client, {
+      actorId: userId,
+      entityType: "repo",
+      entityId: repoId,
+      action: "member.invite",
+      after: { invitedUserId: inviteeId, email },
+      source: "participant",
+    });
+
+    const inviterRes = await client.query(`SELECT name, surname, email FROM users WHERE id = $1`, [
+      userId,
+    ]);
+    const inviter = inviterRes.rows[0] as
+      | { name: string | null; surname: string | null; email: string }
+      | undefined;
+    await notify(client, {
+      userId: inviteeId,
+      category: "project",
+      payload: {
+        template: "project.invite",
+        vars: { projectName: repo.name, inviterName: inviter ? displayName(inviter) : "" },
+      },
+    });
+
+    return { invited: true };
+  });
+}
+
+export interface PendingInvite {
+  repoId: number;
+  repoName: string;
+  invitedByName: string | null;
+  invitedAt: Date;
+}
+
+/** H19/H20: pending invites addressed to userId, newest first. */
+export async function myPendingInvites(userId: number): Promise<PendingInvite[]> {
+  const { rows } = await pool.query(
+    `SELECT s.repo_id, r.name AS repo_name, u.name AS inviter_name, u.surname AS inviter_surname,
+            u.email AS inviter_email, s.created_at AS invited_at
+       FROM submissions s
+       JOIN repos r ON r.id = s.repo_id
+       LEFT JOIN users u ON u.id = s.invited_by
+      WHERE s.user_id = $1 AND s.status = 'invited'
+      ORDER BY s.created_at DESC`,
+    [userId],
+  );
+  return (
+    rows as Array<{
+      repo_id: number;
+      repo_name: string;
+      inviter_name: string | null;
+      inviter_surname: string | null;
+      inviter_email: string | null;
+      invited_at: Date;
+    }>
+  ).map((row) => ({
+    repoId: row.repo_id,
+    repoName: row.repo_name,
+    invitedByName: row.inviter_email
+      ? displayName({
+          name: row.inviter_name,
+          surname: row.inviter_surname,
+          email: row.inviter_email,
+        })
+      : null,
+    invitedAt: row.invited_at,
+  }));
+}
+
+/** H19/H20: the invited user accepts, becoming an active member. */
+export async function acceptProjectInvite(
+  userId: number,
+  repoId: number,
+): Promise<{ accepted: true }> {
+  return withTransaction(async (client) => {
+    await assertWithinHackingWindow(client);
+    const { rows } = await client.query(
+      `UPDATE submissions SET status = 'active', responded_at = now()
+        WHERE repo_id = $1 AND user_id = $2 AND status = 'invited'
+        RETURNING repo_id`,
+      [repoId, userId],
+    );
+    if (!rows[0]) throw new NotFoundError(`No pending invite to repo ${repoId}`);
+    await audit(client, {
+      actorId: userId,
+      entityType: "repo",
+      entityId: repoId,
+      action: "member.invite_accept",
+      after: { userId },
+      source: "participant",
+    });
+    return { accepted: true };
+  });
+}
+
+/** H19/H20: the invited user declines; the pending row is removed entirely. */
+export async function declineProjectInvite(
+  userId: number,
+  repoId: number,
+): Promise<{ declined: true }> {
+  return withTransaction(async (client) => {
+    await assertWithinHackingWindow(client);
+    const { rows } = await client.query(
+      `DELETE FROM submissions WHERE repo_id = $1 AND user_id = $2 AND status = 'invited'
+       RETURNING repo_id`,
+      [repoId, userId],
+    );
+    if (!rows[0]) throw new NotFoundError(`No pending invite to repo ${repoId}`);
+    await audit(client, {
+      actorId: userId,
+      entityType: "repo",
+      entityId: repoId,
+      action: "member.invite_decline",
+      before: { userId },
+      source: "participant",
+    });
+    return { declined: true };
+  });
+}
+
+/**
+ * H19/H20: an active member leaves their own project. The last member can't
+ * leave (they must delete the project instead) — that keeps a project from
+ * silently becoming memberless while still enqueued for judging.
+ */
+export async function leaveMyProject(userId: number, repoId: number): Promise<{ left: true }> {
+  return withTransaction(async (client) => {
+    await assertWithinHackingWindow(client);
+    if (!(await isActiveProjectMember(client, repoId, userId))) {
+      throw new ForbiddenError("Not a member of this project");
+    }
+    const count = await activeProjectMemberCount(client, repoId);
+    if (count <= 1) {
+      throw new ConflictError("You are the last member; delete the project instead");
+    }
+
+    const removed = await client.query(
+      `DELETE FROM submissions WHERE repo_id = $1 AND user_id = $2 AND status = 'active'`,
+      [repoId, userId],
+    );
+    if ((removed.rowCount ?? 0) === 0) {
+      await client.query(`DELETE FROM devpost_participants WHERE repo_id = $1 AND user_id = $2`, [
+        repoId,
+        userId,
+      ]);
+    }
+
+    await audit(client, {
+      actorId: userId,
+      entityType: "repo",
+      entityId: repoId,
+      action: "member.leave",
+      before: { userId },
+      source: "participant",
+    });
+    return { left: true };
+  });
+}
+
+/**
+ * Deletes every row that transitively references repoId before the repo row
+ * itself — none of the FKs onto `repos`/`queue_entries` cascade, and
+ * `deleteMyProject` only ever reaches here once the caller has confirmed
+ * they're the project's sole member.
+ */
+async function deleteRepoCascade(client: Queryable, repoId: number): Promise<void> {
+  await client.query(
+    `DELETE FROM attempt_review_versions WHERE attempt_id IN
+       (SELECT id FROM queue_entries WHERE repo_id = $1)`,
+    [repoId],
+  );
+  await client.query(
+    `DELETE FROM attempt_review WHERE attempt_id IN
+       (SELECT id FROM queue_entries WHERE repo_id = $1)`,
+    [repoId],
+  );
+  await client.query(
+    `DELETE FROM judging_session WHERE queue_entry_id IN
+       (SELECT id FROM queue_entries WHERE repo_id = $1)`,
+    [repoId],
+  );
+  await client.query(
+    `DELETE FROM queue_history WHERE queue_entry_id IN
+       (SELECT id FROM queue_entries WHERE repo_id = $1)`,
+    [repoId],
+  );
+  await client.query(`DELETE FROM challenge_winners WHERE repo_id = $1`, [repoId]);
+  await client.query(`DELETE FROM queue_entries WHERE repo_id = $1`, [repoId]);
+  await client.query(`DELETE FROM submissions WHERE repo_id = $1`, [repoId]);
+  await client.query(`DELETE FROM devpost_participants WHERE repo_id = $1`, [repoId]);
+  await client.query(`DELETE FROM repo_devpost_prizes WHERE repo_id = $1`, [repoId]);
+  await client.query(`DELETE FROM repos WHERE id = $1`, [repoId]);
+}
+
+/**
+ * H19/H20: the last remaining member deletes their own project outright.
+ * Re-checks the caller is both a member and the SOLE member inside the
+ * transaction before touching anything irreversible.
+ */
+export async function deleteMyProject(userId: number, repoId: number): Promise<{ deleted: true }> {
+  return withTransaction(async (client) => {
+    await assertWithinHackingWindow(client);
+    if (!(await isActiveProjectMember(client, repoId, userId))) {
+      throw new ForbiddenError("Not a member of this project");
+    }
+    const count = await activeProjectMemberCount(client, repoId);
+    if (count > 1) {
+      throw new ConflictError("Remove other members first, or ask queue management");
+    }
+
+    const repoRes = await client.query(`SELECT id, name FROM repos WHERE id = $1 FOR UPDATE`, [
+      repoId,
+    ]);
+    const repo = repoRes.rows[0] as { id: number; name: string } | undefined;
+    if (!repo) throw new NotFoundError(`Repo ${repoId} not found`);
+
+    await deleteRepoCascade(client, repoId);
+
+    await audit(client, {
+      actorId: userId,
+      entityType: "repo",
+      entityId: repoId,
+      action: "delete",
+      before: { name: repo.name },
+      source: "participant",
+    });
+    return { deleted: true };
+  });
 }
 
 export interface PublicChallenge {
