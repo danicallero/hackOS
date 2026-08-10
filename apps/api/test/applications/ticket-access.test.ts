@@ -223,4 +223,36 @@ describe("ticket/wallet exposure follows event access", () => {
     const me = await a.inject({ method: "GET", url: "/api/me", headers: asUser(userId) });
     expect(me.json().hasEventAccess).toBe(true);
   });
+
+  it("a sponsor representative gets a served, non-null ticket (H43, #426)", async () => {
+    const a = await getApp();
+    const userId = await createUser({ emailVerified: true });
+    const admin = await createUserWithCapabilities([CAPABILITIES.SPONSORS_MANAGE]);
+
+    const enterprise = await a.inject({
+      method: "POST",
+      url: "/api/enterprises",
+      headers: asUser(admin),
+      payload: { name: "Acme Corp", visibility: "hidden" },
+    });
+    expect(enterprise.statusCode).toBe(201);
+
+    const member = await a.inject({
+      method: "POST",
+      url: `/api/enterprises/${enterprise.json().id}/members`,
+      headers: asUser(admin),
+      payload: { userId },
+    });
+    expect(member.statusCode).toBe(201);
+
+    const me = await a.inject({ method: "GET", url: "/api/me", headers: asUser(userId) });
+    expect(me.json().hasEventAccess).toBe(true);
+
+    const ticket = await a.inject({
+      method: "GET",
+      url: "/api/me/ticket",
+      headers: asUser(userId),
+    });
+    expect(ticket.json().ticketToken).not.toBeNull();
+  });
 });
