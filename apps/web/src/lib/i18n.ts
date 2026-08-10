@@ -4241,12 +4241,6 @@ const dict: Record<string, I18nText> = {
     gl: "Aceptáronte. Confirma para asegurar a túa praza antes de que peche o prazo, ou rexéitaa se non podes vir.",
     en: "You've been accepted. Confirm to lock in your spot before the window closes, or decline if you can't make it.",
   },
-  headsUp: { es: "Atención", gl: "Atención", en: "Heads up" },
-  dietaryDataDeletedWarn: {
-    es: "Tus datos dietéticos se conservan en tu cuenta, pero solo se usan para planificar comidas si confirmas tu plaza.",
-    gl: "Os teus datos dietéticos consérvanse na túa conta, pero só se usan para planificar comidas se confirmas a praza.",
-    en: "Your dietary data stays on your account, but it is used to plan meals only if you confirm your place.",
-  },
   confirmPlace: { es: "Confirmar plaza", gl: "Confirmar praza", en: "Confirm place" },
   placeConfirmedTitle: {
     es: "Tu plaza está confirmada",
@@ -4285,9 +4279,9 @@ const dict: Record<string, I18nText> = {
     en: "Yes, release my place",
   },
   releaseCantBeUndone: {
-    es: "Esto no se puede deshacer desde aquí — necesitarías que la organización te volviera a aceptar. Tus datos dietéticos se conservan en tu cuenta, pero dejan de contar en la planificación de asistentes confirmados.",
-    gl: "Isto non se pode desfacer desde aquí — precisarías que a organización te volvese aceptar. Os teus datos dietéticos consérvanse na túa conta, pero deixan de contar na planificación de asistentes confirmados.",
-    en: "This can't be undone here — the organization would need to accept you again. Your dietary data stays on your account, but it is no longer used for confirmed-attendee planning.",
+    es: "Esta acción no se puede deshacer.",
+    gl: "Esta acción non se pode desfacer.",
+    en: "This action can't be undone.",
   },
   declinedThisPlaceTitle: {
     es: "Has rechazado esta plaza",
