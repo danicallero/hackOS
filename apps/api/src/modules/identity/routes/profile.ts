@@ -22,7 +22,7 @@ import {
   lockPermissionGraph,
   userHasWildcard,
 } from "../permission-graph.js";
-import { deleteOwnApplicationData, getAccountRemovalEligibility } from "../removal.js";
+import { clearOwnUnretainedReferences, getAccountRemovalEligibility } from "../removal.js";
 import { computeDerivedRole, computeMembershipFlags, hasEventAccess } from "../role.js";
 
 /**
@@ -422,7 +422,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             source: "web",
             before: { email: target.email },
           });
-          await deleteOwnApplicationData(client, userId);
+          await clearOwnUnretainedReferences(client, userId);
           await client.query(`DELETE FROM users WHERE id = $1`, [userId]);
           if (wasWildcardHolder) await assertActiveWildcardHolder(client);
         });
@@ -686,9 +686,9 @@ export function registerProfileRoutes(app: FastifyInstance): void {
   // history: we surface a clear 409 in that case (H54 anonymization is the
   // proper path for those). Fresh/inactive accounts delete cleanly (sessions,
   // accounts and group memberships cascade); an unaccepted applicant with no
-  // ticket/role also deletes cleanly — deleteOwnApplicationData removes their
-  // own application_responses/applicant_reviews first, since a never-accepted
-  // application isn't operational history worth retaining (H54).
+  // ticket/role also deletes cleanly — clearOwnUnretainedReferences removes
+  // their own application_responses/applicant_reviews and account-claim
+  // token, since none of that is operational history worth retaining (H54).
   api.delete(
     "/api/users/:id",
     {
@@ -724,7 +724,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             source: "admin",
             before: { email: target.email },
           });
-          await deleteOwnApplicationData(client, targetId);
+          await clearOwnUnretainedReferences(client, targetId);
           await client.query(`DELETE FROM users WHERE id = $1`, [targetId]);
           if (wasWildcardHolder) await assertActiveWildcardHolder(client);
         });
