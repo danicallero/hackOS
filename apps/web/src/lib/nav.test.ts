@@ -14,7 +14,11 @@ import {
 /** Mirrors the server-side `*` admin wildcard (apps/api/src/lib/capabilities.ts). */
 function contextFor(
   capabilities: Capability[],
-  associations: { isRoomJudge?: boolean; isSponsorRep?: boolean } = {},
+  associations: {
+    isRoomJudge?: boolean;
+    isSponsorRep?: boolean;
+    isPureApplicant?: boolean;
+  } = {},
 ): NavVisibilityContext {
   const caps = new Set<string>(capabilities);
   const can = (capability: Capability) => caps.has(CAPABILITIES.ADMIN_ALL) || caps.has(capability);
@@ -23,6 +27,7 @@ function contextFor(
     canAny: (...cs: Capability[]) => cs.some(can),
     isRoomJudge: associations.isRoomJudge ?? false,
     isSponsorRep: associations.isSponsorRep ?? false,
+    isPureApplicant: associations.isPureApplicant ?? false,
   };
 }
 
@@ -49,6 +54,34 @@ describe("stable personal area (audit §3.1)", () => {
     const ctx = contextFor([]);
     for (const item of PERSONAL_NAV) {
       expect(isNavItemVisible(item, ctx)).toBe(true);
+    }
+  });
+});
+
+describe("pure applicant (no confirmed spot, no operational role)", () => {
+  const ctx = contextFor([], { isPureApplicant: true });
+
+  it("hides dashboard, wallet, project, queue and inbox", () => {
+    const hidden = ["/dashboard", "/wallet", "/my-project", "/my-queue", "/inbox"];
+    const visible = PERSONAL_NAV.filter((item) => isNavItemVisible(item, ctx)).map(
+      (item) => item.href,
+    );
+    for (const href of hidden) expect(visible).not.toContain(href);
+  });
+
+  it("keeps schedule, my applications and profile", () => {
+    const visible = PERSONAL_NAV.filter((item) => isNavItemVisible(item, ctx)).map(
+      (item) => item.href,
+    );
+    expect(visible).toEqual(["/timetable", "/my-applications", "/settings/profile"]);
+  });
+
+  it("a room judge or sponsor rep with the same empty capability set is not a pure applicant", () => {
+    const judge = contextFor([], { isRoomJudge: true });
+    const sponsor = contextFor([], { isSponsorRep: true });
+    for (const item of PERSONAL_NAV) {
+      expect(isNavItemVisible(item, judge)).toBe(true);
+      expect(isNavItemVisible(item, sponsor)).toBe(true);
     }
   });
 });

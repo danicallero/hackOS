@@ -52,13 +52,14 @@ function UnreadLabelDot() {
 }
 
 function useVisible() {
-  const { can, canAny, me } = useSessionContext();
+  const { can, canAny, me, isPureApplicant } = useSessionContext();
   return (item: NavItem) =>
     isNavItemVisible(item, {
       can,
       canAny,
       isRoomJudge: me?.isRoomJudge ?? false,
       isSponsorRep: me?.isSponsorRep ?? false,
+      isPureApplicant,
     });
 }
 

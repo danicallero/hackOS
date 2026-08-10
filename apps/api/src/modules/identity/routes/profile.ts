@@ -23,7 +23,7 @@ import {
   userHasWildcard,
 } from "../permission-graph.js";
 import { getAccountRemovalEligibility } from "../removal.js";
-import { computeDerivedRole, computeMembershipFlags } from "../role.js";
+import { computeDerivedRole, computeMembershipFlags, hasEventAccess } from "../role.js";
 
 /**
  * Profile routes (H7).
@@ -264,7 +264,8 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         description:
           "The caller's own profile, illustrative role, effective capabilities (H8), " +
           "the isRoomJudge/isSponsorRep association facts nav uses for multi-capability " +
-          "accounts (H55), and mobile access eligibility.",
+          "accounts (H55), whether they currently hold event access (confirmed spot or " +
+          "manual attendee role), and mobile access eligibility.",
         summary: "Get my profile",
         response: {
           200: userResponseSchema.extend({
@@ -279,6 +280,9 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             // the single-priority `role` above can't represent on its own.
             isRoomJudge: z.boolean(),
             isSponsorRep: z.boolean(),
+            // Confirmed spot or manual attendee role — drives ticket/wallet
+            // exposure and hides participant-only nav for pure applicants.
+            hasEventAccess: z.boolean(),
           }),
         },
       },
@@ -286,10 +290,11 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     async (req) => {
       const userId = req.userId as number;
       const row = await fetchUser(userId);
-      const [role, capabilities, membership] = await Promise.all([
+      const [role, capabilities, membership, eventAccess] = await Promise.all([
         computeDerivedRole(pool, userId),
         getEffectiveCapabilities(userId),
         computeMembershipFlags(pool, userId),
+        hasEventAccess(pool, userId),
       ]);
       const mobileAccess = await hasMobileAccess(pool, userId, role);
       return {
@@ -298,6 +303,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         mobileAccess,
         capabilities: [...capabilities],
         ...membership,
+        hasEventAccess: eventAccess,
       };
     },
   );
