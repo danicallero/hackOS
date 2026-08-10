@@ -124,7 +124,7 @@ function toResponse(row: Record<string, unknown>): EnterpriseInviteLinkResponse 
         userId: item.user_id == null ? null : Number(item.user_id),
         email: String(item.email),
         name: (item.name as string | null) ?? null,
-        redeemedAt: (item.redeemed_at as Date).toISOString(),
+        redeemedAt: new Date(item.redeemed_at as string).toISOString(),
       };
     }),
   };
