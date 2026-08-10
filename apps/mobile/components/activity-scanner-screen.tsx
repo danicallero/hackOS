@@ -143,6 +143,11 @@ export function ActivityScannerScreen() {
   const scanned = useCallback(
     async (raw: string) => {
       const badgeId = raw.trim();
+      // A dialog for a new scan must never inherit a `registering` flag left
+      // over from a still-in-flight store() call for the previous scan
+      // (e.g. a slow/unresponsive sync), which would render its buttons
+      // permanently disabled.
+      setRegistering(false);
       const found = await findPersonByBadge(badgeId);
       if (!found.person) {
         setError(found.revoked ? t("scannerBadgeRevoked") : t("scannerBadgeUnknown"));
@@ -298,8 +303,14 @@ export function ActivityScannerScreen() {
           language={language}
           registering={registering}
           result={result}
-          onCancel={() => setResult(null)}
-          onContinue={() => setResult(null)}
+          onCancel={() => {
+            setResult(null);
+            setRegistering(false);
+          }}
+          onContinue={() => {
+            setResult(null);
+            setRegistering(false);
+          }}
           onRegisterAnother={() => void store(result.person, result.badgeId, true, result.count)}
         />
       ) : null}
