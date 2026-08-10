@@ -22,7 +22,11 @@ import {
 } from "./ordering.js";
 import type { QueueEntryRow } from "./types.js";
 
-/** Postgres unique_violation. Thrown by the `one_active_per_room` partial index (plan/07 invariant 2). */
+/**
+ * Postgres unique_violation. Thrown by the `one_active_per_room` partial
+ * index (plan/07 invariant 2) and the `one_active_entry_per_repo` partial
+ * index (H30 backstop, plan/07 §2/§4).
+ */
 const PG_UNIQUE_VIOLATION = "23505";
 
 async function lockEntry(client: pg.PoolClient, entryId: number): Promise<QueueEntryRow> {
@@ -127,14 +131,25 @@ export async function callNextForRoom(
       )
         continue; // H30: skip, keep position
 
-      const { rows: updatedRows } = await client.query(
-        `UPDATE queue_entries
-           SET status = 'called', assigned_room_id = $1, called_at = now(), precalled_at = NULL
-         WHERE id = $2
-         RETURNING *`,
-        [roomId, candidate.id],
-      );
-      const entry: QueueEntryRow = updatedRows[0];
+      let entry: QueueEntryRow;
+      try {
+        const res = await client.query(
+          `UPDATE queue_entries
+             SET status = 'called', assigned_room_id = $1, called_at = now(), precalled_at = NULL
+           WHERE id = $2
+           RETURNING *`,
+          [roomId, candidate.id],
+        );
+        entry = res.rows[0];
+      } catch (err) {
+        // H30 backstop (one_active_entry_per_repo, plan/07 §2): the guard
+        // above should already have caught this, but a repo with no
+        // resolvable members at check time could slip through it — the
+        // unique index is the structural guarantee. Skip, don't crash the
+        // whole pump loop.
+        if ((err as { code?: string }).code === PG_UNIQUE_VIOLATION) continue;
+        throw err;
+      }
       await writeQueueHistory(client, {
         entryId: entry.id,
         actorId,
@@ -729,7 +744,11 @@ export async function manualCall(
       );
       updated = res.rows[0];
     } catch (err) {
-      if ((err as { code?: string }).code === PG_UNIQUE_VIOLATION) {
+      const pgErr = err as { code?: string; constraint?: string };
+      if (pgErr.code === PG_UNIQUE_VIOLATION && pgErr.constraint === "one_active_entry_per_repo") {
+        throw new ConflictError("Team has a member busy in another room (H30)", { entryId });
+      }
+      if (pgErr.code === PG_UNIQUE_VIOLATION) {
         throw new ConflictError("Room already has an active team", { roomId });
       }
       throw err;
