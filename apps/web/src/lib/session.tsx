@@ -16,6 +16,13 @@ interface SessionContextValue {
   can: (capability: Capability) => boolean;
   /** True if the user holds ANY of the listed capabilities. */
   canAny: (...capabilities: Capability[]) => boolean;
+  /**
+   * Authenticated, but with no confirmed spot and no operational role
+   * (capability, room judge, sponsor rep) — an applicant with nothing to do
+   * in the app yet besides applying. Drives hiding participant-only nav
+   * (wallet/queue/project/inbox) and the dashboard landing redirect.
+   */
+  isPureApplicant: boolean;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -55,6 +62,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       refresh,
       can,
       canAny: (...capabilities: Capability[]) => capabilities.some(can),
+      isPureApplicant:
+        !!me && !me.hasEventAccess && !me.isRoomJudge && !me.isSponsorRep && caps.size === 0,
     };
   }, [me, status, refresh]);
 

@@ -481,11 +481,6 @@ export default function MyApplicationDetailPage() {
           title={t("youreInConfirmTitle")}
           description={t("youreInConfirmDesc")}
         >
-          <Alert role="status">
-            <ShieldAlertIcon aria-hidden="true" />
-            <AlertTitle>{t("headsUp")}</AlertTitle>
-            <AlertDescription>{t("dietaryDataDeletedWarn")}</AlertDescription>
-          </Alert>
           {response?.confirmation_expires_at && (
             <p className="text-sm font-medium tabular-nums">
               {t("deadlineLabel", {
@@ -504,7 +499,7 @@ export default function MyApplicationDetailPage() {
               disabled={acting}
               className="w-full sm:w-auto"
             >
-              {t("decline")}
+              {t("declineInvite")}
             </Button>
           </div>
         </SectionCard>

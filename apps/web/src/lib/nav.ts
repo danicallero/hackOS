@@ -41,6 +41,8 @@ export interface NavItem {
   sponsorVisible?: boolean;
   /** Visible to users assigned as judges to at least one room (association-based, H55). */
   judgeVisible?: boolean;
+  /** Hidden from applicants with no confirmed spot and no operational role. */
+  hideForPureApplicant?: boolean;
   /** Not built yet — shown disabled with a "Soon" badge. */
   soon?: boolean;
 }
@@ -103,6 +105,8 @@ export interface NavVisibilityContext {
   isSponsorRep: boolean;
   /** Assigned as a judge to at least one room (association-based, H55). */
   isRoomJudge: boolean;
+  /** No confirmed spot and no operational role — see NavItem.hideForPureApplicant. */
+  isPureApplicant: boolean;
 }
 
 /**
@@ -111,6 +115,7 @@ export interface NavVisibilityContext {
  * wildcard) can be unit tested without rendering the sidebar.
  */
 export function isNavItemVisible(item: NavItem, ctx: NavVisibilityContext): boolean {
+  if (item.hideForPureApplicant && ctx.isPureApplicant) return false;
   if (item.sponsorVisible && ctx.isSponsorRep) return true;
   if (item.judgeVisible && ctx.isRoomJudge) return true;
   if (item.capability) return ctx.can(item.capability);
@@ -124,17 +129,27 @@ export function isNavItemVisible(item: NavItem, ctx: NavVisibilityContext): bool
  * first, configuration-ish personal items last.
  */
 export const PERSONAL_NAV: NavItem[] = [
-  { title: "dashboard", href: "/dashboard", icon: LayoutDashboardIcon },
+  // A pure applicant has nothing useful here — the dashboard page itself
+  // redirects them to My applications, so hide the link rather than let it
+  // just bounce.
+  { title: "dashboard", href: "/dashboard", icon: LayoutDashboardIcon, hideForPureApplicant: true },
   { title: "schedule", href: "/timetable", icon: CalendarDaysIcon },
   // Participant-facing: everyone can apply (H12-H15). No capability gate.
   { title: "myApplications", href: "/my-applications", icon: FileTextIcon },
-  // Participant project self-view (H20) + policy-gated creation (H19).
-  { title: "myProject", href: "/my-project", icon: FolderGitIcon },
-  // Participant-facing queue status (H38). No capability gate — auth only.
-  { title: "myQueue", href: "/my-queue", icon: TicketIcon },
-  { title: "wallet", href: "/wallet", icon: WalletCardsIcon },
-  // Everyone has an inbox — auth only, no capability (H50/H51).
-  { title: "inbox", href: "/inbox", icon: InboxIcon },
+  // Participant project self-view (H20) + policy-gated creation (H19). Hidden
+  // without a confirmed spot — nothing to see or create yet.
+  {
+    title: "myProject",
+    href: "/my-project",
+    icon: FolderGitIcon,
+    hideForPureApplicant: true,
+  },
+  // Participant-facing queue status (H38). Hidden without a confirmed spot.
+  { title: "myQueue", href: "/my-queue", icon: TicketIcon, hideForPureApplicant: true },
+  // Entrance ticket only exists once a spot is confirmed (plan/07 invariant 10).
+  { title: "wallet", href: "/wallet", icon: WalletCardsIcon, hideForPureApplicant: true },
+  // Hidden for pure applicants — decision emails go out regardless (H50/H51).
+  { title: "inbox", href: "/inbox", icon: InboxIcon, hideForPureApplicant: true },
   { title: "myProfile", href: "/settings/profile", icon: UserIcon },
 ];
 

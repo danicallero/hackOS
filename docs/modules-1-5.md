@@ -118,6 +118,18 @@ confirmed|declined|expired`).
   confirmation token, frees the capacity slot, and notifies the applicant;
   dietary data is left on the user row (a revoked spot can be re-accepted
   later, and wiping it made that re-accept lose the data).
+- Declining a `confirmed` response (self-service `doDecline`, or staff
+  `revokeSpot`) also revokes event access: `identity/role.ts:hasEventAccess`
+  is rechecked for the user, and if no confirmed response or manual attendee
+  role remains, `logistics/wallet-passes.ts:voidTicketPasses` marks any
+  ticket-purpose `wallet_passes` row `voided` and pushes the update to
+  devices via `enqueueWalletSync` (the same mechanism H28 badge rotation
+  uses). The `tickets` row itself is never touched — plan/07 invariant 10 —
+  only its exposure: `GET /api/me/ticket` returns `ticketToken: null` and new
+  wallet-pass issuance 404s once `hasEventAccess` is false. Web nav hides
+  wallet/queue/project/inbox and redirects the dashboard to My applications
+  for a "pure applicant" (`isPureApplicant` in `apps/web/src/lib/session.tsx`
+  — no confirmed spot, no capability, not a room judge or sponsor rep).
 - Back to submitted / accept-pending-confirmation already existed
   (`revertDecision(…, "submitted")`, `decide` + `send-decision`) — verified.
 

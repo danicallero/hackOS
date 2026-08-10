@@ -30,9 +30,18 @@ sponsor workspace if nav gated on `role` instead.
 
 ### Stable personal area (`PERSONAL_NAV`)
 
-Always visible to any authenticated account, no capability required: Home
+Visible to any authenticated account, no capability required: Home
 (dashboard), Schedule, My applications, My project, My queue, Wallet, Inbox,
-My profile.
+My profile — except for a **pure applicant**: an account with no confirmed
+spot (`GET /api/me`'s `hasEventAccess`, `apps/api/src/modules/identity/role.ts
+#hasEventAccess`), no operational capability, and no room-judge/sponsor-rep
+association (`isPureApplicant` in `apps/web/src/lib/session.tsx`). That
+account has nothing to do yet on Home, My project, My queue, Wallet, or
+Inbox, so those five hide (`NavItem.hideForPureApplicant` in `nav.ts`) —
+Schedule, My applications, and My profile stay, since applying (or checking
+an application's status) is exactly what they still need. The dashboard page
+itself also redirects a pure applicant straight to My applications, so the
+Home link never dead-ends there.
 
 ### Work workspaces (`WORKSPACES`)
 
@@ -156,7 +165,10 @@ The dashboard follows the same additive policy as the sidebar. Its quick
 actions are derived independently from effective capabilities,
 `isRoomJudge`, and `isSponsorRep`; a sponsor representative assigned as a
 room judge sees both sponsor and judging actions. The derived `role` remains
-display-only and is not consulted for dashboard access.
+display-only and is not consulted for dashboard access. A pure applicant
+(see above) never reaches these quick actions at all — `dashboard/page.tsx`
+redirects to My applications before rendering them, since none apply without
+event access.
 
 This work reuses existing localized action labels, so it requires no new
 translation keys.

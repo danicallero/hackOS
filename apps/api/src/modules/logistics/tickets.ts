@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import type pg from "pg";
 import { pool } from "../../db/pool.js";
 import { NotFoundError } from "../../lib/errors.js";
+import { hasEventAccess } from "../identity/role.js";
 
 /**
  * Creates the permanent entrance credential for any attendee category. The
@@ -21,7 +22,7 @@ export async function issueTicket(client: pg.PoolClient, userId: number): Promis
 }
 
 export async function ticketQrPayload(userId: number) {
-  const [{ rows }, { rows: acceptedRows }] = await Promise.all([
+  const [{ rows }, { rows: acceptedRows }, eventAccess] = await Promise.all([
     pool.query(
       `SELECT u.id, u.badge_id, t.token
        FROM users u
@@ -41,12 +42,16 @@ export async function ticketQrPayload(userId: number) {
         ORDER BY r.id DESC`,
       [userId],
     ),
+    hasEventAccess(pool, userId),
   ]);
   const row = rows[0];
   if (!row) throw new NotFoundError("User not found");
   return {
     userId: row.id as number,
-    ticketToken: (row.token as string | null) ?? null,
+    // A `tickets` row is permanent once issued (plan/07 invariant 10), but it
+    // only gets served here while the person currently holds event access —
+    // otherwise a declined/revoked spot would keep showing a live QR/ticket.
+    ticketToken: eventAccess ? ((row.token as string | null) ?? null) : null,
     badgeId: (row.badge_id as string | null) ?? null,
     acceptedSpots: acceptedRows.map((accepted) => ({
       responseId: accepted.response_id as number,

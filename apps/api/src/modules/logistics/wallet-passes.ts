@@ -1,7 +1,9 @@
 import { randomBytes } from "node:crypto";
+import type pg from "pg";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
+import { hasEventAccess } from "../identity/role.js";
 
 /**
  * Shared `wallet_passes` bookkeeping for both providers (H28). Apple and
@@ -48,8 +50,10 @@ export function resolvePassIdentity(
 
 async function assertEntitled(userId: number, purpose: Purpose): Promise<void> {
   if (purpose === "ticket") {
-    const t = await pool.query(`SELECT 1 FROM tickets WHERE user_id = $1`, [userId]);
-    if (!t.rows[0]) throw new NotFoundError("Ticket not issued");
+    // Not a mere row check: `tickets` is permanent once issued (plan/07
+    // invariant 10), so re-issuing/refreshing a wallet pass must instead gate
+    // on whether the person currently holds real event access.
+    if (!(await hasEventAccess(pool, userId))) throw new NotFoundError("Ticket not issued");
   } else {
     const b = await pool.query(`SELECT badge_id FROM users WHERE id = $1`, [userId]);
     if (!b.rows[0]) throw new NotFoundError("User not found");
@@ -124,4 +128,21 @@ export async function bumpAllAppleWalletUpdateTags(): Promise<number[]> {
       RETURNING id`,
   );
   return rows.map((r: { id: number }) => r.id);
+}
+
+/**
+ * Voids any active ticket-purpose wallet passes for a user who just lost
+ * event access (declined/revoked after confirming) — mirrors
+ * `voidBadgePasses` in `accreditation.ts`. The underlying `tickets` row is
+ * untouched (plan/07 invariant 10); this only closes off the wallet pass
+ * representation, which the caller then pushes to devices via
+ * `enqueueWalletSync`.
+ */
+export async function voidTicketPasses(client: pg.PoolClient, userId: number): Promise<void> {
+  await client.query(
+    `UPDATE wallet_passes
+        SET status = 'voided', last_updated_at = now(), update_tag = extract(epoch from now())::text
+      WHERE user_id = $1 AND purpose = 'ticket' AND status <> 'voided'`,
+    [userId],
+  );
 }
