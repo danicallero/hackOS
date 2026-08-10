@@ -6,7 +6,7 @@ export const privacyCopy: Record<Language, LegalDocumentCopy> = {
     title: "Política de privacidad",
     description:
       "Aquí explicamos qué datos trata GPUL a través de hackOS, para qué los utiliza y cómo puedes ejercer tus derechos.",
-    updatedAt: "14 de julio de 2026",
+    updatedAt: "10 de agosto de 2026",
     body: `## 1. Responsable del tratamiento
 
 Esta política se aplica únicamente a la instancia de hackOS operada por GPUL. Una instalación desplegada por otra persona o entidad es una instancia independiente: su operador será responsable del tratamiento y deberá facilitar su propia política de privacidad. GPUL no controla ni trata los datos almacenados en instancias de terceros.
@@ -60,8 +60,6 @@ La información principal de hackOS —incluidas las cuentas, solicitudes, bases
 
 Conservaremos tus datos mientras tu cuenta o relación con GPUL permanezca activa y, después, durante los plazos necesarios para atender responsabilidades legales. Cuando finalicen, los datos serán eliminados o anonimizados.
 
-Las restricciones alimentarias se conservan mientras tu cuenta exista. Se utilizan para planificar el catering de las personas con plaza confirmada y no se incluyen en las estadísticas hasta que confirmes una plaza. Si no confirmas o rechazas una plaza, no se eliminan automáticamente: se conservan por si recibes otra oportunidad de participación.
-
 ## 7. Cookies y almacenamiento local
 
 hackOS utiliza una cookie de sesión propia, imprescindible para autenticarte y proteger tu cuenta. También guarda localmente preferencias como el idioma, el tema, el estado de la navegación y la confirmación de que has visto el aviso de cookies. No utilizamos estos mecanismos para publicidad comportamental ni para vender información sobre tu navegación.
@@ -86,7 +84,7 @@ Para cualquier consulta sobre privacidad, escribe a [hackudc@gpul.org](mailto:ha
     title: "Política de privacidade",
     description:
       "Aquí explicamos que datos trata GPUL a través de hackOS, para que os utiliza e como podes exercer os teus dereitos.",
-    updatedAt: "14 de xullo de 2026",
+    updatedAt: "10 de agosto de 2026",
     body: `## 1. Responsable do tratamento
 
 Esta política aplícase unicamente á instancia de hackOS operada por GPUL. Unha instalación despregada por outra persoa ou entidade é unha instancia independente: o seu operador será responsable do tratamento e deberá facilitar a súa propia política de privacidade. GPUL non controla nin trata os datos almacenados en instancias de terceiros.
@@ -140,8 +138,6 @@ A información principal de hackOS —incluídas as contas, solicitudes, bases d
 
 Conservaremos os teus datos mentres a túa conta ou relación con GPUL permaneza activa e, despois, durante os prazos necesarios para atender responsabilidades legais. Cando finalicen, os datos serán eliminados ou anonimizados.
 
-As restricións alimentarias consérvanse mentres exista a túa conta. Utilízanse para planificar o catering das persoas cunha praza confirmada e non se inclúen nas estatísticas ata que confirmes unha praza. Se non confirmas ou rexeitas unha praza, non se eliminan automaticamente: consérvanse por se recibes outra oportunidade de participación.
-
 ## 7. Cookies e almacenamento local
 
 hackOS utiliza unha cookie de sesión propia, imprescindible para autenticarte e protexer a túa conta. Tamén garda localmente preferencias como o idioma, o tema, o estado da navegación e a confirmación de que viches o aviso de cookies. Non utilizamos estes mecanismos para publicidade comportamental nin para vender información sobre a túa navegación.
@@ -166,7 +162,7 @@ Para calquera consulta sobre privacidade, escribe a [hackudc@gpul.org](mailto:ha
     title: "Privacy policy",
     description:
       "This policy explains what data GPUL processes through hackOS, why it is used and how you can exercise your rights.",
-    updatedAt: "14 July 2026",
+    updatedAt: "10 August 2026",
     body: `## 1. Data controller
 
 This policy applies only to the hackOS instance operated by GPUL. An installation deployed by another person or organisation is an independent instance: its operator is the data controller and must provide its own privacy policy. GPUL does not control or process data stored in third-party instances.
@@ -219,8 +215,6 @@ Core hackOS information —including accounts, applications, databases and files
 ## 6. Retention
 
 We retain your data while your account or relationship with GPUL remains active and afterwards for the periods necessary to address legal liabilities. Once those periods end, the data is deleted or anonymised.
-
-Dietary restrictions are kept while your account exists. They are used to plan catering for people with confirmed places and are not included in statistics until you confirm a place. If you do not confirm or decline a place, they are not deleted automatically; they are kept in case you receive another participation opportunity.
 
 ## 7. Cookies and local storage
 
