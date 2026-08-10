@@ -1,6 +1,21 @@
 "use client";
 
 import {
+  closestCenter,
+  DndContext,
+  type DragEndEvent,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import {
   type I18nText,
   type Question,
   type QuestionKind,
@@ -12,6 +27,7 @@ import {
   CheckSquareIcon,
   CircleDotIcon,
   CircleHelpIcon,
+  CopyIcon,
   HashIcon,
   ListChecksIcon,
   PlusIcon,
@@ -21,6 +37,7 @@ import {
   TypeIcon,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { DragHandle, SortableItem } from "@/components/common/drag-handle";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -37,12 +54,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import { Surface } from "@/components/ui/surface";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { i18nWithEnglishFallback, type Prize } from "./shared";
+
+/** Fixed locale order for translation inputs — English is always the primary
+ *  column throughout this builder (see MultilingualInput below). */
+const LOCALES = ["es", "en", "gl"] as const;
 
 type BuilderKind = QuestionKind;
 
@@ -189,6 +211,11 @@ export function PrizeBuilder({
   );
 }
 
+/** Judging panel builder (H30/H44) — mirrors the application form editor's
+ *  row pattern (`FieldEditor` in applications/[id]/questions-card.tsx): a
+ *  collapsed preview row that expands into the full editor on click, plus
+ *  drag-and-drop reordering, minus that editor's sections feature (a
+ *  judging panel is always a flat list, issue #423). */
 export function JudgingPanelBuilder({
   value,
   onChange,
@@ -198,7 +225,12 @@ export function JudgingPanelBuilder({
 }) {
   const { t } = useLocale();
   const questionTypes = useMemo(() => buildQuestionTypes(t), [t]);
-  const [openTranslations, setOpenTranslations] = useState<Record<number, boolean>>({});
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const dndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
   const update = (index: number, question: Question) =>
     onChange(value.map((existing, i) => (i === index ? question : existing)));
   const move = (index: number, dir: -1 | 1) => {
@@ -207,7 +239,40 @@ export function JudgingPanelBuilder({
     if (target < 0 || target >= next.length) return;
     [next[index], next[target]] = [next[target], next[index]];
     onChange(next);
+    setActiveIndex((prev) => (prev === index ? target : prev === target ? index : prev));
   };
+  const remove = (index: number) => {
+    onChange(value.filter((_, i) => i !== index));
+    setActiveIndex((prev) => (prev === index ? null : prev));
+  };
+  const duplicate = (index: number) => {
+    const source = value[index];
+    const existingKeys = new Set(value.map((q) => q.key));
+    let key = `${source.key}_copy`;
+    while (existingKeys.has(key)) key = `${key}_copy`;
+    const copy: Question = { ...source, key };
+    const next = [...value];
+    next.splice(index + 1, 0, copy);
+    onChange(next);
+    setActiveIndex(index + 1);
+  };
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = Number(active.id);
+    const newIndex = Number(over.id);
+    onChange(arrayMove(value, oldIndex, newIndex));
+    setActiveIndex((prev) =>
+      prev === null
+        ? prev
+        : arrayMove(
+            value.map((_, i) => i),
+            oldIndex,
+            newIndex,
+          ).indexOf(prev),
+    );
+  }
 
   const addField = (
     <DropdownMenu>
@@ -221,7 +286,10 @@ export function JudgingPanelBuilder({
         {questionTypes.map((type) => (
           <DropdownMenuItem
             key={type.kind}
-            onSelect={() => onChange([...value, defaultQuestion(type.kind, value.length, t)])}
+            onSelect={() => {
+              onChange([...value, defaultQuestion(type.kind, value.length, t)]);
+              setActiveIndex(value.length);
+            }}
           >
             <QuestionIcon kind={type.kind} />
             <div>
@@ -238,117 +306,223 @@ export function JudgingPanelBuilder({
 
   return (
     <div className="space-y-4">
-      {value.map((question, index) => {
-        const translationsOpen = openTranslations[index] ?? false;
-        const setOpen = (open: boolean) =>
-          setOpenTranslations((state) => ({ ...state, [index]: open }));
-        return (
-          // biome-ignore lint/suspicious/noArrayIndexKey: fields are positional; a key tied to question.key would remount inputs and drop focus while typing.
-          <Surface key={index} padding="compact" className="flex flex-col gap-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <QuestionIcon kind={question.kind} />
-                <div>
-                  <div className="font-medium">{question.label.en || `Field ${index + 1}`}</div>
-                  <div className="text-muted-foreground text-xs">{question.key}</div>
-                </div>
-              </div>
-              <div className="flex items-center gap-1">
-                <IconButton
-                  label={t("moveFieldUp")}
-                  disabled={index === 0}
-                  onClick={() => move(index, -1)}
-                >
-                  <ArrowUpIcon className="size-4" />
-                </IconButton>
-                <IconButton
-                  label={t("moveFieldDown")}
-                  disabled={index === value.length - 1}
-                  onClick={() => move(index, 1)}
-                >
-                  <ArrowDownIcon className="size-4" />
-                </IconButton>
-                <IconButton
-                  label={t("removeField")}
-                  onClick={() => onChange(value.filter((_, i) => i !== index))}
-                >
-                  <Trash2Icon className="size-4" />
-                </IconButton>
-              </div>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field id={`question-${index}-kind`} label={t("colType")}>
-                <Select
-                  value={question.kind}
-                  onValueChange={(kind) =>
-                    update(index, retargetQuestion(question, kind as BuilderKind, t))
-                  }
-                >
-                  <SelectTrigger id={`question-${index}-kind`} className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {questionTypes.map((type) => (
-                      <SelectItem key={type.kind} value={type.kind}>
-                        {type.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field
-                id={`question-${index}-key`}
-                label={t("fieldKeyLabel")}
-                hint={t("fieldKeyHint")}
-              >
-                <Input
-                  id={`question-${index}-key`}
-                  value={question.key}
-                  placeholder={t("fieldKeyPlaceholder")}
-                  onChange={(event) =>
-                    update(index, { ...question, key: slug(event.target.value) })
-                  }
+      <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext
+          items={value.map((_, index) => String(index))}
+          strategy={verticalListSortingStrategy}
+        >
+          {value.map((question, index) => (
+            <SortableItem key={String(index)} id={String(index)}>
+              {(drag) => (
+                <JudgingQuestionRow
+                  question={question}
+                  index={index}
+                  count={value.length}
+                  questionTypes={questionTypes}
+                  dragHandle={<DragHandle {...drag} label={t("dragToReorder")} />}
+                  active={activeIndex === index}
+                  onActivate={() => setActiveIndex(index)}
+                  onChange={(next) => update(index, next)}
+                  onMove={(dir) => move(index, dir)}
+                  onDuplicate={() => duplicate(index)}
+                  onRemove={() => remove(index)}
                 />
-              </Field>
-            </div>
-
-            <MultilingualInput
-              label={t("labelField")}
-              value={question.label}
-              open={translationsOpen}
-              onOpenChange={setOpen}
-              onChange={(label) => update(index, { ...question, label })}
-            />
-            <MultilingualInput
-              label={t("descriptionLabel")}
-              value={question.description ?? EMPTY_I18N}
-              open={translationsOpen}
-              onOpenChange={setOpen}
-              onChange={(description) => update(index, { ...question, description })}
-              textarea
-              optional
-            />
-
-            <QuestionSettings
-              question={question}
-              onChange={(next) => update(index, next)}
-              idPrefix={`question-${index}`}
-            />
-
-            <div className="flex items-center gap-2">
-              <Switch
-                id={`required-${index}`}
-                checked={question.required}
-                onCheckedChange={(required) => update(index, { ...question, required })}
-              />
-              <Label htmlFor={`required-${index}`}>{t("requiredCheckboxLabel")}</Label>
-            </div>
-          </Surface>
-        );
-      })}
+              )}
+            </SortableItem>
+          ))}
+        </SortableContext>
+      </DndContext>
       {addField}
     </div>
+  );
+}
+
+function JudgingQuestionRow({
+  question,
+  index,
+  count,
+  questionTypes,
+  dragHandle,
+  active,
+  onActivate,
+  onChange,
+  onMove,
+  onDuplicate,
+  onRemove,
+}: {
+  question: Question;
+  index: number;
+  count: number;
+  questionTypes: { kind: BuilderKind; label: string; description: string }[];
+  dragHandle: React.ReactNode;
+  active: boolean;
+  onActivate: () => void;
+  onChange: (question: Question) => void;
+  onMove: (dir: -1 | 1) => void;
+  onDuplicate: () => void;
+  onRemove: () => void;
+}) {
+  const { t } = useLocale();
+
+  const topRow = (
+    <div className="flex items-center gap-1">
+      {dragHandle}
+      <IconButton label={t("moveFieldUp")} disabled={index === 0} onClick={() => onMove(-1)}>
+        <ArrowUpIcon className="size-3.5" />
+      </IconButton>
+      <IconButton
+        label={t("moveFieldDown")}
+        disabled={index === count - 1}
+        onClick={() => onMove(1)}
+      >
+        <ArrowDownIcon className="size-3.5" />
+      </IconButton>
+    </div>
+  );
+
+  if (!active) {
+    return (
+      <Surface padding="compact" className="hover:border-primary/40 space-y-3 transition-colors">
+        {topRow}
+        <button type="button" onClick={onActivate} className="w-full text-left">
+          <div className="flex items-center gap-2">
+            <QuestionIcon kind={question.kind} />
+            <div>
+              <div className="font-medium">{question.label.en || `Field ${index + 1}`}</div>
+              <div className="text-muted-foreground text-xs">{question.key}</div>
+            </div>
+          </div>
+        </button>
+      </Surface>
+    );
+  }
+
+  const setLabel = (loc: (typeof LOCALES)[number], val: string) =>
+    onChange({ ...question, label: { ...question.label, [loc]: val } });
+  const setDescription = (loc: (typeof LOCALES)[number], val: string) =>
+    onChange({
+      ...question,
+      description: { ...(question.description ?? EMPTY_I18N), [loc]: val },
+    });
+
+  return (
+    <Surface
+      padding="compact"
+      onClick={(e) => e.stopPropagation()}
+      className="border-l-primary space-y-4 border-l-4"
+    >
+      {topRow}
+
+      <div className="grid gap-3 @lg:grid-cols-[minmax(0,1fr)_12rem]">
+        <Input
+          aria-label={t("labelField")}
+          placeholder={t("labelField")}
+          value={question.label.en}
+          onChange={(e) => setLabel("en", e.target.value)}
+          className="text-base font-medium"
+        />
+        <Select
+          value={question.kind}
+          onValueChange={(kind) => onChange(retargetQuestion(question, kind as BuilderKind, t))}
+        >
+          <SelectTrigger aria-label={t("colType")} className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {questionTypes.map((type) => (
+              <SelectItem key={type.kind} value={type.kind}>
+                <span className="flex items-center gap-2">
+                  <QuestionIcon kind={type.kind} />
+                  {type.label}
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <Textarea
+        aria-label={t("descriptionLabel")}
+        placeholder={`${t("descriptionLabel")}${t("optionalSuffix")}`}
+        value={question.description?.en ?? ""}
+        onChange={(e) => setDescription("en", e.target.value)}
+        className="text-sm"
+      />
+
+      <QuestionSettings question={question} onChange={onChange} idPrefix={`question-${index}`} />
+
+      <details className="rounded-lg border p-4">
+        <summary className="cursor-pointer text-sm font-medium">
+          {t("translationsAndSettings")}
+        </summary>
+        <div className="mt-4 space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            {LOCALES.filter((loc) => loc !== "en").map((loc) => (
+              <div key={loc} className="space-y-1.5">
+                <Label htmlFor={`question-${index}-label-${loc}`}>
+                  {t("labelField")} ({loc.toUpperCase()})
+                </Label>
+                <Input
+                  id={`question-${index}-label-${loc}`}
+                  value={question.label[loc]}
+                  onChange={(e) => setLabel(loc, e.target.value)}
+                />
+              </div>
+            ))}
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {LOCALES.filter((loc) => loc !== "en").map((loc) => (
+              <div key={loc} className="space-y-1.5">
+                <Label htmlFor={`question-${index}-description-${loc}`}>
+                  {t("descriptionLabel")} ({loc.toUpperCase()})
+                </Label>
+                <Input
+                  id={`question-${index}-description-${loc}`}
+                  value={question.description?.[loc] ?? ""}
+                  onChange={(e) => setDescription(loc, e.target.value)}
+                />
+              </div>
+            ))}
+          </div>
+          <Field id={`question-${index}-key`} label={t("fieldKeyLabel")} hint={t("fieldKeyHint")}>
+            <Input
+              id={`question-${index}-key`}
+              value={question.key}
+              placeholder={t("fieldKeyPlaceholder")}
+              onChange={(e) => onChange({ ...question, key: slug(e.target.value) })}
+            />
+          </Field>
+        </div>
+      </details>
+
+      <Separator />
+
+      <div className="flex flex-wrap items-center gap-1">
+        <Button type="button" variant="ghost" size="icon" className="size-8" onClick={onDuplicate}>
+          <CopyIcon className="size-4" />
+          <span className="sr-only">{t("duplicateQuestion")}</span>
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="text-destructive size-8"
+          onClick={onRemove}
+        >
+          <Trash2Icon className="size-4" />
+          <span className="sr-only">{t("removeField")}</span>
+        </Button>
+        <Separator orientation="vertical" className="mx-1 h-6" />
+        <Switch
+          checked={question.required}
+          onCheckedChange={(required) => onChange({ ...question, required })}
+          id={`required-${index}`}
+        />
+        <Label htmlFor={`required-${index}`} className="text-sm">
+          {t("requiredCheckboxLabel")}
+        </Label>
+      </div>
+    </Surface>
   );
 }
 
