@@ -264,13 +264,16 @@ describe("self-service account removal (H54)", () => {
     ).toBe(404);
   });
 
-  it("lets an invited-but-unassigned account delete itself, clearing its claim token and self-authored audit rows", async () => {
+  it("lets an invited-but-unassigned account delete itself, clearing its claim token, outbox rows, and self-authored audit rows", async () => {
     // Regression: a plain participant invite acceptance leaves an unavoidable
-    // used email_verification_tokens row and an audit_log row with
-    // actor_id = the new user (the "accept" audit entry) — neither is
-    // operational history the org needs, but both used to permanently force
-    // "anonymize" for accounts that never applied, were never accepted, and
-    // hold no capability/ticket at all.
+    // used email_verification_tokens row, a queued/sent notification_outbox
+    // row (the invite/welcome email), and an audit_log row with
+    // actor_id = the new user (the "accept" audit entry) — none of that is
+    // operational history the org needs, but all three used to permanently
+    // force "anonymize" for accounts that never applied, were never
+    // accepted, and hold no capability/ticket at all (found in production:
+    // a fresh account was stuck on "anonymize" solely because of a leftover
+    // notification_outbox row from its invite email).
     const a = await getApp();
     const { pool } = await import("../../src/db/pool.js");
     const user = await createUser({ name: "Invited Unassigned" });
@@ -283,6 +286,11 @@ describe("self-service account removal (H54)", () => {
     await pool.query(
       `INSERT INTO audit_log (actor_id, entity_type, entity_id, action, source)
        VALUES ($1, 'invite', '999', 'accept', 'email')`,
+      [user],
+    );
+    await pool.query(
+      `INSERT INTO notification_outbox (user_id, category, channel, status)
+       VALUES ($1, 'auth', 'email', 'sent')`,
       [user],
     );
 
@@ -300,6 +308,9 @@ describe("self-service account removal (H54)", () => {
     expect(
       (await pool.query(`SELECT 1 FROM email_verification_tokens WHERE id = $1`, [tok[0].id]))
         .rowCount,
+    ).toBe(0);
+    expect(
+      (await pool.query(`SELECT 1 FROM notification_outbox WHERE user_id = $1`, [user])).rowCount,
     ).toBe(0);
     const { rows: survivingAudit } = await pool.query(
       `SELECT actor_id FROM audit_log WHERE entity_type = 'invite' AND entity_id = '999'`,
