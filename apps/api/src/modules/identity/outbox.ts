@@ -5,8 +5,8 @@ import type { Queryable } from "../../db/pool.js";
  * here instead of sent synchronously — the notifications workstream (H50-H52)
  * owns actual delivery via its outbox dispatcher. `category: "auth"` and the
  * template names below match the registry in
- * src/modules/notifications/templates.ts (auth.verify / auth.reset /
- * auth.invite) so the dispatcher renders them with per-user i18n
+ * src/modules/notifications/templates.ts (auth.verify / auth.verifySecondaryEmail
+ * / auth.reset / auth.invite) so the dispatcher renders them with per-user i18n
  * (users.language) without this module knowing anything about email
  * rendering or providers.
  */

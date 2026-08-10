@@ -134,9 +134,11 @@ export function registerSecondaryEmailRoutes(app: FastifyInstance): void {
         await enqueueAuthEmail(
           client,
           userId,
-          "auth.verify",
+          "auth.verifySecondaryEmail",
           {
-            name: "",
+            name: [self.name, self.surname].filter(Boolean).join(" ") || self.email,
+            primaryEmail: self.email,
+            secondaryEmail: email,
             // Link to the WEB app (a real page), not the API host. The page
             // POSTs the token to /api/me/secondary-email/verify while signed in.
             verifyUrl: `${config.WEB_URL}/verify-secondary-email?token=${token}`,
@@ -166,6 +168,54 @@ export function registerSecondaryEmailRoutes(app: FastifyInstance): void {
     async (req) => removeSecondaryEmail(req.userId as number, req.userId as number, "self"),
   );
 
+  // Read-only preview so the verify page can show which addresses are being
+  // linked — and, if the signed-in browser session belongs to someone else,
+  // say so distinctly — before the token is actually consumed.
+  api.get(
+    "/api/me/secondary-email/verify",
+    {
+      preHandler: requireAuth,
+      config: routeAccess({ kind: "authenticated" }),
+      schema: {
+        summary: "Preview a secondary-email verification token",
+        description:
+          "Read-only lookup for the verify-secondary-email page (H6): reports whether the token belongs to the signed-in account, and the address it would link, without consuming it.",
+        querystring: z.object({ token: z.string().min(1) }),
+        response: {
+          200: z.object({
+            matchesAccount: z.boolean(),
+            secondaryEmail: z.string().nullable(),
+            alreadyUsed: z.boolean(),
+            expired: z.boolean(),
+          }),
+        },
+      },
+    },
+    async (req) => {
+      const userId = req.userId as number;
+      const { rows } = await pool.query(
+        `SELECT email, user_id, expires_at, used_at FROM email_verification_tokens
+         WHERE token = $1 AND type = 'secondary_email'`,
+        [req.query.token],
+      );
+      const row = rows[0] as
+        | { email: string; user_id: number; expires_at: Date; used_at: Date | null }
+        | undefined;
+      if (!row) {
+        throw new BadRequestError("Invalid verification token");
+      }
+      const matchesAccount = row.user_id === userId;
+      return {
+        matchesAccount,
+        // Don't leak the requested address to a browser session that doesn't
+        // own the token — only what it needs to explain the mismatch.
+        secondaryEmail: matchesAccount ? row.email : null,
+        alreadyUsed: row.used_at !== null,
+        expired: row.expires_at < new Date(),
+      };
+    },
+  );
+
   api.post(
     "/api/me/secondary-email/verify",
     {
@@ -191,8 +241,16 @@ export function registerSecondaryEmailRoutes(app: FastifyInstance): void {
         const row = rows[0] as
           | { id: number; email: string; user_id: number; expires_at: Date; used_at: Date | null }
           | undefined;
-        if (!row || row.user_id !== userId) {
+        if (!row) {
           throw new BadRequestError("Invalid verification token");
+        }
+        if (row.user_id !== userId) {
+          // Distinct from a plain invalid/unknown token (issue #392): the
+          // verify page needs to tell "wrong link" apart from "wrong account,
+          // sign in as the right one" so it can offer a way out.
+          throw new BadRequestError("This verification link is for a different account", {
+            wrongAccount: true,
+          });
         }
         if (row.used_at !== null) {
           // Mirrors H2's UX contract: an already-used link answers "already
@@ -291,9 +349,11 @@ export function registerSecondaryEmailRoutes(app: FastifyInstance): void {
           [targetId, email],
         );
         await reconcileDevpostParticipantsForUser(client, targetId);
-        await enqueueAuthEmail(client, targetId, "auth.verify", {
+        await enqueueAuthEmail(client, targetId, "auth.verifySecondaryEmail", {
           recipient: email,
-          name: tgt.name ?? "",
+          name: [tgt.name, tgt.surname].filter(Boolean).join(" ") || tgt.email,
+          primaryEmail: tgt.email,
+          secondaryEmail: email,
           verifyUrl: `${config.WEB_URL}/verify-secondary-email?token=${token}`,
         });
         await audit(client, {

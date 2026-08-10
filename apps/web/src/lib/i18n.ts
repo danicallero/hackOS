@@ -636,6 +636,31 @@ const dict: Record<string, I18nText> = {
     gl: "Non se puido verificar.",
     en: "Couldn't verify.",
   },
+  confirmSecondaryEmailTitle: {
+    es: "Confirmar correo secundario",
+    gl: "Confirmar correo secundario",
+    en: "Confirm secondary email",
+  },
+  confirmSecondaryEmailDesc: {
+    es: "Vamos a vincular {secondaryEmail} como correo secundario de tu cuenta {primaryEmail}, para poder emparejar tus proyectos de Devpost.",
+    gl: "Imos vincular {secondaryEmail} como correo secundario da túa conta {primaryEmail}, para poder emparellar os teus proxectos de Devpost.",
+    en: "We'll link {secondaryEmail} as the secondary email for your account {primaryEmail}, so we can match your Devpost projects.",
+  },
+  confirmAndVerify: {
+    es: "Confirmar y verificar",
+    gl: "Confirmar e verificar",
+    en: "Confirm and verify",
+  },
+  wrongAccountTitle: {
+    es: "Enlace para otra cuenta",
+    gl: "Ligazón para outra conta",
+    en: "Link for a different account",
+  },
+  wrongAccountDesc: {
+    es: "Este enlace de verificación es para otra cuenta, pero has iniciado sesión como {currentEmail}. Inicia sesión con la cuenta que pidió añadir este correo secundario.",
+    gl: "Esta ligazón de verificación é para outra conta, pero iniciaches sesión como {currentEmail}. Inicia sesión coa conta que pediu engadir este correo secundario.",
+    en: "This verification link is for a different account, but you're signed in as {currentEmail}. Sign in with the account that requested this secondary email.",
+  },
 
   // ---- Account overview & capabilities ----
   accountRole: { es: "Rol", gl: "Rol", en: "Account role" },
