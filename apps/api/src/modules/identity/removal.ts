@@ -48,12 +48,16 @@ function quoteIdentifier(identifier: string): string {
 //    about acting on anything BUT its own signup. actor_id is nulled, not
 //    deleted, so the audited event itself (entity_type/action/before/after)
 //    survives — same as the null actorId a self-delete's own audit row uses.
+//  - notification_outbox.user_id: queued/sent comms (e.g. the invite/welcome
+//    email) — a message log, not proof of event participation, and nothing
+//    else references it.
 // Every other restrictive reference (tickets, scans, submissions…) still
 // blocks hard delete.
 const SELF_CLEANABLE_REFERENCES: ReadonlySet<string> = new Set([
   "application_responses.user_id",
   "email_verification_tokens.user_id",
   "audit_log.actor_id",
+  "notification_outbox.user_id",
 ]);
 
 async function hasRetainedReference(client: Queryable, userId: number): Promise<boolean> {
@@ -123,6 +127,7 @@ export async function clearOwnUnretainedReferences(
   }
   await client.query(`DELETE FROM email_verification_tokens WHERE user_id = $1`, [userId]);
   await client.query(`UPDATE audit_log SET actor_id = NULL WHERE actor_id = $1`, [userId]);
+  await client.query(`DELETE FROM notification_outbox WHERE user_id = $1`, [userId]);
 }
 
 export async function getAccountRemovalEligibility(

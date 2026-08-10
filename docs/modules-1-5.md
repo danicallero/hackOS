@@ -209,7 +209,8 @@ foreign-keys on the email string.
   a never-accepted applicant has no role/ticket and is not operational history
   worth retaining — also hard-deletes accounts whose only restrictive
   references are their own `application_responses`/`applicant_reviews`, their
-  account-claim/verification `email_verification_tokens` row, and any
+  account-claim/verification `email_verification_tokens` row, queued/sent
+  `notification_outbox` messages (e.g. the invite/welcome email), and any
   `audit_log` row where they're merely the actor (e.g. the "accept" entry from
   claiming an invite): `removal.ts` `clearOwnUnretainedReferences` clears/nulls
   those in the same transaction before deleting the user (nulling
