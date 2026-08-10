@@ -191,6 +191,58 @@ describe("concurrent transitions: exactly one winner", () => {
     const statusB = (await getEntry(eB)).status;
     expect([statusA, statusB].sort()).toEqual(["called", "waiting"]);
   });
+
+  it("H30 backstop: same repo entered in two challenges with NO resolvable members -> only one gets called", async () => {
+    // Reproduces the reported bug: the H30 member-lock guard can't serialize
+    // when a repo has zero resolvable members (submissions/devpost rows
+    // withdrawn after the queue entry was created). The
+    // one_active_entry_per_repo partial index must catch it anyway.
+    const ch1 = await createChallenge();
+    const ch2 = await createChallenge();
+    const room1 = await createRoom({ maxInWaitingArea: 1 });
+    const room2 = await createRoom({ maxInWaitingArea: 1 });
+    await assignChallengeToRoom(room1, ch1);
+    await assignChallengeToRoom(room2, ch2);
+
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows } = await pool.query(`INSERT INTO repos (name) VALUES ($1) RETURNING id`, [
+      `repo-no-members-${crypto.randomUUID().slice(0, 8)}`,
+    ]);
+    const repoId = rows[0].id; // no submissions / devpost_participants rows at all
+
+    const eA = await enqueueRepo(ch1, repoId, 1);
+    const eB = await enqueueRepo(ch2, repoId, 1);
+
+    const [a, b] = await Promise.all([
+      app.inject({
+        method: "POST",
+        url: `/api/queue/rooms/${room1}/call-next`,
+        headers: asUser(operatorId),
+        payload: {},
+      }),
+      app.inject({
+        method: "POST",
+        url: `/api/queue/rooms/${room2}/call-next`,
+        headers: asUser(operatorId),
+        payload: {},
+      }),
+    ]);
+
+    expect(a.statusCode).toBe(200);
+    expect(b.statusCode).toBe(200);
+    const calledCount = [a.json().called, b.json().called].filter(Boolean).length;
+    expect(calledCount).toBe(1);
+
+    const statusA = (await getEntry(eA)).status;
+    const statusB = (await getEntry(eB)).status;
+    expect([statusA, statusB].sort()).toEqual(["called", "waiting"]);
+
+    const { rows: activeRows } = await pool.query(
+      `SELECT count(*)::int AS n FROM queue_entries WHERE repo_id = $1 AND status IN ('called','in_room','presenting')`,
+      [repoId],
+    );
+    expect(activeRows[0].n).toBe(1); // DB partial index held
+  });
 });
 
 describe("idempotent replay", () => {

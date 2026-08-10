@@ -17,14 +17,29 @@ import { REPO_MEMBER_RELATION_SQL } from "./membership.js";
  * acquisition order is globally consistent and deadlock-free) serializes the
  * check across transactions: the second transaction blocks until the first
  * commits its transition, then sees the member as busy.
+ *
+ * The member-id lock alone is not sufficient on its own: if a repo has no
+ * resolvable members at check time (e.g. its active submission was withdrawn
+ * after the queue entry was created, or a Devpost email match briefly fails
+ * to resolve), the member query returns zero rows, no lock is acquired, and
+ * two rooms calling the SAME repo's two different challenge entries could
+ * both pass. We additionally lock on the repo id itself (separate
+ * namespace) and check the repo's own active entries directly, independent
+ * of member resolution, so the guard can never be bypassed by an empty
+ * membership set.
  */
 const H30_LOCK_NAMESPACE = 815_030;
+const H30_REPO_LOCK_NAMESPACE = 815_031;
 
 export async function isRepoBlockedByBusyMember(
   client: Queryable,
   repoId: number,
   opts: { roomId?: number | null; excludeEntryId?: number | null } = {},
 ): Promise<boolean> {
+  await client.query(`SELECT pg_advisory_xact_lock($1::int, $2::int)`, [
+    H30_REPO_LOCK_NAMESPACE,
+    repoId,
+  ]);
   await client.query(
     `SELECT pg_advisory_xact_lock($1::int, members.user_id)
        FROM (
@@ -43,6 +58,13 @@ export async function isRepoBlockedByBusyMember(
        JOIN queue_entries qe ON qe.repo_id = active.repo_id
                               AND qe.status IN ('called', 'in_room', 'presenting')
       WHERE candidate.repo_id = $1
+        AND ($2::int IS NULL OR qe.assigned_room_id IS DISTINCT FROM $2::int)
+        AND ($3::int IS NULL OR qe.id <> $3::int)
+     UNION ALL
+     SELECT 1
+       FROM queue_entries qe
+      WHERE qe.repo_id = $1
+        AND qe.status IN ('called', 'in_room', 'presenting')
         AND ($2::int IS NULL OR qe.assigned_room_id IS DISTINCT FROM $2::int)
         AND ($3::int IS NULL OR qe.id <> $3::int)
       LIMIT 1`,
