@@ -104,6 +104,20 @@ const TEMPLATES: Record<string, TemplateDefinition> = {
       body: "Ola {{name}},\n\nConfirma o teu enderezo de correo para desbloquear o resto de hackOS:\n\n[Verificar correo]({{verifyUrl}})\n\nCaemos en spam? Move esta mensaxe á caixa de entrada e engade {{fromAddress}} aos teus contactos para non perder ningunha mensaxe.\n\nSe non o pediches ti, ignora esta mensaxe.",
     },
   },
+  "auth.verifySecondaryEmail": {
+    en: {
+      subject: "Confirm your secondary email for hackOS",
+      body: "Hi {{name}},\n\nYour hackOS account ({{primaryEmail}}) asked to add {{secondaryEmail}} as a secondary address, so we can match your Devpost projects to your account:\n\n[Confirm {{secondaryEmail}}]({{verifyUrl}})\n\nDid we land in spam? Move this message to your inbox and add {{fromAddress}} to your contacts so you don't miss future messages.\n\nIf you didn't request this, ignore this message — your account won't change.",
+    },
+    es: {
+      subject: "Confirma tu correo secundario para hackOS",
+      body: "Hola {{name}},\n\nTu cuenta de hackOS ({{primaryEmail}}) ha pedido añadir {{secondaryEmail}} como dirección secundaria, para poder vincular tus proyectos de Devpost a tu cuenta:\n\n[Confirmar {{secondaryEmail}}]({{verifyUrl}})\n\n¿Caímos en spam? Mueve este mensaje a la bandeja de entrada y añade {{fromAddress}} a tus contactos para no perderte ningún mensaje.\n\nSi no lo has pedido tú, ignora este mensaje — tu cuenta no cambiará.",
+    },
+    gl: {
+      subject: "Confirma o teu correo secundario para hackOS",
+      body: "Ola {{name}},\n\nA túa conta de hackOS ({{primaryEmail}}) pediu engadir {{secondaryEmail}} como enderezo secundario, para poder vincular os teus proxectos de Devpost á túa conta:\n\n[Confirmar {{secondaryEmail}}]({{verifyUrl}})\n\nCaemos en spam? Move esta mensaxe á caixa de entrada e engade {{fromAddress}} aos teus contactos para non perder ningunha mensaxe.\n\nSe non o pediches ti, ignora esta mensaxe — a túa conta non cambiará.",
+    },
+  },
   "auth.reset": {
     en: {
       subject: "Reset your hackOS password",

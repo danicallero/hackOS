@@ -288,7 +288,7 @@ describe("H6 secondary email", () => {
     expect(again.json().alreadyVerified).toBe(true);
   });
 
-  it("someone else's token is rejected", async () => {
+  it("someone else's token is rejected, distinctly from an unknown token (issue #392)", async () => {
     const a = await getApp();
     const owner = await createUser();
     await requestSecondary(a, owner, "mine@example.com");
@@ -301,6 +301,57 @@ describe("H6 secondary email", () => {
       payload: { token },
     });
     expect(res.statusCode).toBe(400);
+    expect(res.json().error.details.wrongAccount).toBe(true);
+
+    const bogus = await a.inject({
+      method: "POST",
+      url: "/api/me/secondary-email/verify",
+      headers: asUser(thief),
+      payload: { token: "not-a-real-token" },
+    });
+    expect(bogus.statusCode).toBe(400);
+    expect(bogus.json().error.details).toBeUndefined();
+  });
+
+  it("preview endpoint reports account match without leaking the address to the wrong account (issue #392)", async () => {
+    const a = await getApp();
+    const owner = await createUser();
+    await requestSecondary(a, owner, "preview-me@example.com");
+    const token = await latestToken(owner);
+
+    const ownPreview = await a.inject({
+      method: "GET",
+      url: `/api/me/secondary-email/verify?token=${token}`,
+      headers: asUser(owner),
+    });
+    expect(ownPreview.statusCode).toBe(200);
+    expect(ownPreview.json()).toEqual({
+      matchesAccount: true,
+      secondaryEmail: "preview-me@example.com",
+      alreadyUsed: false,
+      expired: false,
+    });
+
+    const other = await createUser();
+    const otherPreview = await a.inject({
+      method: "GET",
+      url: `/api/me/secondary-email/verify?token=${token}`,
+      headers: asUser(other),
+    });
+    expect(otherPreview.statusCode).toBe(200);
+    expect(otherPreview.json()).toEqual({
+      matchesAccount: false,
+      secondaryEmail: null,
+      alreadyUsed: false,
+      expired: false,
+    });
+
+    const unknown = await a.inject({
+      method: "GET",
+      url: "/api/me/secondary-email/verify?token=not-a-real-token",
+      headers: asUser(owner),
+    });
+    expect(unknown.statusCode).toBe(400);
   });
 
   it("removing a verified secondary email revokes only its automatic project links", async () => {
