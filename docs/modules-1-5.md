@@ -193,8 +193,14 @@ foreign-keys on the email string.
 - `profile.ts` `POST /api/users/:id/anonymize` (`ADMIN_ALL`) — H54 erasure the
   DELETE 409 already pointed to: scrubs every PII column in place (keeping the
   row + FK references intact) and revokes access (deletes `sessions` +
-  `accounts`). `DELETE /api/users/:id` still hard-deletes fresh accounts and
-  409s for accounts with history.
+  `accounts`). `DELETE /api/users/:id` hard-deletes fresh accounts, and — since
+  a never-accepted applicant has no role/ticket and is not operational history
+  worth retaining — also hard-deletes accounts whose only restrictive
+  reference is their own `application_responses` row(s): `removal.ts`
+  `deleteOwnApplicationData` clears those (and any `applicant_reviews` on
+  them) as part of the same transaction before deleting the user. Any account
+  with a ticket, scan, submission, or other retained reference still 409s and
+  must go through anonymization instead.
 
 **State transitions.** None (identity/account lifecycle only).
 

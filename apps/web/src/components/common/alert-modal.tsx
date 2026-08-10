@@ -19,6 +19,7 @@ export function AlertModal({
   children,
   trigger,
   autoClose = false,
+  reverseActions = false,
 }: {
   open?: boolean;
   title: string;
@@ -34,10 +35,33 @@ export function AlertModal({
   trigger?: React.ReactNode;
   /** Close immediately after confirmation; async callers normally stay open while pending. */
   autoClose?: boolean;
+  /**
+   * Put the destructive action where Cancel normally sits, and vice versa,
+   * for a rarer/higher-stakes confirmation (e.g. self-service account
+   * deletion) where the usual "confirm is on the right" muscle memory is a
+   * risk rather than a convenience.
+   */
+  reverseActions?: boolean;
 }) {
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const isOpen = open ?? uncontrolledOpen;
   const setOpen = onOpenChange ?? setUncontrolledOpen;
+
+  const confirmButton = (
+    <AlertDialog.Action asChild>
+      <Button
+        variant={destructive ? "destructive" : "default"}
+        disabled={pending}
+        onClick={(event) => {
+          if (!autoClose || pending) event.preventDefault();
+          onConfirm();
+        }}
+      >
+        {pending && <Spinner className="size-4" />}
+        {confirmLabel}
+      </Button>
+    </AlertDialog.Action>
+  );
 
   return (
     <AlertDialog.Root open={isOpen} onOpenChange={setOpen}>
@@ -59,24 +83,13 @@ export function AlertModal({
           </div>
           {children}
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            {reverseActions && confirmButton}
             <AlertDialog.Cancel asChild>
               <Button variant="outline" disabled={pending}>
                 {cancelLabel}
               </Button>
             </AlertDialog.Cancel>
-            <AlertDialog.Action asChild>
-              <Button
-                variant={destructive ? "destructive" : "default"}
-                disabled={pending}
-                onClick={(event) => {
-                  if (!autoClose || pending) event.preventDefault();
-                  onConfirm();
-                }}
-              >
-                {pending && <Spinner className="size-4" />}
-                {confirmLabel}
-              </Button>
-            </AlertDialog.Action>
+            {!reverseActions && confirmButton}
           </div>
         </AlertDialog.Content>
       </AlertDialog.Portal>

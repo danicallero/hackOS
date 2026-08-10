@@ -32,6 +32,7 @@ import { ApiError, api } from "@/lib/api";
 import { languageName, pickText, useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 import type { Intolerance, Language, Me } from "@/lib/types";
+import { DangerZoneCard } from "./danger-zone";
 import { EmailCard } from "./email-card";
 
 const LANGS: Language[] = ["es", "gl", "en"];
@@ -260,6 +261,7 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
         </form>
       </Form>
       <EmailCard />
+      <DangerZoneCard />
     </div>
   );
 }

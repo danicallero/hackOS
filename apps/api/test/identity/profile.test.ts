@@ -227,6 +227,68 @@ describe("GET /api/me (H7)", () => {
   });
 });
 
+describe("self-service account removal (H54)", () => {
+  it("lets an unaccepted applicant delete their own account and its application data", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const user = await createUser({ name: "Self Deletable" });
+    const { rows: applications } = await pool.query(
+      `INSERT INTO applications (name, type, template)
+       VALUES ('Participants', 'participant', '[]'::jsonb) RETURNING id`,
+    );
+    await pool.query(
+      `INSERT INTO application_responses (user_id, application_id, status, responses)
+       VALUES ($1, $2, 'rejected', '{}'::jsonb)`,
+      [user, applications[0].id],
+    );
+
+    const eligibility = await a.inject({
+      method: "GET",
+      url: "/api/me/removal-eligibility",
+      headers: asUser(user),
+    });
+    expect(eligibility.statusCode).toBe(200);
+    expect(eligibility.json().action).toBe("delete");
+
+    const deleted = await a.inject({ method: "DELETE", url: "/api/me", headers: asUser(user) });
+    expect(deleted.statusCode).toBe(200);
+    expect(deleted.json().deleted).toBe(true);
+    expect(
+      (await pool.query(`SELECT 1 FROM application_responses WHERE user_id = $1`, [user])).rowCount,
+    ).toBe(0);
+    // The test-only x-test-user-id header authenticates without a real
+    // session lookup, so this 404s (row gone) rather than 401 like a real
+    // Better Auth session would once its cascade-deleted `sessions` row is gone.
+    expect(
+      (await a.inject({ method: "GET", url: "/api/me", headers: asUser(user) })).statusCode,
+    ).toBe(404);
+  });
+
+  it("blocks self-deletion for an account with retained history (must go through an admin)", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const user = await createUser({ name: "Accredited" });
+    await pool.query(`INSERT INTO tickets (user_id, token) VALUES ($1, 'tok-self-blocked')`, [
+      user,
+    ]);
+
+    const eligibility = await a.inject({
+      method: "GET",
+      url: "/api/me/removal-eligibility",
+      headers: asUser(user),
+    });
+    expect(eligibility.statusCode).toBe(200);
+    expect(eligibility.json()).toMatchObject({
+      action: "anonymize",
+      reasonCode: "operational_history",
+    });
+
+    const blocked = await a.inject({ method: "DELETE", url: "/api/me", headers: asUser(user) });
+    expect(blocked.statusCode).toBe(409);
+    expect((await pool.query(`SELECT 1 FROM users WHERE id = $1`, [user])).rowCount).toBe(1);
+  });
+});
+
 describe("PATCH /api/me (H7)", () => {
   it("updates own restricted fields (A: food/shirt are staff-only now)", async () => {
     const a = await getApp();
@@ -449,9 +511,13 @@ describe("staff user routes (H7)", () => {
     );
     await pool.query(
       `INSERT INTO application_responses (user_id, application_id, status, responses)
-       VALUES ($1, $2, 'submitted', '{}'::jsonb)`,
+       VALUES ($1, $2, 'accepted', '{}'::jsonb)`,
       [target, applications[0].id],
     );
+    // A ticket (role/accreditation issued) is the real operational history —
+    // not the application row itself, which a never-accepted applicant can
+    // clean up on their own (H54, unaccepted participants delete cleanly).
+    await pool.query(`INSERT INTO tickets (user_id, token) VALUES ($1, 'tok-historic')`, [target]);
 
     const eligibility = await a.inject({
       method: "GET",
@@ -485,6 +551,53 @@ describe("staff user routes (H7)", () => {
       (await pool.query(`SELECT 1 FROM application_responses WHERE user_id = $1`, [target]))
         .rowCount,
     ).toBe(1);
+  });
+
+  it("hard-deletes an unaccepted applicant, cascading their own application data (H54)", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const admin = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
+    const target = await createUser({ name: "Never Accepted" });
+    const { rows: applications } = await pool.query(
+      `INSERT INTO applications (name, type, template)
+       VALUES ('Participants', 'participant', '[]'::jsonb) RETURNING id`,
+    );
+    const { rows: responseRows } = await pool.query(
+      `INSERT INTO application_responses (user_id, application_id, status, responses)
+       VALUES ($1, $2, 'rejected', '{}'::jsonb) RETURNING id`,
+      [target, applications[0].id],
+    );
+    await pool.query(
+      `INSERT INTO applicant_reviews (response_id, author_id, score) VALUES ($1, $2, 50)`,
+      [responseRows[0].id, admin],
+    );
+
+    const eligibility = await a.inject({
+      method: "GET",
+      url: `/api/users/${target}/removal-eligibility`,
+      headers: asUser(admin),
+    });
+    expect(eligibility.statusCode).toBe(200);
+    expect(eligibility.json().action).toBe("delete");
+
+    const deleted = await a.inject({
+      method: "DELETE",
+      url: `/api/users/${target}`,
+      headers: asUser(admin),
+    });
+    expect(deleted.statusCode).toBe(200);
+    expect(deleted.json().deleted).toBe(true);
+    expect(
+      (await pool.query(`SELECT 1 FROM application_responses WHERE user_id = $1`, [target]))
+        .rowCount,
+    ).toBe(0);
+    expect(
+      (
+        await pool.query(`SELECT 1 FROM applicant_reviews WHERE response_id = $1`, [
+          responseRows[0].id,
+        ])
+      ).rowCount,
+    ).toBe(0);
   });
 
   it("PATCH /api/users/:id requires USERS_WRITE, can fix dni/notes, and is audited (H53)", async () => {
