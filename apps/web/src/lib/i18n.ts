@@ -5558,9 +5558,9 @@ const dict: Record<string, I18nText> = {
   winnersTabLabel: { es: "Ganadores", gl: "Gañadores", en: "Winners" },
   winnersTitle: { es: "Ranking de ganadores", gl: "Ranking de gañadores", en: "Winner ranking" },
   winnersDesc: {
-    es: "Uso interno: solo lo ven administradores y el personal de esta empresa.",
-    gl: "Uso interno: só o ven administradores e o persoal desta empresa.",
-    en: "Internal only: visible to admins and this company's own staff.",
+    es: "Solo tú y el equipo organizador podéis ver esto.",
+    gl: "Só ti e o equipo organizador podedes ver isto.",
+    en: "Only you and the organizing team can see this.",
   },
   noWinnersSetTitle: {
     es: "Aún no hay ningún ganador marcado",
