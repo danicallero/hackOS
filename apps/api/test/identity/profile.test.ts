@@ -264,6 +264,50 @@ describe("self-service account removal (H54)", () => {
     ).toBe(404);
   });
 
+  it("lets an invited-but-unassigned account delete itself, clearing its claim token and self-authored audit rows", async () => {
+    // Regression: a plain participant invite acceptance leaves an unavoidable
+    // used email_verification_tokens row and an audit_log row with
+    // actor_id = the new user (the "accept" audit entry) — neither is
+    // operational history the org needs, but both used to permanently force
+    // "anonymize" for accounts that never applied, were never accepted, and
+    // hold no capability/ticket at all.
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const user = await createUser({ name: "Invited Unassigned" });
+    const { rows: tok } = await pool.query(
+      `INSERT INTO email_verification_tokens (token, type, email, user_id, kind, expires_at, used_at)
+       VALUES ('claim-tok', 'account_claim', 'invited@example.com', $1, 'participant', now(), now())
+       RETURNING id`,
+      [user],
+    );
+    await pool.query(
+      `INSERT INTO audit_log (actor_id, entity_type, entity_id, action, source)
+       VALUES ($1, 'invite', '999', 'accept', 'email')`,
+      [user],
+    );
+
+    const eligibility = await a.inject({
+      method: "GET",
+      url: "/api/me/removal-eligibility",
+      headers: asUser(user),
+    });
+    expect(eligibility.statusCode).toBe(200);
+    expect(eligibility.json().action).toBe("delete");
+
+    const deleted = await a.inject({ method: "DELETE", url: "/api/me", headers: asUser(user) });
+    expect(deleted.statusCode).toBe(200);
+    expect(deleted.json().deleted).toBe(true);
+    expect(
+      (await pool.query(`SELECT 1 FROM email_verification_tokens WHERE id = $1`, [tok[0].id]))
+        .rowCount,
+    ).toBe(0);
+    const { rows: survivingAudit } = await pool.query(
+      `SELECT actor_id FROM audit_log WHERE entity_type = 'invite' AND entity_id = '999'`,
+    );
+    expect(survivingAudit).toHaveLength(1);
+    expect(survivingAudit[0].actor_id).toBeNull();
+  });
+
   it("blocks self-deletion for an account with retained history (must go through an admin)", async () => {
     const a = await getApp();
     const { pool } = await import("../../src/db/pool.js");

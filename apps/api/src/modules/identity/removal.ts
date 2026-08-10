@@ -32,12 +32,29 @@ function quoteIdentifier(identifier: string): string {
  * ACTION/RESTRICT references preserve operational history. Reading the catalog
  * keeps this preflight aligned when a new retained user reference is added.
  */
-// A user's own applications aren't operational history: an applicant who was
-// never accepted (no ticket, no role) has nothing worth retaining, so their
-// application_responses rows are cleaned up as part of the delete itself
-// (deleteOwnApplicationData) instead of blocking it. Every other restrictive
-// reference (tickets, scans, submissions, audit…) still blocks hard delete.
-const SELF_CLEANABLE_REFERENCES: ReadonlySet<string> = new Set(["application_responses.user_id"]);
+// A handful of references are just bookkeeping about the account itself, not
+// operational history worth retaining: an applicant who was never accepted
+// (no ticket, no role) has nothing to keep, so these are cleaned up as part
+// of the delete itself (clearOwnUnretainedReferences) instead of blocking it.
+//  - application_responses.user_id / applicant_reviews: their own,
+//    never-accepted application.
+//  - email_verification_tokens.user_id: the claim/verification token that
+//    onboarded them (invite accept, secondary email…) — proof of how the
+//    account was created, not proof of event participation.
+//  - audit_log.actor_id: reachable here only through invite-accept ("accept"
+//    audited with actorId = the new user themselves) — since eligibility
+//    already requires no ticket/capability anywhere, this account was never
+//    able to reach a capability-gated route, so it can't hold an audit row
+//    about acting on anything BUT its own signup. actor_id is nulled, not
+//    deleted, so the audited event itself (entity_type/action/before/after)
+//    survives — same as the null actorId a self-delete's own audit row uses.
+// Every other restrictive reference (tickets, scans, submissions…) still
+// blocks hard delete.
+const SELF_CLEANABLE_REFERENCES: ReadonlySet<string> = new Set([
+  "application_responses.user_id",
+  "email_verification_tokens.user_id",
+  "audit_log.actor_id",
+]);
 
 async function hasRetainedReference(client: Queryable, userId: number): Promise<boolean> {
   const { rows } = await client.query<RestrictingReference>(
@@ -81,25 +98,31 @@ async function hasRetainedReference(client: Queryable, userId: number): Promise<
 }
 
 /**
- * Remove a non-retained applicant's own application data (H54, non-accepted
- * participants). Only called on the "delete" path — an accepted/ticketed
+ * Clear a non-retained applicant's own SELF_CLEANABLE_REFERENCES (H54,
+ * non-accepted participants) so the DELETE FROM users below doesn't hit an
+ * FK violation. Only called on the "delete" path — an accepted/ticketed
  * applicant is never eligible here, so this never touches operational history.
  */
-export async function deleteOwnApplicationData(client: Queryable, userId: number): Promise<void> {
+export async function clearOwnUnretainedReferences(
+  client: Queryable,
+  userId: number,
+): Promise<void> {
   const { rows } = await client.query<{ id: number }>(
     `SELECT id FROM application_responses WHERE user_id = $1`,
     [userId],
   );
   const responseIds = rows.map((row) => row.id);
-  if (responseIds.length === 0) return;
-
-  await client.query(
-    `UPDATE application_responses SET referrer_application_id = NULL
-      WHERE referrer_application_id = ANY($1)`,
-    [responseIds],
-  );
-  await client.query(`DELETE FROM applicant_reviews WHERE response_id = ANY($1)`, [responseIds]);
-  await client.query(`DELETE FROM application_responses WHERE id = ANY($1)`, [responseIds]);
+  if (responseIds.length > 0) {
+    await client.query(
+      `UPDATE application_responses SET referrer_application_id = NULL
+        WHERE referrer_application_id = ANY($1)`,
+      [responseIds],
+    );
+    await client.query(`DELETE FROM applicant_reviews WHERE response_id = ANY($1)`, [responseIds]);
+    await client.query(`DELETE FROM application_responses WHERE id = ANY($1)`, [responseIds]);
+  }
+  await client.query(`DELETE FROM email_verification_tokens WHERE user_id = $1`, [userId]);
+  await client.query(`UPDATE audit_log SET actor_id = NULL WHERE actor_id = $1`, [userId]);
 }
 
 export async function getAccountRemovalEligibility(

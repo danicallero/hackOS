@@ -208,11 +208,25 @@ foreign-keys on the email string.
   `accounts`). `DELETE /api/users/:id` hard-deletes fresh accounts, and — since
   a never-accepted applicant has no role/ticket and is not operational history
   worth retaining — also hard-deletes accounts whose only restrictive
-  reference is their own `application_responses` row(s): `removal.ts`
-  `deleteOwnApplicationData` clears those (and any `applicant_reviews` on
-  them) as part of the same transaction before deleting the user. Any account
-  with a ticket, scan, submission, or other retained reference still 409s and
-  must go through anonymization instead.
+  references are their own `application_responses`/`applicant_reviews`, their
+  account-claim/verification `email_verification_tokens` row, and any
+  `audit_log` row where they're merely the actor (e.g. the "accept" entry from
+  claiming an invite): `removal.ts` `clearOwnUnretainedReferences` clears/nulls
+  those in the same transaction before deleting the user (nulling
+  `audit_log.actor_id` rather than deleting the row keeps the audited event
+  itself, mirroring the nullable-actor pattern the self-delete route's own
+  audit write already uses). Any account with a ticket, scan, submission, or
+  other retained reference still 409s and must go through anonymization
+  instead.
+- `GET /api/me/removal-eligibility` / `DELETE /api/me` (authenticated, no
+  extra capability) — the self-service side of the same H54 preflight/delete:
+  a participant can delete their own account only when
+  `getAccountRemovalEligibility` says `"delete"`; otherwise 409, and the
+  account settings page points them at requesting anonymization from an
+  administrator instead (privacy policy §6). Unlike the admin route, the
+  audit write for a self-delete uses `actorId: null` — actor and target are
+  the same row being deleted in that transaction, and a non-null self-FK would
+  block the `DELETE FROM users` it's part of.
 
 **State transitions.** None (identity/account lifecycle only).
 
