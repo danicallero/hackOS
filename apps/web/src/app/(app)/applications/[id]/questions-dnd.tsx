@@ -1,40 +1,20 @@
 "use client";
 
-// Drag-and-drop primitives for the question builder (H11): a keyboard- and
-// pointer-accessible drag handle, plus thin wrappers around dnd-kit's
-// useSortable/useDroppable so questions-card.tsx can stay focused on the
-// domain logic (which field/section moved where) instead of dnd-kit's API.
+// Drag-and-drop primitives for the question builder (H11): thin wrappers
+// around dnd-kit's useSortable/useDroppable so questions-card.tsx can stay
+// focused on the domain logic (which field/section moved where) instead of
+// dnd-kit's API. The generic drag handle and single-item sortable wrapper
+// live in components/common/drag-handle.tsx, shared with the challenge
+// judging panel builder (issue #423).
 
 import { useDroppable } from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVerticalIcon } from "lucide-react";
+import { DragHandle, SortableItem } from "@/components/common/drag-handle";
 import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
-/** Grip handle: pointer-draggable, and focusable/operable via keyboard (dnd-kit's
- *  KeyboardSensor wires Space/Enter to pick up, arrows to move, Escape to cancel). */
-export function DragHandle({
-  attributes,
-  listeners,
-  label,
-}: {
-  attributes: ReturnType<typeof useSortable>["attributes"];
-  listeners: ReturnType<typeof useSortable>["listeners"];
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      className="text-muted-foreground hover:bg-muted hover:text-foreground -ml-1.5 flex size-8 shrink-0 cursor-grab touch-none items-center justify-center rounded-md active:cursor-grabbing"
-      {...attributes}
-      {...listeners}
-    >
-      <GripVerticalIcon className="size-4" />
-      <span className="sr-only">{label}</span>
-    </button>
-  );
-}
+export { DragHandle };
 
 /** Sortable wrapper for one field card within its section/ungrouped block. */
 export function SortableField({
@@ -47,18 +27,10 @@ export function SortableField({
     listeners: ReturnType<typeof useSortable>["listeners"];
   }) => React.ReactNode;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id,
-    data: { type: "field" },
-  });
   return (
-    <div
-      ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cn(isDragging && "z-10 opacity-60")}
-    >
-      {children({ attributes, listeners })}
-    </div>
+    <SortableItem id={id} data={{ type: "field" }}>
+      {children}
+    </SortableItem>
   );
 }
 

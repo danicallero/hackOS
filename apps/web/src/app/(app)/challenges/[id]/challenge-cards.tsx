@@ -189,7 +189,8 @@ export function EditCard({
     const criteriaEn = criteriaI18n.en.trim();
     try {
       setSaveError(false);
-      const normalizedQuestions = normalizeQuestions(questions);
+      const originalQuestions = asQuestions(challenge.judging_panel_criteria);
+      const questionsChanged = JSON.stringify(questions) !== JSON.stringify(originalQuestions);
       await api.patch<Challenge>(`/api/challenges/${challenge.id}`, {
         ...(canEditGeneral
           ? {
@@ -203,7 +204,11 @@ export function EditCard({
               ...(canMapPrizes ? { devpostTags } : {}),
             }
           : {}),
-        judgingPanelCriteria: normalizedQuestions,
+        // Only send judgingPanelCriteria when it actually changed — the API
+        // rejects any patch that touches it once judging has started (H44),
+        // and this field is otherwise always present since Content/Judging
+        // share one form (issue #423).
+        ...(questionsChanged ? { judgingPanelCriteria: normalizeQuestions(questions) } : {}),
         maxPresentationSeconds: values.maxPresentationSeconds
           ? Number(values.maxPresentationSeconds)
           : null,
