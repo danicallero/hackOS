@@ -9,9 +9,11 @@
 import { sponsorShareKey } from "@hackos/shared/applications";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { FileTextIcon, LockIcon, PencilIcon, SendIcon } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
+  type FormSection,
   fmtScore,
   type ResponseRow,
   statusTone,
@@ -38,6 +40,80 @@ import { pickText, type Translate, useLocale } from "@/lib/i18n";
 import type { SaveState } from "@/lib/save-state";
 import { useCan, useMe } from "@/lib/session";
 import type { Intolerance, Language } from "@/lib/types";
+
+/** Reserved section the shirt-size/dietary fields are grouped under (H11) —
+ *  synthetic, never stored in `application.sections`. Mirrors the identically
+ *  named constant in `applications/[id]/shared.ts` and `my-applications/lib.ts`
+ *  (types/helpers declared locally per module convention). */
+const LOGISTICS_SECTION_KEY = "__logistics__";
+const LOGISTICS_SECTION: FormSection = {
+  key: LOGISTICS_SECTION_KEY,
+  title: { en: "Logistics", es: "Logística", gl: "Loxística" },
+};
+
+/** The read-only shirt-size/dietary "fields" this modal synthesizes so they
+ *  render as ordinary answer rows grouped under Logistics, instead of a
+ *  separate hardcoded block. Values come from the response row directly
+ *  (H12: this data lives on the user row, not `response.responses`) — editing
+ *  it happens on the applicant's profile, not through this form. */
+function logisticsAnswerFields(
+  askShirtSize: boolean,
+  askFoodIntolerances: boolean,
+  intolerances: Intolerance[],
+): TemplateField[] {
+  const fields: TemplateField[] = [];
+  if (askShirtSize) {
+    fields.push({
+      key: "shirt_size",
+      label: { en: "T-shirt size", es: "Talla de camiseta", gl: "Talla de camiseta" },
+      kind: "text",
+      required: false,
+      section_key: LOGISTICS_SECTION_KEY,
+    });
+  }
+  if (askFoodIntolerances) {
+    fields.push(
+      {
+        key: "food_intolerances",
+        label: {
+          en: "Dietary restrictions",
+          es: "Restricciones dietéticas",
+          gl: "Restricións dietéticas",
+        },
+        kind: "multiselect",
+        required: false,
+        options: intolerances.map((i) => ({ value: String(i.id), label: i.label })),
+        section_key: LOGISTICS_SECTION_KEY,
+      },
+      {
+        key: "food_intolerance_notes",
+        label: { en: "Dietary notes", es: "Notas dietéticas", gl: "Notas dietéticas" },
+        kind: "textarea",
+        required: false,
+        section_key: LOGISTICS_SECTION_KEY,
+      },
+    );
+  }
+  return fields;
+}
+
+interface AnswerGroup {
+  section: FormSection | null;
+  fields: TemplateField[];
+}
+
+/** Groups a flat field list under its sections, ungrouped fields leading —
+ *  matches the builder's own layout. Mirrors the identically-named helper in
+ *  `applications/[id]/shared.ts`/`my-applications/lib.ts`. */
+function groupFieldsBySections(fields: TemplateField[], sections: FormSection[]): AnswerGroup[] {
+  const knownKeys = new Set(sections.map((s) => s.key));
+  const ungrouped = fields.filter((f) => !f.section_key || !knownKeys.has(f.section_key));
+  const groups: AnswerGroup[] = [{ section: null, fields: ungrouped }];
+  for (const section of sections) {
+    groups.push({ section, fields: fields.filter((f) => f.section_key === section.key) });
+  }
+  return groups.filter((g) => g.fields.length > 0);
+}
 
 function renderAnswer(
   field: TemplateField,
@@ -104,10 +180,10 @@ export function AnswerValue({
   sharedWithSponsors?: boolean;
 }) {
   const { t } = useLocale();
-  // A file-url is a link the applicant typed: show the URL itself so staff can
-  // read and click through to it. A file is a private upload key with no
-  // meaningful text, so it stays a generic "View file" link.
-  if (field.kind === "file-url" && typeof value === "string" && value) {
+  // A text field validated as a URL is a link the applicant typed: show it
+  // clickable so staff can read and click through. A file is a private
+  // upload key with no meaningful text, so it stays a generic "View file" link.
+  if (field.validation?.text_condition === "url" && typeof value === "string" && value) {
     return (
       <a
         href={value}
@@ -139,6 +215,9 @@ export function ReviewModal({
   response,
   applicationId,
   template,
+  sections = [],
+  askShirtSize = false,
+  askFoodIntolerances = false,
   onClose,
   onChanged,
   workspace = "review",
@@ -146,6 +225,14 @@ export function ReviewModal({
   response: ResponseRow;
   applicationId: number;
   template: TemplateField[] | null;
+  /** The form's named sections (H11), so answers group the same way the
+   *  builder and applicant form do. */
+  sections?: FormSection[];
+  /** Whether this form asks for shirt size/dietary data (H12) — shown here
+   *  read-only under a synthetic Logistics section; edited on the applicant's
+   *  profile, not through this modal (see `logisticsAnswerFields`). */
+  askShirtSize?: boolean;
+  askFoodIntolerances?: boolean;
   onClose: () => void;
   onChanged: () => Promise<void>;
   workspace?: ApplicationWorkspace;
@@ -162,6 +249,17 @@ export function ReviewModal({
   const [savingNotes, setSavingNotes] = useState(false);
   const [intolerances, setIntolerances] = useState<Intolerance[]>([]);
   const [universities, setUniversities] = useState<{ id: number; name: string }[]>([]);
+
+  const hasLogisticsFields = askShirtSize || askFoodIntolerances;
+  const logisticsFields = logisticsAnswerFields(askShirtSize, askFoodIntolerances, intolerances);
+  const answerFields = [...(template ?? []), ...logisticsFields];
+  const answerSections = hasLogisticsFields ? [...sections, LOGISTICS_SECTION] : sections;
+  const answerValues: Record<string, unknown> = {
+    ...response.responses,
+    shirt_size: response.shirt_size,
+    food_intolerances: response.food_intolerances?.map(String) ?? [],
+    food_intolerance_notes: response.food_intolerance_notes,
+  };
 
   useEffect(() => {
     api
@@ -367,22 +465,41 @@ export function ReviewModal({
                 </Button>
               </div>
             </div>
-          ) : template && template.length > 0 ? (
-            <div className="divide-border divide-y">
-              {template.map((f) => (
-                <div key={f.key} className="py-3 first:pt-0 last:pb-0">
-                  <p className="text-muted-foreground mb-1 text-xs font-medium uppercase">
-                    {pickText(f.label, lang) || f.key}
-                  </p>
-                  <div className="text-sm">
-                    <AnswerValue
-                      field={f}
-                      value={response.responses[f.key]}
-                      universities={universities}
-                      lang={lang}
-                      sharedWithSponsors={response.responses[sponsorShareKey(f.key)] === true}
-                    />
+          ) : answerFields.length > 0 ? (
+            <div className="space-y-4">
+              {groupFieldsBySections(answerFields, answerSections).map((group, i) => (
+                <div key={group.section?.key ?? `ungrouped-${i}`} className="space-y-1">
+                  {group.section && (
+                    <p className="text-muted-foreground text-xs font-semibold uppercase">
+                      {pickText(group.section.title, lang)}
+                    </p>
+                  )}
+                  <div className="divide-border divide-y">
+                    {group.fields.map((f) => (
+                      <div key={f.key} className="py-3 first:pt-0 last:pb-0">
+                        <p className="text-muted-foreground mb-1 text-xs font-medium uppercase">
+                          {pickText(f.label, lang) || f.key}
+                        </p>
+                        <div className="text-sm">
+                          <AnswerValue
+                            field={f}
+                            value={answerValues[f.key]}
+                            universities={universities}
+                            lang={lang}
+                            sharedWithSponsors={response.responses[sponsorShareKey(f.key)] === true}
+                          />
+                        </div>
+                      </div>
+                    ))}
                   </div>
+                  {group.section?.key === LOGISTICS_SECTION_KEY && (
+                    <Link
+                      href={`/users/${response.user_id}`}
+                      className="text-primary text-xs underline underline-offset-4"
+                    >
+                      {t("editInProfileLink")}
+                    </Link>
+                  )}
                 </div>
               ))}
             </div>
@@ -401,40 +518,6 @@ export function ReviewModal({
             <p className="text-muted-foreground text-sm">{t("noAnswersRecorded")}</p>
           )}
         </div>
-
-        {/* Dietary info (from user row) */}
-        {(response.food_intolerances?.length > 0 || response.food_intolerance_notes) && (
-          <div className="space-y-3">
-            <p className="text-sm font-medium">{t("dietaryInfo")}</p>
-            <div className="divide-border divide-y">
-              {response.food_intolerances?.length > 0 && (
-                <div className="py-3 first:pt-0">
-                  <p className="text-muted-foreground mb-1 text-xs font-medium uppercase">
-                    {t("dietaryRestrictions")}
-                  </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {response.food_intolerances.map((id) => {
-                      const intol = intolerances.find((i) => i.id === id);
-                      return intol ? (
-                        <StatusBadge key={id} tone="neutral" dot={false}>
-                          {pickText(intol.label, lang)}
-                        </StatusBadge>
-                      ) : null;
-                    })}
-                  </div>
-                </div>
-              )}
-              {response.food_intolerance_notes && (
-                <div className="py-3 first:pt-0">
-                  <p className="text-muted-foreground mb-1 text-xs font-medium uppercase">
-                    {t("dietaryNotes")}
-                  </p>
-                  <p className="text-sm whitespace-pre-wrap">{response.food_intolerance_notes}</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
 
         {/* Shared staff notes (H13) */}
         {canReview && (

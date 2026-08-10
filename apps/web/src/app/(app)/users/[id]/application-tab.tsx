@@ -13,7 +13,12 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { ApiError, api } from "@/lib/api";
 import { LOCALE_CODES, type MessageKey, useLocale } from "@/lib/i18n";
-import type { ApplicationForm, ResponseRow, TemplateField } from "../../applications/lib";
+import type {
+  ApplicationForm,
+  FormSection,
+  ResponseRow,
+  TemplateField,
+} from "../../applications/lib";
 import { applicationStatusLabel } from "../../applications/workflow";
 
 interface UserApplicationRow {
@@ -35,7 +40,12 @@ interface ResponseDetailPayload {
     food_intolerances: number[];
     food_intolerance_notes: string | null;
   };
-  application: Pick<ApplicationForm, "id" | "name" | "type"> & { template: TemplateField[] };
+  application: Pick<ApplicationForm, "id" | "name" | "type"> & {
+    template: TemplateField[];
+    sections: FormSection[];
+    ask_shirt_size: boolean;
+    ask_food_intolerances: boolean;
+  };
   reviews: { score: number | null }[];
 }
 
@@ -54,6 +64,9 @@ export function ApplicationTab({ userId }: { userId: number }) {
     response: ResponseRow;
     applicationId: number;
     template: TemplateField[];
+    sections: FormSection[];
+    askShirtSize: boolean;
+    askFoodIntolerances: boolean;
   } | null>(null);
   const [openingId, setOpeningId] = useState<number | null>(null);
 
@@ -101,6 +114,9 @@ export function ApplicationTab({ userId }: { userId: number }) {
         },
         applicationId: detail.application.id,
         template: detail.application.template,
+        sections: detail.application.sections,
+        askShirtSize: detail.application.ask_shirt_size,
+        askFoodIntolerances: detail.application.ask_food_intolerances,
       });
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("couldNotOpenApplication"));
@@ -181,6 +197,9 @@ export function ApplicationTab({ userId }: { userId: number }) {
           response={selected.response}
           applicationId={selected.applicationId}
           template={selected.template}
+          sections={selected.sections}
+          askShirtSize={selected.askShirtSize}
+          askFoodIntolerances={selected.askFoodIntolerances}
           onClose={() => setSelected(null)}
           onChanged={() => loadRows(false)}
         />

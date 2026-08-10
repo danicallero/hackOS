@@ -19,7 +19,6 @@ export const FIELD_KINDS = [
   "checkbox",
   "date",
   "number",
-  "file-url",
   "file",
   "university",
 ] as const;
@@ -34,6 +33,34 @@ const optionSchema = z.object({
   value: z.string().min(1),
   label: i18nSchema,
 });
+
+/**
+ * Response-validation rules (H11), checked by `validateResponses` at submit
+ * time on top of the kind-shape check. Which sub-fields apply depends on
+ * `kind`: min_length/max_length/pattern for text/textarea, min/max for
+ * number, min_selected/max_selected for multiselect. Fields irrelevant to a
+ * given kind are simply ignored rather than rejected, so switching kind
+ * doesn't require clearing out unrelated validation state.
+ */
+export const TEXT_VALIDATION_CONDITIONS = ["contains", "not_contains", "email", "url"] as const;
+
+export const fieldValidationSchema = z.object({
+  min_length: z.number().int().nonnegative().optional(),
+  max_length: z.number().int().positive().optional(),
+  pattern: z.string().optional(),
+  /** text/textarea only: a "contains"/"doesn't contain" condition needs
+   *  `text_value`; "email"/"url" check the value's own shape instead. */
+  text_condition: z.enum(TEXT_VALIDATION_CONDITIONS).optional(),
+  text_value: z.string().optional(),
+  min: z.number().optional(),
+  max: z.number().optional(),
+  min_selected: z.number().int().nonnegative().optional(),
+  max_selected: z.number().int().positive().optional(),
+  /** Shown to the applicant instead of the generic message when a rule fails. */
+  error_message: i18nSchema.optional(),
+});
+
+export type FieldValidation = z.infer<typeof fieldValidationSchema>;
 
 export const templateFieldSchema = z
   .object({
@@ -50,6 +77,15 @@ export const templateFieldSchema = z
     /** File fields only (H56): lets an applicant consent to sharing this
      *  upload with sponsors; see sponsorShareKey for the response convention. */
     shareable_with_sponsors: z.boolean().optional(),
+    /** Groups this field under a `FormSection.key` (H11 form builder sections). */
+    section_key: z.string().optional(),
+    /** Small helper text shown under the field (H11), e.g. a privacy note or
+     *  formatting hint. Plain text; URLs are auto-linked on render. */
+    help_text: i18nSchema.optional(),
+    /** Placeholder shown inside the empty input, for kinds the applicant
+     *  types into (text/textarea/number). Falls back to a generic string. */
+    placeholder: i18nSchema.optional(),
+    validation: fieldValidationSchema.optional(),
   })
   .refine(
     (f) => !(f.kind === "select" || f.kind === "multiselect") || (f.options?.length ?? 0) > 0,
@@ -64,6 +100,31 @@ export const templateSchema = z
 
 export type TemplateField = z.infer<typeof templateFieldSchema>;
 
+/** A named group of template fields (H11 form builder sections): title +
+ *  optional description, rendered as a header above its member fields. */
+export const sectionSchema = z.object({
+  key: z
+    .string()
+    .min(1)
+    .regex(/^[a-zA-Z0-9_.-]+$/, "section key must be alphanumeric/._-"),
+  title: i18nSchema,
+  description: i18nSchema.optional(),
+});
+
+export const sectionsSchema = z
+  .array(sectionSchema)
+  .refine((sections) => new Set(sections.map((s) => s.key)).size === sections.length, {
+    message: "section keys must be unique",
+  });
+
+export type FormSection = z.infer<typeof sectionSchema>;
+
+/** Every field's `section_key`, if set, must reference a defined section. */
+function fieldsReferenceKnownSections(fields: TemplateField[], sections: FormSection[]): boolean {
+  const keys = new Set(sections.map((s) => s.key));
+  return fields.every((f) => f.section_key === undefined || keys.has(f.section_key));
+}
+
 const timestampCoerce = z.union([z.string(), z.null()]).optional();
 
 export const createApplicationSchema = z
@@ -71,6 +132,7 @@ export const createApplicationSchema = z
     name: z.string().min(1),
     type: z.enum(APPLICATION_TYPES),
     template: templateSchema,
+    sections: sectionsSchema.default([]),
     description: z.string().nullish(),
     active: z.boolean().default(true),
     open_at: timestampCoerce,
@@ -80,13 +142,18 @@ export const createApplicationSchema = z
     ask_shirt_size: z.boolean().default(false),
     ask_food_intolerances: z.boolean().default(false),
   })
-  .strict();
+  .strict()
+  .refine((b) => fieldsReferenceKnownSections(b.template, b.sections), {
+    message: "every field's section_key must reference a defined section",
+    path: ["template"],
+  });
 
 export const updateApplicationSchema = z
   .object({
     name: z.string().min(1).optional(),
     type: z.enum(APPLICATION_TYPES).optional(),
     template: templateSchema.optional(),
+    sections: sectionsSchema.optional(),
     description: z.string().nullish(),
     active: z.boolean().optional(),
     open_at: timestampCoerce,
@@ -96,7 +163,17 @@ export const updateApplicationSchema = z
     ask_shirt_size: z.boolean().optional(),
     ask_food_intolerances: z.boolean().optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    // Only checkable when both sides of the PATCH are present together — a
+    // partial update touching just one of template/sections can't be
+    // validated against the other half without the current DB row.
+    (b) =>
+      b.template === undefined ||
+      b.sections === undefined ||
+      fieldsReferenceKnownSections(b.template, b.sections),
+    { message: "every field's section_key must reference a defined section", path: ["template"] },
+  );
 
 export const idParamSchema = z.object({ id: z.coerce.number().int().positive() });
 export const responseIdParamSchema = z.object({

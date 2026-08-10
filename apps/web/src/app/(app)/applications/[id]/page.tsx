@@ -279,17 +279,38 @@ export default function ApplicationDetailPage() {
 
           {canReview && (
             <TabsContent value="review" className="pt-2">
-              <ResponsesTab id={id} template={form?.template ?? null} workspace="review" />
+              <ResponsesTab
+                id={id}
+                template={form?.template ?? null}
+                sections={form?.sections ?? []}
+                askShirtSize={form?.ask_shirt_size ?? false}
+                askFoodIntolerances={form?.ask_food_intolerances ?? false}
+                workspace="review"
+              />
             </TabsContent>
           )}
           {canSeeDecisions && (
             <TabsContent value="outbox" className="pt-2">
-              <ResponsesTab id={id} template={form?.template ?? null} workspace="outbox" />
+              <ResponsesTab
+                id={id}
+                template={form?.template ?? null}
+                sections={form?.sections ?? []}
+                askShirtSize={form?.ask_shirt_size ?? false}
+                askFoodIntolerances={form?.ask_food_intolerances ?? false}
+                workspace="outbox"
+              />
             </TabsContent>
           )}
           {canSeeDecisions && (
             <TabsContent value="sent" className="pt-2">
-              <ResponsesTab id={id} template={form?.template ?? null} workspace="sent" />
+              <ResponsesTab
+                id={id}
+                template={form?.template ?? null}
+                sections={form?.sections ?? []}
+                askShirtSize={form?.ask_shirt_size ?? false}
+                askFoodIntolerances={form?.ask_food_intolerances ?? false}
+                workspace="sent"
+              />
             </TabsContent>
           )}
         </Tabs>

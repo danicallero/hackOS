@@ -300,4 +300,95 @@ describe("applications CRUD (H11)", () => {
     expect(res.statusCode).toBe(409);
     expect(res.json().error.details.code).toBe("has_responses");
   });
+
+  it("H11: sections group template fields and round-trip through create/update/read", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);
+    const en = { en: "Education", es: "Educación", gl: "Educación" };
+    const template = sampleTemplate().map((f) => ({ ...f, section_key: "education" }));
+
+    const create = await a.inject({
+      method: "POST",
+      url: "/api/applications",
+      headers: asUser(manager),
+      payload: {
+        name: "Sectioned form",
+        type: "participant",
+        template,
+        sections: [{ key: "education", title: en }],
+      },
+    });
+    expect(create.statusCode).toBe(201);
+    expect(create.json().sections).toEqual([{ key: "education", title: en }]);
+    expect(create.json().template[0].section_key).toBe("education");
+    const id = create.json().id;
+
+    const patch = await a.inject({
+      method: "PATCH",
+      url: `/api/applications/${id}`,
+      headers: asUser(manager),
+      payload: { sections: [{ key: "education", title: en, description: en }] },
+    });
+    expect(patch.statusCode).toBe(200);
+    expect(patch.json().sections[0].description).toEqual(en);
+
+    const read = await a.inject({
+      method: "GET",
+      url: `/api/applications/${id}`,
+      headers: asUser(manager),
+    });
+    expect(read.json().sections[0].key).toBe("education");
+  });
+
+  it("H11: a field's help_text round-trips through create/update", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);
+    const help = { en: "We won't call you", es: "No te llamaremos", gl: "Non te chamaremos" };
+    const template = sampleTemplate().map((f, i) => (i === 0 ? { ...f, help_text: help } : f));
+
+    const create = await a.inject({
+      method: "POST",
+      url: "/api/applications",
+      headers: asUser(manager),
+      payload: { name: "Help text form", type: "participant", template },
+    });
+    expect(create.statusCode).toBe(201);
+    expect(create.json().template[0].help_text).toEqual(help);
+  });
+
+  it("H11: rejects a field whose section_key has no matching section", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);
+    const template = sampleTemplate().map((f) => ({ ...f, section_key: "missing" }));
+
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/applications",
+      headers: asUser(manager),
+      payload: { name: "Bad sections", type: "participant", template, sections: [] },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("H11: rejects duplicate section keys", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);
+    const title = { en: "A", es: "A", gl: "A" };
+
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/applications",
+      headers: asUser(manager),
+      payload: {
+        name: "Dup sections",
+        type: "participant",
+        template: sampleTemplate(),
+        sections: [
+          { key: "dup", title },
+          { key: "dup", title },
+        ],
+      },
+    });
+    expect(res.statusCode).toBe(400);
+  });
 });

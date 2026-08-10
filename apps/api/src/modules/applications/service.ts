@@ -8,7 +8,7 @@ import { audit } from "../../lib/audit.js";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { issueTicket } from "../logistics/tickets.js";
 import { issueWalletAccessToken } from "../logistics/wallet-access.js";
-import type { ApplicationType, TemplateField } from "./schemas.js";
+import type { ApplicationType, FormSection, TemplateField } from "./schemas.js";
 
 /**
  * Applications domain service (H11-H15, H27, H56). Holds the state-machine
@@ -99,6 +99,46 @@ export function extractDni(responses: Record<string, unknown>): string | null {
 }
 
 /**
+ * Builder-defined validation rules (H11) on top of the kind-shape check —
+ * length/pattern for text, min/max for number, selection count for
+ * multiselect. `field.validation`'s sub-fields not relevant to `field.kind`
+ * are ignored rather than erroring, so switching kind mid-edit is harmless.
+ * Only called once the value has already passed its kind-shape check, so the
+ * type narrowing below (string/number/array) is safe.
+ */
+const SIMPLE_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// A scheme (http:// or https://) is optional — applicants shouldn't have to
+// type it themselves for this to count as a URL, just a domain-shaped value.
+const SIMPLE_URL_RE = /^(https?:\/\/)?[^\s/$.?#][^\s]*\.[^\s]{2,}$/i;
+
+function checkFieldValidation(field: TemplateField, value: unknown): string | null {
+  const v = field.validation;
+  if (!v) return null;
+  if ((field.kind === "text" || field.kind === "textarea") && typeof value === "string") {
+    if (v.min_length !== undefined && value.length < v.min_length) return "too short";
+    if (v.max_length !== undefined && value.length > v.max_length) return "too long";
+    if (v.pattern !== undefined && !new RegExp(v.pattern).test(value)) return "invalid format";
+    if (v.text_condition === "contains" && v.text_value && !value.includes(v.text_value)) {
+      return "must contain text";
+    }
+    if (v.text_condition === "not_contains" && v.text_value && value.includes(v.text_value)) {
+      return "must not contain text";
+    }
+    if (v.text_condition === "email" && !SIMPLE_EMAIL_RE.test(value)) return "invalid email";
+    if (v.text_condition === "url" && !SIMPLE_URL_RE.test(value)) return "invalid url";
+  }
+  if (field.kind === "number" && typeof value === "number") {
+    if (v.min !== undefined && value < v.min) return "too small";
+    if (v.max !== undefined && value > v.max) return "too large";
+  }
+  if (field.kind === "multiselect" && Array.isArray(value)) {
+    if (v.min_selected !== undefined && value.length < v.min_selected) return "too few selected";
+    if (v.max_selected !== undefined && value.length > v.max_selected) return "too many selected";
+  }
+  return null;
+}
+
+/**
  * Validate a response object against the form template. Required fields are
  * only enforced here (called at submit, never while drafting — H12). Also
  * type-checks each provided value against its field kind.
@@ -149,6 +189,12 @@ export function validateResponses(
         break;
       default:
         if (typeof value !== "string") errors[field.key] = "must be a string";
+    }
+    // H11: builder-defined response validation, on top of the kind-shape
+    // check above (skipped once that already failed for this field).
+    if (!errors[field.key] && field.validation) {
+      const validationError = checkFieldValidation(field, value);
+      if (validationError) errors[field.key] = validationError;
     }
     // H56: an applicant's consent to share a file with sponsors is optional,
     // never required, and only meaningful on a field the organizer marked so.
@@ -1248,7 +1294,15 @@ export interface ResponseDetail {
     food_intolerance_notes: string | null;
     dietary_data_state: "not_provided" | "present";
   };
-  application: { id: number; name: string; type: ApplicationType; template: TemplateField[] };
+  application: {
+    id: number;
+    name: string;
+    type: ApplicationType;
+    template: TemplateField[];
+    sections: FormSection[];
+    ask_shirt_size: boolean;
+    ask_food_intolerances: boolean;
+  };
   reviews: Array<{ author_id: number; score: number | null; notes: string | null }>;
   available_actions: string[];
 }
@@ -1286,7 +1340,7 @@ export async function getResponseDetail(responseId: number): Promise<ResponseDet
   const { rows } = await pool.query(
     `SELECT r.*, u.name, u.email, u.shirt_size,
             u.food_intolerances, u.food_intolerance_notes, u.dietary_data_state,
-            a.id AS app_id, a.name AS app_name, a.type AS app_type, a.template,
+            a.id AS app_id, a.name AS app_name, a.type AS app_type, a.template, a.sections,
             a.ask_shirt_size, a.ask_food_intolerances
      FROM application_responses r
      JOIN users u ON u.id = r.user_id
@@ -1306,6 +1360,7 @@ export async function getResponseDetail(responseId: number): Promise<ResponseDet
     app_name,
     app_type,
     template,
+    sections,
     ask_shirt_size,
     ask_food_intolerances,
     ...response
@@ -1316,7 +1371,10 @@ export async function getResponseDetail(responseId: number): Promise<ResponseDet
     [responseId],
   );
 
-  const enriched = await enrichTemplate({ ask_shirt_size, ask_food_intolerances }, template);
+  // Raw (un-enriched) template + the logistics flags/sections, matching what
+  // GET /api/applications/:id returns — the web builds the shirt-size/dietary
+  // rows itself (grouped under a synthetic Logistics section) so this and the
+  // applications-tab review flow render identically (H11).
   return {
     response,
     user: {
@@ -1331,7 +1389,10 @@ export async function getResponseDetail(responseId: number): Promise<ResponseDet
       id: app_id,
       name: app_name,
       type: app_type,
-      template: enriched,
+      template,
+      sections,
+      ask_shirt_size,
+      ask_food_intolerances,
     },
     reviews,
     available_actions: computeAvailableActions(response.status),
