@@ -250,4 +250,132 @@ describe("application responses (H12)", () => {
     const res = await saveDraft(a, appId, user, { motivation: "changed" });
     expect(res.statusCode).toBe(409);
   });
+
+  it("H11: enforces a field's response-validation rule at submit", async () => {
+    const a = await getApp();
+    const appId = await createApplication({
+      template: [
+        {
+          key: "motivation",
+          label: { en: "Why", es: "Por qué", gl: "Por que" },
+          kind: "text",
+          required: true,
+        },
+        {
+          key: "bio",
+          label: { en: "Bio", es: "Bio", gl: "Bio" },
+          kind: "text",
+          required: false,
+          validation: { max_length: 5 },
+        },
+      ],
+    });
+    const user = await createUser({ emailVerified: true });
+    await saveDraft(a, appId, user, { motivation: "x", bio: "way too long" });
+
+    const tooLong = await a.inject({
+      method: "POST",
+      url: `/api/applications/${appId}/response/submit`,
+      headers: asUser(user),
+      payload: { food_intolerances: [], shirt_size: "M" },
+    });
+    expect(tooLong.statusCode).toBe(400);
+    expect(tooLong.json().error.details.fields.bio).toBe("too long");
+
+    await saveDraft(a, appId, user, { motivation: "x", bio: "ok" });
+    const ok = await a.inject({
+      method: "POST",
+      url: `/api/applications/${appId}/response/submit`,
+      headers: asUser(user),
+      payload: { food_intolerances: [], shirt_size: "M" },
+    });
+    expect(ok.statusCode).toBe(200);
+  });
+
+  it("H11: enforces a text field's contains/email/url validation condition", async () => {
+    const a = await getApp();
+    const appId = await createApplication({
+      template: [
+        {
+          key: "motivation",
+          label: { en: "Why", es: "Por qué", gl: "Por que" },
+          kind: "text",
+          required: true,
+        },
+        {
+          key: "contact",
+          label: { en: "Contact email", es: "Correo", gl: "Correo" },
+          kind: "text",
+          required: false,
+          validation: { text_condition: "email" },
+        },
+      ],
+    });
+    const user = await createUser({ emailVerified: true });
+    await saveDraft(a, appId, user, { motivation: "x", contact: "not-an-email" });
+
+    const bad = await a.inject({
+      method: "POST",
+      url: `/api/applications/${appId}/response/submit`,
+      headers: asUser(user),
+      payload: { food_intolerances: [], shirt_size: "M" },
+    });
+    expect(bad.statusCode).toBe(400);
+    expect(bad.json().error.details.fields.contact).toBe("invalid email");
+
+    await saveDraft(a, appId, user, { motivation: "x", contact: "hi@example.com" });
+    const ok = await a.inject({
+      method: "POST",
+      url: `/api/applications/${appId}/response/submit`,
+      headers: asUser(user),
+      payload: { food_intolerances: [], shirt_size: "M" },
+    });
+    expect(ok.statusCode).toBe(200);
+  });
+
+  it("H11: enforces a multiselect field's selected-count validation rule", async () => {
+    const a = await getApp();
+    const appId = await createApplication({
+      template: [
+        {
+          key: "motivation",
+          label: { en: "Why", es: "Por qué", gl: "Por que" },
+          kind: "text",
+          required: true,
+        },
+        {
+          key: "skills",
+          label: { en: "Skills", es: "Habilidades", gl: "Habilidades" },
+          kind: "multiselect",
+          required: false,
+          options: [
+            { value: "a", label: { en: "A", es: "A", gl: "A" } },
+            { value: "b", label: { en: "B", es: "B", gl: "B" } },
+            { value: "c", label: { en: "C", es: "C", gl: "C" } },
+          ],
+          validation: { min_selected: 2 },
+        },
+      ],
+    });
+    const user = await createUser({ emailVerified: true });
+    await saveDraft(a, appId, user, { motivation: "x", skills: ["a"] });
+
+    const tooFew = await a.inject({
+      method: "POST",
+      url: `/api/applications/${appId}/response/submit`,
+      headers: asUser(user),
+      payload: { food_intolerances: [], shirt_size: "M" },
+    });
+    expect(tooFew.statusCode).toBe(400);
+    expect(tooFew.json().error.details.fields.skills).toBe("too few selected");
+
+    await saveDraft(a, appId, user, { motivation: "x", skills: ["a", "b"] });
+    const ok = await a.inject({
+      method: "POST",
+      url: `/api/applications/${appId}/response/submit`,
+      headers: asUser(user),
+      payload: { food_intolerances: [], shirt_size: "M" },
+    });
+    expect(ok.statusCode).toBe(200);
+  });
 });

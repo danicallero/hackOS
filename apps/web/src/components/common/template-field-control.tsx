@@ -10,6 +10,7 @@
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { FileLink } from "@/components/common/file-link";
 import { FileUploadField } from "@/components/common/file-upload-field";
+import { LinkifiedText } from "@/components/common/linkified-text";
 import { MultiSelect } from "@/components/common/multi-select";
 import { UniversityPicker } from "@/components/common/university-picker";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -41,6 +42,11 @@ export interface TemplateFieldLike {
   /** For kind "file": lets the applicant consent to sharing this upload with
    *  sponsors (H56); see sponsorShareKey for the response-key convention. */
   shareable_with_sponsors?: boolean;
+  /** Small helper text shown under the field (H11); URLs are auto-linked. */
+  help_text?: I18nText;
+  /** Placeholder shown inside the empty input, for kinds the applicant types
+   *  into (text/textarea/number). Falls back to a generic string. */
+  placeholder?: I18nText;
 }
 
 const NONE = "__none__";
@@ -92,11 +98,15 @@ export function TemplateFieldControl({
     value: o.value,
     label: pickText(o.label, lang),
   }));
+  const helpText = field.help_text ? pickText(field.help_text, lang) : "";
+  const customPlaceholder = field.placeholder ? pickText(field.placeholder, lang) : "";
   const id = templateFieldId(field.key, applicationId);
   const labelId = `${id}-label`;
   const errorId = `${id}-error`;
+  const helpId = `${id}-help`;
   const hasError = Boolean(error);
-  const describedBy = hasError ? errorId : undefined;
+  const describedBy =
+    [helpText ? helpId : null, hasError ? errorId : null].filter(Boolean).join(" ") || undefined;
 
   let control: React.ReactNode;
   switch (field.kind) {
@@ -106,6 +116,7 @@ export function TemplateFieldControl({
           id={id}
           name={field.key}
           rows={4}
+          placeholder={customPlaceholder || undefined}
           value={typeof value === "string" ? value : ""}
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
@@ -214,25 +225,9 @@ export function TemplateFieldControl({
           name={field.key}
           type="number"
           inputMode="numeric"
+          placeholder={customPlaceholder || undefined}
           value={typeof value === "number" ? value : ""}
           onChange={(e) => onChange(e.target.value === "" ? "" : Number(e.target.value))}
-          disabled={disabled}
-          aria-labelledby={labelId}
-          aria-describedby={describedBy}
-          aria-invalid={hasError || undefined}
-          aria-required={field.required || undefined}
-        />
-      );
-      break;
-    case "file-url":
-      control = (
-        <Input
-          id={id}
-          name={field.key}
-          type="url"
-          placeholder={t("linkPlaceholder")}
-          value={typeof value === "string" ? value : ""}
-          onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
           aria-labelledby={labelId}
           aria-describedby={describedBy}
@@ -313,6 +308,7 @@ export function TemplateFieldControl({
           id={id}
           name={field.key}
           type="text"
+          placeholder={customPlaceholder || undefined}
           value={typeof value === "string" ? value : ""}
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
@@ -341,6 +337,11 @@ export function TemplateFieldControl({
         </Label>
       )}
       {control}
+      {helpText && (
+        <p id={helpId} className="text-muted-foreground text-xs">
+          <LinkifiedText text={helpText} />
+        </p>
+      )}
       {error && (
         <p id={errorId} role="alert" className="text-destructive text-sm">
           {error}

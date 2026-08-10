@@ -40,7 +40,7 @@ import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useShirtSizes } from "@/hooks/use-shirt-sizes";
 import { ApiError, api } from "@/lib/api";
-import { useLocale } from "@/lib/i18n";
+import { pickText, useLocale } from "@/lib/i18n";
 import { withReturnPath } from "@/lib/return-path";
 import type { SaveState } from "@/lib/save-state";
 import { useMe } from "@/lib/session";
@@ -51,6 +51,7 @@ import {
   type FieldValue,
   fieldErrorsFromApi,
   fmtDateTime,
+  groupFieldsBySections,
   type IntoleranceOption,
   isConfirmationExpiredError,
   isNotFoundError,
@@ -60,6 +61,7 @@ import {
   type PublicForm,
   statusLabel,
   statusTone,
+  withLogisticsSection,
 } from "../lib";
 import { ApplicationTimeline, ReadOnlyAnswers } from "./application-sections";
 
@@ -318,7 +320,7 @@ export default function MyApplicationDetailPage() {
         message: err instanceof ApiError ? err.message : t("couldNotSubmitApplication"),
       });
       if (err instanceof ApiError) {
-        const nextErrors = fieldErrorsFromApi(err, t);
+        const nextErrors = fieldErrorsFromApi(err, t, template, lang);
         setFieldErrors(nextErrors);
         const firstInvalid = template.find((field) => nextErrors[field.key]);
         if (firstInvalid) {
@@ -633,19 +635,50 @@ export default function MyApplicationDetailPage() {
         )}
 
         {template.length > 0 ? (
-          template.map((field) => (
-            <TemplateFieldControl
-              key={field.key}
-              field={field}
-              applicationId={id}
-              value={values[field.key] as FieldValue}
-              onChange={(v) => setValue(field.key, v)}
-              disabled={!editable}
-              lang={lang}
-              error={fieldErrors[field.key]}
-              sharedWithSponsors={values[sponsorShareKey(field.key)] === true}
-              onSharedWithSponsorsChange={(v) => setValue(sponsorShareKey(field.key), v)}
-            />
+          groupFieldsBySections(
+            template,
+            withLogisticsSection(
+              form?.sections ?? [],
+              Boolean(form?.ask_shirt_size || form?.ask_food_intolerances),
+            ),
+          ).map((group, i) => (
+            <div
+              key={group.section?.key ?? `ungrouped-${i}`}
+              className={
+                group.section
+                  ? "border-border bg-muted/20 space-y-4 rounded-xl border p-4 sm:p-5"
+                  : "space-y-4"
+              }
+            >
+              {group.section && (
+                <div className="space-y-0.5">
+                  <h3 className="type-section-title text-balance">
+                    {pickText(group.section.title, lang)}
+                  </h3>
+                  {group.section.description && pickText(group.section.description, lang) && (
+                    <p className="text-muted-foreground text-pretty text-sm">
+                      {pickText(group.section.description, lang)}
+                    </p>
+                  )}
+                </div>
+              )}
+              <div className="space-y-4">
+                {group.fields.map((field) => (
+                  <TemplateFieldControl
+                    key={field.key}
+                    field={field}
+                    applicationId={id}
+                    value={values[field.key] as FieldValue}
+                    onChange={(v) => setValue(field.key, v)}
+                    disabled={!editable}
+                    lang={lang}
+                    error={fieldErrors[field.key]}
+                    sharedWithSponsors={values[sponsorShareKey(field.key)] === true}
+                    onSharedWithSponsorsChange={(v) => setValue(sponsorShareKey(field.key), v)}
+                  />
+                ))}
+              </div>
+            </div>
           ))
         ) : form ? (
           // Open form with no questions — nothing to fill in but a submit is valid.

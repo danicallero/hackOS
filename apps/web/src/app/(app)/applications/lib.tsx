@@ -32,7 +32,6 @@ export const FIELD_KINDS = [
   "checkbox",
   "date",
   "number",
-  "file-url",
   "file",
   "university",
 ] as const;
@@ -61,6 +60,45 @@ export interface TemplateField {
   /** For kind "file": lets the applicant consent to sharing this upload with
    *  sponsors (H56); see sponsorShareKey for the response-key convention. */
   shareable_with_sponsors?: boolean;
+  /** Groups this field under a `FormSection.key` (H11 form builder sections). */
+  section_key?: string;
+  /** Small helper text shown under the field (H11), e.g. a privacy note or
+   *  formatting hint. Plain text; URLs are auto-linked on render. */
+  help_text?: I18nText;
+  /** Placeholder shown inside the empty input, for kinds the applicant types
+   *  into (text/textarea/number). Falls back to a generic string. */
+  placeholder?: I18nText;
+  validation?: FieldValidation;
+}
+
+/** Response-validation rules (H11) — which sub-fields apply depends on the
+ *  field's kind (text/textarea: length + pattern; number: min/max;
+ *  multiselect: selection count). See `apps/api/.../schemas.ts` for the
+ *  matching server-side enforcement. */
+export const TEXT_VALIDATION_CONDITIONS = ["contains", "not_contains", "email", "url"] as const;
+export type TextValidationCondition = (typeof TEXT_VALIDATION_CONDITIONS)[number];
+
+export interface FieldValidation {
+  min_length?: number;
+  max_length?: number;
+  pattern?: string;
+  /** text/textarea only: needs `text_value` for contains/not_contains;
+   *  email/url check the value's own shape instead. */
+  text_condition?: TextValidationCondition;
+  text_value?: string;
+  min?: number;
+  max?: number;
+  min_selected?: number;
+  max_selected?: number;
+  error_message?: I18nText;
+}
+
+/** A named group of template fields (H11): title + optional description,
+ *  rendered as a header above its member fields in the builder/applicant form. */
+export interface FormSection {
+  key: string;
+  title: I18nText;
+  description?: I18nText;
 }
 
 export interface ApplicationForm {
@@ -68,6 +106,7 @@ export interface ApplicationForm {
   name: string;
   type: ApplicationType;
   template: TemplateField[];
+  sections: FormSection[];
   description: string | null;
   active: boolean;
   open_at: string | null;

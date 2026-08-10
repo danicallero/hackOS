@@ -43,7 +43,14 @@ import { ApiError, api } from "@/lib/api";
 import { API_URL } from "@/lib/env";
 import { pickText, useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
-import { fmtDateTime, fmtScore, type ResponseRow, statusTone, type TemplateField } from "../lib";
+import {
+  type FormSection,
+  fmtDateTime,
+  fmtScore,
+  type ResponseRow,
+  statusTone,
+  type TemplateField,
+} from "../lib";
 import {
   type ApplicationWorkspace,
   applicationStatusLabel,
@@ -76,10 +83,16 @@ interface ExportFailuresState {
 export function ResponsesTab({
   id,
   template,
+  sections,
+  askShirtSize,
+  askFoodIntolerances,
   workspace,
 }: {
   id: number;
   template: TemplateField[] | null;
+  sections: FormSection[];
+  askShirtSize: boolean;
+  askFoodIntolerances: boolean;
   workspace: ApplicationWorkspace;
 }) {
   const { t, language } = useLocale();
@@ -737,6 +750,9 @@ export function ResponsesTab({
           response={selected}
           applicationId={id}
           template={template}
+          sections={sections}
+          askShirtSize={askShirtSize}
+          askFoodIntolerances={askFoodIntolerances}
           onClose={() => setSelectedId(null)}
           onChanged={load}
           workspace={workspace}

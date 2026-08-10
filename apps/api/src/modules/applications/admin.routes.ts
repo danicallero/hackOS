@@ -23,7 +23,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
     CAPABILITIES.APPLICATIONS_DECIDE,
   ] as const;
 
-  const COLUMNS = `id, name, type, template, description, active, open_at, close_at,
+  const COLUMNS = `id, name, type, template, sections, description, active, open_at, close_at,
                    capacity, confirmation_window_hours, ask_shirt_size, ask_food_intolerances,
                    created_at`;
 
@@ -125,7 +125,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Create an application form",
         description:
-          "Defines a new application form (H11): its template, open/close window, capacity, confirmation window, and whether it asks for a shirt size and/or dietary restrictions (H12) — both off by default, independent of `type`.",
+          "Defines a new application form (H11): its template, optional named sections that group template fields under a title/description, open/close window, capacity, confirmation window, and whether it asks for a shirt size and/or dietary restrictions (H12) — both off by default, independent of `type`.",
         body: createApplicationSchema,
       },
     },
@@ -133,14 +133,15 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       const b = req.body;
       const { rows } = await pool.query(
         `INSERT INTO applications
-           (name, type, template, description, active, open_at, close_at, capacity,
+           (name, type, template, sections, description, active, open_at, close_at, capacity,
             confirmation_window_hours, ask_shirt_size, ask_food_intolerances)
-         VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8, $9, $10, $11)
+         VALUES ($1, $2, $3::jsonb, $4::jsonb, $5, $6, $7, $8, $9, $10, $11, $12)
          RETURNING ${COLUMNS}`,
         [
           b.name,
           b.type,
           JSON.stringify(b.template),
+          JSON.stringify(b.sections),
           b.description ?? null,
           b.active,
           b.open_at ?? null,
@@ -171,7 +172,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Update an application form",
         description:
-          "Partial update of a form's template, window, capacity, active flag, or shirt-size/dietary-restriction toggles (H11, H12). Fields omitted from the body are left unchanged.",
+          "Partial update of a form's template, named sections grouping template fields, window, capacity, active flag, or shirt-size/dietary-restriction toggles (H11, H12). Fields omitted from the body are left unchanged.",
         params: idParamSchema,
         body: updateApplicationSchema,
       },
@@ -189,6 +190,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       if (b.name !== undefined) put("name", b.name);
       if (b.type !== undefined) put("type", b.type);
       if (b.template !== undefined) put("template", JSON.stringify(b.template), "::jsonb");
+      if (b.sections !== undefined) put("sections", JSON.stringify(b.sections), "::jsonb");
       if (b.description !== undefined) put("description", b.description ?? null);
       if (b.active !== undefined) put("active", b.active);
       if (b.open_at !== undefined) put("open_at", b.open_at ?? null);
