@@ -49,10 +49,7 @@ describe("deletion requests (H54)", () => {
     const admin = await createUserWithCapabilities(["*"]);
     const target = await createUser({ name: "Real Person", email: "person@example.test" });
     const { pool } = await import("../../src/db/pool.js");
-    await pool.query(
-      `UPDATE users SET surname = 'Doe', phone = '555', dni = '00000000T' WHERE id = $1`,
-      [target],
-    );
+    await pool.query(`UPDATE users SET surname = 'Doe', dni = '00000000T' WHERE id = $1`, [target]);
 
     const created = await app.inject({
       method: "POST",
@@ -66,13 +63,12 @@ describe("deletion requests (H54)", () => {
     await processDataSubjectRequest(requestId);
 
     const { rows } = await pool.query(
-      `SELECT email, name, surname, phone, dni, email_verified FROM users WHERE id = $1`,
+      `SELECT email, name, surname, dni, email_verified FROM users WHERE id = $1`,
       [target],
     );
     expect(rows[0].email).toBe(`anonymized+${target}@deleted.invalid`);
     expect(rows[0].name).toBe("Anonymized");
     expect(rows[0].surname).toBeNull();
-    expect(rows[0].phone).toBeNull();
     expect(rows[0].dni).toBeNull();
     expect(rows[0].email_verified).toBe(false);
 

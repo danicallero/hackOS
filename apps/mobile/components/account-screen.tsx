@@ -233,8 +233,6 @@ export default function AccountScreen() {
       <Section title={t("accountProfile")}>
         <InfoRow label={t("accountName")} value={fullName} icon="person" />
         <Separator inset={48} />
-        <InfoRow label={t("accountPhone")} value={me.phone || t("accountNotSet")} icon="phone" />
-        <Separator inset={48} />
         <MenuView
           actions={LANGUAGES.map(
             (lang): MenuAction => ({

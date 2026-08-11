@@ -44,7 +44,6 @@ import type { Intolerance, Language, UserDetail } from "@/lib/types";
 const editSchema = z.object({
   name: z.string().min(1, "Required").max(200),
   surname: z.string().min(1, "Required").max(200),
-  phone: z.string().max(50),
   language: z.enum(["en", "es", "gl"]),
   shirtSize: z.string(),
   dni: z.string().max(50),
@@ -122,7 +121,6 @@ export function ReadOnlyOverview({
             ) : null
           }
         />
-        <Field label={t("phone")} value={user.phone} />
         <Field
           label={t("language")}
           value={isLanguage(user.language) ? languageName(user.language) : user.language}
@@ -157,7 +155,6 @@ export function StaffEditForm({
       z.object({
         name: z.string().min(1, t("required")).max(200),
         surname: z.string().min(1, t("required")).max(200),
-        phone: z.string().max(50),
         language: z.enum(["en", "es", "gl"]),
         shirtSize: z.string(),
         dni: z.string().max(50),
@@ -173,7 +170,6 @@ export function StaffEditForm({
     defaultValues: {
       name: user.name ?? "",
       surname: user.surname ?? "",
-      phone: user.phone ?? "",
       language: (LANGS.includes(user.language as Language) ? user.language : "es") as Language,
       shirtSize: user.shirtSize ?? NONE,
       dni: user.dni ?? "",
@@ -197,7 +193,6 @@ export function StaffEditForm({
       await api.patch<UserDetail>(`/api/users/${user.id}`, {
         name: values.name,
         surname: values.surname,
-        phone: values.phone || null,
         language: values.language,
         shirtSize: values.shirtSize === NONE ? null : values.shirtSize,
         dni: values.dni || null,
@@ -272,19 +267,6 @@ export function StaffEditForm({
                 <FormLabel>{t("lastName")}</FormLabel>
                 <FormControl>
                   <Input {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="phone"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("phone")}</FormLabel>
-                <FormControl>
-                  <Input type="tel" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>

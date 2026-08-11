@@ -86,7 +86,6 @@ const COLUMN_OPTIONS = [
   "application",
   "badge",
   "presence",
-  "phone",
   "shirt",
   "language",
   "created",
@@ -101,7 +100,6 @@ function columnLabel(t: Translate): Record<UserColumnId, string> {
     application: t("colApplication"),
     badge: t("badge"),
     presence: t("presence"),
-    phone: t("phone"),
     shirt: t("colShirt"),
     language: t("language"),
     created: t("colJoined"),
@@ -250,16 +248,6 @@ function buildColumns(presentIds: Set<number> | null, t: Translate): Column<User
           <StatusBadge tone="neutral" dot={false}>
             {t("away")}
           </StatusBadge>
-        ),
-    },
-    {
-      id: "phone",
-      header: t("phone"),
-      cell: (u) =>
-        u.phone ? (
-          <span className="text-sm">{u.phone}</span>
-        ) : (
-          <span className="text-muted-foreground">—</span>
         ),
     },
     {

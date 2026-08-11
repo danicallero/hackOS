@@ -383,10 +383,9 @@ describe("PATCH /api/me (H7)", () => {
       method: "PATCH",
       url: "/api/me",
       headers: asUser(userId),
-      payload: { phone: "+34600000000", language: "gl" },
+      payload: { language: "gl" },
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json().phone).toBe("+34600000000");
     expect(res.json().language).toBe("gl");
   });
 
@@ -873,7 +872,7 @@ describe("staff user routes (H7)", () => {
           method: "PATCH",
           url: "/api/me",
           headers: asUser(user),
-          payload: { phone: "555" },
+          payload: { language: "en" },
         })
       ).statusCode,
     ).toBe(200);
@@ -898,7 +897,7 @@ describe("staff user routes (H7)", () => {
     const { pool } = await import("../../src/db/pool.js");
     await pool.query(
       `UPDATE users
-       SET email = 'person@example.test', name = 'Real Person', surname = 'Doe', phone = '555', dni = '00000000T'
+       SET email = 'person@example.test', name = 'Real Person', surname = 'Doe', dni = '00000000T'
        WHERE id = $1`,
       [target],
     );
@@ -933,13 +932,12 @@ describe("staff user routes (H7)", () => {
     expect(ok.json().anonymized).toBe(true);
 
     const { rows } = await pool.query(
-      `SELECT email, name, surname, phone, dni, email_verified, anonymized_at FROM users WHERE id = $1`,
+      `SELECT email, name, surname, dni, email_verified, anonymized_at FROM users WHERE id = $1`,
       [target],
     );
     expect(rows[0].email).toBe(`anonymized+${target}@deleted.invalid`);
     expect(rows[0].name).toBe("Anonymized");
     expect(rows[0].surname).toBeNull();
-    expect(rows[0].phone).toBeNull();
     expect(rows[0].dni).toBeNull();
     expect(rows[0].email_verified).toBe(false);
     expect(rows[0].anonymized_at).not.toBeNull();

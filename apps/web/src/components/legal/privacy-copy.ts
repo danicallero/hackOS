@@ -19,7 +19,7 @@ Puedes contactar con GPUL en esa dirección o mediante [hackudc@gpul.org](mailto
 
 Según cómo utilices hackOS, podremos tratar las siguientes categorías:
 
-- **Cuenta e identificación:** nombre, apellidos, correo electrónico, credenciales de acceso protegidas, teléfono, idioma, imagen de perfil y, cuando sea necesario para la acreditación, documento identificativo y código de acceso.
+- **Cuenta e identificación:** nombre, apellidos, correo electrónico, credenciales de acceso protegidas, idioma, imagen de perfil y, cuando sea necesario para la acreditación, documento identificativo y código de acceso.
 - **Solicitudes:** respuestas a formularios, universidad, talla de camiseta, currículum o justificantes y otros datos que solicite la convocatoria. Cada formulario identificará qué campos son obligatorios.
 - **Datos de salud:** alergias, intolerancias y otras necesidades dietéticas proporcionadas voluntariamente para organizar el catering.
 - **Participación:** proyectos, equipos, retos, turnos, acreditaciones, accesos, actividades, evaluaciones y comunicaciones del evento.
@@ -101,7 +101,7 @@ Podes contactar con GPUL nese enderezo ou mediante [hackudc@gpul.org](mailto:hac
 
 Segundo como utilices hackOS, poderemos tratar as seguintes categorías:
 
-- **Conta e identificación:** nome, apelidos, correo electrónico, credenciais de acceso protexidas, teléfono, idioma, imaxe de perfil e, cando sexa necesario para a acreditación, documento identificativo e código de acceso.
+- **Conta e identificación:** nome, apelidos, correo electrónico, credenciais de acceso protexidas, idioma, imaxe de perfil e, cando sexa necesario para a acreditación, documento identificativo e código de acceso.
 - **Solicitudes:** respostas a formularios, universidade, talla de camiseta, currículo ou xustificantes e outros datos que solicite a convocatoria. Cada formulario identificará que campos son obrigatorios.
 - **Datos de saúde:** alerxias, intolerancias e outras necesidades dietéticas proporcionadas voluntariamente para organizar o catering.
 - **Participación:** proxectos, equipos, retos, quendas, acreditacións, accesos, actividades, avaliacións e comunicacións do evento.
@@ -183,7 +183,7 @@ You may contact GPUL at that address or at [hackudc@gpul.org](mailto:hackudc@gpu
 
 Depending on how you use hackOS, we may process the following categories:
 
-- **Account and identification:** first and last name, email address, protected access credentials, phone number, language, profile image and, where needed for accreditation, an identity document and access code.
+- **Account and identification:** first and last name, email address, protected access credentials, language, profile image and, where needed for accreditation, an identity document and access code.
 - **Applications:** form responses, university, T-shirt size, CV or supporting documents and other information requested by a call for applications. Each form identifies its required fields.
 - **Health data:** allergies, intolerances and other dietary requirements you voluntarily provide for catering purposes.
 - **Participation:** projects, teams, challenges, turns, accreditation, access, activities, assessments and event communications.

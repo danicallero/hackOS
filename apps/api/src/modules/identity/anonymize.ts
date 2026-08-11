@@ -42,7 +42,7 @@ export async function anonymizeUser(
   await client.query(
     `UPDATE users
        SET email = $2, email_verified = false, name = 'Anonymized', surname = NULL,
-           phone = NULL, dni = NULL, image = NULL,
+           dni = NULL, image = NULL,
            secondary_email = NULL, secondary_email_verified_at = NULL,
            food_intolerances = '{}', food_intolerance_notes = NULL,
            dietary_data_state = 'not_provided', notes = NULL,

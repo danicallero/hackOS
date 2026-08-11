@@ -12,7 +12,6 @@ export interface PersonCard {
 export interface AccreditationLookup extends PersonCard {
   email: string | null;
   dni: string | null;
-  phone: string | null;
   shirtSize: string | null;
   confirmed: boolean;
   hasTicket: boolean;
@@ -26,14 +25,7 @@ export interface AccreditationRoleCount {
 }
 
 /** Fields the person search can return; pass the ones your station needs. */
-export type PersonSearchField =
-  | "email"
-  | "badgeId"
-  | "dni"
-  | "phone"
-  | "shirtSize"
-  | "notes"
-  | "confirmed";
+export type PersonSearchField = "email" | "badgeId" | "dni" | "shirtSize" | "notes" | "confirmed";
 
 export interface PersonSearchResult {
   userId: number;
@@ -44,7 +36,6 @@ export interface PersonSearchResult {
   email?: string | null;
   badgeId?: string | null;
   dni?: string | null;
-  phone?: string | null;
   shirtSize?: string | null;
   notes?: string | null;
   confirmed?: boolean;

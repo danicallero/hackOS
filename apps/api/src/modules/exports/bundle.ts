@@ -167,7 +167,6 @@ export async function buildExportBundle(subjectUserId: number): Promise<Record<s
       emailVerified: user.email_verified,
       name: user.name,
       surname: user.surname,
-      phone: user.phone,
       dni: user.dni,
       image: user.image,
       badgeId: user.badge_id,

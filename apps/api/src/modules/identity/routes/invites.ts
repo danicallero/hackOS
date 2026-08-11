@@ -636,7 +636,6 @@ export function registerInviteRoutes(app: FastifyInstance): void {
           name: z.string().min(1).max(200),
           surname: z.string().min(1).max(200),
           password: z.string().min(8).max(128),
-          phone: z.string().max(50).optional(),
           language: z.enum(["en", "es", "gl"]).optional(),
           foodIntolerances: z.array(z.number().int()).default([]),
           foodIntoleranceNotes: z.string().max(2000).nullable().optional(),
@@ -739,22 +738,20 @@ export function registerInviteRoutes(app: FastifyInstance): void {
         // link does not, so it keeps the verification email Better Auth queued.
         await client.query(
           `UPDATE users
-           SET email_verified = CASE WHEN $7 THEN true ELSE email_verified END,
-               phone = COALESCE($2, phone),
-               language = COALESCE($3, language),
-               food_intolerances = COALESCE($4, food_intolerances),
-               food_intolerance_notes = COALESCE($5, food_intolerance_notes),
+           SET email_verified = CASE WHEN $6 THEN true ELSE email_verified END,
+               language = COALESCE($2, language),
+               food_intolerances = COALESCE($3, food_intolerances),
+               food_intolerance_notes = COALESCE($4, food_intolerance_notes),
                dietary_data_state = CASE
-                 WHEN cardinality(COALESCE($4, food_intolerances)) > 0
-                   OR NULLIF(BTRIM(COALESCE($5, food_intolerance_notes)), '') IS NOT NULL
+                 WHEN cardinality(COALESCE($3, food_intolerances)) > 0
+                   OR NULLIF(BTRIM(COALESCE($4, food_intolerance_notes)), '') IS NOT NULL
                  THEN 'present'
                  ELSE 'not_provided'
                END,
-               shirt_size = COALESCE($6, shirt_size)
+               shirt_size = COALESCE($5, shirt_size)
            WHERE id = $1`,
           [
             userId,
-            req.body.phone ?? null,
             req.body.language ?? null,
             req.body.foodIntolerances ?? null,
             req.body.foodIntoleranceNotes ?? null,

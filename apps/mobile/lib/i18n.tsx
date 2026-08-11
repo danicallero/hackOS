@@ -263,7 +263,6 @@ const dict = {
   accountLanguage: { en: "Language", es: "Idioma", gl: "Idioma" },
   accountBadge: { en: "Badge", es: "Badge", gl: "Badge" },
   accountNoBadge: { en: "Not assigned yet", es: "Todavía sin asignar", gl: "Aínda sen asignar" },
-  accountPhone: { en: "Phone", es: "Teléfono", gl: "Teléfono" },
   accountUniversity: { en: "University", es: "Universidad", gl: "Universidade" },
   accountShirtSize: { en: "Shirt size", es: "Talla de camiseta", gl: "Talla de camiseta" },
   accountNotSet: { en: "Not set", es: "Sin indicar", gl: "Sen indicar" },
@@ -1361,7 +1360,6 @@ const dict = {
   personLoading: { en: "Loading person…", es: "Cargando persona…", gl: "Cargando persoa…" },
   personFallbackName: { en: "Person {id}", es: "Persona {id}", gl: "Persoa {id}" },
   personPersonalData: { en: "Personal details", es: "Datos personales", gl: "Datos persoais" },
-  personPhone: { en: "Phone", es: "Teléfono", gl: "Teléfono" },
   personDni: { en: "ID document", es: "DNI", gl: "DNI" },
   personShirt: { en: "T-shirt", es: "Camiseta", gl: "Camiseta" },
   personCurrentBadge: {
