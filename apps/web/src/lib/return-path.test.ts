@@ -14,7 +14,7 @@ describe("safeReturnPath (H188 same-origin guard)", () => {
     "//evil.example.com",
     "javascript:alert(1)",
   ])("falls back to the default for %s", (candidate) => {
-    expect(safeReturnPath(candidate)).toBe("/dashboard");
+    expect(safeReturnPath(candidate)).toBe("/timetable");
   });
 
   it("supports a custom fallback", () => {
@@ -31,8 +31,8 @@ describe("withReturnPath", () => {
   });
 
   it("appends &next= when the href already has a query string", () => {
-    expect(withReturnPath("/verify-email?email=a%40b.com", "/dashboard")).toBe(
-      "/verify-email?email=a%40b.com&next=%2Fdashboard",
+    expect(withReturnPath("/verify-email?email=a%40b.com", "/timetable")).toBe(
+      "/verify-email?email=a%40b.com&next=%2Ftimetable",
     );
   });
 

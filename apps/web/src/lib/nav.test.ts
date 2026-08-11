@@ -65,8 +65,8 @@ describe("stable personal area (audit §3.1)", () => {
 describe("pure applicant (no confirmed spot, no operational role)", () => {
   const ctx = contextFor([], { isPureApplicant: true });
 
-  it("hides dashboard, wallet, project, queue and inbox", () => {
-    const hidden = ["/dashboard", "/wallet", "/my-project", "/my-queue", "/inbox"];
+  it("hides wallet, project, queue and inbox", () => {
+    const hidden = ["/wallet", "/my-project", "/my-queue", "/inbox"];
     const visible = PERSONAL_NAV.filter((item) => isNavItemVisible(item, ctx)).map(
       (item) => item.href,
     );
@@ -195,7 +195,6 @@ describe("route stability (deep links, issue #187)", () => {
   it("keeps every previously published href unchanged", () => {
     const hrefs = [...PERSONAL_NAV, ...WORKSPACES.flatMap((w) => w.items)].map((i) => i.href);
     const legacyHrefs = [
-      "/dashboard",
       "/timetable",
       "/my-applications",
       "/my-project",

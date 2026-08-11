@@ -9,7 +9,7 @@
  */
 export function safeReturnPath(
   candidate: string | null | undefined,
-  fallback = "/dashboard",
+  fallback = "/timetable",
 ): string {
   if (candidate?.startsWith("/") && !candidate.startsWith("//")) return candidate;
   return fallback;

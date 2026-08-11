@@ -20,7 +20,7 @@ interface SessionContextValue {
    * Authenticated, but with no confirmed spot and no operational role
    * (capability, room judge, sponsor rep) — an applicant with nothing to do
    * in the app yet besides applying. Drives hiding participant-only nav
-   * (wallet/queue/project/inbox) and the dashboard landing redirect.
+   * (wallet/queue/project/inbox).
    */
   isPureApplicant: boolean;
 }

@@ -30,18 +30,22 @@ sponsor workspace if nav gated on `role` instead.
 
 ### Stable personal area (`PERSONAL_NAV`)
 
-Visible to any authenticated account, no capability required: Home
-(dashboard), Schedule, My applications, My project, My queue, Wallet, Inbox,
-My profile — except for a **pure applicant**: an account with no confirmed
-spot (`GET /api/me`'s `hasEventAccess`, `apps/api/src/modules/identity/role.ts
-#hasEventAccess`), no operational capability, and no room-judge/sponsor-rep
-association (`isPureApplicant` in `apps/web/src/lib/session.tsx`). That
-account has nothing to do yet on Home, My project, My queue, Wallet, or
-Inbox, so those five hide (`NavItem.hideForPureApplicant` in `nav.ts`) —
-Schedule, My applications, and My profile stay, since applying (or checking
-an application's status) is exactly what they still need. The dashboard page
-itself also redirects a pure applicant straight to My applications, so the
-Home link never dead-ends there.
+Visible to any authenticated account, no capability required: Schedule, My
+applications, My project, My queue, Wallet, Inbox, My profile — except for a
+**pure applicant**: an account with no confirmed spot (`GET /api/me`'s
+`hasEventAccess`, `apps/api/src/modules/identity/role.ts#hasEventAccess`), no
+operational capability, and no room-judge/sponsor-rep association
+(`isPureApplicant` in `apps/web/src/lib/session.tsx`). That account has
+nothing to do yet on My project, My queue, Wallet, or Inbox, so those four
+hide (`NavItem.hideForPureApplicant` in `nav.ts`) — Schedule, My applications,
+and My profile stay, since applying (or checking an application's status) is
+exactly what they still need.
+
+There is deliberately no dashboard/home page: `/timetable` (Schedule) is the
+landing destination after sign-in and email verification
+(`apps/web/src/lib/invite-destination.ts`, `apps/web/src/lib/return-path.ts`),
+and every other destination a dashboard would have surfaced (applications,
+queue, project, wallet) already has its own stable nav entry above.
 
 My project and My queue also hide independently of `isPureApplicant` for
 **any** account — participant, judge, or sponsor rep — that currently has no
@@ -166,25 +170,13 @@ back, status, search, and filter controls alongside the top tab chrome. On
 iPhone those layouts retain their own Stack because overflow destinations are
 header-less pseudo-tabs and still need local navigation chrome.
 
-## Decision-only applications and dashboard shortcuts
+## Decision-only applications
 
 `applications:decide` is a first-class Applications workspace capability. A
 decision-only account can discover and open the protected application list and
 form metadata, then use Outbox and Sent decisions, but it never receives form
 builder, review, score, note, or response-edit controls solely from that
 capability.
-
-The dashboard follows the same additive policy as the sidebar. Its quick
-actions are derived independently from effective capabilities,
-`isRoomJudge`, and `isSponsorRep`; a sponsor representative assigned as a
-room judge sees both sponsor and judging actions. The derived `role` remains
-display-only and is not consulted for dashboard access. A pure applicant
-(see above) never reaches these quick actions at all — `dashboard/page.tsx`
-redirects to My applications before rendering them, since none apply without
-event access.
-
-This work reuses existing localized action labels, so it requires no new
-translation keys.
 
 ## Association-aware domain pages
 

@@ -12,7 +12,6 @@ import {
   GavelIcon,
   HandshakeIcon,
   InboxIcon,
-  LayoutDashboardIcon,
   LibraryBigIcon,
   ListOrderedIcon,
   type LucideIcon,
@@ -139,10 +138,6 @@ export function isNavItemVisible(item: NavItem, ctx: NavVisibilityContext): bool
  * first, configuration-ish personal items last.
  */
 export const PERSONAL_NAV: NavItem[] = [
-  // A pure applicant has nothing useful here — the dashboard page itself
-  // redirects them to My applications, so hide the link rather than let it
-  // just bounce.
-  { title: "dashboard", href: "/dashboard", icon: LayoutDashboardIcon, hideForPureApplicant: true },
   { title: "schedule", href: "/timetable", icon: CalendarDaysIcon },
   // Participant-facing: everyone can apply (H12-H15). No capability gate.
   { title: "myApplications", href: "/my-applications", icon: FileTextIcon },
