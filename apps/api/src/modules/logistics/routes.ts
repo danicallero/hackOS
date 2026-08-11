@@ -264,7 +264,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       schema: {
         body: lookupBody,
         description:
-          "Resolve an entrance-ticket QR token to the full person card staff needs to accredit (H22): identity fields (name, DNI, email, shirt size), intolerances, notes, confirmed-spot flag and current badge if already accredited. Read-only.",
+          "Resolve an entrance-ticket QR token to the full person card staff needs to accredit (H22): identity fields (name, DNI, email, shirt size), intolerances, notes, confirmed-spot flag, current badge if already accredited, and hasEventAccess (H43) — whether this ticket's owner currently holds real event access; false means the ticket token still exists (permanent, plan/07 invariant 10) but check-in will be refused. Read-only.",
       },
     },
     async (req) => lookupByTicket(req.body.ticketToken),
@@ -292,7 +292,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       schema: {
         body: checkInBody,
         description:
-          "Assign a badge to the ticket's owner and log the check-in (H22). Idempotency-key replays are safe; 409 if the badge belongs to someone else, the badge id is actually a ticket token, or the person is already accredited (use /api/accreditation/rotate to replace a badge).",
+          "Assign a badge to the ticket's owner and log the check-in (H22). Idempotency-key replays are safe; 409 if the badge belongs to someone else, the badge id is actually a ticket token, or the person is already accredited (use /api/accreditation/rotate to replace a badge); 403 if the ticket's owner no longer holds event access (H43) — the tickets row is permanent, so a stale/captured QR does not itself expire, but check-in still checks live event access.",
       },
     },
     async (req) =>
@@ -311,7 +311,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       schema: {
         body: checkInUserBody,
         description:
-          "Same as /api/accreditation/check-in but keyed by user id instead of ticket token (H22). For an unassigned person, attendeeRole atomically creates the participant/mentor relationship and ticket before badge assignment.",
+          "Same as /api/accreditation/check-in but keyed by user id instead of ticket token (H22). For an unassigned person, attendeeRole atomically creates the participant/mentor relationship and ticket before badge assignment. 403 if the person still has no event access after that (H43).",
       },
     },
     async (req) =>

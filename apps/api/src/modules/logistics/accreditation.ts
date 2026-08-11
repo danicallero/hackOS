@@ -2,8 +2,9 @@ import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import type pg from "pg";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
-import { ConflictError, NotFoundError } from "../../lib/errors.js";
+import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
+import { hasEventAccess } from "../identity/role.js";
 import { loadPersonCard } from "./cards.js";
 import { issueTicket } from "./tickets.js";
 import { enqueueWalletSync } from "./wallet-sync.js";
@@ -59,6 +60,13 @@ export async function lookupByUserId(userId: number) {
     shirtSize: (row.shirt_size ?? null) as string | null,
     confirmed: confirmed.rows.length > 0,
     hasTicket: await hasTicket(userId),
+    // Distinct from `confirmed`: a capability holder or sponsor rep can have
+    // event access with no confirmed application at all (H43), and a
+    // formerly-confirmed applicant can have a permanent `tickets` row but no
+    // current access. `checkIn`/`checkInUser` refuse the latter — surfaced
+    // here so staff see it before attempting the badge assignment, not as a
+    // bare 403 after.
+    hasEventAccess: await hasEventAccess(pool, userId),
     alreadyAccredited: badge != null,
     currentBadge: badge,
   };
@@ -158,6 +166,18 @@ export async function checkInUser(
       throw new ConflictError("User already accredited", {
         userId: input.userId,
         currentBadge: user.badge_id,
+      });
+    }
+
+    // The `tickets` row is permanent (plan/07 invariant 10), so a captured
+    // QR/token — screenshotted, printed, or already sitting in an installed
+    // Wallet pass — never itself expires. Gate the physical door the same
+    // way the served QR and wallet exposure already are (H43): a ticket
+    // whose owner no longer holds event access (declined/revoked spot, no
+    // capability/manual role/sponsor tie) must not badge someone in.
+    if (!(await hasEventAccess(client, input.userId))) {
+      throw new ForbiddenError("This ticket's owner no longer has event access", {
+        userId: input.userId,
       });
     }
 

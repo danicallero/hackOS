@@ -65,6 +65,19 @@ Staff with `users:write` can manually set an attendee relationship to
 participant or mentor; during accreditation, a scanner can make that same
 choice for an otherwise unassigned person before assigning their badge.
 
+Because the `tickets` row itself is permanent, a captured token (screenshot,
+printout, or an already-installed Wallet pass) never expires on its own —
+`identity/role.ts:hasEventAccess` is the live gate everywhere the ticket is
+*served or acted on*: `GET /api/me/ticket` (H43), wallet-pass issuance/refresh
+(`logistics/wallet-passes.ts`), and, at the physical door,
+`logistics/accreditation.ts:checkInUser` — a ticket whose owner no longer
+holds event access (declined/revoked spot, no capability/manual role/sponsor
+tie) is refused with 403 even if the token itself still resolves. The
+accreditation lookup card (`/api/accreditation/lookup`,
+`/api/accreditation/lookup-user`) exposes `hasEventAccess` so staff see this
+before attempting the badge assignment, distinct from `confirmed` (which only
+reflects application status and misses capability/sponsor-only access).
+
 **Access policy (H8, H53, H54).** Every identity, invitation, application, and
 export route now declares `RouteAccessPolicy` metadata for the generated API
 ledger. Invite lookup/acceptance and spot confirmation are explicit token
@@ -120,15 +133,20 @@ confirmed|declined|expired`).
   later, and wiping it made that re-accept lose the data).
 - Declining a `confirmed` response (self-service `doDecline`, or staff
   `revokeSpot`) also revokes event access: `identity/role.ts:hasEventAccess`
-  is rechecked for the user, and if no confirmed response or manual attendee
-  role remains, `logistics/wallet-passes.ts:voidTicketPasses` marks any
-  ticket-purpose `wallet_passes` row `voided` and pushes the update to
-  devices via `enqueueWalletSync` (the same mechanism H28 badge rotation
-  uses). The `tickets` row itself is never touched — plan/07 invariant 10 —
-  only its exposure: `GET /api/me/ticket` returns `ticketToken: null` and new
-  wallet-pass issuance 404s once `hasEventAccess` is false. Web nav hides
-  wallet/queue/project/inbox for a "pure applicant" (`isPureApplicant` in `apps/web/src/lib/session.tsx`
-  — no confirmed spot, no capability, not a room judge or sponsor rep).
+  is rechecked for the user, and if no confirmed response, manual attendee
+  role, sponsor-rep membership, **or effective capability** remains,
+  `logistics/wallet-passes.ts:voidTicketPasses` marks any ticket-purpose
+  `wallet_passes` row `voided` and pushes the update to devices via
+  `enqueueWalletSync` (the same mechanism H28 badge rotation uses). The
+  `hasEventAccess` capability branch (H43) means an admin/staffer whose only
+  other tie to the event was an application they later declined or had
+  revoked keeps their ticket — same reasoning as sponsor reps, who already
+  had an unconditional `sponsors` branch. The `tickets` row itself is never
+  touched — plan/07 invariant 10 — only its exposure: `GET /api/me/ticket`
+  returns `ticketToken: null` and new wallet-pass issuance 404s once
+  `hasEventAccess` is false. Web nav hides wallet/queue/project/inbox for a
+  "pure applicant" (`isPureApplicant` in `apps/web/src/lib/session.tsx` — no
+  confirmed spot, no capability, not a room judge or sponsor rep).
 - Back to submitted / accept-pending-confirmation already existed
   (`revertDecision(…, "submitted")`, `decide` + `send-decision`) — verified.
 

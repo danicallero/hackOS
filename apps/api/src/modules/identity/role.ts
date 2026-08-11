@@ -72,12 +72,16 @@ export async function computeMembershipFlags(
 /**
  * Whether this user currently holds real event access: a confirmed
  * application response, a staff-assigned attendee role (mentor/participant
- * granted without going through the applications flow), or a sponsor
- * representative membership (H43). User-level, not response-level —
- * declining one of several applications doesn't strip access if another
- * stays confirmed. Drives ticket/wallet exposure and participant-only nav
- * gating; the underlying `tickets` row is never touched by this (plan/07
- * invariant 10: a ticket is neither consumed nor revoked).
+ * granted without going through the applications flow), a sponsor
+ * representative membership, or any operational capability (admin/staff —
+ * H43). User-level, not response-level — declining one of several
+ * applications doesn't strip access if another stays confirmed, and it
+ * doesn't strip access for an admin/staffer whose only other tie to the
+ * event was an application they later rejected: capability holders keep
+ * their ticket regardless of application status. Drives ticket/wallet
+ * exposure and participant-only nav gating; the underlying `tickets` row is
+ * never touched by this (plan/07 invariant 10: a ticket is neither consumed
+ * nor revoked).
  */
 export async function hasEventAccess(db: Queryable, userId: number): Promise<boolean> {
   const { rows } = await db.query(
@@ -90,5 +94,7 @@ export async function hasEventAccess(db: Queryable, userId: number): Promise<boo
       )`,
     [userId],
   );
-  return rows.length > 0;
+  if (rows.length > 0) return true;
+  const capabilities = await getEffectiveCapabilities(userId);
+  return capabilities.size > 0;
 }

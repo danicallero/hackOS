@@ -217,6 +217,54 @@ describe("H22 accreditation lookup + check-in", () => {
     expect(u.rows[0].badge_id).toBeNull();
   });
 
+  it("403 when the ticket's owner no longer has event access (revoked spot, stale QR)", async () => {
+    // The tickets row is permanent (plan/07 invariant 10) — a captured QR
+    // never itself expires. Once event access is gone, check-in must refuse
+    // it even though the token still resolves (H43).
+    const uid = await createUser();
+    const token = await issueTicket(uid);
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`DELETE FROM manual_attendee_roles WHERE user_id = $1`, [uid]);
+
+    const lookup = await app.inject({
+      method: "POST",
+      url: "/api/accreditation/lookup",
+      headers: asUser(staff),
+      payload: { ticketToken: token },
+    });
+    expect(lookup.statusCode).toBe(200);
+    expect(lookup.json().hasEventAccess).toBe(false);
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/accreditation/check-in",
+      headers: asUser(staff),
+      payload: { ticketToken: token, badgeId: "B-STALE" },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(
+      (await pool.query(`SELECT badge_id FROM users WHERE id = $1`, [uid])).rows[0].badge_id,
+    ).toBeNull();
+  });
+
+  it("check-in succeeds for a capability holder with no confirmed application at all (H43)", async () => {
+    const admin = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_DECIDE]);
+    const token = await (async () => {
+      const { pool } = await import("../../src/db/pool.js");
+      const t = `tkt-${crypto.randomUUID()}`;
+      await pool.query(`INSERT INTO tickets (user_id, token) VALUES ($1, $2)`, [admin, t]);
+      return t;
+    })();
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/accreditation/check-in",
+      headers: asUser(staff),
+      payload: { ticketToken: token, badgeId: "B-ADMIN" },
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
   it("two concurrent check-ins of the same badge for different users: one wins", async () => {
     const a = await createUser();
     const b = await createUser();
