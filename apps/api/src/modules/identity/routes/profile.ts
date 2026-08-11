@@ -54,7 +54,6 @@ const selfPatchSchema = z
   .object({
     name: z.string().min(1).max(200).optional(),
     surname: z.string().min(1).max(200).optional(),
-    phone: z.string().max(50).nullable().optional(),
     language: z.enum(LANGUAGES).optional(),
     image: z.string().max(2000).nullable().optional(),
     universityId: z.number().int().nullable().optional(),
@@ -78,7 +77,6 @@ const attendeeRoleBody = z.object({ role: z.enum(["participant", "mentor"]) }).s
 const COLUMN_BY_FIELD: Record<string, string> = {
   name: "name",
   surname: "surname",
-  phone: "phone",
   language: "language",
   image: "image",
   foodIntolerances: "food_intolerances",
@@ -102,7 +100,6 @@ const userResponseSchema = z.object({
   emailVerified: z.boolean(),
   name: z.string().nullable(),
   surname: z.string().nullable(),
-  phone: z.string().nullable(),
   image: z.string().nullable(),
   dni: z.string().nullable(),
   badgeId: z.string().nullable(),
@@ -140,7 +137,6 @@ interface UserRow {
   email_verified: boolean;
   name: string | null;
   surname: string | null;
-  phone: string | null;
   image: string | null;
   dni: string | null;
   badge_id: string | null;
@@ -163,7 +159,6 @@ function serializeUser(row: UserRow) {
     emailVerified: row.email_verified,
     name: row.name,
     surname: row.surname,
-    phone: row.phone,
     image: row.image,
     dni: row.dni,
     badgeId: row.badge_id,
@@ -492,7 +487,6 @@ export function registerProfileRoutes(app: FastifyInstance): void {
                 surname: z.string().nullable(),
                 badgeId: z.string().nullable(),
                 role: derivedRoleSchema,
-                phone: z.string().nullable(),
                 language: z.string(),
                 shirtSize: z.string().nullable(),
                 applicationStatus: z.string().nullable(),
@@ -512,7 +506,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       const args = filter ? [filter, limit, offset] : [limit, offset];
       const p = filter ? 2 : 1;
       const { rows } = await pool.query(
-        `SELECT id, email, email_verified, name, surname, badge_id, phone, language, shirt_size, created_at
+        `SELECT id, email, email_verified, name, surname, badge_id, language, shirt_size, created_at
            FROM users ${where}
            ORDER BY created_at DESC LIMIT $${p} OFFSET $${p + 1}`,
         args,
@@ -558,7 +552,6 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           surname: r.surname,
           badgeId: r.badge_id,
           role: await computeDerivedRole(pool, r.id),
-          phone: r.phone,
           language: r.language,
           shirtSize: r.shirt_size,
           applicationStatus: statusByUser.get(r.id) ?? null,

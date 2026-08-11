@@ -13,7 +13,6 @@ const PERSON_FIELD_SQL = {
   email: "u.email",
   badgeId: "u.badge_id",
   dni: "u.dni",
-  phone: "u.phone",
   shirtSize: "u.shirt_size",
   notes: "u.notes",
   confirmed: `EXISTS (

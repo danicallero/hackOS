@@ -82,7 +82,7 @@ function frontendPathFromBetterAuthUrl(url: string): string | undefined {
  *   separate table. It's pointed at the EXISTING `users` table from
  *   0001_initial.sql, camelCase fields mapped to our snake_case columns.
  *   `additionalFields` covers only what Better Auth itself writes at
- *   sign-up/verification time (surname, phone, language); shirt size, food
+ *   sign-up/verification time (surname, language); shirt size, food
  *   intolerances, dni, badge id etc. live on the same table but are only
  *   ever touched by this module's own /me and staff routes (profile.ts),
  *   never by Better Auth.
@@ -148,7 +148,6 @@ export const auth = betterAuth({
     },
     additionalFields: {
       surname: { type: "string", required: true, fieldName: "surname" },
-      phone: { type: "string", required: false, fieldName: "phone" },
       language: {
         type: "string",
         required: false,

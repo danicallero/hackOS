@@ -5,7 +5,6 @@ export interface Me {
   emailVerified: boolean;
   name: string | null;
   surname: string | null;
-  phone: string | null;
   image: string | null;
   dni: string | null;
   badgeId: string | null;

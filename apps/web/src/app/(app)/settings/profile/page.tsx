@@ -41,7 +41,6 @@ function profileSchema(t: (key: string) => string) {
   return z.object({
     name: z.string().min(1, t("required")).max(200),
     surname: z.string().min(1, t("required")).max(200),
-    phone: z.string().max(50),
     language: z.enum(["en", "es", "gl"]),
     shirtSize: z.string(),
     foodIntolerances: z.array(z.string()),
@@ -57,7 +56,6 @@ function valuesFromMe(me: Me): Values {
   return {
     name: me.name ?? "",
     surname: me.surname ?? "",
-    phone: me.phone ?? "",
     // Coerce to a known locale — stray/empty values would leave the select blank.
     language: (LANGS.includes(me.language as Language) ? me.language : "es") as Language,
     shirtSize: me.shirtSize ?? NONE,
@@ -105,7 +103,6 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
       await api.patch<Me>("/api/me", {
         name: values.name,
         surname: values.surname,
-        phone: values.phone || null,
         language: values.language,
         shirtSize: values.shirtSize === NONE ? null : values.shirtSize,
         foodIntolerances: values.foodIntolerances.map(Number),
@@ -157,19 +154,6 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
                   <FormLabel>{t("lastName")}</FormLabel>
                   <FormControl>
                     <Input autoComplete="family-name" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="phone"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("phone")}</FormLabel>
-                  <FormControl>
-                    <Input type="tel" autoComplete="tel" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

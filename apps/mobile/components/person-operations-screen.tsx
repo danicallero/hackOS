@@ -34,7 +34,6 @@ import { colors } from "@/theme/colors";
 
 interface PersonDetails extends ScannerPerson {
   dni?: string | null;
-  phone?: string | null;
   shirtSize?: string | null;
   currentBadge?: string | null;
 }
@@ -90,7 +89,7 @@ export function PersonOperationsScreen() {
           });
           // Single setPerson call with the fully-merged result: setting the
           // local-only snapshot first and the enriched one after causes a
-          // visible flicker as dni/phone/shirtSize/badge briefly disappear and
+          // visible flicker as dni/shirtSize/badge briefly disappear and
           // reappear on every periodic sync.
           setPerson({ ...local, ...details, badgeId: details.currentBadge ?? local.badgeId });
           setLoadState("ready");
@@ -514,12 +513,6 @@ export function PersonOperationsScreen() {
           {person.dni ? (
             <>
               <InfoRow label={t("personDni")} value={person.dni} icon="person.text.rectangle" />
-              <Separator />
-            </>
-          ) : null}
-          {person.phone ? (
-            <>
-              <InfoRow label={t("personPhone")} value={person.phone} icon="phone" />
               <Separator />
             </>
           ) : null}

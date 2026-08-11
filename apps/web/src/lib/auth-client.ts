@@ -12,7 +12,7 @@ import { API_URL } from "./env";
  * (:3000) are different origins in dev; the API's CORS allows credentials.
  *
  * `inferAdditionalFields` teaches the client about the extra user columns the
- * API declares on Better Auth (surname/phone/language) so sign-up is typed.
+ * API declares on Better Auth (surname/language) so sign-up is typed.
  */
 export const authClient = createAuthClient({
   baseURL: API_URL,
@@ -21,7 +21,6 @@ export const authClient = createAuthClient({
     inferAdditionalFields({
       user: {
         surname: { type: "string", required: true },
-        phone: { type: "string", required: false },
         language: { type: "string", required: false },
       },
     }),

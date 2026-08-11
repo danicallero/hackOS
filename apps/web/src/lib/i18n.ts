@@ -215,7 +215,6 @@ const dict: Record<string, I18nText> = {
   personalDetails: { es: "Datos personales", gl: "Datos persoais", en: "Personal details" },
   firstName: { es: "Nombre", gl: "Nome", en: "First name" },
   lastName: { es: "Apellidos", gl: "Apelidos", en: "Last name" },
-  phone: { es: "Teléfono", gl: "Teléfono", en: "Phone" },
   shirtSize: { es: "Talla de camiseta", gl: "Talla de camiseta", en: "Shirt size" },
   notSet: { es: "Sin indicar", gl: "Sen indicar", en: "Not set" },
   foodIntolerances: {
