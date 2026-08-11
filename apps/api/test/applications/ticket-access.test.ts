@@ -16,7 +16,10 @@ import { createApplication } from "./fixtures.js";
  * Losing event access (declining a confirmed spot, or staff revoking one)
  * must stop the ticket/wallet from being served — even though the `tickets`
  * row itself is never touched (plan/07 invariant 10: neither consumed nor
- * revoked). Any wallet pass already issued gets voided.
+ * revoked). Any wallet pass already issued gets voided. Capability holders
+ * (admin/staff) and sponsor reps are the exception: their event access does
+ * not depend on application status at all, so declining/losing an
+ * application spot never strips their ticket (H43).
  */
 
 let app: App;
@@ -222,6 +225,68 @@ describe("ticket/wallet exposure follows event access", () => {
 
     const me = await a.inject({ method: "GET", url: "/api/me", headers: asUser(userId) });
     expect(me.json().hasEventAccess).toBe(true);
+  });
+
+  it("an admin/staff account keeps event access after declining their own confirmed spot", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const staffUser = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_DECIDE]);
+
+    // Same user submits, gets accepted, and confirms a spot like any applicant.
+    await a.inject({
+      method: "PUT",
+      url: `/api/applications/${appId}/response`,
+      headers: asUser(staffUser),
+      payload: { responses: { motivation: "yes" } },
+    });
+    await a.inject({
+      method: "POST",
+      url: `/api/applications/${appId}/response/submit`,
+      headers: asUser(staffUser),
+      payload: { food_intolerances: [], shirt_size: "M" },
+    });
+    const { rows } = await pool.query(
+      `SELECT id FROM application_responses WHERE user_id = $1 AND application_id = $2`,
+      [staffUser, appId],
+    );
+    const responseId = rows[0].id;
+    await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/decide`,
+      headers: asUser(decider),
+      payload: { decision: "accepted" },
+    });
+    await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/send-decision`,
+      headers: asUser(decider),
+    });
+    await a.inject({
+      method: "POST",
+      url: `/api/me/responses/${responseId}/confirm`,
+      headers: asUser(staffUser),
+    });
+
+    const passId = await createTicketPass(staffUser);
+
+    const decline = await a.inject({
+      method: "POST",
+      url: `/api/me/responses/${responseId}/decline`,
+      headers: asUser(staffUser),
+    });
+    expect(decline.statusCode).toBe(200);
+
+    // Unlike a plain applicant, the capability keeps event access alive.
+    const after = await a.inject({ method: "GET", url: "/api/me", headers: asUser(staffUser) });
+    expect(after.json().hasEventAccess).toBe(true);
+    expect(await passStatus(passId)).toBe("active");
+
+    const ticket = await a.inject({
+      method: "GET",
+      url: "/api/me/ticket",
+      headers: asUser(staffUser),
+    });
+    expect(ticket.json().ticketToken).not.toBeNull();
   });
 
   it("a sponsor representative gets a served, non-null ticket (H43, #426)", async () => {
