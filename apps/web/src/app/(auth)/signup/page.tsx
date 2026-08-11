@@ -71,7 +71,7 @@ function SignUpInner() {
   const { t, language } = useLocale();
   // The application (or other same-origin destination) the visitor was
   // trying to reach — carried through verification so they land back there
-  // instead of the dashboard (H188: applicant return-path continuity).
+  // instead of the schedule (H188: applicant return-path continuity).
   const rawNext = useSearchParams().get("next");
   const next = safeReturnPath(rawNext, "");
   const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
@@ -83,7 +83,7 @@ function SignUpInner() {
 
   // Already signed in: no reason to show the sign-up form again.
   useEffect(() => {
-    if (status === "authenticated") router.replace(next || "/dashboard");
+    if (status === "authenticated") router.replace(next || "/timetable");
   }, [status, router, next]);
 
   if (status === "loading" || status === "authenticated") {

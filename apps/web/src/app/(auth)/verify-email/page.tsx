@@ -80,9 +80,9 @@ function VerifyEmailInner() {
     !errorInfo && (params.get("verified") !== null || params.get("status") === "verified");
   // Where to send the person after a successful verification or a resend
   // (H188): the application or other same-origin destination they were
-  // originally interrupted from, falling back to the dashboard.
+  // originally interrupted from, falling back to the schedule.
   const rawNext = params.get("next");
-  const next = safeReturnPath(rawNext, "/dashboard");
+  const next = safeReturnPath(rawNext, "/timetable");
   const [cooldown, setCooldown] = useState(0);
 
   const form = useForm<Values>({
@@ -136,7 +136,7 @@ function VerifyEmailInner() {
         </CardHeader>
         <CardContent className="flex flex-col gap-2 text-center">
           <Button onClick={() => router.push(next)}>
-            {next === "/dashboard" ? t("continueToDashboard") : t("continueToDestination")}
+            {next === "/timetable" ? t("continueToSchedule") : t("continueToDestination")}
           </Button>
           <Link
             href={withReturnPath("/login", rawNext)}

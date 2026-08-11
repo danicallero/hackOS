@@ -127,8 +127,7 @@ confirmed|declined|expired`).
   uses). The `tickets` row itself is never touched — plan/07 invariant 10 —
   only its exposure: `GET /api/me/ticket` returns `ticketToken: null` and new
   wallet-pass issuance 404s once `hasEventAccess` is false. Web nav hides
-  wallet/queue/project/inbox and redirects the dashboard to My applications
-  for a "pure applicant" (`isPureApplicant` in `apps/web/src/lib/session.tsx`
+  wallet/queue/project/inbox for a "pure applicant" (`isPureApplicant` in `apps/web/src/lib/session.tsx`
   — no confirmed spot, no capability, not a room judge or sponsor rep).
 - Back to submitted / accept-pending-confirmation already existed
   (`revertDecision(…, "submitted")`, `decide` + `send-decision`) — verified.

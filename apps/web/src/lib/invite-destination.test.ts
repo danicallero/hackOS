@@ -10,7 +10,7 @@ describe("destinationForKind (H9/H10 invitation onboarding branch)", () => {
     expect(destinationForKind("sponsor")).toBe("/enterprises");
   });
 
-  it("routes staff to their granted work tools", () => {
-    expect(destinationForKind("staff")).toBe("/dashboard");
+  it("routes staff to the event schedule", () => {
+    expect(destinationForKind("staff")).toBe("/timetable");
   });
 });

@@ -558,20 +558,6 @@ export default function MyApplicationDetailPage() {
         </Alert>
       )}
 
-      {response?.submitted_at && (
-        <Alert role="status">
-          <ShieldAlertIcon aria-hidden="true" />
-          <AlertTitle>{t("sensitiveDataLifecycleTitle")}</AlertTitle>
-          <AlertDescription>
-            {status === "confirmed"
-              ? t("sensitiveDataLifecycleConfirmed")
-              : status === "declined" || status === "expired" || status === "rejected"
-                ? t("sensitiveDataLifecycleDeleted")
-                : t("sensitiveDataLifecycleSubmitted")}
-          </AlertDescription>
-        </Alert>
-      )}
-
       <SectionCard
         icon={ClipboardListIcon}
         title={editable ? t("yourAnswers") : t("yourSubmittedAnswers")}

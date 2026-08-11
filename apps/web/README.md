@@ -64,13 +64,14 @@ src/
       login, signup, forgot-password, reset-password, verify-email,
       claim-account, applications (public application form)
     (app)/             authenticated shell — sidebar + top bar, AuthGuard
-      dashboard · personal area (my-applications, my-project, my-queue,
-      wallet, inbox, schedule, settings/profile) · staff workspaces
-      (applications, projects, challenges, enterprises, queue, judging,
-      logistics, announcements, timetable, tv, users, permissions, audit,
-      settings/event) — one directory per module, gated by capability
+      personal area (my-applications, my-project, my-queue, wallet, inbox,
+      schedule, settings/profile — no dashboard/home page, schedule is the
+      landing destination) · staff workspaces (applications, projects,
+      challenges, enterprises, queue, judging, logistics, announcements,
+      timetable, tv, users, permissions, audit, settings/event) — one
+      directory per module, gated by capability
     layout.tsx         root: fonts + <Providers>
-    page.tsx           routes to /dashboard or /login by session
+    page.tsx           routes to /timetable or /login by session
   components/
     ui/                shadcn primitives — GENERATED, do not hand-edit
     common/            reusable app widgets (the shared library, below)

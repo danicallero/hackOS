@@ -235,7 +235,7 @@ export function AppSidebar() {
               tooltip="hackOS"
               className="gap-2.5 group-data-[collapsible=icon]:!p-1.5"
             >
-              <Link href="/dashboard">
+              <Link href="/timetable">
                 <span className="bg-primary text-primary-foreground grid size-8 shrink-0 place-items-center rounded-md text-sm font-bold">
                   h
                 </span>

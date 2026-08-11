@@ -45,7 +45,6 @@ export type Translate = (key: MessageKey, values?: Record<string, string | numbe
  */
 const dict: Record<string, I18nText> = {
   // ---- Navigation & sidebar ----
-  dashboard: { es: "Inicio", gl: "Inicio", en: "Dashboard" },
   myApplications: { es: "Mis solicitudes", gl: "As miñas solicitudes", en: "My applications" },
   myQueue: { es: "Mi cola", gl: "A miña cola", en: "My queue" },
   // ---- Workspaces (issue #187: capability-based work areas, audit §3.2) ----
@@ -395,7 +394,7 @@ const dict: Record<string, I18nText> = {
     gl: "O teu enderezo está confirmado e xa iniciaches sesión.",
     en: "Your address is confirmed and you're signed in.",
   },
-  continueToDashboard: { es: "Ir al inicio", gl: "Ir ao inicio", en: "Continue to dashboard" },
+  continueToSchedule: { es: "Ver el horario", gl: "Ver o horario", en: "Continue to schedule" },
   continueToDestination: { es: "Continuar", gl: "Continuar", en: "Continue" },
   differentAccount: {
     es: "Iniciar sesión con otra cuenta",
@@ -679,14 +678,6 @@ const dict: Record<string, I18nText> = {
   verified: { es: "Verificado", gl: "Verificado", en: "Verified" },
   unverified: { es: "Sin verificar", gl: "Sen verificar", en: "Unverified" },
   yourCapabilities: { es: "Tus permisos", gl: "Os teus permisos", en: "Your capabilities" },
-  welcome: { es: "Bienvenido", gl: "Benvida", en: "Welcome" },
-  loadingDashboard: { es: "Cargando inicio", gl: "Cargando inicio", en: "Loading dashboard" },
-  eventTimingPending: {
-    es: "El horario del evento se publicará próximamente.",
-    gl: "O horario do evento publicarase proximamente.",
-    en: "Event timing will be published soon.",
-  },
-  nextUp: { es: "Lo próximo", gl: "O seguinte", en: "Next up" },
   noUpcomingSchedule: {
     es: "No hay más actividades programadas.",
     gl: "Non hai máis actividades programadas.",
@@ -703,28 +694,13 @@ const dict: Record<string, I18nText> = {
     en: "They have already been registered {count} times. Allow another one?",
   },
   allowRepeat: { es: "Permitir repetición", gl: "Permitir repetición", en: "Allow repeat" },
-  latestAnnouncements: { es: "Últimos avisos", gl: "Últimos avisos", en: "Latest announcements" },
-  yourStatus: { es: "Tu estado", gl: "O teu estado", en: "Your status" },
-  queuePositions: {
-    es: "Tus posiciones en cola",
-    gl: "As túas posicións na cola",
-    en: "Your queue positions",
-  },
   quickActions: { es: "Accesos rápidos", gl: "Accesos rápidos", en: "Quick actions" },
-  viewAll: { es: "Ver todo", gl: "Ver todo", en: "View all" },
   viewSchedule: { es: "Ver programa", gl: "Ver programa", en: "View schedule" },
   today: { es: "Hoy", gl: "Hoxe", en: "Today" },
   happeningNow: { es: "Ahora", gl: "Agora", en: "Now" },
   currentTime: { es: "Hora actual", gl: "Hora actual", en: "Current time" },
   loading: { es: "Cargando", gl: "Cargando", en: "Loading" },
-  viewQueue: { es: "Ver mi cola", gl: "Ver a miña cola", en: "View my queue" },
   manageRoom: { es: "Gestionar", gl: "Xestionar", en: "Manage" },
-  nextAction: { es: "Siguiente acción", gl: "Seguinte acción", en: "Next action" },
-  needsAttention: {
-    es: "Necesita tu atención",
-    gl: "Precisa a túa atención",
-    en: "Needs attention",
-  },
   moreWorkspaces: {
     es: "Más espacios de trabajo",
     gl: "Máis espazos de traballo",
@@ -7985,26 +7961,6 @@ const dict: Record<string, I18nText> = {
     es: "Confirma antes del {date}",
     gl: "Confirma antes do {date}",
     en: "Confirm by {date}",
-  },
-  sensitiveDataLifecycleTitle: {
-    es: "Datos dietéticos",
-    gl: "Datos dietéticos",
-    en: "Dietary data",
-  },
-  sensitiveDataLifecycleSubmitted: {
-    es: "Se conservan mientras se decide tu solicitud. Solo cuentan en estadísticas si confirmas la plaza.",
-    gl: "Consérvanse mentres se decide a túa solicitude. Só contan nas estatísticas se confirmas a praza.",
-    en: "Kept while your application is decided. Included in statistics only after you confirm your place.",
-  },
-  sensitiveDataLifecycleDeleted: {
-    es: "Se conservan en tu cuenta, pero no se usan para las estadísticas de asistentes confirmados mientras la plaza no esté confirmada.",
-    gl: "Consérvanse na túa conta, pero non se usan para as estatísticas de asistentes confirmados mentres a praza non estea confirmada.",
-    en: "Kept on your account, but not used for confirmed-attendee statistics while the place is unconfirmed.",
-  },
-  sensitiveDataLifecycleConfirmed: {
-    es: "Se conservan para la logística del evento y cuentan en las estadísticas de asistentes confirmados.",
-    gl: "Consérvanse para a loxística do evento e contan nas estatísticas de asistentes confirmados.",
-    en: "Kept for event logistics and included in confirmed-attendee statistics.",
   },
 
   // ---- Judging panel: room queue widgets ----
