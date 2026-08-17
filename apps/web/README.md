@@ -87,7 +87,7 @@ src/
     session.tsx        SessionProvider + useSessionContext/useMe/useCan
     nav.ts             sidebar model: PERSONAL_NAV + capability-gated
                        WORKSPACES — extend per module (docs/navigation.md)
-    i18n.ts            the trilingual copy dictionary (see Conventions)
+    i18n.ts            i18next wrapper — copy lives in packages/shared/locales (see Conventions)
     tones.ts           semantic tone → theme-token class mapping
     types.ts           API DTOs (Me, …)
     env.ts, utils.ts   config + cn()
@@ -279,11 +279,12 @@ list turns into a dumping ground and the guard stops meaning anything.
   scale, control sizes, and the `Surface`/`Section`/`Overlay` container
   contract are specified in [`docs/DESIGN.md`](../../docs/DESIGN.md) — the
   consolidated design/UX rulebook; read it before building screens.
-- **All copy through `lib/i18n.ts`, in all three locales.** Every user-facing
-  string is a dictionary entry with `es`, `gl`, and `en` — no hardcoded
-  literals in components, no partial entries. Copy must never leak story IDs
-  (`H29`) or capability keys (`queue:admin`); `pnpm check:copy` (part of
-  `pnpm lint`) enforces both rules.
+- **All copy through `lib/i18n.ts`'s `t()` (i18next), in all three locales.**
+  Every user-facing string is a resource entry in
+  `packages/shared/locales/{en,es,gl}/{common,web}.json` with `es`, `gl`, and
+  `en` — no hardcoded literals in components, no partial entries. Copy must
+  never leak story IDs (`H29`) or capability keys (`queue:admin`); `pnpm
+  check:copy` (part of `pnpm lint`) enforces both rules.
 
 ## Adding a new story module (the pattern)
 

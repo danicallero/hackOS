@@ -9,19 +9,17 @@
  * compiler can't see (identical/untranslated fallbacks, banned patterns) and
  * runs without a full typecheck, so it's cheap to wire into `pnpm lint` or a
  * pre-push hook.
+ *
+ * Resources live as i18next JSON under packages/shared/locales/{lng}/{ns}.json
+ * (web, mobile, common, email — the last nested by template name, e.g.
+ * mail.auth.verify.subject) since the i18next migration (H7); this walks
+ * every string leaf across the three locale files per namespace.
  */
 import { readFileSync } from "node:fs";
 
-const TARGETS = [
-  { file: "apps/web/src/lib/i18n.ts", lang: "web" },
-  { file: "apps/mobile/lib/i18n.tsx", lang: "mobile" },
-];
-
-// key: { es: "...", gl: "...", en: "..." } in any order, single- or multi-line.
-const ENTRY_RE =
-  /(?<key>[A-Za-z_$][\w$]*)\s*:\s*\{\s*(?<body>(?:[a-z]{2}\s*:\s*(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)\s*,?\s*){2,3})\}/gs;
-const LOCALE_RE =
-  /(?<locale>en|es|gl)\s*:\s*(?:"(?<dq>(?:[^"\\]|\\.)*)"|'(?<sq>(?:[^'\\]|\\.)*)'|`(?<bq>(?:[^`\\]|\\.)*)`)/g;
+const LANGS = ["en", "es", "gl"];
+const NAMESPACES = ["common", "web", "mobile", "email"];
+const LOCALES_DIR = "packages/shared/locales";
 
 // Story identifiers (H7, H29-H40) and raw capability-key syntax (queue:admin).
 const STORY_ID_RE = /\bH\d{1,3}(?:-H\d{1,3})?\b/;
@@ -30,7 +28,7 @@ const CAP_KEY_RE = /\b[a-z][a-z_]{2,}:[a-z][a-z_]{2,}\b/;
 // Focused guards for the audited UI surfaces (H55). This is intentionally
 // small and evidence-based: broad JSX-literal matching would flag technical
 // values, test fixtures, and product names as copy. New user-facing variants
-// on these surfaces should go through the locale dictionary.
+// on these surfaces should go through the locale resource files.
 const RAW_COPY_GUARDS = [
   {
     file: "apps/web/src/app/(app)/challenges/builders.tsx",
@@ -61,51 +59,60 @@ function isPlausiblyUntranslated(a, b, minLen) {
   if (a !== b) return false;
   if (/^[\d\s.,:;!?%€$#{}()\-–—/]*$/.test(a)) return false; // punctuation/number-only
   if (/^https?:\/\//.test(a)) return false;
-  if (/\{[a-zA-Z]+\}/.test(a) && a.replace(/\{[a-zA-Z]+\}/g, "").trim().length < minLen)
+  if (/\{\{?[a-zA-Z]+\}?\}/.test(a) && a.replace(/\{\{?[a-zA-Z]+\}?\}/g, "").trim().length < minLen)
     return false;
   return true;
 }
 
+/** Flatten a (possibly nested, e.g. email.json's mail.auth.verify.subject) resource object to dot-path -> string. */
+function flatten(obj, prefix = "") {
+  const out = {};
+  for (const [key, value] of Object.entries(obj)) {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (typeof value === "string") {
+      out[path] = value;
+    } else if (value && typeof value === "object") {
+      Object.assign(out, flatten(value, path));
+    }
+  }
+  return out;
+}
+
 const failures = [];
 
-for (const { file } of TARGETS) {
-  const src = readFileSync(file, "utf8");
-  for (const entryMatch of src.matchAll(ENTRY_RE)) {
-    const key = entryMatch.groups.key;
-    const body = entryMatch.groups.body;
-    const values = {};
-    for (const localeMatch of body.matchAll(LOCALE_RE)) {
-      const { locale, dq, sq, bq } = localeMatch.groups;
-      values[locale] = dq ?? sq ?? bq ?? "";
-    }
+for (const ns of NAMESPACES) {
+  const flattened = {};
+  for (const lang of LANGS) {
+    const file = `${LOCALES_DIR}/${lang}/${ns}.json`;
+    flattened[lang] = flatten(JSON.parse(readFileSync(file, "utf8")));
+  }
 
-    const missing = ["en", "es", "gl"].filter((l) => !(l in values));
+  const allKeys = new Set(LANGS.flatMap((lang) => Object.keys(flattened[lang])));
+  for (const key of allKeys) {
+    const missing = LANGS.filter((lang) => !(key in flattened[lang]));
     if (missing.length > 0) {
-      failures.push(`${file}: "${key}" is missing locale(s): ${missing.join(", ")}`);
+      failures.push(`${ns}/${key}: missing locale(s): ${missing.join(", ")}`);
       continue;
     }
 
+    const values = Object.fromEntries(LANGS.map((lang) => [lang, flattened[lang][key]]));
     for (const [locale, text] of Object.entries(values)) {
       if (STORY_ID_RE.test(text)) {
-        failures.push(
-          `${file}: "${key}".${locale} leaks a story identifier: ${JSON.stringify(text)}`,
-        );
+        failures.push(`${ns}/${key}.${locale} leaks a story identifier: ${JSON.stringify(text)}`);
       }
       if (CAP_KEY_RE.test(text)) {
-        failures.push(
-          `${file}: "${key}".${locale} leaks a raw capability key: ${JSON.stringify(text)}`,
-        );
+        failures.push(`${ns}/${key}.${locale} leaks a raw capability key: ${JSON.stringify(text)}`);
       }
     }
 
     if (isPlausiblyUntranslated(values.en, values.es, 15)) {
       failures.push(
-        `${file}: "${key}" — es matches en verbatim (looks untranslated): ${JSON.stringify(values.en)}`,
+        `${ns}/${key} — es matches en verbatim (looks untranslated): ${JSON.stringify(values.en)}`,
       );
     }
     if (isPlausiblyUntranslated(values.en, values.gl, 15)) {
       failures.push(
-        `${file}: "${key}" — gl matches en verbatim (looks untranslated): ${JSON.stringify(values.en)}`,
+        `${ns}/${key} — gl matches en verbatim (looks untranslated): ${JSON.stringify(values.en)}`,
       );
     }
   }
