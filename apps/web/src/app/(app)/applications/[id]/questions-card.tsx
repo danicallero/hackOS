@@ -593,8 +593,8 @@ export function QuestionsCard({
         description={t("missingReservedKeyDesc", {
           keys: missingReservedKeys?.join(", ") ?? "",
         })}
-        cancelLabel={t("missingReservedKeyGoBack")}
-        confirmLabel={t("missingReservedKeySaveAnyway")}
+        cancelLabel={t("back")}
+        confirmLabel={t("saveAnyway")}
         onConfirm={() => void doSave()}
       />
       {fields.length === 0 && sections.length === 0 ? (

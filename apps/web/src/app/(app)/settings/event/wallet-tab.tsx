@@ -217,7 +217,7 @@ function BackFieldBuilder({
         </div>
       ))}
       <Button type="button" variant="outline" size="sm" onClick={add}>
-        {t("addBackField")}
+        {t("addField")}
       </Button>
     </div>
   );

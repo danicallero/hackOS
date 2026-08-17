@@ -197,7 +197,7 @@ export default function ReviewDetailPage() {
               </dd>
             </div>
             <div>
-              <dt className="text-muted-foreground text-sm">{t("lastUpdatedLabel")}</dt>
+              <dt className="text-muted-foreground text-sm">{t("lastUpdated")}</dt>
               <dd className="text-sm">
                 {review.updatedAt ? new Date(review.updatedAt).toLocaleString() : "—"}
               </dd>

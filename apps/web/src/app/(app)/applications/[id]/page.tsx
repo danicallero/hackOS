@@ -208,7 +208,7 @@ export default function ApplicationDetailPage() {
           <TabBar className="w-full justify-start">
             <TabsTrigger value="overview">{t("tabOverview")}</TabsTrigger>
             {canManage && <TabsTrigger value="builder">{t("formTabLabel")}</TabsTrigger>}
-            {canReview && <TabsTrigger value="review">{t("workspaceReview")}</TabsTrigger>}
+            {canReview && <TabsTrigger value="review">{t("review")}</TabsTrigger>}
             {canSeeDecisions && <TabsTrigger value="outbox">{t("workspaceOutbox")}</TabsTrigger>}
             {canSeeDecisions && (
               <TabsTrigger value="sent">{t("workspaceSentDecisions")}</TabsTrigger>

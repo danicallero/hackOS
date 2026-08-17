@@ -34,7 +34,7 @@ export function PersonCardView({
         {"confirmed" in card && (
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone={card.confirmed ? "success" : "warning"}>
-              {card.confirmed ? t("confirmed") : t("notConfirmedBadge")}
+              {card.confirmed ? t("confirmed") : t("notConfirmed")}
             </StatusBadge>
             <StatusBadge tone={card.alreadyAccredited ? "info" : "neutral"}>
               {card.alreadyAccredited

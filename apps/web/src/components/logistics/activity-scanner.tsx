@@ -283,7 +283,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
                       : transactionState === "saved"
                         ? "scannerStateSaved"
                         : transactionState === "confirmed"
-                          ? "scannerStateConfirmed"
+                          ? "confirmed"
                           : "scannerStateAttention",
                   )}
                 </p>

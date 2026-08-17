@@ -471,7 +471,11 @@ const dict: Record<string, I18nText> = {
     gl: "Non se puido confirmar a túa praza",
     en: "We couldn't confirm your place",
   },
-  placeConfirmed: { es: "Plaza confirmada", gl: "Praza confirmada", en: "Your place is confirmed" },
+  placeConfirmed: {
+    es: "Tu plaza está confirmada",
+    gl: "A túa praza está confirmada",
+    en: "Your place is confirmed",
+  },
   alreadyConfirmed: {
     es: "Ya has confirmado tu plaza",
     gl: "Xa confirmaches a túa praza",
@@ -1762,7 +1766,7 @@ const dict: Record<string, I18nText> = {
   colType: { es: "Tipo", gl: "Tipo", en: "Type" },
   colEnterprise: { es: "Empresa", gl: "Empresa", en: "Enterprise" },
   colExpires: { es: "Caduca", gl: "Caduca", en: "Expires" },
-  colCreated: { es: "Creada", gl: "Creado", en: "Created" },
+  created: { es: "Creada", gl: "Creada", en: "Created" },
   searchByEmailType: {
     es: "Buscar por correo o tipo…",
     gl: "Buscar por correo ou tipo…",
@@ -1923,7 +1927,6 @@ const dict: Record<string, I18nText> = {
     gl: "Ligazón creada. Compártea coas persoas que deban unirse.",
     en: "Link created. Share it with the people who should join.",
   },
-  copyLink: { es: "Copiar enlace", gl: "Copiar ligazón", en: "Copy invite link" },
   linkStatusActive: { es: "Activo", gl: "Activo", en: "Active" },
   linkStatusExpired: { es: "Caducado", gl: "Caducado", en: "Expired" },
   linkStatusExhausted: { es: "Agotado", gl: "Esgotado", en: "Limit reached" },
@@ -2305,15 +2308,8 @@ const dict: Record<string, I18nText> = {
     gl: "Estado da avaliación",
     en: "Evaluation state",
   },
-  collaborationSaving: { es: "Guardando…", gl: "Gardando…", en: "Saving…" },
-  collaborationSaved: { es: "Guardado", gl: "Gardado", en: "Saved" },
   collaborationOffline: { es: "Sin conexión", gl: "Sen conexión", en: "Offline" },
   collaborationConflict: { es: "Conflicto", gl: "Conflito", en: "Conflict" },
-  collaborationUnsaved: {
-    es: "Cambios sin guardar",
-    gl: "Cambios sen gardar",
-    en: "Unsaved changes",
-  },
   offlineEvaluationPending: {
     es: "Los cambios siguen en este formulario, pero no están guardados hasta que el servidor los confirme.",
     gl: "Os cambios seguen neste formulario, pero non están gardados ata que o servidor os confirme.",
@@ -2912,7 +2908,7 @@ const dict: Record<string, I18nText> = {
     gl: "Redacta o contido, configura a entrega e revisa a xanela de publicación.",
     en: "Write the content, configure delivery, and review the publication window.",
   },
-  editAnnouncementTitle: { es: "Editar aviso", gl: "Editar aviso", en: "Edit announcement" },
+  editAnnouncement: { es: "Editar aviso", gl: "Editar aviso", en: "Edit announcement" },
   editAnnouncementDescription: {
     es: "Actualiza el contenido o la publicación sin salir del flujo del aviso.",
     gl: "Actualiza o contido ou a publicación sen saír do fluxo do aviso.",
@@ -2924,7 +2920,6 @@ const dict: Record<string, I18nText> = {
     gl: "Buscar avisos…",
     en: "Search announcements…",
   },
-  editAnnouncementAria: { es: "Editar aviso", gl: "Editar aviso", en: "Edit announcement" },
   deleteAnnouncementAria: { es: "Eliminar aviso", gl: "Eliminar aviso", en: "Delete announcement" },
   noAnnouncementsYet: {
     es: "Aún no hay avisos",
@@ -4242,11 +4237,6 @@ const dict: Record<string, I18nText> = {
     en: "You've been accepted. Confirm to lock in your spot before the window closes, or decline if you can't make it.",
   },
   confirmPlace: { es: "Confirmar plaza", gl: "Confirmar praza", en: "Confirm place" },
-  placeConfirmedTitle: {
-    es: "Tu plaza está confirmada",
-    gl: "A túa praza está confirmada",
-    en: "Your place is confirmed",
-  },
   placeConfirmedDesc: {
     es: "Todo listo. ¡Nos vemos en el evento!",
     gl: "Todo listo. Vémonos no evento!",
@@ -5172,7 +5162,6 @@ const dict: Record<string, I18nText> = {
   noLimitPlaceholder: { es: "Sin límite", gl: "Sen límite", en: "No limit" },
   maxLengthLabel: { es: "Longitud máxima", gl: "Lonxitude máxima", en: "Max length" },
   optionsFieldLabel: { es: "Opciones", gl: "Opcións", en: "Options" },
-  addOptionButton: { es: "Añadir opción", gl: "Engadir opción", en: "Add option" },
   optionNumberLabel: { es: "Opción {index}", gl: "Opción {index}", en: "Option {index}" },
   hideTranslations: {
     es: "Ocultar traducciones",
@@ -5337,7 +5326,6 @@ const dict: Record<string, I18nText> = {
     gl: "Sitio web non indicado.",
     en: "Website not set.",
   },
-  createdAtLabel: { es: "Creada", gl: "Creada", en: "Created" },
   nextActionAddLogo: {
     es: "Sube el logo de tu empresa.",
     gl: "Sube o logo da túa empresa.",
@@ -5612,11 +5600,6 @@ const dict: Record<string, I18nText> = {
   projectDetailsTitle: { es: "El proyecto", gl: "O proxecto", en: "The project" },
   openProject: { es: "Ver proyecto", gl: "Ver proxecto", en: "Open project" },
   teamMembersLabel: { es: "Equipo", gl: "Equipo", en: "Team" },
-  lastUpdatedLabel: {
-    es: "Última actualización",
-    gl: "Última actualización",
-    en: "Last updated",
-  },
   devpostUrlLabel: { es: "Devpost", gl: "Devpost", en: "Devpost" },
   githubUrlLabel: { es: "Repositorio", gl: "Repositorio", en: "Repository" },
   demoUrlLabel: { es: "Demo", gl: "Demo", en: "Demo" },
@@ -5896,11 +5879,6 @@ const dict: Record<string, I18nText> = {
     gl: "Pide a un administrador acceso ao directorio de usuarios para buscar.",
     en: "Ask an administrator for user-directory access to search users.",
   },
-  searchFailedGeneric: {
-    es: "La búsqueda ha fallado.",
-    gl: "A busca fallou.",
-    en: "Search failed.",
-  },
   userAffiliated: { es: "Usuario afiliado.", gl: "Usuario afiliado.", en: "User affiliated." },
   couldNotAddUser: {
     es: "No se ha podido añadir este usuario.",
@@ -6076,7 +6054,6 @@ const dict: Record<string, I18nText> = {
     gl: "Escolle un nome único e, se o precisas, unha descrición. Poderás editar os permisos despois.",
     en: "Choose a unique name and, if useful, a description. You can edit capabilities afterwards.",
   },
-  createTemplateGroup: { es: "Crear grupo", gl: "Crear grupo", en: "Create group" },
   templateGroupNameExample: {
     es: "Ej. Operaciones de colas",
     gl: "Ex. Operacións de colas",
@@ -6681,7 +6658,6 @@ const dict: Record<string, I18nText> = {
   },
   backFieldLabelPlaceholder: { es: "Etiqueta", gl: "Etiqueta", en: "Label" },
   backFieldValuePlaceholder: { es: "Valor", gl: "Valor", en: "Value" },
-  addBackField: { es: "Añadir campo", gl: "Engadir campo", en: "Add field" },
   removeBackFieldAria: {
     es: "Eliminar campo {index}",
     gl: "Eliminar campo {index}",
@@ -7137,7 +7113,6 @@ const dict: Record<string, I18nText> = {
     en: "Saved on this device",
   },
   scannerStateReady: { es: "Listo", gl: "Listo", en: "Ready" },
-  scannerStateConfirmed: { es: "Confirmado", gl: "Confirmado", en: "Confirmed" },
   scannerStateSyncing: { es: "Sincronizando", gl: "Sincronizando", en: "Synchronizing" },
   scannerStateAttention: {
     es: "Necesita atención",
@@ -7175,7 +7150,6 @@ const dict: Record<string, I18nText> = {
     en: "Review the reason before retrying.",
   },
   intoleranceFallback: { es: "Intolerancia", gl: "Intolerancia", en: "Intolerance" },
-  notConfirmedBadge: { es: "Sin confirmar", gl: "Sen confirmar", en: "Not confirmed" },
   badgeCapitalInline: {
     es: "Acreditación {badge}",
     gl: "Acreditación {badge}",
@@ -7833,7 +7807,7 @@ const dict: Record<string, I18nText> = {
   },
   yesNoText: { es: "Sí / No", gl: "Si / Non", en: "Yes / No" },
   yourReview: { es: "Tu evaluación", gl: "A túa avaliación", en: "Your review" },
-  workspaceReview: { es: "Revisión", gl: "Revisión", en: "Review" },
+  review: { es: "Revisión", gl: "Revisión", en: "Review" },
   workspaceOutbox: { es: "Bandeja de salida", gl: "Bandexa de saída", en: "Outbox" },
   workspaceSentDecisions: {
     es: "Decisiones enviadas",
@@ -7919,12 +7893,7 @@ const dict: Record<string, I18nText> = {
     gl: 'Este formulario non ten ningunha pregunta co identificador especial "{keys}", así que non se autorrelleará nin se sincronizará co perfil da persoa solicitante. Podes gardar igualmente ou volver atrás para engadila.',
     en: "This form has no question using the special identifier \"{keys}\", so it won't autofill or sync with the applicant's profile. You can save anyway or go back and add it.",
   },
-  missingReservedKeyGoBack: {
-    es: "Volver",
-    gl: "Volver",
-    en: "Go back",
-  },
-  missingReservedKeySaveAnyway: {
+  saveAnyway: {
     es: "Guardar de todas formas",
     gl: "Gardar de todos os xeitos",
     en: "Save anyway",
@@ -7988,7 +7957,6 @@ const dict: Record<string, I18nText> = {
     en: "Application progress",
   },
   timelineApplication: { es: "Solicitud", gl: "Solicitude", en: "Application" },
-  timelineReview: { es: "Revisión", gl: "Revisión", en: "Review" },
   timelineDecision: { es: "Decisión", gl: "Decisión", en: "Decision" },
   timelinePlace: { es: "Plaza", gl: "Praza", en: "Place" },
   deadlineLabel: {

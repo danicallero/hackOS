@@ -5,9 +5,9 @@ export type SaveState = "saved" | "saving" | "unsaved" | "error";
 
 export function saveStateLabel(state: SaveState, t: Translate): string {
   return {
-    saved: t("saveStateSaved"),
+    saved: t("saved"),
     saving: t("saveStateSaving"),
-    unsaved: t("saveStateUnsaved"),
+    unsaved: t("unsavedChanges"),
     error: t("saveStateError"),
   }[state];
 }

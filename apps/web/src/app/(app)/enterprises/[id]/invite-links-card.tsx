@@ -289,15 +289,15 @@ export function InviteLinksCard({ enterpriseId }: { enterpriseId: number }) {
                   <Input
                     value={link.url}
                     readOnly
-                    aria-label={t("copyLink")}
+                    aria-label={t("copyInviteLink")}
                     className="min-w-0 font-mono text-xs"
                   />
                   <Button
                     type="button"
                     variant="outline"
                     size="icon"
-                    aria-label={t("copyLink")}
-                    title={t("copyLink")}
+                    aria-label={t("copyInviteLink")}
+                    title={t("copyInviteLink")}
                     onClick={() => void copyLink(link.url)}
                   >
                     <LinkIcon aria-hidden="true" />

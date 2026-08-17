@@ -62,7 +62,7 @@ export default function EditAnnouncementPage() {
     <div className="space-y-6">
       <BackLink href="/announcements" label={t("backToAnnouncements")} />
       <PageHeader
-        title={t("editAnnouncementTitle")}
+        title={t("editAnnouncement")}
         description={t("editAnnouncementDescription")}
         leading={<MegaphoneIcon className="text-muted-foreground size-6" aria-hidden="true" />}
         meta={<span className="text-muted-foreground text-sm">{item.title}</span>}

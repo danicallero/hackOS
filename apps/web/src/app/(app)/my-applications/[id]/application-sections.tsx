@@ -13,7 +13,7 @@ export function ApplicationTimeline({ response }: { response: MyResponseDetail |
   const steps = [
     { label: t("timelineApplication"), reached: timeline.application },
     { label: t("dataStatusSubmitted"), reached: timeline.submitted },
-    { label: t("timelineReview"), reached: timeline.review },
+    { label: t("review"), reached: timeline.review },
     { label: t("timelineDecision"), reached: timeline.decision },
     { label: t("timelinePlace"), reached: timeline.place },
   ];
