@@ -311,6 +311,12 @@ under `packages/shared/locales/{en,es,gl}/{common,web,mobile,email}.json`:
 every key carries **es / gl / en**, and copy never leaks story IDs (`H29`) or
 capability-key syntax (`queue:admin`).
 
+Translations are managed in a self-hosted [Tolgee](https://tolgee.io/)
+instance (`deploy/tolgee/`) and synced with these JSON files via `pnpm
+i18n:push`/`pnpm i18n:pull` (`.tolgeerc.json`) — see
+[`docs/i18n-portal.md`](./i18n-portal.md) for the full workflow and
+one-time project bootstrap.
+
 Writing rules:
 
 1. Titles name the object or task.

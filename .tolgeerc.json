@@ -1,0 +1,18 @@
+{
+  "$schema": "./node_modules/@tolgee/cli/schema.json",
+  "projectId": 1,
+  "format": "JSON_I18NEXT",
+  "push": {
+    "filesTemplate": "./packages/shared/locales/{languageTag}/{namespace}.json",
+    "languages": ["en"],
+    "namespaces": ["common", "web", "mobile", "email"],
+    "convertPlaceholdersToIcu": false,
+    "removeOtherKeys": false
+  },
+  "pull": {
+    "path": "./packages/shared/locales",
+    "fileStructureTemplate": "{languageTag}/{namespace}.{extension}",
+    "languages": ["en", "es", "gl"],
+    "namespaces": ["common", "web", "mobile", "email"]
+  }
+}

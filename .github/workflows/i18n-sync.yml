@@ -1,0 +1,68 @@
+name: i18n sync (Tolgee)
+
+# Keeps the self-hosted Tolgee project (deploy/tolgee/) and
+# packages/shared/locales/**/*.json in sync, using the Tolgee CLI configured
+# in .tolgeerc.json. Two directions:
+#   - push: any new/changed source (en) copy merged to main becomes visible
+#     to translators immediately.
+#   - pull: translator edits in Tolgee land back in the repo as a normal PR
+#     (never committed straight to main), on a weekly schedule or on demand.
+#
+# Requires the TOLGEE_API_KEY and TOLGEE_API_URL repository secrets (see
+# docs/env-vars.md#tolgee) — this is the API-client key generated from the
+# Tolgee UI, separate from the deploy-time secrets in deploy/tolgee/.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/shared/locales/**"
+  schedule:
+    - cron: "0 6 * * 1" # weekly, Monday 06:00 UTC
+  workflow_dispatch: {}
+
+jobs:
+  push:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm i18n:push
+        env:
+          TOLGEE_API_KEY: ${{ secrets.TOLGEE_API_KEY }}
+          TOLGEE_API_URL: ${{ secrets.TOLGEE_API_URL }}
+
+  pull:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm i18n:pull
+        env:
+          TOLGEE_API_KEY: ${{ secrets.TOLGEE_API_KEY }}
+          TOLGEE_API_URL: ${{ secrets.TOLGEE_API_URL }}
+      - uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "chore(i18n): pull translations from Tolgee"
+          title: "chore(i18n): pull translations from Tolgee"
+          body: |
+            Automated pull from Tolgee — translator edits since the last sync.
+
+            `pnpm check:copy` already ran as part of `pnpm i18n:pull` above;
+            review the diff for anything that still needs a human look
+            (unexpectedly large changes, missing locales) before merging.
+          branch: i18n/tolgee-pull
+          delete-branch: true
+          add-paths: packages/shared/locales/**
