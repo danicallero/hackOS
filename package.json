@@ -22,6 +22,8 @@
     "lint:fix": "biome check --write .",
     "check:copy": "node scripts/check-copy.mjs",
     "check:pages": "node scripts/check-page-size.mjs",
+    "i18n:push": "tolgee push --api-url \"$TOLGEE_API_URL\"",
+    "i18n:pull": "tolgee pull --api-url \"$TOLGEE_API_URL\" && pnpm check:copy",
     "migrate": "pnpm --filter @hackos/api migrate",
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
@@ -45,6 +47,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.2",
     "@playwright/test": "^1.62.1",
+    "@tolgee/cli": "^2.20.0",
     "detox": "^20.51.4",
     "husky": "^9.1.7",
     "lint-staged": "^17.1.0",

@@ -97,6 +97,10 @@ Frontend (web & mobile):
 - [UI testing](./ui-testing.md) — the shared browser/native selector contract,
   Playwright browser projects, fast React Native screen tests, optional
   Detox simulator/device runs, and the screenshot-on-UI-PRs rule.
+- [Translation portal (Tolgee)](./i18n-portal.md) — the self-hosted Tolgee
+  deployment (`deploy/tolgee/`), one-time project bootstrap, and the
+  `pnpm i18n:push`/`pnpm i18n:pull` sync workflow (automated via
+  `.github/workflows/i18n-sync.yml`).
 
 Deployment:
 
