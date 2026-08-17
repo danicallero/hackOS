@@ -11,6 +11,7 @@
     "./capabilities": "./src/capabilities.ts",
     "./events": "./src/events.ts",
     "./locale": "./src/locale.ts",
+    "./locales/*": "./locales/*",
     "./questions": "./src/questions.ts",
     "./ui-test-ids": "./src/ui-test-ids.ts",
     "./wallet-pass-labels": "./src/wallet-pass-labels.ts"
