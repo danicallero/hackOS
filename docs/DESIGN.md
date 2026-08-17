@@ -311,14 +311,10 @@ under `packages/shared/locales/{en,es,gl}/{common,web,mobile,email}.json`:
 every key carries **es / gl / en**, and copy never leaks story IDs (`H29`) or
 capability-key syntax (`queue:admin`).
 
-`web.json` is generated (`pnpm i18n:build`) from a commented `.jsonc` source
-in `packages/shared/locales-src/{en,es,gl}/web.jsonc` — edit the source, not
-the generated file; `check-copy.mjs` fails the build if they drift apart.
-The `// ---- Section name ----` comments group keys by feature (navigation,
-sign-in, staff scanning, admin screens, …) so the ~2,400-key file stays
-browsable. `common.json`/`mobile.json`/`email.json` have no source — they're
-small enough (or, for `common.json`, made of scattered cross-feature keys a
-web-dict section label would misrepresent) to edit directly.
+All translation resources under `packages/shared/locales/{en,es,gl}/` are
+canonical runtime JSON and must be edited directly. The four namespaces are
+`common.json`, `web.json`, `mobile.json`, and `email.json`; `check-copy.mjs`
+validates their locale coverage and copy rules.
 
 Writing rules:
 

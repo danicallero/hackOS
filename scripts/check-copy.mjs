@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { readFileSync } from "node:fs";
+
 /**
  * Lightweight guard for the H196 copy rules (docs/DESIGN.md §10):
  * every i18n entry has all three locales, and no entry leaks story
@@ -16,19 +17,11 @@ import { readFileSync } from "node:fs";
  * mail.auth.verify.subject) since the i18next migration (H7); this walks
  * every string leaf across the three locale files per namespace.
  *
- * web.json is generated from a commented .jsonc source in
- * packages/shared/locales-src/ (`pnpm i18n:build`) — this also fails if the
- * committed .json ever drifts from that source, so editing the generated
- * file directly and forgetting to rebuild doesn't silently go stale.
- * (common/mobile/email have no .jsonc source — see build-locales.mjs for why.)
  */
-import { parse as parseJsonc } from "jsonc-parser";
 
 const LANGS = ["en", "es", "gl"];
 const NAMESPACES = ["common", "web", "mobile", "email"];
-const JSONC_SOURCED_NAMESPACES = ["web"];
 const LOCALES_DIR = "packages/shared/locales";
-const LOCALES_SRC_DIR = "packages/shared/locales-src";
 
 // Story identifiers (H7, H29-H40) and raw capability-key syntax (queue:admin).
 const STORY_ID_RE = /\bH\d{1,3}(?:-H\d{1,3})?\b/;
@@ -88,18 +81,6 @@ function flatten(obj, prefix = "") {
 }
 
 const failures = [];
-
-for (const lang of LANGS) {
-  for (const ns of JSONC_SOURCED_NAMESPACES) {
-    const srcPath = `${LOCALES_SRC_DIR}/${lang}/${ns}.jsonc`;
-    const outPath = `${LOCALES_DIR}/${lang}/${ns}.json`;
-    const expected = JSON.stringify(parseJsonc(readFileSync(srcPath, "utf8")));
-    const actual = JSON.stringify(JSON.parse(readFileSync(outPath, "utf8")));
-    if (expected !== actual) {
-      failures.push(`${outPath}: out of sync with ${srcPath} — run \`pnpm i18n:build\``);
-    }
-  }
-}
 
 for (const ns of NAMESPACES) {
   const flattened = {};
