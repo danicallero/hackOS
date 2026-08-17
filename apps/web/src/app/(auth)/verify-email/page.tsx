@@ -58,7 +58,7 @@ function localizedResendError(error: ApiError, t: Translate): string {
  */
 function messageForError(
   error: string | null,
-  t: (key: string) => string,
+  t: Translate,
 ): { title: string; body: string } | null {
   if (!error) return null;
   if (error === "TOKEN_EXPIRED") {

@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { useLocale } from "@/lib/i18n";
+import { type MessageKey, useLocale } from "@/lib/i18n";
 import {
   type AccreditationLookup,
   type AccreditationRoleCount,
@@ -33,6 +33,16 @@ import {
   personName,
 } from "@/lib/logistics";
 import { useCan } from "@/lib/session";
+
+const ROLE_LABEL_KEY: Record<AccreditationRoleCount["role"], MessageKey> = {
+  admin: "roleAdmin",
+  judge: "roleJudge",
+  sponsor: "roleSponsor",
+  staff: "roleStaff",
+  mentor: "roleMentor",
+  participant: "roleParticipant",
+  unassigned: "roleUnassigned",
+};
 
 export default function AccreditationPage() {
   const { t } = useLocale();
@@ -65,7 +75,7 @@ export default function AccreditationPage() {
         {roleCounts.map((item) => (
           <StatCard
             key={item.role}
-            label={t(item.role)}
+            label={t(ROLE_LABEL_KEY[item.role])}
             value={item.count}
             icon={BadgeCheckIcon}
             hint={t("accredited")}

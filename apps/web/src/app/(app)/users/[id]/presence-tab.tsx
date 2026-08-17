@@ -337,7 +337,7 @@ export function EditTimeLogModal({
           <DateTimeInput id="edit-presence-time" value={scannedAt} onChange={setScannedAt} />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="edit-presence-notes">{t("notes")}</Label>
+          <Label htmlFor="edit-presence-notes">{t("notesLabel")}</Label>
           <Textarea
             id="edit-presence-notes"
             value={notes}
@@ -533,7 +533,7 @@ export function PresenceSignalModal({
         )}
         {kind === "activity" && (
           <div className="space-y-2">
-            <Label htmlFor="presence-activity">{t("colActivity")}</Label>
+            <Label htmlFor="presence-activity">{t("columnActivity")}</Label>
             <EntityCombobox
               id="presence-activity"
               inDialog
@@ -558,7 +558,7 @@ export function PresenceSignalModal({
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="presence-signal-notes">{t("notes")}</Label>
+          <Label htmlFor="presence-signal-notes">{t("notesLabel")}</Label>
           <Textarea
             id="presence-signal-notes"
             value={notes}

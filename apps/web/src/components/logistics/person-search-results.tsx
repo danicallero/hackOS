@@ -1,9 +1,9 @@
 import { StatusBadge } from "@/components/common/status-badge";
-import { useLocale } from "@/lib/i18n";
+import { type MessageKey, useLocale } from "@/lib/i18n";
 import type { PersonSearchResult } from "@/lib/logistics";
 
 /** i18n key for how a search result matched — null for the plain name/email fallback. */
-const MATCH_LABEL_KEY: Record<PersonSearchResult["matchedBy"], string | null> = {
+const MATCH_LABEL_KEY: Record<PersonSearchResult["matchedBy"], MessageKey | null> = {
   ticket: "matchTicket",
   badge: "matchBadge",
   badge_history: "matchOldBadge",

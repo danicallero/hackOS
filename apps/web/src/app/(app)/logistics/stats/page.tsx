@@ -51,6 +51,7 @@ import {
   defaultDataPhase,
   errorMessage,
   exportUrl,
+  FRESHNESS_LABEL_KEYS,
   type FreshnessKind,
 } from "./model";
 
@@ -88,7 +89,7 @@ function Freshness({ kind }: { kind: FreshnessKind }) {
           : "warning";
   return (
     <StatusBadge tone={tone} dot={false}>
-      {t(`dataFreshness${kind[0].toUpperCase()}${kind.slice(1)}`)}
+      {t(FRESHNESS_LABEL_KEYS[kind])}
     </StatusBadge>
   );
 }
@@ -410,7 +411,7 @@ function DuringPanel({ stats }: { stats: LiveStatsState }) {
           label={t("accredited")}
           value={data?.accreditedCount ?? "—"}
           icon={BadgeCheckIcon}
-          hint={t(`dataFreshness${freshness[0].toUpperCase()}${freshness.slice(1)}`)}
+          hint={t(FRESHNESS_LABEL_KEYS[freshness])}
         />
         <StatCard
           label={t("presentNow")}
@@ -422,13 +423,13 @@ function DuringPanel({ stats }: { stats: LiveStatsState }) {
           label={t("mealsServed")}
           value={data ? data.meals.reduce((sum, meal) => sum + meal.served, 0) : "—"}
           icon={SoupIcon}
-          hint={t(`dataFreshness${freshness[0].toUpperCase()}${freshness.slice(1)}`)}
+          hint={t(FRESHNESS_LABEL_KEYS[freshness])}
         />
         <StatCard
           label={t("activityScans")}
           value={data ? data.activities.reduce((sum, activity) => sum + activity.scans, 0) : "—"}
           icon={ActivityIcon}
-          hint={t(`dataFreshness${freshness[0].toUpperCase()}${freshness.slice(1)}`)}
+          hint={t(FRESHNESS_LABEL_KEYS[freshness])}
         />
       </div>
       <div className="grid gap-4 xl:grid-cols-2">

@@ -301,7 +301,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
               </div>
             </div>
             <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_minmax(180px,0.8fr)_140px]">
-              <Field id="activity-scan-activity" label={t("colActivity")}>
+              <Field id="activity-scan-activity" label={t("columnActivity")}>
                 <EntityCombobox
                   id="activity-scan-activity"
                   options={items}

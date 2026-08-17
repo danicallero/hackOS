@@ -1593,6 +1593,7 @@
   "presencePolicyTitle": "Continuous presence verification",
   "presenceProvisionalHours": "Provisional hours",
   "presenceRecordedBySystem": "Recorded automatically by the system",
+  "presenceResolveConflict": "Resolve conflict",
   "presenceScanFailed": "Presence scan failed.",
   "presenceScanTab": "Scan",
   "presenceSections": "Presence sections",
