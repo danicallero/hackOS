@@ -22,6 +22,7 @@
     "lint:fix": "biome check --write .",
     "check:copy": "node scripts/check-copy.mjs",
     "check:pages": "node scripts/check-page-size.mjs",
+    "i18n:build": "node scripts/build-locales.mjs",
     "migrate": "pnpm --filter @hackos/api migrate",
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
@@ -47,6 +48,7 @@
     "@playwright/test": "^1.62.1",
     "detox": "^20.51.4",
     "husky": "^9.1.7",
+    "jsonc-parser": "^3.3.1",
     "lint-staged": "^17.1.0",
     "typescript": "^6.0.3"
   },
