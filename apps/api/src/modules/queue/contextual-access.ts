@@ -205,13 +205,20 @@ export function requireRoomJudgeManager(
         : challengeSource === "params"
           ? numberParam(req, "challengeId")
           : numberBody(req, "challengeId");
-    // Bind the child challenge to the room before considering a global grant:
-    // a mismatched parent/child pair must not become a harmless-but-audited
-    // no-op mutation (AC-2C parent/child isolation).
-    if (expectedChallengeId == null || expectedChallengeId !== requestedChallengeId) {
+    // Bind the child challenge to the room before considering any grant: a
+    // mismatched parent/child pair must not become a harmless-but-audited
+    // no-op mutation, even for QUEUE_ADMIN (AC-2C parent/child isolation).
+    if (expectedChallengeId != null && expectedChallengeId !== requestedChallengeId) {
       denied("room judge assignments", { roomId, challengeId: requestedChallengeId });
     }
+    // H436: QUEUE_ADMIN bypasses only the "room has no challenge yet" gate below
+    // — a global admin may legitimately browse/manage judges before the room's
+    // challenge is set, unlike the sponsor-owner fallback which needs a challenge
+    // to check ownership of.
     if (await userHasCapability(userId, CAPABILITIES.QUEUE_ADMIN, req)) return;
+    if (expectedChallengeId == null) {
+      denied("room judge assignments", { roomId, challengeId: requestedChallengeId });
+    }
     if (await ownsChallenge(userId, expectedChallengeId)) {
       return;
     }

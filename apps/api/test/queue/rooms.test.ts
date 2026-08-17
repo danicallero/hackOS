@@ -312,6 +312,24 @@ describe("rooms CRUD + assignments (QUEUE_ADMIN)", () => {
       { action: "remove", actor_id: sponsorUser },
     ]);
   });
+
+  it("H436: QUEUE_ADMIN can browse judge candidates for a room with no challenge assigned yet", async () => {
+    const room = await app.inject({
+      method: "POST",
+      url: "/api/queue/rooms",
+      headers: asUser(adminId),
+      payload: { name: "Sala sin reto", slug: "sala-sin-reto" },
+    });
+    const roomId = room.json().id;
+
+    const candidates = await app.inject({
+      method: "GET",
+      url: `/api/queue/rooms/${roomId}/judge-candidates`,
+      headers: asUser(adminId),
+    });
+    expect(candidates.statusCode).toBe(200);
+    expect(Array.isArray(candidates.json().users)).toBe(true);
+  });
 });
 
 describe("queue_settings singleton", () => {
