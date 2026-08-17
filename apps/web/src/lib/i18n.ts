@@ -69,6 +69,12 @@ i18nInstance.init({
   // Resources are bundled statically, so finish init synchronously instead
   // of deferring a tick — avoids a flash of raw keys on first render.
   initAsync: false,
+  // Dev-only: surface missing/unresolved keys (e.g. wrong namespace, typo)
+  // as a console warning instead of silently rendering the raw key.
+  saveMissing: process.env.NODE_ENV !== "production",
+  missingKeyHandler: (lngs: readonly string[], ns: string, key: string) => {
+    console.warn(`[i18n] missing translation for "${ns}:${key}" (${lngs.join(", ")})`);
+  },
 });
 
 /** Resolve one dictionary entry outside React, for navigation and copy checks. */
