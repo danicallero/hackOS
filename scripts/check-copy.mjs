@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { extname, join } from "node:path";
 
 /**
  * Lightweight guard for the H196 copy rules (docs/DESIGN.md §10):
@@ -17,6 +18,10 @@ import { readFileSync } from "node:fs";
  * mail.auth.verify.subject) since the i18next migration (H7); this walks
  * every string leaf across the three locale files per namespace.
  *
+ * It also cross-checks call sites: every static t("...") key referenced from
+ * apps/web/src or apps/mobile must resolve in that app's namespace-fallback
+ * chain (web -> common, mobile -> common), catching typos and wrong-namespace
+ * keys that the internal-consistency check above can't see (H459).
  */
 
 const LANGS = ["en", "es", "gl"];
@@ -81,6 +86,7 @@ function flatten(obj, prefix = "") {
 }
 
 const failures = [];
+const namespaceKeys = {};
 
 for (const ns of NAMESPACES) {
   const flattened = {};
@@ -90,6 +96,7 @@ for (const ns of NAMESPACES) {
   }
 
   const allKeys = new Set(LANGS.flatMap((lang) => Object.keys(flattened[lang])));
+  namespaceKeys[ns] = allKeys;
   for (const key of allKeys) {
     const missing = LANGS.filter((lang) => !(key in flattened[lang]));
     if (missing.length > 0) {
@@ -116,6 +123,155 @@ for (const ns of NAMESPACES) {
       failures.push(
         `${ns}/${key} — gl matches en verbatim (looks untranslated): ${JSON.stringify(values.en)}`,
       );
+    }
+  }
+}
+
+// Cross-check t("...") call sites against the resolved namespace-fallback
+// chain per app: web -> common for apps/web, mobile -> common for
+// apps/mobile (see apps/web/src/lib/i18n.ts and apps/mobile/lib/i18n.tsx).
+// Catches typos/wrong-namespace keys that pass the internal-consistency
+// check above but only fail at runtime as a raw key literal (H459).
+const SKIP_DIRS = new Set([
+  "node_modules",
+  ".next",
+  ".expo",
+  "dist",
+  "build",
+  "coverage",
+  ".turbo",
+]);
+const SOURCE_EXTS = new Set([".ts", ".tsx"]);
+
+function walk(dir, out = []) {
+  for (const entry of readdirSync(dir)) {
+    if (SKIP_DIRS.has(entry)) continue;
+    const path = join(dir, entry);
+    const stat = statSync(path);
+    if (stat.isDirectory()) walk(path, out);
+    else if (SOURCE_EXTS.has(extname(entry))) out.push(path);
+  }
+  return out;
+}
+
+/** Advance past a quoted string literal starting at src[i] (the opening quote), honoring backslash escapes. */
+function skipString(src, i, quote) {
+  i++;
+  while (i < src.length) {
+    if (src[i] === "\\") {
+      i += 2;
+      continue;
+    }
+    if (src[i] === quote) return i + 1;
+    i++;
+  }
+  return i;
+}
+
+/** Find every `t(...)` call site and return its raw argument text (balanced on parens/strings). */
+function findTCalls(src) {
+  const calls = [];
+  const re = /\bt\(/g;
+  let m = re.exec(src);
+  while (m) {
+    const start = re.lastIndex;
+    let depth = 1;
+    let i = start;
+    while (i < src.length && depth > 0) {
+      const c = src[i];
+      if (c === "(") depth++;
+      else if (c === ")") depth--;
+      else if (c === '"' || c === "'" || c === "`") {
+        i = skipString(src, i, c);
+        continue;
+      }
+      i++;
+    }
+    calls.push({
+      argsText: src.slice(start, i - 1),
+      line: src.slice(0, m.index).split("\n").length,
+    });
+    m = re.exec(src);
+  }
+  return calls;
+}
+
+const COMPARISON_OPS = ["===", "!==", "==", "!="];
+
+/**
+ * Static string-literal keys a t(...) call could resolve to at its first
+ * argument position: the whole argument, or a top-level ternary/`??`
+ * branch. Skips: everything past the first top-level comma (values-object
+ * literals aren't keys), anything nested inside another call/array/object
+ * (e.g. an options bag or a `.slice("...")` argument), literals adjacent to
+ * an equality operator (a ternary *condition*, not a branch), and template
+ * literals with interpolation (can't be resolved statically).
+ */
+function firstArgLiteralKeys(argsText) {
+  let depth = 0;
+  let firstArgEnd = argsText.length;
+  for (let i = 0; i < argsText.length; i++) {
+    const c = argsText[i];
+    if (c === "(" || c === "[" || c === "{") depth++;
+    else if (c === ")" || c === "]" || c === "}") depth--;
+    else if (c === '"' || c === "'" || c === "`") {
+      i = skipString(argsText, i, c) - 1;
+    } else if (c === "," && depth === 0) {
+      firstArgEnd = i;
+      break;
+    }
+  }
+  const firstArg = argsText.slice(0, firstArgEnd);
+
+  const keys = [];
+  depth = 0;
+  let i = 0;
+  while (i < firstArg.length) {
+    const c = firstArg[i];
+    if (c === "(" || c === "[" || c === "{") {
+      depth++;
+      i++;
+    } else if (c === ")" || c === "]" || c === "}") {
+      depth--;
+      i++;
+    } else if (c === '"' || c === "'" || c === "`") {
+      const end = skipString(firstArg, i, c);
+      if (depth === 0) {
+        const before = firstArg.slice(0, i).trimEnd();
+        const after = firstArg.slice(end).trimStart();
+        const isComparison =
+          COMPARISON_OPS.some((op) => before.endsWith(op)) ||
+          COMPARISON_OPS.some((op) => after.startsWith(op));
+        const isTemplate = c === "`";
+        const value = firstArg.slice(i + 1, end - 1);
+        if (!isComparison && !(isTemplate && value.includes("${")) && value.length > 0) {
+          keys.push(value);
+        }
+      }
+      i = end;
+    } else {
+      i++;
+    }
+  }
+  return keys;
+}
+
+const CALL_SITE_SOURCES = [
+  { dir: "apps/web/src", resolvable: new Set([...namespaceKeys.web, ...namespaceKeys.common]) },
+  { dir: "apps/mobile", resolvable: new Set([...namespaceKeys.mobile, ...namespaceKeys.common]) },
+];
+
+for (const { dir, resolvable } of CALL_SITE_SOURCES) {
+  for (const file of walk(dir)) {
+    const src = readFileSync(file, "utf8");
+    for (const { argsText, line } of findTCalls(src)) {
+      for (const key of firstArgLiteralKeys(argsText)) {
+        if (!resolvable.has(key)) {
+          failures.push(
+            `${file}:${line}: t("${key}") does not resolve to any known translation key`,
+          );
+        }
+      }
     }
   }
 }
