@@ -6,7 +6,7 @@ import mobileEs from "@hackos/shared/locales/es/mobile.json";
 import commonGl from "@hackos/shared/locales/gl/common.json";
 import mobileGl from "@hackos/shared/locales/gl/mobile.json";
 import i18next from "i18next";
-import { createElement, type ReactNode } from "react";
+import { createElement, type ReactNode, useCallback, useMemo } from "react";
 import { I18nextProvider, initReactI18next, useTranslation } from "react-i18next";
 
 /**
@@ -29,6 +29,7 @@ instance.init({
   fallbackLng: "en",
   ns: ["mobile", "common"],
   defaultNS: "mobile",
+  fallbackNS: "common",
   resources: {
     en: { mobile: mobileEn, common: commonEn },
     es: { mobile: mobileEs, common: commonEs },
@@ -39,6 +40,12 @@ instance.init({
   // Resources are bundled statically, so finish init synchronously instead
   // of deferring a tick — avoids a flash of raw keys on first render.
   initAsync: false,
+  // Dev-only: surface missing/unresolved keys (e.g. wrong namespace, typo)
+  // as a console warning instead of silently rendering the raw key.
+  saveMissing: __DEV__,
+  missingKeyHandler: (lngs: readonly string[], ns: string, key: string) => {
+    console.warn(`[i18n] missing translation for "${ns}:${key}" (${lngs.join(", ")})`);
+  },
 });
 
 interface LocaleContextValue {
@@ -52,12 +59,19 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
 }
 
 export function useLocale(): LocaleContextValue {
-  const { t, i18n } = useTranslation(["mobile", "common"], { i18n: instance });
-  return {
-    language: i18n.language as Lang,
-    setLanguage: (lang) => {
+  const { t: translate, i18n } = useTranslation(["mobile", "common"], { i18n: instance });
+  const language = i18n.language as Lang;
+
+  const setLanguage = useCallback(
+    (lang: Lang) => {
       i18n.changeLanguage(lang);
     },
-    t: (key, vars) => t(key, vars),
-  };
+    [i18n],
+  );
+  const t = useCallback(
+    (key: Key, vars?: Record<string, string>) => translate(key, vars),
+    [translate],
+  );
+
+  return useMemo(() => ({ language, setLanguage, t }), [language, setLanguage, t]);
 }
