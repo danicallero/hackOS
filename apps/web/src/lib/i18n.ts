@@ -7894,6 +7894,41 @@ const dict: Record<string, I18nText> = {
     gl: "Xérase desde a pregunta. Só precisas cambiala para integracións técnicas.",
     en: "Generated from the question. Change it only for technical integrations.",
   },
+  reservedKeysToggle: {
+    es: "¿Cómo funcionan los identificadores?",
+    gl: "¿Como funcionan os identificadores?",
+    en: "How do identifiers work?",
+  },
+  reservedKeysDesc: {
+    es: "El identificador (la clave) es lo que distingue a cada pregunta. Algunos identificadores son especiales: si una pregunta usa exactamente uno de ellos, su respuesta se autorrellena con el dato que ya tiene guardado la persona solicitante en su perfil, y lo que responda se guarda también ahí.",
+    gl: "O identificador (a clave) é o que distingue a cada pregunta. Algúns identificadores son especiais: se unha pregunta usa exactamente un deles, a súa resposta autorrelléase co dato que xa ten gardado a persoa solicitante no seu perfil, e o que responda gárdase tamén alí.",
+    en: "The identifier (the key) is what tells each question apart. Some identifiers are special: if a question uses exactly one of them, its answer autofills from the data the applicant already has saved on their profile, and whatever they answer is saved back there too.",
+  },
+  reservedKeyDni: {
+    es: "— se sincroniza con el DNI/NIE del perfil de la persona solicitante.",
+    gl: "— sincronízase co DNI/NIE do perfil da persoa solicitante.",
+    en: "— syncs with the applicant's national ID (DNI/NIE) on their profile.",
+  },
+  missingReservedKeyTitle: {
+    es: "Falta un identificador especial",
+    gl: "Falta un identificador especial",
+    en: "A special identifier is missing",
+  },
+  missingReservedKeyDesc: {
+    es: 'Este formulario no tiene ninguna pregunta con el identificador especial "{keys}", así que no se autorrellenará ni se sincronizará con el perfil de la persona solicitante. Puedes guardar igualmente o volver atrás para añadirla.',
+    gl: 'Este formulario non ten ningunha pregunta co identificador especial "{keys}", así que non se autorrelleará nin se sincronizará co perfil da persoa solicitante. Podes gardar igualmente ou volver atrás para engadila.',
+    en: "This form has no question using the special identifier \"{keys}\", so it won't autofill or sync with the applicant's profile. You can save anyway or go back and add it.",
+  },
+  missingReservedKeyGoBack: {
+    es: "Volver",
+    gl: "Volver",
+    en: "Go back",
+  },
+  missingReservedKeySaveAnyway: {
+    es: "Guardar de todas formas",
+    gl: "Gardar de todos os xeitos",
+    en: "Save anyway",
+  },
   translationsAndSettings: {
     es: "Traducciones y ajustes técnicos",
     gl: "Traducións e axustes técnicos",
