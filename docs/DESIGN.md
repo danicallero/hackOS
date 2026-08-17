@@ -311,11 +311,14 @@ under `packages/shared/locales/{en,es,gl}/{common,web,mobile,email}.json`:
 every key carries **es / gl / en**, and copy never leaks story IDs (`H29`) or
 capability-key syntax (`queue:admin`).
 
-Translations are managed in a self-hosted [Tolgee](https://tolgee.io/)
-instance (`deploy/tolgee/`) and synced with these JSON files via `pnpm
-i18n:push`/`pnpm i18n:pull` (`.tolgeerc.json`) — see
-[`docs/i18n-portal.md`](./i18n-portal.md) for the full workflow and
-one-time project bootstrap.
+`web.json` is generated (`pnpm i18n:build`) from a commented `.jsonc` source
+in `packages/shared/locales-src/{en,es,gl}/web.jsonc` — edit the source, not
+the generated file; `check-copy.mjs` fails the build if they drift apart.
+The `// ---- Section name ----` comments group keys by feature (navigation,
+sign-in, staff scanning, admin screens, …) so the ~2,400-key file stays
+browsable. `common.json`/`mobile.json`/`email.json` have no source — they're
+small enough (or, for `common.json`, made of scattered cross-feature keys a
+web-dict section label would misrepresent) to edit directly.
 
 Writing rules:
 

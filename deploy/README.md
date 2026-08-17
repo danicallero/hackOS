@@ -17,11 +17,6 @@ posture. Pick one per instance — don't mix them for the same instance.
 > again with a different `STACK_NAME` + `INSTANCE_NETWORK` to host a second
 > event on the same server with zero shared state. See [Multiple instances](#multiple-instances).
 
-> **Tolgee (`deploy/tolgee/`) is not one of the per-instance services above.**
-> It's a one-time, org-wide deployment for managing translations across all
-> hackathon instances — deploy it once, not per event. See
-> `deploy/tolgee/docker-compose.yml` and `docs/env-vars.md#tolgee`.
-
 ---
 
 ## Architecture
@@ -365,7 +360,4 @@ deploy/
     ├── api/       (docker-compose.yml ← api + one-shot migrate; dokploy.env.example)
     ├── worker/    (docker-compose.yml + dokploy.env.example)
     └── web/       (docker-compose.yml + dokploy.env.example)
-└── tolgee/                       ← NOT per-instance — deploy once, org-wide
-    ├── docker-compose.yml        ← translation portal + its own Postgres
-    └── dokploy.env.example
 ```

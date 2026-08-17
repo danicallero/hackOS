@@ -1,6 +1,9 @@
 {
+  // ---- Navigation & sidebar ----
   "myApplications": "Mis solicitudes",
   "myQueue": "Mi cola",
+
+  // ---- Workspaces (issue #187: capability-based work areas, audit §3.2) ----
   "workspaceApplications": "Solicitudes",
   "workspaceProjects": "Proyectos e importación",
   "workspaceLiveJudging": "Evaluación en vivo",
@@ -40,10 +43,14 @@
   "soon": "Próximamente",
   "comingSoon": "próximamente",
   "profile": "Mi perfil",
+
+  // ---- Theme switcher ----
   "light": "Claro",
   "dark": "Oscuro",
   "system": "Sistema",
   "toggleTheme": "Cambiar tema",
+
+  // ---- Sign in / sign up ----
   "signInDescription": "Inicia sesión en hackOS.",
   "email": "Correo electrónico",
   "password": "Contraseña",
@@ -68,6 +75,8 @@
   "couldNotCreateAccount": "No se ha podido crear la cuenta.",
   "couldNotSendResetEmail": "No se ha podido enviar el correo. Inténtalo de nuevo.",
   "atLeastEight": "Al menos 8 caracteres",
+
+  // ---- Profile: personal details ----
   "personalDetails": "Datos personales",
   "firstName": "Nombre",
   "lastName": "Apellidos",
@@ -83,6 +92,8 @@
   "noIntolerances": "Aún no hay intolerancias en el catálogo.",
   "cateringNotes": "Indica cualquier necesidad adicional para el equipo de catering.",
   "dietaryDataHandlingNote": "Solo se usa para pedir la comida del evento.",
+
+  // ---- Public marketing pages ----
   "logIn": "Iniciar sesión",
   "termsAndConditions": "Términos y condiciones",
   "privacyPolicy": "Política de privacidad",
@@ -105,6 +116,8 @@
   "challengesPending": "Los retos se publicarán próximamente.",
   "sponsors": "Patrocinadores",
   "sponsorsPending": "Los patrocinadores se anunciarán próximamente.",
+
+  // ---- Password reset & email verification ----
   "rememberedIt": "¿La recuerdas?",
   "resetEmailSent": "Si existe una cuenta con esa dirección, hemos enviado un enlace para restablecer la contraseña.",
   "resetTokenMissing": "Falta el token de restablecimiento o no es válido.",
@@ -151,6 +164,8 @@
   "placeReleasedDesc": "La organización podrá ofrecer tu plaza a otra persona.",
   "linkMissingToken": "A este enlace le falta el token.",
   "clearDate": "Borrar fecha",
+
+  // ---- File uploads & Devpost tag picker ----
   "devpostTags": "Etiquetas de Devpost",
   "selectDevpostTags": "Selecciona etiquetas de Devpost",
   "searchImportedPrizes": "Buscar premios importados…",
@@ -165,8 +180,12 @@
   "anyFile": "Cualquier archivo",
   "uploadFailed": "No se ha podido subir el archivo.",
   "fileUploaded": "Archivo subido.",
+
+  // ---- Invite acceptance ----
   "inviteUnavailable": "Invitación no disponible",
   "accountCreated": "Cuenta creada",
+
+  // ---- Secondary email verification ----
   "verifyNow": "Verificar ahora",
   "emailNotVerified": "Tu correo todavía no está verificado.",
   "secondaryEmailVerified": "Correo secundario verificado",
@@ -178,6 +197,8 @@
   "confirmAndVerify": "Confirmar y verificar",
   "wrongAccountTitle": "Enlace para otra cuenta",
   "wrongAccountDesc": "Este enlace de verificación es para otra cuenta, pero has iniciado sesión como {currentEmail}. Inicia sesión con la cuenta que pidió añadir este correo secundario.",
+
+  // ---- Account overview & capabilities ----
   "accountRole": "Rol",
   "capabilities": "Permisos",
   "permissionGroupSections": "Secciones del grupo de permisos",
@@ -199,6 +220,8 @@
   "manageRoom": "Gestionar",
   "moreWorkspaces": "Más espacios de trabajo",
   "continueApplication": "Continuar solicitud",
+
+  // ---- Entrance ticket & wallet badge ----
   "entranceTicket": "Entrada",
   "viewTicket": "Ver mi entrada",
   "badge": "Acreditación",
@@ -208,7 +231,11 @@
   "walletGoogleSaveFailed": "No se pudo generar el enlace de Google Wallet",
   "currentBadge": "Acreditación actual",
   "qrNotAvailable": "{item} no disponible.",
+
+  // ---- Sidebar toggle ----
   "toggleSidebar": "Alternar barra lateral",
+
+  // ---- Data table selection ----
   "selectAll": "Seleccionar todo",
   "selectRow": "Seleccionar fila",
   "openRow": "Abrir fila",
@@ -226,15 +253,23 @@
   "selectionCount": "{count} filas seleccionadas",
   "retry": "Reintentar",
   "nothingToShow": "No hay nada que mostrar",
+
+  // ---- Participant queue status banner ----
   "anyMoment": "en cualquier momento",
   "yourRoom": "tu sala",
   "queueLoadError": "No se ha podido cargar tu estado de cola.",
   "yourTurn": "Te toca — ve a {room}",
   "getReady": "Prepárate — te toca pronto",
+
+  // ---- Participant: my queues ----
   "noJudgingQueue": "No estás en ninguna cola de evaluación",
   "position": "Posición",
+
+  // ---- Inbox tabs ----
   "messages": "Mensajes",
   "preferences": "Preferencias",
+
+  // ---- Notifications & reminders ----
   "unreadOnly": "Solo sin leer",
   "markRead": "Marcar como leído",
   "previous": "Anterior",
@@ -246,15 +281,23 @@
   "category": "Categoría",
   "alwaysOn": "siempre activo",
   "turnOff": "Desactivar",
+
+  // ---- Application form settings ----
   "formSettings": "Configuración del formulario",
   "saveSettings": "Guardar configuración",
   "formUpdated": "Formulario actualizado",
   "couldNotSaveForm": "No se ha podido guardar el formulario.",
+
+  // ---- Application form questions ----
   "questions": "Preguntas",
   "questionsSaved": "Preguntas guardadas",
   "couldNotSaveQuestions": "No se han podido guardar las preguntas.",
+
+  // ---- File upload validation errors ----
   "fileTypeNotAllowed": "El tipo {ext} no está permitido. Permitidos: {allowed}",
   "fileTooLarge": "El archivo supera el límite de {maxMb} MB.",
+
+  // ---- Staff: queue operations ----
   "queueOpsAccessDeniedDesc": "Necesitas acceso a colas o evaluación.",
   "couldNotLoadOperationsDetails": "No se han podido cargar los detalles de operaciones.",
   "couldNotGenerateQueues": "No se han podido generar las colas.",
@@ -298,6 +341,8 @@
   "entryNumber": "Entrada #{id}",
   "teamMembers": "Miembros del equipo",
   "noMembersLinked": "Ningún miembro vinculado a este equipo.",
+
+  // ---- Staff: accreditation scanning ----
   "accreditationDeniedDesc": "Pide a un administrador acceso al escaneo de acreditación.",
   "personSearchTitle": "Buscar persona",
   "personSearchDesc": "Escanea el QR de la entrada o de una acreditación (también una antigua), o escribe nombre, apellidos o correo.",
@@ -342,6 +387,8 @@
   "reasonLabel": "Motivo",
   "reasonPlaceholder": "perdida, dañada, ilegible…",
   "rotateBadge": "Cambiar acreditación",
+
+  // ---- Staff: presence scanning ----
   "presenceDeniedDesc": "Pide a un administrador acceso al escaneo de presencia.",
   "presencePolicyTitle": "Verificación de presencia continuada",
   "presencePolicyDesc": "Configura la entrada automática al acreditar y cuánto tiempo puede pasar sin una señal que confirme la presencia.",
@@ -397,6 +444,8 @@
   "staleCheck": "No computa",
   "reviewSession": "Revisar sesión",
   "fresh": "Reciente",
+
+  // ---- Staff: meals, activities & logistics stats overview ----
   "mealsDeniedDesc": "Pide a un administrador acceso al escaneo de comidas.",
   "columnMeal": "Comida",
   "columnServed": "Servidas",
@@ -422,6 +471,8 @@
   "noActivityScansYet": "Aún no hay escaneos de actividad",
   "columnActivity": "Actividad",
   "registrableActivities": "Actividades registrables",
+
+  // ---- Staff: room administration ----
   "roomAdminDeniedDesc": "Pide a un administrador acceso a la administración de salas.",
   "judgingWindowDeniedDesc": "Pide a un administrador acceso a la ventana de evaluación.",
   "couldNotLoadRoomAdminData": "No se han podido cargar los datos de administración de salas.",
@@ -473,6 +524,8 @@
   "noJudgesAssigned": "Ningún juez asignado.",
   "challengeProgressTitle": "Progreso y resultados del reto",
   "couldNotLoadChallengeProgress": "No se ha podido cargar el progreso del reto.",
+
+  // ---- Admin: user directory ----
   "peopleCountOne": "{count} persona",
   "peopleCountOther": "{count} personas",
   "showingFirst": "mostrando las primeras {shown}, afina tu búsqueda",
@@ -503,6 +556,8 @@
   "noUsersYet": "Aún no hay usuarios",
   "usersAppearHere": "Los usuarios aparecerán aquí en cuanto se registren.",
   "couldNotLoadUsers": "No se han podido cargar los usuarios.",
+
+  // ---- Admin: invite a user ----
   "inviteUser": "Invitar usuario",
   "inviteAUser": "Invitar a un usuario",
   "inviteUserDesc": "Seguirán un enlace para crear su propia cuenta — tú nunca rellenas sus datos.",
@@ -525,6 +580,8 @@
   "searchGroupsPlaceholder": "Buscar grupos…",
   "noPermissionGroupsYet": "Aún no hay grupos de permisos.",
   "accountHoldsPermissions": "La cuenta tendrá estos permisos en cuanto se una.",
+
+  // ---- Admin: active invitations ----
   "couldNotLoadInvitations": "No se han podido cargar las invitaciones.",
   "couldNotInviteAction": "No se ha podido completar esa acción sobre la invitación.",
   "activeInvitations": "Invitaciones activas",
@@ -595,6 +652,8 @@
   "couldNotWithdrawLink": "No se ha podido retirar el enlace.",
   "enterpriseInviteJoin": "Te unirás a {enterprise} cuando crees tu cuenta.",
   "enterpriseInviteEmailNote": "Usa un correo al que tengas acceso para completar la verificación.",
+
+  // ---- Judging panel: queue, room & scoring ----
   "pastCalls": "Llamadas previas:",
   "positionHash": "Posición #{position}",
   "calledAt": "Llamado a las {time}",
@@ -726,6 +785,8 @@
   "yesLabel": "Sí",
   "selectOptionPlaceholder": "Selecciona una opción",
   "keyLabel": "Clave:",
+
+  // ---- Admin: application forms ----
   "couldNotLoadApplicationForms": "No se han podido cargar los formularios de solicitud.",
   "mustBePositiveWholeNumber": "Debe ser un número entero positivo",
   "formCreated": "Formulario creado.",
@@ -754,6 +815,8 @@
   "confirmWindowLabel": "Ventana de confirmación (h)",
   "hoursToConfirmDesc": "Horas para confirmar una plaza.",
   "exampleFormNamePlaceholder": "Solicitud hacker 2026",
+
+  // ---- Account: email addresses ----
   "verificationEmailSentCheck": "Correo de verificación enviado — revisa esa bandeja para confirmarlo.",
   "couldNotSendVerificationEmail": "No se ha podido enviar el correo de verificación.",
   "emailAddressesTitle": "Direcciones de correo",
@@ -772,6 +835,8 @@
   "devpostEmailPlaceholder": "tu@correo-devpost.com",
   "updateAndVerify": "Actualizar y verificar",
   "addAndVerify": "Añadir y verificar",
+
+  // ---- Account: notification preferences & channels ----
   "categoryQueueCalls": "Llamadas de cola",
   "categoryApplicationUpdates": "Actualizaciones de solicitud",
   "categoryReminderChannels": "Recordatorios de actividades",
@@ -818,6 +883,8 @@
   "mandatoryChannelTitle": "Obligatorio: sin este aviso, las llamadas de cola no funcionan.",
   "mandatoryChannelAria": "{channel} para {label}, obligatorio y siempre activo",
   "noUpcomingActivities": "No hay actividades próximas disponibles para activar ahora mismo.",
+
+  // ---- Admin: public schedule ----
   "couldNotLoadSchedule": "No se ha podido cargar el programa.",
   "itemsShown": "Elementos mostrados.",
   "itemsHidden": "Elementos ocultados.",
@@ -862,6 +929,8 @@
   "visibleInPublicAgenda": "Visible en el programa público cuando se muestra.",
   "hiddenOption": "Oculto",
   "shownOption": "Mostrado",
+
+  // ---- Admin: announcements ----
   "couldNotLoadAnnouncements": "No se han podido cargar los avisos.",
   "announcementDeleted": "Aviso eliminado.",
   "couldNotDeleteAnnouncement": "No se ha podido eliminar el aviso.",
@@ -916,6 +985,8 @@
   "announcementPlacementEmbedded": "Integrado",
   "announcementPlacementFullscreen": "Pantalla completa",
   "announcementTranslationsRequired": "Completa el título y el mensaje en castellano, gallego e inglés.",
+
+  // ---- Admin: TV control ----
   "couldNotLoadTvMode": "No se ha podido cargar el modo de TV actual.",
   "tvDisplaysUpdated": "Pantallas de TV actualizadas.",
   "couldNotUpdateTvDisplays": "No se han podido actualizar las pantallas de TV.",
@@ -1030,6 +1101,8 @@
   "confirmWifiBroadcastDesc": "La red y la contraseña quedarán visibles de inmediato en todas las TV abiertas. Revisa los datos antes de confirmar.",
   "confirmUrgentBroadcastDesc": "Esto sustituye de inmediato lo que se muestra en todas las pantallas del recinto.",
   "broadcastNow": "Emitir ahora",
+
+  // ---- Admin: user profile detail ----
   "couldNotLoadUserProfile": "No se ha podido cargar el perfil de este usuario.",
   "userNotFoundTitle": "Usuario no encontrado",
   "profileNotLoaded": "Este perfil no se ha podido cargar.",
@@ -1185,6 +1258,8 @@
   "colSource": "Origen",
   "noAuditEntriesYet": "Aún no hay entradas de auditoría",
   "auditEntriesAppearHere": "Las ediciones del equipo y otros cambios auditados de este usuario aparecerán aquí.",
+
+  // ---- Account: my applications & attendance ----
   "tabOverview": "Resumen",
   "attendanceDataUnavailable": "Los datos de asistencia no están disponibles ahora mismo.",
   "presenceLessThanHourAgo": "hace menos de 1 h",
@@ -1265,6 +1340,8 @@
   "verifyEmailToSubmitDesc": "Puedes guardar un borrador ahora, pero para enviarlo necesitas un correo verificado.",
   "formHasNoQuestions": "Este formulario no tiene preguntas que responder.",
   "noAnswersSaved": "No se ha guardado ninguna respuesta.",
+
+  // ---- Admin: projects (Devpost imports) ----
   "couldNotLoadProjects": "No se han podido cargar los proyectos.",
   "noAccessTitle": "No tienes acceso a esto",
   "projectAccessDeniedDesc": "Pide a un administrador acceso a proyectos.",
@@ -1294,6 +1371,8 @@
   "myProjectEmptyDesc": "Aparecerá aquí cuando se importe de Devpost o te añada la organización.",
   "myProjectCanCreateDesc": "Este evento permite crear tu propio proyecto directamente en hackOS.",
   "participantsCanCreateProjectsLabel": "Los participantes pueden crear proyectos",
+
+  // ---- H19/H20 participant self-service: invites, edit, leave, delete ----
   "pendingInvitesTitle": "Invitaciones pendientes",
   "invitedToProjectLabel": "{inviterName} te invitó a {projectName}",
   "acceptInvite": "Aceptar",
@@ -1381,6 +1460,8 @@
   "addChallengeLabel": "Añadir reto",
   "challengeAddedMsg": "Reto añadido.",
   "couldNotAddChallenge": "No se ha podido añadir el reto.",
+
+  // ---- Admin: CSV import ----
   "couldNotReadFile": "No se ha podido leer {file}.",
   "pastedLabel": "Pegado",
   "rowsCount": "{count} filas",
@@ -1432,6 +1513,8 @@
   "projectsCsvHint": "Exportación de \"proyectos/envíos\" de Devpost — columnas como Project Title, Submission Url, Opt-In Prizes, Team Member N Email.",
   "participantsCsvLabel": "CSV de participantes",
   "participantsCsvHint": "Exportación de \"participantes/inscritos\" de Devpost — columnas como Email, First Name, Last Name, Project URLs.",
+
+  // ---- Admin: resolve unmatched imports ----
   "couldNotLoadUnmatched": "No se han podido cargar los participantes sin emparejar.",
   "couldNotSearchUsers": "No se han podido buscar usuarios.",
   "actionFailedGeneric": "La acción ha fallado.",
@@ -1463,6 +1546,8 @@
   "colPrizesUnmapped": "Premios sin asociar",
   "prizesUnmappedNoteOne": "{count} premio detectado no está asociado a ningún reto. Resuélvelo en la página de sin emparejar.",
   "prizesUnmappedNoteOther": "{count} premios detectados no están asociados a ningún reto. Resuélvelos en la página de sin emparejar.",
+
+  // ---- Admin: judging criteria & question types ----
   "typeNumeric010": "Numérico 0-10",
   "typeNumeric010Desc": "Control deslizante o número de 0 a 10",
   "typeInteger": "Entero",
@@ -1671,6 +1756,8 @@
   "visibleLabel": "Visible",
   "importedDevpostPrizesTitle": "Premios de DevPost importados",
   "mappedToInline": "Asociado a {title}",
+
+  // ---- Admin: sponsors & enterprises ----
   "colWebsite": "Sitio web",
   "priorityLabel": "Prioridad",
   "myEnterprise": "Mi empresa",
@@ -1732,6 +1819,8 @@
   "setDirectlyOrUpload": "Establécelo directamente o usa el cargador de arriba (que lo rellena).",
   "optionalStandardLogoUsedDesc": "Opcional. El logo estándar se usa en ambos temas cuando se deja en blanco.",
   "couldNotSaveEnterprise": "No se ha podido guardar la empresa.",
+
+  // ---- Admin: permission groups ----
   "couldNotLoadPermissionGroups": "No se han podido cargar los grupos de permisos.",
   "groupCreated": "Grupo creado.",
   "couldNotCreateGroup": "No se ha podido crear el grupo.",
@@ -1849,6 +1938,8 @@
   "searchUsersEllipsisPlaceholder": "Buscar usuarios…",
   "noUsersFoundPeriod": "No se han encontrado usuarios.",
   "added": "Añadido",
+
+  // ---- Admin: event settings ----
   "couldNotLoadEventSettings": "No se ha podido cargar la configuración del evento.",
   "eventSettingsSaved": "Configuración del evento guardada.",
   "couldNotSaveEventSettings": "No se ha podido guardar la configuración del evento.",
@@ -1902,6 +1993,8 @@
   "judgingWindowDesc": "Determina cuánto tiempo tienen las salas de evaluación por proyecto — el ritmo de sala se ajusta automáticamente a medida que se acerca el final de esta ventana.",
   "judgingStartsLabel": "Empieza la evaluación",
   "judgingEndsLabel": "Termina la evaluación",
+
+  // ---- Event settings: local navigation, previews, save state (H195) ----
   "unsavedChangesConfirm": "Hay cambios sin guardar en esta sección. ¿Salir de todos modos?",
   "searchTimezonePlaceholder": "Buscar zona horaria…",
   "noTimezoneMatch": "Ninguna zona horaria coincide.",
@@ -1930,6 +2023,8 @@
   "passSampleTicket": "Entrada",
   "passSampleUniversity": "UDC",
   "passSampleEmail": "ada@ejemplo.com",
+
+  // ---- Admin: libraries (universities, intolerances) ----
   "universitiesTab": "Universidades",
   "couldNotLoadDictionary": "No se ha podido cargar el catálogo.",
   "intoleranceUpdated": "Intolerancia actualizada.",
@@ -1970,7 +2065,11 @@
   "addInstitutionDesc": "Añade una institución al directorio compartido.",
   "addUniversity": "Añadir universidad",
   "removeFromDirectoryInline": "¿Quitar «{name}» del directorio? Las selecciones existentes de los solicitantes conservan su id pero dejan de resolverse.",
+
+  // ---- Admin: delete university dialog ----
   "deleteUniversityTitle": "Eliminar universidad",
+
+  // ---- Admin: university search/select ----
   "addedUniversityInline": "Añadido «{name}».",
   "couldNotAddUniversity": "No se ha podido añadir esa universidad.",
   "couldNotLoadUniversities": "No se han podido cargar las universidades. Prueba de nuevo.",
@@ -1984,6 +2083,8 @@
   "minLabel": "min",
   "secLabel": "seg",
   "presentationSecondsAria": "Segundos de presentación",
+
+  // ---- Staff: logistics stats detail ----
   "servingsLabel": "Raciones",
   "selectToSeeCounts": "Selecciona para ver los recuentos",
   "distinctAttendees": "Asistentes distintos",
@@ -2022,7 +2123,11 @@
   "foodLabel": "Comida",
   "noRestrictions": "Sin restricciones",
   "noNotes": "Sin notas",
+
+  // ---- Queue status labels ----
   "queueStatusInRoom": "En la sala",
+
+  // ---- Admin: audit log ----
   "auditLogAccessDeniedDesc": "Pide a un administrador acceso al registro de auditoría.",
   "userInline": "usuario #{id}",
   "colActor": "Actor",
@@ -2040,6 +2145,8 @@
   "userAgentLabel": "Agente de usuario",
   "beforeLabel": "Antes",
   "afterLabel": "Después",
+
+  // ---- Shared UI primitives ----
   "accept": "Aceptar",
   "acceptedLabel": "Aceptada",
   "acceptedUnsentStatus": "aceptada (sin enviar)",
@@ -2286,6 +2393,8 @@
   "timelineDecision": "Decisión",
   "timelinePlace": "Plaza",
   "deadlineLabel": "Confirma antes del {date}",
+
+  // ---- Judging panel: room queue widgets ----
   "readyStatus": "Listo",
   "presentingNow": "Presentando ahora",
   "inTheRoom": "En la sala",
@@ -2333,6 +2442,8 @@
   "loadingPublicEventInfo": "Cargando información pública del evento",
   "enterpriseUpdated": "Empresa actualizada.",
   "viewFileLabel": "Ver archivo",
+
+  // ---- Phase statistics and privacy data lifecycle (#194) ----
   "eventPhaseLabel": "Fase del evento",
   "phaseBefore": "Antes",
   "phaseDuring": "Durante",
@@ -2399,6 +2510,8 @@
   "dataStatusExpired": "Caducada",
   "dataStatusOther": "Otro estado",
   "egPrefix": "p. ej.",
+
+  // ---- Cookie notice (H196: localized, tokenized, Ursula joke preserved) ----
   "dismissCookieNotice": "Descartar el aviso de cookies",
   "cookieNoticeTitle": "Aviso de cookies legalmente obligatorio",
   "cookieNoticeBody": "hackOS guarda una cookie de sesión propia y algunos ajustes locales para que tu tema, diseño y preferencias de sesión no se reinicien cada vez que parpadeas. Un logro histórico, lo sabemos.",
