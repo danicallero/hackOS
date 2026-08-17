@@ -174,6 +174,12 @@ export default function MyApplicationDetailPage() {
         seeded.food_intolerance_notes = me.foodIntoleranceNotes;
       }
     }
+    // Reserved "dni" question (H11/H12): prefill from the profile the same
+    // way, if the builder added one.
+    const dniField = nextForm?.template.find((f) => f.key.trim().toLowerCase() === "dni");
+    if (dniField && seeded[dniField.key] == null && me?.dni) {
+      seeded[dniField.key] = me.dni;
+    }
     setValues(seeded);
     setSaveState("saved");
     setFieldErrors({});

@@ -20,12 +20,14 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
+import { RESERVED_FIELD_KEYS } from "@hackos/shared/applications";
 import type { I18nText } from "@hackos/shared/questions";
 import {
   AlignLeftIcon,
   ArrowDownIcon,
   ArrowUpIcon,
   CalendarIcon,
+  ChevronDownIcon,
   CircleDotIcon,
   CopyIcon,
   EyeIcon,
@@ -43,11 +45,13 @@ import {
 } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { toast } from "sonner";
+import { AlertModal } from "@/components/common/alert-modal";
 import { EmptyState } from "@/components/common/empty-state";
 import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -68,7 +72,7 @@ import { Surface } from "@/components/ui/surface";
 import { Switch } from "@/components/ui/switch";
 import { useShirtSizes } from "@/hooks/use-shirt-sizes";
 import { ApiError, api } from "@/lib/api";
-import { type Translate, useLocale } from "@/lib/i18n";
+import { type MessageKey, type Translate, useLocale } from "@/lib/i18n";
 import type { SaveState } from "@/lib/save-state";
 import type { Language } from "@/lib/types";
 import {
@@ -107,6 +111,12 @@ interface EditableField extends TemplateField {
 interface EditableSection extends FormSection {
   _id: string;
 }
+
+/** Copy for each `RESERVED_FIELD_KEYS` entry (H11/H12) — new reserved keys
+ *  need an entry here, alongside the i18n message it points to. */
+const RESERVED_KEY_DESC: Record<string, MessageKey> = {
+  dni: "reservedKeyDni",
+};
 
 function mkId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -189,6 +199,7 @@ export function QuestionsCard({
   const [saving, setSaving] = useState(false);
   const [preview, setPreview] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("saved");
+  const [missingReservedKeys, setMissingReservedKeys] = useState<string[] | null>(null);
   const [intolerances, setIntolerances] = useState<IntoleranceOption[]>([]);
   const shirtSizes = useShirtSizes();
   const dndSensors = useSensors(
@@ -450,12 +461,26 @@ export function QuestionsCard({
     return !!v && Object.values(v).some((s) => s.trim());
   }
 
-  async function save() {
+  function save() {
     const err = validate();
     if (err) {
       toast.error(err);
       return;
     }
+    // Nudge (not block) toward wiring up the reserved profile-autofill keys
+    // (H11/H12) — a form missing them still works, it just won't sync DNI etc.
+    // with the applicant's profile, so this is skippable.
+    const presentKeys = new Set(fields.map((f) => f.key.trim().toLowerCase()));
+    const missing = RESERVED_FIELD_KEYS.map((r) => r.key).filter((k) => !presentKeys.has(k));
+    if (missing.length > 0) {
+      setMissingReservedKeys(missing);
+      return;
+    }
+    void doSave();
+  }
+
+  async function doSave() {
+    setMissingReservedKeys(null);
     setSaving(true);
     setSaveState("saving");
     try {
@@ -542,6 +567,36 @@ export function QuestionsCard({
         </>
       }
     >
+      <Collapsible>
+        <CollapsibleTrigger asChild>
+          <Button type="button" variant="ghost" size="sm" className="text-muted-foreground -ml-2">
+            <ChevronDownIcon className="size-4" />
+            {t("reservedKeysToggle")}
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="text-muted-foreground space-y-2 pt-2 pb-2 text-sm text-pretty">
+          <p>{t("reservedKeysDesc")}</p>
+          <ul className="list-disc space-y-1 pl-5">
+            {RESERVED_FIELD_KEYS.map((r) => (
+              <li key={r.key}>
+                <code className="bg-muted rounded px-1 py-0.5 text-xs">{r.key}</code>{" "}
+                {t(RESERVED_KEY_DESC[r.key])}
+              </li>
+            ))}
+          </ul>
+        </CollapsibleContent>
+      </Collapsible>
+      <AlertModal
+        open={missingReservedKeys !== null}
+        onOpenChange={(open) => !open && setMissingReservedKeys(null)}
+        title={t("missingReservedKeyTitle")}
+        description={t("missingReservedKeyDesc", {
+          keys: missingReservedKeys?.join(", ") ?? "",
+        })}
+        cancelLabel={t("missingReservedKeyGoBack")}
+        confirmLabel={t("missingReservedKeySaveAnyway")}
+        onConfirm={() => void doSave()}
+      />
       {fields.length === 0 && sections.length === 0 ? (
         <EmptyState
           icon={ListChecksIcon}

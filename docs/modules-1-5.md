@@ -14,6 +14,28 @@ File references are `path:symbol` for quick navigation.
 `max_redeems`, nullable `expires_at`, `revoked_at`, an atomic redemption count,
 and redemption snapshots for admin tracking (H43).
 
+**Reserved form-builder keys (H11/H12).** `@hackos/shared/applications`
+exports `RESERVED_FIELD_KEYS` (currently just `dni`) — the single source of
+truth for which question keys are "special". A question whose key matches one
+case-insensitively:
+- prefills from the applicant's existing profile value when they open the
+  form (`apps/web/.../my-applications/[id]/page.tsx`, `load`'s seeding block,
+  same pattern as the `shirt_size`/`food_intolerances` prefill just above it);
+- is mirrored back onto the matching `users` column on submit (see
+  `extractDni` below).
+
+The form builder (`apps/web/.../applications/[id]/questions-card.tsx`) surfaces
+this via a "How do identifiers work?" collapsible above the question list
+(same `Collapsible` pattern as the presence-policy explainer in
+`settings/event/presence-tab.tsx`), and warns — but doesn't block — on save
+when a reserved key isn't used by any question (`AlertModal`, skippable).
+Duplicate keys (reserved or not) are always blocked at save, via the existing
+`validate()` check.
+
+To add another reserved key: add the `users` column, add an `extractX`
+alongside `extractDni`, add the client-side prefill branch, then add the key
+to `RESERVED_FIELD_KEYS` — see the doc comment on that constant.
+
 **Endpoints / hooks.**
 - `apps/api/src/modules/applications/service.ts:submitResponse` — on submit, in
   the same transaction that writes shirt size / intolerances to the user row, it
