@@ -7926,9 +7926,9 @@ const dict: Record<string, I18nText> = {
   acceptanceSent: { es: "Aceptación enviada", gl: "Aceptación enviada", en: "Acceptance sent" },
   rejectionSent: { es: "Rechazo enviado", gl: "Rexeitamento enviado", en: "Rejection sent" },
   unknownStatus: { es: "Estado desconocido", gl: "Estado descoñecido", en: "Unknown status" },
-  saveStateSaved: { es: "Guardado", gl: "Gardado", en: "Saved" },
+  saved: { es: "Guardado", gl: "Gardado", en: "Saved" },
   saveStateSaving: { es: "Guardando…", gl: "Gardando…", en: "Saving…" },
-  saveStateUnsaved: { es: "Cambios sin guardar", gl: "Cambios sen gardar", en: "Unsaved changes" },
+  unsavedChanges: { es: "Cambios sin guardar", gl: "Cambios sen gardar", en: "Unsaved changes" },
   saveStateError: { es: "Error al guardar", gl: "Erro ao gardar", en: "Save error" },
   batchResultTitle: {
     es: "Resultado de la acción",
