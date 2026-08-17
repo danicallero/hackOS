@@ -132,31 +132,6 @@ Remember to add `https://${WEB_DOMAIN}` to the **api**'s `CORS_ORIGINS` —
 `web` has no server-side config that wires this for you; it's a one-way
 dependency the api side has to know about.
 
-## tolgee
-
-**Not one of the six per-instance services above** — `deploy/tolgee/` is a
-standalone, org-wide deployment (translation portal for
-`packages/shared/locales`), deployed once, not per hackathon instance. See
-`deploy/tolgee/docker-compose.yml` for why it gets its own Postgres and its
-own dedicated Docker network instead of joining an instance's.
-
-| Variable | Kind | Required | What it does |
-|---|---|---|---|
-| `POSTGRES_USER` | container | yes | Role for Tolgee's own Postgres (separate database from the per-instance `postgres` service). |
-| `POSTGRES_PASSWORD` | container | yes 🔒 | Password for that role. |
-| `POSTGRES_DB` | container | no | Database name, default `tolgee`. |
-| `TOLGEE_JWT_SECRET` | container | yes 🔒 | Signs Tolgee's session/API-key tokens. Generate with `openssl rand -hex 32` (or `deploy/scripts/gen-secrets.sh`); rotating it invalidates every existing session and API key. |
-| `TOLGEE_INITIAL_USERNAME` | container | no | First admin account's username, default `admin`. Only takes effect on first boot against an empty database. |
-| `TOLGEE_INITIAL_PASSWORD` | container | yes 🔒 | First admin account's password. Same first-boot-only caveat as above — change it from the Tolgee UI afterward, not by editing this var. |
-| `TOLGEE_DOMAIN` | container | yes | Public hostname Tolgee is reached at (the Cloudflare Tunnel's Published application route target — see the compose file's header comment), used to build `TOLGEE_FRONT_END_URL`/`TOLGEE_BACK_END_URL`. |
-| `TOLGEE_IMAGE` | compose-level | no | Pinned image tag, default `tolgee/tolgee:latest`. |
-| `TOLGEE_MEM_LIMIT`, `PG_MEM_LIMIT` | compose-level | no | Memory caps, default `1g` / `512m`. |
-
-The API client key used by `pnpm i18n:push`/`pnpm i18n:pull` (`.tolgeerc.json`
-at the repo root) is a **separate** `TOLGEE_API_KEY`, generated from the
-Tolgee UI after first login — not a deploy-time variable, set it locally and
-as a GitHub Actions repository secret instead.
-
 ## Centralizing values with Dokploy's Project/Environment variables
 
 Dokploy has three nested scopes for variables, and it's worth using the
@@ -257,5 +232,5 @@ If any of this drifts from reality, the compose files are the ground truth —
 diff this doc against:
 
 ```sh
-grep -n '\${' deploy/services/*/docker-compose.yml deploy/tolgee/docker-compose.yml
+grep -n '\${' deploy/services/*/docker-compose.yml
 ```
