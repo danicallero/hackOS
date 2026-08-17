@@ -1,0 +1,108 @@
+{
+  "mail": {
+    "generic": {
+      "subject": "{{subject}}",
+      "body": "{{body}}"
+    },
+    "auth": {
+      "verify": {
+        "subject": "Verifica o teu correo de hackOS",
+        "body": "Ola {{name}},\n\nConfirma o teu enderezo de correo para desbloquear o resto de hackOS:\n\n[Verificar correo]({{verifyUrl}})\n\nCaemos en spam? Move esta mensaxe á caixa de entrada e engade {{fromAddress}} aos teus contactos para non perder ningunha mensaxe.\n\nSe non o pediches ti, ignora esta mensaxe."
+      },
+      "verifySecondaryEmail": {
+        "subject": "Confirma o teu correo secundario para hackOS",
+        "body": "Ola {{name}},\n\nA túa conta de hackOS ({{primaryEmail}}) pediu engadir {{secondaryEmail}} como enderezo secundario, para poder vincular os teus proxectos de Devpost á túa conta:\n\n[Confirmar {{secondaryEmail}}]({{verifyUrl}})\n\nCaemos en spam? Move esta mensaxe á caixa de entrada e engade {{fromAddress}} aos teus contactos para non perder ningunha mensaxe.\n\nSe non o pediches ti, ignora esta mensaxe — a túa conta non cambiará."
+      },
+      "reset": {
+        "subject": "Restablece o teu contrasinal de hackOS",
+        "body": "Ola {{name}},\n\nUsa este botón para fixar un contrasinal novo:\n\n[Restablecer contrasinal]({{resetUrl}})\n\nCaemos en spam? Move esta mensaxe á caixa de entrada e engade {{fromAddress}} aos teus contactos para non perder ningunha mensaxe.\n\nSe non o pediches ti, podes ignorar este correo — o teu contrasinal non cambiou."
+      },
+      "invite": {
+        "subject": "Convidáronte a hackOS",
+        "body": "Ola,\n\nCrea a túa conta para continuar:\n\n[Crear conta]({{claimUrl}})\n\nCaemos en spam? Move esta mensaxe á caixa de entrada e engade {{fromAddress}} aos teus contactos para non perder ningunha mensaxe.\n\nDende alí fixa o teu contrasinal, nome e o resto dos teus datos."
+      }
+    },
+    "project": {
+      "invite": {
+        "subject": "Convidáronte a unirte a {{projectName}}",
+        "body": "Ola,\n\n{{inviterName}} convidoute a unirte ao seu proxecto {{projectName}} en hackOS.\n\nAbre O meu proxecto para aceptar ou rexeitar o convite."
+      }
+    },
+    "queue": {
+      "called": {
+        "subject": "Chamaron ao teu equipo",
+        "body": "Ola {{name}},\n\nChamaron ao teu equipo {{teamName}} para {{challengeName}}. Diríxete á sala {{roomName}} e agarda na porta ata que te chamen."
+      },
+      "precall": {
+        "subject": "Tócache pronto",
+        "body": "Ola {{name}},\n\nAo teu equipo {{teamName}} chamaranlle en uns {{etaMinutes}} minutos para {{challengeName}}. Vai preparándote."
+      },
+      "enter": {
+        "subject": "Xa podes entrar",
+        "body": "Ola {{name}},\n\nÉ a quenda do teu equipo para {{challengeName}}. Entra xa á sala {{roomName}}."
+      },
+      "message": {
+        "subject": "Mensaxe sobre {{challengeName}}",
+        "body": "Ola {{name}},\n\n{{senderName}} enviou unha mensaxe ao teu equipo {{teamName}} sobre {{challengeName}}:\n\n{{message}}"
+      },
+      "staff": {
+        "enter": {
+          "subject": "Equipo entrando en {{roomName}}",
+          "body": "Indicóuselle a {{teamName}} que entre na sala {{roomName}} para {{challengeName}}."
+        },
+        "called": {
+          "subject": "Equipo chamado para {{roomName}}",
+          "body": "Chamouse a {{teamName}} para esperar na porta da sala {{roomName}} para {{challengeName}}."
+        }
+      }
+    },
+    "application": {
+      "decision": {
+        "subject": "Unha decisión sobre a túa solicitude",
+        "body": "Ola {{name}},\n\nA túa solicitude a {{applicationName}} foi {{decision}}.{{decisionDetails}}"
+      }
+    },
+    "schedule": {
+      "reminder": {
+        "subject": "Lembranza: {{title}}",
+        "body": "Ola,\n\n{{title}} comeza ás {{startsAtLabel}}.{{locationLine}}\n\nVémonos alí!"
+      }
+    }
+  },
+  "push": {
+    "queue": {
+      "precall": {
+        "title": "Tócache pronto — prepárate",
+        "body": "Chamaran ao teu equipo {{teamName}} para {{challengeName}} en uns {{etaMinutes}} minutos."
+      },
+      "staff": {
+        "enter": {
+          "title": "{{teamName}} entra en {{roomName}}",
+          "body": "Chamado para {{challengeName}}."
+        },
+        "called": {
+          "title": "{{teamName}} chamado a {{roomName}}",
+          "body": "Agardando na porta para {{challengeName}}."
+        }
+      },
+      "message": {
+        "title": "Mensaxe sobre {{challengeName}}",
+        "body": "{{message}}"
+      },
+      "called": {
+        "title": "Vai agardar á sala {{roomName}}",
+        "body": "Agarda na porta para {{challengeName}}. Avisarémoste cando poidas entrar."
+      },
+      "enter": {
+        "title": "Entra xa na sala {{roomName}}",
+        "body": "É a quenda do teu equipo para {{challengeName}}."
+      }
+    },
+    "schedule": {
+      "reminder": {
+        "title": "{{title}}",
+        "body": "Comeza ás {{startsAtLabel}}{{locationSuffix}}"
+      }
+    }
+  }
+}

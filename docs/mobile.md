@@ -386,9 +386,11 @@ device/EAS build to verify — see "What's left" below.
 - `lib/notification-events.ts` — `subscribeToCategory`/`emitCategory`, unit
   tested in `lib/notification-events.test.ts`. Lets a mounted screen react to
   a push the moment it arrives instead of waiting out its poll interval.
-- `lib/i18n.tsx` — minimal `{ en, es, gl }`-per-key dictionary (same shape as
-  `apps/web/src/lib/i18n.ts`, but only the strings these screens need), synced
-  to `me.language` from `/api/me`.
+- `lib/i18n.tsx` — react-i18next wrapper (`useLocale()` keeps the original
+  `{ language, setLanguage, t }` shape) reading `packages/shared/locales/
+  {en,es,gl}/{mobile,common}.json` — mobile-specific strings plus the subset
+  shared verbatim with `apps/web/src/lib/i18n.ts`, synced to `me.language`
+  from `/api/me`.
 - `lib/haptics.ts` — best-effort Expo Haptics feedback for custom controls and
   meaningful outcomes. Selection/light feedback is used for custom toggles,
   segmented choices, scanner capture and retry actions; success/warning/error
@@ -432,9 +434,9 @@ them to server truth.
   behavior, the Android channel, authenticated SSE reconnect, Apple Wallet,
   and Google Wallet. These cannot be truthfully marked verified by a Node/web
   export alone.
-- Full i18n parity with the much larger web dictionary. All new scanner and
-  participant controls have en/es/gl copy, but the mobile dictionary remains
-  intentionally smaller than the web app's.
+- Full i18n parity with the much larger web resource file. All new scanner and
+  participant controls have en/es/gl copy, but `mobile.json` remains
+  intentionally smaller than the web app's `web.json`.
 - **Scanner cache encryption device QA.** Confirm on real iOS/Android
   hardware: `expo-crypto`'s native AES-GCM round-trips correctly, the roster
   database placed under `Paths.cache` is actually excluded from an

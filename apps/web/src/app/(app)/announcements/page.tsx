@@ -183,7 +183,7 @@ export default function AnnouncementsPage() {
     },
     {
       id: "created",
-      header: t("colCreated"),
+      header: t("created"),
       sortValue: (a) => a.created_at,
       cell: (a) => (
         <span className="text-muted-foreground text-xs">
@@ -219,8 +219,8 @@ export default function AnnouncementsPage() {
         rowActions={(a) => (
           <div className="flex justify-end gap-1">
             <Button asChild variant="ghost" size="icon">
-              <Link href={`/announcements/${a.id}`} aria-label={t("editAnnouncementAria")}>
-                <span className="sr-only">{t("editAnnouncementAria")}</span>
+              <Link href={`/announcements/${a.id}`} aria-label={t("editAnnouncement")}>
+                <span className="sr-only">{t("editAnnouncement")}</span>
                 <PencilIcon className="size-4" aria-hidden="true" />
               </Link>
             </Button>

@@ -514,7 +514,7 @@ export default function MyApplicationDetailPage() {
       {status === "confirmed" && (
         <SectionCard
           icon={CheckCircle2Icon}
-          title={t("placeConfirmedTitle")}
+          title={t("placeConfirmed")}
           description={t("placeConfirmedDesc")}
         >
           <p className="text-muted-foreground text-sm">{t("canReleaseAnytime")}</p>

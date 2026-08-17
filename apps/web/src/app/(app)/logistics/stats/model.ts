@@ -1,12 +1,19 @@
 import type { PublicEvent } from "@/components/public/public-types";
 import { ApiError } from "@/lib/api";
-import type { I18nText, Translate } from "@/lib/i18n";
+import type { I18nText, MessageKey, Translate } from "@/lib/i18n";
 
 export const DATA_PHASES = ["before", "during", "after"] as const;
 export type DataPhase = (typeof DATA_PHASES)[number];
 
 export const FRESHNESS_KINDS = ["actual", "estimated", "provisional", "incomplete"] as const;
 export type FreshnessKind = (typeof FRESHNESS_KINDS)[number];
+
+export const FRESHNESS_LABEL_KEYS: Record<FreshnessKind, MessageKey> = {
+  actual: "dataFreshnessActual",
+  estimated: "dataFreshnessEstimated",
+  provisional: "dataFreshnessProvisional",
+  incomplete: "dataFreshnessIncomplete",
+};
 
 /**
  * Select the operational dashboard without hiding the other phases. The event
@@ -29,7 +36,7 @@ export function defaultDataPhase(event: PublicEvent | null, now = Date.now()): D
 
 /** Localize an application status code to its display label. */
 export function applicationStatusLabel(status: string, t: Translate): string {
-  const key: Record<string, string> = {
+  const key: Record<string, MessageKey> = {
     draft: "dataStatusDraft",
     submitted: "dataStatusSubmitted",
     review: "dataStatusReview",

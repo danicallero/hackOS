@@ -86,7 +86,7 @@ describe("application lifecycle presentation", () => {
       ["saved", "saving", "unsaved", "error"].map((state) =>
         saveStateLabel(state as SaveState, translate),
       ),
-    ).toEqual(["saveStateSaved", "saveStateSaving", "saveStateUnsaved", "saveStateError"]);
+    ).toEqual(["saved", "saveStateSaving", "unsavedChanges", "saveStateError"]);
   });
 
   it("advances the applicant timeline only after visible state transitions", () => {

@@ -1,22 +1,26 @@
+import { LANGS, type Language } from "@hackos/shared/locale";
 import { config } from "../../config.js";
+import { emailTemplateExists, translateEmail } from "../../lib/i18n.js";
 
 /**
  * Email template registry (H52). Every outbox row for channel=email carries
  * `payload = { template: string, vars?: Record<string, unknown>, subject?,
  * body? }`. Other modules enqueue by naming a template + vars; they never
- * build HTML themselves. Templates are keyed by name, each with subject/body
- * per language (en | es | gl — H7 i18n). `payload.vars.language` is NOT the
- * source of truth: the dispatcher always resolves language from
- * `users.language`, falling back to "en" (plan/07 §2 i18n).
+ * build HTML themselves. Templates live as i18next resources in
+ * packages/shared/locales/*\/email.json, keyed by name under `mail.`/
+ * `push.`, each with subject/body (or title/body) per language (en | es |
+ * gl — H7 i18n). `payload.vars.language` is NOT the source of truth: the
+ * dispatcher always resolves language from `users.language`, falling back
+ * to "en" (plan/07 §2 i18n).
  *
  * Unknown template names fall back to `generic`, which renders whatever the
  * caller put in payload.subject/payload.body (or a minimal default) so a
  * sibling module's typo never turns into a lost, unrenderable email.
  */
 
-export type Language = "en" | "es" | "gl";
+export type { Language };
 
-export const SUPPORTED_LANGUAGES: Language[] = ["en", "es", "gl"];
+export const SUPPORTED_LANGUAGES: Language[] = LANGS;
 
 export function normalizeLanguage(lang: string | null | undefined): Language {
   return SUPPORTED_LANGUAGES.includes(lang as Language) ? (lang as Language) : "en";
@@ -49,29 +53,6 @@ export interface EmailLayoutSettings {
   footerText: string;
 }
 
-interface TemplateVariant {
-  subject: string;
-  /** Plain-text body; `\n\n` separates paragraphs. May contain {{vars}}. */
-  body: string;
-}
-
-type TemplateDefinition = Record<Language, TemplateVariant>;
-
-interface PushTemplateVariant {
-  title: string;
-  body: string;
-}
-
-type PushTemplateDefinition = Record<Language, PushTemplateVariant>;
-
-/** {{name}} interpolation — deliberately dumb, no HTML escaping beyond entities. */
-function interpolate(str: string, vars: Record<string, unknown>): string {
-  return str.replace(/\{\{(\w+)\}\}/g, (_match, key: string) => {
-    const value = vars[key];
-    return value === undefined || value === null ? "" : String(value);
-  });
-}
-
 function escapeHtml(str: string): string {
   return str
     .replace(/&/g, "&amp;")
@@ -83,284 +64,6 @@ function escapeHtml(str: string): string {
 function footerTextToHtml(text: string): string {
   return escapeHtml(text).replace(/\n/g, "<br/>");
 }
-
-const TEMPLATES: Record<string, TemplateDefinition> = {
-  generic: {
-    en: { subject: "{{subject}}", body: "{{body}}" },
-    es: { subject: "{{subject}}", body: "{{body}}" },
-    gl: { subject: "{{subject}}", body: "{{body}}" },
-  },
-  "auth.verify": {
-    en: {
-      subject: "Verify your hackOS email",
-      body: "Hi {{name}},\n\nConfirm your email address to unlock the rest of hackOS:\n\n[Verify email]({{verifyUrl}})\n\nDid we land in spam? Move this message to your inbox and add {{fromAddress}} to your contacts so you don't miss future messages.\n\nIf you didn't request this, ignore this message.",
-    },
-    es: {
-      subject: "Verifica tu correo de hackOS",
-      body: "Hola {{name}},\n\nConfirma tu dirección de correo para desbloquear el resto de hackOS:\n\n[Verificar correo]({{verifyUrl}})\n\n¿Caímos en spam? Mueve este mensaje a la bandeja de entrada y añade {{fromAddress}} a tus contactos para no perderte ningún mensaje.\n\nSi no lo has pedido tú, ignora este mensaje.",
-    },
-    gl: {
-      subject: "Verifica o teu correo de hackOS",
-      body: "Ola {{name}},\n\nConfirma o teu enderezo de correo para desbloquear o resto de hackOS:\n\n[Verificar correo]({{verifyUrl}})\n\nCaemos en spam? Move esta mensaxe á caixa de entrada e engade {{fromAddress}} aos teus contactos para non perder ningunha mensaxe.\n\nSe non o pediches ti, ignora esta mensaxe.",
-    },
-  },
-  "auth.verifySecondaryEmail": {
-    en: {
-      subject: "Confirm your secondary email for hackOS",
-      body: "Hi {{name}},\n\nYour hackOS account ({{primaryEmail}}) asked to add {{secondaryEmail}} as a secondary address, so we can match your Devpost projects to your account:\n\n[Confirm {{secondaryEmail}}]({{verifyUrl}})\n\nDid we land in spam? Move this message to your inbox and add {{fromAddress}} to your contacts so you don't miss future messages.\n\nIf you didn't request this, ignore this message — your account won't change.",
-    },
-    es: {
-      subject: "Confirma tu correo secundario para hackOS",
-      body: "Hola {{name}},\n\nTu cuenta de hackOS ({{primaryEmail}}) ha pedido añadir {{secondaryEmail}} como dirección secundaria, para poder vincular tus proyectos de Devpost a tu cuenta:\n\n[Confirmar {{secondaryEmail}}]({{verifyUrl}})\n\n¿Caímos en spam? Mueve este mensaje a la bandeja de entrada y añade {{fromAddress}} a tus contactos para no perderte ningún mensaje.\n\nSi no lo has pedido tú, ignora este mensaje — tu cuenta no cambiará.",
-    },
-    gl: {
-      subject: "Confirma o teu correo secundario para hackOS",
-      body: "Ola {{name}},\n\nA túa conta de hackOS ({{primaryEmail}}) pediu engadir {{secondaryEmail}} como enderezo secundario, para poder vincular os teus proxectos de Devpost á túa conta:\n\n[Confirmar {{secondaryEmail}}]({{verifyUrl}})\n\nCaemos en spam? Move esta mensaxe á caixa de entrada e engade {{fromAddress}} aos teus contactos para non perder ningunha mensaxe.\n\nSe non o pediches ti, ignora esta mensaxe — a túa conta non cambiará.",
-    },
-  },
-  "auth.reset": {
-    en: {
-      subject: "Reset your hackOS password",
-      body: "Hi {{name}},\n\nUse this button to set a new password:\n\n[Reset password]({{resetUrl}})\n\nDid we land in spam? Move this message to your inbox and add {{fromAddress}} to your contacts so you don't miss future messages.\n\nIf you didn't request this, you can safely ignore this email — your password hasn't changed.",
-    },
-    es: {
-      subject: "Restablece tu contraseña de hackOS",
-      body: "Hola {{name}},\n\nUsa este botón para fijar una contraseña nueva:\n\n[Restablecer contraseña]({{resetUrl}})\n\n¿Caímos en spam? Mueve este mensaje a la bandeja de entrada y añade {{fromAddress}} a tus contactos para no perderte ningún mensaje.\n\nSi no lo has pedido tú, puedes ignorar este correo — tu contraseña no ha cambiado.",
-    },
-    gl: {
-      subject: "Restablece o teu contrasinal de hackOS",
-      body: "Ola {{name}},\n\nUsa este botón para fixar un contrasinal novo:\n\n[Restablecer contrasinal]({{resetUrl}})\n\nCaemos en spam? Move esta mensaxe á caixa de entrada e engade {{fromAddress}} aos teus contactos para non perder ningunha mensaxe.\n\nSe non o pediches ti, podes ignorar este correo — o teu contrasinal non cambiou.",
-    },
-  },
-  "auth.invite": {
-    en: {
-      subject: "You're invited to hackOS",
-      body: "Hi,\n\nCreate your account to continue:\n\n[Create account]({{claimUrl}})\n\nDid we land in spam? Move this message to your inbox and add {{fromAddress}} to your contacts so you don't miss future messages.\n\nSet your password, name and the rest of your details from there.",
-    },
-    es: {
-      subject: "Te han invitado a hackOS",
-      body: "Hola,\n\nCrea tu cuenta para continuar:\n\n[Crear cuenta]({{claimUrl}})\n\n¿Caímos en spam? Mueve este mensaje a la bandeja de entrada y añade {{fromAddress}} a tus contactos para no perderte ningún mensaje.\n\nDesde ahí fijas tu contraseña, nombre y el resto de tus datos.",
-    },
-    gl: {
-      subject: "Convidáronte a hackOS",
-      body: "Ola,\n\nCrea a túa conta para continuar:\n\n[Crear conta]({{claimUrl}})\n\nCaemos en spam? Move esta mensaxe á caixa de entrada e engade {{fromAddress}} aos teus contactos para non perder ningunha mensaxe.\n\nDende alí fixa o teu contrasinal, nome e o resto dos teus datos.",
-    },
-  },
-  "project.invite": {
-    en: {
-      subject: "You've been invited to join {{projectName}}",
-      body: "Hi,\n\n{{inviterName}} invited you to join their project {{projectName}} on hackOS.\n\nOpen My Project to accept or decline the invite.",
-    },
-    es: {
-      subject: "Te han invitado a unirte a {{projectName}}",
-      body: "Hola,\n\n{{inviterName}} te ha invitado a unirte a su proyecto {{projectName}} en hackOS.\n\nAbre Mi proyecto para aceptar o rechazar la invitación.",
-    },
-    gl: {
-      subject: "Convidáronte a unirte a {{projectName}}",
-      body: "Ola,\n\n{{inviterName}} convidoute a unirte ao seu proxecto {{projectName}} en hackOS.\n\nAbre O meu proxecto para aceptar ou rexeitar o convite.",
-    },
-  },
-  "queue.called": {
-    en: {
-      subject: "Your team was called",
-      body: "Hi {{name}},\n\nYour team {{teamName}} was called for {{challengeName}}. Please head to room {{roomName}} and wait at the door until you are called in.",
-    },
-    es: {
-      subject: "Han llamado a tu equipo",
-      body: "Hola {{name}},\n\nHan llamado a tu equipo {{teamName}} para {{challengeName}}. Dirígete a la sala {{roomName}} y espera en la puerta hasta que te llamen.",
-    },
-    gl: {
-      subject: "Chamaron ao teu equipo",
-      body: "Ola {{name}},\n\nChamaron ao teu equipo {{teamName}} para {{challengeName}}. Diríxete á sala {{roomName}} e agarda na porta ata que te chamen.",
-    },
-  },
-  "queue.precall": {
-    en: {
-      subject: "You're up soon",
-      body: "Hi {{name}},\n\nYour team {{teamName}} is about {{etaMinutes}} minutes from being called for {{challengeName}}. Start getting ready.",
-    },
-    es: {
-      subject: "Te toca pronto",
-      body: "Hola {{name}},\n\nA tu equipo {{teamName}} le llamarán en unos {{etaMinutes}} minutos para {{challengeName}}. Ve preparándote.",
-    },
-    gl: {
-      subject: "Tócache pronto",
-      body: "Ola {{name}},\n\nAo teu equipo {{teamName}} chamaranlle en uns {{etaMinutes}} minutos para {{challengeName}}. Vai preparándote.",
-    },
-  },
-  "queue.enter": {
-    en: {
-      subject: "Come on in",
-      body: "Hi {{name}},\n\nIt's your team's turn for {{challengeName}}. Please come in now to room {{roomName}}.",
-    },
-    es: {
-      subject: "Ya puedes entrar",
-      body: "Hola {{name}},\n\nEs el turno de tu equipo para {{challengeName}}. Entra ya a la sala {{roomName}}.",
-    },
-    gl: {
-      subject: "Xa podes entrar",
-      body: "Ola {{name}},\n\nÉ a quenda do teu equipo para {{challengeName}}. Entra xa á sala {{roomName}}.",
-    },
-  },
-  "queue.message": {
-    en: {
-      subject: "Message about {{challengeName}}",
-      body: "Hi {{name}},\n\n{{senderName}} sent your team {{teamName}} a message about {{challengeName}}:\n\n{{message}}",
-    },
-    es: {
-      subject: "Mensaje sobre {{challengeName}}",
-      body: "Hola {{name}},\n\n{{senderName}} ha enviado un mensaje a tu equipo {{teamName}} sobre {{challengeName}}:\n\n{{message}}",
-    },
-    gl: {
-      subject: "Mensaxe sobre {{challengeName}}",
-      body: "Ola {{name}},\n\n{{senderName}} enviou unha mensaxe ao teu equipo {{teamName}} sobre {{challengeName}}:\n\n{{message}}",
-    },
-  },
-  "queue.staff.enter": {
-    en: {
-      subject: "Team entering {{roomName}}",
-      body: "{{teamName}} was asked to enter room {{roomName}} for {{challengeName}}.",
-    },
-    es: {
-      subject: "Equipo entrando en {{roomName}}",
-      body: "Se ha indicado a {{teamName}} que entre en la sala {{roomName}} para {{challengeName}}.",
-    },
-    gl: {
-      subject: "Equipo entrando en {{roomName}}",
-      body: "Indicóuselle a {{teamName}} que entre na sala {{roomName}} para {{challengeName}}.",
-    },
-  },
-  "queue.staff.called": {
-    en: {
-      subject: "Team called for {{roomName}}",
-      body: "{{teamName}} was called to wait at the door of room {{roomName}} for {{challengeName}}.",
-    },
-    es: {
-      subject: "Equipo llamado para {{roomName}}",
-      body: "Se ha llamado a {{teamName}} para esperar en la puerta de la sala {{roomName}} para {{challengeName}}.",
-    },
-    gl: {
-      subject: "Equipo chamado para {{roomName}}",
-      body: "Chamouse a {{teamName}} para esperar na porta da sala {{roomName}} para {{challengeName}}.",
-    },
-  },
-  "application.decision": {
-    en: {
-      subject: "A decision on your application",
-      body: "Hi {{name}},\n\nYour application to {{applicationName}} has been {{decision}}.{{decisionDetails}}",
-    },
-    es: {
-      subject: "Una decisión sobre tu solicitud",
-      body: "Hola {{name}},\n\nTu solicitud a {{applicationName}} ha sido {{decision}}.{{decisionDetails}}",
-    },
-    gl: {
-      subject: "Unha decisión sobre a túa solicitude",
-      body: "Ola {{name}},\n\nA túa solicitude a {{applicationName}} foi {{decision}}.{{decisionDetails}}",
-    },
-  },
-  "schedule.reminder": {
-    en: {
-      subject: "Reminder: {{title}}",
-      body: "Hi,\n\n{{title}} starts at {{startsAtLabel}}.{{locationLine}}\n\nSee you there!",
-    },
-    es: {
-      subject: "Recordatorio: {{title}}",
-      body: "Hola,\n\n{{title}} empieza a las {{startsAtLabel}}.{{locationLine}}\n\n¡Nos vemos allí!",
-    },
-    gl: {
-      subject: "Lembranza: {{title}}",
-      body: "Ola,\n\n{{title}} comeza ás {{startsAtLabel}}.{{locationLine}}\n\nVémonos alí!",
-    },
-  },
-};
-
-/**
- * Compact, action-first copy for time-sensitive queue pushes. Email and inbox
- * keep their fuller context, while a phone's notification header says exactly
- * what the participant needs to do at a glance.
- */
-const PUSH_TEMPLATES: Record<string, PushTemplateDefinition> = {
-  "queue.precall": {
-    en: {
-      title: "You're up soon — get ready",
-      body: "Your team {{teamName}} will be called for {{challengeName}} in about {{etaMinutes}} minutes.",
-    },
-    es: {
-      title: "Te toca pronto — prepárate",
-      body: "Llamarán a tu equipo {{teamName}} para {{challengeName}} en unos {{etaMinutes}} minutos.",
-    },
-    gl: {
-      title: "Tócache pronto — prepárate",
-      body: "Chamaran ao teu equipo {{teamName}} para {{challengeName}} en uns {{etaMinutes}} minutos.",
-    },
-  },
-  "queue.staff.enter": {
-    en: { title: "{{teamName}} enters {{roomName}}", body: "Called in for {{challengeName}}." },
-    es: { title: "{{teamName}} entra en {{roomName}}", body: "Llamado para {{challengeName}}." },
-    gl: { title: "{{teamName}} entra en {{roomName}}", body: "Chamado para {{challengeName}}." },
-  },
-  "queue.staff.called": {
-    en: {
-      title: "{{teamName}} called to {{roomName}}",
-      body: "Waiting at the door for {{challengeName}}.",
-    },
-    es: {
-      title: "{{teamName}} llamado a {{roomName}}",
-      body: "Esperando en la puerta para {{challengeName}}.",
-    },
-    gl: {
-      title: "{{teamName}} chamado a {{roomName}}",
-      body: "Agardando na porta para {{challengeName}}.",
-    },
-  },
-  "queue.message": {
-    en: { title: "Message about {{challengeName}}", body: "{{message}}" },
-    es: { title: "Mensaje sobre {{challengeName}}", body: "{{message}}" },
-    gl: { title: "Mensaxe sobre {{challengeName}}", body: "{{message}}" },
-  },
-  "queue.called": {
-    en: {
-      title: "Go wait at room {{roomName}}",
-      body: "Wait at the door for {{challengeName}}. We'll tell you when to enter.",
-    },
-    es: {
-      title: "Ve a esperar a la sala {{roomName}}",
-      body: "Espera en la puerta para {{challengeName}}. Te avisaremos para entrar.",
-    },
-    gl: {
-      title: "Vai agardar á sala {{roomName}}",
-      body: "Agarda na porta para {{challengeName}}. Avisarémoste cando poidas entrar.",
-    },
-  },
-  "queue.enter": {
-    en: {
-      title: "Enter room {{roomName}} now",
-      body: "It's your team's turn for {{challengeName}}.",
-    },
-    es: {
-      title: "Entra ya en la sala {{roomName}}",
-      body: "Es el turno de tu equipo para {{challengeName}}.",
-    },
-    gl: {
-      title: "Entra xa na sala {{roomName}}",
-      body: "É a quenda do teu equipo para {{challengeName}}.",
-    },
-  },
-  "schedule.reminder": {
-    en: {
-      title: "{{title}}",
-      body: "Starts at {{startsAtLabel}}{{locationSuffix}}",
-    },
-    es: {
-      title: "{{title}}",
-      body: "Empieza a las {{startsAtLabel}}{{locationSuffix}}",
-    },
-    gl: {
-      title: "{{title}}",
-      body: "Comeza ás {{startsAtLabel}}{{locationSuffix}}",
-    },
-  },
-};
 
 export function emailLayoutSettingsFromConfig(): EmailLayoutSettings {
   return {
@@ -528,19 +231,17 @@ export function renderEmailTemplate(
   layout: EmailLayoutSettings = emailLayoutSettingsFromConfig(),
 ): RenderedEmail {
   const templateName =
-    payload.template && TEMPLATES[payload.template] ? payload.template : "generic";
-  // TEMPLATES.generic always exists (defined above); noUncheckedIndexedAccess
-  // can't see that through the Record<string, ...> index signature.
-  const definition = TEMPLATES[templateName] ?? (TEMPLATES.generic as TemplateDefinition);
-  const variant = definition[language] ?? definition.en;
+    payload.template && emailTemplateExists(`mail.${payload.template}.subject`, language)
+      ? payload.template
+      : "generic";
   const vars = {
     subject: payload.subject ?? "hackOS notification",
     body: payload.body ?? "",
     fromAddress: config.MAIL_FROM_ADDRESS,
     ...payload.vars,
   };
-  const subject = interpolate(variant.subject, vars);
-  const rendered = interpolate(variant.body, vars);
+  const subject = translateEmail(`mail.${templateName}.subject`, language, vars);
+  const rendered = translateEmail(`mail.${templateName}.body`, language, vars);
   const html = brandWrapHtml(subject, renderBodyHtml(rendered, layout), layout);
   const text = bodyToPlainText(rendered);
   return { subject, html, text };
@@ -548,16 +249,17 @@ export function renderEmailTemplate(
 
 /** Uses action-first push copy when defined, otherwise preserves the email rendering. */
 export function renderPushTemplate(payload: EmailPayload, language: Language): RenderedPush {
-  const definition = payload.template ? PUSH_TEMPLATES[payload.template] : undefined;
-  if (!definition) {
+  const exists =
+    payload.template && emailTemplateExists(`push.${payload.template}.title`, language);
+  if (!exists) {
     const rendered = renderEmailTemplate(payload, language);
     return { title: rendered.subject, body: rendered.text };
   }
 
-  const variant = definition[language] ?? definition.en;
+  const templateName = payload.template as string;
   const vars = payload.vars ?? {};
   return {
-    title: interpolate(variant.title, vars),
-    body: interpolate(variant.body, vars),
+    title: translateEmail(`push.${templateName}.title`, language, vars),
+    body: translateEmail(`push.${templateName}.body`, language, vars),
   };
 }

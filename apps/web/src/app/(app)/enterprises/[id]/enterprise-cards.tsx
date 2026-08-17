@@ -243,7 +243,7 @@ export function MembersCard({ enterpriseId }: { enterpriseId: number }) {
         return r.users.filter((u) => !memberUserIds.has(u.id));
       } catch (err) {
         if (err instanceof ApiError && err.status === 403) toast.error(t("needUsersReadSearch"));
-        else toast.error(t("searchFailedGeneric"));
+        else toast.error(t("searchFailed"));
         return [];
       }
     },

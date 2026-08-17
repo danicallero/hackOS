@@ -29,7 +29,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useShirtSizes } from "@/hooks/use-shirt-sizes";
 import { ApiError, api } from "@/lib/api";
-import { languageName, pickText, useLocale } from "@/lib/i18n";
+import { languageName, pickText, type Translate, useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 import type { Intolerance, Language, Me } from "@/lib/types";
 import { DangerZoneCard } from "./danger-zone";
@@ -37,7 +37,7 @@ import { EmailCard } from "./email-card";
 
 const LANGS: Language[] = ["es", "gl", "en"];
 
-function profileSchema(t: (key: string) => string) {
+function profileSchema(t: Translate) {
   return z.object({
     name: z.string().min(1, t("required")).max(200),
     surname: z.string().min(1, t("required")).max(200),

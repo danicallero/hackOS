@@ -1,0 +1,108 @@
+{
+  "mail": {
+    "generic": {
+      "subject": "{{subject}}",
+      "body": "{{body}}"
+    },
+    "auth": {
+      "verify": {
+        "subject": "Verify your hackOS email",
+        "body": "Hi {{name}},\n\nConfirm your email address to unlock the rest of hackOS:\n\n[Verify email]({{verifyUrl}})\n\nDid we land in spam? Move this message to your inbox and add {{fromAddress}} to your contacts so you don't miss future messages.\n\nIf you didn't request this, ignore this message."
+      },
+      "verifySecondaryEmail": {
+        "subject": "Confirm your secondary email for hackOS",
+        "body": "Hi {{name}},\n\nYour hackOS account ({{primaryEmail}}) asked to add {{secondaryEmail}} as a secondary address, so we can match your Devpost projects to your account:\n\n[Confirm {{secondaryEmail}}]({{verifyUrl}})\n\nDid we land in spam? Move this message to your inbox and add {{fromAddress}} to your contacts so you don't miss future messages.\n\nIf you didn't request this, ignore this message — your account won't change."
+      },
+      "reset": {
+        "subject": "Reset your hackOS password",
+        "body": "Hi {{name}},\n\nUse this button to set a new password:\n\n[Reset password]({{resetUrl}})\n\nDid we land in spam? Move this message to your inbox and add {{fromAddress}} to your contacts so you don't miss future messages.\n\nIf you didn't request this, you can safely ignore this email — your password hasn't changed."
+      },
+      "invite": {
+        "subject": "You're invited to hackOS",
+        "body": "Hi,\n\nCreate your account to continue:\n\n[Create account]({{claimUrl}})\n\nDid we land in spam? Move this message to your inbox and add {{fromAddress}} to your contacts so you don't miss future messages.\n\nSet your password, name and the rest of your details from there."
+      }
+    },
+    "project": {
+      "invite": {
+        "subject": "You've been invited to join {{projectName}}",
+        "body": "Hi,\n\n{{inviterName}} invited you to join their project {{projectName}} on hackOS.\n\nOpen My Project to accept or decline the invite."
+      }
+    },
+    "queue": {
+      "called": {
+        "subject": "Your team was called",
+        "body": "Hi {{name}},\n\nYour team {{teamName}} was called for {{challengeName}}. Please head to room {{roomName}} and wait at the door until you are called in."
+      },
+      "precall": {
+        "subject": "You're up soon",
+        "body": "Hi {{name}},\n\nYour team {{teamName}} is about {{etaMinutes}} minutes from being called for {{challengeName}}. Start getting ready."
+      },
+      "enter": {
+        "subject": "Come on in",
+        "body": "Hi {{name}},\n\nIt's your team's turn for {{challengeName}}. Please come in now to room {{roomName}}."
+      },
+      "message": {
+        "subject": "Message about {{challengeName}}",
+        "body": "Hi {{name}},\n\n{{senderName}} sent your team {{teamName}} a message about {{challengeName}}:\n\n{{message}}"
+      },
+      "staff": {
+        "enter": {
+          "subject": "Team entering {{roomName}}",
+          "body": "{{teamName}} was asked to enter room {{roomName}} for {{challengeName}}."
+        },
+        "called": {
+          "subject": "Team called for {{roomName}}",
+          "body": "{{teamName}} was called to wait at the door of room {{roomName}} for {{challengeName}}."
+        }
+      }
+    },
+    "application": {
+      "decision": {
+        "subject": "A decision on your application",
+        "body": "Hi {{name}},\n\nYour application to {{applicationName}} has been {{decision}}.{{decisionDetails}}"
+      }
+    },
+    "schedule": {
+      "reminder": {
+        "subject": "Reminder: {{title}}",
+        "body": "Hi,\n\n{{title}} starts at {{startsAtLabel}}.{{locationLine}}\n\nSee you there!"
+      }
+    }
+  },
+  "push": {
+    "queue": {
+      "precall": {
+        "title": "You're up soon — get ready",
+        "body": "Your team {{teamName}} will be called for {{challengeName}} in about {{etaMinutes}} minutes."
+      },
+      "staff": {
+        "enter": {
+          "title": "{{teamName}} enters {{roomName}}",
+          "body": "Called in for {{challengeName}}."
+        },
+        "called": {
+          "title": "{{teamName}} called to {{roomName}}",
+          "body": "Waiting at the door for {{challengeName}}."
+        }
+      },
+      "message": {
+        "title": "Message about {{challengeName}}",
+        "body": "{{message}}"
+      },
+      "called": {
+        "title": "Go wait at room {{roomName}}",
+        "body": "Wait at the door for {{challengeName}}. We'll tell you when to enter."
+      },
+      "enter": {
+        "title": "Enter room {{roomName}} now",
+        "body": "It's your team's turn for {{challengeName}}."
+      }
+    },
+    "schedule": {
+      "reminder": {
+        "title": "{{title}}",
+        "body": "Starts at {{startsAtLabel}}{{locationSuffix}}"
+      }
+    }
+  }
+}

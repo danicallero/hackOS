@@ -134,7 +134,7 @@ export default function ReviewsOverviewPage() {
       },
       {
         id: "nota",
-        header: t("notaLabel"),
+        header: t("scoreColumn"),
         align: "right",
         sortValue: (r) => r.nota ?? -Infinity,
         cell: (r) => (r.nota !== null ? r.nota : <span className="text-muted-foreground">—</span>),

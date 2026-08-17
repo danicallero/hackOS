@@ -386,7 +386,7 @@ export default function PermissionsPage() {
               form="instantiate-template-form"
               pending={templateForm.formState.isSubmitting}
             >
-              {t("createTemplateGroup")}
+              {t("createGroup")}
             </SubmitButton>
           </>
         }

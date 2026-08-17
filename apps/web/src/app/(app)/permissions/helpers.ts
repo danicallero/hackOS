@@ -1,6 +1,6 @@
 import { ALL_CAPABILITIES } from "@hackos/shared/capabilities";
 import type { MultiSelectOption } from "@/components/common/multi-select";
-import type { Translate } from "@/lib/i18n";
+import type { MessageKey, Translate } from "@/lib/i18n";
 import type { PermissionGroupTemplate, UserListItem } from "@/lib/types";
 
 /**
@@ -51,7 +51,7 @@ export function selectableCapabilities(): string[] {
   return ALL_CAPABILITIES.filter((cap) => cap !== "sponsor:portal");
 }
 
-const TEMPLATE_COPY_KEYS: Record<string, { name: string; description: string }> = {
+const TEMPLATE_COPY_KEYS: Record<string, { name: MessageKey; description: MessageKey }> = {
   platformadministrator: {
     name: "permissionTemplatePlatformAdministrator",
     description: "permissionTemplatePlatformAdministratorDescription",

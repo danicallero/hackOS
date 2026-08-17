@@ -1,6 +1,6 @@
 import type { Capability } from "@hackos/shared/capabilities";
 import type { PassFieldLabels, PassFieldVisibility } from "@hackos/shared/wallet-pass-labels";
-import type { I18nText } from "./i18n";
+import type { I18nText, MessageKey } from "./i18n";
 
 export interface Me {
   id: number;
@@ -90,8 +90,8 @@ export interface PermissionGroupDetail extends PermissionGroupSummary {
 /** GET /api/permission-group-templates item. Keys select the web i18n catalogue. */
 export interface PermissionGroupTemplate {
   key: string;
-  labelKey: string;
-  descriptionKey: string;
+  labelKey: MessageKey;
+  descriptionKey: MessageKey;
   capabilities: Capability[];
 }
 

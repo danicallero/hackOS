@@ -625,7 +625,7 @@ function OptionsBuilder({
           }
         >
           <PlusIcon className="size-4" />
-          {t("addOptionButton")}
+          {t("addOption")}
         </Button>
       </div>
       {question.options.map((option, index) => {

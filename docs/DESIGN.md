@@ -306,10 +306,10 @@ product bug, not a styling choice.**
 **Summary: every string lives in the i18n dictionary in es/gl/en; copy names
 tasks and objects, never internals. Machine-enforced by `pnpm check:copy`.**
 
-`scripts/check-copy.mjs` (part of `pnpm lint`) checks
-`apps/web/src/lib/i18n.ts` and `apps/mobile/lib/i18n.tsx`: every entry carries
-**es / gl / en**, and copy never leaks story IDs (`H29`) or capability-key
-syntax (`queue:admin`).
+`scripts/check-copy.mjs` (part of `pnpm lint`) checks every i18next resource
+under `packages/shared/locales/{en,es,gl}/{common,web,mobile,email}.json`:
+every key carries **es / gl / en**, and copy never leaks story IDs (`H29`) or
+capability-key syntax (`queue:admin`).
 
 Writing rules:
 
@@ -470,8 +470,10 @@ Full architecture: [`mobile.md`](./mobile.md).**
   access boundary must not be represented only as transient inline copy.
 - Notifications render in the foreground too (Expo's default suppresses
   them); a tapped queue notification navigates to the queue tab.
-- Copy comes from `lib/i18n.tsx` — same `{ es, gl, en }` shape as web,
-  intentionally smaller dictionary, same `check-copy` enforcement.
+- Copy comes from `lib/i18n.tsx` (react-i18next), reading
+  `packages/shared/locales/{en,es,gl}/mobile.json` plus the shared
+  `common.json` subset — intentionally smaller than web's resource file,
+  same `check-copy` enforcement.
 - Capability changes apply without reinstall: tabs recompute from a shared
   `/api/me` fetch that refetches on app foreground (H55).
 
@@ -507,7 +509,7 @@ Every UI change, web or mobile:
 | Mobile tabs | `apps/mobile/lib/tabs.ts` |
 | Mobile pseudo-tab navigation | `apps/mobile/lib/operations-navigation.ts` |
 | Scanner sync state model | `apps/mobile/lib/scanner-sync.ts` |
-| Product copy | `apps/web/src/lib/i18n.ts`, `apps/mobile/lib/i18n.tsx` |
+| Product copy | `packages/shared/locales/{en,es,gl}/{common,web,mobile,email}.json` |
 | Copy enforcement | `scripts/check-copy.mjs` |
 
 Inventory commands for staged migrations (redundant descriptions, tracking

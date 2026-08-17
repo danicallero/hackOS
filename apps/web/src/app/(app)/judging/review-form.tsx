@@ -172,11 +172,11 @@ export function ReviewForm({
 
   const syncState = collaborationState({ online, saving, conflict, dirty });
   const syncLabel = {
-    saving: t("collaborationSaving"),
-    saved: t("collaborationSaved"),
+    saving: t("saveStateSaving"),
+    saved: t("saved"),
     offline: t("collaborationOffline"),
     conflict: t("collaborationConflict"),
-    unsaved: t("collaborationUnsaved"),
+    unsaved: t("unsavedChanges"),
   }[syncState];
 
   if (!entry) {

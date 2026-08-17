@@ -28,7 +28,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { ApiError, api } from "@/lib/api";
-import { useLocale } from "@/lib/i18n";
+import { type MessageKey, useLocale } from "@/lib/i18n";
 import type { EventConfig, PassBackField } from "@/lib/types";
 import { EventConfigLoadState, useEventConfig } from "./event-config-context";
 import { useCategorySaveState } from "./use-category-save-state";
@@ -54,7 +54,7 @@ function normalizeBackFields(fields: PassBackField[]): PassBackField[] {
     .filter((field) => field.label.length > 0 && field.value.length > 0);
 }
 
-const FRONT_FIELDS: { key: PassFieldVisibilityKey; titleKey: string; fillKey: string }[] = [
+const FRONT_FIELDS: { key: PassFieldVisibilityKey; titleKey: MessageKey; fillKey: MessageKey }[] = [
   { key: "participant", titleKey: "passFieldParticipantTitle", fillKey: "passFillParticipant" },
   { key: "role", titleKey: "passFieldRoleTitle", fillKey: "passFillRole" },
   { key: "passType", titleKey: "passFieldPassTypeTitle", fillKey: "passFillPassType" },
@@ -217,7 +217,7 @@ function BackFieldBuilder({
         </div>
       ))}
       <Button type="button" variant="outline" size="sm" onClick={add}>
-        {t("addBackField")}
+        {t("addField")}
       </Button>
     </div>
   );

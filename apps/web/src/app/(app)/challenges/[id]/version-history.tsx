@@ -10,7 +10,7 @@ import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { Spinner } from "@/components/common/spinner";
 import { ApiError, api } from "@/lib/api";
-import { useLocale } from "@/lib/i18n";
+import { type MessageKey, useLocale } from "@/lib/i18n";
 import { textForDisplay } from "../shared";
 
 export interface VersionSnapshot {
@@ -33,7 +33,7 @@ interface Version {
 }
 
 /** Fields whose change between two consecutive snapshots is worth calling out. */
-const TRACKED_FIELDS: { key: keyof VersionSnapshot; labelKey: string }[] = [
+const TRACKED_FIELDS: { key: keyof VersionSnapshot; labelKey: MessageKey }[] = [
   { key: "title", labelKey: "versionFieldTitle" },
   { key: "description", labelKey: "versionFieldDescription" },
   { key: "criteria", labelKey: "versionFieldCriteria" },
@@ -45,7 +45,7 @@ const TRACKED_FIELDS: { key: keyof VersionSnapshot; labelKey: string }[] = [
 export function changedFields(
   current: VersionSnapshot,
   previous: VersionSnapshot | null,
-): string[] {
+): MessageKey[] {
   if (!previous) return [];
   return TRACKED_FIELDS.filter(
     (f) => JSON.stringify(current[f.key]) !== JSON.stringify(previous[f.key]),

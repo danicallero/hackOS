@@ -202,7 +202,7 @@ export function EnterpriseOverviewCard({
             <dd className="mt-1 tabular-nums">{enterprise.display_priority ?? t("notSet")}</dd>
           </div>
           <div>
-            <dt className="text-muted-foreground">{t("createdAtLabel")}</dt>
+            <dt className="text-muted-foreground">{t("created")}</dt>
             <dd className="mt-1">{formatDate(enterprise.created_at, language) ?? t("notSet")}</dd>
           </div>
         </dl>

@@ -244,7 +244,7 @@ export function ActiveInvitationsModal() {
     },
     {
       id: "createdAt",
-      header: t("colCreated"),
+      header: t("created"),
       sortValue: (i) => i.createdAt,
       cell: (i) => (
         <span className="text-muted-foreground text-sm">
@@ -257,7 +257,7 @@ export function ActiveInvitationsModal() {
   const enterpriseLinkColumns: Column<EnterpriseInviteLink>[] = [
     {
       id: "link",
-      header: t("copyLink"),
+      header: t("copyInviteLink"),
       sortValue: (link) => link.url,
       cell: (link) => (
         <span className="block max-w-56 truncate font-mono text-xs" title={link.url}>
@@ -313,7 +313,7 @@ export function ActiveInvitationsModal() {
     },
     {
       id: "createdAt",
-      header: t("colCreated"),
+      header: t("created"),
       sortValue: (link) => link.createdAt,
       cell: (link) => (
         <span className="text-muted-foreground text-sm">
@@ -604,8 +604,8 @@ export function ActiveInvitationsModal() {
                           variant="ghost"
                           size="icon"
                           className="size-10"
-                          aria-label={t("copyLink")}
-                          title={t("copyLink")}
+                          aria-label={t("copyInviteLink")}
+                          title={t("copyInviteLink")}
                           onClick={() => void copyLink(link.url)}
                         >
                           <CopyIcon className="size-4" aria-hidden="true" />
@@ -657,7 +657,7 @@ export function ActiveInvitationsModal() {
                         </dd>
                       </div>
                       <div>
-                        <dt className="text-muted-foreground">{t("colCreated")}</dt>
+                        <dt className="text-muted-foreground">{t("created")}</dt>
                         <dd>{dateFmt.format(new Date(link.createdAt))}</dd>
                       </div>
                     </dl>
@@ -683,8 +683,8 @@ export function ActiveInvitationsModal() {
                     variant="ghost"
                     size="icon"
                     className="size-8"
-                    aria-label={t("copyLink")}
-                    title={t("copyLink")}
+                    aria-label={t("copyInviteLink")}
+                    title={t("copyInviteLink")}
                     onClick={() => void copyLink(link.url)}
                   >
                     <CopyIcon className="size-4" aria-hidden="true" />
