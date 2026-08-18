@@ -650,7 +650,7 @@ function SignalEditor({
           </View>
 
           {isLockedToActivity ? null : (
-            <View style={{ gap: 8 }}>
+            <View>
               <Text
                 selectable
                 accessibilityRole="header"
