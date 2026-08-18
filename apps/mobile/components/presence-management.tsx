@@ -649,11 +649,7 @@ function SignalEditor({
             </Text>
           </View>
 
-          {isLockedToActivity ? (
-            <Section title={t("personMovement")} footer={t("presenceActivityKindLocked")}>
-              <InfoRow icon="figure.run" label={t("personMovement")} value={kindLabels.activity} />
-            </Section>
-          ) : (
+          {isLockedToActivity ? null : (
             <Section title={t("personMovement")}>
               <View style={{ padding: 16 }}>
                 <SegmentedControl
