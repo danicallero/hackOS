@@ -201,8 +201,9 @@ describe("foundation", () => {
   it("SSE broadcast fans out through valkey to a subscribed envelope", async () => {
     const { broadcast } = await import("../src/lib/sse.js");
     const envelope = await broadcast("queue", "queue.entry.status_changed", { entryId: 7 });
-    expect(envelope.type).toBe("queue.entry.status_changed");
-    expect(Number(envelope.id)).toBeGreaterThan(0);
-    expect(envelope.data).toEqual({ entryId: 7 });
+    expect(envelope).not.toBeNull();
+    expect(envelope?.type).toBe("queue.entry.status_changed");
+    expect(Number(envelope?.id)).toBeGreaterThan(0);
+    expect(envelope?.data).toEqual({ entryId: 7 });
   });
 });

@@ -118,3 +118,13 @@ export function startPersonalEventStream(): () => void {
 export function startQueueEventStream(enabled = true): () => void {
   return startEventStream("/api/queue/stream", enabled);
 }
+
+/**
+ * Native SSE loop for the shared "logistics" topic (H22-H27) — carries
+ * accreditation, presence, and activity/meal scan events from every device.
+ * The scanner home screen listens on this to refresh its stats tiles the
+ * moment another device's scan changes them, instead of polling.
+ */
+export function startLogisticsEventStream(enabled = true): () => void {
+  return startEventStream("/api/logistics/stream", enabled);
+}

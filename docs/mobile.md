@@ -78,6 +78,33 @@ route below. No migration needed.
   /api/logistics/stats/by-staff` is the `LOGISTICS_STATS`-gated cross-staff
   ranking (web `/logistics/stats`, "Staff ranking" section), and `GET
   /api/exports/staff-scan-stats.csv` (`exports:run`) exports the same data.
+- `GET /api/scanner/role-stats` — Confirmed/Accredited/Inside counts for the
+  scanner home screen's stats tiles, broken down by the same role
+  classification `/api/scanner/snapshot` uses (`apps/api/src/modules/logistics/stats.ts`).
+  "Confirmed" means accreditation-eligible, not the raw application
+  `confirmed` flag: staff/admins/sponsors are always eligible, participants/
+  mentors only once their application is confirmed
+  (`isAccreditationEligible` in `lib/scanner-group-filter.ts` mirrors this
+  server-side rule for the offline fallback below). "Inside" reuses
+  `occupancyEstimate()` rather than re-deriving presence semantics. A plain
+  GET, so it rides the existing app-wide read cache (30s TTL, invalidated on
+  any write — no bespoke caching needed) instead of the client pulling and
+  recomputing from the full roster snapshot on every refresh. The scanner
+  home screen (`components/general-scanner-screen.tsx`) also opens the
+  existing `/api/logistics/stream` SSE topic
+  (`lib/server-events.ts#startLogisticsEventStream`) and refetches on any
+  `LOGISTICS_ACCREDITED`/`LOGISTICS_PRESENCE_SCAN`/`LOGISTICS_ACTIVITY_SCAN`/
+  `LOGISTICS_MEAL_SCAN_BATCH` event, so one device's scan updates every other
+  device's tiles within about a second without polling. If the request fails
+  (offline), the screen falls back to computing the same three numbers from
+  the local SQLite roster — an approximation, since a stale snapshot's
+  `lastPresenceKind` can lag the authoritative server-side occupancy
+  estimate. The screen also gained a persisted, multi-select role-group
+  filter (participants/mentors/staff incl. admins/sponsors — a custom
+  always-open-until-outside-tap panel next to the people-finder button, not
+  a native menu; see the component's doc comments for why) that scopes which
+  rows get summed into the tiles, saved via `expo-secure-store` so it
+  survives app restarts.
 - `idempotencyGuard` (`apps/api/src/lib/idempotency.ts`) now reclaims a
   first-execution record whose `response_status` has been NULL for more
   than 30s, instead of 409ing "still in flight" forever. Mobile scanners

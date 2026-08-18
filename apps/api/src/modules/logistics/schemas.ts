@@ -122,6 +122,20 @@ export const staffScanRankingResponse = z.object({
   ),
 });
 
+export const scannerRoleStatsResponse = z.object({
+  byRole: z.array(
+    z.object({
+      role: z.enum(["admin", "judge", "sponsor", "staff", "mentor", "participant", "unassigned"]),
+      /** Eligible to be accredited: staff/admin/sponsors always, mentors/participants only once their application is confirmed. */
+      eligible: z.number().int(),
+      /** Badge already issued. */
+      accredited: z.number().int(),
+      /** Currently inside per the presence occupancy estimate. */
+      inside: z.number().int(),
+    }),
+  ),
+});
+
 const scannerPersonCard = z.object({
   userId: z.number().int().positive(),
   email: z.string().email(),
