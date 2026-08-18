@@ -601,10 +601,18 @@ function SignalEditor({
     }
   }
 
-  const canChangeKind = !draft.signal || draft.signal.source === "door";
-  // Resolving an in→in conflict: only an exit or activity can close the gap,
-  // and the timestamp must land strictly between the two conflicting entries.
-  const kinds: SignalKind[] = draft.bounds ? ["activity", "out"] : ["in", "activity", "out"];
+  // An activity-sourced signal always stays an activity — only which
+  // activity it belongs to can change, so there's nothing to pick here.
+  const isLockedToActivity = draft.signal?.source === "activity";
+  // Editing a door-sourced signal only ever swaps entry↔exit; conversion to
+  // an activity point is only offered when creating a brand-new signal.
+  const kinds: SignalKind[] = !draft.signal
+    ? draft.bounds
+      ? // Resolving an in→in conflict: only an exit or activity can close the
+        // gap, and the timestamp must land strictly between the two entries.
+        ["activity", "out"]
+      : ["in", "activity", "out"]
+    : ["in", "out"];
   const kindLabels: Record<SignalKind, string> = {
     in: t("presenceSignalEntry"),
     activity: t("presenceSignalActivity"),
@@ -641,24 +649,24 @@ function SignalEditor({
             </Text>
           </View>
 
-          <Section title={t("personMovement")}>
-            <View style={{ gap: 14, padding: 16 }}>
-              <SegmentedControl
-                label={t("personMovement")}
-                values={kinds.map((kind) => kindLabels[kind])}
-                selectedIndex={Math.max(0, kinds.indexOf(draft.kind))}
-                onChange={(index) => {
-                  if (!canChangeKind) return;
-                  onChange({ ...draft, kind: kinds[index] ?? kinds[0] ?? "in" });
-                }}
-              />
-              {!canChangeKind ? (
-                <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13 }}>
-                  {t("presenceActivityKindLocked")}
-                </Text>
-              ) : null}
-            </View>
-          </Section>
+          {isLockedToActivity ? (
+            <Section title={t("personMovement")} footer={t("presenceActivityKindLocked")}>
+              <InfoRow icon="figure.run" label={t("personMovement")} value={kindLabels.activity} />
+            </Section>
+          ) : (
+            <Section title={t("personMovement")}>
+              <View style={{ padding: 16 }}>
+                <SegmentedControl
+                  label={t("personMovement")}
+                  values={kinds.map((kind) => kindLabels[kind])}
+                  selectedIndex={Math.max(0, kinds.indexOf(draft.kind))}
+                  onChange={(index) =>
+                    onChange({ ...draft, kind: kinds[index] ?? kinds[0] ?? "in" })
+                  }
+                />
+              </View>
+            </Section>
+          )}
 
           {draft.kind === "activity" ? (
             <Section title={t("presenceActivity")}>
