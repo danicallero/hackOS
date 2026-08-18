@@ -75,6 +75,7 @@ import {
   scanLogQuery,
   scanLogResponse,
   scannableActivitiesQuery,
+  scannerRoleStatsResponse,
   scannerSnapshotResponse,
   scheduleBody,
   scheduleIdParam,
@@ -88,7 +89,12 @@ import {
   walletAccessQuery,
   walletPurposeParam,
 } from "./schemas.js";
-import { accreditationCountsByRole, logisticsStats, scannableActivities } from "./stats.js";
+import {
+  accreditationCountsByRole,
+  logisticsStats,
+  scannableActivities,
+  scannerRoleStats,
+} from "./stats.js";
 import { ticketQrPayload } from "./tickets.js";
 import {
   appleChangedSerials,
@@ -194,6 +200,25 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       },
     },
     scannerSnapshot,
+  );
+
+  // Lightweight per-role counts for the scanner home screen's stats tiles
+  // (Confirmed/Accredited/Inside) — a plain GET, so it rides the app-wide
+  // read cache instead of the operator pulling/recomputing from the full
+  // roster snapshot on every refresh.
+  typed.get(
+    "/api/scanner/role-stats",
+    {
+      ...routeAccess(access.logisticsRead),
+      preHandler: logisticsRead,
+      schema: {
+        summary: "Scanner stats by role",
+        description:
+          "Per-role counts of accreditation-eligible, already-accredited, and currently-inside people, broken down by the same role classification the scanner roster uses. Staff/admins/sponsors are always eligible; participants/mentors are eligible once their application is confirmed. The client sums whatever role groups it has filtered to.",
+        response: { 200: scannerRoleStatsResponse },
+      },
+    },
+    async () => ({ byRole: await scannerRoleStats() }),
   );
 
   typed.get(

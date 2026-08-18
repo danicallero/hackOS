@@ -74,31 +74,52 @@ function formatSse(envelope: SseEnvelope): string {
   return `event: ${envelope.type}\nid: ${envelope.id}\ndata: ${JSON.stringify(envelope)}\n\n`;
 }
 
-/** Publish an event to every subscriber of `topic`, across instances. */
-export async function broadcast<T>(topic: string, type: string, data: T): Promise<SseEnvelope<T>> {
+/**
+ * Publish an event to every subscriber of `topic`, across instances.
+ *
+ * Every domain call site awaits this *after* its own `withTransaction` has
+ * already committed (scan recorded, badge assigned, presence logged, …) —
+ * broadcasting is a best-effort notification on top of an already-durable
+ * write, never a precondition for it. So a Valkey hiccup here must not turn
+ * an already-successful mutation into a failed HTTP response: I/O failures
+ * are caught and logged, returning `null` instead of throwing. A caller
+ * passing a malformed payload to a public topic is a programming error, not
+ * infra flakiness, so `assertPayloadFreePublicInvalidation` still throws
+ * synchronously, before any I/O.
+ */
+export async function broadcast<T>(
+  topic: string,
+  type: string,
+  data: T,
+): Promise<SseEnvelope<T> | null> {
   assertPayloadFreePublicInvalidation(topic, type, data);
-  const seq = await valkey.incr(`sse:seq:${topic}`);
-  const envelope: SseEnvelope<T> = {
-    type,
-    id: String(seq),
-    at: new Date().toISOString(),
-    data,
-  };
-  await valkey.publish(`${CHANNEL_PREFIX}${topic}`, formatSse(envelope));
-  // Public walls see only their relevant, payload-free invalidation. This is
-  // intentionally separate from authenticated global refresh notifications.
-  const publicInvalidation = publicInvalidationFor(topic);
-  if (publicInvalidation) {
-    await broadcast(publicInvalidation.topic, publicInvalidation.type, publicInvalidation.data);
+  try {
+    const seq = await valkey.incr(`sse:seq:${topic}`);
+    const envelope: SseEnvelope<T> = {
+      type,
+      id: String(seq),
+      at: new Date().toISOString(),
+      data,
+    };
+    await valkey.publish(`${CHANNEL_PREFIX}${topic}`, formatSse(envelope));
+    // Public walls see only their relevant, payload-free invalidation. This is
+    // intentionally separate from authenticated global refresh notifications.
+    const publicInvalidation = publicInvalidationFor(topic);
+    if (publicInvalidation) {
+      await broadcast(publicInvalidation.topic, publicInvalidation.type, publicInvalidation.data);
+    }
+    // Worker-originated changes do not have an HTTP response, so mirror domain
+    // events into the authenticated global refresh stream. Public invalidation
+    // topics are terminal: they neither recurse into global nor into each other.
+    if (topic !== SSE_TOPICS.GLOBAL && !isPublicInvalidationTopic(topic)) {
+      await invalidateReadCache();
+      await broadcast(SSE_TOPICS.GLOBAL, EVENTS.DATA_CHANGED, { at: envelope.at });
+    }
+    return envelope;
+  } catch (err) {
+    console.error(`[sse] broadcast(${topic}, ${type}) failed`, err);
+    return null;
   }
-  // Worker-originated changes do not have an HTTP response, so mirror domain
-  // events into the authenticated global refresh stream. Public invalidation
-  // topics are terminal: they neither recurse into global nor into each other.
-  if (topic !== SSE_TOPICS.GLOBAL && !isPublicInvalidationTopic(topic)) {
-    await invalidateReadCache();
-    await broadcast(SSE_TOPICS.GLOBAL, EVENTS.DATA_CHANGED, { at: envelope.at });
-  }
-  return envelope;
 }
 
 /**

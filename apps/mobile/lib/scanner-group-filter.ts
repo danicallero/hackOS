@@ -18,6 +18,20 @@ export function matchesScannerGroup(role: ScannerPerson["role"], groups: Scanner
   );
 }
 
+/**
+ * "Confirmed" for the stats tile means "eligible to be accredited", not the
+ * raw `confirmed` application flag: staff/admin and sponsors are always
+ * eligible (they never file an application, so `confirmed` stays false for
+ * them), while participants and mentors are gated by their application's
+ * confirmed status.
+ */
+export function isAccreditationEligible(
+  person: Pick<ScannerPerson, "role" | "confirmed">,
+): boolean {
+  if (person.role === "staff" || person.role === "admin" || person.role === "sponsor") return true;
+  return person.confirmed;
+}
+
 export async function loadScannerGroupFilter(): Promise<ScannerGroup[]> {
   try {
     const stored = await SecureStore.getItemAsync(STORAGE_KEY);

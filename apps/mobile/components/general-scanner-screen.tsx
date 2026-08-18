@@ -1,3 +1,4 @@
+import { EVENTS } from "@hackos/shared/events";
 import { usePathname, useRouter } from "expo-router";
 import { Stack } from "expo-router/stack";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -8,18 +9,28 @@ import { AdaptiveToolbarButton } from "@/components/native-ui";
 import { QrCamera } from "@/components/QrCamera";
 import { ScannerQueueStatus } from "@/components/scanner-transaction-status";
 import { SymbolView } from "@/components/symbol";
+import { apiFetch } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { findPersonByBadge, findPersonByTicket, listScannerPeople } from "@/lib/scanner-db";
 import {
+  isAccreditationEligible,
   loadScannerGroupFilter,
   matchesScannerGroup,
   type ScannerGroup,
   saveScannerGroupFilter,
 } from "@/lib/scanner-group-filter";
 import type { ScannerPerson } from "@/lib/scanner-types";
+import { startLogisticsEventStream, subscribeToServerEvent } from "@/lib/server-events";
 import { useScannerSync } from "@/lib/use-scanner";
 import { colors } from "@/theme/colors";
+
+interface ScannerRoleStat {
+  role: ScannerPerson["role"];
+  eligible: number;
+  accredited: number;
+  inside: number;
+}
 
 export function GeneralScannerScreen() {
   const router = useRouter();
@@ -32,6 +43,7 @@ export function GeneralScannerScreen() {
   const sync = useScannerSync();
   const [people, setPeople] = useState<ScannerPerson[]>([]);
   const [groups, setGroups] = useState<ScannerGroup[]>([]);
+  const [roleStats, setRoleStats] = useState<ScannerRoleStat[] | null>(null);
 
   useEffect(() => {
     void loadScannerGroupFilter().then(setGroups);
@@ -45,6 +57,44 @@ export function GeneralScannerScreen() {
   useEffect(() => {
     if (sync.lastSync) loadPeople();
   }, [loadPeople, sync.lastSync]);
+
+  // Server-side per-role counts (cached + invalidated on every write —
+  // apps/api/src/lib/read-cache.ts) so a refresh here is a cheap cache hit
+  // rather than the operator pulling and recomputing from the full local
+  // roster. Falls back to the local roster below when offline.
+  const loadRoleStats = useCallback(() => {
+    void apiFetch<{ byRole: ScannerRoleStat[] }>("/api/scanner/role-stats")
+      .then((res) => setRoleStats(res.byRole))
+      .catch(() => {
+        // Offline or request failed — the local-roster fallback in `stats`
+        // below keeps the tiles usable, just without cross-device accuracy.
+      });
+  }, []);
+
+  useEffect(() => loadRoleStats(), [loadRoleStats]);
+  useEffect(() => {
+    if (sync.lastSync) loadRoleStats();
+  }, [loadRoleStats, sync.lastSync]);
+  // Any device's accreditation/presence/activity scan pushes here, so the
+  // tiles update within a second of another operator's scan instead of
+  // waiting on this device's own next sync tick.
+  useEffect(() => startLogisticsEventStream(), []);
+  useEffect(
+    () => subscribeToServerEvent(EVENTS.LOGISTICS_ACCREDITED, loadRoleStats),
+    [loadRoleStats],
+  );
+  useEffect(
+    () => subscribeToServerEvent(EVENTS.LOGISTICS_PRESENCE_SCAN, loadRoleStats),
+    [loadRoleStats],
+  );
+  useEffect(
+    () => subscribeToServerEvent(EVENTS.LOGISTICS_ACTIVITY_SCAN, loadRoleStats),
+    [loadRoleStats],
+  );
+  useEffect(
+    () => subscribeToServerEvent(EVENTS.LOGISTICS_MEAL_SCAN_BATCH, loadRoleStats),
+    [loadRoleStats],
+  );
 
   const toggleGroup = useCallback((group: ScannerGroup) => {
     setGroups((current) => {
@@ -62,13 +112,21 @@ export function GeneralScannerScreen() {
   }, []);
 
   const stats = useMemo(() => {
+    if (roleStats) {
+      const filtered = roleStats.filter((row) => matchesScannerGroup(row.role, groups));
+      return {
+        accredited: filtered.reduce((sum, row) => sum + row.accredited, 0),
+        confirmed: filtered.reduce((sum, row) => sum + row.eligible, 0),
+        inside: filtered.reduce((sum, row) => sum + row.inside, 0),
+      };
+    }
     const filtered = people.filter((person) => matchesScannerGroup(person.role, groups));
     return {
       accredited: filtered.filter((person) => person.badgeId !== null).length,
-      confirmed: filtered.filter((person) => person.confirmed).length,
+      confirmed: filtered.filter((person) => isAccreditationEligible(person)).length,
       inside: filtered.filter((person) => person.lastPresenceKind === "in").length,
     };
-  }, [people, groups]);
+  }, [roleStats, people, groups]);
 
   const resolve = useCallback(
     async (raw: string) => {
@@ -313,7 +371,6 @@ function ScannerGroupFilterButton({
           <GlassView
             colorScheme="dark"
             glassEffectStyle="regular"
-            tintColor="rgba(20,20,22,0.85)"
             style={{
               borderColor: "rgba(255,255,255,0.14)",
               borderCurve: "continuous",
@@ -383,13 +440,9 @@ function ScannerGroupStatistics({
 }) {
   const { t } = useLocale();
   const items = [
-    { icon: "checkmark.seal.fill", label: t("scannerStatConfirmed"), value: stats.confirmed },
-    {
-      icon: "person.crop.circle.badge.checkmark",
-      label: t("scannerAccredited"),
-      value: stats.accredited,
-    },
-    { icon: "figure.walk.circle.fill", label: t("scannerInside"), value: stats.inside },
+    { icon: "person.2", label: t("scannerStatConfirmed"), value: stats.confirmed },
+    { icon: "lanyardcard", label: t("scannerAccredited"), value: stats.accredited },
+    { icon: "building.2", label: t("scannerInside"), value: stats.inside },
   ] as const;
 
   return (

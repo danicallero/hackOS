@@ -148,3 +148,90 @@ export async function logisticsStats() {
     })),
   };
 }
+
+/**
+ * Per-role scanner stats tile (mobile scanner home screen): eligible
+ * (accreditable), accredited, and currently-inside counts, broken down by
+ * the same role classification the scanner roster snapshot uses (H22-H26 —
+ * see `scannerSnapshot` in scanner-sync.ts), so the client can sum whatever
+ * combination of role groups the operator has filtered to. Answered as a
+ * plain GET, so it rides the app-wide read cache (30s TTL, invalidated on
+ * any write — app.ts) instead of needing bespoke caching here.
+ */
+export type ScannerRole =
+  | "admin"
+  | "judge"
+  | "sponsor"
+  | "staff"
+  | "mentor"
+  | "participant"
+  | "unassigned";
+
+export async function scannerRoleStats(): Promise<
+  Array<{ role: ScannerRole; eligible: number; accredited: number; inside: number }>
+> {
+  const { rows } = await pool.query<{
+    role: ScannerRole;
+    eligible: number;
+    accredited: number;
+    user_ids: number[];
+  }>(
+    `WITH RECURSIVE effective_groups (user_id, group_id) AS (
+       SELECT user_id, group_id FROM permission_group_members
+       UNION
+       SELECT eg.user_id, gi.child_group_id
+         FROM effective_groups eg
+         JOIN permission_group_includes gi ON gi.parent_group_id = eg.group_id
+     ), user_caps AS (
+       SELECT eg.user_id,
+              bool_or(gc.capability = '*') AS is_admin,
+              count(gc.capability) > 0 AS has_capability
+         FROM effective_groups eg
+         JOIN group_capabilities gc ON gc.group_id = eg.group_id
+        GROUP BY eg.user_id
+     ), classified AS (
+       SELECT u.id, u.badge_id,
+              CASE
+                WHEN COALESCE(uc.is_admin, false) THEN 'admin'
+                WHEN EXISTS (SELECT 1 FROM room_judges rj WHERE rj.user_id = u.id) THEN 'judge'
+                WHEN EXISTS (SELECT 1 FROM sponsors s WHERE s.user_id = u.id) THEN 'sponsor'
+                WHEN COALESCE(uc.has_capability, false) THEN 'staff'
+                WHEN EXISTS (SELECT 1 FROM manual_attendee_roles mar WHERE mar.user_id = u.id AND mar.role = 'mentor') THEN 'mentor'
+                WHEN EXISTS (SELECT 1 FROM manual_attendee_roles mar WHERE mar.user_id = u.id AND mar.role = 'participant') THEN 'participant'
+                WHEN EXISTS (
+                  SELECT 1 FROM application_responses ar JOIN applications a ON a.id = ar.application_id
+                 WHERE ar.user_id = u.id AND ar.status <> 'draft' AND a.type = 'mentor'
+                ) THEN 'mentor'
+                WHEN EXISTS (
+                  SELECT 1 FROM application_responses ar JOIN applications a ON a.id = ar.application_id
+                 WHERE ar.user_id = u.id AND ar.status <> 'draft' AND a.type = 'participant'
+                ) THEN 'participant'
+                ELSE 'unassigned'
+              END AS role,
+              EXISTS (
+                SELECT 1 FROM application_responses ar
+                 WHERE ar.user_id = u.id AND ar.status = 'confirmed'
+              ) AS confirmed
+         FROM users u
+         LEFT JOIN user_caps uc ON uc.user_id = u.id
+        WHERE u.anonymized_at IS NULL
+     )
+     SELECT role,
+            count(*) FILTER (WHERE role IN ('staff', 'admin', 'sponsor') OR confirmed)::int AS eligible,
+            count(*) FILTER (WHERE badge_id IS NOT NULL)::int AS accredited,
+            array_agg(id) AS user_ids
+       FROM classified
+      GROUP BY role
+      ORDER BY role`,
+  );
+
+  const occ = await occupancyEstimate();
+  const present = new Set(occ.present);
+
+  return rows.map((row) => ({
+    role: row.role,
+    eligible: row.eligible,
+    accredited: row.accredited,
+    inside: row.user_ids.filter((id) => present.has(id)).length,
+  }));
+}
