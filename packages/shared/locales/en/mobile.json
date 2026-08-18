@@ -455,7 +455,6 @@
   "presenceConflictBounds": "The date is limited to the gap between the two conflicting entries.",
   "presenceActivity": "Activity or meal",
   "presenceActivityRequired": "Choose an activity.",
-  "presenceActivityKindLocked": "An activity point remains an activity; you can change which activity it belongs to.",
   "presenceNoActivities": "There are no activities available.",
   "presenceDateAndTime": "Date and time",
   "presenceDateField": "Date",

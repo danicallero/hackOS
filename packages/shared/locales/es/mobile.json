@@ -455,7 +455,6 @@
   "presenceConflictBounds": "La fecha está limitada al intervalo entre las dos entradas en conflicto.",
   "presenceActivity": "Actividad o comida",
   "presenceActivityRequired": "Selecciona una actividad.",
-  "presenceActivityKindLocked": "Un punto de actividad sigue siendo una actividad; puedes cambiar a cuál pertenece.",
   "presenceNoActivities": "No hay actividades disponibles.",
   "presenceDateAndTime": "Fecha y hora",
   "presenceDateField": "Fecha",

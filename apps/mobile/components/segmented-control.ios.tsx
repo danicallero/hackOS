@@ -1,7 +1,9 @@
 import { Host, Picker, Text } from "@expo/ui/swift-ui";
-import { pickerStyle, tag } from "@expo/ui/swift-ui/modifiers";
+import { frame, pickerStyle, tag } from "@expo/ui/swift-ui/modifiers";
 
 import type { SegmentedControlProps } from "./segmented-control";
+
+const HEIGHT = 50;
 
 /** A real SwiftUI segmented Picker. @expo/ui is included in Expo Go. */
 export function SegmentedControl({
@@ -11,10 +13,10 @@ export function SegmentedControl({
   label,
 }: SegmentedControlProps) {
   return (
-    <Host matchContents>
+    <Host style={{ height: HEIGHT, width: "100%" }}>
       <Picker
         label={label}
-        modifiers={[pickerStyle("segmented")]}
+        modifiers={[pickerStyle("segmented"), frame({ height: HEIGHT, maxWidth: Infinity })]}
         selection={selectedIndex}
         onSelectionChange={onChange}
       >
