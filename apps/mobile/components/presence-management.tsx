@@ -650,18 +650,26 @@ function SignalEditor({
           </View>
 
           {isLockedToActivity ? null : (
-            <Section title={t("personMovement")}>
-              <View style={{ padding: 16 }}>
-                <SegmentedControl
-                  label={t("personMovement")}
-                  values={kinds.map((kind) => kindLabels[kind])}
-                  selectedIndex={Math.max(0, kinds.indexOf(draft.kind))}
-                  onChange={(index) =>
-                    onChange({ ...draft, kind: kinds[index] ?? kinds[0] ?? "in" })
-                  }
-                />
-              </View>
-            </Section>
+            <View style={{ gap: 8 }}>
+              <Text
+                selectable
+                accessibilityRole="header"
+                style={{
+                  color: colors.secondaryLabel,
+                  fontSize: 13,
+                  fontWeight: "600",
+                  paddingHorizontal: 16,
+                }}
+              >
+                {t("personMovement")}
+              </Text>
+              <SegmentedControl
+                label={t("personMovement")}
+                values={kinds.map((kind) => kindLabels[kind])}
+                selectedIndex={Math.max(0, kinds.indexOf(draft.kind))}
+                onChange={(index) => onChange({ ...draft, kind: kinds[index] ?? kinds[0] ?? "in" })}
+              />
+            </View>
           )}
 
           {draft.kind === "activity" ? (
