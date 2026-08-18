@@ -225,6 +225,14 @@ route below. No migration needed.
   title) and toggles `schedule:<id>` push reminders **straight from the list**
   via `lib/use-activity-reminders.ts`; filled/accent means on, outline/grey
   off. Covered by `test/ui/schedule-list.test.tsx`.
+- `app/schedule/[id].tsx` — the detail screen's title/subtitle float over the
+  scrolling body inside a fixed overlay; the overlay's backing is a
+  `expo-blur` `BlurView` masked (`@react-native-masked-view/masked-view` +
+  `expo-linear-gradient`) so the blur is solid only behind the header text
+  and fades to nothing both upward (through the button row, clearing near
+  the status bar) and downward over `HEADER_FADE_HEIGHT` into the scrolled
+  content — subtle translucency contained around the text instead of an
+  opaque bar or full glass material.
 - `components/queue-operations-screen.tsx` — Queue operations is available to
   `queue:operate`, `queue:admin`, and `*`. It first lists only the caller's
   authorized rooms, then loads each protected room view. Each card keeps the

@@ -1,3 +1,6 @@
+import MaskedView from "@react-native-masked-view/masked-view";
+import { BlurView } from "expo-blur";
+import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect } from "react";
 import { ScrollView, Text, useColorScheme, View } from "react-native";
@@ -19,9 +22,13 @@ const BUTTON_ROW_HEIGHT = 60;
 // Approximate height of the header's own title + subtitle text, so the
 // scrolling content below starts clear of it instead of underneath it.
 const HEADER_TEXT_HEIGHT = 56;
+// How far past the header text the blur keeps fading before it disappears
+// completely, so scrolled content dissolves into view instead of popping
+// out from under a hard edge.
+const HEADER_FADE_HEIGHT = 48;
 
 export default function ScheduleDetailScreen() {
-  useColorScheme();
+  const colorScheme = useColorScheme();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -142,36 +149,65 @@ export default function ScheduleDetailScreen() {
         <View
           pointerEvents="none"
           style={{
-            backgroundColor: colors.background,
+            height: headerHeight + HEADER_FADE_HEIGHT,
             left: 0,
-            paddingBottom: 14,
-            paddingHorizontal: CONTENT_PADDING,
-            paddingTop: topInset + BUTTON_ROW_HEIGHT,
             position: "absolute",
             right: 0,
             top: 0,
           }}
         >
-          <Text
-            selectable
-            numberOfLines={1}
-            style={{ color: colors.label, fontSize: 22, fontWeight: "800" }}
+          <MaskedView
+            style={{ flex: 1 }}
+            maskElement={
+              <LinearGradient
+                colors={["transparent", "#fff", "#fff", "transparent"]}
+                locations={[
+                  0,
+                  (topInset + BUTTON_ROW_HEIGHT) / (headerHeight + HEADER_FADE_HEIGHT),
+                  headerHeight / (headerHeight + HEADER_FADE_HEIGHT),
+                  1,
+                ]}
+                style={{ flex: 1 }}
+              />
+            }
           >
-            {item.title}
-          </Text>
-          {headerSubtitle ? (
+            <BlurView
+              intensity={40}
+              tint={colorScheme === "dark" ? "dark" : "light"}
+              style={{ flex: 1 }}
+            />
+          </MaskedView>
+          <View
+            style={{
+              left: 0,
+              paddingHorizontal: CONTENT_PADDING,
+              paddingTop: topInset + BUTTON_ROW_HEIGHT,
+              position: "absolute",
+              right: 0,
+              top: 0,
+            }}
+          >
             <Text
               selectable
               numberOfLines={1}
-              style={{
-                color: colors.secondaryLabel,
-                fontSize: 14,
-                marginTop: 2,
-              }}
+              style={{ color: colors.label, fontSize: 22, fontWeight: "800" }}
             >
-              {headerSubtitle}
+              {item.title}
             </Text>
-          ) : null}
+            {headerSubtitle ? (
+              <Text
+                selectable
+                numberOfLines={1}
+                style={{
+                  color: colors.secondaryLabel,
+                  fontSize: 14,
+                  marginTop: 2,
+                }}
+              >
+                {headerSubtitle}
+              </Text>
+            ) : null}
+          </View>
         </View>
       ) : null}
 
