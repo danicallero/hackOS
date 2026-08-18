@@ -1,6 +1,4 @@
-import MaskedView from "@react-native-masked-view/masked-view";
 import { BlurView } from "expo-blur";
-import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect } from "react";
 import { ScrollView, Text, useColorScheme, View } from "react-native";
@@ -22,10 +20,6 @@ const BUTTON_ROW_HEIGHT = 60;
 // Approximate height of the header's own title + subtitle text, so the
 // scrolling content below starts clear of it instead of underneath it.
 const HEADER_TEXT_HEIGHT = 56;
-// How far past the header text the blur keeps fading before it disappears
-// completely, so scrolled content dissolves into view instead of popping
-// out from under a hard edge.
-const HEADER_FADE_HEIGHT = 48;
 
 export default function ScheduleDetailScreen() {
   const colorScheme = useColorScheme();
@@ -149,34 +143,24 @@ export default function ScheduleDetailScreen() {
         <View
           pointerEvents="none"
           style={{
-            height: headerHeight + HEADER_FADE_HEIGHT,
+            height: headerHeight,
             left: 0,
             position: "absolute",
             right: 0,
             top: 0,
           }}
         >
-          <MaskedView
-            style={{ flex: 1 }}
-            maskElement={
-              <LinearGradient
-                colors={["transparent", "#fff", "#fff", "transparent"]}
-                locations={[
-                  0,
-                  (topInset + BUTTON_ROW_HEIGHT) / (headerHeight + HEADER_FADE_HEIGHT),
-                  headerHeight / (headerHeight + HEADER_FADE_HEIGHT),
-                  1,
-                ]}
-                style={{ flex: 1 }}
-              />
-            }
-          >
-            <BlurView
-              intensity={40}
-              tint={colorScheme === "dark" ? "dark" : "light"}
-              style={{ flex: 1 }}
-            />
-          </MaskedView>
+          <BlurView
+            intensity={9}
+            tint={colorScheme === "dark" ? "dark" : "light"}
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              height: headerHeight,
+            }}
+          />
           <View
             style={{
               left: 0,
