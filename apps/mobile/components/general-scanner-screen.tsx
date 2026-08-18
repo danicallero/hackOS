@@ -157,7 +157,7 @@ export function GeneralScannerScreen() {
         onValue={(value) => void resolve(value)}
       />
       <ScannerToolbarActions
-        top={insets.top + 12}
+        top={insets.top + (usesTopTabBar ? 72 : 12)}
         groups={groups}
         onToggle={toggleGroup}
         onClear={clearGroups}
