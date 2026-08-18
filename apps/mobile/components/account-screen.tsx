@@ -268,41 +268,27 @@ export default function AccountScreen() {
       <Section title={t("accountContact")}>
         <InfoRow
           label={t("accountEmail")}
-          value={me.emailVerified ? t("accountVerified") : t("accountNotVerified")}
+          value={me.email}
           icon="envelope"
-          valueStyle={{ color: me.emailVerified ? colors.success : colors.warning }}
+          accessoryIcon={me.emailVerified ? "checkmark.seal.fill" : "exclamationmark.triangle.fill"}
+          accessoryColor={me.emailVerified ? colors.success : colors.warning}
+          accessoryLabel={me.emailVerified ? t("accountVerified") : t("accountNotVerified")}
         />
-        <Text
-          selectable
-          style={{
-            color: colors.secondaryLabel,
-            fontSize: 13,
-            paddingBottom: 12,
-            paddingHorizontal: 48,
-          }}
-        >
-          {me.email}
-        </Text>
         {me.secondaryEmail ? (
           <>
             <Separator inset={48} />
             <InfoRow
               label={t("accountSecondaryEmail")}
-              value={me.secondaryEmailVerified ? t("accountVerified") : t("accountNotVerified")}
+              value={me.secondaryEmail}
               icon="envelope.badge"
-              valueStyle={{ color: me.secondaryEmailVerified ? colors.success : colors.warning }}
+              accessoryIcon={
+                me.secondaryEmailVerified ? "checkmark.seal.fill" : "exclamationmark.triangle.fill"
+              }
+              accessoryColor={me.secondaryEmailVerified ? colors.success : colors.warning}
+              accessoryLabel={
+                me.secondaryEmailVerified ? t("accountVerified") : t("accountNotVerified")
+              }
             />
-            <Text
-              selectable
-              style={{
-                color: colors.secondaryLabel,
-                fontSize: 13,
-                paddingBottom: 12,
-                paddingHorizontal: 48,
-              }}
-            >
-              {me.secondaryEmail}
-            </Text>
           </>
         ) : null}
       </Section>
@@ -362,23 +348,6 @@ export default function AccountScreen() {
         </Section>
       ) : null}
 
-      <Section title={t("sessionTitle")} footer={t("sessionActive", { email: me.email })}>
-        <ActionButton
-          label={t("refreshAccount")}
-          icon="arrow.clockwise"
-          busy={loading}
-          onPress={() => void refetch()}
-        />
-        <Separator />
-        <ActionButton
-          label={t("signOut")}
-          icon="rectangle.portrait.and.arrow.right"
-          destructive
-          busy={signingOut}
-          onPress={confirmSignOut}
-        />
-      </Section>
-
       <Section title={t("storageTitle")} footer={t("storageFooter")}>
         <InfoRow
           label={t("storageOfflineData")}
@@ -404,6 +373,23 @@ export default function AccountScreen() {
           destructive
           busy={clearingCache}
           onPress={confirmClearCache}
+        />
+      </Section>
+
+      <Section title={t("sessionTitle")} footer={t("sessionActive", { email: me.email })}>
+        <ActionButton
+          label={t("refreshAccount")}
+          icon="arrow.clockwise"
+          busy={loading}
+          onPress={() => void refetch()}
+        />
+        <Separator />
+        <ActionButton
+          label={t("signOut")}
+          icon="rectangle.portrait.and.arrow.right"
+          destructive
+          busy={signingOut}
+          onPress={confirmSignOut}
         />
       </Section>
     </ScrollView>

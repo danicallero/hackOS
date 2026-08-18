@@ -91,12 +91,22 @@ export function InfoRow({
   value,
   icon,
   accessoryIcon,
+  accessoryColor,
+  accessoryLabel,
   valueStyle,
 }: {
   label: string;
   value: string;
   icon?: SymbolViewProps["name"];
   accessoryIcon?: SymbolViewProps["name"];
+  /** Tint for `accessoryIcon`; defaults to the neutral chevron tint. */
+  accessoryColor?: SymbolViewProps["tintColor"];
+  /**
+   * Accessibility label for `accessoryIcon` when it conveys meaning beyond
+   * decoration (e.g. a verification badge) rather than a plain disclosure
+   * chevron. Leave unset for chevrons — they stay hidden from VoiceOver.
+   */
+  accessoryLabel?: string;
   valueStyle?: TextStyle;
 }) {
   return (
@@ -128,10 +138,11 @@ export function InfoRow({
       {accessoryIcon ? (
         <SymbolView
           name={accessoryIcon}
-          tintColor={colors.tertiaryLabel}
-          size={12}
+          tintColor={accessoryColor ?? colors.tertiaryLabel}
+          size={accessoryColor ? 18 : 12}
           weight="semibold"
-          accessible={false}
+          accessible={!!accessoryLabel}
+          accessibilityLabel={accessoryLabel}
         />
       ) : null}
     </View>

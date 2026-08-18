@@ -170,7 +170,10 @@ function MobileAccessGate({ authenticated }: { authenticated: boolean }) {
   useEffect(() => {
     if (!authenticated || loading || !me || me.mobileAccess) return;
     void signOut().finally(() => {
-      router.replace({ pathname: "/(auth)/sign-in", params: { accessDenied: "1" } });
+      router.replace({
+        pathname: "/(auth)/sign-in",
+        params: { accessDenied: "1" },
+      });
     });
   }, [authenticated, loading, me, router]);
 

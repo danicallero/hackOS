@@ -5,18 +5,28 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AdaptiveBackButton, AdaptiveToolbarButton, EmptyState } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
-import { SymbolView } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
-import { fetchPublicSchedule, scheduleTypeLabel } from "@/lib/schedule";
+import { fetchPublicSchedule, scheduleDurationLabel, scheduleTypeLabel } from "@/lib/schedule";
 import { useActivityReminders } from "@/lib/use-activity-reminders";
+import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { colors } from "@/theme/colors";
+
+const CONTENT_PADDING = 20;
+// The floating back/reminder buttons sit at `topInset + 8` with a 44pt
+// diameter — the header's own text has to clear that whole row.
+const BUTTON_ROW_HEIGHT = 60;
+// Approximate height of the header's own title + subtitle text, so the
+// scrolling content below starts clear of it instead of underneath it.
+const HEADER_TEXT_HEIGHT = 56;
 
 export default function ScheduleDetailScreen() {
   useColorScheme();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const androidTopInset = useAndroidTopInset();
+  const topInset = process.env.EXPO_OS === "ios" ? insets.top : androidTopInset;
   const { t, language } = useLocale();
   const { data, loading, error, staleSince, load } = useCachedApi("schedule", fetchPublicSchedule);
   const reminders = useActivityReminders();
@@ -39,103 +49,63 @@ export default function ScheduleDetailScreen() {
     startsAt && endsAt
       ? `${startsAt.toLocaleTimeString(language, { hour: "2-digit", minute: "2-digit" })}–${endsAt.toLocaleTimeString(language, { hour: "2-digit", minute: "2-digit" })}`
       : null;
+  const when = date && time ? `${date} · ${time}` : (date ?? time);
+  // Everything the header already shows (location, when it happens) is left
+  // out of the Information table below so nothing repeats.
+  const headerSubtitle = [item?.location, when].filter(Boolean).join(" · ");
+  const headerHeight = topInset + BUTTON_ROW_HEIGHT + HEADER_TEXT_HEIGHT;
 
   return (
     <>
       <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
+        // A fixed sibling overlay below (not scroll content) — `stickyHeaderIndices`
+        // pins content visually, but RN's JS implementation lets it drag along
+        // with the elastic bounce when you overscroll past the top. A sibling
+        // outside the ScrollView's transform hierarchy can't move at all.
+        scrollIndicatorInsets={{
+          top: item ? headerHeight : topInset + BUTTON_ROW_HEIGHT,
+        }}
         contentContainerStyle={{
           flexGrow: 1,
-          gap: 16,
-          padding: 20,
           paddingBottom: 40,
-          paddingTop: insets.top + 15,
+          paddingHorizontal: CONTENT_PADDING,
+          paddingTop: item ? headerHeight : topInset + BUTTON_ROW_HEIGHT,
         }}
         style={{ backgroundColor: colors.background }}
       >
-        <StaleDataBanner updatedAt={staleSince} onRetry={() => void load()} retrying={loading} />
-        {reminders.error ? (
-          <RequestFeedback
-            error={reminders.error}
-            message={t("scheduleReminderError")}
-            onRetry={reminders.retry}
-            retrying={reminders.savingId !== null}
-          />
-        ) : null}
-        {loading && !data ? (
-          <RequestFeedback loading />
-        ) : error && !data ? (
-          <RequestFeedback error={error} onRetry={() => void load()} />
-        ) : !item ? (
-          <EmptyState
-            icon="calendar.badge.exclamationmark"
-            title={t("scheduleDetails")}
-            description={t("scheduleItemUnavailable")}
-          />
+        <View style={{ gap: 8 }}>
+          <StaleDataBanner updatedAt={staleSince} onRetry={() => void load()} retrying={loading} />
+          {reminders.error ? (
+            <RequestFeedback
+              error={reminders.error}
+              message={t("scheduleReminderError")}
+              onRetry={reminders.retry}
+              retrying={reminders.savingId !== null}
+            />
+          ) : null}
+        </View>
+
+        {!item ? (
+          loading && !data ? (
+            <RequestFeedback loading />
+          ) : error && !data ? (
+            <RequestFeedback error={error} onRetry={() => void load()} />
+          ) : (
+            <EmptyState
+              icon="calendar.badge.exclamationmark"
+              title={t("scheduleDetails")}
+              description={t("scheduleItemUnavailable")}
+            />
+          )
         ) : (
-          <View style={{ gap: 20 }}>
-            <View style={{ gap: 6 }}>
-              <View
-                style={{ alignItems: "center", flexDirection: "row", flexWrap: "wrap", gap: 6 }}
-              >
-                <Text
-                  selectable
-                  style={{
-                    color: colors.secondaryLabel,
-                    fontSize: 13,
-                    fontWeight: "700",
-                  }}
-                >
-                  {scheduleTypeLabel(item.type, t)}
-                </Text>
-                {item.location ? (
-                  <>
-                    <Text style={{ color: colors.tertiaryLabel, fontSize: 13 }}>·</Text>
-                    <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13 }}>
-                      {item.location}
-                    </Text>
-                  </>
-                ) : null}
-              </View>
-              <Text
-                selectable
-                style={{ color: colors.label, fontSize: 30, fontWeight: "800", lineHeight: 36 }}
-              >
-                {item.title}
-              </Text>
-            </View>
-
-            <View
-              style={{
-                alignItems: "center",
-                alignSelf: "flex-start",
-                backgroundColor: colors.accentSurface,
-                borderCurve: "continuous",
-                borderRadius: 999,
-                flexDirection: "row",
-                gap: 8,
-                paddingHorizontal: 14,
-                paddingVertical: 10,
-              }}
-            >
-              <SymbolView
-                name="clock.fill"
-                tintColor={colors.accent}
-                size={15}
-                accessible={false}
-              />
-              <Text selectable style={{ color: colors.accent, fontSize: 15, fontWeight: "700" }}>
-                {date ? `${date} · ${time}` : time}
-              </Text>
-            </View>
-
+          <View style={{ gap: 24 }}>
             {item.description ? (
-              <View style={{ gap: 6 }}>
+              <View style={{ gap: 10 }}>
                 <Text
                   style={{
-                    color: colors.secondaryLabel,
-                    fontSize: 12,
-                    fontWeight: "700",
+                    color: colors.label,
+                    fontSize: 20,
+                    fontWeight: "800",
                   }}
                 >
                   {t("scheduleDescription")}
@@ -145,9 +115,66 @@ export default function ScheduleDetailScreen() {
                 </Text>
               </View>
             ) : null}
+
+            <View style={{ gap: 4 }}>
+              <Text
+                style={{
+                  color: colors.label,
+                  fontSize: 20,
+                  fontWeight: "800",
+                  marginBottom: 8,
+                }}
+              >
+                {t("scheduleInformation")}
+              </Text>
+              <PlainInfoRow label={t("scheduleType")} value={scheduleTypeLabel(item.type, t)} />
+              <PlainInfoRow
+                label={t("scheduleDuration")}
+                value={scheduleDurationLabel(item, t)}
+                last
+              />
+            </View>
           </View>
         )}
       </ScrollView>
+
+      {item ? (
+        <View
+          pointerEvents="none"
+          style={{
+            backgroundColor: colors.background,
+            left: 0,
+            paddingBottom: 14,
+            paddingHorizontal: CONTENT_PADDING,
+            paddingTop: topInset + BUTTON_ROW_HEIGHT,
+            position: "absolute",
+            right: 0,
+            top: 0,
+          }}
+        >
+          <Text
+            selectable
+            numberOfLines={1}
+            style={{ color: colors.label, fontSize: 22, fontWeight: "800" }}
+          >
+            {item.title}
+          </Text>
+          {headerSubtitle ? (
+            <Text
+              selectable
+              numberOfLines={1}
+              style={{
+                color: colors.secondaryLabel,
+                fontSize: 14,
+                marginTop: 2,
+              }}
+            >
+              {headerSubtitle}
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
+
       <AdaptiveBackButton top={insets.top + 8} onPress={() => router.back()} />
       {item && reminderOn !== null ? (
         <AdaptiveToolbarButton
@@ -158,11 +185,45 @@ export default function ScheduleDetailScreen() {
           accessibilityLabel={t(reminderOn ? "scheduleReminderOn" : "scheduleReminderOff", {
             name: item.title,
           })}
-          accessibilityState={{ selected: reminderOn, busy: reminders.savingId === item.id }}
+          accessibilityState={{
+            selected: reminderOn,
+            busy: reminders.savingId === item.id,
+          }}
           disabled={reminders.savingId === item.id}
           onPress={() => void reminders.toggle(item.id, !reminderOn)}
         />
       ) : null}
     </>
+  );
+}
+
+/** Full-bleed label/value row, no card — mirrors Podcasts' plain "Information" list. */
+function PlainInfoRow({
+  label,
+  value,
+  last = false,
+}: {
+  label: string;
+  value: string;
+  last?: boolean;
+}) {
+  return (
+    <View
+      style={{
+        alignItems: "center",
+        borderBottomColor: colors.separator,
+        borderBottomWidth: last ? 0 : 0.5,
+        flexDirection: "row",
+        justifyContent: "space-between",
+        paddingVertical: 14,
+      }}
+    >
+      <Text selectable style={{ color: colors.secondaryLabel, fontSize: 16 }}>
+        {label}
+      </Text>
+      <Text selectable style={{ color: colors.label, fontSize: 16 }}>
+        {value}
+      </Text>
+    </View>
   );
 }

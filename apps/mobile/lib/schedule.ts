@@ -1,5 +1,6 @@
 import { apiFetch } from "./api";
 import type { useLocale } from "./i18n";
+import { durationMinutes } from "./presence-timeline";
 
 type Translate = ReturnType<typeof useLocale>["t"];
 
@@ -28,4 +29,18 @@ export function scheduleTypeLabel(type: string | null | undefined, t: Translate)
     other: t("typeOther"),
   };
   return (type && labels[type]) || t("typeOther");
+}
+
+/** `1 h 30 min` / `45 min` — the wall-clock length of a schedule item. */
+export function scheduleDurationLabel(
+  item: Pick<ScheduleItem, "startsAt" | "endsAt">,
+  t: Translate,
+) {
+  const minutes = durationMinutes(item.startsAt, item.endsAt);
+  if (minutes < 60) return t("scheduleDurationMinutes", { minutes: String(minutes) });
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return remainder
+    ? t("scheduleDurationHoursMinutes", { hours: String(hours), minutes: String(remainder) })
+    : t("scheduleDurationHours", { hours: String(hours) });
 }

@@ -9,7 +9,7 @@ import {
   useColorScheme,
   View,
 } from "react-native";
-import { EmptyState, StatusPill } from "@/components/native-ui";
+import { EmptyState } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
@@ -307,13 +307,6 @@ function ScheduleCard({
           >
             {item.title}
           </Text>
-          {item.type ? (
-            // Without alignSelf the pill keeps its flex-start default and
-            // drifts above the centered bell on multi-line titles (H374).
-            <StatusPill style={{ alignSelf: "center" }}>
-              {scheduleTypeLabel(item.type, t)}
-            </StatusPill>
-          ) : null}
           {reminderOn !== null ? (
             <Pressable
               accessibilityLabel={t(reminderOn ? "scheduleReminderOn" : "scheduleReminderOff", {
@@ -342,24 +335,25 @@ function ScheduleCard({
             </Pressable>
           ) : null}
         </View>
-        <View style={{ alignItems: "center", flexDirection: "row", gap: 6 }}>
-          <SymbolView name="clock" tintColor={colors.secondaryLabel} size={14} accessible={false} />
+        <View style={{ alignItems: "center", flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+          {item.type ? (
+            <>
+              <Text style={{ color: colors.secondaryLabel, fontSize: 13, fontWeight: "600" }}>
+                {scheduleTypeLabel(item.type, t)}
+              </Text>
+              <Text style={{ color: colors.tertiaryLabel, fontSize: 13 }}>·</Text>
+            </>
+          ) : null}
           <Text
             selectable
-            style={{ color: colors.secondaryLabel, fontSize: 14, fontVariant: ["tabular-nums"] }}
+            style={{ color: colors.secondaryLabel, fontSize: 13, fontVariant: ["tabular-nums"] }}
           >
             {time}–{end}
           </Text>
           {item.location ? (
             <>
-              <Text style={{ color: colors.tertiaryLabel, fontSize: 14 }}>·</Text>
-              <SymbolView
-                name="mappin.and.ellipse"
-                tintColor={colors.secondaryLabel}
-                size={14}
-                accessible={false}
-              />
-              <Text selectable style={{ color: colors.secondaryLabel, flex: 1, fontSize: 14 }}>
+              <Text style={{ color: colors.tertiaryLabel, fontSize: 13 }}>·</Text>
+              <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13 }}>
                 {item.location}
               </Text>
             </>
