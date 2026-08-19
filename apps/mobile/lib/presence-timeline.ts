@@ -25,3 +25,55 @@ export function guaranteedMinutesTotal(windows: CertaintyWindowLike[]): number {
     0,
   );
 }
+
+export interface CertaintyWindowFull extends CertaintyWindowLike {
+  status: "secured" | "provisional" | "invalid";
+  openedBy: "in" | "activity";
+  conflict: boolean;
+}
+
+export interface PresenceDivergence {
+  /** Overrides the door-only quick-register suggestion for this profile visit. */
+  primaryOverride: "in" | "out" | null;
+  /** A backfill/fix action to offer alongside the (possibly overridden) primary one. */
+  secondary: { kind: "in" | "out"; reason: "activity-open" | "invalid-window"; at: string } | null;
+}
+
+/**
+ * The door-only quick register (H24) only ever sees `time_logs`, never
+ * activity/meal check-ins — so it can suggest "log an entry" for someone
+ * who's demonstrably already inside (an activity opened a certainty window
+ * with no door `in` behind it), or stay silent about a past session that
+ * timed out uncredited because its exit was never scanned. Surface both so
+ * staff can fix them via the unrestricted signal-editor flow instead of the
+ * gated scan endpoint, which would reject either case outright.
+ */
+export function detectPresenceDivergence(
+  windows: CertaintyWindowFull[],
+  doorDirection: "in" | "out",
+): PresenceDivergence {
+  // Only relevant when the door register is about to suggest "log an entry"
+  // — i.e. door ground truth currently shows nobody's inside.
+  if (doorDirection !== "in") return { primaryOverride: null, secondary: null };
+
+  const latest = windows.at(-1) ?? null;
+  if (!latest) return { primaryOverride: null, secondary: null };
+
+  if (latest.status === "provisional" && latest.openedBy === "activity") {
+    return {
+      primaryOverride: "out",
+      secondary: { kind: "in", reason: "activity-open", at: latest.start },
+    };
+  }
+
+  // The in→in conflict has its own dedicated banner/fix flow — only offer
+  // this shortcut for a plain forgotten-exit timeout.
+  if (latest.status === "invalid" && !latest.conflict) {
+    return {
+      primaryOverride: null,
+      secondary: { kind: "out", reason: "invalid-window", at: latest.deadline },
+    };
+  }
+
+  return { primaryOverride: null, secondary: null };
+}

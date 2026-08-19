@@ -62,6 +62,13 @@ function findSubject(scan: PendingScan, people: ScannerPerson[]): ScannerPerson 
       return people.find(
         (person) => person.badgeId === p.badgeId || person.revokedBadgeIds.includes(p.badgeId),
       );
+    case "presence_signal":
+    case "presence_signal_activity":
+      return people.find((person) => person.userId === p.userId);
+    case "presence_signal_edit_door":
+    case "presence_signal_edit_activity":
+    case "presence_signal_delete":
+      return undefined;
   }
 }
 
@@ -91,6 +98,16 @@ function detailLabel(
       const activity = activities.find((a) => a.id === p.activityId);
       return `${p.badgeId} · ${activity?.name ?? `#${p.activityId}`}`;
     }
+    case "presence_signal":
+      return `#${p.userId} · ${p.direction === "in" ? t("presenceSignalEntry") : t("presenceSignalExit")}`;
+    case "presence_signal_activity":
+      return `#${p.userId} · ${activities.find((a) => a.id === p.activityId)?.name ?? `#${p.activityId}`}`;
+    case "presence_signal_edit_door":
+      return `${t("edit")} · #${p.logId}`;
+    case "presence_signal_edit_activity":
+      return `${t("edit")} · #${p.logId}`;
+    case "presence_signal_delete":
+      return `${t("delete")} · #${p.logId}`;
   }
 }
 
@@ -167,6 +184,67 @@ function manualLogDetails(
       });
       break;
     }
+    case "presence_signal":
+      details.push({
+        label: t("scannerFieldDirection"),
+        value: p.direction === "in" ? t("presenceSignalEntry") : t("presenceSignalExit"),
+      });
+      details.push({
+        label: t("scannerFieldTimestamp"),
+        value: new Date(p.occurredAt).toLocaleString(),
+      });
+      break;
+    case "presence_signal_activity": {
+      const activity = activities.find((a) => a.id === p.activityId);
+      details.push({
+        label: t("scannerFieldActivity"),
+        value: activity ? `${activity.name} (#${p.activityId})` : `#${p.activityId}`,
+      });
+      details.push({
+        label: t("scannerFieldTimestamp"),
+        value: new Date(p.occurredAt).toLocaleString(),
+      });
+      break;
+    }
+    case "presence_signal_edit_door":
+      details.push({ label: t("scannerFieldLogId"), value: String(p.logId) });
+      if (p.direction) {
+        details.push({
+          label: t("scannerFieldDirection"),
+          value: p.direction === "in" ? t("presenceSignalEntry") : t("presenceSignalExit"),
+        });
+      }
+      if (p.occurredAt) {
+        details.push({
+          label: t("scannerFieldTimestamp"),
+          value: new Date(p.occurredAt).toLocaleString(),
+        });
+      }
+      break;
+    case "presence_signal_edit_activity": {
+      details.push({ label: t("scannerFieldLogId"), value: String(p.logId) });
+      const activity = activities.find((a) => a.id === p.activityId);
+      if (p.activityId != null) {
+        details.push({
+          label: t("scannerFieldActivity"),
+          value: activity ? `${activity.name} (#${p.activityId})` : `#${p.activityId}`,
+        });
+      }
+      if (p.occurredAt) {
+        details.push({
+          label: t("scannerFieldTimestamp"),
+          value: new Date(p.occurredAt).toLocaleString(),
+        });
+      }
+      break;
+    }
+    case "presence_signal_delete":
+      details.push({
+        label: t("scannerFieldSource"),
+        value: p.source === "door" ? t("presenceSignalEntry") : t("scannerFieldActivity"),
+      });
+      details.push({ label: t("scannerFieldLogId"), value: String(p.logId) });
+      break;
   }
   return details;
 }

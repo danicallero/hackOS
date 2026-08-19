@@ -18,6 +18,7 @@ export function revokedBadgesFromSnapshot(snapshot: {
 
 export function requestForPendingScan(scan: PendingScan): {
   path: string;
+  method: "POST" | "PATCH" | "DELETE";
   body: Record<string, unknown>;
   headers: Record<string, string>;
 } {
@@ -26,6 +27,7 @@ export function requestForPendingScan(scan: PendingScan): {
   if (payload.kind === "accreditation") {
     return {
       path: "/api/accreditation/check-in",
+      method: "POST",
       headers,
       body: { ticketToken: payload.ticketToken, badgeId: payload.badgeId, method: payload.method },
     };
@@ -33,6 +35,7 @@ export function requestForPendingScan(scan: PendingScan): {
   if (payload.kind === "accreditation_user") {
     return {
       path: "/api/accreditation/check-in-user",
+      method: "POST",
       headers,
       body: {
         userId: payload.userId,
@@ -45,6 +48,7 @@ export function requestForPendingScan(scan: PendingScan): {
   if (payload.kind === "badge_rotation") {
     return {
       path: "/api/accreditation/rotate",
+      method: "POST",
       headers,
       body: {
         userId: payload.userId,
@@ -57,6 +61,7 @@ export function requestForPendingScan(scan: PendingScan): {
   if (payload.kind === "badge_removal") {
     return {
       path: "/api/accreditation/remove",
+      method: "POST",
       headers,
       body: { userId: payload.userId, reason: payload.reason },
     };
@@ -64,12 +69,66 @@ export function requestForPendingScan(scan: PendingScan): {
   if (payload.kind === "presence") {
     return {
       path: "/api/presence/scan",
+      method: "POST",
       headers,
       body: { badgeId: payload.badgeId, kind: payload.direction, scannedAt: payload.scannedAt },
     };
   }
+  if (payload.kind === "presence_signal") {
+    return {
+      path: `/api/presence/signals/${payload.userId}`,
+      method: "POST",
+      headers,
+      body: { kind: payload.direction, occurredAt: payload.occurredAt, notes: payload.notes },
+    };
+  }
+  if (payload.kind === "presence_signal_activity") {
+    return {
+      path: `/api/presence/signals/${payload.userId}`,
+      method: "POST",
+      headers,
+      body: {
+        kind: "activity",
+        activityId: payload.activityId,
+        occurredAt: payload.occurredAt,
+        notes: payload.notes,
+      },
+    };
+  }
+  if (payload.kind === "presence_signal_edit_door") {
+    return {
+      path: `/api/presence/logs/${payload.logId}`,
+      method: "PATCH",
+      headers,
+      body: { kind: payload.direction, scannedAt: payload.occurredAt, notes: payload.notes },
+    };
+  }
+  if (payload.kind === "presence_signal_edit_activity") {
+    return {
+      path: `/api/presence/activity-logs/${payload.logId}`,
+      method: "PATCH",
+      headers,
+      body: {
+        activityId: payload.activityId,
+        occurredAt: payload.occurredAt,
+        notes: payload.notes,
+      },
+    };
+  }
+  if (payload.kind === "presence_signal_delete") {
+    return {
+      path:
+        payload.source === "door"
+          ? `/api/presence/logs/${payload.logId}`
+          : `/api/presence/activity-logs/${payload.logId}`,
+      method: "DELETE",
+      headers,
+      body: {},
+    };
+  }
   return {
     path: `/api/activities/${payload.activityId}/scan`,
+    method: "POST",
     headers,
     body: {
       badgeId: payload.badgeId,

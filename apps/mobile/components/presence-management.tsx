@@ -1,5 +1,5 @@
 import { MenuView } from "@expo/ui/community/menu";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -28,7 +28,11 @@ import { SymbolView, type SymbolViewProps } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
+import { useMeContext } from "@/lib/me-context";
 import { durationMinutes, guaranteedMinutesTotal } from "@/lib/presence-timeline";
+import { enqueueLocalScan, pendingScans } from "@/lib/scanner-db";
+import type { ScanPayload } from "@/lib/scanner-types";
+import { useScannerSync } from "@/lib/use-scanner";
 import { colors } from "@/theme/colors";
 
 export type SignalKind = "in" | "out" | "activity";
@@ -87,6 +91,7 @@ export function PresenceManagement({
   refreshKey,
   onDoorState,
   accredited,
+  initialDraft,
 }: {
   userId: number;
   refreshKey?: string;
@@ -94,13 +99,23 @@ export function PresenceManagement({
   onDoorState?: (state: { kind: "in" | "out"; at: string } | null) => void;
   /** Hides the summary card for an unaccredited person with no signals yet — nothing to summarize. */
   accredited: boolean;
+  /**
+   * Opens the editor pre-filled once, as soon as the timeline first loads —
+   * for a deep link from the profile's quick register (a backfilled entry,
+   * or a backdated fix for a session that timed out uncredited).
+   */
+  initialDraft?: { kind: "in" | "out"; occurredAt: Date };
 }) {
   useColorScheme();
   const { language, t } = useLocale();
+  const { me } = useMeContext();
+  const ownerUserId = me?.id;
+  const sync = useScannerSync();
   const [timeline, setTimeline] = useState<PresenceTimeline | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<SignalDraft | null>(null);
+  const autoOpenedDraft = useRef(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -123,6 +138,18 @@ export function PresenceManagement({
     void refreshKey;
     void load();
   }, [load, refreshKey]);
+
+  useEffect(() => {
+    if (!initialDraft || !timeline || autoOpenedDraft.current) return;
+    autoOpenedDraft.current = true;
+    setDraft({
+      signal: null,
+      kind: initialDraft.kind,
+      occurredAt: initialDraft.occurredAt,
+      activityId: timeline.activities[0]?.id ?? null,
+      notes: "",
+    });
+  }, [initialDraft, timeline]);
 
   function addSignal() {
     setDraft({
@@ -165,14 +192,20 @@ export function PresenceManagement({
         style: "destructive",
         onPress: () =>
           void (async () => {
-            try {
-              const collection = signal.source === "door" ? "logs" : "activity-logs";
-              await apiFetch(`/api/presence/${collection}/${signal.id}`, { method: "DELETE" });
-              await load();
+            if (ownerUserId === undefined) return;
+            const scanId = await enqueueLocalScan(
+              { kind: "presence_signal_delete", source: signal.source, logId: signal.id },
+              ownerUserId,
+            );
+            await sync.sync();
+            const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
+            if (stored?.status === "failed") {
+              void haptic("error");
+              Alert.alert(t("presenceCouldNotDelete"), stored.lastError ?? undefined);
+            } else {
               void haptic("warning");
-            } catch {
-              Alert.alert(t("presenceCouldNotDelete"));
             }
+            await load();
           })(),
       },
     ]);
@@ -348,6 +381,8 @@ export function PresenceManagement({
             await load();
             void haptic("success");
           }}
+          ownerUserId={ownerUserId}
+          sync={sync}
           userId={userId}
         />
       ) : null}
@@ -698,12 +733,52 @@ function SignalCard({
   );
 }
 
+/** Maps the editor's draft state to the right queue-backed create/edit payload. */
+function buildDraftPayload(draft: SignalDraft, userId: number, notes: string | null): ScanPayload {
+  const occurredAt = draft.occurredAt.toISOString();
+  if (!draft.signal) {
+    return draft.kind === "activity"
+      ? {
+          kind: "presence_signal_activity",
+          userId,
+          // Guarded by the caller: `presenceActivityRequired` blocks save()
+          // before this runs if no activity is chosen yet.
+          activityId: draft.activityId as number,
+          occurredAt,
+          notes,
+        }
+      : { kind: "presence_signal", userId, direction: draft.kind, occurredAt, notes };
+  }
+  if (draft.signal.source === "activity") {
+    return {
+      kind: "presence_signal_edit_activity",
+      logId: draft.signal.id,
+      activityId: draft.activityId ?? undefined,
+      occurredAt,
+      notes,
+    };
+  }
+  // An existing door signal only ever swaps entry↔exit (never becomes
+  // "activity") — see the `kinds` list below, which restricts this case to
+  // ["in", "out"].
+  const direction = draft.kind === "activity" ? undefined : draft.kind;
+  return {
+    kind: "presence_signal_edit_door",
+    logId: draft.signal.id,
+    direction,
+    occurredAt,
+    notes,
+  };
+}
+
 function SignalEditor({
   activities,
   draft,
   onChange,
   onClose,
   onSaved,
+  ownerUserId,
+  sync,
   userId,
 }: {
   activities: PresenceTimeline["activities"];
@@ -711,6 +786,8 @@ function SignalEditor({
   onChange: (draft: SignalDraft) => void;
   onClose: () => void;
   onSaved: () => Promise<void>;
+  ownerUserId: number | undefined;
+  sync: { sync: () => Promise<void> };
   userId: number;
 }) {
   useColorScheme();
@@ -724,49 +801,19 @@ function SignalEditor({
       setError(t("presenceActivityRequired"));
       return;
     }
+    if (ownerUserId === undefined) return;
     setSaving(true);
     setError(null);
     const notes = draft.notes.trim() || null;
     try {
-      if (!draft.signal) {
-        const body =
-          draft.kind === "activity"
-            ? {
-                kind: draft.kind,
-                occurredAt: draft.occurredAt.toISOString(),
-                activityId: draft.activityId,
-                notes,
-              }
-            : { kind: draft.kind, occurredAt: draft.occurredAt.toISOString(), notes };
-        await apiFetch(`/api/presence/signals/${userId}`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
-        });
-      } else if (draft.signal.source === "activity") {
-        await apiFetch(`/api/presence/activity-logs/${draft.signal.id}`, {
-          method: "PATCH",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            activityId: draft.activityId,
-            occurredAt: draft.occurredAt.toISOString(),
-            notes,
-          }),
-        });
-      } else {
-        await apiFetch(`/api/presence/logs/${draft.signal.id}`, {
-          method: "PATCH",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            kind: draft.kind,
-            scannedAt: draft.occurredAt.toISOString(),
-            notes,
-          }),
-        });
+      const scanId = await enqueueLocalScan(buildDraftPayload(draft, userId, notes), ownerUserId);
+      await sync.sync();
+      const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
+      if (stored?.status === "failed") {
+        setError(stored.lastError ?? t("presenceCouldNotSave"));
+        return;
       }
       await onSaved();
-    } catch {
-      setError(t("presenceCouldNotSave"));
     } finally {
       setSaving(false);
     }

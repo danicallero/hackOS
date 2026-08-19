@@ -12,11 +12,20 @@ const CONTENT_PADDING = 16;
 const BUTTON_ROW_HEIGHT = 20;
 
 export function PresenceScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, draftKind, draftAt } = useLocalSearchParams<{
+    id: string;
+    draftKind?: string;
+    draftAt?: string;
+  }>();
   const userId = Number(id);
   const router = useRouter();
   const { t } = useLocale();
   const insets = useSafeAreaInsets();
+  const draftKindValid: "in" | "out" | null =
+    draftKind === "in" || draftKind === "out" ? draftKind : null;
+  const initialDraft = draftKindValid
+    ? { kind: draftKindValid, occurredAt: draftAt ? new Date(draftAt) : new Date() }
+    : undefined;
 
   return (
     <>
@@ -48,7 +57,7 @@ export function PresenceScreen() {
             compact link on the profile which hides for an unaccredited
             person with no signals yet — reaching here already implies
             there's something to look at. */}
-        <PresenceManagement accredited userId={userId} />
+        <PresenceManagement accredited initialDraft={initialDraft} userId={userId} />
       </ScrollView>
 
       <AdaptiveBackButton top={insets.top + 12} onPress={() => router.back()} />

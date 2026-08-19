@@ -4,7 +4,12 @@ export type ScanKind =
   | "badge_rotation"
   | "badge_removal"
   | "presence"
-  | "activity";
+  | "activity"
+  | "presence_signal"
+  | "presence_signal_activity"
+  | "presence_signal_edit_door"
+  | "presence_signal_edit_activity"
+  | "presence_signal_delete";
 
 export interface ScannerPerson {
   userId: number;
@@ -69,7 +74,41 @@ export type ScanPayload =
       badgeId: string;
       allowRepeat: boolean;
       scannedAt: string;
-    };
+    }
+  // Manual presence-timeline create/edit/delete via the unrestricted
+  // presence-signal endpoints (not the gated /api/presence/scan `presence`
+  // kind above) — e.g. backfilling an entry for a session an activity opened
+  // with no door scan behind it, or the "Add event"/edit/delete flows on the
+  // timeline editor itself.
+  | {
+      kind: "presence_signal";
+      userId: number;
+      direction: "in" | "out";
+      occurredAt: string;
+      notes?: string | null;
+    }
+  | {
+      kind: "presence_signal_activity";
+      userId: number;
+      activityId: number;
+      occurredAt: string;
+      notes?: string | null;
+    }
+  | {
+      kind: "presence_signal_edit_door";
+      logId: number;
+      direction?: "in" | "out";
+      occurredAt?: string;
+      notes?: string | null;
+    }
+  | {
+      kind: "presence_signal_edit_activity";
+      logId: number;
+      activityId?: number;
+      occurredAt?: string;
+      notes?: string | null;
+    }
+  | { kind: "presence_signal_delete"; source: "door" | "activity"; logId: number };
 
 export interface PendingScan {
   id: string;

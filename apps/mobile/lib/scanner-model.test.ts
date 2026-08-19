@@ -83,4 +83,89 @@ describe("offline scanner contract", () => {
     expect(request.path).toBe("/api/accreditation/check-in-user");
     expect(request.body).toEqual({ userId: 42, badgeId: "BADGE-42", method: "manual" });
   });
+
+  it("replays a manual presence signal through the unrestricted endpoint (H24)", () => {
+    const request = requestForPendingScan(
+      pending({
+        kind: "presence_signal",
+        userId: 42,
+        direction: "out",
+        occurredAt: "2026-01-01T00:00:00.000Z",
+      }),
+    );
+    expect(request.path).toBe("/api/presence/signals/42");
+    expect(request.method).toBe("POST");
+    expect(request.body).toEqual({ kind: "out", occurredAt: "2026-01-01T00:00:00.000Z" });
+    expect(request.headers["idempotency-key"]).toBe("stable-device-id");
+  });
+
+  it("replays a manual activity check-in through the unrestricted endpoint (H24)", () => {
+    const request = requestForPendingScan(
+      pending({
+        kind: "presence_signal_activity",
+        userId: 42,
+        activityId: 5,
+        occurredAt: "2026-01-01T00:00:00.000Z",
+        notes: "Backfilled from the timeline editor",
+      }),
+    );
+    expect(request.path).toBe("/api/presence/signals/42");
+    expect(request.method).toBe("POST");
+    expect(request.body).toEqual({
+      kind: "activity",
+      activityId: 5,
+      occurredAt: "2026-01-01T00:00:00.000Z",
+      notes: "Backfilled from the timeline editor",
+    });
+  });
+
+  it("replays a door signal edit as PATCH against its log", () => {
+    const request = requestForPendingScan(
+      pending({
+        kind: "presence_signal_edit_door",
+        logId: 11,
+        direction: "in",
+        occurredAt: "2026-01-01T00:00:00.000Z",
+        notes: null,
+      }),
+    );
+    expect(request.path).toBe("/api/presence/logs/11");
+    expect(request.method).toBe("PATCH");
+    expect(request.body).toEqual({
+      kind: "in",
+      scannedAt: "2026-01-01T00:00:00.000Z",
+      notes: null,
+    });
+  });
+
+  it("replays an activity signal edit as PATCH against its log", () => {
+    const request = requestForPendingScan(
+      pending({
+        kind: "presence_signal_edit_activity",
+        logId: 12,
+        activityId: 6,
+        occurredAt: "2026-01-01T00:00:00.000Z",
+      }),
+    );
+    expect(request.path).toBe("/api/presence/activity-logs/12");
+    expect(request.method).toBe("PATCH");
+    expect(request.body).toEqual({
+      activityId: 6,
+      occurredAt: "2026-01-01T00:00:00.000Z",
+    });
+  });
+
+  it("replays a presence signal deletion as DELETE against the matching collection", () => {
+    const doorDelete = requestForPendingScan(
+      pending({ kind: "presence_signal_delete", source: "door", logId: 7 }),
+    );
+    expect(doorDelete.path).toBe("/api/presence/logs/7");
+    expect(doorDelete.method).toBe("DELETE");
+
+    const activityDelete = requestForPendingScan(
+      pending({ kind: "presence_signal_delete", source: "activity", logId: 9 }),
+    );
+    expect(activityDelete.path).toBe("/api/presence/activity-logs/9");
+    expect(activityDelete.method).toBe("DELETE");
+  });
 });

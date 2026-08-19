@@ -468,7 +468,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
     "/api/presence/signals/:userId",
     {
       ...routeAccess(access.presence),
-      preHandler: presence,
+      preHandler: [presence, idempotencyGuard],
       schema: { params: userIdParam, body: presenceSignalBody },
     },
     async (req, reply) =>
@@ -481,7 +481,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
     "/api/presence/logs/:id",
     {
       ...routeAccess(access.presence),
-      preHandler: presence,
+      preHandler: [presence, idempotencyGuard],
       schema: { params: timeLogIdParam, body: timeLogPatchBody },
     },
     async (req) =>
@@ -496,7 +496,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
     "/api/presence/activity-logs/:id",
     {
       ...routeAccess(access.presence),
-      preHandler: presence,
+      preHandler: [presence, idempotencyGuard],
       schema: { params: timeLogIdParam, body: presenceActivityPatchBody },
     },
     async (req) => updatePresenceActivity(actor(req.userId), req.params.id, req.body),
@@ -504,13 +504,21 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
 
   typed.delete(
     "/api/presence/activity-logs/:id",
-    { ...routeAccess(access.presence), preHandler: presence, schema: { params: timeLogIdParam } },
+    {
+      ...routeAccess(access.presence),
+      preHandler: [presence, idempotencyGuard],
+      schema: { params: timeLogIdParam },
+    },
     async (req) => deletePresenceActivity(actor(req.userId), req.params.id),
   );
 
   typed.delete(
     "/api/presence/logs/:id",
-    { ...routeAccess(access.presence), preHandler: presence, schema: { params: timeLogIdParam } },
+    {
+      ...routeAccess(access.presence),
+      preHandler: [presence, idempotencyGuard],
+      schema: { params: timeLogIdParam },
+    },
     async (req) => deleteTimeLog(actor(req.userId), req.params.id),
   );
 
@@ -518,7 +526,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
 
   // Scannable activities with live counts — powers the meal/activity station
   // pickers and their inline stats (available to scan operators, not just
-  // LOGISTICS_STATS). Fixes the scanner that used to require the stats panel.
+  // LOGISTICS_STATS).
   typed.get(
     "/api/activities/scannable",
     {

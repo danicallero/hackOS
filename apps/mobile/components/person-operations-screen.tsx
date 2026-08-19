@@ -1,11 +1,10 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { BlurView } from "expo-blur";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, useColorScheme, View } from "react-native";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { DateTimeField } from "@/components/date-time-field";
 import {
   ActionButton,
   AdaptiveBackButton,
@@ -23,6 +22,7 @@ import { apiFetch } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
+import type { PresenceDivergence } from "@/lib/presence-timeline";
 import {
   enqueueLocalScan,
   findPersonById,
@@ -138,7 +138,6 @@ export function PersonOperationsScreen() {
   const [loadError, setLoadError] = useState<Error | null>(null);
   const [cameraAction, setCameraAction] = useState<"assign" | "replace" | null>(null);
   const [attendeeRole, setAttendeeRole] = useState<"participant" | "mentor" | null>(null);
-  const [scannedAt, setScannedAt] = useState(new Date());
   const [busy, setBusy] = useState(false);
   // Server-side last door log, reported by the presence timeline below —
   // the local snapshot alone can lag behind manual edits or other devices.
@@ -147,6 +146,14 @@ export function PersonOperationsScreen() {
     (state: { kind: "in" | "out"; at: string } | null) => setServerDoor(state),
     [],
   );
+  // Whether the door-only register's suggestion diverges from what activity
+  // signals show (e.g. an activity opened a session with no door entry
+  // behind it, or a past session timed out uncredited) — see
+  // lib/presence-timeline.ts's detectPresenceDivergence for the exact rules.
+  const [divergence, setDivergence] = useState<PresenceDivergence>({
+    primaryOverride: null,
+    secondary: null,
+  });
   const load = useCallback(async () => {
     setLoadError(null);
     setLoadState((current) => (current === "ready" ? current : "loading"));
@@ -191,6 +198,15 @@ export function PersonOperationsScreen() {
     void sync.lastSync;
     void load();
   }, [load, sync.lastSync]);
+
+  // Also reload on focus: this screen stays mounted while "Add event" (a
+  // separate pushed screen) saves a presence signal, so returning here
+  // wouldn't otherwise pick up a just-changed badge/accreditation state.
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
 
   async function saveBadge(nextBadge: string, attendeeRole?: "participant" | "mentor") {
     if (!person || ownerUserId === undefined) return;
@@ -309,6 +325,7 @@ export function PersonOperationsScreen() {
 
   async function registerPresence(direction: "in" | "out") {
     if (!person?.badgeId || ownerUserId === undefined) return;
+    const scannedAt = new Date();
     setBusy(true);
     try {
       const scanId = await enqueueLocalScan(
@@ -338,6 +355,39 @@ export function PersonOperationsScreen() {
           lastPresenceKind: direction,
           lastPresenceAt: scannedAt.toISOString(),
         });
+      } else {
+        void haptic("light");
+      }
+      await load();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // For the activity-open divergence only: the door-only scan endpoint
+  // above would reject either half of this (no door session exists for it
+  // to open or close), but the unrestricted signal endpoint — the same one
+  // "Add event" already uses — has no such gate. Runs inline, right from
+  // this screen, same as the normal register above; not offline-queued,
+  // matching how the full editor's own saves already work.
+  async function createPresenceSignal(kind: "in" | "out", occurredAt: Date) {
+    if (ownerUserId === undefined) return;
+    setBusy(true);
+    try {
+      const scanId = await enqueueLocalScan(
+        { kind: "presence_signal", userId, direction: kind, occurredAt: occurredAt.toISOString() },
+        ownerUserId,
+      );
+      await sync.sync();
+      const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
+      if (stored?.status === "failed") {
+        void haptic("error");
+        Alert.alert(
+          t("presenceScanRejectedTitle"),
+          stored.lastError ?? t("presenceScanRejectedBody"),
+        );
+      } else if (stored?.status === "acknowledged") {
+        void haptic("success");
       } else {
         void haptic("light");
       }
@@ -437,25 +487,63 @@ export function PersonOperationsScreen() {
 
   // Door logging needs a badge: without one the register is hidden entirely
   // and assigning a badge becomes the profile's primary action instead.
-  // The suggested direction (inferred from the last door signal) gets the
-  // full labeled button; the other direction is still one tap away, as a
-  // plain icon circle, for the rarer manual override.
-  const otherDirection: "in" | "out" = direction === "in" ? "out" : "in";
+  // The suggested direction (inferred from the last door signal — or
+  // overridden when an activity opened a session with no door entry behind
+  // it, see PresenceDivergence) gets the full filled button; the other
+  // direction is still one tap away, as a clearly labeled outline button.
+  const effectiveDirection: "in" | "out" = divergence.primaryOverride ?? direction;
+  const otherDirection: "in" | "out" = effectiveDirection === "in" ? "out" : "in";
+  // The door-only scan endpoint can't represent either half of the
+  // activity-open case (no door session exists for it to open or close) —
+  // both buttons instead create the signal directly via createPresenceSignal.
+  const isActivityOpenDivergence = divergence.primaryOverride !== null;
   const directionTone = (dir: "in" | "out") => (dir === "in" ? colors.accent : colors.warning);
   const directionIcon = (dir: "in" | "out") =>
     dir === "in" ? "arrow.right.to.line" : "arrow.left.to.line";
   const directionLabel = (dir: "in" | "out") => (dir === "in" ? t("scannerIn") : t("scannerOut"));
 
+  function openPresenceDraft(kind: "in" | "out", at: string) {
+    router.push({
+      pathname: "/(tabs)/scan/person/presence/[id]",
+      params: { id: String(userId), draftKind: kind, draftAt: at },
+    });
+  }
+
+  // The suggested action fires immediately, right on this screen — an
+  // activity-open session just can't go through the gated scan endpoint, so
+  // it takes the unrestricted one instead, but neither case ever navigates
+  // away to confirm a timestamp.
+  function registerPrimary() {
+    if (isActivityOpenDivergence) {
+      void createPresenceSignal(effectiveDirection, new Date());
+      return;
+    }
+    void registerPresence(effectiveDirection);
+  }
+
+  // The override direction always opens "Add event" pre-filled instead: it's
+  // the less common, more deliberate action, so staff see (and can adjust)
+  // the exact timestamp before it's committed, rather than firing blind.
+  function registerOther() {
+    const at =
+      isActivityOpenDivergence && otherDirection === divergence.secondary?.kind
+        ? divergence.secondary.at
+        : new Date().toISOString();
+    openPresenceDraft(otherDirection, at);
+  }
+
   const registerButton = (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={direction === "in" ? t("personRegisterEntry") : t("personRegisterExit")}
+      accessibilityLabel={
+        effectiveDirection === "in" ? t("personRegisterEntry") : t("personRegisterExit")
+      }
       accessibilityState={{ busy, disabled: busy }}
       disabled={busy}
-      onPress={() => void registerPresence(direction)}
+      onPress={registerPrimary}
       style={({ pressed }) => ({
         alignItems: "center",
-        backgroundColor: direction === "in" ? colors.accentSurface : colors.warningSurface,
+        backgroundColor: effectiveDirection === "in" ? colors.accentSurface : colors.warningSurface,
         borderCurve: "continuous",
         borderRadius: 14,
         flex: 1,
@@ -467,13 +555,13 @@ export function PersonOperationsScreen() {
       })}
     >
       <SymbolView
-        name={directionIcon(direction)}
-        tintColor={directionTone(direction)}
+        name={directionIcon(effectiveDirection)}
+        tintColor={directionTone(effectiveDirection)}
         size={18}
         weight="semibold"
       />
-      <Text style={{ color: directionTone(direction), fontSize: 17, fontWeight: "600" }}>
-        {directionLabel(direction)}
+      <Text style={{ color: directionTone(effectiveDirection), fontSize: 17, fontWeight: "600" }}>
+        {directionLabel(effectiveDirection)}
       </Text>
     </Pressable>
   );
@@ -486,41 +574,73 @@ export function PersonOperationsScreen() {
       }
       accessibilityState={{ busy, disabled: busy }}
       disabled={busy}
-      onPress={() => void registerPresence(otherDirection)}
+      onPress={registerOther}
       style={({ pressed }) => ({
         alignItems: "center",
-        backgroundColor: colors.elevatedSurface,
-        borderRadius: 25,
+        borderColor: directionTone(otherDirection),
+        borderCurve: "continuous",
+        borderRadius: 14,
+        borderWidth: 1.5,
+        flexDirection: "row",
+        gap: 7,
         height: 50,
         justifyContent: "center",
         opacity: busy ? 0.45 : pressed ? 0.6 : 1,
-        width: 50,
+        paddingHorizontal: 16,
       })}
     >
       <SymbolView
         name={directionIcon(otherDirection)}
-        tintColor={colors.secondaryLabel}
-        size={18}
+        tintColor={directionTone(otherDirection)}
+        size={16}
         weight="semibold"
       />
+      <Text style={{ color: directionTone(otherDirection), fontSize: 15, fontWeight: "600" }}>
+        {directionLabel(otherDirection)}
+      </Text>
     </Pressable>
   );
+
+  // A past session that timed out uncredited (not the in→in conflict, which
+  // has its own banner) doesn't change today's suggestion — it's offered as
+  // a separate, subtle backdated fix instead.
+  const staleSessionFix =
+    !isActivityOpenDivergence && divergence.secondary?.reason === "invalid-window" ? (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t("presenceFixStaleSession")}
+        onPress={() => openPresenceDraft(divergence.secondary!.kind, divergence.secondary!.at)}
+        style={({ pressed }) => ({
+          alignItems: "center",
+          flexDirection: "row",
+          gap: 6,
+          opacity: pressed ? 0.6 : 1,
+        })}
+      >
+        <SymbolView
+          name="exclamationmark.triangle.fill"
+          tintColor={colors.warning}
+          size={13}
+          accessible={false}
+        />
+        <Text style={{ color: colors.warning, fontSize: 13, fontWeight: "600" }}>
+          {t("presenceFixStaleSession")}
+        </Text>
+      </Pressable>
+    ) : null;
 
   const presenceRegisterSection =
     canPresence && person.badgeId ? (
       <Section title={t("personPresenceTitle")}>
         <View style={{ gap: 16, padding: 16 }}>
-          <DateTimeField
-            dateAccessibilityLabel={t("scannerDateField")}
-            timeAccessibilityLabel={t("scannerTimeField")}
-            maximumDate={new Date()}
-            value={scannedAt}
-            onChange={setScannedAt}
-          />
+          {isActivityOpenDivergence ? (
+            <StatusPill tone="warning">{t("presenceActivityOpenIndicator")}</StatusPill>
+          ) : null}
           <View style={{ alignItems: "center", flexDirection: "row", gap: 10 }}>
             {registerButton}
             {otherDirectionButton}
           </View>
+          {staleSessionFix}
         </View>
       </Section>
     ) : null;
@@ -647,6 +767,7 @@ export function PersonOperationsScreen() {
         {canPresence ? (
           <PresenceSummaryLink
             accredited={Boolean(person.badgeId)}
+            onDivergence={setDivergence}
             onDoorState={onDoorState}
             refreshKey={sync.lastSync ?? undefined}
             userId={userId}
