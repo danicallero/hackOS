@@ -19,10 +19,14 @@ const TIMESTAMP_FUTURE_ERROR = "Offline scan timestamp must be in the past";
 
 async function replay(scan: PendingScan): Promise<void> {
   const request = requestForPendingScan(scan);
+  const isDelete = request.method === "DELETE";
+  const headers = isDelete
+    ? Object.fromEntries(Object.entries(request.headers).filter(([key]) => key !== "content-type"))
+    : request.headers;
   await apiFetch(request.path, {
     method: request.method,
-    headers: request.headers,
-    body: request.method === "DELETE" ? undefined : JSON.stringify(request.body),
+    headers,
+    body: isDelete ? undefined : JSON.stringify(request.body),
   });
 }
 
