@@ -10,12 +10,13 @@ import {
   TextInput,
   useColorScheme,
   View,
+  type ViewStyle,
 } from "react-native";
+import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DateTimeField } from "@/components/date-time-field";
 import {
   ActionButton,
-  EmptyState,
   FloatingGlassButton,
   InfoRow,
   Section,
@@ -23,11 +24,11 @@ import {
   StatusPill,
 } from "@/components/native-ui";
 import { SegmentedControl } from "@/components/segmented-control";
-import { SymbolView } from "@/components/symbol";
+import { SymbolView, type SymbolViewProps } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
-import { durationMinutes, securedWindowFraction } from "@/lib/presence-timeline";
+import { durationMinutes } from "@/lib/presence-timeline";
 import { colors } from "@/theme/colors";
 
 type SignalKind = "in" | "out" | "activity";
@@ -85,11 +86,14 @@ export function PresenceManagement({
   userId,
   refreshKey,
   onDoorState,
+  accredited,
 }: {
   userId: number;
   refreshKey?: string;
   /** Reports the server's last door log so the register can derive its direction from ground truth. */
   onDoorState?: (state: { kind: "in" | "out"; at: string } | null) => void;
+  /** Hides the summary card for an unaccredited person with no signals yet — nothing to summarize. */
+  accredited: boolean;
 }) {
   useColorScheme();
   const { language, t } = useLocale();
@@ -202,6 +206,8 @@ export function PresenceManagement({
       .reverse(); // newest first
   })();
 
+  const groups = groupRowsByDay(rows, language, t);
+
   return (
     <View style={{ gap: 22 }}>
       {(timeline?.conflicts ?? []).map((conflict) => (
@@ -213,78 +219,142 @@ export function PresenceManagement({
         />
       ))}
 
-      <Section title={t("presenceSummary")}>
-        <InfoRow
-          icon="checkmark.seal.fill"
-          label={t("presenceGuaranteedHours")}
-          value={timeline ? formatMinutes(guaranteedMinutes, t) : "—"}
-          valueStyle={{ color: colors.success, fontVariant: ["tabular-nums"], fontWeight: "700" }}
-        />
-        <Separator />
-        <InfoRow
-          icon="hourglass"
-          label={t("presenceProvisionalHours")}
-          value={timeline ? formatMinutes(provisionalMinutes, t) : "—"}
-          valueStyle={{ color: colors.warning, fontVariant: ["tabular-nums"], fontWeight: "600" }}
-        />
-      </Section>
+      {accredited || rows.length > 0 ? (
+        <Section title={t("presenceSummary")}>
+          <InfoRow
+            icon="checkmark.seal.fill"
+            label={t("presenceGuaranteedHours")}
+            value={timeline ? formatMinutes(guaranteedMinutes, t) : "—"}
+            valueStyle={{ color: colors.success, fontVariant: ["tabular-nums"], fontWeight: "700" }}
+          />
+          <Separator />
+          <InfoRow
+            icon="hourglass"
+            label={t("presenceProvisionalHours")}
+            value={timeline ? formatMinutes(provisionalMinutes, t) : "—"}
+            valueStyle={{ color: colors.warning, fontVariant: ["tabular-nums"], fontWeight: "600" }}
+          />
+        </Section>
+      ) : null}
 
-      <Section title={t("presenceTimeline")} footer={t("presenceTimelineFooter")}>
-        <ActionButton icon="plus.circle.fill" label={t("presenceAddSignal")} onPress={addSignal} />
-        {loading && !timeline ? (
-          <>
-            <Separator />
-            <View style={{ alignItems: "center", minHeight: 110, justifyContent: "center" }}>
-              <ActivityIndicator color={colors.accent} />
-            </View>
-          </>
-        ) : error && !timeline ? (
-          <>
-            <Separator />
-            <InfoRow icon="exclamationmark.triangle" label={error} value="" />
-            <Separator />
-            <ActionButton icon="arrow.clockwise" label={t("retry")} onPress={() => void load()} />
-          </>
-        ) : rows.length === 0 ? (
-          <>
-            <Separator />
-            <EmptyState
-              icon="clock.badge.questionmark"
-              title={t("presenceNoWindows")}
-              description={t("presenceNoWindowsDescription")}
-            />
-          </>
-        ) : (
-          rows.map(({ signal, window }) => (
-            <View key={`${signal.source}-${signal.id}`}>
+      <View style={{ gap: 16 }}>
+        <Section title={t("presenceTimeline")}>
+          <ActionButton
+            icon="plus.circle.fill"
+            label={t("presenceAddSignal")}
+            onPress={addSignal}
+          />
+          {loading && !timeline ? (
+            <>
               <Separator />
-              <SignalRow
-                signal={signal}
-                window={window}
-                language={language}
-                onEdit={() => editSignal(signal)}
-              />
-              {window ? <WindowMeter window={window} language={language} /> : null}
-              <View style={{ flexDirection: "row" }}>
-                <ActionButton
-                  icon="pencil"
-                  label={t("edit")}
-                  onPress={() => editSignal(signal)}
-                  style={{ flex: 1 }}
-                />
-                <View style={{ backgroundColor: colors.separator, width: 0.5 }} />
-                <ActionButton
-                  destructive
-                  icon="trash"
-                  label={t("delete")}
-                  onPress={() => confirmDelete(signal)}
-                  style={{ flex: 1 }}
-                />
+              <View style={{ alignItems: "center", minHeight: 110, justifyContent: "center" }}>
+                <ActivityIndicator color={colors.accent} />
               </View>
+            </>
+          ) : error && !timeline ? (
+            <>
+              <Separator />
+              <InfoRow icon="exclamationmark.triangle" label={error} value="" />
+              <Separator />
+              <ActionButton icon="arrow.clockwise" label={t("retry")} onPress={() => void load()} />
+            </>
+          ) : rows.length === 0 ? (
+            <>
+              <Separator />
+              <View
+                style={{ alignItems: "center", gap: 6, paddingHorizontal: 32, paddingVertical: 24 }}
+              >
+                <SymbolView
+                  name="clock.badge.questionmark"
+                  tintColor={colors.secondaryLabel}
+                  size={26}
+                  accessible={false}
+                />
+                <Text
+                  selectable
+                  accessibilityRole="header"
+                  style={{
+                    color: colors.label,
+                    fontSize: 16,
+                    fontWeight: "700",
+                    textAlign: "center",
+                  }}
+                >
+                  {t("presenceNoWindows")}
+                </Text>
+                <Text
+                  selectable
+                  style={{
+                    color: colors.secondaryLabel,
+                    fontSize: 14,
+                    lineHeight: 19,
+                    textAlign: "center",
+                  }}
+                >
+                  {t("presenceNoWindowsDescription")}
+                </Text>
+              </View>
+            </>
+          ) : null}
+        </Section>
+
+        {groups.map((group) => (
+          <View key={group.key} style={{ gap: 10 }}>
+            <View
+              style={{
+                alignItems: "baseline",
+                flexDirection: "row",
+                justifyContent: "space-between",
+                paddingHorizontal: 4,
+              }}
+            >
+              <Text
+                selectable
+                style={{
+                  color: colors.secondaryLabel,
+                  fontSize: 13,
+                  fontWeight: "700",
+                  letterSpacing: 0.4,
+                  textTransform: "uppercase",
+                }}
+              >
+                {group.label}
+              </Text>
+              <Text style={{ color: colors.tertiaryLabel, fontSize: 13 }}>
+                {group.items.length === 1
+                  ? t("presenceRecordsCountOne", { count: "1" })
+                  : t("presenceRecordsCountOther", { count: String(group.items.length) })}
+              </Text>
             </View>
-          ))
-        )}
-      </Section>
+            <View style={{ gap: 10 }}>
+              {group.items.map(({ signal, window }) => (
+                <SignalCard
+                  key={`${signal.source}-${signal.id}`}
+                  signal={signal}
+                  window={window}
+                  language={language}
+                  onEdit={() => editSignal(signal)}
+                  onDelete={() => confirmDelete(signal)}
+                />
+              ))}
+            </View>
+          </View>
+        ))}
+
+        {rows.length > 0 ? (
+          <Text
+            selectable
+            style={{
+              color: colors.secondaryLabel,
+              fontSize: 13,
+              lineHeight: 18,
+              paddingHorizontal: 16,
+            }}
+          >
+            {t("presenceTimelineFooter")}
+          </Text>
+        ) : null}
+      </View>
 
       {draft && timeline ? (
         <SignalEditor
@@ -357,96 +427,141 @@ function ConflictBanner({
   );
 }
 
-/** Certainty-window meter shown under the signal that opened the window. */
-function WindowMeter({ window, language }: { window: CertaintyWindow; language: string }) {
+function dayKey(date: Date): string {
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+
+function fmtTime(date: Date, language: string): string {
+  return date.toLocaleTimeString(language, { hour: "2-digit", minute: "2-digit" });
+}
+
+interface TimelineRow {
+  signal: PresenceSignal;
+  window: CertaintyWindow | null;
+}
+
+interface DayGroup {
+  key: string;
+  label: string;
+  items: TimelineRow[];
+}
+
+/** Buckets the (already newest-first) rows by calendar day, "Today"/"Yesterday" first. */
+function groupRowsByDay(
+  rows: TimelineRow[],
+  language: string,
+  t: ReturnType<typeof useLocale>["t"],
+): DayGroup[] {
+  const now = new Date();
+  const todayKey = dayKey(now);
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const yesterdayKey = dayKey(yesterday);
+  const groups: DayGroup[] = [];
+  for (const row of rows) {
+    const occurredAt = new Date(row.signal.occurredAt);
+    const key = dayKey(occurredAt);
+    const current = groups.at(-1);
+    if (current?.key === key) {
+      current.items.push(row);
+      continue;
+    }
+    const dayMonth = occurredAt.toLocaleDateString(language, { day: "numeric", month: "short" });
+    const relative =
+      key === todayKey
+        ? t("presenceToday")
+        : key === yesterdayKey
+          ? t("presenceYesterday")
+          : occurredAt.toLocaleDateString(language, { weekday: "short" });
+    groups.push({ key, label: `${relative}, ${dayMonth}`, items: [row] });
+  }
+  return groups;
+}
+
+function iconForSignal(signal: PresenceSignal): {
+  icon: Extract<SymbolViewProps["name"], string>;
+  background: ViewStyle["backgroundColor"];
+} {
+  if (signal.kind === "activity") {
+    return {
+      icon: signal.category === "meal" ? "fork.knife" : "figure.run",
+      background: colors.purple,
+    };
+  }
+  return signal.kind === "in"
+    ? { icon: "arrow.right.to.line", background: colors.accent }
+    : { icon: "arrow.left.to.line", background: colors.warning };
+}
+
+/**
+ * The action panel revealed by swiping a card left, matching the OS
+ * notification center's swipe-to-clear gesture: the whole card slides as one
+ * layer (Swipeable's own transform on its child) to uncover these buttons —
+ * they're at full opacity from the first pixel of drag, never fading in
+ * separately, so nothing ever looks like it's floating above them.
+ */
+function SignalCardActions({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
   const { t } = useLocale();
-  const securedFraction = securedWindowFraction(window);
-  const provisionalFraction =
-    window.status === "provisional"
-      ? Math.min(
-          1,
-          Math.max(
-            0,
-            (Date.now() - Date.parse(window.start)) /
-              (Date.parse(window.deadline) - Date.parse(window.start)),
-          ),
-        )
-      : 0;
-  const securedMinutes = window.securedUntil
-    ? durationMinutes(window.start, window.securedUntil)
-    : 0;
-
   return (
-    <View style={{ gap: 10, paddingBottom: 14, paddingHorizontal: 16 }}>
-      <View
-        accessibilityLabel={t("presenceCertaintyWindow")}
-        style={{
-          backgroundColor: colors.elevatedSurface,
-          borderCurve: "continuous",
-          borderRadius: 999,
-          height: 10,
-          overflow: "hidden",
+    <View style={{ flexDirection: "row", height: "100%" }}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t("edit")}
+        onPress={() => {
+          void haptic("light");
+          onEdit();
         }}
+        style={({ pressed }) => ({
+          alignItems: "center",
+          backgroundColor: colors.accent,
+          height: "100%",
+          justifyContent: "center",
+          opacity: pressed ? 0.75 : 1,
+          width: 74,
+        })}
       >
-        {provisionalFraction > 0 ? (
-          <View
-            style={{
-              backgroundColor: colors.warning,
-              height: "100%",
-              opacity: 0.5,
-              width: `${provisionalFraction * 100}%`,
-            }}
-          />
-        ) : null}
-        {securedFraction > 0 ? (
-          <View
-            style={{
-              backgroundColor: colors.success,
-              height: "100%",
-              position: "absolute",
-              width: `${securedFraction * 100}%`,
-            }}
-          />
-        ) : null}
-      </View>
-
-      <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-        <Text selectable style={{ color: colors.secondaryLabel, fontSize: 12 }}>
-          {new Date(window.start).toLocaleTimeString(language, {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
+        <SymbolView name="pencil" tintColor="white" size={18} accessible={false} />
+        <Text style={{ color: "white", fontSize: 12, fontWeight: "700", marginTop: 4 }}>
+          {t("edit")}
         </Text>
-        <Text selectable style={{ color: colors.secondaryLabel, fontSize: 12 }}>
-          {t("presenceDeadline", {
-            time: new Date(window.deadline).toLocaleString(language, {
-              day: "2-digit",
-              hour: "2-digit",
-              minute: "2-digit",
-              month: "short",
-            }),
-          })}
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t("delete")}
+        onPress={() => {
+          void haptic("warning");
+          onDelete();
+        }}
+        style={({ pressed }) => ({
+          alignItems: "center",
+          backgroundColor: colors.destructive,
+          height: "100%",
+          justifyContent: "center",
+          opacity: pressed ? 0.75 : 1,
+          width: 74,
+        })}
+      >
+        <SymbolView name="trash.fill" tintColor="white" size={18} accessible={false} />
+        <Text style={{ color: "white", fontSize: 12, fontWeight: "700", marginTop: 4 }}>
+          {t("delete")}
         </Text>
-      </View>
-      {window.securedUntil ? (
-        <Text selectable style={{ color: colors.success, fontSize: 13, fontWeight: "600" }}>
-          {t("presenceSecuredFor", { duration: formatMinutes(securedMinutes, t) })}
-        </Text>
-      ) : null}
+      </Pressable>
     </View>
   );
 }
 
-function SignalRow({
+function SignalCard({
   signal,
   window,
   language,
   onEdit,
+  onDelete,
 }: {
   signal: PresenceSignal;
-  window?: CertaintyWindow | null;
+  window: CertaintyWindow | null;
   language: string;
   onEdit: () => void;
+  onDelete: () => void;
 }) {
   const { t } = useLocale();
   const title =
@@ -455,75 +570,150 @@ function SignalRow({
       : signal.kind === "in"
         ? t("presenceSignalEntry")
         : t("presenceSignalExit");
+  const { icon, background } = iconForSignal(signal);
+  const recordedBy = signal.recordedBy
+    ? [signal.recordedBy.name, signal.recordedBy.surname].filter(Boolean).join(" ")
+    : null;
+
+  // The status pill only shows for outcomes that need a second look — any
+  // secured window (whether it reached the full duration or not) gets none.
   const status = !window
     ? null
     : window.conflict
       ? { label: t("presenceConflict"), tone: "destructive" as const }
-      : {
-          secured: { label: t("presenceSecured"), tone: "success" as const },
-          provisional: { label: t("presenceProvisional"), tone: "warning" as const },
-          invalid: { label: t("presenceInvalid"), tone: "destructive" as const },
-        }[window.status];
-  const recordedBy = signal.recordedBy
-    ? [signal.recordedBy.name, signal.recordedBy.surname].filter(Boolean).join(" ")
-    : null;
+      : window.status === "invalid"
+        ? { label: t("presenceInvalid"), tone: "destructive" as const }
+        : null;
+
+  // Never hardcoded: both sides of the meter come straight from this
+  // window's own start/deadline/securedUntil instants, so a config change to
+  // the certainty-window duration is reflected automatically, including for
+  // windows opened under a since-changed policy.
+  const totalMinutes = window ? durationMinutes(window.start, window.deadline) : 0;
+  const elapsedMinutes = !window
+    ? 0
+    : window.status === "invalid"
+      ? 0
+      : window.securedUntil
+        ? durationMinutes(window.start, window.securedUntil)
+        : durationMinutes(window.start, new Date().toISOString());
+  const meterFraction = totalMinutes > 0 ? Math.min(1, elapsedMinutes / totalMinutes) : 0;
+  const showHint = window?.status === "provisional" && elapsedMinutes === 0;
+
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${t("edit")}: ${title}`}
-      onPress={onEdit}
-      style={({ pressed }) => ({
-        flexDirection: "row",
-        gap: 12,
-        opacity: pressed ? 0.6 : 1,
-        padding: 16,
-      })}
-    >
-      <SymbolView
-        name={
-          signal.kind === "activity"
-            ? "figure.run"
-            : signal.kind === "in"
-              ? "arrow.right.to.line"
-              : "arrow.left.to.line"
-        }
-        tintColor={signal.kind === "out" ? colors.warning : colors.accent}
-        size={20}
-      />
-      <View style={{ flex: 1, gap: 3 }}>
-        <Text selectable style={{ color: colors.label, fontSize: 16, fontWeight: "600" }}>
-          {title}
-        </Text>
-        <Text selectable style={{ color: colors.secondaryLabel, fontSize: 14 }}>
-          {new Date(signal.occurredAt).toLocaleString(language)}
-        </Text>
-        {signal.notes ? (
-          <Text selectable style={{ color: colors.secondaryLabel, fontSize: 14, lineHeight: 19 }}>
-            {signal.notes}
-          </Text>
-        ) : null}
-        {recordedBy ? (
-          <Text selectable style={{ color: colors.tertiaryLabel, fontSize: 12 }}>
-            {t("presenceRecordedBy", { name: recordedBy })}
-          </Text>
-        ) : signal.recordedBy == null ? (
-          <Text selectable style={{ color: colors.tertiaryLabel, fontSize: 12 }}>
-            {t("presenceRecordedBySystem")}
-          </Text>
-        ) : null}
-      </View>
-      {status ? (
-        <StatusPill tone={status.tone} style={{ alignSelf: "center" }}>
-          {status.label}
-        </StatusPill>
-      ) : null}
-      <SymbolView
-        name="chevron.right"
-        tintColor={colors.tertiaryLabel}
-        size={14}
-        style={{ alignSelf: "center" }}
-      />
-    </Pressable>
+    <View style={{ borderCurve: "continuous", borderRadius: 14, overflow: "hidden" }}>
+      <Swipeable
+        renderRightActions={() => <SignalCardActions onEdit={onEdit} onDelete={onDelete} />}
+        rightThreshold={40}
+        overshootRight={false}
+      >
+        <View style={{ backgroundColor: colors.surface, gap: 8, padding: 16 }}>
+          <View style={{ alignItems: "flex-start", flexDirection: "row", gap: 12 }}>
+            <View
+              style={{
+                alignItems: "center",
+                backgroundColor: background,
+                borderCurve: "continuous",
+                borderRadius: 8,
+                height: 30,
+                justifyContent: "center",
+                width: 30,
+              }}
+            >
+              <SymbolView name={icon} tintColor="white" size={15} accessible={false} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text
+                selectable
+                numberOfLines={1}
+                style={{ color: colors.label, fontSize: 17, fontWeight: "600" }}
+              >
+                {title}
+              </Text>
+              {recordedBy ? (
+                <Text
+                  selectable
+                  numberOfLines={1}
+                  style={{ color: colors.tertiaryLabel, fontSize: 12, marginTop: 1 }}
+                >
+                  {t("presenceRecordedBy", { name: recordedBy })}
+                </Text>
+              ) : signal.recordedBy == null ? (
+                <Text
+                  selectable
+                  numberOfLines={1}
+                  style={{ color: colors.tertiaryLabel, fontSize: 12, marginTop: 1 }}
+                >
+                  {t("presenceRecordedBySystem")}
+                </Text>
+              ) : null}
+            </View>
+            <Text
+              style={{
+                color: colors.secondaryLabel,
+                fontSize: 15,
+                fontVariant: ["tabular-nums"],
+              }}
+            >
+              {fmtTime(new Date(signal.occurredAt), language)}
+            </Text>
+          </View>
+
+          <View style={{ gap: 8, marginLeft: 42 }}>
+            {window ? (
+              <View style={{ alignItems: "center", flexDirection: "row", gap: 10 }}>
+                <View
+                  style={{
+                    backgroundColor: colors.elevatedSurface,
+                    borderCurve: "continuous",
+                    borderRadius: 999,
+                    flex: 1,
+                    height: 4,
+                    overflow: "hidden",
+                  }}
+                >
+                  {window.status === "invalid" ? null : (
+                    <View
+                      style={{
+                        backgroundColor:
+                          window.status === "provisional" ? colors.accent : colors.success,
+                        height: "100%",
+                        width: `${meterFraction * 100}%`,
+                      }}
+                    />
+                  )}
+                </View>
+                {status ? (
+                  <StatusPill tone={status.tone}>{status.label}</StatusPill>
+                ) : (
+                  <Text
+                    style={{
+                      color: colors.secondaryLabel,
+                      fontSize: 13,
+                      fontVariant: ["tabular-nums"],
+                    }}
+                  >
+                    {t("presenceMeterLabel", {
+                      elapsed: elapsedMinutes === 0 ? "0" : formatMinutes(elapsedMinutes, t),
+                      total: formatMinutes(totalMinutes, t),
+                    })}
+                  </Text>
+                )}
+              </View>
+            ) : null}
+
+            {showHint ? (
+              <View style={{ alignItems: "center", flexDirection: "row", gap: 6 }}>
+                <SymbolView name="clock" tintColor={colors.accent} size={13} accessible={false} />
+                <Text style={{ color: colors.accent, flex: 1, fontSize: 12 }}>
+                  {t("presenceSecureTimeHint")}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        </View>
+      </Swipeable>
+    </View>
   );
 }
 

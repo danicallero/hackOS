@@ -106,4 +106,14 @@ export const colors = {
     android: Color.android.dynamic.errorContainer,
     default: "#fff0f0",
   })!,
+  purple: Platform.select({
+    ios: Color.ios.systemPurple,
+    android: Color.android.dynamic.primary,
+    default: "#af52de",
+  })!,
+  purpleSurface: Platform.select({
+    ios: iosDynamic("#f5ebff", "#2b1a3d"),
+    android: Color.android.dynamic.primaryContainer,
+    default: "#f5ebff",
+  })!,
 };

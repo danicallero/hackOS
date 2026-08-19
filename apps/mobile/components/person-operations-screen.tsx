@@ -612,6 +612,7 @@ export function PersonOperationsScreen() {
 
         {canPresence ? (
           <PresenceManagement
+            accredited={Boolean(person.badgeId)}
             onDoorState={onDoorState}
             refreshKey={sync.lastSync ?? undefined}
             userId={userId}
