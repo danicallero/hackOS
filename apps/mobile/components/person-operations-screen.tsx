@@ -4,7 +4,6 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, useColorScheme, View } from "react-native";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
-import Animated, { type SharedValue, useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DateTimeField } from "@/components/date-time-field";
 import {
@@ -52,34 +51,24 @@ const HEADER_TEXT_HEIGHT = 56;
 
 /**
  * The action panel revealed by swiping the current-badge row left, matching
- * the OS notification center's swipe-to-clear gesture: swiping only reveals
- * the buttons, and the badge is only replaced/removed on the deliberate
- * follow-up tap — never by the swipe distance alone.
+ * the OS notification center's swipe-to-clear gesture: the row slides as one
+ * opaque layer (Swipeable's own transform on its child) to uncover these
+ * buttons — they're at full opacity from the first pixel of drag, never
+ * fading in separately — and the badge is only replaced/removed on the
+ * deliberate follow-up tap, never by the swipe distance alone. This is the
+ * last row in its section, so only its bottom-right corner is rounded to
+ * match the section's own clip.
  */
 function AccreditationRevealActions({
-  progress,
   onReplace,
   onDelete,
 }: {
-  progress: SharedValue<number>;
   onReplace: () => void;
   onDelete: () => void;
 }) {
   const { t } = useLocale();
-  const style = useAnimatedStyle(() => ({ opacity: progress.value }));
   return (
-    <Animated.View
-      style={[
-        {
-          borderBottomRightRadius: 14,
-          borderTopRightRadius: 14,
-          flexDirection: "row",
-          marginLeft: 8,
-          overflow: "hidden",
-        },
-        style,
-      ]}
-    >
+    <View style={{ flexDirection: "row", height: "100%" }}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={t("personReplaceBadge")}
@@ -124,7 +113,7 @@ function AccreditationRevealActions({
           {t("personDeleteBadge")}
         </Text>
       </Pressable>
-    </Animated.View>
+    </View>
   );
 }
 
@@ -448,6 +437,15 @@ export function PersonOperationsScreen() {
 
   // Door logging needs a badge: without one the register is hidden entirely
   // and assigning a badge becomes the profile's primary action instead.
+  // The suggested direction (inferred from the last door signal) gets the
+  // full labeled button; the other direction is still one tap away, as a
+  // plain icon circle, for the rarer manual override.
+  const otherDirection: "in" | "out" = direction === "in" ? "out" : "in";
+  const directionTone = (dir: "in" | "out") => (dir === "in" ? colors.accent : colors.warning);
+  const directionIcon = (dir: "in" | "out") =>
+    dir === "in" ? "arrow.right.to.line" : "arrow.left.to.line";
+  const directionLabel = (dir: "in" | "out") => (dir === "in" ? t("scannerIn") : t("scannerOut"));
+
   const registerButton = (
     <Pressable
       accessibilityRole="button"
@@ -459,54 +457,70 @@ export function PersonOperationsScreen() {
         alignItems: "center",
         backgroundColor: direction === "in" ? colors.accentSurface : colors.warningSurface,
         borderCurve: "continuous",
-        borderRadius: 22,
+        borderRadius: 14,
+        flex: 1,
         flexDirection: "row",
-        gap: 7,
-        height: 44,
+        gap: 8,
+        height: 50,
         justifyContent: "center",
         opacity: busy ? 0.45 : pressed ? 0.6 : 1,
-        paddingHorizontal: 16,
       })}
     >
       <SymbolView
-        name={direction === "in" ? "arrow.right.to.line" : "arrow.left.to.line"}
-        tintColor={direction === "in" ? colors.accent : colors.warning}
-        size={17}
+        name={directionIcon(direction)}
+        tintColor={directionTone(direction)}
+        size={18}
         weight="semibold"
       />
-      <Text
-        style={{
-          color: direction === "in" ? colors.accent : colors.warning,
-          fontSize: 16,
-          fontWeight: "600",
-        }}
-      >
-        {direction === "in" ? t("scannerIn") : t("scannerOut")}
+      <Text style={{ color: directionTone(direction), fontSize: 17, fontWeight: "600" }}>
+        {directionLabel(direction)}
       </Text>
+    </Pressable>
+  );
+
+  const otherDirectionButton = (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={
+        otherDirection === "in" ? t("personRegisterEntry") : t("personRegisterExit")
+      }
+      accessibilityState={{ busy, disabled: busy }}
+      disabled={busy}
+      onPress={() => void registerPresence(otherDirection)}
+      style={({ pressed }) => ({
+        alignItems: "center",
+        backgroundColor: colors.elevatedSurface,
+        borderRadius: 25,
+        height: 50,
+        justifyContent: "center",
+        opacity: busy ? 0.45 : pressed ? 0.6 : 1,
+        width: 50,
+      })}
+    >
+      <SymbolView
+        name={directionIcon(otherDirection)}
+        tintColor={colors.secondaryLabel}
+        size={18}
+        weight="semibold"
+      />
     </Pressable>
   );
 
   const presenceRegisterSection =
     canPresence && person.badgeId ? (
       <Section title={t("personPresenceTitle")}>
-        <View
-          style={{
-            alignItems: "center",
-            flexDirection: "row",
-            gap: 12,
-            padding: 16,
-          }}
-        >
-          <View style={{ alignItems: "flex-start", flex: 1 }}>
-            <DateTimeField
-              dateAccessibilityLabel={t("scannerDateField")}
-              timeAccessibilityLabel={t("scannerTimeField")}
-              maximumDate={new Date()}
-              value={scannedAt}
-              onChange={setScannedAt}
-            />
+        <View style={{ gap: 16, padding: 16 }}>
+          <DateTimeField
+            dateAccessibilityLabel={t("scannerDateField")}
+            timeAccessibilityLabel={t("scannerTimeField")}
+            maximumDate={new Date()}
+            value={scannedAt}
+            onChange={setScannedAt}
+          />
+          <View style={{ alignItems: "center", flexDirection: "row", gap: 10 }}>
+            {registerButton}
+            {otherDirectionButton}
           </View>
-          {registerButton}
         </View>
       </Section>
     ) : null;
@@ -588,18 +602,33 @@ export function PersonOperationsScreen() {
           {canAccredit && person.badgeId ? (
             <>
               <Separator />
-              <Swipeable
-                renderRightActions={(progress) => (
-                  <AccreditationRevealActions
-                    progress={progress}
-                    onReplace={beginBadgeAction}
-                    onDelete={confirmRemoveBadge}
-                  />
-                )}
-                rightThreshold={40}
+              <View
+                style={{
+                  borderBottomLeftRadius: 14,
+                  borderBottomRightRadius: 14,
+                  borderCurve: "continuous",
+                  overflow: "hidden",
+                }}
               >
-                <InfoRow label={t("personCurrentBadge")} value={person.badgeId} icon="key.card" />
-              </Swipeable>
+                <Swipeable
+                  renderRightActions={() => (
+                    <AccreditationRevealActions
+                      onReplace={beginBadgeAction}
+                      onDelete={confirmRemoveBadge}
+                    />
+                  )}
+                  rightThreshold={40}
+                  overshootRight={false}
+                >
+                  <View style={{ backgroundColor: colors.surface }}>
+                    <InfoRow
+                      label={t("personCurrentBadge")}
+                      value={person.badgeId}
+                      icon="key.card"
+                    />
+                  </View>
+                </Swipeable>
+              </View>
             </>
           ) : null}
         </Section>
