@@ -1,7 +1,10 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { BlurView } from "expo-blur";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, useColorScheme, View } from "react-native";
+import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
+import Animated, { type SharedValue, useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DateTimeField } from "@/components/date-time-field";
 import {
@@ -16,7 +19,6 @@ import {
 import { PresenceManagement } from "@/components/presence-management";
 import { QrCamera } from "@/components/QrCamera";
 import { RequestFeedback } from "@/components/RequestFeedback";
-import { ScannerTransactionStatus } from "@/components/scanner-transaction-status";
 import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
@@ -28,7 +30,7 @@ import {
   findPersonByTicket,
   pendingScans,
 } from "@/lib/scanner-db";
-import type { PendingScan, ScannerPerson } from "@/lib/scanner-types";
+import type { ScannerPerson } from "@/lib/scanner-types";
 import { useScannerSync } from "@/lib/use-scanner";
 import { colors } from "@/theme/colors";
 
@@ -36,12 +38,100 @@ interface PersonDetails extends ScannerPerson {
   dni?: string | null;
   shirtSize?: string | null;
   currentBadge?: string | null;
+  secondaryEmail?: string | null;
+  secondaryEmailVerified?: boolean;
+}
+
+const CONTENT_PADDING = 16;
+// The floating back button sits at `topInset + 12` with a 44pt diameter —
+// the header's own text has to clear that whole row.
+const BUTTON_ROW_HEIGHT = 60;
+// Approximate height of the header's own name + email text, so the
+// scrolling content below starts clear of it instead of underneath it.
+const HEADER_TEXT_HEIGHT = 56;
+
+/**
+ * The action panel revealed by swiping the current-badge row left, matching
+ * the OS notification center's swipe-to-clear gesture: swiping only reveals
+ * the buttons, and the badge is only replaced/removed on the deliberate
+ * follow-up tap — never by the swipe distance alone.
+ */
+function AccreditationRevealActions({
+  progress,
+  onReplace,
+  onDelete,
+}: {
+  progress: SharedValue<number>;
+  onReplace: () => void;
+  onDelete: () => void;
+}) {
+  const { t } = useLocale();
+  const style = useAnimatedStyle(() => ({ opacity: progress.value }));
+  return (
+    <Animated.View
+      style={[
+        {
+          borderBottomRightRadius: 14,
+          borderTopRightRadius: 14,
+          flexDirection: "row",
+          marginLeft: 8,
+          overflow: "hidden",
+        },
+        style,
+      ]}
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t("personReplaceBadge")}
+        onPress={() => {
+          void haptic("light");
+          onReplace();
+        }}
+        style={({ pressed }) => ({
+          alignItems: "center",
+          backgroundColor: colors.accent,
+          gap: 4,
+          height: "100%",
+          justifyContent: "center",
+          opacity: pressed ? 0.75 : 1,
+          paddingHorizontal: 16,
+        })}
+      >
+        <SymbolView name="qrcode.viewfinder" tintColor="white" size={16} accessible={false} />
+        <Text style={{ color: "white", fontSize: 12, fontWeight: "700" }}>
+          {t("personReplaceBadge")}
+        </Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t("personDeleteBadge")}
+        onPress={() => {
+          void haptic("warning");
+          onDelete();
+        }}
+        style={({ pressed }) => ({
+          alignItems: "center",
+          backgroundColor: colors.destructive,
+          gap: 4,
+          height: "100%",
+          justifyContent: "center",
+          opacity: pressed ? 0.75 : 1,
+          paddingHorizontal: 16,
+        })}
+      >
+        <SymbolView name="trash.fill" tintColor="white" size={16} accessible={false} />
+        <Text style={{ color: "white", fontSize: 12, fontWeight: "700" }}>
+          {t("personDeleteBadge")}
+        </Text>
+      </Pressable>
+    </Animated.View>
+  );
 }
 
 type PersonLoadState = "loading" | "ready" | "missing" | "error";
 
 export function PersonOperationsScreen() {
-  useColorScheme();
+  const colorScheme = useColorScheme();
   const { id } = useLocalSearchParams<{ id: string }>();
   const userId = Number(id);
   const router = useRouter();
@@ -61,7 +151,6 @@ export function PersonOperationsScreen() {
   const [attendeeRole, setAttendeeRole] = useState<"participant" | "mentor" | null>(null);
   const [scannedAt, setScannedAt] = useState(new Date());
   const [busy, setBusy] = useState(false);
-  const [lastOperation, setLastOperation] = useState<PendingScan | null>(null);
   // Server-side last door log, reported by the presence timeline below —
   // the local snapshot alone can lag behind manual edits or other devices.
   const [serverDoor, setServerDoor] = useState<{ kind: "in" | "out"; at: string } | null>(null);
@@ -142,9 +231,7 @@ export function PersonOperationsScreen() {
     void haptic("light");
     setCameraAction(null);
     setAttendeeRole(null);
-    setLastOperation((await pendingScans(ownerUserId)).find((scan) => scan.id === scanId) ?? null);
     await sync.sync();
-    setLastOperation((await pendingScans(ownerUserId)).find((scan) => scan.id === scanId) ?? null);
     const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
     void haptic(
       stored?.status === "failed"
@@ -215,14 +302,8 @@ export function PersonOperationsScreen() {
               },
               ownerUserId,
             );
-            setLastOperation(
-              (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId) ?? null,
-            );
             void haptic("light");
             await sync.sync();
-            setLastOperation(
-              (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId) ?? null,
-            );
             const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
             void haptic(
               stored?.status === "failed"
@@ -250,15 +331,11 @@ export function PersonOperationsScreen() {
         },
         ownerUserId,
       );
-      setLastOperation(
-        (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId) ?? null,
-      );
       await sync.sync();
       // The offline queue fails 4xx replays permanently (e.g. an entry while
       // a session is already open) — without this check the rejection is
       // invisible and the log just never appears.
       const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
-      setLastOperation(stored ?? null);
       if (stored?.status === "failed") {
         void haptic("error");
         Alert.alert(
@@ -358,29 +435,19 @@ export function PersonOperationsScreen() {
 
   const accreditationSection = canAccredit ? (
     <Section title={t("scannerAccreditation")}>
-      <InfoRow
-        label={t("personCurrentBadge")}
-        value={person.badgeId ?? t("personUnassigned")}
-        icon="key.card"
-      />
-      <Separator />
       {person.badgeId ? (
-        <View style={{ flexDirection: "row" }}>
-          <ActionButton
-            icon="qrcode.viewfinder"
-            label={t("personReplaceBadge")}
-            onPress={beginBadgeAction}
-            style={{ flex: 1 }}
-          />
-          <View style={{ backgroundColor: colors.separator, width: 0.5 }} />
-          <ActionButton
-            destructive
-            icon="trash"
-            label={t("personDeleteBadge")}
-            onPress={confirmRemoveBadge}
-            style={{ flex: 1 }}
-          />
-        </View>
+        <Swipeable
+          renderRightActions={(progress) => (
+            <AccreditationRevealActions
+              progress={progress}
+              onReplace={beginBadgeAction}
+              onDelete={confirmRemoveBadge}
+            />
+          )}
+          rightThreshold={40}
+        >
+          <InfoRow label={t("personCurrentBadge")} value={person.badgeId} icon="key.card" />
+        </Swipeable>
       ) : (
         <ActionButton
           icon="qrcode.viewfinder"
@@ -456,67 +523,80 @@ export function PersonOperationsScreen() {
       </Section>
     ) : null;
 
+  // `app/(tabs)/scan/person/_layout.tsx` shows a real (transparent,
+  // title-less) native nav bar on iOS for this screen, kept only so
+  // `AdaptiveBackButton` can dock in the native toolbar on iPad widths. It's
+  // invisible, but its frame still exists — `automatic` below lets iOS push
+  // content (and the scroll indicator) below its real height for free,
+  // instead of us guessing at a duplicate of that space ourselves.
+  const headerHeight = insets.top + BUTTON_ROW_HEIGHT + HEADER_TEXT_HEIGHT;
+
   return (
     <>
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
+        scrollIndicatorInsets={{ top: 60 }}
         contentContainerStyle={{
           gap: 22,
-          padding: 16,
           paddingBottom: 40,
-          paddingTop: insets.top - 10,
+          paddingHorizontal: CONTENT_PADDING,
+          // Only the extra name/email text below the native bar's own
+          // (automatically-inset) space — not the full `headerHeight`,
+          // which would double-count that native bar's height on top of it.
+          paddingTop: HEADER_TEXT_HEIGHT + 10,
         }}
         style={{ backgroundColor: colors.background }}
       >
         {loadState === "error" && loadError ? (
           <RequestFeedback error={loadError} onRetry={() => void load()} />
         ) : null}
-        <View style={{ alignItems: "center", gap: 10, paddingVertical: 8 }}>
-          <View
-            style={{
-              alignItems: "center",
-              backgroundColor: colors.accentSurface,
-              borderRadius: 999,
-              height: 74,
-              justifyContent: "center",
-              width: 74,
-            }}
-          >
-            <SymbolView accessible={false} name="person.fill" tintColor={colors.accent} size={34} />
-          </View>
-          <Text
-            selectable
-            style={{ color: colors.label, fontSize: 24, fontWeight: "700", textAlign: "center" }}
-          >
-            {fullName}
-          </Text>
-          <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-            <StatusPill tone={person.confirmed ? "success" : "warning"}>
-              {person.confirmed
-                ? t("scannerConfirmed")
-                : person.accepted
-                  ? t("scannerPlaceUnconfirmed")
-                  : t("scannerNoAcceptedPlace")}
-            </StatusPill>
-          </View>
-        </View>
-
-        <ScannerTransactionStatus scan={lastOperation} />
 
         <Section title={t("personPersonalData")}>
-          {person.email ? (
+          {person.secondaryEmail ? (
             <>
-              <InfoRow label={t("emailLabel")} value={person.email} icon="envelope" />
+              <InfoRow
+                label={t("personSecondaryEmail")}
+                value={person.secondaryEmail}
+                icon="envelope.badge"
+                accessoryIcon={
+                  person.secondaryEmailVerified ? "checkmark.seal.fill" : "exclamationmark.circle"
+                }
+                accessoryColor={person.secondaryEmailVerified ? colors.success : colors.warning}
+                accessoryLabel={
+                  person.secondaryEmailVerified
+                    ? t("personSecondaryEmailVerified")
+                    : t("personSecondaryEmailUnverified")
+                }
+              />
               <Separator />
             </>
           ) : null}
-          {person.dni ? (
-            <>
-              <InfoRow label={t("personDni")} value={person.dni} icon="person.text.rectangle" />
-              <Separator />
-            </>
-          ) : null}
+          <InfoRow label={t("personDni")} value={person.dni ?? "—"} icon="person.text.rectangle" />
+          <Separator />
           <InfoRow label={t("personShirt")} value={person.shirtSize ?? "—"} icon="tshirt" />
+          {person.intolerances.length > 0 ? (
+            <>
+              <Separator />
+              <InfoRow
+                label={t("personFoodRestrictions")}
+                value={person.intolerances
+                  .map((item) => item.label[language] ?? item.label.en ?? String(item.id))
+                  .join(", ")}
+                icon="exclamationmark.triangle.fill"
+                valueStyle={{ color: colors.warning, fontWeight: "600" }}
+              />
+            </>
+          ) : null}
+          {person.foodIntoleranceNotes ? (
+            <>
+              <Separator />
+              <InfoRow
+                label={t("personFoodNotes")}
+                value={person.foodIntoleranceNotes}
+                icon="note.text"
+              />
+            </>
+          ) : null}
         </Section>
 
         {/* Personal details always lead; then the movement register (badge
@@ -524,29 +604,9 @@ export function PersonOperationsScreen() {
         {person.badgeId ? presenceRegisterSection : null}
         {accreditationSection}
 
-        {person.intolerances.length > 0 || person.foodIntoleranceNotes || person.notes ? (
+        {person.notes ? (
           <Section title={t("personImportantInfo")}>
-            {person.intolerances.length > 0 || person.foodIntoleranceNotes ? (
-              <>
-                <InfoRow
-                  label={t("personFoodRestrictions")}
-                  value={[
-                    ...person.intolerances.map(
-                      (item) => item.label[language] ?? item.label.en ?? String(item.id),
-                    ),
-                    person.foodIntoleranceNotes,
-                  ]
-                    .filter(Boolean)
-                    .join(", ")}
-                  icon="exclamationmark.triangle.fill"
-                  valueStyle={{ color: colors.warning, fontWeight: "600" }}
-                />
-                {person.notes ? <Separator /> : null}
-              </>
-            ) : null}
-            {person.notes ? (
-              <InfoRow label={t("personNotes")} value={person.notes} icon="note.text" />
-            ) : null}
+            <InfoRow label={t("personNotes")} value={person.notes} icon="note.text" />
           </Section>
         ) : null}
 
@@ -558,7 +618,73 @@ export function PersonOperationsScreen() {
           />
         ) : null}
       </ScrollView>
+
+      <View
+        pointerEvents="none"
+        style={{
+          height: headerHeight,
+          left: 0,
+          position: "absolute",
+          right: 0,
+          top: 0,
+        }}
+      >
+        <BlurView
+          intensity={9}
+          tint={colorScheme === "dark" ? "dark" : "light"}
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: headerHeight,
+          }}
+        />
+        <View
+          style={{
+            left: 0,
+            paddingHorizontal: CONTENT_PADDING,
+            paddingTop: insets.top + BUTTON_ROW_HEIGHT,
+            position: "absolute",
+            right: 0,
+            top: 0,
+          }}
+        >
+          <Text
+            selectable
+            numberOfLines={1}
+            style={{ color: colors.label, fontSize: 22, fontWeight: "800" }}
+          >
+            {fullName}
+          </Text>
+          {person.email ? (
+            <Text
+              selectable
+              numberOfLines={1}
+              style={{ color: colors.secondaryLabel, fontSize: 14, marginTop: 2 }}
+            >
+              {person.email}
+            </Text>
+          ) : null}
+        </View>
+      </View>
+
       <AdaptiveBackButton top={insets.top + 12} onPress={() => router.back()} />
+      {!person.accepted ? (
+        <View
+          pointerEvents="none"
+          style={{
+            alignItems: "center",
+            height: 44,
+            justifyContent: "center",
+            position: "absolute",
+            right: 16,
+            top: insets.top + 12,
+          }}
+        >
+          <StatusPill tone="warning">{t("scannerNoAcceptedPlace")}</StatusPill>
+        </View>
+      ) : null}
     </>
   );
 }
