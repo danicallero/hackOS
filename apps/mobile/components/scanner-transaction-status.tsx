@@ -261,24 +261,37 @@ function ManualLogDetails({
   const { t } = useLocale();
   const details = manualLogDetails(scan, people, activities, t);
   return (
-    <View
-      style={{
-        borderLeftColor: colors.destructive,
-        borderLeftWidth: 2,
-        gap: 8,
-        paddingLeft: 10,
-      }}
-    >
+    <View style={{ gap: 8 }}>
       <Text style={{ color: colors.secondaryLabel, fontSize: 12, lineHeight: 16 }}>
         {t("scannerManualLogHint")}
       </Text>
-      <View style={{ gap: 4 }}>
-        {details.map((detail) => (
-          <View key={detail.label} style={{ flexDirection: "row", gap: 8 }}>
-            <Text style={{ color: colors.secondaryLabel, fontSize: 13, width: 96 }}>
+      <View
+        style={{
+          backgroundColor: colors.background,
+          borderCurve: "continuous",
+          borderRadius: 10,
+          overflow: "hidden",
+        }}
+      >
+        {details.map((detail, index) => (
+          <View
+            key={detail.label}
+            style={{
+              borderTopColor: colors.separator,
+              borderTopWidth: index === 0 ? 0 : 1,
+              flexDirection: "row",
+              gap: 8,
+              paddingHorizontal: 10,
+              paddingVertical: 8,
+            }}
+          >
+            <Text style={{ color: colors.secondaryLabel, fontSize: 13, width: 88 }}>
               {detail.label}
             </Text>
-            <Text selectable style={{ color: colors.label, flex: 1, fontSize: 13 }}>
+            <Text
+              selectable
+              style={{ color: colors.label, flex: 1, fontSize: 13, fontWeight: "600" }}
+            >
               {detail.value}
             </Text>
           </View>
@@ -416,7 +429,6 @@ export function ScannerTransactionStatus({
             color: colors.label,
             fontSize: bare ? 13 : 15,
             fontWeight: "700",
-            paddingTop: state === "attention" ? 10 : 0,
           }}
         >
           {presentation.label}
@@ -427,7 +439,6 @@ export function ScannerTransactionStatus({
             style={{
               color: colors.secondaryLabel,
               fontSize: 13,
-              paddingBottom: state === "attention" ? 10 : 0,
             }}
           >
             {scan.status === "failed" ? t("scannerBusinessRejected") : t("scannerOfflineWaiting")}
@@ -482,14 +493,26 @@ export function ScannerQueueStatus({
     : health.saved > 0
       ? t("scannerQueueSavedCount", { count: String(health.saved) })
       : t("scannerStateReady");
-  const operationLabel = (scan: PendingScan) =>
-    scan.kind === "activity"
-      ? t("scannerActivity")
-      : scan.kind === "presence"
-        ? t("scannerPresence")
-        : scan.kind === "accreditation" || scan.kind === "accreditation_user"
-          ? t("scannerAccreditation")
-          : t("scannerBadge");
+  const operationLabel = (scan: PendingScan) => {
+    switch (scan.kind) {
+      case "activity":
+        return t("scannerActivity");
+      case "presence":
+      case "presence_signal":
+      case "presence_signal_activity":
+        return t("scannerPresence");
+      case "presence_signal_edit_door":
+      case "presence_signal_edit_activity":
+      case "presence_signal_delete":
+        return t("scannerPresenceLog");
+      case "accreditation":
+      case "accreditation_user":
+        return t("scannerAccreditation");
+      case "badge_rotation":
+      case "badge_removal":
+        return t("scannerBadge");
+    }
+  };
   return (
     <>
       <GlassView
@@ -648,9 +671,17 @@ export function ScannerQueueStatus({
                               ? ` · ${t("scannerAttemptsCount", { count: String(scan.attempts) })}`
                               : ""}
                           </Text>
-                          <ScannerTransactionStatus scan={scan} bare />
                           {deletable ? (
-                            <>
+                            <View
+                              style={{
+                                borderTopColor: colors.separator,
+                                borderTopWidth: 1,
+                                gap: 10,
+                                marginTop: 4,
+                                paddingTop: 10,
+                              }}
+                            >
+                              <ScannerTransactionStatus scan={scan} bare />
                               <ManualLogDetails
                                 scan={scan}
                                 people={people}
@@ -672,31 +703,36 @@ export function ScannerQueueStatus({
                                 style={({ pressed }) => ({
                                   alignItems: "center",
                                   alignSelf: "flex-end",
+                                  backgroundColor: colors.accent,
+                                  borderCurve: "continuous",
+                                  borderRadius: 10,
                                   flexDirection: "row",
-                                  gap: 5,
-                                  minHeight: 32,
-                                  opacity: pressed ? 0.6 : 1,
-                                  paddingHorizontal: 4,
+                                  gap: 6,
+                                  minHeight: 34,
+                                  opacity: pressed ? 0.75 : 1,
+                                  paddingHorizontal: 14,
                                 })}
                               >
                                 <SymbolView
                                   accessible={false}
                                   name="arrow.clockwise"
                                   size={13}
-                                  tintColor={colors.accent}
+                                  tintColor="white"
                                 />
                                 <Text
                                   style={{
-                                    color: colors.accent,
+                                    color: "white",
                                     fontSize: 13,
-                                    fontWeight: "600",
+                                    fontWeight: "700",
                                   }}
                                 >
                                   {t("retry")}
                                 </Text>
                               </Pressable>
-                            </>
-                          ) : null}
+                            </View>
+                          ) : (
+                            <ScannerTransactionStatus scan={scan} bare />
+                          )}
                         </View>
                       </SwipeableQueueRow>
                     );
