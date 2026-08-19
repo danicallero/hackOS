@@ -278,6 +278,8 @@
   "scannerMeals": "Comidas / actividades",
   "scannerSync": "Sincronizar",
   "scannerSyncing": "Sincronizando…",
+  "scannerSyncFailed": "A sincronización en segundo plano está fallando. Os datos locais séguense amosando embaixo.",
+  "scannerSyncRejected": "O servidor rexeitou a sincronización. O reintento automático está en pausa: revisa o conflito e reintenta manualmente.",
   "scannerStateConfirmed": "Confirmado",
   "scannerBusinessRejected": "O servidor rexeitou esta operación",
   "scannerQueueSavedCount": "Gardados: {count}",

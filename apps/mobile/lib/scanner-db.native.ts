@@ -654,6 +654,15 @@ export async function retryFailedScans(ownerUserId: number): Promise<void> {
   );
 }
 
+/** Same as retryFailedScans, scoped to a single scan the operator picked from the queue. */
+export async function retryScan(id: string): Promise<void> {
+  await (await queueDb()).runAsync(
+    `UPDATE pending_scans SET status = 'pending', last_error = NULL
+      WHERE id = ? AND status = 'failed'`,
+    id,
+  );
+}
+
 /**
  * Discards a scan the operator has decided to give up on (e.g. after logging
  * it manually in the web admin panel instead). Only ever invoked by an

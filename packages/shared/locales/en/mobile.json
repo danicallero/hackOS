@@ -278,6 +278,8 @@
   "scannerMeals": "Meals / activities",
   "scannerSync": "Sync now",
   "scannerSyncing": "Syncing…",
+  "scannerSyncFailed": "Background sync is failing. Your local data is still shown below.",
+  "scannerSyncRejected": "The server rejected the sync. Auto-retry is paused — check the conflict and retry manually.",
   "scannerStateConfirmed": "Confirmed",
   "scannerBusinessRejected": "Server rejected this operation",
   "scannerQueueSavedCount": "Saved: {count}",
