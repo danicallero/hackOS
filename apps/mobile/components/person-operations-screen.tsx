@@ -14,7 +14,7 @@ import {
   Separator,
   StatusPill,
 } from "@/components/native-ui";
-import { PresenceSummaryLink } from "@/components/presence-summary-link";
+import { formatMinutes } from "@/components/presence-management";
 import { QrCamera } from "@/components/QrCamera";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
@@ -30,6 +30,7 @@ import {
   pendingScans,
 } from "@/lib/scanner-db";
 import type { ScannerPerson } from "@/lib/scanner-types";
+import { usePresenceSummary } from "@/lib/use-presence-summary";
 import { useScannerSync } from "@/lib/use-scanner";
 import { colors } from "@/theme/colors";
 
@@ -153,6 +154,12 @@ export function PersonOperationsScreen() {
   const [divergence, setDivergence] = useState<PresenceDivergence>({
     primaryOverride: null,
     secondary: null,
+  });
+  const { timeline, guaranteedMinutes } = usePresenceSummary({
+    userId,
+    refreshKey: sync.lastSync ?? undefined,
+    onDoorState,
+    onDivergence: setDivergence,
   });
   const load = useCallback(async () => {
     setLoadError(null);
@@ -601,47 +608,77 @@ export function PersonOperationsScreen() {
     </Pressable>
   );
 
-  // A past session that timed out uncredited (not the in→in conflict, which
-  // has its own banner) doesn't change today's suggestion — it's offered as
-  // a separate, subtle backdated fix instead.
-  const staleSessionFix =
-    !isActivityOpenDivergence && divergence.secondary?.reason === "invalid-window" ? (
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={t("presenceFixStaleSession")}
-        onPress={() => openPresenceDraft(divergence.secondary!.kind, divergence.secondary!.at)}
-        style={({ pressed }) => ({
-          alignItems: "center",
-          flexDirection: "row",
-          gap: 6,
-          opacity: pressed ? 0.6 : 1,
-        })}
-      >
-        <SymbolView
-          name="exclamationmark.triangle.fill"
-          tintColor={colors.warning}
-          size={13}
-          accessible={false}
-        />
-        <Text style={{ color: colors.warning, fontSize: 13, fontWeight: "600" }}>
-          {t("presenceFixStaleSession")}
-        </Text>
-      </Pressable>
-    ) : null;
+  // Same warning row for both divergence cases: a past session that timed
+  // out uncredited is offered as a tappable backdated fix; an activity-open
+  // session (already handled by the register buttons above, which post
+  // straight to the unrestricted signal endpoint for this case) is just the
+  // static heads-up, no separate action needed.
+  const divergenceWarning = isActivityOpenDivergence ? (
+    <View style={{ alignItems: "center", flexDirection: "row", gap: 6 }}>
+      <SymbolView
+        name="exclamationmark.triangle.fill"
+        tintColor={colors.warning}
+        size={13}
+        accessible={false}
+      />
+      <Text style={{ color: colors.warning, fontSize: 13, fontWeight: "600" }}>
+        {t("presenceActivityOpenIndicator")}
+      </Text>
+    </View>
+  ) : divergence.secondary?.reason === "invalid-window" ? (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={t("presenceFixStaleSession")}
+      onPress={() => openPresenceDraft(divergence.secondary!.kind, divergence.secondary!.at)}
+      style={({ pressed }) => ({
+        alignItems: "center",
+        flexDirection: "row",
+        gap: 6,
+        opacity: pressed ? 0.6 : 1,
+      })}
+    >
+      <SymbolView
+        name="exclamationmark.triangle.fill"
+        tintColor={colors.warning}
+        size={13}
+        accessible={false}
+      />
+      <Text style={{ color: colors.warning, fontSize: 13, fontWeight: "600" }}>
+        {t("presenceFixStaleSession")}
+      </Text>
+    </Pressable>
+  ) : null;
 
   const presenceRegisterSection =
     canPresence && person.badgeId ? (
       <Section title={t("personPresenceTitle")}>
         <View style={{ gap: 16, padding: 16 }}>
-          {isActivityOpenDivergence ? (
-            <StatusPill tone="warning">{t("presenceActivityOpenIndicator")}</StatusPill>
-          ) : null}
           <View style={{ alignItems: "center", flexDirection: "row", gap: 10 }}>
             {registerButton}
             {otherDirectionButton}
           </View>
-          {staleSessionFix}
+          {divergenceWarning}
         </View>
+        <Separator />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t("presenceGuaranteedHours")}
+          onPress={() =>
+            router.push({
+              pathname: "/(tabs)/scan/person/presence/[id]",
+              params: { id: String(userId) },
+            })
+          }
+          style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+        >
+          <InfoRow
+            icon="checkmark.seal.fill"
+            label={t("presenceGuaranteedHours")}
+            value={timeline ? formatMinutes(guaranteedMinutes, t) : "—"}
+            accessoryIcon="chevron.right"
+            valueStyle={{ color: colors.success, fontVariant: ["tabular-nums"], fontWeight: "700" }}
+          />
+        </Pressable>
       </Section>
     ) : null;
 
@@ -696,29 +733,7 @@ export function PersonOperationsScreen() {
           <InfoRow label={t("personDni")} value={person.dni ?? "—"} icon="person.text.rectangle" />
           <Separator />
           <InfoRow label={t("personShirt")} value={person.shirtSize ?? "—"} icon="tshirt" />
-          {person.intolerances.length > 0 ? (
-            <>
-              <Separator />
-              <InfoRow
-                label={t("personFoodRestrictions")}
-                value={person.intolerances
-                  .map((item) => item.label[language] ?? item.label.en ?? String(item.id))
-                  .join(", ")}
-                icon="exclamationmark.triangle.fill"
-                valueStyle={{ color: colors.warning, fontWeight: "600" }}
-              />
-            </>
-          ) : null}
-          {person.foodIntoleranceNotes ? (
-            <>
-              <Separator />
-              <InfoRow
-                label={t("personFoodNotes")}
-                value={person.foodIntoleranceNotes}
-                icon="note.text"
-              />
-            </>
-          ) : null}
+
           {canAccredit && person.badgeId ? (
             <>
               <Separator />
@@ -753,26 +768,37 @@ export function PersonOperationsScreen() {
           ) : null}
         </Section>
 
-        {/* Personal details always lead; then the movement register (badge
-            holders) or badge assignment (everyone else), then the rest. */}
-        {person.badgeId ? presenceRegisterSection : null}
-        {accreditationSection}
+        {person.intolerances.length > 0 || person.foodIntoleranceNotes ? (
+          <Section title={t("personDietaryTitle")}>
+            {person.intolerances.length > 0 ? (
+              <InfoRow
+                label={t("personFoodRestrictions")}
+                value={person.intolerances
+                  .map((item) => item.label[language] ?? item.label.en ?? String(item.id))
+                  .join(", ")}
+                icon="exclamationmark.triangle.fill"
+                valueStyle={{ color: colors.warning, fontWeight: "600" }}
+              />
+            ) : null}
+            {person.intolerances.length > 0 ? <Separator /> : null}
+            <InfoRow
+              label={t("personFoodNotes")}
+              value={person.foodIntoleranceNotes || "—"}
+              icon="note.text"
+            />
+          </Section>
+        ) : null}
 
         {person.notes ? (
-          <Section title={t("personImportantInfo")}>
+          <Section>
             <InfoRow label={t("personNotes")} value={person.notes} icon="note.text" />
           </Section>
         ) : null}
 
-        {canPresence ? (
-          <PresenceSummaryLink
-            accredited={Boolean(person.badgeId)}
-            onDivergence={setDivergence}
-            onDoorState={onDoorState}
-            refreshKey={sync.lastSync ?? undefined}
-            userId={userId}
-          />
-        ) : null}
+        {/* Personal details always lead; then the movement register (badge
+            holders) or badge assignment (everyone else), then the rest. */}
+        {person.badgeId ? presenceRegisterSection : null}
+        {accreditationSection}
       </ScrollView>
 
       <View

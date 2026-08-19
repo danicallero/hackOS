@@ -82,8 +82,6 @@ interface SignalDraft {
   occurredAt: Date;
   activityId: number | null;
   notes: string;
-  /** When resolving a conflict, the picker is clamped to the gap between the two entries. */
-  bounds?: { min: Date; max: Date };
 }
 
 export function PresenceManagement({
@@ -161,19 +159,6 @@ export function PresenceManagement({
     });
   }
 
-  function resolveConflict(conflict: PresenceConflict) {
-    const from = Date.parse(conflict.from);
-    const to = Date.parse(conflict.to);
-    setDraft({
-      signal: null,
-      kind: "out", // an entry can't fix in→in; default to the missing exit
-      occurredAt: new Date(from + (to - from) / 2),
-      activityId: timeline?.activities[0]?.id ?? null,
-      notes: "",
-      bounds: { min: new Date(from), max: new Date(to) },
-    });
-  }
-
   function editSignal(signal: PresenceSignal) {
     setDraft({
       signal,
@@ -231,15 +216,6 @@ export function PresenceManagement({
 
   return (
     <View style={{ gap: 22 }}>
-      {(timeline?.conflicts ?? []).map((conflict) => (
-        <ConflictBanner
-          key={`${conflict.firstLogId}-${conflict.secondLogId}`}
-          conflict={conflict}
-          language={language}
-          onResolve={() => resolveConflict(conflict)}
-        />
-      ))}
-
       {accredited || rows.length > 0 ? (
         <Section title={t("presenceSummary")}>
           <InfoRow
@@ -386,59 +362,6 @@ export function PresenceManagement({
           userId={userId}
         />
       ) : null}
-    </View>
-  );
-}
-
-function ConflictBanner({
-  conflict,
-  language,
-  onResolve,
-}: {
-  conflict: PresenceConflict;
-  language: string;
-  onResolve: () => void;
-}) {
-  const { t } = useLocale();
-  const timeOptions = {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  } as const;
-  return (
-    <View
-      accessibilityRole="alert"
-      style={{
-        backgroundColor: colors.destructiveSurface,
-        borderColor: colors.destructive,
-        borderCurve: "continuous",
-        borderRadius: 14,
-        borderWidth: 0.5,
-        overflow: "hidden",
-      }}
-    >
-      <View style={{ flexDirection: "row", gap: 12, padding: 16 }}>
-        <SymbolView name="exclamationmark.triangle.fill" tintColor={colors.destructive} size={22} />
-        <View style={{ flex: 1, gap: 4 }}>
-          <Text selectable style={{ color: colors.destructive, fontSize: 16, fontWeight: "700" }}>
-            {t("presenceConflictTitle")}
-          </Text>
-          <Text selectable style={{ color: colors.label, fontSize: 14, lineHeight: 19 }}>
-            {t("presenceConflictBody", {
-              from: new Date(conflict.from).toLocaleString(language, timeOptions),
-              to: new Date(conflict.to).toLocaleString(language, timeOptions),
-            })}
-          </Text>
-        </View>
-      </View>
-      <View style={{ backgroundColor: colors.destructive, height: 0.5, opacity: 0.3 }} />
-      <ActionButton
-        destructive
-        icon="wrench.and.screwdriver.fill"
-        label={t("presenceResolveConflict")}
-        onPress={onResolve}
-      />
     </View>
   );
 }
@@ -824,25 +747,11 @@ function SignalEditor({
   const isLockedToActivity = draft.signal?.source === "activity";
   // Editing a door-sourced signal only ever swaps entry↔exit; conversion to
   // an activity point is only offered when creating a brand-new signal.
-  const kinds: SignalKind[] = !draft.signal
-    ? draft.bounds
-      ? // Resolving an in→in conflict: only an exit or activity can close the
-        // gap, and the timestamp must land strictly between the two entries.
-        ["activity", "out"]
-      : ["in", "activity", "out"]
-    : ["in", "out"];
+  const kinds: SignalKind[] = !draft.signal ? ["in", "activity", "out"] : ["in", "out"];
   const kindLabels: Record<SignalKind, string> = {
     in: t("presenceSignalEntry"),
     activity: t("presenceSignalActivity"),
     out: t("presenceSignalExit"),
-  };
-  const clampToBounds = (date: Date): Date => {
-    if (!draft.bounds) return date;
-    const time = Math.min(
-      Math.max(date.getTime(), draft.bounds.min.getTime()),
-      draft.bounds.max.getTime(),
-    );
-    return new Date(time);
   };
 
   return (
@@ -941,18 +850,14 @@ function SignalEditor({
             </Section>
           ) : null}
 
-          <Section
-            title={t("presenceDateAndTime")}
-            footer={draft.bounds ? t("presenceConflictBounds") : undefined}
-          >
+          <Section title={t("presenceDateAndTime")}>
             <View style={{ gap: 12, padding: 16 }}>
               <DateTimeField
                 dateAccessibilityLabel={t("presenceDateField")}
                 timeAccessibilityLabel={t("presenceTimeField")}
-                minimumDate={draft.bounds?.min}
-                maximumDate={draft.bounds?.max ?? new Date()}
+                maximumDate={new Date()}
                 value={draft.occurredAt}
-                onChange={(date) => onChange({ ...draft, occurredAt: clampToBounds(date) })}
+                onChange={(date) => onChange({ ...draft, occurredAt: date })}
               />
             </View>
           </Section>
