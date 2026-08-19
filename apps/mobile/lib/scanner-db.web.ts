@@ -156,6 +156,15 @@ export async function retryFailedScans(ownerUserId: number): Promise<void> {
   );
 }
 
+/** Same as retryFailedScans, scoped to a single scan the operator picked from the queue. */
+export async function retryScan(id: string): Promise<void> {
+  scans = scans.map((scan) =>
+    scan.id === id && scan.status === "failed"
+      ? { ...scan, status: "pending", lastError: null }
+      : scan,
+  );
+}
+
 export async function deleteScan(id: string): Promise<void> {
   scans = scans.filter((scan) => scan.id !== id);
 }

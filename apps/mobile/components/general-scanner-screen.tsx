@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassView } from "@/components/glass-view";
-import { AdaptiveToolbarButton } from "@/components/native-ui";
 import { QrCamera } from "@/components/QrCamera";
 import { ScannerQueueStatus } from "@/components/scanner-transaction-status";
 import { SymbolView } from "@/components/symbol";
@@ -178,6 +177,7 @@ export function GeneralScannerScreen() {
           syncing={sync.syncing}
           onSync={() => void sync.sync()}
           onRetry={() => void sync.retryFailed()}
+          onRetryOne={(id) => void sync.retryOne(id)}
           onDelete={(id) => void sync.discardScan(id)}
           clockSkewMs={sync.clockSkewMs}
         />
@@ -246,18 +246,19 @@ const GROUP_FILTERS: Array<{
 ];
 
 /**
- * The group-filter and people-finder controls, together.
+ * The group-filter and people-finder controls, side by side in one
+ * elongated glass pill — see `ScannerGroupFilterButton`.
  *
  * `Stack.Toolbar.Menu`'s `unstable_keepPresented` (the native "stays open
  * across taps" option) turned out to live up to its name — in practice the
  * menu still closed after every action and its toolbar placement sat at a
  * different height than the rest of this screen's floating chrome (the
- * "Ready" sync pill included). Both controls stay as floating glass buttons
- * on every platform instead: `AdaptiveToolbarButton` for people-finder (it
- * still joins the native toolbar on its own at iPad/macOS widths), and a
- * custom panel for the filter — see `ScannerGroupFilterButton` — since
- * `MenuView` (used by the single-select role filter on the people directory
- * screen) doesn't support staying open across taps either.
+ * "Ready" sync pill included). So the filter panel stays a custom panel
+ * instead of `MenuView`/`Stack.Toolbar.Menu` (neither of which support
+ * staying open across taps). It previously lived in its own separate
+ * circular button next to people-finder's; the two are now one pill (same
+ * combined footprint, single glass shape) so both stay a direct one-tap
+ * action instead of one being buried inside the other's menu.
  */
 function ScannerToolbarActions({
   top,
@@ -275,36 +276,40 @@ function ScannerToolbarActions({
   peopleLabel: string;
 }) {
   return (
-    <>
-      <ScannerGroupFilterButton top={top} groups={groups} onToggle={onToggle} onClear={onClear} />
-      <AdaptiveToolbarButton
-        top={top}
-        side="right"
-        icon="person.crop.badge.magnifyingglass"
-        tintColor="white"
-        accessibilityLabel={peopleLabel}
-        onPress={onOpenPeople}
-      />
-    </>
+    <ScannerGroupFilterButton
+      top={top}
+      groups={groups}
+      onToggle={onToggle}
+      onClear={onClear}
+      onOpenPeople={onOpenPeople}
+      peopleLabel={peopleLabel}
+    />
   );
 }
 
 /**
- * Floating group-filter button: same round glass-icon look as the
- * people-finder button, but its dropdown panel stays open across multiple
- * toggles and only closes when the operator taps outside it, so they can
- * build up a combination (e.g. participants + sponsors) in one go.
+ * Floating group-filter + people-finder pill: one elongated glass shape
+ * with two side-by-side tap zones instead of two separate circular
+ * buttons — same combined footprint, but reads as one control. Left zone
+ * opens the filter panel below the pill (stays open
+ * across multiple role toggles, closing only on an outside tap, so the
+ * operator can build up a combination like participants + sponsors in one
+ * go); right zone navigates straight to the people finder, one tap.
  */
 function ScannerGroupFilterButton({
   top,
   groups,
   onToggle,
   onClear,
+  onOpenPeople,
+  peopleLabel,
 }: {
   top: number;
   groups: ScannerGroup[];
   onToggle: (group: ScannerGroup) => void;
   onClear: () => void;
+  onOpenPeople: () => void;
+  peopleLabel: string;
 }) {
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
@@ -337,11 +342,12 @@ function ScannerGroupFilterButton({
         isInteractive
         style={{
           borderRadius: 22,
+          flexDirection: "row",
           height: 44,
           position: "absolute",
-          right: 72,
+          right: 16,
           top,
-          width: 44,
+          width: 88,
           zIndex: FILTER_PANEL_Z_INDEX + 1,
         }}
       >
@@ -353,9 +359,28 @@ function ScannerGroupFilterButton({
             void haptic("light");
             setOpen((current) => !current);
           }}
-          style={{ alignItems: "center", flex: 1, justifyContent: "center" }}
+          // Hit area still spans the full half (unchanged flex:1) — only
+          // the icon's visual position nudges toward the pill's middle,
+          // now that there's no divider marking each half's own center.
+          style={{ alignItems: "center", flex: 1, justifyContent: "center", paddingLeft: 8 }}
         >
           <SymbolView name={filterIcon} tintColor="white" size={19} weight="semibold" />
+        </Pressable>
+        <Pressable
+          accessibilityLabel={peopleLabel}
+          accessibilityRole="button"
+          onPress={() => {
+            void haptic("light");
+            onOpenPeople();
+          }}
+          style={{ alignItems: "center", flex: 1, justifyContent: "center", paddingRight: 8 }}
+        >
+          <SymbolView
+            name="person.crop.badge.magnifyingglass"
+            tintColor="white"
+            size={19}
+            weight="semibold"
+          />
         </Pressable>
       </GlassView>
       {open ? (

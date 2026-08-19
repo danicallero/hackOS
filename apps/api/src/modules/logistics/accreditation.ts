@@ -41,9 +41,11 @@ export async function lookupByUserId(userId: number) {
   // Identity-verification fields staff needs at the door (H22): the badge is
   // handed to a physical person, so the card carries DNI, email and shirt
   // size on top of the shared scanner card.
-  const u = await pool.query(`SELECT badge_id, email, dni, shirt_size FROM users WHERE id = $1`, [
-    userId,
-  ]);
+  const u = await pool.query(
+    `SELECT badge_id, email, dni, shirt_size, secondary_email, secondary_email_verified_at
+       FROM users WHERE id = $1`,
+    [userId],
+  );
   const row = u.rows[0] ?? {};
   const badge = (row.badge_id ?? null) as string | null;
   const confirmed = await pool.query(
@@ -56,6 +58,8 @@ export async function lookupByUserId(userId: number) {
     email: (row.email ?? null) as string | null,
     dni: (row.dni ?? null) as string | null,
     shirtSize: (row.shirt_size ?? null) as string | null,
+    secondaryEmail: (row.secondary_email ?? null) as string | null,
+    secondaryEmailVerified: row.secondary_email_verified_at != null,
     confirmed: confirmed.rows.length > 0,
     hasTicket: await hasTicket(userId),
     // Distinct from `confirmed`: a capability holder or sponsor rep can have

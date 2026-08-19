@@ -68,7 +68,7 @@ export default function ScanScreen() {
           }}
         />
       </NativeView>
-      {syncState.error ? <Text style={styles.error}>{syncState.error}</Text> : null}
+      {syncState.error ? <Text style={styles.error}>{syncState.error.message}</Text> : null}
 
       <NativeView style={styles.modeRow}>
         {modes.map((candidate) => (

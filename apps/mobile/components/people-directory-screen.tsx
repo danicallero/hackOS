@@ -55,7 +55,14 @@ export function PeopleDirectoryScreen() {
     }, [load]),
   );
 
-  const loadError = error ?? (sync.error ? new Error(sync.error) : null);
+  // Deliberately not folding `sync.error` into this screen's own load error:
+  // that reflects the background scan-queue sync (retried every 15s / on
+  // app resume), whose transient failures shouldn't flash an error over an
+  // already-loaded list. It gets its own banner below, and only appears
+  // once auto-retry has actually given up (a single blip self-heals quietly
+  // on the next tick) — see useScannerSync's autoRetryPaused.
+  const loadError = error;
+  const syncError = sync.autoRetryPaused ? sync.error : null;
 
   async function onRefresh() {
     setRefreshing(true);
@@ -149,7 +156,7 @@ export function PeopleDirectoryScreen() {
       ItemSeparatorComponent={() => <Separator inset={72} />}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
       ListHeaderComponent={
-        usesListTitle || (loadError && people.length > 0) ? (
+        usesListTitle || (loadError && people.length > 0) || syncError ? (
           <View style={{ gap: 16, paddingBottom: usesListTitle ? 16 : 0, paddingTop: 8 }}>
             {usesListTitle ? (
               <Text style={{ color: colors.label, fontSize: 34, fontWeight: "700" }}>
@@ -162,6 +169,14 @@ export function PeopleDirectoryScreen() {
                 message={t("requestError")}
                 onRetry={() => void onRefresh()}
                 retrying={loading || refreshing || sync.syncing}
+              />
+            ) : null}
+            {syncError ? (
+              <RequestFeedback
+                error={new Error(syncError.message)}
+                message={t(syncError.conflict ? "scannerSyncRejected" : "scannerSyncFailed")}
+                onRetry={() => void sync.sync()}
+                retrying={sync.syncing}
               />
             ) : null}
           </View>

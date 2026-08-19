@@ -62,6 +62,13 @@ function findSubject(scan: PendingScan, people: ScannerPerson[]): ScannerPerson 
       return people.find(
         (person) => person.badgeId === p.badgeId || person.revokedBadgeIds.includes(p.badgeId),
       );
+    case "presence_signal":
+    case "presence_signal_activity":
+      return people.find((person) => person.userId === p.userId);
+    case "presence_signal_edit_door":
+    case "presence_signal_edit_activity":
+    case "presence_signal_delete":
+      return undefined;
   }
 }
 
@@ -91,6 +98,16 @@ function detailLabel(
       const activity = activities.find((a) => a.id === p.activityId);
       return `${p.badgeId} · ${activity?.name ?? `#${p.activityId}`}`;
     }
+    case "presence_signal":
+      return `#${p.userId} · ${p.direction === "in" ? t("presenceSignalEntry") : t("presenceSignalExit")}`;
+    case "presence_signal_activity":
+      return `#${p.userId} · ${activities.find((a) => a.id === p.activityId)?.name ?? `#${p.activityId}`}`;
+    case "presence_signal_edit_door":
+      return `${t("edit")} · #${p.logId}`;
+    case "presence_signal_edit_activity":
+      return `${t("edit")} · #${p.logId}`;
+    case "presence_signal_delete":
+      return `${t("delete")} · #${p.logId}`;
   }
 }
 
@@ -167,6 +184,67 @@ function manualLogDetails(
       });
       break;
     }
+    case "presence_signal":
+      details.push({
+        label: t("scannerFieldDirection"),
+        value: p.direction === "in" ? t("presenceSignalEntry") : t("presenceSignalExit"),
+      });
+      details.push({
+        label: t("scannerFieldTimestamp"),
+        value: new Date(p.occurredAt).toLocaleString(),
+      });
+      break;
+    case "presence_signal_activity": {
+      const activity = activities.find((a) => a.id === p.activityId);
+      details.push({
+        label: t("scannerFieldActivity"),
+        value: activity ? `${activity.name} (#${p.activityId})` : `#${p.activityId}`,
+      });
+      details.push({
+        label: t("scannerFieldTimestamp"),
+        value: new Date(p.occurredAt).toLocaleString(),
+      });
+      break;
+    }
+    case "presence_signal_edit_door":
+      details.push({ label: t("scannerFieldLogId"), value: String(p.logId) });
+      if (p.direction) {
+        details.push({
+          label: t("scannerFieldDirection"),
+          value: p.direction === "in" ? t("presenceSignalEntry") : t("presenceSignalExit"),
+        });
+      }
+      if (p.occurredAt) {
+        details.push({
+          label: t("scannerFieldTimestamp"),
+          value: new Date(p.occurredAt).toLocaleString(),
+        });
+      }
+      break;
+    case "presence_signal_edit_activity": {
+      details.push({ label: t("scannerFieldLogId"), value: String(p.logId) });
+      const activity = activities.find((a) => a.id === p.activityId);
+      if (p.activityId != null) {
+        details.push({
+          label: t("scannerFieldActivity"),
+          value: activity ? `${activity.name} (#${p.activityId})` : `#${p.activityId}`,
+        });
+      }
+      if (p.occurredAt) {
+        details.push({
+          label: t("scannerFieldTimestamp"),
+          value: new Date(p.occurredAt).toLocaleString(),
+        });
+      }
+      break;
+    }
+    case "presence_signal_delete":
+      details.push({
+        label: t("scannerFieldSource"),
+        value: p.source === "door" ? t("presenceSignalEntry") : t("scannerFieldActivity"),
+      });
+      details.push({ label: t("scannerFieldLogId"), value: String(p.logId) });
+      break;
   }
   return details;
 }
@@ -371,6 +449,7 @@ export function ScannerQueueStatus({
   syncing,
   onSync,
   onRetry,
+  onRetryOne,
   onDelete,
   clockSkewMs = null,
   fillWidth = false,
@@ -380,6 +459,7 @@ export function ScannerQueueStatus({
   clockSkewMs?: number | null;
   onSync: () => void;
   onRetry: () => void;
+  onRetryOne: (id: string) => void;
   onDelete: (id: string) => void;
   fillWidth?: boolean;
 }) {
@@ -523,6 +603,21 @@ export function ScannerQueueStatus({
                         onDelete={() => onDelete(scan.id)}
                       >
                         <View
+                          // The swipe gesture that reveals delete has no VoiceOver/
+                          // TalkBack/switch-control path, so it stays reachable as a
+                          // non-visual accessibility action here instead of a second
+                          // always-visible delete button next to the retry one below.
+                          accessibilityActions={
+                            deletable
+                              ? [{ name: "delete", label: t("scannerDeleteScan") }]
+                              : undefined
+                          }
+                          onAccessibilityAction={(event) => {
+                            if (deletable && event.nativeEvent.actionName === "delete") {
+                              void haptic("warning");
+                              onDelete(scan.id);
+                            }
+                          }}
                           style={{
                             backgroundColor: colors.surface,
                             borderCurve: "continuous",
@@ -561,15 +656,18 @@ export function ScannerQueueStatus({
                                 people={people}
                                 activities={activities}
                               />
-                              {/* Swiping the row (above) is the primary gesture, but a
-                                  swipe-only control has no path for VoiceOver/TalkBack or
-                                  switch control, so this stays reachable without it. */}
+                              {/* Discarding this entry is only reachable by swiping the row
+                                  (above) — a second, always-visible delete button here was
+                                  redundant with it. This stays the always-visible action for
+                                  a single entry instead: a retry that doesn't wait for
+                                  "Retry rejected scans" to sweep every failed scan in the
+                                  queue. */}
                               <Pressable
                                 accessibilityRole="button"
-                                accessibilityLabel={t("scannerDeleteScan")}
+                                accessibilityLabel={t("retry")}
                                 onPress={() => {
-                                  void haptic("warning");
-                                  onDelete(scan.id);
+                                  void haptic("light");
+                                  onRetryOne(scan.id);
                                 }}
                                 style={({ pressed }) => ({
                                   alignItems: "center",
@@ -583,18 +681,18 @@ export function ScannerQueueStatus({
                               >
                                 <SymbolView
                                   accessible={false}
-                                  name="trash"
+                                  name="arrow.clockwise"
                                   size={13}
-                                  tintColor={colors.destructive}
+                                  tintColor={colors.accent}
                                 />
                                 <Text
                                   style={{
-                                    color: colors.destructive,
+                                    color: colors.accent,
                                     fontSize: 13,
                                     fontWeight: "600",
                                   }}
                                 >
-                                  {t("scannerDeleteScan")}
+                                  {t("retry")}
                                 </Text>
                               </Pressable>
                             </>

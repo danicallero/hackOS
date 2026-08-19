@@ -53,7 +53,14 @@ export function ActivitiesScreen() {
     if (sync.lastSync) void load();
   }, [load, sync.lastSync]);
 
-  const loadError = error ?? (sync.error ? new Error(sync.error) : null);
+  // Deliberately not folding `sync.error` into this screen's own load error:
+  // that reflects the background scan-queue sync (retried every 15s / on
+  // app resume), whose transient failures shouldn't flash an error over an
+  // already-loaded list. It gets its own banner below, and only appears
+  // once auto-retry has actually given up (a single blip self-heals quietly
+  // on the next tick) — see useScannerSync's autoRetryPaused.
+  const loadError = error;
+  const syncError = sync.autoRetryPaused ? sync.error : null;
 
   // Forces the FlatList back to the top on focus so the native large-title
   // header re-syncs its collapsed/expanded state with the actual scroll
@@ -80,13 +87,25 @@ export function ActivitiesScreen() {
       refreshControl={<RefreshControl refreshing={sync.syncing} onRefresh={() => void refresh()} />}
       ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
       ListHeaderComponent={
-        loadError && items.length > 0 ? (
-          <RequestFeedback
-            error={loadError}
-            message={t("requestError")}
-            onRetry={() => void refresh()}
-            retrying={loading || sync.syncing}
-          />
+        (loadError && items.length > 0) || syncError ? (
+          <View style={{ gap: 8, paddingBottom: 12 }}>
+            {loadError && items.length > 0 ? (
+              <RequestFeedback
+                error={loadError}
+                message={t("requestError")}
+                onRetry={() => void refresh()}
+                retrying={loading || sync.syncing}
+              />
+            ) : null}
+            {syncError ? (
+              <RequestFeedback
+                error={new Error(syncError.message)}
+                message={t(syncError.conflict ? "scannerSyncRejected" : "scannerSyncFailed")}
+                onRetry={() => void sync.sync()}
+                retrying={sync.syncing}
+              />
+            ) : null}
+          </View>
         ) : null
       }
       ListEmptyComponent={
