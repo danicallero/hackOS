@@ -16,7 +16,7 @@ import {
   Separator,
   StatusPill,
 } from "@/components/native-ui";
-import { PresenceManagement } from "@/components/presence-management";
+import { PresenceSummaryLink } from "@/components/presence-summary-link";
 import { QrCamera } from "@/components/QrCamera";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
@@ -611,7 +611,7 @@ export function PersonOperationsScreen() {
         ) : null}
 
         {canPresence ? (
-          <PresenceManagement
+          <PresenceSummaryLink
             accredited={Boolean(person.badgeId)}
             onDoorState={onDoorState}
             refreshKey={sync.lastSync ?? undefined}

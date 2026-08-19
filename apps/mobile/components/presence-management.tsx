@@ -28,12 +28,16 @@ import { SymbolView, type SymbolViewProps } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
-import { durationMinutes } from "@/lib/presence-timeline";
+import {
+  durationMinutes,
+  guaranteedMinutesTotal,
+  provisionalMinutesTotal,
+} from "@/lib/presence-timeline";
 import { colors } from "@/theme/colors";
 
-type SignalKind = "in" | "out" | "activity";
+export type SignalKind = "in" | "out" | "activity";
 
-interface PresenceSignal {
+export interface PresenceSignal {
   id: number;
   source: "door" | "activity";
   kind: SignalKind;
@@ -46,7 +50,7 @@ interface PresenceSignal {
   recordedBy: { userId: number; name: string | null; surname: string | null } | null;
 }
 
-interface CertaintyWindow {
+export interface CertaintyWindow {
   start: string;
   deadline: string;
   securedUntil: string | null;
@@ -57,14 +61,14 @@ interface CertaintyWindow {
 }
 
 // Illegal in→in pair (H24): the fix must land strictly inside (from, to).
-interface PresenceConflict {
+export interface PresenceConflict {
   firstLogId: number;
   secondLogId: number;
   from: string;
   to: string;
 }
 
-interface PresenceTimeline {
+export interface PresenceTimeline {
   certaintyWindowMinutes: number;
   activities: Array<{ id: number; name: string; category: string }>;
   signals: PresenceSignal[];
@@ -178,19 +182,8 @@ export function PresenceManagement({
     ]);
   }
 
-  // Guaranteed = time already secured by a later checkpoint; provisional =
-  // the still-open window's elapsed time since the last checkpoint (secured
-  // by the next exit/activity, worth zero if the window expires).
-  const guaranteedMinutes = (timeline?.windows ?? []).reduce(
-    (sum, window) =>
-      sum + (window.securedUntil ? durationMinutes(window.start, window.securedUntil) : 0),
-    0,
-  );
-  const provisionalMinutes = (timeline?.windows ?? []).reduce((sum, window) => {
-    if (window.securedUntil || window.status !== "provisional") return sum;
-    const end = Math.min(Date.now(), Date.parse(window.deadline));
-    return sum + Math.max(0, Math.round((end - Date.parse(window.start)) / 60_000));
-  }, 0);
+  const guaranteedMinutes = guaranteedMinutesTotal(timeline?.windows ?? []);
+  const provisionalMinutes = provisionalMinutesTotal(timeline?.windows ?? []);
 
   // One unified timeline: every entry/activity signal opens exactly one
   // certainty window (in order), so zip them and render each point with the
@@ -980,7 +973,7 @@ function SignalEditor({
   );
 }
 
-function formatMinutes(minutes: number, t: ReturnType<typeof useLocale>["t"]): string {
+export function formatMinutes(minutes: number, t: ReturnType<typeof useLocale>["t"]): string {
   if (minutes < 60) return t("presenceMinutesValue", { minutes: String(minutes) });
   const hours = Math.floor(minutes / 60);
   const remainder = minutes % 60;
