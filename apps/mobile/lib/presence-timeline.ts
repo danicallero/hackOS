@@ -4,10 +4,6 @@ export interface CertaintyWindowLike {
   securedUntil: string | null;
 }
 
-export interface CertaintyWindowStatusLike extends CertaintyWindowLike {
-  status: "secured" | "provisional" | "invalid";
-}
-
 export function durationMinutes(start: string, end: string): number {
   const duration = Date.parse(end) - Date.parse(start);
   return Number.isFinite(duration) ? Math.max(0, Math.round(duration / 60_000)) : 0;
@@ -28,16 +24,4 @@ export function guaranteedMinutesTotal(windows: CertaintyWindowLike[]): number {
       sum + (window.securedUntil ? durationMinutes(window.start, window.securedUntil) : 0),
     0,
   );
-}
-
-/**
- * The still-open window's elapsed time since its last checkpoint — secured
- * once a later exit/activity lands, worth zero if the window just expires.
- */
-export function provisionalMinutesTotal(windows: CertaintyWindowStatusLike[]): number {
-  return windows.reduce((sum, window) => {
-    if (window.securedUntil || window.status !== "provisional") return sum;
-    const end = Math.min(Date.now(), Date.parse(window.deadline));
-    return sum + Math.max(0, Math.round((end - Date.parse(window.start)) / 60_000));
-  }, 0);
 }

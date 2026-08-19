@@ -28,11 +28,7 @@ import { SymbolView, type SymbolViewProps } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
-import {
-  durationMinutes,
-  guaranteedMinutesTotal,
-  provisionalMinutesTotal,
-} from "@/lib/presence-timeline";
+import { durationMinutes, guaranteedMinutesTotal } from "@/lib/presence-timeline";
 import { colors } from "@/theme/colors";
 
 export type SignalKind = "in" | "out" | "activity";
@@ -183,7 +179,6 @@ export function PresenceManagement({
   }
 
   const guaranteedMinutes = guaranteedMinutesTotal(timeline?.windows ?? []);
-  const provisionalMinutes = provisionalMinutesTotal(timeline?.windows ?? []);
 
   // One unified timeline: every entry/activity signal opens exactly one
   // certainty window (in order), so zip them and render each point with the
@@ -219,13 +214,6 @@ export function PresenceManagement({
             label={t("presenceGuaranteedHours")}
             value={timeline ? formatMinutes(guaranteedMinutes, t) : "—"}
             valueStyle={{ color: colors.success, fontVariant: ["tabular-nums"], fontWeight: "700" }}
-          />
-          <Separator />
-          <InfoRow
-            icon="hourglass"
-            label={t("presenceProvisionalHours")}
-            value={timeline ? formatMinutes(provisionalMinutes, t) : "—"}
-            valueStyle={{ color: colors.warning, fontVariant: ["tabular-nums"], fontWeight: "600" }}
           />
         </Section>
       ) : null}

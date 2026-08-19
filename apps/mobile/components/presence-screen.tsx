@@ -9,7 +9,7 @@ import { colors } from "@/theme/colors";
 const CONTENT_PADDING = 16;
 // The floating back button sits at `topInset + 12` with a 44pt diameter —
 // the page title has to clear that whole row.
-const BUTTON_ROW_HEIGHT = 60;
+const BUTTON_ROW_HEIGHT = 20;
 
 export function PresenceScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -21,11 +21,16 @@ export function PresenceScreen() {
   return (
     <>
       <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={{
           gap: 22,
           paddingBottom: 40,
           paddingHorizontal: CONTENT_PADDING,
-          paddingTop: insets.top + BUTTON_ROW_HEIGHT,
+          // Not `insets.top + BUTTON_ROW_HEIGHT`: this screen sits under the
+          // same route group's invisible native nav bar as the profile
+          // screen, and `automatic` above already pushes content below its
+          // real height — adding `insets.top` again double-counts it.
+          paddingTop: BUTTON_ROW_HEIGHT,
         }}
         style={{ backgroundColor: colors.background }}
       >

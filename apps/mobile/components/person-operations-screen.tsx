@@ -433,30 +433,18 @@ export function PersonOperationsScreen() {
     serverAt >= localAt ? (serverDoor?.kind ?? person.lastPresenceKind) : person.lastPresenceKind;
   const direction: "in" | "out" = lastDoorKind === "in" ? "out" : "in";
 
-  const accreditationSection = canAccredit ? (
-    <Section title={t("scannerAccreditation")}>
-      {person.badgeId ? (
-        <Swipeable
-          renderRightActions={(progress) => (
-            <AccreditationRevealActions
-              progress={progress}
-              onReplace={beginBadgeAction}
-              onDelete={confirmRemoveBadge}
-            />
-          )}
-          rightThreshold={40}
-        >
-          <InfoRow label={t("personCurrentBadge")} value={person.badgeId} icon="key.card" />
-        </Swipeable>
-      ) : (
+  // Once a badge exists, its row lives at the bottom of Personal details
+  // instead — this section is then only the unassigned-person action.
+  const accreditationSection =
+    canAccredit && !person.badgeId ? (
+      <Section title={t("scannerAccreditation")}>
         <ActionButton
           icon="qrcode.viewfinder"
           label={t("personLinkBadge")}
           onPress={beginBadgeAction}
         />
-      )}
-    </Section>
-  ) : null;
+      </Section>
+    ) : null;
 
   // Door logging needs a badge: without one the register is hidden entirely
   // and assigning a badge becomes the profile's primary action instead.
@@ -595,6 +583,23 @@ export function PersonOperationsScreen() {
                 value={person.foodIntoleranceNotes}
                 icon="note.text"
               />
+            </>
+          ) : null}
+          {canAccredit && person.badgeId ? (
+            <>
+              <Separator />
+              <Swipeable
+                renderRightActions={(progress) => (
+                  <AccreditationRevealActions
+                    progress={progress}
+                    onReplace={beginBadgeAction}
+                    onDelete={confirmRemoveBadge}
+                  />
+                )}
+                rightThreshold={40}
+              >
+                <InfoRow label={t("personCurrentBadge")} value={person.badgeId} icon="key.card" />
+              </Swipeable>
             </>
           ) : null}
         </Section>
