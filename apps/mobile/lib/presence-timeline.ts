@@ -67,8 +67,11 @@ export function detectPresenceDivergence(
   }
 
   // The in→in conflict has its own dedicated banner/fix flow — only offer
-  // this shortcut for a plain forgotten-exit timeout.
-  if (latest.status === "invalid" && !latest.conflict) {
+  // this shortcut for a plain forgotten-exit timeout. A conflict always sits
+  // on the window *before* the one it invalidates (the second `in` opens a
+  // fresh window of its own), so an unresolved conflict anywhere in the
+  // history — not just on `latest` — must still suppress this shortcut.
+  if (latest.status === "invalid" && !windows.some((window) => window.conflict)) {
     return {
       primaryOverride: null,
       secondary: { kind: "out", reason: "invalid-window", at: latest.deadline },

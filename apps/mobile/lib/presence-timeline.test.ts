@@ -73,6 +73,29 @@ describe("presence timeline helpers", () => {
       });
     });
 
+    test("leaves an unresolved conflict on an earlier window to its own banner, even when a later window has separately timed out", () => {
+      const conflicted: CertaintyWindowFull = {
+        ...secured,
+        securedUntil: null,
+        status: "invalid",
+        conflict: true,
+      };
+      // The second `in` that caused the conflict opens its own fresh window,
+      // which can independently time out with no exit ever following it.
+      const laterTimedOut: CertaintyWindowFull = {
+        ...secured,
+        start: "2026-07-16T08:00:00.000Z",
+        deadline: "2026-07-16T20:00:00.000Z",
+        securedUntil: null,
+        status: "invalid",
+        conflict: false,
+      };
+      expect(detectPresenceDivergence([conflicted, laterTimedOut], "in")).toEqual({
+        primaryOverride: null,
+        secondary: null,
+      });
+    });
+
     test("does nothing with no windows at all", () => {
       expect(detectPresenceDivergence([], "in")).toEqual({
         primaryOverride: null,
