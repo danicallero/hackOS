@@ -1,33 +1,21 @@
-import { BlurView } from "expo-blur";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
+import Stack from "expo-router/stack";
 import { useEffect } from "react";
-import { ScrollView, Text, useColorScheme, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AdaptiveBackButton, AdaptiveToolbarButton, EmptyState } from "@/components/native-ui";
+import { Pressable, ScrollView, Text, View } from "react-native";
+import { EmptyState } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
+import { SymbolView } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
 import { fetchPublicSchedule, scheduleDurationLabel, scheduleTypeLabel } from "@/lib/schedule";
 import { useActivityReminders } from "@/lib/use-activity-reminders";
-import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { colors } from "@/theme/colors";
 
 const CONTENT_PADDING = 20;
-// The floating back/reminder buttons sit at `topInset + 8` with a 44pt
-// diameter — the header's own text has to clear that whole row.
-const BUTTON_ROW_HEIGHT = 60;
-// Approximate height of the header's own title + subtitle text, so the
-// scrolling content below starts clear of it instead of underneath it.
-const HEADER_TEXT_HEIGHT = 56;
 
 export default function ScheduleDetailScreen() {
-  const colorScheme = useColorScheme();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const androidTopInset = useAndroidTopInset();
-  const topInset = process.env.EXPO_OS === "ios" ? insets.top : androidTopInset;
   const { t, language } = useLocale();
   const { data, loading, error, staleSince, load } = useCachedApi("schedule", fetchPublicSchedule);
   const reminders = useActivityReminders();
@@ -51,26 +39,48 @@ export default function ScheduleDetailScreen() {
       ? `${startsAt.toLocaleTimeString(language, { hour: "2-digit", minute: "2-digit" })}–${endsAt.toLocaleTimeString(language, { hour: "2-digit", minute: "2-digit" })}`
       : null;
   const when = date && time ? `${date} · ${time}` : (date ?? time);
-  // Everything the header already shows (location, when it happens) is left
-  // out of the Information table below so nothing repeats.
-  const headerSubtitle = [item?.location, when].filter(Boolean).join(" · ");
-  const headerHeight = topInset + BUTTON_ROW_HEIGHT + HEADER_TEXT_HEIGHT;
 
   return (
     <>
-      <ScrollView
-        // A fixed sibling overlay below (not scroll content) — `stickyHeaderIndices`
-        // pins content visually, but RN's JS implementation lets it drag along
-        // with the elastic bounce when you overscroll past the top. A sibling
-        // outside the ScrollView's transform hierarchy can't move at all.
-        scrollIndicatorInsets={{
-          top: item ? headerHeight : topInset + BUTTON_ROW_HEIGHT,
+      <Stack.Screen
+        options={{
+          title: item?.title ?? "",
+          headerRight:
+            item && reminderOn !== null
+              ? () => (
+                  <Pressable
+                    accessibilityLabel={t(
+                      reminderOn ? "scheduleReminderOn" : "scheduleReminderOff",
+                      {
+                        name: item.title,
+                      },
+                    )}
+                    accessibilityRole="button"
+                    accessibilityState={{
+                      selected: reminderOn,
+                      busy: reminders.savingId === item.id,
+                    }}
+                    disabled={reminders.savingId === item.id}
+                    hitSlop={12}
+                    onPress={() => void reminders.toggle(item.id, !reminderOn)}
+                    style={{ opacity: reminders.savingId === item.id ? 0.4 : 1 }}
+                  >
+                    <SymbolView
+                      name={reminderOn ? "bell.fill" : "bell"}
+                      tintColor={reminderOn ? colors.accent : colors.label}
+                      size={20}
+                    />
+                  </Pressable>
+                )
+              : undefined,
         }}
+      />
+      <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={{
           flexGrow: 1,
           paddingBottom: 40,
           paddingHorizontal: CONTENT_PADDING,
-          paddingTop: item ? headerHeight : topInset + BUTTON_ROW_HEIGHT,
         }}
         style={{ backgroundColor: colors.background }}
       >
@@ -129,90 +139,15 @@ export default function ScheduleDetailScreen() {
                 {t("scheduleInformation")}
               </Text>
               <PlainInfoRow label={t("scheduleType")} value={scheduleTypeLabel(item.type, t)} />
-              <PlainInfoRow
-                label={t("scheduleDuration")}
-                value={scheduleDurationLabel(item, t)}
-                last
-              />
+              <PlainInfoRow label={t("scheduleDuration")} value={scheduleDurationLabel(item, t)} />
+              {when ? <PlainInfoRow label={t("scheduleTime")} value={when} /> : null}
+              {item.location ? (
+                <PlainInfoRow label={t("scheduleLocation")} value={item.location} last />
+              ) : null}
             </View>
           </View>
         )}
       </ScrollView>
-
-      {item ? (
-        <View
-          pointerEvents="none"
-          style={{
-            height: headerHeight,
-            left: 0,
-            position: "absolute",
-            right: 0,
-            top: 0,
-          }}
-        >
-          <BlurView
-            intensity={9}
-            tint={colorScheme === "dark" ? "dark" : "light"}
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              right: 0,
-              height: headerHeight,
-            }}
-          />
-          <View
-            style={{
-              left: 0,
-              paddingHorizontal: CONTENT_PADDING,
-              paddingTop: topInset + BUTTON_ROW_HEIGHT,
-              position: "absolute",
-              right: 0,
-              top: 0,
-            }}
-          >
-            <Text
-              selectable
-              numberOfLines={1}
-              style={{ color: colors.label, fontSize: 22, fontWeight: "800" }}
-            >
-              {item.title}
-            </Text>
-            {headerSubtitle ? (
-              <Text
-                selectable
-                numberOfLines={1}
-                style={{
-                  color: colors.secondaryLabel,
-                  fontSize: 14,
-                  marginTop: 2,
-                }}
-              >
-                {headerSubtitle}
-              </Text>
-            ) : null}
-          </View>
-        </View>
-      ) : null}
-
-      <AdaptiveBackButton top={insets.top + 8} onPress={() => router.back()} />
-      {item && reminderOn !== null ? (
-        <AdaptiveToolbarButton
-          top={insets.top + 8}
-          side="right"
-          icon={reminderOn ? "bell.fill" : "bell"}
-          tintColor={reminderOn ? colors.accent : colors.label}
-          accessibilityLabel={t(reminderOn ? "scheduleReminderOn" : "scheduleReminderOff", {
-            name: item.title,
-          })}
-          accessibilityState={{
-            selected: reminderOn,
-            busy: reminders.savingId === item.id,
-          }}
-          disabled={reminders.savingId === item.id}
-          onPress={() => void reminders.toggle(item.id, !reminderOn)}
-        />
-      ) : null}
     </>
   );
 }

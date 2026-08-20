@@ -182,6 +182,7 @@ function MobileAccessGate({ authenticated }: { authenticated: boolean }) {
 
 function RootLayoutNav({ authenticated, pending }: { authenticated: boolean; pending: boolean }) {
   const colorScheme = useColorScheme();
+  const { t } = useLocale();
   const { me, loading: meLoading, refetch } = useMeContext();
   const showRestoringSession = useDelayedVisibility(authenticated && !me && meLoading, 500);
   const canEnterApp = canEnterMobileApp(authenticated, me?.mobileAccess);
@@ -226,9 +227,8 @@ function RootLayoutNav({ authenticated, pending }: { authenticated: boolean; pen
             options={{
               headerShown: process.env.EXPO_OS === "ios",
               headerTransparent: true,
-              headerShadowVisible: false,
-              headerTitle: "",
-              headerBackVisible: false,
+              headerLargeTitle: true,
+              headerBackTitle: t("tabSchedule"),
             }}
           />
         </Stack.Protected>
