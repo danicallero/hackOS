@@ -25,6 +25,7 @@ export function ScheduleSwipeRow({
   return (
     <Swipeable
       enabled
+      containerStyle={{ flex: 1 }}
       rightThreshold={40}
       renderRightActions={(progress) => (
         <RevealActions
