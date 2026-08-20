@@ -11,7 +11,6 @@ import {
   useColorScheme,
   View,
 } from "react-native";
-import { GlassView } from "@/components/glass-view";
 import { EmptyState } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import {
@@ -431,23 +430,25 @@ function HeaderGlassButton({
   onPress: () => void;
 }) {
   return (
-    <GlassView
-      glassEffectStyle="regular"
-      isInteractive
-      style={{ borderRadius: 22, height: 44, width: 44 }}
+    <Pressable
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole="button"
+      onPress={() => {
+        void haptic("light");
+        onPress();
+      }}
+      style={({ pressed }) => ({
+        alignItems: "center",
+        backgroundColor: colors.surface,
+        borderRadius: 22,
+        height: 44,
+        justifyContent: "center",
+        opacity: pressed ? 0.6 : 1,
+        width: 44,
+      })}
     >
-      <Pressable
-        accessibilityLabel={accessibilityLabel}
-        accessibilityRole="button"
-        onPress={() => {
-          void haptic("light");
-          onPress();
-        }}
-        style={{ alignItems: "center", flex: 1, justifyContent: "center" }}
-      >
-        <SymbolView name={icon} tintColor={colors.label} size={19} weight="semibold" />
-      </Pressable>
-    </GlassView>
+      <SymbolView name={icon} tintColor={colors.label} size={19} weight="semibold" />
+    </Pressable>
   );
 }
 

@@ -295,7 +295,9 @@ export function ScheduleFormModal({
                 setValues((current) => ({ ...current, visibility: shown ? "shown" : "hidden" }))
               }
             />
-            <View style={{ backgroundColor: colors.separator, height: 0.5, marginLeft: 16 }} />
+          </Section>
+
+          <Section>
             <ToggleRow
               label={t("scheduleRequiresScanLabel")}
               value={values.requiresScan}

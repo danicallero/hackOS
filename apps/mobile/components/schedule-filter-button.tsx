@@ -63,29 +63,32 @@ export function ScheduleFilterButton({
           style={{ bottom: 0, left: 0, position: "absolute", right: 0, top: 0 }}
         />
       ) : null}
-      <GlassView
-        glassEffectStyle="regular"
-        isInteractive
-        style={{ borderRadius: 22, height: 44, width: 44, zIndex: FILTER_PANEL_Z_INDEX + 1 }}
+      <Pressable
+        accessibilityLabel={t("scheduleFilter")}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open, selected: active }}
+        onPress={() => {
+          void haptic("light");
+          setOpen((current) => !current);
+        }}
+        style={({ pressed }) => ({
+          alignItems: "center",
+          backgroundColor: colors.surface,
+          borderRadius: 22,
+          height: 44,
+          justifyContent: "center",
+          opacity: pressed ? 0.6 : 1,
+          width: 44,
+          zIndex: FILTER_PANEL_Z_INDEX + 1,
+        })}
       >
-        <Pressable
-          accessibilityLabel={t("scheduleFilter")}
-          accessibilityRole="button"
-          accessibilityState={{ expanded: open, selected: active }}
-          onPress={() => {
-            void haptic("light");
-            setOpen((current) => !current);
-          }}
-          style={{ alignItems: "center", flex: 1, justifyContent: "center" }}
-        >
-          <SymbolView
-            name={icon}
-            tintColor={active ? colors.accent : colors.label}
-            size={19}
-            weight="semibold"
-          />
-        </Pressable>
-      </GlassView>
+        <SymbolView
+          name={icon}
+          tintColor={active ? colors.accent : colors.label}
+          size={19}
+          weight="semibold"
+        />
+      </Pressable>
       {open ? (
         <View
           style={{
