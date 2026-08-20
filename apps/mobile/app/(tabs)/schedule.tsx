@@ -321,7 +321,13 @@ export default function ScheduleScreen() {
           )
         }
         renderSectionHeader={({ section }) => (
-          <View style={{ height: SECTION_HEADER_HEIGHT, justifyContent: "center" }}>
+          <View
+            style={{
+              backgroundColor: colors.background,
+              height: SECTION_HEADER_HEIGHT,
+              justifyContent: "center",
+            }}
+          >
             <Text
               selectable
               accessibilityRole="header"
