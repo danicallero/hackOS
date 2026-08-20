@@ -79,3 +79,20 @@ export function enterpriseAccessFor(request: FastifyRequest): EnterpriseAccess {
   if (!result) throw new Error("Enterprise access missing: requireEnterpriseAccess must run first");
   return result;
 }
+
+/**
+ * H58: the sponsor FAQ is sponsor-only, not public and not everyone with
+ * SPONSORS_MANAGE-adjacent access (unlike challenge-directory in the
+ * challenges module, judges are deliberately excluded here — this is
+ * logistics for companies attending as sponsors, not for the judging pool).
+ * Org admins (SPONSORS_MANAGE) can always read it too, since they're the ones
+ * writing it.
+ */
+export const requireSponsorPortalAccess: preHandlerHookHandler = async (request) => {
+  if (request.userId == null) throw new UnauthorizedError();
+  if (await userHasCapability(request.userId, CAPABILITIES.SPONSORS_MANAGE)) return;
+  const { rowCount } = await pool.query(`SELECT 1 FROM sponsors WHERE user_id = $1 LIMIT 1`, [
+    request.userId,
+  ]);
+  if (!rowCount) throw new ForbiddenError("Not a sponsor representative");
+};

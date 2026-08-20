@@ -375,6 +375,12 @@ I want to export every uploaded file at once, named by applicant email, or
 just the ones applicants agreed to share, so I can hand sponsors CVs without
 touching files one by one or without breaching consent for the rest.
 
+**H58. Sponsor logistics FAQ**
+As a sponsor rep I want a page inside the portal, not the public site, with the
+practical logistics for the event — venue/parking/wifi, load-in and setup
+window, merch drop-off deadline, who to contact — kept current by the
+organizing team, so I stop having to dig through email threads to find it.
+
 ---
 
 ## 8. Schedule & public content

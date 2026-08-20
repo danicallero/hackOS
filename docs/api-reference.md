@@ -55,7 +55,7 @@ registerModules(app)
 ├─ notifications  (WS-F  · H50-H53)
 ├─ projects       (WS-B1 · H16-H17)
 ├─ queue          (WS-B2 · H29-H42)
-└─ sponsors       (WS-G  · H43-H45)
+└─ sponsors       (WS-G  · H43-H45, H58)
 ```
 
 A module owns routes, its own DB access (no cross-module raw SQL — call the
@@ -128,10 +128,15 @@ delivery (email, push, Discord, in-app) driven entirely by the durable
 dispatcher's retry/backoff and dead-letter model — there is no BullMQ-native
 retry queue here on purpose.
 
-### sponsors (H43–H45)
+### sponsors (H43–H45, H58)
 Enterprises, sponsor (rep) membership on an enterprise, and the
 enterprise-invite-link flow that lets an org self-serve rep accounts without
-staff creating each one by hand.
+staff creating each one by hand. Also owns the sponsor-only logistics/FAQ
+singleton (`GET/PUT /api/sponsor-faq`, H58) — trilingual content readable by
+any linked sponsor rep or a `sponsors:manage` admin, writable only by the
+latter; access is a "sponsor-portal-access" contextual policy (any row in
+`sponsors`, deliberately narrower than `challenges`' judge-inclusive
+`challenge-directory` policy).
 
 ### event (H45, H47)
 The `event_config` singleton: event identity/tagline, the public countdown

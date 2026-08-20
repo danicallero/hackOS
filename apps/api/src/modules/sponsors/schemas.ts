@@ -83,3 +83,12 @@ export const CONTENT_TYPE_EXT: Record<(typeof LOGO_CONTENT_TYPES)[number], strin
 
 export type CreateEnterpriseBody = z.infer<typeof createEnterpriseBody>;
 export type UpdateEnterpriseBody = z.infer<typeof updateEnterpriseBody>;
+
+/** H58: sponsor-only logistics/FAQ content, trilingual like challenge text. */
+export const sponsorFaqBody = z
+  .object({
+    contentI18n: z.object({ en: z.string(), es: z.string(), gl: z.string() }),
+  })
+  .strict();
+
+export type SponsorFaqBody = z.infer<typeof sponsorFaqBody>;

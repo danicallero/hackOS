@@ -52,10 +52,43 @@ export function changedFields(
   ).map((f) => f.labelKey);
 }
 
+/** Human-readable rendering of one snapshot field, for the before/after diff. */
+export function fieldValueForDisplay(key: keyof VersionSnapshot, value: unknown): string {
+  if (key === "prizes") {
+    const prizes = value as { name?: unknown }[] | null;
+    if (!prizes || prizes.length === 0) return "—";
+    return prizes.map((p) => (typeof p?.name === "string" ? p.name : "?")).join(", ");
+  }
+  if (key === "judging_panel_criteria") {
+    const questions = value as { key?: unknown; label?: unknown }[] | null;
+    if (!questions || questions.length === 0) return "—";
+    return questions
+      .map((q) => textForDisplay(q?.label as never) || (typeof q?.key === "string" ? q.key : "?"))
+      .join(", ");
+  }
+  if (key === "available_from") {
+    return typeof value === "string" && value ? new Date(value).toLocaleString() : "—";
+  }
+  return textForDisplay(value as never) || "—";
+}
+
 export function VersionHistory({ challengeId }: { challengeId: number }) {
   const { t } = useLocale();
   const [versions, setVersions] = useState<Version[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+
+  const toggleExpanded = useCallback((id: number) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
 
   const load = useCallback(() => {
     setError(null);
@@ -103,6 +136,36 @@ export function VersionHistory({ challengeId }: { challengeId: number }) {
             ) : changed.length > 0 ? (
               <p className="mt-1 text-xs">{changed.map((labelKey) => t(labelKey)).join(", ")}</p>
             ) : null}
+            {(changed.length > 0 || index === versions.length - 1) && (
+              <button
+                type="button"
+                onClick={() => toggleExpanded(version.id)}
+                className="text-primary mt-1 text-xs underline underline-offset-2"
+              >
+                {expanded.has(version.id)
+                  ? t("hideVersionDetailsLabel")
+                  : t("viewVersionDetailsLabel")}
+              </button>
+            )}
+            {expanded.has(version.id) && (
+              <dl className="border-border mt-2 space-y-2 rounded-md border p-2">
+                {TRACKED_FIELDS.filter(
+                  (f) => index === versions.length - 1 || changed.includes(f.labelKey),
+                ).map((f) => (
+                  <div key={f.key} className="text-xs">
+                    <dt className="text-muted-foreground font-medium">{t(f.labelKey)}</dt>
+                    <dd className="mt-0.5 space-y-0.5">
+                      {previous && (
+                        <p className="text-muted-foreground line-through">
+                          {fieldValueForDisplay(f.key, previous.snapshot[f.key])}
+                        </p>
+                      )}
+                      <p>{fieldValueForDisplay(f.key, version.snapshot[f.key])}</p>
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            )}
           </li>
         );
       })}

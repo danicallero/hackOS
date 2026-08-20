@@ -263,6 +263,8 @@ Public/token snapshot: public rows are health, public content/announcement/TV/in
 | DELETE | `/api/schedule/:id` | capability:schedule:manage |
 | PATCH | `/api/schedule/:id` | capability:schedule:manage |
 | POST | `/api/schedule/visibility` | capability:schedule:manage |
+| GET | `/api/sponsor-faq` | contextual:sponsor-portal-access |
+| PUT | `/api/sponsor-faq` | capability:sponsors:manage |
 | GET | `/api/tv/config` | public:public-tv |
 | DELETE | `/api/tv/mode` | capability:tv:control |
 | GET | `/api/tv/mode` | public:public-tv |

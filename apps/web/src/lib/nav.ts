@@ -353,6 +353,13 @@ export const WORKSPACES: Workspace[] = [
         anyCapability: [CAPABILITIES.SPONSORS_MANAGE, CAPABILITIES.QUEUE_ADMIN],
         sponsorVisible: true,
       },
+      {
+        title: "sponsorFaq",
+        href: "/sponsor-faq",
+        icon: FileTextIcon,
+        capability: CAPABILITIES.SPONSORS_MANAGE,
+        sponsorVisible: true,
+      },
     ],
   },
   {
