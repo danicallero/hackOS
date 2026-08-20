@@ -273,6 +273,8 @@
   "scheduleOverlap": "Solápase con outra actividade",
   "scheduleNotificationsTitle": "Notificacións de actividades",
   "scheduleNotificationsPartial": "Algunhas silenciadas",
+  "scheduleManualSubscribed": "Notificado",
+  "scheduleManualMuted": "Silenciado",
   "scheduleFilter": "Filtrar",
   "scheduleFilterAll": "Todas",
   "scheduleFilterAudience": "Audiencia",
@@ -506,5 +508,7 @@
   "badgeReplacementReason": "Substitución desde a app de operacións",
   "badgeRemovalReason": "Retirada desde a app de operacións",
   "confirm": "Confirmar",
-  "add": "Engadir"
+  "add": "Engadir",
+  "remove": "Quitar",
+  "scheduleOwnerSearchEmpty": "Sen resultados"
 }

@@ -102,6 +102,23 @@ export function useScheduleNotifications(items: ScheduleItem[]) {
     [items, itemRow, kindRow],
   );
 
+  /**
+   * Per-entry breakdown for a kind's settings row: which entries are
+   * individually subscribed (category off) and which are muted (category
+   * on/partial) — the settings sheet lists these so a manual override is
+   * visible and reversible from Settings, not just from each entry's bell.
+   */
+  const manualEntries = useCallback(
+    (kind: string): { subscribed: ScheduleItem[]; muted: ScheduleItem[] } => {
+      const kindItems = items.filter((item) => item.type === kind);
+      return {
+        subscribed: kindItems.filter((item) => itemRow(item.id)?.enabled === true),
+        muted: kindItems.filter((item) => itemRow(item.id)?.enabled === false),
+      };
+    },
+    [items, itemRow],
+  );
+
   const toggleEntry = useCallback(
     async (item: ScheduleItem) => {
       if (!prefs) return;
@@ -188,6 +205,7 @@ export function useScheduleNotifications(items: ScheduleItem[]) {
     load,
     isEntrySubscribed,
     categoryState,
+    manualEntries,
     toggleEntry,
     toggleCategory,
     savingKey,

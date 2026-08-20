@@ -1,7 +1,16 @@
 import { MenuView } from "@expo/ui/community/menu";
 import { ACTIVITY_KINDS, type ActivityKind } from "@hackos/shared/activity-kinds";
 import { useEffect, useRef, useState } from "react";
-import { Modal, Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  Modal,
+  Pressable,
+  ScrollView,
+  Switch,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DateTimeField } from "@/components/date-time-field";
 import { FloatingGlassButton, Section } from "@/components/native-ui";
@@ -46,7 +55,9 @@ function emptyForm(): ScheduleInput {
     endsAt: endsAt.toISOString(),
     visibility: "hidden",
     publishAt: null,
-    audiences: [],
+    // New items default to reaching participants — staff-only (empty) is an
+    // explicit opt-out, not the common case.
+    audiences: ["participant"],
     contactNote: null,
     notes: null,
   };
@@ -63,7 +74,7 @@ export function scheduleItemToForm(item: AdminScheduleItem): ScheduleInput {
     endsAt: item.endsAt,
     visibility: item.visibility,
     publishAt: item.publishAt,
-    audiences: item.audiences,
+    audiences: item.audiences ?? [],
     contactNote: item.contactNote,
     notes: item.notes,
   };
@@ -292,29 +303,31 @@ export function ScheduleFormModal({
             />
           </Section>
 
-          <Section title={t("schedulePublishAtLabel")}>
-            <ToggleRow
-              label={t("schedulePublishAtLabel")}
-              value={scheduledPublish}
-              onChange={setScheduledPublish}
-            />
-            {scheduledPublish ? (
-              <View style={{ padding: 16, paddingTop: 0 }}>
-                <DateTimeField
-                  dateAccessibilityLabel={t("schedulePublishAtLabel")}
-                  timeAccessibilityLabel={t("schedulePublishAtLabel")}
-                  value={values.publishAt ? new Date(values.publishAt) : new Date()}
-                  onChange={(date) =>
-                    setValues((current) => ({ ...current, publishAt: date.toISOString() }))
-                  }
-                />
-              </View>
-            ) : null}
-          </Section>
+          {values.visibility === "shown" ? null : (
+            <Section title={t("schedulePublishAtLabel")}>
+              <ToggleRow
+                label={t("schedulePublishAtLabel")}
+                value={scheduledPublish}
+                onChange={setScheduledPublish}
+              />
+              {scheduledPublish ? (
+                <View style={{ padding: 16, paddingTop: 0 }}>
+                  <DateTimeField
+                    dateAccessibilityLabel={t("schedulePublishAtLabel")}
+                    timeAccessibilityLabel={t("schedulePublishAtLabel")}
+                    value={values.publishAt ? new Date(values.publishAt) : new Date()}
+                    onChange={(date) =>
+                      setValues((current) => ({ ...current, publishAt: date.toISOString() }))
+                    }
+                  />
+                </View>
+              ) : null}
+            </Section>
+          )}
 
           <Section title={t("scheduleFilterAudience")}>
             {SCHEDULE_AUDIENCES.map((audience, index) => {
-              const selected = values.audiences.includes(audience);
+              const selected = (values.audiences ?? []).includes(audience);
               return (
                 <View key={audience}>
                   {index > 0 ? (
@@ -329,8 +342,8 @@ export function ScheduleFormModal({
                       setValues((current) => ({
                         ...current,
                         audiences: next
-                          ? [...current.audiences, audience]
-                          : current.audiences.filter((a) => a !== audience),
+                          ? [...(current.audiences ?? []), audience]
+                          : (current.audiences ?? []).filter((a) => a !== audience),
                       }))
                     }
                   />
@@ -439,6 +452,13 @@ function ToggleRow({
  * `pendingOwnerIds` after the item is created. In edit mode, each tap hits
  * the owner endpoints immediately (mirrors the web admin table's picker).
  */
+/** A candidate returned by the owner-candidates search. */
+type OwnerCandidate = { id: number; email: string; name: string | null; surname: string | null };
+
+function ownerCandidateName(candidate: OwnerCandidate): string {
+  return [candidate.name, candidate.surname].filter(Boolean).join(" ").trim() || candidate.email;
+}
+
 function OwnersField({
   owners,
   onChange,
@@ -450,95 +470,174 @@ function OwnersField({
 }) {
   const { t } = useLocale();
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<
-    { id: number; email: string; name: string | null; surname: string | null }[]
-  >([]);
+  const [results, setResults] = useState<OwnerCandidate[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searched, setSearched] = useState(false);
+  const [mutation, setMutation] = useState<string | null>(null);
   const requestId = useRef(0);
-
-  useEffect(() => {
-    if (query.trim().length < 2) {
-      setResults([]);
-      return;
-    }
-    const currentRequest = ++requestId.current;
-    const handle = setTimeout(async () => {
-      try {
-        const users = await fetchScheduleOwnerCandidates(query.trim());
-        if (currentRequest === requestId.current) setResults(users);
-      } catch {
-        if (currentRequest === requestId.current) setResults([]);
-      }
-    }, 300);
-    return () => clearTimeout(handle);
-  }, [query]);
 
   const ownerIds = new Set(owners.map((owner) => owner.userId));
 
-  async function add(candidate: {
-    id: number;
-    email: string;
-    name: string | null;
-    surname: string | null;
-  }) {
+  async function search() {
+    const trimmed = query.trim();
+    if (!trimmed) return;
+    const currentRequest = ++requestId.current;
+    setSearching(true);
+    try {
+      const users = await fetchScheduleOwnerCandidates(trimmed);
+      if (currentRequest === requestId.current) {
+        setResults(users);
+        setSearched(true);
+      }
+    } catch {
+      if (currentRequest === requestId.current) setResults([]);
+    } finally {
+      if (currentRequest === requestId.current) setSearching(false);
+    }
+  }
+
+  async function add(candidate: OwnerCandidate) {
     if (ownerIds.has(candidate.id)) return;
-    if (scheduleId) await addScheduleOwner(scheduleId, candidate.id);
-    onChange([
-      ...owners,
-      {
-        userId: candidate.id,
-        name: candidate.name,
-        surname: candidate.surname,
-        email: candidate.email,
-      },
-    ]);
-    setQuery("");
-    setResults([]);
+    setMutation(`add:${candidate.id}`);
+    try {
+      if (scheduleId) await addScheduleOwner(scheduleId, candidate.id);
+      onChange([
+        ...owners,
+        {
+          userId: candidate.id,
+          name: candidate.name,
+          surname: candidate.surname,
+          email: candidate.email,
+        },
+      ]);
+    } finally {
+      setMutation(null);
+    }
   }
 
   async function remove(userId: number) {
-    if (scheduleId) await removeScheduleOwner(scheduleId, userId);
-    onChange(owners.filter((owner) => owner.userId !== userId));
+    setMutation(`remove:${userId}`);
+    try {
+      if (scheduleId) await removeScheduleOwner(scheduleId, userId);
+      onChange(owners.filter((owner) => owner.userId !== userId));
+    } finally {
+      setMutation(null);
+    }
   }
 
   return (
     <Section title={t("scheduleOwnersLabel")}>
-      <View style={{ padding: 16, paddingBottom: results.length > 0 ? 0 : 16 }}>
-        <TextInput
-          accessibilityLabel={t("scheduleOwnerAdd")}
-          onChangeText={setQuery}
-          placeholder={t("scheduleOwnerSearchPlaceholder")}
-          placeholderTextColor={colors.tertiaryLabel}
-          style={{ color: colors.label, fontSize: 16 }}
-          value={query}
-        />
-      </View>
-      {results.map((candidate) => (
+      <View style={{ gap: 8, padding: 16 }}>
         <View
-          key={candidate.id}
+          accessible
+          accessibilityLabel={t("scheduleOwnerSearchPlaceholder")}
           style={{
             alignItems: "center",
-            borderTopColor: colors.separator,
-            borderTopWidth: 0.5,
+            backgroundColor: colors.elevatedSurface,
+            borderCurve: "continuous",
+            borderRadius: 10,
             flexDirection: "row",
             gap: 8,
-            paddingHorizontal: 16,
-            paddingVertical: 10,
+            minHeight: 36,
+            paddingHorizontal: 8,
           }}
         >
-          <Text style={{ color: colors.label, flex: 1, fontSize: 15 }}>
-            {[candidate.name, candidate.surname].filter(Boolean).join(" ").trim() ||
-              candidate.email}
-          </Text>
-          <Pressable
-            accessibilityLabel={t("scheduleOwnerAdd")}
-            accessibilityRole="button"
-            hitSlop={10}
-            onPress={() => void add(candidate)}
+          <SymbolView
+            name="magnifyingglass"
+            tintColor={colors.tertiaryLabel}
+            size={15}
+            accessible={false}
+          />
+          <TextInput
+            accessibilityLabel={t("scheduleOwnerSearchPlaceholder")}
+            editable={mutation === null && !searching}
+            onChangeText={(value) => {
+              setQuery(value);
+              setResults([]);
+              setSearched(false);
+            }}
+            onSubmitEditing={() => void search()}
+            placeholder={t("scheduleOwnerSearchPlaceholder")}
+            placeholderTextColor={colors.tertiaryLabel}
+            returnKeyType="search"
+            value={query}
+            style={{ color: colors.label, flex: 1, fontSize: 17, minHeight: 36 }}
+          />
+          {query.length > 0 ? (
+            <Pressable
+              accessibilityLabel={t("cancel")}
+              onPress={() => {
+                setQuery("");
+                setResults([]);
+                setSearched(false);
+              }}
+              hitSlop={8}
+            >
+              <SymbolView
+                name="xmark.circle.fill"
+                tintColor={colors.tertiaryLabel}
+                size={16}
+                accessible={false}
+              />
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
+      {results.map((candidate) => (
+        <View key={candidate.id}>
+          <View style={{ backgroundColor: colors.separator, height: 0.5, marginLeft: 16 }} />
+          <View
+            style={{
+              alignItems: "center",
+              flexDirection: "row",
+              gap: 12,
+              minHeight: 44,
+              paddingHorizontal: 16,
+              paddingVertical: 6,
+            }}
           >
-            <SymbolView name="plus.circle.fill" tintColor={colors.accent} size={20} />
-          </Pressable>
+            <View style={{ flex: 1 }}>
+              <Text selectable numberOfLines={1} style={{ color: colors.label, fontSize: 16 }}>
+                {ownerCandidateName(candidate)}
+              </Text>
+              <Text
+                selectable
+                numberOfLines={1}
+                style={{ color: colors.secondaryLabel, fontSize: 14 }}
+              >
+                {candidate.email}
+              </Text>
+            </View>
+            {mutation === `add:${candidate.id}` ? (
+              <ActivityIndicator size="small" color={colors.accent} />
+            ) : (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t("scheduleOwnerAdd")}
+                disabled={mutation !== null}
+                onPress={() => void add(candidate)}
+                hitSlop={8}
+                style={({ pressed }) => ({
+                  alignItems: "center",
+                  justifyContent: "center",
+                  minHeight: 44,
+                  minWidth: 44,
+                  opacity: pressed ? 0.5 : 1,
+                })}
+              >
+                <Text style={{ color: colors.accent, fontSize: 16 }}>{t("add")}</Text>
+              </Pressable>
+            )}
+          </View>
         </View>
       ))}
+      {!searching && searched && results.length === 0 ? (
+        <View style={{ borderTopColor: colors.separator, borderTopWidth: 0.5, padding: 16 }}>
+          <Text style={{ color: colors.tertiaryLabel, fontSize: 14 }}>
+            {t("scheduleOwnerSearchEmpty")}
+          </Text>
+        </View>
+      ) : null}
       {owners.length === 0 ? (
         <View style={{ borderTopColor: colors.separator, borderTopWidth: 0.5, padding: 16 }}>
           <Text style={{ color: colors.tertiaryLabel, fontSize: 14 }}>
@@ -547,29 +646,46 @@ function OwnersField({
         </View>
       ) : (
         owners.map((owner) => (
-          <View
-            key={owner.userId}
-            style={{
-              alignItems: "center",
-              borderTopColor: colors.separator,
-              borderTopWidth: 0.5,
-              flexDirection: "row",
-              gap: 8,
-              paddingHorizontal: 16,
-              paddingVertical: 10,
-            }}
-          >
-            <Text style={{ color: colors.label, flex: 1, fontSize: 15 }}>
-              {[owner.name, owner.surname].filter(Boolean).join(" ").trim() || owner.email}
-            </Text>
-            <Pressable
-              accessibilityLabel={t("scheduleDelete")}
-              accessibilityRole="button"
-              hitSlop={10}
-              onPress={() => void remove(owner.userId)}
+          <View key={owner.userId}>
+            <View style={{ backgroundColor: colors.separator, height: 0.5, marginLeft: 16 }} />
+            <View
+              style={{
+                alignItems: "center",
+                flexDirection: "row",
+                gap: 12,
+                minHeight: 44,
+                paddingHorizontal: 16,
+                paddingVertical: 6,
+              }}
             >
-              <SymbolView name="minus.circle.fill" tintColor={colors.destructive} size={20} />
-            </Pressable>
+              <Text
+                selectable
+                numberOfLines={1}
+                style={{ color: colors.label, flex: 1, fontSize: 16 }}
+              >
+                {[owner.name, owner.surname].filter(Boolean).join(" ").trim() || owner.email}
+              </Text>
+              {mutation === `remove:${owner.userId}` ? (
+                <ActivityIndicator size="small" color={colors.destructive} />
+              ) : (
+                <Pressable
+                  accessibilityLabel={t("scheduleDelete")}
+                  accessibilityRole="button"
+                  disabled={mutation !== null}
+                  onPress={() => void remove(owner.userId)}
+                  hitSlop={8}
+                  style={({ pressed }) => ({
+                    alignItems: "center",
+                    justifyContent: "center",
+                    minHeight: 44,
+                    minWidth: 44,
+                    opacity: pressed ? 0.5 : 1,
+                  })}
+                >
+                  <Text style={{ color: colors.destructive, fontSize: 16 }}>{t("remove")}</Text>
+                </Pressable>
+              )}
+            </View>
           </View>
         ))
       )}

@@ -273,6 +273,8 @@
   "scheduleOverlap": "Overlaps with another activity",
   "scheduleNotificationsTitle": "Activity notifications",
   "scheduleNotificationsPartial": "Some muted",
+  "scheduleManualSubscribed": "Notified",
+  "scheduleManualMuted": "Muted",
   "scheduleFilter": "Filter",
   "scheduleFilterAll": "All",
   "scheduleFilterAudience": "Audience",
@@ -506,5 +508,7 @@
   "badgeReplacementReason": "Replacement from the operations app",
   "badgeRemovalReason": "Removal from the operations app",
   "confirm": "Confirm",
-  "add": "Add"
+  "add": "Add",
+  "remove": "Remove",
+  "scheduleOwnerSearchEmpty": "No matches"
 }

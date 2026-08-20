@@ -213,7 +213,7 @@ export default function ScheduleDetailScreen() {
             onPress={() => setEditing(true)}
             style={{ alignItems: "center", flex: 1, justifyContent: "center" }}
           >
-            <SymbolView name="pencil" tintColor="white" size={20} weight="semibold" />
+            <SymbolView name="pencil" tintColor={colors.accent} size={20} weight="semibold" />
           </Pressable>
         </GlassView>
       ) : null}

@@ -78,7 +78,12 @@ export function ScheduleFilterButton({
           }}
           style={{ alignItems: "center", flex: 1, justifyContent: "center" }}
         >
-          <SymbolView name={icon} tintColor="white" size={19} weight="semibold" />
+          <SymbolView
+            name={icon}
+            tintColor={active ? colors.accent : colors.label}
+            size={19}
+            weight="semibold"
+          />
         </Pressable>
       </GlassView>
       {open ? (

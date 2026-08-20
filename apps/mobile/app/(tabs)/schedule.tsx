@@ -376,6 +376,8 @@ export default function ScheduleScreen() {
         kinds={kinds}
         categoryState={notifications.categoryState}
         onToggleCategory={(kind, enabled) => void notifications.toggleCategory(kind, enabled)}
+        manualEntries={notifications.manualEntries}
+        onToggleEntry={(item) => void notifications.toggleEntry(item)}
         savingKind={notifications.savingKey}
       />
     </View>
@@ -452,7 +454,7 @@ function HeaderGlassButton({
         }}
         style={{ alignItems: "center", flex: 1, justifyContent: "center" }}
       >
-        <SymbolView name={icon} tintColor="white" size={19} weight="semibold" />
+        <SymbolView name={icon} tintColor={colors.label} size={19} weight="semibold" />
       </Pressable>
     </GlassView>
   );
