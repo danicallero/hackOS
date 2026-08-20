@@ -11,6 +11,7 @@ import {
   useColorScheme,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { EmptyState } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import {
@@ -68,6 +69,8 @@ export default function ScheduleScreen() {
   const listRef = useRef<SectionList<SectionRow, ScheduleSection>>(null);
   const scrolledOnLoad = useRef(false);
   const androidTopInset = useAndroidTopInset();
+  const insets = useSafeAreaInsets();
+  const headerTopInset = process.env.EXPO_OS === "ios" ? insets.top : androidTopInset;
   const canManage = has(me?.capabilities ?? [], CAPABILITIES.SCHEDULE_MANAGE);
 
   const { data, loading, error, staleSince, load } = useCachedApi("schedule", fetchPublicSchedule);
@@ -222,12 +225,63 @@ export default function ScheduleScreen() {
 
   return (
     <View style={{ backgroundColor: colors.background, flex: 1 }}>
+      <View
+        style={{
+          backgroundColor: colors.background,
+          gap: 8,
+          paddingHorizontal: 16,
+          paddingTop: headerTopInset,
+          // Above the list so the filter dropdown isn't clipped by the
+          // SectionList's scroll container — it used to live inside
+          // ListHeaderComponent, which clips absolutely-positioned overflow.
+          zIndex: 10,
+        }}
+      >
+        <View
+          style={{
+            alignItems: "center",
+            flexDirection: "row",
+            justifyContent: "space-between",
+            paddingBottom: 4,
+            paddingTop: 8,
+          }}
+        >
+          <Text style={{ color: colors.label, fontSize: 34, fontWeight: "800" }}>
+            {t("tabSchedule")}
+          </Text>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <ScheduleFilterButton
+              kinds={kinds}
+              selectedKinds={selectedKinds}
+              onToggleKind={toggleKind}
+              showAudience={canManage}
+              selectedAudiences={selectedAudiences}
+              onToggleAudience={toggleAudience}
+              onClear={() => {
+                setSelectedKinds([]);
+                setSelectedAudiences([]);
+              }}
+            />
+            {canManage ? (
+              <HeaderGlassButton
+                icon="plus"
+                accessibilityLabel={t("scheduleAdd")}
+                onPress={() => setFormTarget("create")}
+              />
+            ) : null}
+            <HeaderGlassButton
+              icon="bell.badge"
+              accessibilityLabel={t("scheduleNotificationsTitle")}
+              onPress={() => setSettingsOpen(true)}
+            />
+          </View>
+        </View>
+      </View>
       <SectionList
         ref={listRef}
         sections={sections}
         keyExtractor={(row) => (row.kind === "now" ? row.id : String(row.id))}
-        contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{ flexGrow: 1, paddingBottom: 24, paddingTop: androidTopInset }}
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: 24 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         stickySectionHeadersEnabled
         onScrollToIndexFailed={() => {
@@ -236,44 +290,6 @@ export default function ScheduleScreen() {
         }}
         ListHeaderComponent={
           <View style={{ gap: 8 }}>
-            <View
-              style={{
-                alignItems: "center",
-                flexDirection: "row",
-                justifyContent: "space-between",
-                paddingBottom: 4,
-              }}
-            >
-              <Text style={{ color: colors.label, fontSize: 34, fontWeight: "800" }}>
-                {t("tabSchedule")}
-              </Text>
-              <View style={{ flexDirection: "row", gap: 8 }}>
-                <ScheduleFilterButton
-                  kinds={kinds}
-                  selectedKinds={selectedKinds}
-                  onToggleKind={toggleKind}
-                  showAudience={canManage}
-                  selectedAudiences={selectedAudiences}
-                  onToggleAudience={toggleAudience}
-                  onClear={() => {
-                    setSelectedKinds([]);
-                    setSelectedAudiences([]);
-                  }}
-                />
-                {canManage ? (
-                  <HeaderGlassButton
-                    icon="plus"
-                    accessibilityLabel={t("scheduleAdd")}
-                    onPress={() => setFormTarget("create")}
-                  />
-                ) : null}
-                <HeaderGlassButton
-                  icon="bell.badge"
-                  accessibilityLabel={t("scheduleNotificationsTitle")}
-                  onPress={() => setSettingsOpen(true)}
-                />
-              </View>
-            </View>
             <StaleDataBanner
               updatedAt={staleSince}
               onRetry={() => void load()}
@@ -289,7 +305,7 @@ export default function ScheduleScreen() {
             ) : null}
           </View>
         }
-        ListHeaderComponentStyle={{ paddingHorizontal: 16, paddingTop: 0 }}
+        ListHeaderComponentStyle={{ paddingHorizontal: 16, paddingTop: 8 }}
         ListEmptyComponent={
           loading ? (
             <RequestFeedback loading />

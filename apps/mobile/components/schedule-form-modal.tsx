@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DateTimeField } from "@/components/date-time-field";
 import { FloatingGlassButton, Section } from "@/components/native-ui";
+import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
 import {
@@ -148,8 +149,10 @@ export function ScheduleFormModal({
     >
       <View style={{ backgroundColor: colors.background, flex: 1 }}>
         <ScrollView
+          automaticallyAdjustKeyboardInsets
           contentInsetAdjustmentBehavior="automatic"
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
           contentContainerStyle={{
             gap: 22,
             padding: 16,
@@ -475,6 +478,7 @@ function OwnersField({
   const [results, setResults] = useState<OwnerCandidate[]>([]);
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [searchError, setSearchError] = useState<Error | null>(null);
   const [mutation, setMutation] = useState<string | null>(null);
   const requestId = useRef(0);
 
@@ -482,17 +486,23 @@ function OwnersField({
 
   async function search() {
     const trimmed = query.trim();
-    if (!trimmed) return;
+    // Matches the API's own minimum (schemas.ts scheduleOwnerCandidatesQuery)
+    // — searching below it would just 400.
+    if (trimmed.length < 2) return;
     const currentRequest = ++requestId.current;
     setSearching(true);
+    setSearchError(null);
     try {
       const users = await fetchScheduleOwnerCandidates(trimmed);
       if (currentRequest === requestId.current) {
         setResults(users);
         setSearched(true);
       }
-    } catch {
-      if (currentRequest === requestId.current) setResults([]);
+    } catch (cause) {
+      if (currentRequest === requestId.current) {
+        setResults([]);
+        setSearchError(cause instanceof Error ? cause : new Error("Search failed"));
+      }
     } finally {
       if (currentRequest === requestId.current) setSearching(false);
     }
@@ -501,6 +511,7 @@ function OwnersField({
   async function add(candidate: OwnerCandidate) {
     if (ownerIds.has(candidate.id)) return;
     setMutation(`add:${candidate.id}`);
+    setSearchError(null);
     try {
       if (scheduleId) await addScheduleOwner(scheduleId, candidate.id);
       onChange([
@@ -512,6 +523,8 @@ function OwnersField({
           email: candidate.email,
         },
       ]);
+    } catch (cause) {
+      setSearchError(cause instanceof Error ? cause : new Error("Add failed"));
     } finally {
       setMutation(null);
     }
@@ -519,9 +532,12 @@ function OwnersField({
 
   async function remove(userId: number) {
     setMutation(`remove:${userId}`);
+    setSearchError(null);
     try {
       if (scheduleId) await removeScheduleOwner(scheduleId, userId);
       onChange(owners.filter((owner) => owner.userId !== userId));
+    } catch (cause) {
+      setSearchError(cause instanceof Error ? cause : new Error("Remove failed"));
     } finally {
       setMutation(null);
     }
@@ -584,6 +600,9 @@ function OwnersField({
             </Pressable>
           ) : null}
         </View>
+        {searchError ? (
+          <RequestFeedback error={searchError} onRetry={() => void search()} retrying={searching} />
+        ) : null}
       </View>
       {results.map((candidate) => (
         <View key={candidate.id}>
