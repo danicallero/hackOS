@@ -7,12 +7,24 @@ import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
-import { fetchPublicSchedule, scheduleDurationLabel, scheduleTypeLabel } from "@/lib/schedule";
+import {
+  collapseBlankLines,
+  fetchPublicSchedule,
+  scheduleDurationLabel,
+  scheduleTypeLabel,
+} from "@/lib/schedule";
 import { useActivityReminders } from "@/lib/use-activity-reminders";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { colors } from "@/theme/colors";
 
 const CONTENT_PADDING = 20;
+
+const sectionHeaderStyle = {
+  color: colors.secondaryLabel,
+  fontSize: 13,
+  fontWeight: "600" as const,
+  textTransform: "uppercase" as const,
+};
 
 export default function ScheduleDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -112,38 +124,33 @@ export default function ScheduleDetailScreen() {
           <View style={{ gap: 24 }}>
             {item.description ? (
               <View style={{ gap: 10 }}>
-                <Text
-                  style={{
-                    color: colors.label,
-                    fontSize: 20,
-                    fontWeight: "800",
-                  }}
-                >
-                  {t("scheduleDescription")}
-                </Text>
+                <Text style={sectionHeaderStyle}>{t("scheduleDescription")}</Text>
                 <Text selectable style={{ color: colors.label, fontSize: 16, lineHeight: 24 }}>
-                  {item.description}
+                  {collapseBlankLines(item.description)}
                 </Text>
               </View>
             ) : null}
 
-            <View style={{ gap: 4 }}>
-              <Text
+            <View style={{ gap: 8 }}>
+              <Text style={sectionHeaderStyle}>{t("scheduleInformation")}</Text>
+              <View
                 style={{
-                  color: colors.label,
-                  fontSize: 20,
-                  fontWeight: "800",
-                  marginBottom: 8,
+                  backgroundColor: colors.surface,
+                  borderCurve: "continuous",
+                  borderRadius: 14,
+                  paddingHorizontal: 16,
                 }}
               >
-                {t("scheduleInformation")}
-              </Text>
-              <PlainInfoRow label={t("scheduleType")} value={scheduleTypeLabel(item.type, t)} />
-              <PlainInfoRow label={t("scheduleDuration")} value={scheduleDurationLabel(item, t)} />
-              {when ? <PlainInfoRow label={t("scheduleTime")} value={when} /> : null}
-              {item.location ? (
-                <PlainInfoRow label={t("scheduleLocation")} value={item.location} last />
-              ) : null}
+                <PlainInfoRow label={t("scheduleType")} value={scheduleTypeLabel(item.type, t)} />
+                <PlainInfoRow
+                  label={t("scheduleDuration")}
+                  value={scheduleDurationLabel(item, t)}
+                />
+                {when ? <PlainInfoRow label={t("scheduleTime")} value={when} /> : null}
+                {item.location ? (
+                  <PlainInfoRow label={t("scheduleLocation")} value={item.location} last />
+                ) : null}
+              </View>
             </View>
           </View>
         )}

@@ -270,6 +270,7 @@
   "scheduleShowLess": "Show less",
   "scheduleShowMore": "Show more",
   "scheduleNow": "Now",
+  "scheduleOverlap": "Overlaps with another activity",
   "scheduleReminderError": "The reminder couldn't be updated. Check your connection and try again.",
   "accountLanguageError": "Your language couldn't be updated. Check your connection and try again.",
   "saved": "Saved",

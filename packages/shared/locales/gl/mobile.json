@@ -270,6 +270,7 @@
   "scheduleShowLess": "Ver menos",
   "scheduleShowMore": "Ver máis",
   "scheduleNow": "Agora",
+  "scheduleOverlap": "Solápase con outra actividade",
   "scheduleReminderError": "Non se puido actualizar a lembranza. Revisa a conexión e téntao de novo.",
   "accountLanguageError": "Non se puido actualizar o idioma. Revisa a conexión e téntao de novo.",
   "saved": "Gardado",
