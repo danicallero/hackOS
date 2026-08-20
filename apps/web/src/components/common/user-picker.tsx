@@ -7,7 +7,7 @@
 
 import { CheckIcon, ChevronsUpDownIcon } from "lucide-react";
 import { Popover as PopoverPrimitive } from "radix-ui";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -70,6 +70,14 @@ export function UserPicker({
   const [searchError, setSearchError] = useState(false);
   const [selected, setSelected] = useState<UserOption | null>(null);
 
+  // `search` is almost always a fresh closure every render (callers rarely
+  // memoize it) — reading it via a ref, rather than depending on it
+  // directly, keeps a re-render mid-type from restarting the debounce timer
+  // before it ever fires, which otherwise gets the search permanently stuck
+  // on "Searching…" if the caller re-renders more often than the debounce.
+  const searchRef = useRef(search);
+  searchRef.current = search;
+
   useEffect(() => {
     if (!open || query.trim().length < minQueryLength) {
       setOptions([]);
@@ -80,7 +88,7 @@ export function UserPicker({
     setSearchError(false);
     const handle = setTimeout(async () => {
       try {
-        const users = await search(query.trim());
+        const users = await searchRef.current(query.trim());
         if (active) setOptions(users);
       } catch {
         if (active) {
@@ -95,7 +103,7 @@ export function UserPicker({
       active = false;
       clearTimeout(handle);
     };
-  }, [open, query, minQueryLength, search]);
+  }, [open, query, minQueryLength]);
 
   useEffect(() => {
     if (!value) setSelected(null);

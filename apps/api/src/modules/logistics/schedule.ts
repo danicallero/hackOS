@@ -544,7 +544,10 @@ export async function callerScheduleAudiences(
   ]);
   if (capabilities.size > 0) return { isStaff: true, audiences: new Set() };
   const audiences = new Set<ScheduleAudience>();
-  if (isSponsorRep) audiences.add("sponsor");
+  // A sponsor rep always sees the entire public schedule (the same
+  // `participant` feed anyone else browses), plus their own sponsor-tagged
+  // content on top — sponsor is additive, never a narrower view (H59).
+  if (isSponsorRep) audiences.add("sponsor").add("participant");
   if (attendeeType) audiences.add(attendeeType);
   return { isStaff: false, audiences };
 }
@@ -558,6 +561,7 @@ export interface AudienceScheduleItem {
   startsAt: string;
   endsAt: string;
   publishAt: string | null;
+  audiences: string[];
   /** Only populated when the caller shares a non-public audience with this item. */
   contactNote?: string | null;
   owners?: { userId: number; name: string | null; surname: string | null }[];
@@ -596,6 +600,10 @@ export async function listScheduleForAudiences(
       startsAt: (row.starts_at as Date).toISOString(),
       endsAt: (row.ends_at as Date).toISOString(),
       publishAt: row.publish_at instanceof Date ? row.publish_at.toISOString() : null,
+      // Non-sensitive categorization metadata — always exposed so a sponsor
+      // rep's client can pick out "sponsor-relevant" items from the general
+      // feed (H59), same as it already lets a staff caller do the same.
+      audiences: Array.from(itemAudiences),
     };
     // Staff sees owners/contact/notes for every item, regardless of that
     // item's own audience tags — operational detail is a staff concern, not

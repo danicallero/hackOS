@@ -2,9 +2,13 @@
 
 // Sponsor info hub (H58, H59): a structured FAQ (question/answer pairs,
 // collapsible, plus free-form text blocks) admins author for sponsor reps,
-// and a "what's happening" panel of sponsor-audience schedule items
-// (deadlines, sponsor reception, etc. — H59 audiences). Deliberately not
-// public (unlike /horario) and not judge-visible (unlike challenges'
+// and a "Sponsor events" panel: the sponsor-tagged slice of the schedule
+// (deadlines, sponsor reception, etc.), shown with the same day-grouped
+// timeline the public /horario page uses, extended to reveal each item's
+// responsible person(s)/contact note. A sponsor rep's own /api/public/activities
+// call already returns the entire public schedule too (H59 — sponsor is
+// additive, never a narrower view of the general programme). Deliberately
+// not public (unlike /horario) and not judge-visible (unlike challenges'
 // challenge-directory access) — see requireSponsorPortalAccess.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
@@ -18,6 +22,8 @@ import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { SubmitButton } from "@/components/common/submit-button";
+import type { PublicEvent } from "@/components/public/public-types";
+import { ScheduleTimeline } from "@/components/public/schedule-timeline";
 import {
   Accordion,
   AccordionContent,
@@ -33,7 +39,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ApiError, api } from "@/lib/api";
-import { formatScheduledDateTime } from "@/lib/datetime";
 import { type I18nText, useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem } from "@/lib/logistics";
 import { useCan, useMe } from "@/lib/session";
@@ -222,17 +227,28 @@ function FaqItemsDisplay({ items }: { items: FaqItem[] }) {
   );
 }
 
-/** H59: sponsor-audience schedule items (deadlines, sponsor reception, etc.). */
+/**
+ * H59: the sponsor-tagged slice of the schedule (deadlines, sponsor
+ * reception, etc.) — a sponsor rep's `/api/public/activities` call already
+ * returns the entire public schedule (they see everything a participant
+ * does), so this filters client-side to just the items that involve
+ * sponsors, and renders them with the same day-grouped timeline the public
+ * `/horario` page uses, extended to reveal each item's responsible
+ * person(s)/contact note (never shown on the public timeline).
+ */
 function SponsorScheduleCard() {
   const { t } = useLocale();
+  const [event, setEvent] = useState<PublicEvent | null>(null);
   const [items, setItems] = useState<PublicScheduleItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setError(null);
-    logisticsApi
-      .publicSchedule()
-      .then((r) => setItems(r.items))
+    Promise.all([api.get<PublicEvent>("/api/public/event"), logisticsApi.publicSchedule()])
+      .then(([eventData, schedule]) => {
+        setEvent(eventData);
+        setItems(schedule.items);
+      })
       .catch((err) => {
         setError(err instanceof ApiError ? err.message : t("couldNotLoadSchedule"));
       });
@@ -242,44 +258,18 @@ function SponsorScheduleCard() {
     load();
   }, [load]);
 
+  const sponsorItems = items?.filter((item) => item.audiences?.includes("sponsor")) ?? null;
+
   return (
     <SectionCard icon={CalendarClockIcon} title={t("whatsHappeningTitle")}>
       {error ? (
         <ContextualError message={error} onRetry={load} />
-      ) : items === null ? (
+      ) : sponsorItems === null || !event ? (
         <Spinner className="size-5" />
-      ) : items.length === 0 ? (
+      ) : sponsorItems.length === 0 ? (
         <EmptyState title={t("noSponsorScheduleItemsYet")} />
       ) : (
-        <ul className="divide-border divide-y">
-          {items.map((item) => {
-            const owners = item.owners ?? [];
-            const contact =
-              item.contactNote ??
-              (owners.length > 0
-                ? owners.map((o) => [o.name, o.surname].filter(Boolean).join(" ")).join(", ")
-                : null);
-            return (
-              <li key={item.id} className="space-y-1 py-3">
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <p className="text-sm font-medium">{item.title}</p>
-                  <time className="text-muted-foreground text-xs" dateTime={item.startsAt}>
-                    {formatScheduledDateTime(item.startsAt)}
-                  </time>
-                </div>
-                {item.description && (
-                  <p className="text-muted-foreground text-pretty text-sm">{item.description}</p>
-                )}
-                {item.location && <p className="text-muted-foreground text-xs">{item.location}</p>}
-                {contact && (
-                  <p className="text-xs">
-                    {t("contactLabel")}: {contact}
-                  </p>
-                )}
-              </li>
-            );
-          })}
-        </ul>
+        <ScheduleTimeline items={sponsorItems} timezone={event.timezone} showResponsible />
       )}
     </SectionCard>
   );

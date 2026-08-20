@@ -74,8 +74,9 @@ describe("audience-aware schedule feed (H59)", () => {
     await createItem({ title: "Mentor briefing", audiences: ["mentor"] });
 
     const res = await a.inject({ method: "GET", url: "/api/public/activities" });
-    const titles = res.json().items.map((i: { title: string }) => i.title);
-    expect(titles).toEqual(["Opening ceremony"]);
+    const items = res.json().items;
+    expect(items.map((i: { title: string }) => i.title)).toEqual(["Opening ceremony"]);
+    expect(items[0].audiences).toEqual(["participant"]);
   });
 
   it("a capability-holding staff member sees the full run-of-show — every live item regardless of audience — each with notes and owners", async () => {
@@ -114,7 +115,7 @@ describe("audience-aware schedule feed (H59)", () => {
     expect(staffOnlyItem.contactNote).toBe("Ask at the info desk");
   });
 
-  it("a sponsor rep sees only sponsor-tagged items, with owners/contact but never the staff-only notes", async () => {
+  it("a sponsor rep sees the entire public schedule plus their sponsor-tagged items, with owners/contact but never the staff-only notes", async () => {
     const a = await getApp();
     const { rows } = await pool.query(
       `INSERT INTO enterprises (name, visibility) VALUES ('Acme', 'hidden') RETURNING id`,
@@ -130,6 +131,10 @@ describe("audience-aware schedule feed (H59)", () => {
       notes: "Print badges",
       contactNote: "Ask for Jamie",
     });
+    const participantId = await createItem({
+      title: "Opening ceremony",
+      audiences: ["participant"],
+    });
     await createItem({ title: "Mentor briefing", audiences: ["mentor"] });
 
     const res = await a.inject({
@@ -138,9 +143,15 @@ describe("audience-aware schedule feed (H59)", () => {
       headers: asUser(rep),
     });
     const items = res.json().items;
-    expect(items.map((i: { id: number }) => i.id)).toEqual([sponsorId]);
-    expect(items[0].contactNote).toBe("Ask for Jamie");
-    expect(items[0].notes).toBeUndefined();
+    expect(items.map((i: { id: number }) => i.id).sort()).toEqual(
+      [sponsorId, participantId].sort(),
+    );
+    const sponsorItem = items.find((i: { id: number }) => i.id === sponsorId);
+    expect(sponsorItem.contactNote).toBe("Ask for Jamie");
+    expect(sponsorItem.notes).toBeUndefined();
+    const participantItem = items.find((i: { id: number }) => i.id === participantId);
+    expect(participantItem.owners).toBeUndefined();
+    expect(participantItem.contactNote).toBeUndefined();
   });
 
   it("a confirmed mentor sees mentor-tagged items but not participant- or sponsor-only ones", async () => {

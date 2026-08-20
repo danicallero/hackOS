@@ -93,10 +93,13 @@ export function ScheduleTimeline({
   items,
   timezone,
   className,
+  showResponsible = false,
 }: {
   items: PublicScheduleItem[];
   timezone: string;
   className?: string;
+  /** Reveal each item's responsible person(s)/contact note in its detail modal (H59) — for the sponsor-only view, never the public one. */
+  showResponsible?: boolean;
 }) {
   const { language, t } = useLocale();
   const now = Date.now();
@@ -259,9 +262,9 @@ export function ScheduleTimeline({
                   role="status"
                   aria-label={t("currentTime")}
                 >
-                  <span className="bg-primary size-2.5 rounded-full" />
-                  <span className="bg-primary h-0.5 flex-1" />
-                  <span className="bg-primary text-primary-foreground rounded px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
+                  <span className="bg-destructive size-2.5 rounded-full" />
+                  <span className="bg-destructive h-0.5 flex-1" />
+                  <span className="bg-destructive text-destructive-foreground rounded px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
                     {timeFormatter.format(new Date(now))}
                   </span>
                 </div>
@@ -296,6 +299,15 @@ export function ScheduleTimeline({
             )}
             {selectedItem.description && (
               <p className="whitespace-pre-wrap text-pretty">{selectedItem.description}</p>
+            )}
+            {showResponsible && (selectedItem.owners?.length || selectedItem.contactNote) && (
+              <p className="text-muted-foreground text-pretty">
+                {t("contactLabel")}:{" "}
+                {selectedItem.contactNote ??
+                  selectedItem.owners
+                    ?.map((o) => [o.name, o.surname].filter(Boolean).join(" "))
+                    .join(", ")}
+              </p>
             )}
           </div>
         )}

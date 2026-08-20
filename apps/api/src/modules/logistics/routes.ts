@@ -138,6 +138,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
     startsAt: z.string(),
     endsAt: z.string(),
     publishAt: z.string().nullable(),
+    audiences: z.array(z.string()),
     contactNote: z.string().nullable().optional(),
     owners: z
       .array(
@@ -249,7 +250,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Published schedule, audience-aware",
         description:
-          "H47/H48/H59 schedule feed. Contains only items currently live (visibility='shown', publishAt due). Every item is unconditionally visible to staff (any authenticated account holding at least one capability) — the full run-of-show, each with its notes and owners/contactNote. Everyone else (including anonymous callers, treated as 'participant') only sees items whose optional audiences ('sponsor'/'participant'/'mentor') overlap their own; a sponsor rep additionally gets owners/contactNote (never the staff-only notes) on items tagged 'sponsor'.",
+          "H47/H48/H59 schedule feed. Contains only items currently live (visibility='shown', publishAt due). Every item is unconditionally visible to staff (any authenticated account holding at least one capability) — the full run-of-show, each with its notes and owners/contactNote. Everyone else (including anonymous callers, treated as 'participant') only sees items whose optional audiences ('sponsor'/'participant'/'mentor') overlap their own; a sponsor rep's audience always additionally includes 'participant', so they see the entire public schedule plus their sponsor-tagged items on top, getting owners/contactNote (never the staff-only notes) on the latter. Every item's own `audiences` array is included so a caller can pick out the items relevant to a given audience client-side.",
         response: { 200: z.object({ items: z.array(publicActivitySchema) }) },
       },
     },
