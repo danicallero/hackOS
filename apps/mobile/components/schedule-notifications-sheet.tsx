@@ -140,12 +140,28 @@ export function ScheduleNotificationsSheet({
                     />
                   </View>
                   {isExpanded ? (
-                    <View style={{ backgroundColor: colors.elevatedSurface, paddingBottom: 4 }}>
-                      {[...subscribed, ...muted].map((item, entryIndex) => (
+                    <View style={{ paddingBottom: 8 }}>
+                      {subscribed.length > 0 ? (
+                        <Text style={manualGroupLabelStyle}>{t("scheduleManualSubscribed")}</Text>
+                      ) : null}
+                      {subscribed.map((item, entryIndex) => (
                         <ManualEntryRow
                           key={item.id}
                           item={item}
-                          muted={muted.includes(item)}
+                          muted={false}
+                          divider={entryIndex > 0}
+                          busy={savingKind === itemCategory(item.id)}
+                          onPress={() => onToggleEntry(item)}
+                        />
+                      ))}
+                      {muted.length > 0 ? (
+                        <Text style={manualGroupLabelStyle}>{t("scheduleManualMuted")}</Text>
+                      ) : null}
+                      {muted.map((item, entryIndex) => (
+                        <ManualEntryRow
+                          key={item.id}
+                          item={item}
+                          muted
                           divider={entryIndex > 0}
                           busy={savingKind === itemCategory(item.id)}
                           onPress={() => onToggleEntry(item)}
@@ -170,6 +186,16 @@ export function ScheduleNotificationsSheet({
     </Modal>
   );
 }
+
+const manualGroupLabelStyle = {
+  color: colors.tertiaryLabel,
+  fontSize: 11,
+  fontWeight: "600" as const,
+  letterSpacing: 0.3,
+  paddingHorizontal: 16,
+  paddingTop: 10,
+  textTransform: "uppercase" as const,
+};
 
 function ManualEntryRow({
   item,
@@ -199,26 +225,25 @@ function ManualEntryRow({
         flexDirection: "row",
         gap: 10,
         minHeight: 44,
+        marginTop: divider ? 0 : 4,
         opacity: busy ? 0.4 : pressed ? 0.6 : 1,
-        paddingHorizontal: 32,
+        paddingHorizontal: 16,
         paddingVertical: 8,
       })}
     >
       <SymbolView
         name={muted ? "bell.slash.fill" : "bell.fill"}
         tintColor={muted ? colors.tertiaryLabel : colors.accent}
-        size={15}
+        size={14}
       />
       <Text
         selectable={false}
         numberOfLines={1}
-        style={{ color: colors.label, flex: 1, fontSize: 15 }}
+        style={{ color: colors.secondaryLabel, flex: 1, fontSize: 15 }}
       >
         {item.title}
       </Text>
-      <Text selectable={false} style={{ color: colors.secondaryLabel, fontSize: 13 }}>
-        {t(muted ? "scheduleManualMuted" : "scheduleManualSubscribed")}
-      </Text>
+      <SymbolView name="xmark.circle.fill" tintColor={colors.tertiaryLabel} size={16} />
     </Pressable>
   );
 }

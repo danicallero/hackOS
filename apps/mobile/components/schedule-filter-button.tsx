@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, Text, useWindowDimensions, View } from "react-native";
 import { GlassView } from "@/components/glass-view";
 import { SymbolView } from "@/components/symbol";
 import { haptic } from "@/lib/haptics";
@@ -49,6 +49,7 @@ export function ScheduleFilterButton({
   onClear: () => void;
 }) {
   const { t } = useLocale();
+  const { height: windowHeight } = useWindowDimensions();
   const [open, setOpen] = useState(false);
   const active = selectedKinds.length > 0 || selectedAudiences.length > 0;
   const icon = active ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease";
@@ -60,7 +61,17 @@ export function ScheduleFilterButton({
           accessibilityLabel={t("close")}
           accessibilityRole="button"
           onPress={() => setOpen(false)}
-          style={{ bottom: 0, left: 0, position: "absolute", right: 0, top: 0 }}
+          // Sized to the whole window, not just this button's own row — the
+          // header row it lives in has a fixed natural height, so a backdrop
+          // that only matched that height couldn't catch a tap anywhere over
+          // the list below it.
+          style={{
+            height: windowHeight,
+            left: 0,
+            position: "absolute",
+            right: 0,
+            top: 0,
+          }}
         />
       ) : null}
       <Pressable

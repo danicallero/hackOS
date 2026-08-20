@@ -111,12 +111,21 @@ export function useScheduleNotifications(items: ScheduleItem[]) {
   const manualEntries = useCallback(
     (kind: string): { subscribed: ScheduleItem[]; muted: ScheduleItem[] } => {
       const kindItems = items.filter((item) => item.type === kind);
+      // A "muted" item row only means something while the category itself is
+      // on (toggling the category off writes enabled=false to every item row
+      // too, to start clean next time — that's not "6 muted", it's off).
+      // Likewise an item-level enabled=true row only means "individually
+      // subscribed" while the category is off; once on, the category covers
+      // it and the row is a harmless leftover, not something to list.
+      const categoryOn = kindRow(kind)?.enabled === true;
       return {
-        subscribed: kindItems.filter((item) => itemRow(item.id)?.enabled === true),
-        muted: kindItems.filter((item) => itemRow(item.id)?.enabled === false),
+        subscribed: categoryOn
+          ? []
+          : kindItems.filter((item) => itemRow(item.id)?.enabled === true),
+        muted: categoryOn ? kindItems.filter((item) => itemRow(item.id)?.enabled === false) : [],
       };
     },
-    [items, itemRow],
+    [items, itemRow, kindRow],
   );
 
   const toggleEntry = useCallback(

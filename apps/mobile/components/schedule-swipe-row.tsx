@@ -59,14 +59,22 @@ function RevealActions({
     opacity: interpolate(progress.value, [0, 0.1, 1], [0, 0.5, 1]),
   }));
   return (
-    <Animated.View style={[{ flexDirection: "row" }, animatedStyle]}>
+    <Animated.View
+      style={[
+        { alignItems: "center", flexDirection: "row", gap: 8, marginBottom: 12 },
+        animatedStyle,
+      ]}
+    >
       <Pressable
         accessibilityLabel={editLabel}
         accessibilityRole="button"
         onPress={onEdit}
         style={({ pressed }) => ({
           alignItems: "center",
+          alignSelf: "stretch",
           backgroundColor: colors.accent,
+          borderCurve: "continuous",
+          borderRadius: 14,
           gap: 6,
           justifyContent: "center",
           opacity: pressed ? 0.75 : 1,
@@ -82,11 +90,13 @@ function RevealActions({
         onPress={onDelete}
         style={({ pressed }) => ({
           alignItems: "center",
+          alignSelf: "stretch",
           backgroundColor: colors.destructive,
-          borderBottomLeftRadius: 14,
-          borderTopLeftRadius: 14,
+          borderCurve: "continuous",
+          borderRadius: 14,
           gap: 6,
           justifyContent: "center",
+          marginRight: 16,
           opacity: pressed ? 0.75 : 1,
           paddingHorizontal: 18,
         })}
