@@ -10,40 +10,46 @@ import { type CategoryState, itemCategory, kindCategory } from "@/lib/use-schedu
 import { colors } from "@/theme/colors";
 
 /**
- * H59 category notification settings sheet — one toggle per activity kind
- * present in the current schedule, reflecting on/off/partial (a kind that's
- * subscribed but has one or more individually-muted entries). Expanding a
- * kind lists the manual overrides behind that state — entries individually
- * subscribed while the kind is off, or muted while the kind is on — each
- * reversible from here too, not just from the entry's own bell.
+ * H59 category notification settings sheet — one row per activity kind
+ * present in the current schedule, with a live notified/muted count and a
+ * toggle for the whole category. Tapping a row (off the toggle) drills into
+ * that kind's full activity list, each with its own toggle, instead of
+ * only surfacing the manual overrides.
  */
 export function ScheduleNotificationsSheet({
   visible,
   onClose,
   kinds,
+  items,
   categoryState,
   onToggleCategory,
-  manualEntries,
+  isEntrySubscribed,
   onToggleEntry,
-  savingKind,
+  savingKey,
 }: {
   visible: boolean;
   onClose: () => void;
   kinds: string[];
+  items: ScheduleItem[];
   categoryState: (kind: string) => CategoryState;
   onToggleCategory: (kind: string, enabled: boolean) => void;
-  manualEntries: (kind: string) => { subscribed: ScheduleItem[]; muted: ScheduleItem[] };
+  isEntrySubscribed: (item: ScheduleItem) => boolean;
   onToggleEntry: (item: ScheduleItem) => void;
-  savingKind: string | null;
+  savingKey: string | null;
 }) {
   const { t } = useLocale();
   const insets = useSafeAreaInsets();
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [viewingKind, setViewingKind] = useState<string | null>(null);
+
+  function close() {
+    setViewingKind(null);
+    onClose();
+  }
 
   return (
     <Modal
       animationType="slide"
-      onRequestClose={onClose}
+      onRequestClose={close}
       presentationStyle="pageSheet"
       visible={visible}
     >
@@ -62,34 +68,38 @@ export function ScheduleNotificationsSheet({
               selectable
               style={{ color: colors.label, fontSize: 20, fontWeight: "700", textAlign: "center" }}
             >
-              {t("scheduleNotificationsTitle")}
+              {viewingKind ? scheduleTypeLabel(viewingKind, t) : t("scheduleNotificationsTitle")}
             </Text>
           </View>
 
-          <View
-            style={{
-              backgroundColor: colors.surface,
-              borderCurve: "continuous",
-              borderRadius: 14,
-              overflow: "hidden",
-            }}
-          >
-            {kinds.map((kind, index) => {
-              const state = categoryState(kind);
-              const { subscribed, muted } = manualEntries(kind);
-              const manualCount = subscribed.length + muted.length;
-              const isExpanded = expanded === kind;
-              return (
-                <View
-                  key={kind}
-                  style={{
-                    borderBottomColor: colors.separator,
-                    borderBottomWidth: index === kinds.length - 1 ? 0 : 0.5,
-                  }}
-                >
+          {viewingKind ? (
+            <KindEntryList
+              items={items.filter((item) => item.type === viewingKind)}
+              isEntrySubscribed={isEntrySubscribed}
+              onToggleEntry={onToggleEntry}
+              savingKey={savingKey}
+            />
+          ) : (
+            <View
+              style={{
+                backgroundColor: colors.surface,
+                borderCurve: "continuous",
+                borderRadius: 14,
+                overflow: "hidden",
+              }}
+            >
+              {kinds.map((kind, index) => {
+                const state = categoryState(kind);
+                const kindItems = items.filter((item) => item.type === kind);
+                const notifiedCount = kindItems.filter(isEntrySubscribed).length;
+                const mutedCount = kindItems.length - notifiedCount;
+                return (
                   <View
+                    key={kind}
                     style={{
                       alignItems: "center",
+                      borderBottomColor: colors.separator,
+                      borderBottomWidth: index === kinds.length - 1 ? 0 : 0.5,
                       flexDirection: "row",
                       gap: 8,
                       paddingHorizontal: 16,
@@ -99,151 +109,93 @@ export function ScheduleNotificationsSheet({
                     <Pressable
                       accessibilityLabel={scheduleTypeLabel(kind, t)}
                       accessibilityRole="button"
-                      accessibilityState={{ expanded: isExpanded, disabled: manualCount === 0 }}
-                      disabled={manualCount === 0}
-                      onPress={() => setExpanded((current) => (current === kind ? null : kind))}
-                      style={{ alignItems: "center", flex: 1, flexDirection: "row", gap: 6 }}
+                      onPress={() => setViewingKind(kind)}
+                      style={{ flex: 1, gap: 2 }}
                     >
-                      <View style={{ flex: 1, gap: 2 }}>
-                        <Text style={{ color: colors.label, fontSize: 16 }}>
-                          {scheduleTypeLabel(kind, t)}
-                        </Text>
-                        {manualCount > 0 ? (
-                          <Text style={{ color: colors.secondaryLabel, fontSize: 12 }}>
-                            {[
-                              subscribed.length > 0
-                                ? t("scheduleManualSubscribedCount", {
-                                    count: String(subscribed.length),
-                                  })
-                                : null,
-                              muted.length > 0
-                                ? t("scheduleManualMutedCount", { count: String(muted.length) })
-                                : null,
-                            ]
-                              .filter(Boolean)
-                              .join(" · ")}
-                          </Text>
-                        ) : null}
-                      </View>
-                      {manualCount > 0 ? (
-                        <SymbolView
-                          name={isExpanded ? "chevron.up" : "chevron.down"}
-                          tintColor={colors.tertiaryLabel}
-                          size={13}
-                        />
-                      ) : null}
+                      <Text style={{ color: colors.label, fontSize: 16 }}>
+                        {scheduleTypeLabel(kind, t)}
+                      </Text>
+                      <Text style={{ color: colors.secondaryLabel, fontSize: 12 }}>
+                        {t("scheduleManualSubscribedCount", { count: String(notifiedCount) })} ·{" "}
+                        {t("scheduleManualMutedCount", { count: String(mutedCount) })}
+                      </Text>
                     </Pressable>
                     <Switch
-                      disabled={savingKind === kindCategory(kind)}
+                      disabled={savingKey === kindCategory(kind)}
                       onValueChange={(next) => onToggleCategory(kind, next)}
                       value={state !== "off"}
                     />
+                    <Pressable
+                      accessibilityLabel={scheduleTypeLabel(kind, t)}
+                      accessibilityRole="button"
+                      onPress={() => setViewingKind(kind)}
+                      hitSlop={8}
+                    >
+                      <SymbolView name="chevron.right" tintColor={colors.tertiaryLabel} size={14} />
+                    </Pressable>
                   </View>
-                  {isExpanded ? (
-                    <View style={{ paddingBottom: 8 }}>
-                      {subscribed.length > 0 ? (
-                        <Text style={manualGroupLabelStyle}>{t("scheduleManualSubscribed")}</Text>
-                      ) : null}
-                      {subscribed.map((item, entryIndex) => (
-                        <ManualEntryRow
-                          key={item.id}
-                          item={item}
-                          muted={false}
-                          divider={entryIndex > 0}
-                          busy={savingKind === itemCategory(item.id)}
-                          onPress={() => onToggleEntry(item)}
-                        />
-                      ))}
-                      {muted.length > 0 ? (
-                        <Text style={manualGroupLabelStyle}>{t("scheduleManualMuted")}</Text>
-                      ) : null}
-                      {muted.map((item, entryIndex) => (
-                        <ManualEntryRow
-                          key={item.id}
-                          item={item}
-                          muted
-                          divider={entryIndex > 0}
-                          busy={savingKind === itemCategory(item.id)}
-                          onPress={() => onToggleEntry(item)}
-                        />
-                      ))}
-                    </View>
-                  ) : null}
-                </View>
-              );
-            })}
-          </View>
+                );
+              })}
+            </View>
+          )}
         </ScrollView>
 
         <FloatingGlassButton
           top={16}
           side="left"
-          icon="xmark"
-          accessibilityLabel={t("close")}
-          onPress={onClose}
+          icon={viewingKind ? "chevron.left" : "xmark"}
+          accessibilityLabel={viewingKind ? t("back") : t("close")}
+          onPress={() => (viewingKind ? setViewingKind(null) : close())}
         />
       </View>
     </Modal>
   );
 }
 
-const manualGroupLabelStyle = {
-  color: colors.tertiaryLabel,
-  fontSize: 11,
-  fontWeight: "600" as const,
-  letterSpacing: 0.3,
-  paddingHorizontal: 16,
-  paddingTop: 10,
-  textTransform: "uppercase" as const,
-};
-
-function ManualEntryRow({
-  item,
-  muted,
-  divider,
-  busy,
-  onPress,
+function KindEntryList({
+  items,
+  isEntrySubscribed,
+  onToggleEntry,
+  savingKey,
 }: {
-  item: ScheduleItem;
-  muted: boolean;
-  divider: boolean;
-  busy: boolean;
-  onPress: () => void;
+  items: ScheduleItem[];
+  isEntrySubscribed: (item: ScheduleItem) => boolean;
+  onToggleEntry: (item: ScheduleItem) => void;
+  savingKey: string | null;
 }) {
-  const { t } = useLocale();
   return (
-    <Pressable
-      accessibilityLabel={`${item.title} — ${t(muted ? "scheduleManualMuted" : "scheduleManualSubscribed")}`}
-      accessibilityRole="button"
-      accessibilityState={{ busy }}
-      disabled={busy}
-      onPress={onPress}
-      style={({ pressed }) => ({
-        alignItems: "center",
-        borderTopColor: colors.separator,
-        borderTopWidth: divider ? 0.5 : 0,
-        flexDirection: "row",
-        gap: 10,
-        minHeight: 44,
-        marginTop: divider ? 0 : 4,
-        opacity: busy ? 0.4 : pressed ? 0.6 : 1,
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-      })}
+    <View
+      style={{
+        backgroundColor: colors.surface,
+        borderCurve: "continuous",
+        borderRadius: 14,
+        overflow: "hidden",
+      }}
     >
-      <SymbolView
-        name={muted ? "bell.slash.fill" : "bell.fill"}
-        tintColor={muted ? colors.tertiaryLabel : colors.accent}
-        size={14}
-      />
-      <Text
-        selectable={false}
-        numberOfLines={1}
-        style={{ color: colors.secondaryLabel, flex: 1, fontSize: 15 }}
-      >
-        {item.title}
-      </Text>
-      <SymbolView name="xmark.circle.fill" tintColor={colors.tertiaryLabel} size={16} />
-    </Pressable>
+      {items.map((item, index) => (
+        <View
+          key={item.id}
+          style={{
+            alignItems: "center",
+            borderBottomColor: colors.separator,
+            borderBottomWidth: index === items.length - 1 ? 0 : 0.5,
+            flexDirection: "row",
+            gap: 8,
+            minHeight: 50,
+            paddingHorizontal: 16,
+            paddingVertical: 10,
+          }}
+        >
+          <Text selectable numberOfLines={2} style={{ color: colors.label, flex: 1, fontSize: 15 }}>
+            {item.title}
+          </Text>
+          <Switch
+            disabled={savingKey === itemCategory(item.id)}
+            onValueChange={() => onToggleEntry(item)}
+            value={isEntrySubscribed(item)}
+          />
+        </View>
+      ))}
+    </View>
   );
 }

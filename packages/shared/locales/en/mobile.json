@@ -272,8 +272,6 @@
   "scheduleShowMore": "Show more",
   "scheduleNow": "Now",
   "scheduleNotificationsTitle": "Activity notifications",
-  "scheduleManualSubscribed": "Notified",
-  "scheduleManualMuted": "Muted",
   "scheduleManualSubscribedCount": "{count} notified",
   "scheduleManualMutedCount": "{count} muted",
   "scheduleFilter": "Filter",

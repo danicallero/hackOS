@@ -388,11 +388,14 @@ export default function ScheduleScreen() {
         visible={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         kinds={kinds}
+        items={items}
         categoryState={notifications.categoryState}
         onToggleCategory={(kind, enabled) => void notifications.toggleCategory(kind, enabled)}
-        manualEntries={notifications.manualEntries}
+        isEntrySubscribed={(item) =>
+          notifications.ready ? notifications.isEntrySubscribed(item) : false
+        }
         onToggleEntry={(item) => void notifications.toggleEntry(item)}
-        savingKind={notifications.savingKey}
+        savingKey={notifications.savingKey}
       />
     </View>
   );

@@ -272,8 +272,6 @@
   "scheduleShowMore": "Ver máis",
   "scheduleNow": "Agora",
   "scheduleNotificationsTitle": "Notificacións de actividades",
-  "scheduleManualSubscribed": "Notificado",
-  "scheduleManualMuted": "Silenciado",
   "scheduleManualSubscribedCount": "{count} notificadas",
   "scheduleManualMutedCount": "{count} silenciadas",
   "scheduleFilter": "Filtrar",
