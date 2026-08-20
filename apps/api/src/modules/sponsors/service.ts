@@ -348,3 +348,31 @@ export async function revealDueEnterprises(client: Queryable = pool): Promise<nu
   );
   return rows.map((r: { id: number }) => Number(r.id));
 }
+
+/** H58: sponsor-only logistics/FAQ content, singleton row. */
+export async function getSponsorFaq(): Promise<{ contentI18n: Record<string, string> }> {
+  const { rows } = await pool.query(`SELECT content_i18n FROM sponsor_faq WHERE id = 1`);
+  return { contentI18n: rows[0]?.content_i18n ?? { en: "", es: "", gl: "" } };
+}
+
+export async function updateSponsorFaq(
+  actorId: number,
+  contentI18n: { en: string; es: string; gl: string },
+): Promise<{ contentI18n: Record<string, string> }> {
+  return withTransaction(async (client) => {
+    const { rows } = await client.query(
+      `INSERT INTO sponsor_faq (id, content_i18n) VALUES (1, $1::jsonb)
+       ON CONFLICT (id) DO UPDATE SET content_i18n = EXCLUDED.content_i18n
+       RETURNING content_i18n`,
+      [JSON.stringify(contentI18n)],
+    );
+    await audit(client, {
+      actorId,
+      entityType: "sponsor_faq",
+      entityId: 1,
+      action: "updated",
+      after: { contentI18n: rows[0].content_i18n },
+    });
+    return { contentI18n: rows[0].content_i18n };
+  });
+}

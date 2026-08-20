@@ -6,7 +6,11 @@ import { requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { BadRequestError, ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
 import { routeAccessOption as access } from "../../lib/route-policy.js";
 import { putObject } from "../../lib/storage.js";
-import { enterpriseAccessFor, requireEnterpriseAccess } from "./access.js";
+import {
+  enterpriseAccessFor,
+  requireEnterpriseAccess,
+  requireSponsorPortalAccess,
+} from "./access.js";
 import {
   addMemberBody,
   bulkVisibilityBody,
@@ -15,12 +19,14 @@ import {
   enterpriseIdParam,
   memberParams,
   OWNER_EDITABLE_KEYS,
+  sponsorFaqBody,
   updateEnterpriseBody,
 } from "./schemas.js";
 import {
   addEnterpriseMember,
   createEnterprise,
   getEnterprise,
+  getSponsorFaq,
   listEnterpriseMembers,
   listEnterprises,
   listPublicSponsors,
@@ -30,6 +36,7 @@ import {
   setEnterpriseLogo,
   setEnterprisesVisibility,
   updateEnterprise,
+  updateSponsorFaq,
 } from "./service.js";
 
 function actor(userId: number | null): number {
@@ -271,5 +278,37 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
       await setEnterpriseLogo(req.params.id, logoUrl, req.query.variant, req.userId);
       return { logoUrl, variant: req.query.variant };
     },
+  );
+
+  // H58: sponsor-only logistics/FAQ page (venue, load-in window, merch
+  // drop-off, point of contact) — not the public site, and not everyone with
+  // portal access (judges are excluded; see requireSponsorPortalAccess).
+  r.get(
+    "/api/sponsor-faq",
+    {
+      ...access({ kind: "contextual", policy: "sponsor-portal-access" }),
+      preHandler: requireSponsorPortalAccess,
+      schema: {
+        summary: "Read sponsor logistics FAQ",
+        description:
+          "Trilingual logistics/FAQ content for sponsor reps (H58): venue, load-in window, merch drop-off deadline, point of contact. Readable by any linked sponsor representative or a SPONSORS_MANAGE admin.",
+      },
+    },
+    async () => getSponsorFaq(),
+  );
+
+  r.put(
+    "/api/sponsor-faq",
+    {
+      ...access({ kind: "capability", capability: CAPABILITIES.SPONSORS_MANAGE }),
+      preHandler: manage,
+      schema: {
+        body: sponsorFaqBody,
+        summary: "Update sponsor logistics FAQ",
+        description:
+          "Replaces the sponsor logistics/FAQ content (H58), trilingual (en/es/gl). SPONSORS_MANAGE only.",
+      },
+    },
+    async (req) => updateSponsorFaq(actor(req.userId), req.body.contentI18n),
   );
 }
