@@ -282,7 +282,7 @@ export default function ScheduleScreen() {
         ref={listRef}
         sections={sections}
         keyExtractor={(row) => (row.kind === "now" ? row.id : String(row.id))}
-        contentContainerStyle={{ flexGrow: 1, paddingBottom: 24 }}
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: insets.bottom + 24 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         stickySectionHeadersEnabled
         onScrollToIndexFailed={() => {

@@ -8,6 +8,10 @@ jest.mock("expo-router", () => ({
   useNavigation: () => ({ setOptions: jest.fn() }),
   useRouter: () => ({ push: mockPush }),
 }));
+jest.mock("expo-router/stack", () => ({
+  __esModule: true,
+  default: { Screen: () => null },
+}));
 
 jest.mock("@/lib/api", () => ({
   ApiError: class ApiError extends Error {},
