@@ -1,20 +1,30 @@
+import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { useLocalSearchParams } from "expo-router";
 import Stack from "expo-router/stack";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { GlassView } from "@/components/glass-view";
 import { EmptyState } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
+import { ScheduleFormModal, scheduleItemToForm } from "@/components/schedule-form-modal";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
+import { useMeContext } from "@/lib/me-context";
 import {
+  type AdminScheduleItem,
   collapseBlankLines,
+  fetchAdminSchedule,
   fetchPublicSchedule,
+  type ScheduleInput,
   scheduleDurationLabel,
   scheduleTypeLabel,
+  updateScheduleItem,
 } from "@/lib/schedule";
-import { useActivityReminders } from "@/lib/use-activity-reminders";
+import { has } from "@/lib/tabs";
 import { useCachedApi } from "@/lib/use-cached-api";
+import { itemCategory, useScheduleNotifications } from "@/lib/use-schedule-notifications";
 import { colors } from "@/theme/colors";
 
 const CONTENT_PADDING = 20;
@@ -29,16 +39,42 @@ const sectionHeaderStyle = {
 export default function ScheduleDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { t, language } = useLocale();
+  const { me } = useMeContext();
+  const insets = useSafeAreaInsets();
+  const canManage = has(me?.capabilities ?? [], CAPABILITIES.SCHEDULE_MANAGE);
   const { data, loading, error, staleSince, load } = useCachedApi("schedule", fetchPublicSchedule);
-  const reminders = useActivityReminders();
+  const notifications = useScheduleNotifications(data ?? []);
+  const [editing, setEditing] = useState(false);
+  const [adminItem, setAdminItem] = useState<AdminScheduleItem | null>(null);
 
   useEffect(() => {
     void load();
-    void reminders.load();
-  }, [load, reminders.load]);
+    void notifications.load();
+  }, [load, notifications.load]);
+
+  useEffect(() => {
+    if (!editing) return;
+    let cancelled = false;
+    void fetchAdminSchedule().then((items) => {
+      if (cancelled) return;
+      const match = items.find((candidate) => String(candidate.id) === id);
+      if (match) setAdminItem(match);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [editing, id]);
 
   const item = data?.find((candidate) => String(candidate.id) === id) ?? null;
-  const reminderOn = item && reminders.ready ? reminders.isEnabled(item.id) : null;
+  const reminderOn = item && notifications.ready ? notifications.isEntrySubscribed(item) : null;
+
+  async function saveEdit(values: ScheduleInput, _pendingOwnerIds: number[]) {
+    if (!item) return;
+    await updateScheduleItem(item.id, values);
+    setEditing(false);
+    setAdminItem(null);
+    await load();
+  }
   const startsAt = item ? new Date(item.startsAt) : null;
   const endsAt = item ? new Date(item.endsAt) : null;
   const date = startsAt?.toLocaleDateString(language, {
@@ -70,12 +106,14 @@ export default function ScheduleDetailScreen() {
                     accessibilityRole="button"
                     accessibilityState={{
                       selected: reminderOn,
-                      busy: reminders.savingId === item.id,
+                      busy: notifications.savingKey === itemCategory(item.id),
                     }}
-                    disabled={reminders.savingId === item.id}
+                    disabled={notifications.savingKey === itemCategory(item.id)}
                     hitSlop={12}
-                    onPress={() => void reminders.toggle(item.id, !reminderOn)}
-                    style={{ opacity: reminders.savingId === item.id ? 0.4 : 1 }}
+                    onPress={() => void notifications.toggleEntry(item)}
+                    style={{
+                      opacity: notifications.savingKey === itemCategory(item.id) ? 0.4 : 1,
+                    }}
                   >
                     <SymbolView
                       name={reminderOn ? "bell.fill" : "bell"}
@@ -98,12 +136,12 @@ export default function ScheduleDetailScreen() {
       >
         <View style={{ gap: 8 }}>
           <StaleDataBanner updatedAt={staleSince} onRetry={() => void load()} retrying={loading} />
-          {reminders.error ? (
+          {notifications.error ? (
             <RequestFeedback
-              error={reminders.error}
+              error={notifications.error}
               message={t("scheduleReminderError")}
-              onRetry={reminders.retry}
-              retrying={reminders.savingId !== null}
+              onRetry={notifications.retry}
+              retrying={notifications.savingKey !== null}
             />
           ) : null}
         </View>
@@ -155,6 +193,44 @@ export default function ScheduleDetailScreen() {
           </View>
         )}
       </ScrollView>
+
+      {canManage && item ? (
+        <GlassView
+          glassEffectStyle="regular"
+          isInteractive
+          style={{
+            borderRadius: 26,
+            bottom: Math.max(16, insets.bottom),
+            height: 52,
+            position: "absolute",
+            right: 16,
+            width: 52,
+          }}
+        >
+          <Pressable
+            accessibilityLabel={t("scheduleEdit")}
+            accessibilityRole="button"
+            onPress={() => setEditing(true)}
+            style={{ alignItems: "center", flex: 1, justifyContent: "center" }}
+          >
+            <SymbolView name="pencil" tintColor="white" size={20} weight="semibold" />
+          </Pressable>
+        </GlassView>
+      ) : null}
+
+      {editing && adminItem ? (
+        <ScheduleFormModal
+          visible
+          onClose={() => {
+            setEditing(false);
+            setAdminItem(null);
+          }}
+          initial={scheduleItemToForm(adminItem)}
+          scheduleId={adminItem.id}
+          initialOwners={adminItem.owners}
+          onSubmit={saveEdit}
+        />
+      ) : null}
     </>
   );
 }
