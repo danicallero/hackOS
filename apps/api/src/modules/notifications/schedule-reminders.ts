@@ -74,10 +74,22 @@ export async function runScheduleRemindersOnce(): Promise<{ reminded: number; no
       for (const row of rows as DueScheduleRow[]) {
         const category = `schedule:${row.id}`;
         const kindCategory = row.type ? `schedule:type:${row.type}` : null;
+        // An item-level row, when present, always wins over the kind-level
+        // one instead of the two being OR'd — otherwise muting a single
+        // entry inside an otherwise-subscribed kind (H59 mobile bell UX)
+        // couldn't actually suppress that entry's reminder.
         const { rows: audienceRows } = await client.query(
-          `SELECT DISTINCT user_id FROM notification_preferences
-          WHERE enabled = true
-            AND (category = $1 OR ($2::text IS NOT NULL AND category = $2))`,
+          `WITH item_pref AS (
+             SELECT user_id, bool_or(enabled) AS item_enabled
+             FROM notification_preferences
+             WHERE category = $1
+             GROUP BY user_id
+           )
+           SELECT user_id FROM item_pref WHERE item_enabled = true
+           UNION
+           SELECT user_id FROM notification_preferences
+           WHERE $2::text IS NOT NULL AND category = $2 AND enabled = true
+             AND user_id NOT IN (SELECT user_id FROM item_pref)`,
           [category, kindCategory],
         );
 

@@ -273,6 +273,42 @@ describe("schedule reminders (H51, issue #80)", () => {
     expect(payload.body).not.toMatch(/\d{4}-\d{2}-\d{2}T/); // human time, not the raw ISO instant
   });
 
+  it("mute override: an item-level opt-out suppresses the reminder even though its kind is subscribed", async () => {
+    const { runScheduleRemindersOnce } = await import(
+      "../../src/modules/notifications/schedule-reminders.js"
+    );
+    const mutedId = await createScheduleItem(new Date(Date.now() + 10 * 60_000), "meal");
+    const siblingId = await createScheduleItem(new Date(Date.now() + 10 * 60_000), "meal");
+    const userId = await createUser();
+    await optInKind(userId, "meal");
+    await pool.query(
+      `INSERT INTO notification_preferences (user_id, category, channel, enabled)
+       VALUES ($1, $2, 'push', false)`,
+      [userId, `schedule:${mutedId}`],
+    );
+    await setReminderChannels(userId, ["push"]);
+
+    const result = await runScheduleRemindersOnce();
+    expect(result.notified).toBe(1);
+
+    expect(await outboxCount(mutedId)).toBe(0);
+    expect(await outboxCount(siblingId)).toBe(1);
+  });
+
+  it("mute override: an item-level opt-in still fires even though the kind was never subscribed", async () => {
+    const { runScheduleRemindersOnce } = await import(
+      "../../src/modules/notifications/schedule-reminders.js"
+    );
+    const scheduleId = await createScheduleItem(new Date(Date.now() + 10 * 60_000), "meal");
+    const userId = await createUser();
+    await optIn(userId, scheduleId);
+    await setReminderChannels(userId, ["push"]);
+
+    const result = await runScheduleRemindersOnce();
+    expect(result.notified).toBe(1);
+    expect(await outboxCount(scheduleId)).toBe(1);
+  });
+
   it("no-recipient: a due item with nobody opted in sends nothing but is still marked reminded", async () => {
     const { runScheduleRemindersOnce } = await import(
       "../../src/modules/notifications/schedule-reminders.js"
