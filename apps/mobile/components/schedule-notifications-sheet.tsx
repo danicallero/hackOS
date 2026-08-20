@@ -108,17 +108,21 @@ export function ScheduleNotificationsSheet({
                         <Text style={{ color: colors.label, fontSize: 16 }}>
                           {scheduleTypeLabel(kind, t)}
                         </Text>
-                        {state === "partial" ? (
-                          <View style={{ alignItems: "center", flexDirection: "row", gap: 4 }}>
-                            <SymbolView
-                              name="minus.circle.fill"
-                              tintColor={colors.secondaryLabel}
-                              size={12}
-                            />
-                            <Text style={{ color: colors.secondaryLabel, fontSize: 12 }}>
-                              {t("scheduleNotificationsPartial")}
-                            </Text>
-                          </View>
+                        {manualCount > 0 ? (
+                          <Text style={{ color: colors.secondaryLabel, fontSize: 12 }}>
+                            {[
+                              subscribed.length > 0
+                                ? t("scheduleManualSubscribedCount", {
+                                    count: String(subscribed.length),
+                                  })
+                                : null,
+                              muted.length > 0
+                                ? t("scheduleManualMutedCount", { count: String(muted.length) })
+                                : null,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </Text>
                         ) : null}
                       </View>
                       {manualCount > 0 ? (
@@ -136,21 +140,13 @@ export function ScheduleNotificationsSheet({
                     />
                   </View>
                   {isExpanded ? (
-                    <View style={{ paddingBottom: 8 }}>
-                      {subscribed.map((item) => (
+                    <View style={{ backgroundColor: colors.elevatedSurface, paddingBottom: 4 }}>
+                      {[...subscribed, ...muted].map((item, entryIndex) => (
                         <ManualEntryRow
                           key={item.id}
                           item={item}
-                          label={t("scheduleManualSubscribed")}
-                          busy={savingKind === itemCategory(item.id)}
-                          onPress={() => onToggleEntry(item)}
-                        />
-                      ))}
-                      {muted.map((item) => (
-                        <ManualEntryRow
-                          key={item.id}
-                          item={item}
-                          label={t("scheduleManualMuted")}
+                          muted={muted.includes(item)}
+                          divider={entryIndex > 0}
                           busy={savingKind === itemCategory(item.id)}
                           onPress={() => onToggleEntry(item)}
                         />
@@ -177,40 +173,51 @@ export function ScheduleNotificationsSheet({
 
 function ManualEntryRow({
   item,
-  label,
+  muted,
+  divider,
   busy,
   onPress,
 }: {
   item: ScheduleItem;
-  label: string;
+  muted: boolean;
+  divider: boolean;
   busy: boolean;
   onPress: () => void;
 }) {
+  const { t } = useLocale();
   return (
     <Pressable
-      accessibilityLabel={`${item.title} — ${label}`}
+      accessibilityLabel={`${item.title} — ${t(muted ? "scheduleManualMuted" : "scheduleManualSubscribed")}`}
       accessibilityRole="button"
       accessibilityState={{ busy }}
       disabled={busy}
       onPress={onPress}
       style={({ pressed }) => ({
         alignItems: "center",
+        borderTopColor: colors.separator,
+        borderTopWidth: divider ? 0.5 : 0,
         flexDirection: "row",
-        gap: 8,
+        gap: 10,
+        minHeight: 44,
         opacity: busy ? 0.4 : pressed ? 0.6 : 1,
         paddingHorizontal: 32,
         paddingVertical: 8,
       })}
     >
+      <SymbolView
+        name={muted ? "bell.slash.fill" : "bell.fill"}
+        tintColor={muted ? colors.tertiaryLabel : colors.accent}
+        size={15}
+      />
       <Text
         selectable={false}
         numberOfLines={1}
-        style={{ color: colors.label, flex: 1, fontSize: 14 }}
+        style={{ color: colors.label, flex: 1, fontSize: 15 }}
       >
         {item.title}
       </Text>
-      <Text selectable={false} style={{ color: colors.secondaryLabel, fontSize: 12 }}>
-        {label}
+      <Text selectable={false} style={{ color: colors.secondaryLabel, fontSize: 13 }}>
+        {t(muted ? "scheduleManualMuted" : "scheduleManualSubscribed")}
       </Text>
     </Pressable>
   );

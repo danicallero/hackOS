@@ -143,17 +143,6 @@ export function scheduleDurationLabel(
     : t("scheduleDurationHours", { hours: String(hours) });
 }
 
-/** True when `[a.startsAt, a.endsAt)` and `[b.startsAt, b.endsAt)` share any time. */
-export function entriesOverlap(
-  a: Pick<ScheduleItem, "startsAt" | "endsAt">,
-  b: Pick<ScheduleItem, "startsAt" | "endsAt">,
-): boolean {
-  return (
-    new Date(a.startsAt).getTime() < new Date(b.endsAt).getTime() &&
-    new Date(b.startsAt).getTime() < new Date(a.endsAt).getTime()
-  );
-}
-
 /** Collapses runs of 2+ blank lines down to one, so author-added gaps don't render as dead space. */
 export function collapseBlankLines(text: string): string {
   return text.replace(/\n{3,}/g, "\n\n");

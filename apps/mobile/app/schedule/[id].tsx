@@ -86,7 +86,6 @@ export default function ScheduleDetailScreen() {
     startsAt && endsAt
       ? `${startsAt.toLocaleTimeString(language, { hour: "2-digit", minute: "2-digit" })}–${endsAt.toLocaleTimeString(language, { hour: "2-digit", minute: "2-digit" })}`
       : null;
-  const when = date && time ? `${date} · ${time}` : (date ?? time);
 
   return (
     <>
@@ -184,7 +183,8 @@ export default function ScheduleDetailScreen() {
                   label={t("scheduleDuration")}
                   value={scheduleDurationLabel(item, t)}
                 />
-                {when ? <PlainInfoRow label={t("scheduleTime")} value={when} /> : null}
+                {date ? <PlainInfoRow label={t("scheduleDate")} value={date} /> : null}
+                {time ? <PlainInfoRow label={t("scheduleTime")} value={time} /> : null}
                 {item.location ? (
                   <PlainInfoRow label={t("scheduleLocation")} value={item.location} last />
                 ) : null}

@@ -30,7 +30,6 @@ import {
   addScheduleOwner,
   createScheduleItem,
   deleteScheduleItem,
-  entriesOverlap,
   fetchAdminSchedule,
   fetchPublicSchedule,
   type ScheduleInput,
@@ -45,7 +44,7 @@ import { itemCategory, useScheduleNotifications } from "@/lib/use-schedule-notif
 import { colors } from "@/theme/colors";
 
 type NowMarker = { kind: "now"; id: string };
-type ItemRow = ScheduleItem & { kind: "item"; overlapsAdjacent: boolean };
+type ItemRow = ScheduleItem & { kind: "item" };
 type SectionRow = ItemRow | NowMarker;
 
 interface ScheduleSection {
@@ -121,14 +120,7 @@ export default function ScheduleScreen() {
       grouped.set(key, [...(grouped.get(key) ?? []), item]);
     }
     return [...grouped.entries()].map(([key, dayItems]) => {
-      const rows: SectionRow[] = dayItems.map((item, index) => {
-        const prev = dayItems[index - 1];
-        const next = dayItems[index + 1];
-        const overlapsAdjacent =
-          (prev !== undefined && entriesOverlap(prev, item)) ||
-          (next !== undefined && entriesOverlap(item, next));
-        return { ...item, kind: "item" as const, overlapsAdjacent };
-      });
+      const rows: SectionRow[] = dayItems.map((item) => ({ ...item, kind: "item" as const }));
       if (key === todayKey) {
         const hasActiveItem = dayItems.some(
           (item) => safeTimestamp(item.startsAt) <= now && safeTimestamp(item.endsAt) >= now,
@@ -350,7 +342,6 @@ export default function ScheduleScreen() {
                 item={item}
                 language={language}
                 last={index === section.data.length - 1}
-                overlapsAdjacent={item.overlapsAdjacent}
                 reminderOn={notifications.ready ? notifications.isEntrySubscribed(item) : null}
                 reminderBusy={notifications.savingKey === itemCategory(item.id)}
                 onToggleReminder={() => void notifications.toggleEntry(item)}
@@ -482,7 +473,6 @@ function ScheduleCard({
   item,
   language,
   last,
-  overlapsAdjacent,
   reminderOn,
   reminderBusy,
   onToggleReminder,
@@ -490,7 +480,6 @@ function ScheduleCard({
   item: ScheduleItem;
   language: string;
   last: boolean;
-  overlapsAdjacent: boolean;
   reminderOn: boolean | null;
   reminderBusy: boolean;
   onToggleReminder: () => void;
@@ -526,14 +515,6 @@ function ScheduleCard({
         >
           {time}
         </Text>
-        {overlapsAdjacent ? (
-          <SymbolView
-            name="exclamationmark.triangle.fill"
-            tintColor={colors.warning}
-            size={12}
-            style={{ marginTop: 3 }}
-          />
-        ) : null}
         {!last ? (
           <View style={{ backgroundColor: colors.separator, flex: 1, marginTop: 8, width: 1 }} />
         ) : null}
@@ -544,7 +525,6 @@ function ScheduleCard({
           time,
           end,
           item.location,
-          overlapsAdjacent ? t("scheduleOverlap") : null,
           reminderOn === null
             ? null
             : t(reminderOn ? "scheduleReminderOn" : "scheduleReminderOff", {
