@@ -42,6 +42,8 @@ async function linkSponsor(userId: number, enterpriseId: number): Promise<void> 
   ]);
 }
 
+const EMPTY_I18N = { en: "", es: "", gl: "" };
+
 describe("sponsor FAQ (H58)", () => {
   it("a linked sponsor rep can read the FAQ but not write it", async () => {
     const a = await getApp();
@@ -53,13 +55,17 @@ describe("sponsor FAQ (H58)", () => {
 
     const read = await a.inject({ method: "GET", url: "/api/sponsor-faq", headers: asUser(rep) });
     expect(read.statusCode).toBe(200);
-    expect(read.json()).toEqual({ contentI18n: { en: "", es: "", gl: "" } });
+    expect(read.json()).toEqual({ items: [] });
 
     const write = await a.inject({
       method: "PUT",
       url: "/api/sponsor-faq",
       headers: asUser(rep),
-      payload: { contentI18n: { en: "Load in at 8am", es: "", gl: "" } },
+      payload: {
+        items: [
+          { kind: "qa", heading: { ...EMPTY_I18N, en: "When can we load in?" }, body: EMPTY_I18N },
+        ],
+      },
     });
     expect(write.statusCode).toBe(403);
   });
@@ -75,27 +81,40 @@ describe("sponsor FAQ (H58)", () => {
     expect(res.statusCode).toBe(403);
   });
 
-  it("SPONSORS_MANAGE can write the FAQ, and the write is auditable", async () => {
+  it("SPONSORS_MANAGE can write a mix of Q&A and text-block items, and the write is auditable", async () => {
     const a = await getApp();
     const admin = await createUserWithCapabilities([CAPABILITIES.SPONSORS_MANAGE]);
+
+    const items = [
+      {
+        kind: "qa",
+        heading: { ...EMPTY_I18N, en: "When can we load in?" },
+        body: { ...EMPTY_I18N, en: "From 8am on Friday." },
+      },
+      {
+        kind: "text",
+        heading: { ...EMPTY_I18N, en: "Wifi" },
+        body: { ...EMPTY_I18N, en: "SSID: hackos, password: hackos" },
+      },
+    ];
 
     const write = await a.inject({
       method: "PUT",
       url: "/api/sponsor-faq",
       headers: asUser(admin),
-      payload: {
-        contentI18n: { en: "Load in at 8am, wifi: hackos/hackos", es: "", gl: "" },
-      },
+      payload: { items },
     });
     expect(write.statusCode).toBe(200);
-    expect(write.json().contentI18n.en).toBe("Load in at 8am, wifi: hackos/hackos");
+    expect(write.json().items).toHaveLength(2);
+    expect(write.json().items[0].kind).toBe("qa");
+    expect(write.json().items[1].heading.en).toBe("Wifi");
 
     const read = await a.inject({
       method: "GET",
       url: "/api/sponsor-faq",
       headers: asUser(admin),
     });
-    expect(read.json().contentI18n.en).toBe("Load in at 8am, wifi: hackos/hackos");
+    expect(read.json().items).toHaveLength(2);
 
     const { rows } = await pool.query(
       `SELECT action FROM audit_log WHERE entity_type = 'sponsor_faq' AND entity_id = '1'`,

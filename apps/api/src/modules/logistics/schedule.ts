@@ -2,15 +2,26 @@ import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
-import { BadRequestError, NotFoundError } from "../../lib/errors.js";
+import { getEffectiveCapabilities } from "../../lib/capabilities.js";
+import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
+import { computeMembershipFlags, mentorOrParticipantType } from "../identity/role.js";
 
 const SCHEDULE_COLUMNS =
-  "id, title, description, location, type, requires_scan, starts_at, ends_at, visibility, publish_at, reminded_at, created_at, updated_at";
+  "id, title, description, location, type, requires_scan, starts_at, ends_at, visibility, publish_at, reminded_at, audiences, contact_note, notes, created_at, updated_at";
 
 function toActivityCategory(type: string | null): string {
   return type === "meal" ? "meal" : (type ?? "activity");
 }
+
+/**
+ * Who a live schedule item is shown to, on top of always-on staff visibility
+ * (staff see every live item unconditionally — never stored). Empty is valid
+ * and means "staff-only". `participant` also drives the anonymous public
+ * site/TV feed (H59) — there's no audience distinct from "what participants
+ * see" for an anonymous visitor.
+ */
+export type ScheduleAudience = "sponsor" | "participant" | "mentor";
 
 export interface ScheduleInput {
   title: string;
@@ -22,6 +33,9 @@ export interface ScheduleInput {
   endsAt: Date;
   visibility: "shown" | "hidden";
   publishAt?: Date | null;
+  audiences?: ScheduleAudience[];
+  contactNote?: string | null;
+  notes?: string | null;
 }
 
 export interface SchedulePatch {
@@ -34,6 +48,9 @@ export interface SchedulePatch {
   endsAt?: Date;
   visibility?: "shown" | "hidden";
   publishAt?: Date | null;
+  audiences?: ScheduleAudience[];
+  contactNote?: string | null;
+  notes?: string | null;
 }
 
 function serialize(row: Record<string, unknown>) {
@@ -49,6 +66,9 @@ function serialize(row: Record<string, unknown>) {
     visibility: String(row.visibility),
     publishAt: row.publish_at instanceof Date ? row.publish_at.toISOString() : null,
     remindedAt: row.reminded_at instanceof Date ? row.reminded_at.toISOString() : null,
+    audiences: (row.audiences as string[] | null) ?? [],
+    contactNote: (row.contact_note as string | null) ?? null,
+    notes: (row.notes as string | null) ?? null,
     createdAt: (row.created_at as Date).toISOString(),
     updatedAt: (row.updated_at as Date).toISOString(),
   };
@@ -57,6 +77,21 @@ function serialize(row: Record<string, unknown>) {
 function assertWindow(startsAt: Date, endsAt: Date) {
   if (endsAt.getTime() <= startsAt.getTime()) {
     throw new BadRequestError("endsAt must be after startsAt");
+  }
+}
+
+/**
+ * A scanner station reads a badge against an activity the *attendee* can
+ * already see is happening — a staff/sponsor/mentor-only item has no
+ * business being scannable (H59). `participant` is the anonymous-visible
+ * audience (see `ScheduleAudience`), so it's the one that gates scanning.
+ */
+function assertScanRequiresParticipantAudience(
+  requiresScan: boolean,
+  audiences: readonly string[],
+) {
+  if (requiresScan && !audiences.includes("participant")) {
+    throw new BadRequestError("Only a participant-visible item can require scanning");
   }
 }
 
@@ -87,33 +122,69 @@ export async function revealDueScheduleItems(client: Queryable = pool): Promise<
   return rows.map((r: { id: number }) => Number(r.id));
 }
 
+/** Shared by listSchedule and listScheduleForAudiences (H59) — one owners query for a batch of ids. */
+async function loadOwnersByScheduleId(ids: number[]): Promise<Map<number, ScheduleOwner[]>> {
+  const ownersByScheduleId = new Map<number, ScheduleOwner[]>();
+  if (ids.length === 0) return ownersByScheduleId;
+  const { rows: ownerRows } = await pool.query(
+    `SELECT so.schedule_id, so.user_id, u.name, u.surname, u.email, so.assigned_at
+       FROM schedule_owners so
+       JOIN users u ON u.id = so.user_id
+      WHERE so.schedule_id = ANY($1::int[])`,
+    [ids],
+  );
+  for (const row of ownerRows as Record<string, unknown>[]) {
+    const owner = serializeOwner(row);
+    const list = ownersByScheduleId.get(owner.scheduleId) ?? [];
+    list.push(owner);
+    ownersByScheduleId.set(owner.scheduleId, list);
+  }
+  return ownersByScheduleId;
+}
+
+/**
+ * Full unfiltered listing (draft/hidden items included) for SCHEDULE_MANAGE
+ * holders — this is the Manage Schedule table's data source, distinct from
+ * listScheduleForAudiences's live-only feed (H59).
+ */
 export async function listSchedule() {
   const { rows } = await pool.query(
     `SELECT ${SCHEDULE_COLUMNS}
        FROM schedule
       ORDER BY starts_at ASC, id ASC`,
   );
-  return { items: rows.map(serialize) };
+  const ownersByScheduleId = await loadOwnersByScheduleId(rows.map((r) => Number(r.id)));
+  return {
+    items: rows.map((row) => ({
+      ...serialize(row),
+      owners: ownersByScheduleId.get(Number(row.id)) ?? [],
+    })),
+  };
 }
 
 export async function createScheduleItem(actorId: number | null, input: ScheduleInput) {
   assertWindow(input.startsAt, input.endsAt);
+  const requiresScan = input.type === "meal" || input.requiresScan === true;
+  assertScanRequiresParticipantAudience(requiresScan, input.audiences ?? []);
   const item = await withTransaction(async (client) => {
     const { rows } = await client.query(
       `INSERT INTO schedule
-         (title, description, location, type, requires_scan, starts_at, ends_at, visibility, publish_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         (title, description, location, type, requires_scan, starts_at, ends_at, visibility, publish_at, audiences, contact_note, notes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING ${SCHEDULE_COLUMNS}`,
       [
         input.title,
         input.description ?? null,
         input.location ?? null,
         input.type ?? null,
-        input.type === "meal" || input.requiresScan === true,
+        requiresScan,
         input.startsAt,
         input.endsAt,
         input.visibility,
         input.publishAt ?? null,
+        input.audiences ?? [],
+        input.contactNote ?? null,
+        input.notes ?? null,
       ],
     );
     const item = serialize(rows[0]);
@@ -152,7 +223,9 @@ export async function updateScheduleItem(actorId: number | null, id: number, pat
       nextType === "meal" ||
       patch.requiresScan === true ||
       (patch.requiresScan === undefined && Boolean(current.rows[0].requires_scan));
+    const nextAudiences = patch.audiences ?? (current.rows[0].audiences as string[]);
     assertWindow(nextStartsAt, nextEndsAt);
+    assertScanRequiresParticipantAudience(nextRequiresScan, nextAudiences);
 
     const { rows } = await client.query(
       `UPDATE schedule
@@ -164,7 +237,10 @@ export async function updateScheduleItem(actorId: number | null, id: number, pat
               starts_at = $7,
               ends_at = $8,
               visibility = $9,
-              publish_at = $10
+              publish_at = $10,
+              audiences = $11,
+              contact_note = $12,
+              notes = $13
         WHERE id = $1
         RETURNING ${SCHEDULE_COLUMNS}`,
       [
@@ -178,6 +254,9 @@ export async function updateScheduleItem(actorId: number | null, id: number, pat
         nextEndsAt,
         patch.visibility ?? current.rows[0].visibility,
         patch.publishAt === undefined ? current.rows[0].publish_at : patch.publishAt,
+        nextAudiences,
+        patch.contactNote === undefined ? current.rows[0].contact_note : patch.contactNote,
+        patch.notes === undefined ? current.rows[0].notes : patch.notes,
       ],
     );
     const after = serialize(rows[0]);
@@ -257,4 +336,282 @@ export async function setScheduleVisibility(
   });
   await emitScheduleChanged({ action: "set_visibility", ...result });
   return result;
+}
+
+/** Bulk "schedule these hidden items to reveal at once" (H59). */
+export async function setScheduleBulkPublishAt(
+  actorId: number | null,
+  ids: number[],
+  publishAt: Date | null,
+) {
+  const result = await withTransaction(async (client) => {
+    const before = await client.query(
+      `SELECT id, publish_at FROM schedule WHERE id = ANY($1::int[]) FOR UPDATE`,
+      [ids],
+    );
+    const { rows } = await client.query(
+      `UPDATE schedule SET publish_at = $2 WHERE id = ANY($1::int[]) RETURNING id`,
+      [ids, publishAt],
+    );
+    await audit(client, {
+      actorId,
+      entityType: "schedule",
+      entityId: `batch:publish_at`,
+      action: "set_publish_at",
+      before: { rows: before.rows },
+      after: { ids, publishAt, updated: rows.length },
+    });
+    return {
+      ids: rows.map((r: { id: number }) => r.id),
+      publishAt: publishAt ? publishAt.toISOString() : null,
+      updated: rows.length,
+    };
+  });
+  await emitScheduleChanged({ action: "set_publish_at", ...result });
+  return result;
+}
+
+// ── H59: responsible person(s) ("owners") for a schedule item ──────────
+// Modeled on the `sponsors` (enterprise members) join table, not
+// `room_judges` — a flat resource-to-users link, not scoped to a compound
+// resource.
+
+export interface ScheduleOwner {
+  scheduleId: number;
+  userId: number;
+  name: string | null;
+  surname: string | null;
+  email: string;
+  assignedAt: string;
+}
+
+function serializeOwner(row: Record<string, unknown>): ScheduleOwner {
+  return {
+    scheduleId: Number(row.schedule_id),
+    userId: Number(row.user_id),
+    name: (row.name as string | null) ?? null,
+    surname: (row.surname as string | null) ?? null,
+    email: String(row.email),
+    assignedAt: (row.assigned_at as Date).toISOString(),
+  };
+}
+
+export interface OwnerCandidate {
+  id: number;
+  email: string;
+  name: string | null;
+  surname: string | null;
+}
+
+/**
+ * Minimal account lookup for assigning a schedule item's responsible
+ * person(s) (H59) — gated by SCHEDULE_MANAGE (the same capability that
+ * governs the write), not the broad USERS_READ, mirroring
+ * projects/service.ts's listProjectMemberCandidates. Someone who can manage
+ * the programme but isn't a general user-directory admin should still be
+ * able to pick a colleague.
+ */
+export async function listScheduleOwnerCandidates(
+  query: string,
+  limit: number,
+): Promise<OwnerCandidate[]> {
+  const filter = `%${query.trim()}%`;
+  const { rows } = await pool.query(
+    `SELECT id, email, name, surname
+       FROM users
+      WHERE anonymized_at IS NULL
+        AND (email ILIKE $1 OR name ILIKE $1 OR surname ILIKE $1)
+      ORDER BY name ASC NULLS LAST, surname ASC NULLS LAST, email ASC
+      LIMIT $2`,
+    [filter, limit],
+  );
+  return rows;
+}
+
+export async function listScheduleOwners(scheduleId: number): Promise<ScheduleOwner[]> {
+  const { rows } = await pool.query(
+    `SELECT so.schedule_id, so.user_id, u.name, u.surname, u.email, so.assigned_at
+       FROM schedule_owners so
+       JOIN users u ON u.id = so.user_id
+      WHERE so.schedule_id = $1
+      ORDER BY u.name NULLS LAST, u.email`,
+    [scheduleId],
+  );
+  return rows.map(serializeOwner);
+}
+
+export async function addScheduleOwner(
+  actorId: number | null,
+  scheduleId: number,
+  userId: number,
+): Promise<ScheduleOwner> {
+  const { rows: scheduleRows } = await pool.query(`SELECT id FROM schedule WHERE id = $1`, [
+    scheduleId,
+  ]);
+  if (!scheduleRows[0]) throw new NotFoundError("Schedule item not found", { scheduleId });
+  const { rows: userRows } = await pool.query(`SELECT id FROM users WHERE id = $1`, [userId]);
+  if (!userRows[0]) throw new NotFoundError("User not found", { userId });
+
+  const { rows: existing } = await pool.query(
+    `SELECT id FROM schedule_owners WHERE schedule_id = $1 AND user_id = $2`,
+    [scheduleId, userId],
+  );
+  if (existing[0]) {
+    throw new ConflictError("User is already an owner of this schedule item", {
+      scheduleId,
+      userId,
+    });
+  }
+
+  return withTransaction(async (client) => {
+    const { rows } = await client.query(
+      `INSERT INTO schedule_owners (schedule_id, user_id, assigned_by)
+       VALUES ($1, $2, $3)
+       RETURNING schedule_id, user_id, assigned_at`,
+      [scheduleId, userId, actorId],
+    );
+    const { rows: userRow } = await client.query(
+      `SELECT name, surname, email FROM users WHERE id = $1`,
+      [userId],
+    );
+    const owner = serializeOwner({ ...rows[0], ...userRow[0] });
+    await audit(client, {
+      actorId,
+      entityType: "schedule_owner",
+      entityId: `${scheduleId}:${userId}`,
+      action: "create",
+      after: owner,
+    });
+    return owner;
+  });
+}
+
+export async function removeScheduleOwner(
+  actorId: number | null,
+  scheduleId: number,
+  userId: number,
+): Promise<void> {
+  await withTransaction(async (client) => {
+    const { rowCount } = await client.query(
+      `DELETE FROM schedule_owners WHERE schedule_id = $1 AND user_id = $2`,
+      [scheduleId, userId],
+    );
+    if (!rowCount) {
+      throw new NotFoundError("User is not an owner of this schedule item", {
+        scheduleId,
+        userId,
+      });
+    }
+    await audit(client, {
+      actorId,
+      entityType: "schedule_owner",
+      entityId: `${scheduleId}:${userId}`,
+      action: "delete",
+    });
+  });
+}
+
+// ── H59: audience-aware read feed ───────────────────────────────────────
+// One feed backs the public site, the staff management table, and the
+// sponsor hub — the caller's audience is computed server-side and used to
+// filter which live items come back, rather than parallel endpoints running
+// variants of the same query.
+
+export interface CallerScheduleAudience {
+  /** Sees every live item unconditionally, plus owners/contactNote/notes on all of them. */
+  isStaff: boolean;
+  /** `sponsor`/`participant`/`mentor` — the optional per-item toggles that apply to this caller. */
+  audiences: Set<ScheduleAudience>;
+}
+
+/**
+ * Staff (any authenticated account holding at least one capability) always
+ * sees everything — never gated by the stored `audiences` set. Everyone else
+ * is resolved to at most one attendee audience (`participant`/`mentor`,
+ * mutually exclusive) plus `sponsor` if they're a linked sponsor rep. An
+ * anonymous caller (no session — the public site/TV) is treated as
+ * `participant`: there's no audience distinct from "what participants see"
+ * for an anonymous visitor (H59).
+ */
+export async function callerScheduleAudiences(
+  userId: number | null,
+): Promise<CallerScheduleAudience> {
+  if (userId == null) return { isStaff: false, audiences: new Set(["participant"]) };
+  const [capabilities, { isSponsorRep }, attendeeType] = await Promise.all([
+    getEffectiveCapabilities(userId),
+    computeMembershipFlags(pool, userId),
+    mentorOrParticipantType(pool, userId),
+  ]);
+  if (capabilities.size > 0) return { isStaff: true, audiences: new Set() };
+  const audiences = new Set<ScheduleAudience>();
+  if (isSponsorRep) audiences.add("sponsor");
+  if (attendeeType) audiences.add(attendeeType);
+  return { isStaff: false, audiences };
+}
+
+export interface AudienceScheduleItem {
+  id: number;
+  title: string;
+  description: string | null;
+  location: string | null;
+  type: string | null;
+  startsAt: string;
+  endsAt: string;
+  publishAt: string | null;
+  /** Only populated when the caller shares a non-public audience with this item. */
+  contactNote?: string | null;
+  owners?: { userId: number; name: string | null; surname: string | null }[];
+  /** Staff-only free-form notes (the escaleta's "Observaciones"). */
+  notes?: string | null;
+}
+
+export async function listScheduleForAudiences(
+  caller: CallerScheduleAudience,
+): Promise<AudienceScheduleItem[]> {
+  // Staff run the whole show, not just staff-tagged items — every live item
+  // is visible to them unconditionally (H59: "gotta be able to see all
+  // schedule"); everyone else only sees items whose audience overlaps theirs.
+  const { rows } = await pool.query(
+    `SELECT id, title, description, location, type, starts_at, ends_at, publish_at,
+            audiences, contact_note, notes
+       FROM schedule
+      WHERE visibility = 'shown'
+        AND (publish_at IS NULL OR publish_at <= now())
+        AND ($2 OR audiences && $1::text[])
+      ORDER BY starts_at ASC, id ASC`,
+    [Array.from(caller.audiences), caller.isStaff],
+  );
+  const ids = rows.map((r: Record<string, unknown>) => Number(r.id));
+  const ownersByScheduleId = await loadOwnersByScheduleId(ids);
+
+  return rows.map((row: Record<string, unknown>) => {
+    const itemAudiences = new Set((row.audiences as string[]) ?? []);
+    const sharesSponsorAudience = itemAudiences.has("sponsor") && caller.audiences.has("sponsor");
+    const base = {
+      id: Number(row.id),
+      title: String(row.title),
+      description: (row.description as string | null) ?? null,
+      location: (row.location as string | null) ?? null,
+      type: (row.type as string | null) ?? null,
+      startsAt: (row.starts_at as Date).toISOString(),
+      endsAt: (row.ends_at as Date).toISOString(),
+      publishAt: row.publish_at instanceof Date ? row.publish_at.toISOString() : null,
+    };
+    // Staff sees owners/contact/notes for every item, regardless of that
+    // item's own audience tags — operational detail is a staff concern, not
+    // gated by who the content is themed for. A sponsor rep only gets
+    // owners/contact for items explicitly tagged `sponsor`, and never the
+    // (staff-internal) notes.
+    if (!caller.isStaff && !sharesSponsorAudience) return base;
+    return {
+      ...base,
+      contactNote: (row.contact_note as string | null) ?? null,
+      owners: (ownersByScheduleId.get(Number(row.id)) ?? []).map((o) => ({
+        userId: o.userId,
+        name: o.name,
+        surname: o.surname,
+      })),
+      ...(caller.isStaff ? { notes: (row.notes as string | null) ?? null } : {}),
+    };
+  });
 }

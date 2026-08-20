@@ -84,11 +84,26 @@ export const CONTENT_TYPE_EXT: Record<(typeof LOGO_CONTENT_TYPES)[number], strin
 export type CreateEnterpriseBody = z.infer<typeof createEnterpriseBody>;
 export type UpdateEnterpriseBody = z.infer<typeof updateEnterpriseBody>;
 
-/** H58: sponsor-only logistics/FAQ content, trilingual like challenge text. */
+/**
+ * H58: sponsor-only FAQ — an ordered list of admin-authored items, each
+ * either a question/answer pair (`kind: 'qa'`) or a free-form text block
+ * (`kind: 'text'`), trilingual like challenge text. Saved wholesale, same
+ * shape as `challenges.prizes`/`judging_panel_criteria`.
+ */
+const i18nText = z.object({ en: z.string(), es: z.string(), gl: z.string() });
+
+export const faqItem = z.object({
+  kind: z.enum(["qa", "text"]),
+  heading: i18nText,
+  body: i18nText,
+});
+
 export const sponsorFaqBody = z
   .object({
-    contentI18n: z.object({ en: z.string(), es: z.string(), gl: z.string() }),
+    items: z.array(faqItem).max(100),
   })
   .strict();
+
+export type FaqItem = z.infer<typeof faqItem>;
 
 export type SponsorFaqBody = z.infer<typeof sponsorFaqBody>;

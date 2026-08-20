@@ -1,254 +1,607 @@
 "use client";
 
-import { ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
-import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { EVENTS } from "@hackos/shared/events";
+// Manage Schedule (H48/H59): the full run-of-show, grouped by day — status,
+// start, end, duration, location, item, who's responsible, observations —
+// for any account holding at least one capability (see
+// callerScheduleAudiences / listScheduleForAudiences), with inline edits,
+// bulk visibility/scheduling actions, and delete reserved for
+// SCHEDULE_MANAGE holders. Replaces the old DataTable-based /schedule editor
+// entirely — this table already covers everything that editor did. Column
+// visibility/order is user-configurable and persisted both in localStorage
+// (instant) and on the account (cross-device) via /api/me/ui-prefs.
+
 import {
-  CalendarDaysIcon,
+  closestCenter,
+  DndContext,
+  type DragEndEvent,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CAPABILITIES } from "@hackos/shared/capabilities";
+import {
+  CalendarClockIcon,
   CopyIcon,
   EyeIcon,
   EyeOffIcon,
+  FilterIcon,
   PencilIcon,
   PlusIcon,
-  ScanLineIcon,
+  SearchIcon,
+  SlidersHorizontalIcon,
   Trash2Icon,
+  XIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AccessDenied } from "@/components/common/access-denied";
 import { AlertModal } from "@/components/common/alert-modal";
-import { type Column, DataTable } from "@/components/common/data-table";
+import { ContextualError } from "@/components/common/contextual-error";
 import { DateTimeInput } from "@/components/common/datetime-input";
-import { Modal } from "@/components/common/modal";
+import { DragHandle, SortableItem } from "@/components/common/drag-handle";
+import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { StatusBadge } from "@/components/common/status-badge";
-import { SubmitButton } from "@/components/common/submit-button";
+import { type UserOption, UserPicker } from "@/components/common/user-picker";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { ApiError } from "@/lib/api";
-import { formatScheduledDateTime, getTimeZoneLabel } from "@/lib/datetime";
-import { useLocale } from "@/lib/i18n";
-import { logisticsApi, type PublicScheduleItem, type ScheduleInput } from "@/lib/logistics";
-import { useCan } from "@/lib/session";
+import { type MessageKey, useLocale } from "@/lib/i18n";
 import {
+  logisticsApi,
+  type PublicScheduleItem,
+  type ScheduleAudience,
+  uiPrefsApi,
+} from "@/lib/logistics";
+import { useCan, useMe } from "@/lib/session";
+import {
+  cleanScheduleForm,
+  EMPTY_SCHEDULE_FORM,
+  ScheduleFormModal,
+  scheduleDuplicateForm,
+  scheduleItemToForm,
+} from "./schedule-form-modal";
+import {
+  SCHEDULE_AUDIENCES,
   SCHEDULE_STATUS_TONES,
+  scheduleAudienceLabel,
+  scheduleDayLabel,
+  scheduleDuration,
   scheduleStatus,
   scheduleStatusLabel,
-  scheduleTypeIcon,
-  scheduleTypeLabel,
+  scheduleTimeOfDay,
+  timeInputValue,
+  withTimeOfDay,
 } from "./schedule-model";
 
-const EMPTY_FORM: ScheduleInput = {
-  title: "",
-  description: "",
-  location: "",
-  type: "activity",
-  requiresScan: false,
-  startsAt: "",
-  endsAt: "",
-  visibility: "hidden",
-  publishAt: null,
+function ownerNames(item: PublicScheduleItem): string {
+  return (item.owners ?? [])
+    .map((o) => [o.name, o.surname].filter(Boolean).join(" ") || o.email)
+    .join(", ");
+}
+
+interface DayGroup {
+  label: string;
+  items: PublicScheduleItem[];
+}
+
+function groupByDay(items: PublicScheduleItem[], language: Parameters<typeof scheduleDayLabel>[1]) {
+  const groups: DayGroup[] = [];
+  for (const item of items) {
+    const label = scheduleDayLabel(item.startsAt, language);
+    const last = groups.at(-1);
+    if (last?.label === label) last.items.push(item);
+    else groups.push({ label, items: [item] });
+  }
+  return groups;
+}
+
+// --- Column configuration (H59): which columns show, and in what order,
+// persisted in localStorage for an instant read and synced to the account
+// so it follows the user across devices. -----------------------------------
+
+type ColumnId =
+  | "status"
+  | "starts"
+  | "ends"
+  | "duration"
+  | "location"
+  | "item"
+  | "owners"
+  | "notes";
+
+const COLUMN_LABEL_KEYS: Record<ColumnId, MessageKey> = {
+  status: "statusColumn",
+  starts: "colStarts",
+  ends: "endsLabel",
+  duration: "colDuration",
+  location: "locationLabel",
+  item: "colItem",
+  owners: "ownersLabel",
+  notes: "notesLabel",
 };
 
-function toForm(item: PublicScheduleItem): ScheduleInput {
-  return {
-    title: item.title,
-    description: item.description ?? "",
-    location: item.location ?? "",
-    type: item.type ?? "activity",
-    requiresScan: item.requiresScan ?? false,
-    startsAt: item.startsAt,
-    endsAt: item.endsAt,
-    visibility: item.visibility ?? "hidden",
-    publishAt: item.publishAt,
-  };
+/** Default column widths in px — also the resize handle's live-drag unit. */
+const DEFAULT_COLUMN_WIDTHS: Record<ColumnId, number> = {
+  starts: 72,
+  ends: 72,
+  duration: 64,
+  location: 140,
+  item: 320,
+  owners: 180,
+  notes: 220,
+  status: 110,
+};
+
+const MIN_COLUMN_WIDTH = 56;
+const MAX_COLUMN_WIDTH = 480;
+
+const DEFAULT_COLUMN_ORDER: ColumnId[] = [
+  "starts",
+  "ends",
+  "duration",
+  "location",
+  "item",
+  "owners",
+  "notes",
+  "status",
+];
+
+const REQUIRED_COLUMNS: ColumnId[] = ["item"];
+
+interface TableConfig {
+  order: ColumnId[];
+  hidden: ColumnId[];
+  widths: Record<ColumnId, number>;
 }
 
-function toDuplicateForm(item: PublicScheduleItem): ScheduleInput {
-  return {
-    ...toForm(item),
-    title: `${item.title} (copy)`,
-    // A duplicated item should not unexpectedly appear on the public agenda.
-    visibility: "hidden",
-    publishAt: null,
-  };
+const DEFAULT_TABLE_CONFIG: TableConfig = {
+  order: DEFAULT_COLUMN_ORDER,
+  hidden: [],
+  widths: DEFAULT_COLUMN_WIDTHS,
+};
+const STORAGE_KEY = "hackos:scheduleTable:v3";
+
+function isColumnId(value: unknown): value is ColumnId {
+  return typeof value === "string" && value in COLUMN_LABEL_KEYS;
 }
 
-function cleanForm(form: ScheduleInput): ScheduleInput {
-  return {
-    title: form.title.trim(),
-    description: form.description?.trim() || null,
-    location: form.location?.trim() || null,
-    type: form.type?.trim() || null,
-    requiresScan: form.type === "meal" || form.requiresScan === true,
-    startsAt: new Date(form.startsAt).toISOString(),
-    endsAt: new Date(form.endsAt).toISOString(),
-    visibility: form.visibility,
-    publishAt: form.publishAt ? new Date(form.publishAt).toISOString() : null,
-  };
+function clampWidth(width: number): number {
+  return Math.min(MAX_COLUMN_WIDTH, Math.max(MIN_COLUMN_WIDTH, Math.round(width)));
 }
 
-export default function SchedulePage() {
-  const { t } = useLocale();
-  const canManage = useCan(CAPABILITIES.SCHEDULE_MANAGE);
-  const [items, setItems] = useState<PublicScheduleItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [editing, setEditing] = useState<PublicScheduleItem | null>(null);
-  const [duplicating, setDuplicating] = useState<PublicScheduleItem | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [mutationError, setMutationError] = useState<{
-    message: string;
-    onRetry?: () => void;
-  } | null>(null);
+function sanitizeWidths(raw: unknown): Record<ColumnId, number> {
+  const obj = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const widths = { ...DEFAULT_COLUMN_WIDTHS };
+  for (const id of DEFAULT_COLUMN_ORDER) {
+    const value = obj[id];
+    if (typeof value === "number" && Number.isFinite(value)) widths[id] = clampWidth(value);
+  }
+  return widths;
+}
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const result = await logisticsApi.schedule();
-      setItems(result.items);
-      setSelectedIds(new Set());
-    } catch (err) {
-      const message = err instanceof ApiError ? err.message : t("couldNotLoadSchedule");
-      setLoadError(message);
-      toast.error(message);
-    } finally {
-      setLoading(false);
-    }
-  }, [t]);
+function sanitizeTableConfig(raw: unknown): TableConfig | null {
+  if (!raw || typeof raw !== "object") return null;
+  const obj = raw as { order?: unknown; hidden?: unknown; widths?: unknown };
+  const order = Array.isArray(obj.order) ? obj.order.filter(isColumnId) : [];
+  const hidden = Array.isArray(obj.hidden)
+    ? obj.hidden.filter((id): id is ColumnId => isColumnId(id) && !REQUIRED_COLUMNS.includes(id))
+    : [];
+  const merged = [...order, ...DEFAULT_COLUMN_ORDER.filter((id) => !order.includes(id))];
+  if (merged.length !== DEFAULT_COLUMN_ORDER.length) return null;
+  return { order: merged, hidden, widths: sanitizeWidths(obj.widths) };
+}
 
-  // Soft, in-place refresh instead of a hard reload when another admin
-  // edits the schedule elsewhere (H47).
-  const liveRefresh = useAutoRefresh("/api/content/stream", [EVENTS.CONTENT_SCHEDULE_CHANGED]);
+function loadLocalTableConfig(): TableConfig | null {
+  try {
+    return sanitizeTableConfig(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null"));
+  } catch {
+    return null;
+  }
+}
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
+function useScheduleTableConfig(): [TableConfig, (next: TableConfig) => void] {
+  const [config, setConfigState] = useState<TableConfig>(
+    () => loadLocalTableConfig() ?? DEFAULT_TABLE_CONFIG,
+  );
+
   useEffect(() => {
-    if (canManage) void load();
-    else setLoading(false);
-  }, [canManage, load, liveRefresh]);
-
-  async function setVisibility(visibility: "shown" | "hidden", ids = [...selectedIds].map(Number)) {
-    if (ids.length === 0) return;
-    setBusy(true);
-    setMutationError(null);
-    try {
-      await logisticsApi.setScheduleVisibility(ids, visibility);
-      toast.success(visibility === "shown" ? t("itemsShown") : t("itemsHidden"));
-      await load();
-    } catch (err) {
-      const message = err instanceof ApiError ? err.message : t("couldNotUpdateVisibility");
-      setMutationError({
-        message,
-        onRetry: () => void setVisibility(visibility, ids),
+    uiPrefsApi
+      .get()
+      .then((prefs) => {
+        const remote = sanitizeTableConfig(prefs.scheduleTable);
+        if (remote) {
+          setConfigState(remote);
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(remote));
+          } catch {
+            // localStorage may be unavailable (private browsing); the account copy still applies for this session.
+          }
+        }
+      })
+      .catch(() => {
+        // Not signed in with the right capability, or offline — the local copy already applied.
       });
-      toast.error(message);
-    } finally {
-      setBusy(false);
+  }, []);
+
+  const setConfig = useCallback((next: TableConfig) => {
+    setConfigState(next);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      // Best-effort only.
+    }
+    void uiPrefsApi.set("scheduleTable", next).catch(() => {});
+  }, []);
+
+  return [config, setConfig];
+}
+
+function ColumnConfigPopover({
+  config,
+  onChange,
+}: {
+  config: TableConfig;
+  onChange: (next: TableConfig) => void;
+}) {
+  const { t } = useLocale();
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  function toggle(id: ColumnId, visible: boolean) {
+    const hidden = visible ? config.hidden.filter((h) => h !== id) : [...config.hidden, id];
+    onChange({ ...config, hidden });
+  }
+
+  function onDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = config.order.indexOf(active.id as ColumnId);
+    const newIndex = config.order.indexOf(over.id as ColumnId);
+    if (oldIndex === -1 || newIndex === -1) return;
+    onChange({ ...config, order: arrayMove(config.order, oldIndex, newIndex) });
+  }
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm">
+          <SlidersHorizontalIcon className="size-4" />
+          {t("columnsAction")}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-64 space-y-1">
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+          <SortableContext items={config.order} strategy={verticalListSortingStrategy}>
+            {config.order.map((id) => {
+              const required = REQUIRED_COLUMNS.includes(id);
+              const visible = required || !config.hidden.includes(id);
+              return (
+                <SortableItem key={id} id={id}>
+                  {(drag) => (
+                    <div className="flex items-center gap-1.5 rounded px-1 py-1">
+                      <DragHandle
+                        attributes={drag.attributes}
+                        listeners={drag.listeners}
+                        label={t("reorderColumnAria")}
+                      />
+                      <Checkbox
+                        id={`col-${id}`}
+                        checked={visible}
+                        disabled={required}
+                        onCheckedChange={(checked) => toggle(id, checked === true)}
+                      />
+                      <label htmlFor={`col-${id}`} className="flex-1 text-sm">
+                        {t(COLUMN_LABEL_KEYS[id])}
+                      </label>
+                    </div>
+                  )}
+                </SortableItem>
+              );
+            })}
+          </SortableContext>
+        </DndContext>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/**
+ * Drag-to-resize a column's header border (H59). Live width updates go
+ * straight to the parent's cheap `liveWidths` state (React only, no
+ * persistence) on every pointermove; the final width is only persisted
+ * (localStorage + account sync) once, on pointerup — the exact final value
+ * is computed from the drag's own start point rather than read back from
+ * parent state, so there's no stale-closure risk.
+ */
+function ResizableHead({
+  id,
+  width,
+  onResize,
+  onResizeEnd,
+  children,
+}: {
+  id: ColumnId;
+  width: number;
+  onResize: (id: ColumnId, width: number) => void;
+  onResizeEnd: (id: ColumnId, width: number) => void;
+  children: React.ReactNode;
+}) {
+  const { t } = useLocale();
+
+  function onPointerDown(e: React.PointerEvent<HTMLButtonElement>) {
+    e.preventDefault();
+    const start = { x: e.clientX, width };
+    function onMove(ev: PointerEvent) {
+      onResize(id, clampWidth(start.width + (ev.clientX - start.x)));
+    }
+    function onUp(ev: PointerEvent) {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      onResizeEnd(id, clampWidth(start.width + (ev.clientX - start.x)));
+    }
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }
+
+  // Arrow keys resize in 16px steps for keyboard/screen-reader users, since
+  // the pointer drag above has no keyboard equivalent on its own.
+  function onKeyDown(e: React.KeyboardEvent<HTMLButtonElement>) {
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      onResizeEnd(id, clampWidth(width - 16));
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      onResizeEnd(id, clampWidth(width + 16));
     }
   }
+
+  return (
+    <TableHead className="relative overflow-hidden select-none">
+      <span className="block truncate pr-2">{children}</span>
+      <button
+        type="button"
+        aria-label={t("resizeColumnAria")}
+        onPointerDown={onPointerDown}
+        onKeyDown={onKeyDown}
+        className="hover:bg-primary/50 active:bg-primary/70 absolute inset-y-0 right-0 w-1.5 cursor-col-resize touch-none focus-visible:bg-primary/60 outline-none"
+      />
+    </TableHead>
+  );
+}
+
+/**
+ * Filter the visible rows by audience (H59) — sponsor/participant/mentor
+ * checkboxes plus a synthetic "staff-only" option for items with no stored
+ * audience at all (staff is implicit, never a stored value). Multiple
+ * selections combine with OR: an item matches if it has any of the checked
+ * audiences, or is staff-only and that option is checked.
+ */
+function AudienceFilterPopover({
+  selected,
+  staffOnly,
+  onChange,
+}: {
+  selected: Set<ScheduleAudience>;
+  staffOnly: boolean;
+  onChange: (selected: Set<ScheduleAudience>, staffOnly: boolean) => void;
+}) {
+  const { t } = useLocale();
+  const activeCount = selected.size + (staffOnly ? 1 : 0);
+
+  function toggleAudience(audience: ScheduleAudience, checked: boolean) {
+    const next = new Set(selected);
+    if (checked) next.add(audience);
+    else next.delete(audience);
+    onChange(next, staffOnly);
+  }
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm">
+          <FilterIcon className="size-4" />
+          {t("audienceFilterAction")}
+          {activeCount > 0 && (
+            <span className="bg-primary text-primary-foreground ml-0.5 flex size-4 items-center justify-center rounded-full text-[10px]">
+              {activeCount}
+            </span>
+          )}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-60 space-y-1">
+        {SCHEDULE_AUDIENCES.map((audience) => (
+          <div key={audience} className="flex items-center gap-2 px-1 py-1">
+            <Checkbox
+              id={`audience-filter-${audience}`}
+              checked={selected.has(audience)}
+              onCheckedChange={(checked) => toggleAudience(audience, checked === true)}
+            />
+            <label htmlFor={`audience-filter-${audience}`} className="flex-1 text-sm">
+              {scheduleAudienceLabel(audience, t)}
+            </label>
+          </div>
+        ))}
+        <div className="mt-1 flex items-center gap-2 border-t px-1 pt-2">
+          <Checkbox
+            id="audience-filter-staff-only"
+            checked={staffOnly}
+            onCheckedChange={(checked) => onChange(selected, checked === true)}
+          />
+          <label htmlFor="audience-filter-staff-only" className="flex-1 text-sm">
+            {t("audienceFilterStaffOnly")}
+          </label>
+        </div>
+        {activeCount > 0 && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="w-full"
+            onClick={() => onChange(new Set(), false)}
+          >
+            {t("clearFilters")}
+          </Button>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// --- Page --------------------------------------------------------------
+
+export default function SchedulePage() {
+  const { t, language } = useLocale();
+  const me = useMe();
+  const canEdit = useCan(CAPABILITIES.SCHEDULE_MANAGE);
+  const canView = Boolean(me && me.capabilities.length > 0);
+
+  const [items, setItems] = useState<PublicScheduleItem[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<PublicScheduleItem | null>(null);
+  const [duplicatingItem, setDuplicatingItem] = useState<PublicScheduleItem | null>(null);
+  const [deletingItem, setDeletingItem] = useState<PublicScheduleItem | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const [tableConfig, setTableConfig] = useScheduleTableConfig();
+  const [audienceFilter, setAudienceFilter] = useState<Set<ScheduleAudience>>(new Set());
+  const [staffOnlyFilter, setStaffOnlyFilter] = useState(false);
+  const [liveWidths, setLiveWidths] = useState<Partial<Record<ColumnId, number>>>({});
+  const columnWidths = useMemo(
+    () => ({ ...tableConfig.widths, ...liveWidths }),
+    [tableConfig.widths, liveWidths],
+  );
+
+  const handleColumnResize = useCallback((id: ColumnId, width: number) => {
+    setLiveWidths((prev) => ({ ...prev, [id]: width }));
+  }, []);
+
+  const handleColumnResizeEnd = useCallback(
+    (id: ColumnId, width: number) => {
+      setTableConfig({ ...tableConfig, widths: { ...tableConfig.widths, [id]: width } });
+      setLiveWidths((prev) => {
+        const { [id]: _removed, ...rest } = prev;
+        return rest;
+      });
+    },
+    [tableConfig, setTableConfig],
+  );
+
+  const load = useCallback(() => {
+    setError(null);
+    // SCHEDULE_MANAGE holders manage the whole run-of-show including hidden
+    // drafts, so they need the unfiltered /api/schedule listing; everyone
+    // else only ever sees the live, audience-filtered feed (H59).
+    const request = canEdit ? logisticsApi.schedule() : logisticsApi.publicSchedule();
+    request
+      .then((r) => {
+        setItems(r.items);
+        setSelectedIds(new Set());
+      })
+      .catch((err) => {
+        setError(err instanceof ApiError ? err.message : t("couldNotLoadSchedule"));
+      });
+  }, [t, canEdit]);
+
+  useEffect(() => {
+    if (canView) load();
+  }, [canView, load]);
+
+  const updateItem = useCallback((id: number, patch: Partial<PublicScheduleItem>) => {
+    setItems((prev) => prev?.map((it) => (it.id === id ? { ...it, ...patch } : it)) ?? prev);
+  }, []);
+
+  const filtered = useMemo(() => {
+    if (!items) return [];
+    const q = query.trim().toLowerCase();
+    let list = q
+      ? items.filter((item) =>
+          `${item.title} ${item.location ?? ""} ${ownerNames(item)}`.toLowerCase().includes(q),
+        )
+      : items;
+    if (audienceFilter.size > 0 || staffOnlyFilter) {
+      list = list.filter((item) => {
+        const audiences = item.audiences ?? [];
+        if (audiences.length === 0) return staffOnlyFilter;
+        return audiences.some((a) => audienceFilter.has(a));
+      });
+    }
+    return list;
+  }, [items, query, audienceFilter, staffOnlyFilter]);
+
+  const groups = useMemo(() => groupByDay(filtered, language), [filtered, language]);
+  const visibleColumns = tableConfig.order.filter(
+    (id) => REQUIRED_COLUMNS.includes(id) || !tableConfig.hidden.includes(id),
+  );
 
   async function remove(item: PublicScheduleItem) {
     setBusy(true);
-    setMutationError(null);
     try {
       await logisticsApi.deleteSchedule(item.id);
       toast.success(t("scheduleItemDeleted"));
-      await load();
+      setDeletingItem(null);
+      load();
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : t("couldNotDeleteScheduleItem");
-      setMutationError({ message });
-      toast.error(message);
+      toast.error(err instanceof ApiError ? err.message : t("couldNotDeleteScheduleItem"));
     } finally {
       setBusy(false);
     }
   }
 
-  if (!canManage) {
-    return <AccessDenied ask={t("scheduleDeniedDesc")} />;
+  async function bulkVisibility(visibility: "shown" | "hidden") {
+    if (selectedIds.size === 0) return;
+    setBusy(true);
+    try {
+      await logisticsApi.setScheduleVisibility([...selectedIds], visibility);
+      toast.success(visibility === "shown" ? t("itemsShown") : t("itemsHidden"));
+      load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotUpdateVisibility"));
+    } finally {
+      setBusy(false);
+    }
   }
 
-  const columns: Column<PublicScheduleItem>[] = [
-    {
-      id: "title",
-      header: t("colItem"),
-      sortValue: (item) => item.title,
-      cell: (item) => (
-        <div>
-          <p className="font-medium">{item.title}</p>
-          {item.description && (
-            <p className="text-muted-foreground line-clamp-1 text-sm">{item.description}</p>
-          )}
-        </div>
-      ),
-    },
-    {
-      id: "type",
-      header: t("colType"),
-      sortValue: (item) => item.type ?? "",
-      cell: (item) => {
-        const Icon = scheduleTypeIcon(item.type);
-        return (
-          <div className="flex items-center gap-2">
-            <StatusBadge tone="neutral" dot={false}>
-              <Icon className="size-3.5" aria-hidden="true" />
-              {scheduleTypeLabel(item.type, t)}
-            </StatusBadge>
-            {item.requiresScan && (
-              <StatusBadge tone="info" dot={false} className="max-w-full whitespace-normal">
-                <ScanLineIcon className="size-3.5" aria-hidden="true" />
-                <span className="break-words">{t("registrableByScanner")}</span>
-              </StatusBadge>
-            )}
-          </div>
-        );
-      },
-    },
-    {
-      id: "starts",
-      header: t("colStarts"),
-      sortValue: (item) => item.startsAt,
-      cell: (item) => (
-        <span className="font-mono text-xs tabular-nums">
-          {formatScheduledDateTime(item.startsAt)}
-        </span>
-      ),
-    },
-    {
-      id: "status",
-      header: t("statusColumn"),
-      sortValue: (item) => scheduleStatus(item),
-      cell: (item) => {
-        const status = scheduleStatus(item);
-        return (
-          <StatusBadge tone={SCHEDULE_STATUS_TONES[status]}>
-            {scheduleStatusLabel(status, t)}
-          </StatusBadge>
-        );
-      },
-    },
-    {
-      id: "location",
-      header: t("locationLabel"),
-      sortValue: (item) => item.location ?? "",
-      cell: (item) => item.location ?? <span className="text-muted-foreground">-</span>,
-    },
-  ];
-  const selectedItem =
-    selectedIds.size === 1 ? items.find((item) => selectedIds.has(String(item.id))) : undefined;
+  async function bulkSchedule(publishAt: string | null) {
+    if (selectedIds.size === 0) return;
+    setBusy(true);
+    try {
+      await logisticsApi.setScheduleBulkPublishAt([...selectedIds], publishAt);
+      toast.success(t("bulkScheduleSet"));
+      load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotUpdateVisibility"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!canView) return <AccessDenied ask={t("manageSchedule")} />;
+
+  const allSelected = filtered.length > 0 && filtered.every((item) => selectedIds.has(item.id));
 
   return (
     <div className="space-y-6" data-wide>
@@ -256,312 +609,743 @@ export default function SchedulePage() {
         title={t("manageSchedule")}
         description={t("manageScheduleDescription")}
         primaryAction={
-          <Button onClick={() => setCreateOpen(true)}>
-            <PlusIcon className="size-4" />
-            {t("newItem")}
-          </Button>
+          canEdit ? (
+            <Button onClick={() => setCreateOpen(true)}>
+              <PlusIcon className="size-4" />
+              {t("newItem")}
+            </Button>
+          ) : undefined
         }
       />
 
-      <DataTable
-        columns={columns}
-        data={items}
-        getRowId={(item) => String(item.id)}
-        loading={loading}
-        error={loadError ? { message: loadError, onRetry: load } : undefined}
-        mutationError={mutationError ?? undefined}
-        selectable
-        selectedIds={selectedIds}
-        onSelectionChange={setSelectedIds}
-        searchable={(item) => `${item.title} ${item.type ?? ""} ${item.location ?? ""}`}
-        searchPlaceholder={t("searchSchedulePlaceholder")}
-        pageSize={20}
-        rowActions={(item) => (
-          <div className="flex justify-end gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={t("editItemAria")}
-              onClick={() => setEditing(item)}
-            >
-              <PencilIcon className="size-4" />
-            </Button>
-            <AlertModal
-              title={t("deleteScheduleItemConfirmTitle")}
-              description={t("deleteScheduleItemConfirmDesc")}
-              cancelLabel={t("cancel")}
-              confirmLabel={t("deleteAction")}
-              destructive
-              pending={busy}
-              trigger={
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label={t("deleteItemAria")}
-                  className="text-destructive"
-                  disabled={busy}
-                >
-                  <Trash2Icon className="size-4" />
-                </Button>
-              }
-              onConfirm={() => void remove(item)}
+      <Card className="gap-0 overflow-hidden py-0">
+        <div className="flex flex-wrap items-center gap-2 p-4">
+          <div className="relative w-full max-w-xs">
+            <SearchIcon
+              className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+              aria-hidden="true"
+            />
+            <Input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t("searchSchedulePlaceholder")}
+              className="h-9 pl-9"
+              aria-label={t("searchSchedulePlaceholder")}
             />
           </div>
-        )}
-        toolbar={
-          selectedIds.size > 0 ? (
-            <>
-              <span className="text-muted-foreground text-sm">
-                {t("selectedCount", { count: selectedIds.size })}
-              </span>
-              {selectedItem && (
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            {canEdit && selectedIds.size > 0 && (
+              <>
+                <span className="text-muted-foreground text-sm">
+                  {t("selectedCount", { count: selectedIds.size })}
+                </span>
                 <Button
                   size="sm"
                   variant="outline"
                   disabled={busy}
-                  onClick={() => setDuplicating(selectedItem)}
+                  onClick={() => bulkVisibility("shown")}
                 >
-                  <CopyIcon className="size-4" />
-                  {t("duplicate")}
+                  <EyeIcon className="size-4" />
+                  {t("show")}
                 </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => bulkVisibility("hidden")}
+                >
+                  <EyeOffIcon className="size-4" />
+                  {t("hide")}
+                </Button>
+                <BulkSchedulePopover disabled={busy} onApply={bulkSchedule} />
+              </>
+            )}
+            {canEdit && (
+              <AudienceFilterPopover
+                selected={audienceFilter}
+                staffOnly={staffOnlyFilter}
+                onChange={(selected, staffOnly) => {
+                  setAudienceFilter(selected);
+                  setStaffOnlyFilter(staffOnly);
+                }}
+              />
+            )}
+            <ColumnConfigPopover config={tableConfig} onChange={setTableConfig} />
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <Table className="table-fixed">
+            <colgroup>
+              {canEdit && <col style={{ width: 40 }} />}
+              {visibleColumns.map((id) => (
+                <col key={id} style={{ width: columnWidths[id] }} />
+              ))}
+              {canEdit && <col style={{ width: 96 }} />}
+            </colgroup>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                {canEdit && (
+                  <TableHead>
+                    <Checkbox
+                      checked={allSelected}
+                      aria-label={t("selectAllAria")}
+                      onCheckedChange={(checked) =>
+                        setSelectedIds(
+                          checked === true ? new Set(filtered.map((i) => i.id)) : new Set(),
+                        )
+                      }
+                    />
+                  </TableHead>
+                )}
+                {visibleColumns.map((id) => (
+                  <ResizableHead
+                    key={id}
+                    id={id}
+                    width={columnWidths[id]}
+                    onResize={handleColumnResize}
+                    onResizeEnd={handleColumnResizeEnd}
+                  >
+                    {t(COLUMN_LABEL_KEYS[id])}
+                  </ResizableHead>
+                ))}
+                {canEdit && <TableHead className="text-right">{t("actionsColumn")}</TableHead>}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {error ? (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={visibleColumns.length + 2} className="p-4">
+                    <ContextualError message={error} onRetry={load} />
+                  </TableCell>
+                </TableRow>
+              ) : items === null ? (
+                Array.from({ length: 6 }, (_, i) => (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: skeleton placeholder rows.
+                  <TableRow key={i} className="hover:bg-transparent">
+                    {Array.from({ length: visibleColumns.length + 2 }, (_, j) => (
+                      // biome-ignore lint/suspicious/noArrayIndexKey: skeleton placeholder cells.
+                      <TableCell key={j}>
+                        <Skeleton className="h-4 w-full max-w-24" />
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : groups.length === 0 ? (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={visibleColumns.length + 2} className="p-0">
+                    <EmptyState icon={CalendarClockIcon} title={t("noScheduleItemsYet")} />
+                  </TableCell>
+                </TableRow>
+              ) : (
+                groups.map((group) => (
+                  <Fragment key={group.label}>
+                    <TableRow className="hover:bg-transparent">
+                      <TableCell
+                        colSpan={visibleColumns.length + 2}
+                        className="bg-muted/50 text-muted-foreground py-1.5 text-xs font-medium"
+                      >
+                        {group.label}
+                      </TableCell>
+                    </TableRow>
+                    {group.items.map((item) => (
+                      <ActivityRow
+                        key={item.id}
+                        item={item}
+                        columns={visibleColumns}
+                        canEdit={canEdit}
+                        selected={selectedIds.has(item.id)}
+                        onToggleSelected={(checked) =>
+                          setSelectedIds((prev) => {
+                            const next = new Set(prev);
+                            if (checked) next.add(item.id);
+                            else next.delete(item.id);
+                            return next;
+                          })
+                        }
+                        onUpdate={(patch) => updateItem(item.id, patch)}
+                        onOpenEdit={() => setEditingItem(item)}
+                        onDuplicate={() => setDuplicatingItem(item)}
+                        onDelete={() => setDeletingItem(item)}
+                      />
+                    ))}
+                  </Fragment>
+                ))
               )}
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={busy}
-                onClick={() => setVisibility("shown")}
-              >
-                <EyeIcon className="size-4" />
-                {t("show")}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={busy}
-                onClick={() => setVisibility("hidden")}
-              >
-                <EyeOffIcon className="size-4" />
-                {t("hide")}
-              </Button>
-            </>
-          ) : undefined
-        }
-        empty={{
-          icon: CalendarDaysIcon,
-          title: t("noScheduleItemsYet"),
-          description: t("createFirstEventItem"),
-        }}
-      />
+            </TableBody>
+          </Table>
+        </div>
+      </Card>
 
       <ScheduleFormModal
         open={createOpen}
         onOpenChange={setCreateOpen}
         title={t("newScheduleItem")}
-        initial={EMPTY_FORM}
-        onSubmit={async (values) => {
-          await logisticsApi.createSchedule(cleanForm(values));
+        initial={EMPTY_SCHEDULE_FORM}
+        onSubmit={async (values, pendingOwnerIds) => {
+          const created = await logisticsApi.createSchedule(cleanScheduleForm(values));
+          await Promise.all(
+            pendingOwnerIds.map((userId) => logisticsApi.addScheduleOwner(created.id, userId)),
+          );
           toast.success(t("scheduleItemCreated"));
           setCreateOpen(false);
-          await load();
+          load();
         }}
       />
 
-      {editing && (
+      {editingItem && (
         <ScheduleFormModal
-          open={Boolean(editing)}
+          open={Boolean(editingItem)}
           onOpenChange={(open) => {
-            if (!open) setEditing(null);
+            if (!open) setEditingItem(null);
           }}
           title={t("editScheduleItem")}
-          initial={toForm(editing)}
+          initial={scheduleItemToForm(editingItem)}
+          scheduleId={editingItem.id}
           onSubmit={async (values) => {
-            await logisticsApi.updateSchedule(editing.id, cleanForm(values));
+            await logisticsApi.updateSchedule(editingItem.id, cleanScheduleForm(values));
             toast.success(t("scheduleItemUpdated"));
-            setEditing(null);
-            await load();
+            setEditingItem(null);
+            // A full edit can move the item to a different day/audience, so
+            // a full reload (not a local patch) keeps grouping/filtering correct.
+            load();
           }}
         />
       )}
 
-      {duplicating && (
+      {duplicatingItem && (
         <ScheduleFormModal
-          open={Boolean(duplicating)}
+          open={Boolean(duplicatingItem)}
           onOpenChange={(open) => {
-            if (!open) setDuplicating(null);
+            if (!open) setDuplicatingItem(null);
           }}
           title={t("duplicateScheduleItem")}
-          initial={toDuplicateForm(duplicating)}
-          onSubmit={async (values) => {
-            await logisticsApi.createSchedule(cleanForm(values));
+          initial={scheduleDuplicateForm(duplicatingItem)}
+          onSubmit={async (values, pendingOwnerIds) => {
+            const created = await logisticsApi.createSchedule(cleanScheduleForm(values));
+            await Promise.all(
+              pendingOwnerIds.map((userId) => logisticsApi.addScheduleOwner(created.id, userId)),
+            );
             toast.success(t("scheduleItemDuplicated"));
-            setDuplicating(null);
-            await load();
+            setDuplicatingItem(null);
+            load();
           }}
+        />
+      )}
+
+      {deletingItem && (
+        <AlertModal
+          open
+          onOpenChange={(open) => {
+            if (!open) setDeletingItem(null);
+          }}
+          title={t("deleteScheduleItemConfirmTitle")}
+          description={t("deleteScheduleItemConfirmDesc")}
+          cancelLabel={t("cancel")}
+          confirmLabel={t("deleteAction")}
+          destructive
+          pending={busy}
+          onConfirm={() => void remove(deletingItem)}
         />
       )}
     </div>
   );
 }
 
-function ScheduleFormModal({
-  open,
-  onOpenChange,
-  title,
-  initial,
-  onSubmit,
+function BulkSchedulePopover({
+  disabled,
+  onApply,
 }: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  title: string;
-  initial: ScheduleInput;
-  onSubmit: (values: ScheduleInput) => Promise<void>;
+  disabled: boolean;
+  onApply: (publishAt: string | null) => Promise<void>;
 }) {
   const { t } = useLocale();
-  const [values, setValues] = useState(initial);
-  const [pending, setPending] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState("");
 
-  useEffect(() => {
-    setValues(initial);
-  }, [initial]);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button size="sm" variant="outline" disabled={disabled}>
+          <CalendarClockIcon className="size-4" />
+          {t("bulkScheduleAction")}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-72 space-y-3">
+        <p className="text-muted-foreground text-sm text-pretty">{t("bulkScheduleHint")}</p>
+        <DateTimeInput id="bulk-schedule-publish-at" value={value} onChange={setValue} />
+        <div className="flex justify-end gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!value}
+            onClick={async () => {
+              await onApply(new Date(value).toISOString());
+              setOpen(false);
+              setValue("");
+            }}
+          >
+            {t("applyAction")}
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
-  async function submit() {
-    setPending(true);
-    try {
-      await onSubmit(values);
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
-    } finally {
-      setPending(false);
+function ActivityRow({
+  item,
+  columns,
+  canEdit,
+  selected,
+  onToggleSelected,
+  onUpdate,
+  onOpenEdit,
+  onDuplicate,
+  onDelete,
+}: {
+  item: PublicScheduleItem;
+  columns: ColumnId[];
+  canEdit: boolean;
+  selected: boolean;
+  onToggleSelected: (checked: boolean) => void;
+  onUpdate: (patch: Partial<PublicScheduleItem>) => void;
+  onOpenEdit: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+}) {
+  const { t, language } = useLocale();
+
+  async function saveTime(field: "startsAt" | "endsAt", hhmm: string) {
+    const next = withTimeOfDay(item[field], hhmm);
+    if (!next || next === item[field]) return;
+    const updated = await logisticsApi.updateSchedule(item.id, { [field]: next });
+    onUpdate(updated);
+  }
+
+  async function saveLocation(next: string) {
+    const trimmed = next.trim();
+    if (trimmed === (item.location ?? "")) return;
+    const updated = await logisticsApi.updateSchedule(item.id, { location: trimmed || null });
+    onUpdate(updated);
+  }
+
+  async function saveNotes(next: string) {
+    const trimmed = next.trim();
+    if (trimmed === (item.notes ?? "")) return;
+    const updated = await logisticsApi.updateSchedule(item.id, { notes: trimmed || null });
+    onUpdate(updated);
+  }
+
+  const status = scheduleStatus(item);
+
+  function renderCell(id: ColumnId) {
+    switch (id) {
+      case "status":
+        return <StatusPill item={item} status={status} />;
+      case "starts":
+        return canEdit ? (
+          <EditableTimeCell
+            value={timeInputValue(item.startsAt)}
+            onSave={(v) => saveTime("startsAt", v)}
+          />
+        ) : (
+          scheduleTimeOfDay(item.startsAt, language)
+        );
+      case "ends":
+        return canEdit ? (
+          <EditableTimeCell
+            value={timeInputValue(item.endsAt)}
+            onSave={(v) => saveTime("endsAt", v)}
+          />
+        ) : (
+          scheduleTimeOfDay(item.endsAt, language)
+        );
+      case "duration":
+        return scheduleDuration(item.startsAt, item.endsAt);
+      case "location":
+        return canEdit ? (
+          <EditableTextCell
+            value={item.location ?? ""}
+            placeholder={t("locationLabel")}
+            onSave={saveLocation}
+          />
+        ) : (
+          (item.location ?? <span className="text-muted-foreground">—</span>)
+        );
+      case "item":
+        return (
+          <button
+            type="button"
+            onClick={canEdit ? onOpenEdit : undefined}
+            disabled={!canEdit}
+            className={
+              canEdit
+                ? "hover:bg-muted -mx-1 w-full rounded px-1 py-0.5 text-left disabled:cursor-default"
+                : "-mx-1 w-full px-1 py-0.5 text-left"
+            }
+            aria-label={canEdit ? t("editItemAria") : undefined}
+          >
+            <p className="truncate font-medium">{item.title}</p>
+            {item.description && (
+              <p className="text-muted-foreground line-clamp-1 text-sm">{item.description}</p>
+            )}
+          </button>
+        );
+      case "owners":
+        return canEdit ? (
+          <EditableOwnersCell item={item} onUpdate={onUpdate} />
+        ) : (
+          ownerNames(item) || <span className="text-muted-foreground">—</span>
+        );
+      case "notes":
+        return canEdit ? (
+          <EditableTextCell value={item.notes ?? ""} onSave={saveNotes} />
+        ) : (
+          (item.notes ?? <span className="text-muted-foreground">—</span>)
+        );
+      default:
+        return null;
     }
   }
 
   return (
-    <Modal open={open} onOpenChange={onOpenChange} title={title} icon={CalendarDaysIcon} size="lg">
-      <div className="space-y-4">
-        <Field id="schedule-title" label={t("titleLabel")}>
-          <Input
-            id="schedule-title"
-            value={values.title}
-            onChange={(e) => setValues((v) => ({ ...v, title: e.target.value }))}
-            placeholder={t("openingCeremonyPlaceholder")}
-          />
-        </Field>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field id="schedule-type" label={t("colType")}>
-            <Select
-              value={values.type ?? "activity"}
-              onValueChange={(type) =>
-                setValues((v) => ({ ...v, type, requiresScan: type === "meal" || v.requiresScan }))
-              }
-            >
-              <SelectTrigger id="schedule-type" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {ACTIVITY_KINDS.map((type) => (
-                  <SelectItem key={type} value={type}>
-                    {scheduleTypeLabel(type, t)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field id="schedule-visibility" label={t("colVisibility")}>
-            <Select
-              value={values.visibility}
-              onValueChange={(visibility) =>
-                setValues((v) => ({ ...v, visibility: visibility as "shown" | "hidden" }))
-              }
-            >
-              <SelectTrigger id="schedule-visibility" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="hidden">{t("hiddenOption")}</SelectItem>
-                <SelectItem value="shown">{t("shownOption")}</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-        </div>
-        <div className="flex items-center gap-2">
+    <TableRow data-state={selected ? "selected" : undefined}>
+      {canEdit && (
+        <TableCell>
           <Checkbox
-            id="requires-scan"
-            checked={values.type === "meal" || values.requiresScan === true}
-            disabled={values.type === "meal"}
-            onCheckedChange={(checked) =>
-              setValues((v) => ({ ...v, requiresScan: checked === true }))
-            }
+            checked={selected}
+            aria-label={t("selectRowAria")}
+            onCheckedChange={(checked) => onToggleSelected(checked === true)}
           />
-          <Label htmlFor="requires-scan" className="font-normal">
-            {t("registrableByScanner")}
-            {values.type === "meal" ? t("mealsAlwaysRegistrable") : ""}
-          </Label>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field id="schedule-starts" label={t("colStarts")}>
-            <DateTimeInput
-              id="schedule-starts"
-              value={values.startsAt}
-              onChange={(startsAt) => setValues((v) => ({ ...v, startsAt }))}
-            />
-          </Field>
-          <Field id="schedule-ends" label={t("endsLabel")}>
-            <DateTimeInput
-              id="schedule-ends"
-              value={values.endsAt}
-              onChange={(endsAt) => setValues((v) => ({ ...v, endsAt }))}
-            />
-          </Field>
-        </div>
-        <Field id="schedule-publish-at" label={t("publishAtLabel")}>
-          <DateTimeInput
-            id="schedule-publish-at"
-            value={values.publishAt ?? ""}
-            onChange={(publishAt) => setValues((v) => ({ ...v, publishAt: publishAt || null }))}
-            nullOption={{ label: t("immediate") }}
-          />
-          <p className="text-muted-foreground text-sm text-pretty">
-            {t("publishDestinationsHint", { timezone: getTimeZoneLabel() })}
-          </p>
-        </Field>
-        <Field id="schedule-location" label={t("locationLabel")}>
-          <Input
-            id="schedule-location"
-            value={values.location ?? ""}
-            onChange={(e) => setValues((v) => ({ ...v, location: e.target.value }))}
-            placeholder={t("mainHallPlaceholder")}
-          />
-        </Field>
-        <Field id="schedule-description" label={t("descriptionLabel")}>
-          <Textarea
-            id="schedule-description"
-            value={values.description ?? ""}
-            onChange={(e) => setValues((v) => ({ ...v, description: e.target.value }))}
-            placeholder={t("visibleInPublicAgenda")}
-          />
-        </Field>
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            {t("cancel")}
-          </Button>
-          <SubmitButton
-            pending={pending}
-            onClick={submit}
-            disabled={!values.title || !values.startsAt || !values.endsAt}
-          >
-            {t("save")}
-          </SubmitButton>
-        </div>
-      </div>
-    </Modal>
+        </TableCell>
+      )}
+      {columns.map((id) => (
+        <TableCell key={id} className="relative">
+          {renderCell(id)}
+        </TableCell>
+      ))}
+      {canEdit && (
+        <TableCell className="text-right">
+          <div className="flex justify-end gap-0.5">
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={t("editItemAria")}
+              className="size-7"
+              onClick={onOpenEdit}
+            >
+              <PencilIcon className="size-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={t("duplicate")}
+              className="size-7"
+              onClick={onDuplicate}
+            >
+              <CopyIcon className="size-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={t("deleteItemAria")}
+              className="text-destructive size-7"
+              onClick={onDelete}
+            >
+              <Trash2Icon className="size-3.5" />
+            </Button>
+          </div>
+        </TableCell>
+      )}
+    </TableRow>
   );
 }
 
-function Field({ id, label, children }: { id: string; label: string; children: React.ReactNode }) {
+function StatusPill({
+  item,
+  status,
+}: {
+  item: PublicScheduleItem;
+  status: ReturnType<typeof scheduleStatus>;
+}) {
+  const { t } = useLocale();
+  const badge = (
+    <StatusBadge tone={SCHEDULE_STATUS_TONES[status]}>{scheduleStatusLabel(status, t)}</StatusBadge>
+  );
+  if (status === "scheduled" && item.publishAt) {
+    return <span title={new Date(item.publishAt).toLocaleString()}>{badge}</span>;
+  }
+  return badge;
+}
+
+/**
+ * Click (mouse or keyboard Enter/Space on the focused trigger) to edit;
+ * Enter or blur commits, Escape reverts — the same contract for every
+ * inline-editable cell in this table (H59).
+ */
+function EditableTextCell({
+  value,
+  placeholder,
+  onSave,
+}: {
+  value: string;
+  placeholder?: string;
+  onSave: (next: string) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const [saving, setSaving] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!editing) setDraft(value);
+  }, [value, editing]);
+
+  useEffect(() => {
+    if (editing) inputRef.current?.focus();
+  }, [editing]);
+
+  async function commit() {
+    setSaving(true);
+    try {
+      await onSave(draft);
+    } finally {
+      setSaving(false);
+      setEditing(false);
+    }
+  }
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className="hover:bg-muted -mx-1 block w-full truncate rounded px-1 py-0.5 text-left"
+      >
+        {value || <span className="text-muted-foreground">{placeholder ?? "—"}</span>}
+      </button>
+    );
+  }
+  // Pops out over neighboring cells instead of clipping when the column is
+  // narrower than the content being edited (H59) — the cell itself has no
+  // overflow-hidden, so this is free to render past the column's edge.
   return (
-    <div className="space-y-2">
-      <Label htmlFor={id}>{label}</Label>
-      {children}
+    <div
+      className="bg-popover border-border absolute inset-y-0 left-0 z-20 flex items-center rounded-md border shadow-md"
+      style={{ width: "max(100%, 12rem)" }}
+    >
+      <Input
+        ref={inputRef}
+        value={draft}
+        disabled={saving}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit();
+          } else if (e.key === "Escape") {
+            setDraft(value);
+            setEditing(false);
+          }
+        }}
+        className="h-7 w-full border-0 bg-transparent text-sm shadow-none"
+      />
     </div>
+  );
+}
+
+/** HH:MM, 24-hour, e.g. "08:00" or "23:45" — rejects anything else. */
+const TIME_24H_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+/**
+ * Plain HH:MM text field, not the native `<input type="time">` — that
+ * control's AM/PM-vs-24h rendering follows the OS locale, not this app's
+ * locale, so it can't guarantee a 24-hour clock across browsers/systems.
+ */
+function EditableTimeCell({
+  value,
+  onSave,
+}: {
+  value: string;
+  onSave: (next: string) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const [saving, setSaving] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!editing) setDraft(value);
+  }, [value, editing]);
+
+  useEffect(() => {
+    if (editing) inputRef.current?.focus();
+  }, [editing]);
+
+  async function commit() {
+    if (!TIME_24H_PATTERN.test(draft)) {
+      setDraft(value);
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSave(draft);
+    } finally {
+      setSaving(false);
+      setEditing(false);
+    }
+  }
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className="hover:bg-muted -mx-1 w-full rounded px-1 py-0.5 text-left"
+      >
+        {value}
+      </button>
+    );
+  }
+  return (
+    <div
+      className="bg-popover border-border absolute inset-y-0 left-0 z-20 flex items-center rounded-md border shadow-md"
+      style={{ width: "max(100%, 6rem)" }}
+    >
+      <Input
+        ref={inputRef}
+        type="text"
+        inputMode="numeric"
+        placeholder="HH:MM"
+        value={draft}
+        disabled={saving}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit();
+          } else if (e.key === "Escape") {
+            setDraft(value);
+            setEditing(false);
+          }
+        }}
+        className="h-7 w-full border-0 bg-transparent font-mono text-sm tabular-nums shadow-none"
+      />
+    </div>
+  );
+}
+
+/** Responsible-person editor (H59), a compact popover version of the schedule editor's OwnersField. */
+function EditableOwnersCell({
+  item,
+  onUpdate,
+}: {
+  item: PublicScheduleItem;
+  onUpdate: (patch: Partial<PublicScheduleItem>) => void;
+}) {
+  const { t } = useLocale();
+  const [open, setOpen] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const owners = item.owners ?? [];
+
+  const ownerUserIds = new Set(owners.map((o) => o.userId));
+  async function searchAvailableUsers(query: string): Promise<UserOption[]> {
+    try {
+      const r = await logisticsApi.scheduleOwnerCandidates(query);
+      return r.users.filter((u) => !ownerUserIds.has(u.id));
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 403) toast.error(t("needScheduleManageSearch"));
+      else toast.error(t("searchFailed"));
+      return [];
+    }
+  }
+
+  async function refresh() {
+    const r = await logisticsApi.scheduleOwners(item.id);
+    onUpdate({
+      owners: r.owners.map((o) => ({ userId: o.userId, name: o.name, surname: o.surname })),
+    });
+  }
+
+  async function add(userId: number) {
+    setBusy(true);
+    try {
+      await logisticsApi.addScheduleOwner(item.id, userId);
+      setSelectedUserId("");
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(userId: number) {
+    setBusy(true);
+    try {
+      await logisticsApi.removeScheduleOwner(item.id, userId);
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="hover:bg-muted -mx-1 block w-full truncate rounded px-1 py-0.5 text-left"
+        >
+          {ownerNames(item) || <span className="text-muted-foreground">{t("noOwnersYet")}</span>}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-80 space-y-3">
+        <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+          <UserPicker
+            value={selectedUserId}
+            onChange={setSelectedUserId}
+            search={searchAvailableUsers}
+            minQueryLength={2}
+            inDialog
+          />
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={busy || !selectedUserId}
+            onClick={() => add(Number(selectedUserId))}
+          >
+            {t("addAction")}
+          </Button>
+        </div>
+        {owners.length === 0 ? (
+          <p className="text-muted-foreground text-sm">{t("noOwnersYet")}</p>
+        ) : (
+          <ul className="space-y-1">
+            {owners.map((owner) => (
+              <li key={owner.userId} className="flex items-center justify-between gap-2 text-sm">
+                {[owner.name, owner.surname].filter(Boolean).join(" ") || t("noOwnersYet")}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-6"
+                  aria-label={t("remove")}
+                  disabled={busy}
+                  onClick={() => remove(owner.userId)}
+                >
+                  <XIcon className="size-3.5" />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }

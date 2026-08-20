@@ -73,8 +73,8 @@ workspace never over-grants access.
 | Projects and imports | Projects, Resolve import | `projects:read`, `projects:import`, `judge:panel`, or an assigned-judge/sponsor-rep association |
 | Live judging | Queue operations, Judging, Rooms, Reviews, Judging window | `queue:operate`, `queue:admin`, `judge:panel`, an assigned-judge association (Judging), or a sponsor-rep association (Rooms); Judging window is `queue:admin` only |
 | Logistics | Accreditation, Meals, Activities, Presence, Logistics stats | `accredit:scan`, `activity:scan`, `presence:scan`, `logistics:stats` (each item its own capability — H22-H27 per-station gating) |
-| Programme | Manage schedule, TV control, Announcements | `schedule:manage` (also judge-visible), `tv:control`, `announcements:manage` |
-| Sponsors | Enterprises, Challenges | `sponsors:manage`, `queue:admin`, or a sponsor-rep association |
+| Programme | Manage schedule, TV control, Announcements | Manage schedule: any account holding at least one capability (H59 `staffVisible` — full CRUD incl. hidden/draft items is further gated by `schedule:manage` inside the page itself, not at the nav level), `tv:control`, `announcements:manage` |
+| Sponsors | Enterprises, Challenges, Sponsor FAQ | `sponsors:manage`, `queue:admin`, or a sponsor-rep association (Sponsor FAQ: `sponsors:manage` only, plus sponsor-rep read access enforced server-side) |
 | Event setup (`Configuración` in es/gl) | Event settings, Libraries | Event settings: any of `event:manage`, `venue:manage`, `wallet:manage`, `presence:manage`, `invites:manage` (each tab within it individually gated by its own capability — H8); Libraries: `intolerances:manage` |
 | Access and audit | Users, Permissions, Audit log | `users:read`, `permissions:manage`, `audit:read` |
 

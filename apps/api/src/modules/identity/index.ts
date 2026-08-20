@@ -7,6 +7,7 @@ import { registerPermissionGroupRoutes } from "./routes/permissions.js";
 import { registerProfileRoutes } from "./routes/profile.js";
 import { registerResendVerificationRoutes } from "./routes/resend-verification.js";
 import { registerSecondaryEmailRoutes } from "./routes/secondary-email.js";
+import { registerUiPrefsRoutes } from "./routes/ui-prefs.js";
 
 /**
  * Identity module (H1-H10). Mounts Better Auth's own handler under
@@ -62,6 +63,7 @@ export async function registerIdentityModule(app: FastifyInstance): Promise<void
   registerSecondaryEmailRoutes(app);
   registerPermissionGroupRoutes(app);
   registerInviteRoutes(app);
+  registerUiPrefsRoutes(app);
 }
 
 async function betterAuthPassthrough(

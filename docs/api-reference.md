@@ -73,8 +73,13 @@ permission-group graph: capability groups, groups-of-groups with cycle
 rejection, and the `ADMIN_ALL` wildcard's "at least one active holder"
 invariant (`permission-graph.ts`). Account removal (H54) branches to hard
 delete or field-level anonymization depending on whether the account has any
-retained activity. `docs/modules-1-5.md` M1 tracks recent story-level changes
-here.
+retained activity. A generic per-account UI-preference store (`GET/PATCH
+/api/me/ui-prefs`, H59) namespaces one jsonb column by view (e.g.
+`scheduleTable` holds the Manage Schedule table's column visibility/order) —
+a thin merge-patch, not a table per view; the browser also keeps a
+localStorage copy for an instant read, and this is what makes the preference
+follow the account across devices. `docs/modules-1-5.md` M1 tracks recent
+story-level changes here.
 
 ### applications (H11–H15, H27)
 Configurable application forms (`applications` table), an applicant's
@@ -111,13 +116,41 @@ precedence: operator override → scheduled `tv_slots` → default rooms) all
 live here. Every queue action writes exactly one history row and emits
 exactly one broadcast (`plan/07` invariant 5).
 
-### logistics (H22–H27)
+### logistics (H22–H27, H59)
 Accreditation (badge issuance, rotation, revocation), presence (door in/out
 with certainty-window derivation and conflict detection), meal/activity
 scanning, the pre-event schedule, cross-station people search, and Apple/Google
 Wallet pass issuance + the Apple PassKit web-service protocol. Scanner
 mutation routes carry `idempotencyGuard` so an offline device's queued retries
 never double-apply.
+
+Schedule items (H48) carry an optional `audiences` set
+(`sponsor`/`participant`/`mentor`, independent of `visibility`/`publishAt`).
+Staff always sees every live item unconditionally and is never a stored
+audience value; an empty `audiences` array means "staff-only". There is no
+separate `public` audience — the anonymous web/TV feed is served exactly the
+`participant` slice. Items also carry an optional staff-only `notes`
+free-text field (the run-of-show's "observations" column), an optional
+`contactNote`, and responsible-person assignment via `schedule_owners`
+(`GET/POST /api/schedule/:id/owners`, `DELETE /api/schedule/:id/owners/:userId`,
+`SCHEDULE_MANAGE`-gated, modeled on the `sponsors` enterprise-member join
+table). Picking a responsible person searches `GET /api/schedule/owner-candidates`
+— `SCHEDULE_MANAGE`-gated like the write itself, deliberately not the broader
+`USERS_READ` (mirrors `projects`' `listProjectMemberCandidates`). A scannable
+item must include `participant` in its `audiences`; the API rejects
+`requiresScan: true` otherwise (H59 — a staff/sponsor/mentor-only item has no
+business being scanner-registrable). `POST /api/schedule/publish-at` sets a
+shared scheduled-reveal time for several items at once (`SCHEDULE_MANAGE`,
+one audit entry + one broadcast for the whole batch), alongside the existing
+single-item `publishAt` field and the bulk `POST /api/schedule/visibility`.
+`GET /api/public/activities` is audience-aware and anonymous-callable
+(treated as `participant`). An authenticated caller holding any capability
+("staff") bypasses the audience filter entirely and sees every *live* item —
+the full run-of-show, each with its owners, contactNote, and notes; the
+`SCHEDULE_MANAGE`-gated `GET /api/schedule` additionally includes hidden/draft
+items and is what the web "Manage Schedule" table uses. A linked sponsor rep
+instead only sees items explicitly tagged `sponsor`, with owners/contactNote
+but never the (staff-internal) notes. One feed, not three parallel endpoints.
 
 ### notifications (H50–H53)
 The in-app inbox, scheduled announcements (with translations and a
@@ -131,12 +164,14 @@ retry queue here on purpose.
 ### sponsors (H43–H45, H58)
 Enterprises, sponsor (rep) membership on an enterprise, and the
 enterprise-invite-link flow that lets an org self-serve rep accounts without
-staff creating each one by hand. Also owns the sponsor-only logistics/FAQ
-singleton (`GET/PUT /api/sponsor-faq`, H58) — trilingual content readable by
-any linked sponsor rep or a `sponsors:manage` admin, writable only by the
-latter; access is a "sponsor-portal-access" contextual policy (any row in
-`sponsors`, deliberately narrower than `challenges`' judge-inclusive
-`challenge-directory` policy).
+staff creating each one by hand. Also owns the sponsor-only FAQ singleton
+(`GET/PUT /api/sponsor-faq`, H58) — an ordered `items` array, each item either
+a Q&A pair (`kind: 'qa'`) or a free-form text block (`kind: 'text'`), trilingual,
+saved wholesale (same "admin-edited jsonb array" shape as
+`challenges.prizes`/`judging_panel_criteria`). Readable by any linked sponsor
+rep or a `sponsors:manage` admin, writable only by the latter; access is a
+"sponsor-portal-access" contextual policy (any row in `sponsors`, deliberately
+narrower than `challenges`' judge-inclusive `challenge-directory` policy).
 
 ### event (H45, H47)
 The `event_config` singleton: event identity/tagline, the public countdown

@@ -29,6 +29,7 @@ function contextFor(
     canAny: (...cs: Capability[]) => cs.some(can),
     isRoomJudge: associations.isRoomJudge ?? false,
     isSponsorRep: associations.isSponsorRep ?? false,
+    hasAnyCapability: capabilities.length > 0,
     isPureApplicant: associations.isPureApplicant ?? false,
     hasProject: associations.hasProject ?? true,
     hasQueueItems: associations.hasQueueItems ?? true,
@@ -166,22 +167,22 @@ describe("admin wildcard (H8)", () => {
 });
 
 describe("capability-gated workspace, no association or wildcard", () => {
-  it("gives a decision-only account the Applications workspace without builder or reviewer capability", () => {
+  it("gives a decision-only account the Applications workspace without builder or reviewer capability, plus Programme's Manage schedule view (H59, any capability holder)", () => {
     const ctx = contextFor([CAPABILITIES.APPLICATIONS_DECIDE]);
-    expect(visibleWorkspaceIds(ctx)).toEqual(["applications"]);
-    expect(visibleHrefs(ctx)).toEqual(["/applications"]);
+    expect(visibleWorkspaceIds(ctx)).toEqual(["applications", "programme"]);
+    expect(visibleHrefs(ctx)).toEqual(["/applications", "/schedule"]);
   });
 
-  it("a bare accreditation scanner only sees Logistics", () => {
+  it("a bare accreditation scanner sees Logistics plus Programme's Manage schedule view (H59)", () => {
     const ctx = contextFor([CAPABILITIES.ACCREDIT_SCAN]);
-    expect(visibleWorkspaceIds(ctx)).toEqual(["logistics"]);
-    expect(visibleHrefs(ctx)).toEqual(["/logistics/accreditation"]);
+    expect(visibleWorkspaceIds(ctx)).toEqual(["logistics", "programme"]);
+    expect(visibleHrefs(ctx)).toEqual(["/logistics/accreditation", "/schedule"]);
   });
 
-  it("puts announcement management in Programme, alongside schedule and TV control", () => {
+  it("puts announcement management in Programme, alongside Manage schedule and TV control", () => {
     const ctx = contextFor([CAPABILITIES.ANNOUNCEMENTS_MANAGE]);
     expect(visibleWorkspaceIds(ctx)).toEqual(["programme"]);
-    expect(visibleHrefs(ctx)).toEqual(["/announcements"]);
+    expect(visibleHrefs(ctx)).toEqual(["/schedule", "/announcements"]);
     expect(WORKSPACES.some((workspace) => workspace.id === "communications")).toBe(false);
   });
 

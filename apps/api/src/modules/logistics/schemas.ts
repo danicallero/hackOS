@@ -226,6 +226,15 @@ export const appleLogBody = z.object({
 
 export const scheduleIdParam = z.object({ id: z.coerce.number().int().positive() });
 
+/**
+ * H59: who a live schedule item is shown to, on top of always-on staff
+ * visibility (never stored — every live item is visible to staff
+ * unconditionally). Empty is valid and means "staff-only". `participant`
+ * also drives the anonymous public site/TV feed — there's no audience
+ * distinct from "what participants see" for anonymous visitors.
+ */
+export const scheduleAudience = z.enum(["sponsor", "participant", "mentor"]);
+
 export const scheduleBody = z.object({
   title: z.string().min(1).max(300),
   description: z.string().max(4000).nullable().optional(),
@@ -236,6 +245,9 @@ export const scheduleBody = z.object({
   endsAt: z.coerce.date(),
   visibility: z.enum(["shown", "hidden"]).default("hidden"),
   publishAt: z.coerce.date().nullable().optional(),
+  audiences: z.array(scheduleAudience).max(3).default([]),
+  contactNote: z.string().max(300).nullable().optional(),
+  notes: z.string().max(4000).nullable().optional(),
 });
 
 export const schedulePatchBody = scheduleBody.partial();
@@ -243,4 +255,21 @@ export const schedulePatchBody = scheduleBody.partial();
 export const scheduleVisibilityBody = z.object({
   ids: z.array(z.coerce.number().int().positive()).min(1).max(200),
   visibility: z.enum(["shown", "hidden"]),
+});
+
+/** Bulk "schedule these hidden items to reveal at once" (H59). */
+export const scheduleBulkPublishAtBody = z.object({
+  ids: z.array(z.coerce.number().int().positive()).min(1).max(200),
+  publishAt: z.coerce.date().nullable(),
+});
+
+export const scheduleOwnerBody = z.object({ userId: z.coerce.number().int().positive() });
+export const scheduleOwnerParams = z.object({
+  id: z.coerce.number().int().positive(),
+  userId: z.coerce.number().int().positive(),
+});
+
+export const scheduleOwnerCandidatesQuery = z.object({
+  q: z.string().trim().min(2),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
 });

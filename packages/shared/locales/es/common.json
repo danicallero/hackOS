@@ -37,6 +37,7 @@
   "typeWorkshop": "Taller",
   "typeTalk": "Charla",
   "typeCeremony": "Ceremonia",
+  "typeDeadline": "Fecha límite",
   "typeOther": "Otro",
   "save": "Guardar",
   "presenceConflictTitle": "Conflicto en la cronología",

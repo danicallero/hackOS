@@ -27,8 +27,8 @@ async function createScheduleItem(opts: {
   publishAt: Date | null;
 }): Promise<number> {
   const { rows } = await pool.query(
-    `INSERT INTO schedule (title, starts_at, ends_at, visibility, publish_at)
-     VALUES ($1, now() + interval '1 day', now() + interval '1 day 1 hour', $2, $3)
+    `INSERT INTO schedule (title, starts_at, ends_at, visibility, publish_at, audiences)
+     VALUES ($1, now() + interval '1 day', now() + interval '1 day 1 hour', $2, $3, '{participant}')
      RETURNING id`,
     [`Activity ${crypto.randomUUID()}`, opts.visibility, opts.publishAt],
   );

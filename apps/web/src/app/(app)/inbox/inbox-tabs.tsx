@@ -74,6 +74,7 @@ function kindLabelMap(t: Translate): Record<string, string> {
     talk: t("kindTalk"),
     ceremony: t("kindCeremony"),
     activity: t("kindActivity"),
+    deadline: t("kindDeadline"),
     other: t("kindOther"),
   };
 }

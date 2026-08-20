@@ -37,6 +37,7 @@
   "typeWorkshop": "Workshop",
   "typeTalk": "Talk",
   "typeCeremony": "Ceremony",
+  "typeDeadline": "Deadline",
   "typeOther": "Other",
   "save": "Save",
   "presenceConflictTitle": "Timeline conflict",

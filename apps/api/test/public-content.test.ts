@@ -93,11 +93,11 @@ describe("public content catalog (H48, H49)", () => {
     );
 
     await pool.query(
-      `INSERT INTO schedule (title, description, location, type, starts_at, ends_at, visibility, publish_at)
+      `INSERT INTO schedule (title, description, location, type, starts_at, ends_at, visibility, publish_at, audiences)
        VALUES
-       ('Opening', 'Kickoff', 'Main Stage', 'ceremony', now() + interval '1 hour', now() + interval '2 hours', 'shown', now() - interval '1 hour'),
-       ('Private Ops', 'Staff only', 'Backstage', 'other', now() + interval '3 hours', now() + interval '4 hours', 'hidden', now() - interval '1 hour'),
-       ('Future Reveal', 'Will be published later', 'Hall B', 'workshop', now() + interval '5 hours', now() + interval '6 hours', 'shown', now() + interval '1 hour')`,
+       ('Opening', 'Kickoff', 'Main Stage', 'ceremony', now() + interval '1 hour', now() + interval '2 hours', 'shown', now() - interval '1 hour', '{participant}'),
+       ('Private Ops', 'Staff only', 'Backstage', 'other', now() + interval '3 hours', now() + interval '4 hours', 'hidden', now() - interval '1 hour', '{participant}'),
+       ('Future Reveal', 'Will be published later', 'Hall B', 'workshop', now() + interval '5 hours', now() + interval '6 hours', 'shown', now() + interval '1 hour', '{participant}')`,
     );
 
     const server = await getApp();

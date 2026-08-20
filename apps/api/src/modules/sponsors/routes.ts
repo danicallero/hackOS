@@ -289,9 +289,9 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
       ...access({ kind: "contextual", policy: "sponsor-portal-access" }),
       preHandler: requireSponsorPortalAccess,
       schema: {
-        summary: "Read sponsor logistics FAQ",
+        summary: "Read sponsor FAQ",
         description:
-          "Trilingual logistics/FAQ content for sponsor reps (H58): venue, load-in window, merch drop-off deadline, point of contact. Readable by any linked sponsor representative or a SPONSORS_MANAGE admin.",
+          "Ordered list of trilingual FAQ items for sponsor reps (H58): question/answer pairs (kind='qa') and free-form text blocks (kind='text'), e.g. venue, load-in window, merch drop-off deadline. Readable by any linked sponsor representative or a SPONSORS_MANAGE admin.",
       },
     },
     async () => getSponsorFaq(),
@@ -304,11 +304,11 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
       preHandler: manage,
       schema: {
         body: sponsorFaqBody,
-        summary: "Update sponsor logistics FAQ",
+        summary: "Update sponsor FAQ",
         description:
-          "Replaces the sponsor logistics/FAQ content (H58), trilingual (en/es/gl). SPONSORS_MANAGE only.",
+          "Replaces the sponsor FAQ items wholesale (H58), each trilingual (en/es/gl). SPONSORS_MANAGE only.",
       },
     },
-    async (req) => updateSponsorFaq(actor(req.userId), req.body.contentI18n),
+    async (req) => updateSponsorFaq(actor(req.userId), req.body.items),
   );
 }

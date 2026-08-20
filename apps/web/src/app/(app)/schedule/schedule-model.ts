@@ -1,11 +1,12 @@
 import {
   CalendarDaysIcon,
+  FlagIcon,
   MicIcon,
   PartyPopperIcon,
   SparklesIcon,
   UtensilsIcon,
 } from "lucide-react";
-import type { Translate } from "@/lib/i18n";
+import { LOCALE_CODES, type Translate } from "@/lib/i18n";
 import type { PublicScheduleItem } from "@/lib/logistics";
 import type { Tone } from "@/lib/tones";
 
@@ -17,6 +18,7 @@ const TYPE_ICONS: Record<string, typeof CalendarDaysIcon> = {
   workshop: MicIcon,
   talk: MicIcon,
   ceremony: PartyPopperIcon,
+  deadline: FlagIcon,
   other: CalendarDaysIcon,
 };
 
@@ -35,6 +37,7 @@ export function scheduleTypeLabel(type: string | null | undefined, t: Translate)
     workshop: t("typeWorkshop"),
     talk: t("typeTalk"),
     ceremony: t("typeCeremony"),
+    deadline: t("typeDeadline"),
     other: t("typeOther"),
   };
   return (type && labels[type]) || t("typeActivity");
@@ -69,4 +72,73 @@ export function scheduleStatusLabel(status: ScheduleStatus, t: Translate): strin
     ended: t("statusEnded"),
   };
   return labels[status];
+}
+
+/**
+ * H59: who a live item is shown to, independent of visibility/publishAt.
+ * Staff always sees everything implicitly and is never a stored value or a
+ * selectable checkbox; leaving all three unchecked means "staff-only".
+ * Anonymous/public web+TV feeds are served the same slice as "participant" —
+ * there is no separate "public" audience.
+ */
+export const SCHEDULE_AUDIENCES = ["sponsor", "participant", "mentor"] as const;
+export type ScheduleAudience = (typeof SCHEDULE_AUDIENCES)[number];
+
+export function scheduleAudienceLabel(audience: ScheduleAudience, t: Translate): string {
+  const labels: Record<ScheduleAudience, string> = {
+    sponsor: t("audienceSponsor"),
+    participant: t("audienceParticipant"),
+    mentor: t("audienceMentor"),
+  };
+  return labels[audience];
+}
+
+/** Short "Fri 22/08" style day label for a run-of-show table (H59). */
+export function scheduleDayLabel(iso: string, language: keyof typeof LOCALE_CODES): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat(LOCALE_CODES[language], {
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit",
+  }).format(date);
+}
+
+/** "08:00" time-of-day for a run-of-show table's separate Start/End columns (H59). */
+export function scheduleTimeOfDay(iso: string, language: keyof typeof LOCALE_CODES): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat(LOCALE_CODES[language], {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
+}
+
+/** "1:30" h:mm duration between two ISO timestamps, auto-computed (H59). */
+export function scheduleDuration(startsAt: string, endsAt: string): string {
+  const start = new Date(startsAt).getTime();
+  const end = new Date(endsAt).getTime();
+  if (Number.isNaN(start) || Number.isNaN(end) || end <= start) return "";
+  const totalMinutes = Math.round((end - start) / 60_000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours}:${String(minutes).padStart(2, "0")}`;
+}
+
+/** HH:mm (local time) for populating a `<input type="time">` from an ISO timestamp. */
+export function timeInputValue(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
+/** Re-applies a new HH:mm to an existing ISO timestamp's date, keeping the date unchanged. */
+export function withTimeOfDay(iso: string, hhmm: string): string | null {
+  const match = /^(\d{2}):(\d{2})$/.exec(hhmm);
+  if (!match) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setHours(Number(match[1]), Number(match[2]), 0, 0);
+  return date.toISOString();
 }

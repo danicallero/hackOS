@@ -1050,6 +1050,7 @@ function activityKindLabel(kind: string, t: ReturnType<typeof useLocale>["t"]): 
     workshop: t("notificationsKindWorkshop"),
     talk: t("notificationsKindTalk"),
     ceremony: t("notificationsKindCeremony"),
+    deadline: t("notificationsKindDeadline"),
     other: t("notificationsKindOther"),
   };
   return labels[kind] ?? kind;

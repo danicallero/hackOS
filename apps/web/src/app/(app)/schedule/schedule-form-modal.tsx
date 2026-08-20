@@ -1,0 +1,562 @@
+"use client";
+
+// Shared schedule item create/edit modal (H48/H59) — used by the Manage
+// Schedule table (/schedule; click an item's title/description cell to open
+// it here for a full edit, including moving an item to a different day via
+// its full Starts date).
+
+import { ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
+import { CalendarDaysIcon, ChevronDownIcon, XIcon } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
+import { DateTimeInput } from "@/components/common/datetime-input";
+import { Modal } from "@/components/common/modal";
+import { SectionCard } from "@/components/common/section-card";
+import { Spinner } from "@/components/common/spinner";
+import { SubmitButton } from "@/components/common/submit-button";
+import { type UserOption, UserPicker } from "@/components/common/user-picker";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { ApiError } from "@/lib/api";
+import { getTimeZoneLabel, toDatetimeLocal } from "@/lib/datetime";
+import { useLocale } from "@/lib/i18n";
+import {
+  logisticsApi,
+  type PublicScheduleItem,
+  type ScheduleInput,
+  type ScheduleOwner,
+} from "@/lib/logistics";
+import { cn } from "@/lib/utils";
+import { SCHEDULE_AUDIENCES, scheduleAudienceLabel, scheduleTypeLabel } from "./schedule-model";
+
+export const EMPTY_SCHEDULE_FORM: ScheduleInput = {
+  title: "",
+  description: "",
+  location: "",
+  type: "activity",
+  requiresScan: false,
+  startsAt: "",
+  endsAt: "",
+  visibility: "hidden",
+  publishAt: null,
+  // Unchecked/empty is a valid state and means staff-only (H59) — no default audience.
+  audiences: [],
+  contactNote: "",
+  notes: "",
+};
+
+export function scheduleItemToForm(item: PublicScheduleItem): ScheduleInput {
+  return {
+    title: item.title,
+    description: item.description ?? "",
+    location: item.location ?? "",
+    type: item.type ?? "activity",
+    requiresScan: item.requiresScan ?? false,
+    startsAt: item.startsAt,
+    endsAt: item.endsAt,
+    visibility: item.visibility ?? "hidden",
+    publishAt: item.publishAt,
+    audiences: item.audiences ?? [],
+    contactNote: item.contactNote ?? "",
+    notes: item.notes ?? "",
+  };
+}
+
+export function scheduleDuplicateForm(item: PublicScheduleItem): ScheduleInput {
+  return {
+    ...scheduleItemToForm(item),
+    title: `${item.title} (copy)`,
+    // A duplicated item should not unexpectedly appear on the public agenda.
+    visibility: "hidden",
+    publishAt: null,
+  };
+}
+
+export function cleanScheduleForm(form: ScheduleInput): ScheduleInput {
+  return {
+    title: form.title.trim(),
+    description: form.description?.trim() || null,
+    location: form.location?.trim() || null,
+    type: form.type?.trim() || null,
+    requiresScan: form.type === "meal" || form.requiresScan === true,
+    startsAt: new Date(form.startsAt).toISOString(),
+    endsAt: new Date(form.endsAt).toISOString(),
+    visibility: form.visibility,
+    publishAt: form.publishAt ? new Date(form.publishAt).toISOString() : null,
+    audiences: form.audiences ?? [],
+    contactNote: form.contactNote?.trim() || null,
+    notes: form.notes?.trim() || null,
+  };
+}
+
+export function ScheduleFormModal({
+  open,
+  onOpenChange,
+  title,
+  initial,
+  onSubmit,
+  scheduleId,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  title: string;
+  initial: ScheduleInput;
+  /**
+   * `pendingOwnerIds` is only populated in create mode (no `scheduleId` yet)
+   * — the caller is responsible for assigning them to the newly created item
+   * (H59: the responsible-person picker needs to work before the row exists).
+   */
+  onSubmit: (values: ScheduleInput, pendingOwnerIds: number[]) => Promise<void>;
+  /** Present only when editing an existing item — owner assignment needs a real id. */
+  scheduleId?: number;
+}) {
+  const { t } = useLocale();
+  const [values, setValues] = useState(initial);
+  const [pending, setPending] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [scheduledPublish, setScheduledPublish] = useState(Boolean(initial.publishAt));
+  const [pendingOwners, setPendingOwners] = useState<UserOption[]>([]);
+
+  useEffect(() => {
+    setValues(initial);
+    setAdvancedOpen(false);
+    setScheduledPublish(Boolean(initial.publishAt));
+    setPendingOwners([]);
+  }, [initial]);
+
+  async function submit() {
+    setPending(true);
+    try {
+      await onSubmit(
+        values,
+        pendingOwners.map((o) => o.id),
+      );
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  const isParticipant = (values.audiences ?? []).includes("participant");
+  const isMeal = values.type === "meal";
+
+  function toggleAudience(audience: (typeof SCHEDULE_AUDIENCES)[number], checked: boolean) {
+    setValues((v) => {
+      const current = new Set(v.audiences ?? []);
+      if (checked) current.add(audience);
+      else current.delete(audience);
+      // Only a participant-visible item can be scanner-registrable (H59).
+      const requiresScan = audience === "participant" && !checked ? false : v.requiresScan;
+      return { ...v, audiences: Array.from(current), requiresScan };
+    });
+  }
+
+  return (
+    <Modal open={open} onOpenChange={onOpenChange} title={title} icon={CalendarDaysIcon} size="xl">
+      <div className="space-y-5">
+        <Field id="schedule-title" label={t("titleLabel")}>
+          <Input
+            id="schedule-title"
+            value={values.title}
+            onChange={(e) => setValues((v) => ({ ...v, title: e.target.value }))}
+            placeholder={t("openingCeremonyPlaceholder")}
+          />
+        </Field>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field id="schedule-type" label={t("colType")}>
+            <Select
+              value={values.type ?? "activity"}
+              onValueChange={(type) =>
+                setValues((v) => ({
+                  ...v,
+                  type,
+                  requiresScan: type === "meal" || v.requiresScan,
+                }))
+              }
+            >
+              <SelectTrigger id="schedule-type" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ACTIVITY_KINDS.map((type) => (
+                  <SelectItem key={type} value={type}>
+                    {scheduleTypeLabel(type, t)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field id="schedule-visibility" label={t("colVisibility")}>
+            <Select
+              value={values.visibility}
+              onValueChange={(visibility) =>
+                setValues((v) => ({ ...v, visibility: visibility as "shown" | "hidden" }))
+              }
+            >
+              <SelectTrigger id="schedule-visibility" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="hidden">{t("hiddenOption")}</SelectItem>
+                <SelectItem value="shown">{t("shownOption")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+        </div>
+
+        <Field id="schedule-audiences" label={t("audienceLabel")}>
+          <div className="flex flex-wrap gap-4">
+            {SCHEDULE_AUDIENCES.map((audience) => (
+              <div key={audience} className="flex items-center gap-2">
+                <Checkbox
+                  id={`schedule-audience-${audience}`}
+                  checked={(values.audiences ?? []).includes(audience)}
+                  onCheckedChange={(checked) => toggleAudience(audience, checked === true)}
+                />
+                <Label htmlFor={`schedule-audience-${audience}`} className="font-normal">
+                  {scheduleAudienceLabel(audience, t)}
+                </Label>
+              </div>
+            ))}
+          </div>
+        </Field>
+
+        {isParticipant && (
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="requires-scan"
+              checked={isMeal || values.requiresScan === true}
+              disabled={isMeal}
+              onCheckedChange={(checked) =>
+                setValues((v) => ({ ...v, requiresScan: checked === true }))
+              }
+            />
+            <Label htmlFor="requires-scan" className="font-normal">
+              {t("registrableByScanner")}
+              {isMeal ? t("mealsAlwaysRegistrable") : ""}
+            </Label>
+          </div>
+        )}
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Field id="schedule-starts" label={t("colStarts")}>
+            <DateTimeInput
+              id="schedule-starts"
+              value={values.startsAt}
+              onChange={(startsAt) => setValues((v) => ({ ...v, startsAt }))}
+            />
+          </Field>
+          <Field id="schedule-ends" label={t("endsLabel")}>
+            <DateTimeInput
+              id="schedule-ends"
+              value={values.endsAt}
+              onChange={(endsAt) => setValues((v) => ({ ...v, endsAt }))}
+            />
+          </Field>
+          <Field id="schedule-location" label={t("locationLabel")}>
+            <Input
+              id="schedule-location"
+              value={values.location ?? ""}
+              onChange={(e) => setValues((v) => ({ ...v, location: e.target.value }))}
+              placeholder={t("mainHallPlaceholder")}
+            />
+          </Field>
+        </div>
+
+        <Field id="schedule-description" label={t("descriptionLabel")}>
+          <Textarea
+            id="schedule-description"
+            value={values.description ?? ""}
+            onChange={(e) => setValues((v) => ({ ...v, description: e.target.value }))}
+            placeholder={t("visibleInPublicAgenda")}
+          />
+        </Field>
+
+        <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+          <CollapsibleTrigger asChild>
+            <Button type="button" variant="ghost" size="sm" className="text-muted-foreground -ml-2">
+              <ChevronDownIcon
+                className={cn("size-4 transition-transform", advancedOpen && "rotate-180")}
+              />
+              {t("moreOptions")}
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-5 pt-3">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="schedule-publication-toggle"
+                  checked={scheduledPublish}
+                  onCheckedChange={(checked) => {
+                    const next = checked === true;
+                    setScheduledPublish(next);
+                    setValues((v) => ({
+                      ...v,
+                      publishAt: next ? toDatetimeLocal(new Date().toISOString()) : null,
+                    }));
+                  }}
+                />
+                <Label htmlFor="schedule-publication-toggle" className="font-normal">
+                  {t("schedulePublicationLabel")}
+                </Label>
+              </div>
+              {scheduledPublish && (
+                <Field id="schedule-publish-at" label={t("publishAtLabel")}>
+                  <DateTimeInput
+                    id="schedule-publish-at"
+                    value={values.publishAt ?? ""}
+                    onChange={(publishAt) =>
+                      setValues((v) => ({ ...v, publishAt: publishAt || null }))
+                    }
+                  />
+                  <p className="text-muted-foreground text-sm text-pretty">
+                    {t("publishDestinationsHint", { timezone: getTimeZoneLabel() })}
+                  </p>
+                </Field>
+              )}
+            </div>
+            <Field id="schedule-notes" label={t("internalNotesLabel")}>
+              <Textarea
+                id="schedule-notes"
+                value={values.notes ?? ""}
+                onChange={(e) => setValues((v) => ({ ...v, notes: e.target.value }))}
+                placeholder={t("notesPlaceholder")}
+              />
+            </Field>
+            <Field id="schedule-contact-note" label={t("contactNoteLabel")}>
+              <Input
+                id="schedule-contact-note"
+                value={values.contactNote ?? ""}
+                onChange={(e) => setValues((v) => ({ ...v, contactNote: e.target.value }))}
+                placeholder={t("contactNotePlaceholder")}
+              />
+            </Field>
+            {scheduleId ? (
+              <OwnersField scheduleId={scheduleId} />
+            ) : (
+              <PendingOwnersField owners={pendingOwners} onChange={setPendingOwners} />
+            )}
+          </CollapsibleContent>
+        </Collapsible>
+
+        <div className="flex justify-end gap-2 border-t pt-4">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            {t("cancel")}
+          </Button>
+          <SubmitButton
+            pending={pending}
+            onClick={submit}
+            disabled={!values.title || !values.startsAt || !values.endsAt}
+          >
+            {t("save")}
+          </SubmitButton>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function Field({ id, label, children }: { id: string; label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={id}>{label}</Label>
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Responsible-person picker for a new (not-yet-created) item (H59) — a
+ * schedule_owners row needs a real schedule_id, so selections just live in
+ * local state here until the caller creates the item and assigns them.
+ */
+function PendingOwnersField({
+  owners,
+  onChange,
+}: {
+  owners: UserOption[];
+  onChange: (next: UserOption[]) => void;
+}) {
+  const { t } = useLocale();
+  const [selectedUserId, setSelectedUserId] = useState("");
+
+  const ownerIds = new Set(owners.map((o) => o.id));
+  async function searchAvailableUsers(query: string): Promise<UserOption[]> {
+    try {
+      const r = await logisticsApi.scheduleOwnerCandidates(query);
+      return r.users.filter((u) => !ownerIds.has(u.id));
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 403) toast.error(t("needScheduleManageSearch"));
+      else toast.error(t("searchFailed"));
+      return [];
+    }
+  }
+
+  return (
+    <SectionCard title={t("ownersLabel")}>
+      <div className="space-y-4">
+        <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+          <UserPicker
+            value={selectedUserId}
+            onChange={(value, user) => {
+              setSelectedUserId(value);
+              if (user && !ownerIds.has(user.id)) {
+                onChange([...owners, user]);
+                setSelectedUserId("");
+              }
+            }}
+            search={searchAvailableUsers}
+            minQueryLength={2}
+            inDialog
+          />
+        </div>
+        {owners.length === 0 ? (
+          <p className="text-muted-foreground text-sm">{t("noOwnersYet")}</p>
+        ) : (
+          <ul className="divide-border divide-y">
+            {owners.map((owner) => (
+              <li key={owner.id} className="flex items-center justify-between gap-2 py-2">
+                <span className="text-sm">
+                  {[owner.name, owner.surname].filter(Boolean).join(" ").trim() || owner.email}
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label={t("remove")}
+                  onClick={() => onChange(owners.filter((o) => o.id !== owner.id))}
+                >
+                  <XIcon className="size-4" />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </SectionCard>
+  );
+}
+
+/** Responsible-person assignment (H59), mirroring enterprise MembersCard. */
+function OwnersField({ scheduleId }: { scheduleId: number }) {
+  const { t } = useLocale();
+  const [owners, setOwners] = useState<ScheduleOwner[] | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const loadOwners = useCallback(async () => {
+    try {
+      const r = await logisticsApi.scheduleOwners(scheduleId);
+      setOwners(r.owners);
+    } catch {
+      setOwners([]);
+    }
+  }, [scheduleId]);
+
+  useEffect(() => {
+    void loadOwners();
+  }, [loadOwners]);
+
+  const ownerUserIds = new Set((owners ?? []).map((o) => o.userId));
+  async function searchAvailableUsers(query: string): Promise<UserOption[]> {
+    try {
+      const r = await logisticsApi.scheduleOwnerCandidates(query);
+      return r.users.filter((u) => !ownerUserIds.has(u.id));
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 403) toast.error(t("needScheduleManageSearch"));
+      else toast.error(t("searchFailed"));
+      return [];
+    }
+  }
+
+  async function add(userId: number) {
+    setBusy(true);
+    try {
+      await logisticsApi.addScheduleOwner(scheduleId, userId);
+      setSelectedUserId("");
+      await loadOwners();
+      toast.success(t("userAffiliated"));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotAddUser"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(userId: number) {
+    setBusy(true);
+    try {
+      await logisticsApi.removeScheduleOwner(scheduleId, userId);
+      await loadOwners();
+      toast.success(t("affiliationRemoved"));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveUser"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <SectionCard title={t("ownersLabel")}>
+      <div className="space-y-4">
+        <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+          <UserPicker
+            id={`schedule-owner-${scheduleId}`}
+            value={selectedUserId}
+            onChange={setSelectedUserId}
+            search={searchAvailableUsers}
+            minQueryLength={2}
+            inDialog
+          />
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={busy || !selectedUserId}
+            onClick={() => add(Number(selectedUserId))}
+          >
+            {t("addAction")}
+          </Button>
+        </div>
+        {owners === null ? (
+          <Spinner className="size-5" />
+        ) : owners.length === 0 ? (
+          <p className="text-muted-foreground text-sm">{t("noOwnersYet")}</p>
+        ) : (
+          <ul className="divide-border divide-y">
+            {owners.map((owner) => (
+              <li key={owner.userId} className="flex items-center justify-between gap-2 py-2">
+                <span className="text-sm">
+                  {[owner.name, owner.surname].filter(Boolean).join(" ").trim() || owner.email}
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label={t("remove")}
+                  disabled={busy}
+                  onClick={() => remove(owner.userId)}
+                >
+                  <XIcon className="size-4" />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </SectionCard>
+  );
+}

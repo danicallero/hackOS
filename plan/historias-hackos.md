@@ -375,11 +375,13 @@ I want to export every uploaded file at once, named by applicant email, or
 just the ones applicants agreed to share, so I can hand sponsors CVs without
 touching files one by one or without breaching consent for the rest.
 
-**H58. Sponsor logistics FAQ**
-As a sponsor rep I want a page inside the portal, not the public site, with the
-practical logistics for the event — venue/parking/wifi, load-in and setup
-window, merch drop-off deadline, who to contact — kept current by the
-organizing team, so I stop having to dig through email threads to find it.
+**H58. Sponsor FAQ**
+As a sponsor rep I want a page inside the portal, not the public site, with
+real question/answer pairs and free-form text blocks — practical logistics
+(venue/parking/wifi, load-in and setup window, merch drop-off deadline, who to
+contact), and anything else the organizing team wants to answer once instead
+of by email — kept current by them, collapsible where it's Q&A, so I stop
+having to dig through email threads to find it.
 
 ---
 
@@ -395,6 +397,16 @@ title, location, description, start time and optional end time — and decide
 when they become visible, with scheduled publication if needed. Meals and
 recordable activities (H25, H26) are also defined here. The list is publicly
 queryable so other websites can display it without duplicating it manually.
+
+**H59. Activity ownership and audience**
+As the organizing team I want to mark who's responsible for a given schedule
+item (one or more staff), attach a private prep checklist to it, and choose
+who it's shown to — the public site, staff, sponsors, or any mix — instead of
+every item being either fully public or fully hidden. As staff I want a view
+of every live activity with its responsible person(s) and checklist progress,
+not just the ones I personally manage. As a sponsor rep I want the sponsor
+hub to show me sponsor-audience items — deadlines, "sponsor reception starts
+at X" — with who to contact, without the organizing team relaying it by hand.
 
 **H49. Public website**
 As a visitor I want to see published challenges with prizes, the sponsor grid

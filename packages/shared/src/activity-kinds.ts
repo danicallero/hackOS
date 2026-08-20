@@ -5,6 +5,7 @@ export const ACTIVITY_KINDS = [
   "workshop",
   "talk",
   "ceremony",
+  "deadline",
   "other",
 ] as const;
 
