@@ -27,12 +27,7 @@ import { useCachedApi } from "@/lib/use-cached-api";
 import { colors } from "@/theme/colors";
 
 type NowMarker = { kind: "now"; id: string };
-type ItemRow = ScheduleItem & {
-  kind: "item";
-  firstInGroup: boolean;
-  lastInGroup: boolean;
-  overlapsAdjacent: boolean;
-};
+type ItemRow = ScheduleItem & { kind: "item"; overlapsAdjacent: boolean };
 type SectionRow = ItemRow | NowMarker;
 
 interface ScheduleSection {
@@ -77,44 +72,24 @@ export default function ScheduleScreen() {
       grouped.set(key, [...(grouped.get(key) ?? []), item]);
     }
     return [...grouped.entries()].map(([key, dayItems]) => {
-      const rows: SectionRow[] = [];
-      // A run is a contiguous block of item rows uninterrupted by the "now"
-      // marker — each run renders as its own inset-grouped card, so the
-      // marker doesn't get trapped inside one.
-      let run: ItemRow[] = [];
-      const flushRun = () => {
-        run.forEach((row, i) => {
-          row.firstInGroup = i === 0;
-          row.lastInGroup = i === run.length - 1;
-        });
-        rows.push(...run);
-        run = [];
-      };
-      const hasActiveItem = dayItems.some(
-        (item) => safeTimestamp(item.startsAt) <= now && safeTimestamp(item.endsAt) >= now,
-      );
-      dayItems.forEach((item, index) => {
+      const rows: SectionRow[] = dayItems.map((item, index) => {
         const prev = dayItems[index - 1];
         const next = dayItems[index + 1];
         const overlapsAdjacent =
           (prev !== undefined && entriesOverlap(prev, item)) ||
           (next !== undefined && entriesOverlap(item, next));
-        run.push({
-          ...item,
-          kind: "item",
-          firstInGroup: false,
-          lastInGroup: false,
-          overlapsAdjacent,
-        });
-        if (key === todayKey && !hasActiveItem && safeTimestamp(item.startsAt) > now) {
-          const alreadyMarked = rows.some((row) => row.kind === "now");
-          if (!alreadyMarked) {
-            flushRun();
-            rows.push({ kind: "now", id: "now-marker" });
-          }
-        }
+        return { ...item, kind: "item" as const, overlapsAdjacent };
       });
-      flushRun();
+      if (key === todayKey) {
+        const hasActiveItem = dayItems.some(
+          (item) => safeTimestamp(item.startsAt) <= now && safeTimestamp(item.endsAt) >= now,
+        );
+        if (!hasActiveItem) {
+          const markerIndex = dayItems.findIndex((item) => safeTimestamp(item.startsAt) > now);
+          const insertAt = markerIndex === -1 ? rows.length : markerIndex;
+          rows.splice(insertAt, 0, { kind: "now", id: "now-marker" });
+        }
+      }
       return {
         key,
         data: rows,
@@ -221,7 +196,7 @@ export default function ScheduleScreen() {
           </Text>
         </View>
       )}
-      renderItem={({ item }) =>
+      renderItem={({ item, index, section }) =>
         item.kind === "now" ? (
           <View style={{ alignItems: "center", flexDirection: "row", gap: 8, padding: 16 }}>
             <View style={{ backgroundColor: colors.accent, flex: 1, height: 2 }} />
@@ -231,11 +206,10 @@ export default function ScheduleScreen() {
             <View style={{ backgroundColor: colors.accent, flex: 1, height: 2 }} />
           </View>
         ) : (
-          <ScheduleRow
+          <ScheduleCard
             item={item}
             language={language}
-            firstInGroup={item.firstInGroup}
-            lastInGroup={item.lastInGroup}
+            last={index === section.data.length - 1}
             overlapsAdjacent={item.overlapsAdjacent}
             reminderOn={reminders.ready ? reminders.isEnabled(item.id) : null}
             reminderBusy={reminders.savingId === item.id}
@@ -254,7 +228,6 @@ function safeTimestamp(value: string) {
 
 const COLLAPSED_TITLE_LINES = 2;
 const COLLAPSED_DESCRIPTION_LINES = 2;
-const GUTTER_WIDTH = 56;
 
 /**
  * Whether a card is worth an expand affordance. `numberOfLines` clamps without
@@ -266,11 +239,10 @@ export function isScheduleCardExpandable(item: Pick<ScheduleItem, "title" | "des
   return description.includes("\n") || description.length > 90 || item.title.length > 60;
 }
 
-function ScheduleRow({
+function ScheduleCard({
   item,
   language,
-  firstInGroup,
-  lastInGroup,
+  last,
   overlapsAdjacent,
   reminderOn,
   reminderBusy,
@@ -278,8 +250,7 @@ function ScheduleRow({
 }: {
   item: ScheduleItem;
   language: string;
-  firstInGroup: boolean;
-  lastInGroup: boolean;
+  last: boolean;
   overlapsAdjacent: boolean;
   reminderOn: boolean | null;
   reminderBusy: boolean;
@@ -301,19 +272,31 @@ function ScheduleRow({
   }
 
   return (
-    <View
-      style={{
-        backgroundColor: colors.surface,
-        borderBottomLeftRadius: lastInGroup ? 14 : 0,
-        borderBottomRightRadius: lastInGroup ? 14 : 0,
-        borderCurve: "continuous",
-        borderTopLeftRadius: firstInGroup ? 14 : 0,
-        borderTopRightRadius: firstInGroup ? 14 : 0,
-        marginBottom: lastInGroup ? 12 : 0,
-        marginHorizontal: 16,
-        marginTop: firstInGroup ? 0 : undefined,
-      }}
-    >
+    <View style={{ flexDirection: "row", paddingHorizontal: 16 }}>
+      <View style={{ alignItems: "center", width: 70 }}>
+        <Text
+          selectable
+          style={{
+            color: colors.label,
+            fontSize: 15,
+            fontVariant: ["tabular-nums"],
+            fontWeight: "600",
+          }}
+        >
+          {time}
+        </Text>
+        {overlapsAdjacent ? (
+          <SymbolView
+            name="exclamationmark.triangle.fill"
+            tintColor={colors.warning}
+            size={12}
+            style={{ marginTop: 3 }}
+          />
+        ) : null}
+        {!last ? (
+          <View style={{ backgroundColor: colors.separator, flex: 1, marginTop: 8, width: 1 }} />
+        ) : null}
+      </View>
       <Pressable
         accessibilityLabel={[
           item.title,
@@ -332,43 +315,22 @@ function ScheduleRow({
         accessibilityRole="button"
         onPress={() => router.push({ pathname: "/schedule/[id]", params: { id: String(item.id) } })}
         style={{
-          borderBottomColor: colors.separator,
-          borderBottomWidth: lastInGroup ? 0 : 0.5,
+          alignItems: "center",
+          backgroundColor: colors.surface,
+          borderCurve: "continuous",
+          borderRadius: 14,
+          flex: 1,
           flexDirection: "row",
-          paddingHorizontal: 12,
-          paddingVertical: 10,
+          marginBottom: 12,
+          marginLeft: 8,
         }}
       >
-        <View style={{ alignItems: "center", width: GUTTER_WIDTH }}>
-          <Text
-            selectable
-            style={{
-              color: colors.label,
-              fontSize: 14,
-              fontVariant: ["tabular-nums"],
-              fontWeight: "600",
-            }}
-          >
-            {time}
-          </Text>
-          {overlapsAdjacent ? (
-            <SymbolView
-              name="exclamationmark.triangle.fill"
-              tintColor={colors.warning}
-              size={12}
-              style={{ marginTop: 3 }}
-            />
-          ) : null}
-          {!lastInGroup ? (
-            <View style={{ backgroundColor: colors.separator, flex: 1, marginTop: 6, width: 1 }} />
-          ) : null}
-        </View>
-        <View style={{ flex: 1, gap: 4, marginLeft: 4 }}>
+        <View style={{ flex: 1, gap: 9, padding: 16 }}>
           <View style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
             <Text
               selectable
               numberOfLines={collapsed ? COLLAPSED_TITLE_LINES : undefined}
-              style={{ color: colors.label, flex: 1, fontSize: 17, fontWeight: "600" }}
+              style={{ color: colors.label, flex: 1, fontSize: 17, fontWeight: "700" }}
             >
               {item.title}
             </Text>
@@ -381,6 +343,8 @@ function ScheduleRow({
                 accessibilityState={{ selected: reminderOn, busy: reminderBusy }}
                 disabled={reminderBusy}
                 onPress={toggleReminder}
+                // hitSlop instead of a 44pt box: the box stretched the header row
+                // and pushed the bell off the title's baseline (H374).
                 hitSlop={{ bottom: 14, left: 14, right: 14, top: 14 }}
                 style={({ pressed }) => ({
                   alignItems: "center",
@@ -393,7 +357,7 @@ function ScheduleRow({
                 <SymbolView
                   name={reminderOn ? "bell.fill" : "bell"}
                   tintColor={reminderOn ? colors.accent : colors.tertiaryLabel}
-                  size={18}
+                  size={19}
                 />
               </Pressable>
             ) : null}
@@ -466,7 +430,7 @@ function ScheduleRow({
           name="chevron.right"
           tintColor={colors.tertiaryLabel}
           size={13}
-          style={{ alignSelf: "center", marginLeft: 4 }}
+          style={{ marginRight: 14 }}
         />
       </Pressable>
     </View>
