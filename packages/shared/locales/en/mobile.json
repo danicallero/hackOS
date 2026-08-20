@@ -272,6 +272,7 @@
   "scheduleShowMore": "Show more",
   "scheduleNow": "Now",
   "scheduleNotificationsTitle": "Activity notifications",
+  "scheduleNotificationsSubtitle": "Get notified 15 minutes before each activity starts.",
   "scheduleManualSubscribedCount": "{count} notified",
   "scheduleManualMutedCount": "{count} muted",
   "scheduleFilter": "Filter",

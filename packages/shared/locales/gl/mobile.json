@@ -272,6 +272,7 @@
   "scheduleShowMore": "Ver máis",
   "scheduleNow": "Agora",
   "scheduleNotificationsTitle": "Notificacións de actividades",
+  "scheduleNotificationsSubtitle": "Recibe un aviso 15 minutos antes de que comece cada actividade.",
   "scheduleManualSubscribedCount": "{count} notificadas",
   "scheduleManualMutedCount": "{count} silenciadas",
   "scheduleFilter": "Filtrar",
