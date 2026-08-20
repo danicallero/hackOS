@@ -17,6 +17,27 @@ jest.mock("@/lib/me-context", () => ({
   useMeContext: () => ({ me: { id: 1, capabilities: [] } }),
 }));
 jest.mock("@/lib/use-android-top-inset", () => ({ useAndroidTopInset: () => 0 }));
+jest.mock("react-native-safe-area-context", () => ({
+  useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
+}));
+jest.mock("react-native-gesture-handler/ReanimatedSwipeable", () => ({
+  __esModule: true,
+  default: ({ children }: { children: unknown }) => {
+    const ReactLib = require("react");
+    return ReactLib.createElement(ReactLib.Fragment, null, children);
+  },
+}));
+jest.mock("react-native-reanimated", () => ({
+  __esModule: true,
+  default: {
+    View: ({ children }: { children: unknown }) => {
+      const ReactLib = require("react");
+      return ReactLib.createElement(ReactLib.Fragment, null, children);
+    },
+  },
+  interpolate: () => 1,
+  useAnimatedStyle: (factory: () => unknown) => factory(),
+}));
 jest.mock("@/lib/i18n", () => ({
   useLocale: () => ({
     language: "en",
@@ -108,13 +129,11 @@ describe("schedule list (H374)", () => {
     expect(mockPush).not.toHaveBeenCalled();
   });
 
-  it("keeps the type pill on the bell's centre line", async () => {
+  it("keeps the type label centered in its metadata row", async () => {
     await renderMobile(<ScheduleScreen />);
 
-    // StatusPill defaults to alignSelf "flex-start", which floats it (and the
-    // bell it sits beside) off the title's centre line on multi-line titles.
     const pill = await screen.findByText("Meal");
-    const style = StyleSheet.flatten(pill.parent?.props.style);
+    const style = StyleSheet.flatten(pill.props.style);
     expect(style.alignSelf).toBe("center");
   });
 

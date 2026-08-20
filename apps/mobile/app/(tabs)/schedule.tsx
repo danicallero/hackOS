@@ -604,7 +604,14 @@ function ScheduleCard({
           <View style={{ alignItems: "center", flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
             {item.type ? (
               <>
-                <Text style={{ color: colors.secondaryLabel, fontSize: 13, fontWeight: "600" }}>
+                <Text
+                  style={{
+                    alignSelf: "center",
+                    color: colors.secondaryLabel,
+                    fontSize: 13,
+                    fontWeight: "600",
+                  }}
+                >
                   {scheduleTypeLabel(item.type, t)}
                 </Text>
                 <Text style={{ color: colors.tertiaryLabel, fontSize: 13 }}>·</Text>
