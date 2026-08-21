@@ -106,6 +106,7 @@ import {
   scheduleItemToForm,
 } from "./schedule-form-modal";
 import {
+  draftWindowBetween,
   editingNavigationDirection,
   MAX_INLINE_ROLLED_HOURS,
   parseTimeOfDay,
@@ -148,6 +149,16 @@ interface DayGroup {
   /** Local YYYY-MM-DD key; unlike the label it stays unique across locales. */
   date: string;
   items: PublicScheduleItem[];
+}
+
+/** A row typed into the table but not created yet (H59 inline row creation). */
+interface ScheduleDraft {
+  /** Local YYYY-MM-DD key of the day section it belongs to. */
+  dayKey: string;
+  /** Slot between that day's rows: 0 is above the first, `items.length` below the last. */
+  index: number;
+  startsAt: string;
+  endsAt: string;
 }
 
 function groupByDay(items: PublicScheduleItem[], language: Parameters<typeof scheduleDayLabel>[1]) {
@@ -809,6 +820,80 @@ export default function SchedulePage() {
     (id) => REQUIRED_COLUMNS.includes(id) || !tableConfig.hidden.includes(id),
   );
 
+  // The row being typed into the table but not created yet (H59 inline row
+  // creation). `index` is the slot *between* rows it was inserted at, so the
+  // draft renders exactly where the "+" was clicked; a day key with no group
+  // yet is a brand-new date section.
+  const [draft, setDraft] = useState<ScheduleDraft | null>(null);
+  const [newDayOpen, setNewDayOpen] = useState(false);
+  const draftIsNewDay = draft !== null && !groups.some((group) => group.date === draft.dayKey);
+
+  const openDraft = useCallback((group: DayGroup, index: number) => {
+    const previous = index > 0 ? group.items[index - 1] : null;
+    const next = index < group.items.length ? group.items[index] : null;
+    const window = draftWindowBetween(previous?.endsAt ?? null, next?.startsAt ?? null, group.date);
+    if (!window) return;
+    setNewDayOpen(false);
+    setDraft({ dayKey: group.date, index, ...window });
+  }, []);
+
+  const openDraftOnNewDay = useCallback((dayKey: string) => {
+    const window = draftWindowBetween(null, null, dayKey);
+    if (!window) return;
+    setNewDayOpen(false);
+    setDraft({ dayKey, index: 0, ...window });
+  }, []);
+
+  // Creates from the draft row with nothing but a title: the slot it was
+  // inserted at already decided when it happens, and every other field is
+  // editable in the row itself once it exists (the full editor stays one
+  // click away in the row's actions).
+  const createDraft = useCallback(
+    async (title: string) => {
+      if (!draft) return;
+      setBusy(true);
+      try {
+        await logisticsApi.createSchedule(
+          cleanScheduleForm({
+            ...EMPTY_SCHEDULE_FORM,
+            title,
+            startsAt: draft.startsAt,
+            endsAt: draft.endsAt,
+          }),
+        );
+        toast.success(t("scheduleItemCreated"));
+        setDraft(null);
+        load();
+      } catch (err) {
+        toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [draft, load, t],
+  );
+
+  /** Either the draft row itself, when it was inserted here, or the "+" that opens it. */
+  function renderInsertSlot(group: DayGroup, index: number) {
+    if (draft && !draftIsNewDay && draft.dayKey === group.date && draft.index === index) {
+      return (
+        <DraftActivityRow
+          colSpan={visibleColumns.length + 2}
+          draft={draft}
+          saving={busy}
+          onCancel={() => setDraft(null)}
+          onCreate={createDraft}
+        />
+      );
+    }
+    return (
+      <InsertRowDivider
+        colSpan={visibleColumns.length + 2}
+        onInsert={() => openDraft(group, index)}
+      />
+    );
+  }
+
   async function remove(item: PublicScheduleItem) {
     setBusy(true);
     try {
@@ -857,18 +942,7 @@ export default function SchedulePage() {
 
   return (
     <div className="space-y-6" data-wide>
-      <PageHeader
-        title={t("manageSchedule")}
-        description={t("manageScheduleDescription")}
-        primaryAction={
-          canEdit ? (
-            <Button onClick={() => setCreateOpen(true)}>
-              <PlusIcon className="size-4" />
-              {t("newItem")}
-            </Button>
-          ) : undefined
-        }
-      />
+      <PageHeader title={t("manageSchedule")} description={t("manageScheduleDescription")} />
 
       <Card className="gap-0 overflow-hidden py-0">
         <div className="flex flex-wrap items-center gap-2 p-4">
@@ -1003,33 +1077,65 @@ export default function SchedulePage() {
                         colSpan={visibleColumns.length + 2}
                         droppable={canEdit}
                       />
-                      {group.items.map((item) => (
-                        <ActivityRow
-                          key={item.id}
-                          item={item}
-                          columns={visibleColumns}
-                          canEdit={canEdit}
-                          selected={selectedIds.has(item.id)}
-                          onToggleSelected={(checked) =>
-                            setSelectedIds((prev) => {
-                              const next = new Set(prev);
-                              if (checked) next.add(item.id);
-                              else next.delete(item.id);
-                              return next;
-                            })
-                          }
-                          onUpdate={(patch) => updateItem(item.id, patch)}
-                          onOpenEdit={() => setEditingItem(item)}
-                          onDuplicate={() => setDuplicatingItem(item)}
-                          onDelete={() => setDeletingItem(item)}
-                          dayKey={scheduleDayKey(item.startsAt)}
-                        />
+                      {canEdit && renderInsertSlot(group, 0)}
+                      {group.items.map((item, index) => (
+                        <Fragment key={item.id}>
+                          <ActivityRow
+                            item={item}
+                            columns={visibleColumns}
+                            canEdit={canEdit}
+                            selected={selectedIds.has(item.id)}
+                            onToggleSelected={(checked) =>
+                              setSelectedIds((prev) => {
+                                const next = new Set(prev);
+                                if (checked) next.add(item.id);
+                                else next.delete(item.id);
+                                return next;
+                              })
+                            }
+                            onUpdate={(patch) => updateItem(item.id, patch)}
+                            onOpenEdit={() => setEditingItem(item)}
+                            onDuplicate={() => setDuplicatingItem(item)}
+                            onDelete={() => setDeletingItem(item)}
+                            dayKey={scheduleDayKey(item.startsAt)}
+                          />
+                          {canEdit && renderInsertSlot(group, index + 1)}
+                        </Fragment>
                       ))}
                     </Fragment>
                   ))
                 )}
+                {canEdit && draftIsNewDay && draft && (
+                  <Fragment key={draft.dayKey}>
+                    <DayGroupHeaderRow
+                      group={{
+                        date: draft.dayKey,
+                        label: scheduleDayLabel(draft.startsAt, language),
+                        items: [],
+                      }}
+                      colSpan={visibleColumns.length + 2}
+                      droppable={false}
+                    />
+                    <DraftActivityRow
+                      colSpan={visibleColumns.length + 2}
+                      draft={draft}
+                      saving={busy}
+                      onCancel={() => setDraft(null)}
+                      onCreate={createDraft}
+                    />
+                  </Fragment>
+                )}
                 {canEdit && groups.length > 0 && (
-                  <NewDayDropzoneRow colSpan={visibleColumns.length + 2} />
+                  <NewDayDropzoneRow
+                    colSpan={visibleColumns.length + 2}
+                    open={newDayOpen}
+                    onOpen={() => {
+                      setDraft(null);
+                      setNewDayOpen(true);
+                    }}
+                    onCancel={() => setNewDayOpen(false)}
+                    onPickDate={openDraftOnNewDay}
+                  />
                 )}
               </TableBody>
             </Table>
@@ -1111,6 +1217,21 @@ export default function SchedulePage() {
           pending={busy}
           onConfirm={() => void remove(deletingItem)}
         />
+      )}
+
+      {canEdit && (
+        // Zero-height so it never lengthens the page: the button floats over
+        // the table's bottom-left corner and stays there while scrolling, so
+        // adding an item never means going back up to the header (H59).
+        <div className="pointer-events-none sticky bottom-6 z-20 flex h-0 items-end">
+          <Button
+            className="pointer-events-auto shadow-floating"
+            onClick={() => setCreateOpen(true)}
+          >
+            <PlusIcon className="size-4" />
+            {t("newItem")}
+          </Button>
+        </div>
       )}
 
       {moveToDateItem && (
@@ -1258,10 +1379,65 @@ function DayGroupHeaderRow({
   );
 }
 
-/** Always-present drop target below the table for moving an item to a day with no items yet. */
-function NewDayDropzoneRow({ colSpan }: { colSpan: number }) {
+/**
+ * Always-present drop target below the table for moving an item to a day with
+ * no items yet — and, on a double click, the way to start that day from
+ * nothing: it turns into a date field, and picking a date opens a draft row
+ * under a fresh day heading (H59).
+ */
+function NewDayDropzoneRow({
+  colSpan,
+  open,
+  onOpen,
+  onCancel,
+  onPickDate,
+}: {
+  colSpan: number;
+  open: boolean;
+  onOpen: () => void;
+  onCancel: () => void;
+  onPickDate: (dayKey: string) => void;
+}) {
   const { t } = useLocale();
   const { setNodeRef, isOver } = useDroppable({ id: "new-day-dropzone" });
+  const [date, setDate] = useState("");
+
+  useEffect(() => {
+    if (!open) setDate("");
+  }, [open]);
+
+  if (open) {
+    return (
+      <TableRow className="hover:bg-transparent">
+        <TableCell colSpan={colSpan} className="border-t border-dashed py-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              autoFocus
+              type="date"
+              value={date}
+              aria-label={t("newDayDateLabel")}
+              className="h-8 w-auto"
+              onChange={(e) => setDate(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && date) {
+                  e.preventDefault();
+                  onPickDate(date);
+                }
+                if (e.key === "Escape") onCancel();
+              }}
+            />
+            <Button size="sm" disabled={!date} onClick={() => date && onPickDate(date)}>
+              {t("addAction")}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={onCancel}>
+              {t("cancel")}
+            </Button>
+          </div>
+        </TableCell>
+      </TableRow>
+    );
+  }
+
   return (
     <TableRow ref={setNodeRef} className="hover:bg-transparent">
       <TableCell
@@ -1270,8 +1446,102 @@ function NewDayDropzoneRow({ colSpan }: { colSpan: number }) {
           "text-muted-foreground border-t border-dashed py-2 text-center text-xs",
           isOver && "bg-muted/50 text-foreground",
         )}
+        // Double-clicking the strip opens the date field; the button beside
+        // the label is the same action for keyboards and for anyone who
+        // doesn't think to try a double click.
+        onDoubleClick={onOpen}
       >
-        {t("dropNewDayLabel")}
+        <span className="inline-flex flex-wrap items-center justify-center gap-2">
+          {t("dropNewDayLabel")}
+          <Button variant="ghost" size="sm" className="h-6 gap-1 px-2 text-xs" onClick={onOpen}>
+            <PlusIcon className="size-3" />
+            {t("newDateAction")}
+          </Button>
+        </span>
+      </TableCell>
+    </TableRow>
+  );
+}
+
+/**
+ * The hairline between two rows, which reveals a "+" on hover and inserts a
+ * draft row exactly there (H59). Where the row lands is the whole input: the
+ * slot decides its start and end, so the draft only has to ask for a title.
+ */
+function InsertRowDivider({ colSpan, onInsert }: { colSpan: number; onInsert: () => void }) {
+  const { t } = useLocale();
+  return (
+    <TableRow className="group/insert border-0 hover:bg-transparent">
+      <TableCell colSpan={colSpan} className="relative h-2 border-0 p-0">
+        <button
+          type="button"
+          onClick={onInsert}
+          aria-label={t("insertActivityHere")}
+          title={t("insertActivityHere")}
+          className="absolute inset-x-0 top-1/2 flex h-4 -translate-y-1/2 cursor-pointer items-center gap-1 px-3 opacity-0 transition-opacity group-hover/insert:opacity-100 focus-visible:opacity-100 focus-visible:outline-none"
+        >
+          <span className="bg-primary text-primary-foreground flex size-4 shrink-0 items-center justify-center rounded-full">
+            <PlusIcon className="size-3" />
+          </span>
+          <span className="bg-primary/40 h-px flex-1" />
+        </button>
+      </TableCell>
+    </TableRow>
+  );
+}
+
+/**
+ * A row that does not exist yet: one title field, and the start/end the slot
+ * already implies shown beside it. Enter creates it and the real row takes
+ * its place, where every other column is edited inline as usual.
+ */
+function DraftActivityRow({
+  colSpan,
+  draft,
+  saving,
+  onCancel,
+  onCreate,
+}: {
+  colSpan: number;
+  draft: ScheduleDraft;
+  saving: boolean;
+  onCancel: () => void;
+  onCreate: (title: string) => void;
+}) {
+  const { t, language } = useLocale();
+  const [title, setTitle] = useState("");
+  const trimmed = title.trim();
+
+  return (
+    <TableRow className="bg-muted/40 hover:bg-muted/40">
+      <TableCell colSpan={colSpan} className="py-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            autoFocus
+            value={title}
+            aria-label={t("newActivityTitleLabel")}
+            placeholder={t("newActivityTitlePlaceholder")}
+            className="h-8 w-full max-w-sm"
+            onChange={(e) => setTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && trimmed && !saving) {
+                e.preventDefault();
+                onCreate(trimmed);
+              }
+              if (e.key === "Escape") onCancel();
+            }}
+          />
+          <span className="text-muted-foreground text-xs tabular-nums">
+            {scheduleTimeOfDay(draft.startsAt, language)}–
+            {scheduleTimeOfDay(draft.endsAt, language)}
+          </span>
+          <Button size="sm" disabled={!trimmed || saving} onClick={() => onCreate(trimmed)}>
+            {t("addAction")}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={onCancel}>
+            {t("cancel")}
+          </Button>
+        </div>
       </TableCell>
     </TableRow>
   );

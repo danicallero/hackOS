@@ -218,6 +218,18 @@ Tables and lists:
   text and drops out of the navigation order instead of offering a dead editor.
 - Batch operations that can partially fail report a durable result panel
   (skipped rows + reasons), not only a toast.
+- In a table whose order carries meaning (a run-of-show ordered by time), a row
+  is added *where it belongs*: a hairline between two rows reveals a "+" that
+  inserts a draft row in that slot, and the slot supplies what the position
+  already implies (its start and end), so the draft asks only for the name.
+  Everything else is filled in the row itself once it exists; the full form
+  stays available for the details that have no column. Every such gesture keeps
+  a keyboard-reachable equivalent — a mouse-only affordance (double-click,
+  drag) is an accelerator, never the only way in.
+- A page whose primary action creates rows in a long table keeps that action
+  reachable from anywhere in the scroll (a sticky button over the table's
+  bottom corner), instead of only in the page header where a scrolled-down
+  user can't see it.
 
 Forms:
 
