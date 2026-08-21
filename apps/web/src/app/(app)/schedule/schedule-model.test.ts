@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { PublicScheduleItem } from "@/lib/logistics";
 import {
+  DRAFT_DEFAULT_MINUTES,
+  draftWindowBetween,
   editingNavigationDirection,
   MAX_INLINE_ROLLED_HOURS,
   parseTimeOfDay,
@@ -262,5 +264,74 @@ describe("scheduleDayKey / withDate", () => {
   it("rejects invalid source and target dates", () => {
     expect(withDate("not-a-date", "2026-08-28")).toBeNull();
     expect(withDate("2026-08-27T08:00:00.000Z", "not-a-date")).toBeNull();
+  });
+});
+
+describe("draftWindowBetween", () => {
+  /** Local wall-clock ISO, so the test reads the same way the table does. */
+  const at = (day: string, hours: number, minutes = 0) =>
+    new Date(`${day}T00:00:00`).setHours(hours, minutes, 0, 0);
+  const iso = (ms: number) => new Date(ms).toISOString();
+  const minutesBetween = (window: { startsAt: string; endsAt: string }) =>
+    (new Date(window.endsAt).getTime() - new Date(window.startsAt).getTime()) / 60_000;
+
+  it("starts a row where the one above it ends", () => {
+    const window = draftWindowBetween(iso(at("2026-08-22", 11)), null, "2026-08-22");
+
+    expect(window?.startsAt).toBe(iso(at("2026-08-22", 11)));
+    expect(minutesBetween(window!)).toBe(DRAFT_DEFAULT_MINUTES);
+  });
+
+  it("stops at the row below when the gap is shorter than the default", () => {
+    const window = draftWindowBetween(
+      iso(at("2026-08-22", 11)),
+      iso(at("2026-08-22", 11, 10)),
+      "2026-08-22",
+    );
+
+    expect(window?.endsAt).toBe(iso(at("2026-08-22", 11, 10)));
+    expect(minutesBetween(window!)).toBe(10);
+  });
+
+  it("still produces a default-length row when the neighbours leave no gap", () => {
+    const window = draftWindowBetween(
+      iso(at("2026-08-22", 11)),
+      iso(at("2026-08-22", 10)),
+      "2026-08-22",
+    );
+
+    expect(minutesBetween(window!)).toBe(DRAFT_DEFAULT_MINUTES);
+  });
+
+  it("backs off from the first row of the day when inserting above it", () => {
+    const window = draftWindowBetween(null, iso(at("2026-08-22", 10)), "2026-08-22");
+
+    expect(window?.startsAt).toBe(iso(at("2026-08-22", 9, 30)));
+    expect(window?.endsAt).toBe(iso(at("2026-08-22", 10)));
+  });
+
+  it("never backs off into the previous day", () => {
+    const window = draftWindowBetween(null, iso(at("2026-08-22", 0, 10)), "2026-08-22");
+
+    expect(window?.startsAt).toBe(iso(at("2026-08-22", 0)));
+    expect(window?.endsAt).toBe(iso(at("2026-08-22", 0, 10)));
+  });
+
+  it("falls forward when the day's first row starts at midnight exactly", () => {
+    const window = draftWindowBetween(null, iso(at("2026-08-22", 0)), "2026-08-22");
+
+    expect(window?.startsAt).toBe(iso(at("2026-08-22", 0)));
+    expect(minutesBetween(window!)).toBe(DRAFT_DEFAULT_MINUTES);
+  });
+
+  it("opens a brand-new day at the default hour", () => {
+    const window = draftWindowBetween(null, null, "2026-08-23");
+
+    expect(window?.startsAt).toBe(iso(at("2026-08-23", 9)));
+    expect(minutesBetween(window!)).toBe(DRAFT_DEFAULT_MINUTES);
+  });
+
+  it("rejects a day key that isn't a calendar date", () => {
+    expect(draftWindowBetween(null, null, "not-a-day")).toBeNull();
   });
 });

@@ -323,3 +323,72 @@ export function withDate(iso: string, targetDateIso: string): string | null {
   date.setFullYear(target.getFullYear(), target.getMonth(), target.getDate());
   return date.toISOString();
 }
+
+// --- Inline row creation (H59) --------------------------------------------
+
+/** Length a freshly inserted row gets when nothing constrains it. */
+export const DRAFT_DEFAULT_MINUTES = 30;
+/** Where a row lands on a day that has no items yet. */
+export const DRAFT_DEFAULT_START_HOUR = 9;
+
+const MINUTE_MS = 60_000;
+
+/** Local midnight of a `YYYY-MM-DD` day key, as a timestamp. */
+function dayStartMs(dayKey: string): number | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dayKey);
+  if (!match) return null;
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 0, 0, 0, 0).getTime();
+}
+
+/**
+ * The start/end a row inserted at a given point in the table should get,
+ * derived from the rows it lands between (H59 inline row creation).
+ *
+ * The whole point of inserting *there* rather than opening the form is that
+ * the position already says when the activity happens: it starts when the
+ * row above ends, and it stops at the row below if the gap is shorter than
+ * the default. Gaps of zero (or rows that already overlap) still produce a
+ * default-length row — the table shows overlaps rather than forbidding them,
+ * and a zero-length activity would be rejected by the API.
+ */
+export function draftWindowBetween(
+  previousEndsAt: string | null,
+  nextStartsAt: string | null,
+  dayKey: string,
+): { startsAt: string; endsAt: string } | null {
+  const dayStart = dayStartMs(dayKey);
+  if (dayStart === null) return null;
+  const defaultMs = DRAFT_DEFAULT_MINUTES * MINUTE_MS;
+
+  const previous = previousEndsAt ? new Date(previousEndsAt).getTime() : Number.NaN;
+  const next = nextStartsAt ? new Date(nextStartsAt).getTime() : Number.NaN;
+
+  if (!Number.isNaN(previous)) {
+    const start = previous;
+    const untilNext = Number.isNaN(next) ? Number.POSITIVE_INFINITY : next - start;
+    const length = untilNext > 0 ? Math.min(defaultMs, untilNext) : defaultMs;
+    return {
+      startsAt: new Date(start).toISOString(),
+      endsAt: new Date(start + length).toISOString(),
+    };
+  }
+
+  if (!Number.isNaN(next)) {
+    // Inserting above the day's first row: back off from it, but never into
+    // the previous day — that would drop the row into another group.
+    const start = Math.max(next - defaultMs, dayStart);
+    if (start >= next) {
+      return {
+        startsAt: new Date(next).toISOString(),
+        endsAt: new Date(next + defaultMs).toISOString(),
+      };
+    }
+    return { startsAt: new Date(start).toISOString(), endsAt: new Date(next).toISOString() };
+  }
+
+  const start = dayStart + DRAFT_DEFAULT_START_HOUR * 60 * MINUTE_MS;
+  return {
+    startsAt: new Date(start).toISOString(),
+    endsAt: new Date(start + defaultMs).toISOString(),
+  };
+}
