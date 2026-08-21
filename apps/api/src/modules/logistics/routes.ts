@@ -793,7 +793,10 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
         req.body.userId !== undefined
           ? { userId: req.body.userId }
           : { freeTextName: req.body.freeTextName as string };
-      reply.code(201).send(await addScheduleOwner(actor(req.userId), req.params.id, input));
+      // `return` matters: an async handler that resolves to undefined makes
+      // Fastify try to reply a second time (ERR_HTTP_HEADERS_SENT), and the
+      // caller gets an empty 201 body instead of the new owner (H59).
+      return reply.code(201).send(await addScheduleOwner(actor(req.userId), req.params.id, input));
     },
   );
 

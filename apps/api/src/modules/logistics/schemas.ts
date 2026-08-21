@@ -250,7 +250,21 @@ export const scheduleBody = z.object({
   notes: z.string().max(4000).nullable().optional(),
 });
 
-export const schedulePatchBody = scheduleBody.partial();
+/**
+ * `.partial()` alone is NOT enough here: it makes a key optional but keeps its
+ * `.default(...)`, so an absent `visibility`/`audiences` would still arrive as
+ * "hidden"/[] and quietly hide an item — and strip its audience tags — on any
+ * unrelated PATCH (an inline time or location edit). A patch must carry only
+ * what the caller actually sent, so both fields are re-declared without their
+ * create-time defaults (H59).
+ */
+export const schedulePatchBody = scheduleBody
+  .omit({ visibility: true, audiences: true })
+  .partial()
+  .extend({
+    visibility: z.enum(["shown", "hidden"]).optional(),
+    audiences: z.array(scheduleAudience).max(3).optional(),
+  });
 
 export const scheduleVisibilityBody = z.object({
   ids: z.array(z.coerce.number().int().positive()).min(1).max(200),

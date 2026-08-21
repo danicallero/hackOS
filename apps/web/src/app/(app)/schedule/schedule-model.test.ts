@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { PublicScheduleItem } from "@/lib/logistics";
 import {
+  editingNavigationDirection,
   scheduleDayKey,
   scheduleDuration,
+  scheduleNavigationDirection,
   scheduleStatus,
   timeInputValue,
   withDate,
@@ -37,8 +39,13 @@ describe("scheduleStatus", () => {
     expect(scheduleStatus(item({ publishAt: "2026-07-22T12:01:00.000Z" }), NOW)).toBe("scheduled");
   });
 
-  it("makes a due publication public even when visibility remains hidden", () => {
-    expect(scheduleStatus(item({ publishAt: "2026-07-22T11:59:00.000Z" }), NOW)).toBe("public");
+  it("reads visibility, not a spent publish date, so hiding a published item sticks", () => {
+    // publish_at stays behind after the publisher worker reveals an item, so a
+    // past date on a hidden item means it was hidden again by hand.
+    expect(scheduleStatus(item({ publishAt: "2026-07-22T11:59:00.000Z" }), NOW)).toBe("draft");
+    expect(
+      scheduleStatus(item({ visibility: "shown", publishAt: "2026-07-22T11:59:00.000Z" }), NOW),
+    ).toBe("public");
   });
 
   it("ignores the item's own time window — a run-of-show lists past and future alike", () => {
@@ -68,6 +75,29 @@ describe("scheduleStatus", () => {
         NOW,
       ),
     ).toBe("staffOnly");
+  });
+});
+
+describe("keyboard grid navigation", () => {
+  it("maps Tab and the four arrows onto grid directions", () => {
+    expect(scheduleNavigationDirection({ key: "Tab" })).toBe("next");
+    expect(scheduleNavigationDirection({ key: "Tab", shiftKey: true })).toBe("previous");
+    expect(scheduleNavigationDirection({ key: "ArrowLeft" })).toBe("previousInRow");
+    expect(scheduleNavigationDirection({ key: "ArrowRight" })).toBe("nextInRow");
+    expect(scheduleNavigationDirection({ key: "ArrowUp" })).toBe("previousInColumn");
+    expect(scheduleNavigationDirection({ key: "ArrowDown" })).toBe("nextInColumn");
+    expect(scheduleNavigationDirection({ key: "Enter" })).toBeNull();
+    expect(scheduleNavigationDirection({ key: "a" })).toBeNull();
+  });
+
+  it("leaves the horizontal arrows to the caret while a cell is being edited", () => {
+    expect(editingNavigationDirection({ key: "ArrowLeft" })).toBeNull();
+    expect(editingNavigationDirection({ key: "ArrowRight" })).toBeNull();
+    // Everything else still commits and moves.
+    expect(editingNavigationDirection({ key: "ArrowUp" })).toBe("previousInColumn");
+    expect(editingNavigationDirection({ key: "ArrowDown" })).toBe("nextInColumn");
+    expect(editingNavigationDirection({ key: "Tab" })).toBe("next");
+    expect(editingNavigationDirection({ key: "Tab", shiftKey: true })).toBe("previous");
   });
 });
 

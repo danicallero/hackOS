@@ -61,9 +61,14 @@ export function scheduleTypeIcon(type: string | null | undefined) {
  */
 export function scheduleStatus(item: PublicScheduleItem, now = Date.now()): ScheduleStatus {
   if ((item.audiences ?? []).length === 0) return "staffOnly";
+  if (item.visibility === "shown") return "public";
+  // `visibility` is the answer, not a hint: a *past* publishAt on a hidden
+  // item is spent (the publisher worker flips visibility itself when the date
+  // comes due, and it leaves publish_at behind), so treating "due" as public
+  // would make hiding an already-published item look like it did nothing.
+  // Only a publish date still in the future means "scheduled to reveal".
   const publishAtMs = item.publishAt ? new Date(item.publishAt).getTime() : null;
-  if (item.visibility === "shown" || (publishAtMs !== null && publishAtMs <= now)) return "public";
-  return publishAtMs !== null ? "scheduled" : "draft";
+  return publishAtMs !== null && publishAtMs > now ? "scheduled" : "draft";
 }
 
 export function scheduleStatusLabel(status: ScheduleStatus, t: Translate): string {
@@ -93,6 +98,44 @@ export function scheduleAudienceLabel(audience: ScheduleAudience, t: Translate):
     mentor: t("audienceMentor"),
   };
   return labels[audience];
+}
+
+// --- Keyboard grid navigation (H59) ---------------------------------------
+
+export type ScheduleNavigationDirection =
+  | "next"
+  | "previous"
+  | "nextInRow"
+  | "previousInRow"
+  | "nextInColumn"
+  | "previousInColumn";
+
+/** Which way a keypress moves the focused cell, or null if it isn't navigation. */
+export function scheduleNavigationDirection(event: {
+  key: string;
+  shiftKey?: boolean;
+}): ScheduleNavigationDirection | null {
+  if (event.key === "Tab") return event.shiftKey ? "previous" : "next";
+  if (event.key === "ArrowLeft") return "previousInRow";
+  if (event.key === "ArrowRight") return "nextInRow";
+  if (event.key === "ArrowUp") return "previousInColumn";
+  if (event.key === "ArrowDown") return "nextInColumn";
+  return null;
+}
+
+/**
+ * The same, minus the horizontal arrows, for a cell that is *open for
+ * editing*: inside a text field Left/Right belong to the caret (and inside a
+ * native date field, to its segments), so stealing them for column navigation
+ * would make a typo unfixable without reaching for the mouse. Tab, Enter and
+ * the vertical arrows still commit and move, the way a spreadsheet behaves.
+ */
+export function editingNavigationDirection(event: {
+  key: string;
+  shiftKey?: boolean;
+}): ScheduleNavigationDirection | null {
+  const direction = scheduleNavigationDirection(event);
+  return direction === "nextInRow" || direction === "previousInRow" ? null : direction;
 }
 
 /** Short "Fri 22/08" style day label for a run-of-show table (H59). */

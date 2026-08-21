@@ -208,6 +208,14 @@ Tables and lists:
 - No two columns in one table share a header: a repeated header makes sorting
   do two different things depending on which one is clicked (#299).
 - Bulk actions appear only after selection and state what set they affect.
+- An inline-editable grid navigates like a spreadsheet: arrows move between
+  cells, Tab/Enter commit and move, Escape reverts — and both the row-selection
+  checkbox and the row actions are cells too, so nothing in a row needs a
+  mouse. While a cell is *open for editing* the horizontal arrows belong to the
+  caret, not to the grid, and ending an edit hands focus back to that cell
+  rather than dropping it on `<body>`. A cell that can't be edited in the
+  current state (a publish date on an already-shown item) renders as read-only
+  text and drops out of the navigation order instead of offering a dead editor.
 - Batch operations that can partially fail report a durable result panel
   (skipped rows + reasons), not only a toast.
 
