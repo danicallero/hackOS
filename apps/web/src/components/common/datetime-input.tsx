@@ -14,8 +14,11 @@ import { cn } from "@/lib/utils";
  * button. Native inputs have no consistent way to blank a once-set value
  * (Safari has none), and a blank value is how callers send `null` to the API.
  * Controlled: `value` is the date/datetime-local string, `onChange` gets ""
- * when cleared. A min-width keeps the native date/time text from getting
- * clipped when the input sits in a narrow flex or grid slot.
+ * when cleared. From `sm` up a min-width keeps the native date/time text from
+ * getting clipped when the input sits in a narrow flex or grid slot; on phones
+ * that min-width (and the control's own intrinsic width, which is what iOS
+ * Safari sizes it from) is dropped instead, since a grid/flex item that can't
+ * shrink pushes the whole dialog into horizontal scroll (H59).
  *
  * `nullOption` replaces a "leave blank to mean X" hint with an explicit
  * checkbox: checked means the value is null/blank (the input is disabled),
@@ -44,7 +47,7 @@ export function DateTimeInput({
   const checkboxId = useId();
   const isBlank = value === "";
   return (
-    <div className="space-y-2">
+    <div className="w-full min-w-0 space-y-2">
       {nullOption && (
         <label
           htmlFor={checkboxId}
@@ -66,7 +69,7 @@ export function DateTimeInput({
           {nullOption.label}
         </label>
       )}
-      <div className="relative">
+      <div className="relative min-w-0">
         <Input
           type={type}
           value={value}
@@ -81,7 +84,8 @@ export function DateTimeInput({
           }}
           disabled={disabled || (nullOption ? isBlank : false)}
           className={cn(
-            type === "date" ? "min-w-[9.5rem]" : "min-w-[14rem]",
+            "min-w-0 max-w-full",
+            type === "date" ? "sm:min-w-[9.5rem]" : "sm:min-w-[14rem]",
             value && "pr-9",
             className,
           )}

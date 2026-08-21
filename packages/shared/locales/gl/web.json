@@ -847,6 +847,8 @@
   "scheduleAudienceColumn": "Audiencia",
   "scheduleScannableColumn": "Escaneable",
   "schedulePublishDateColumn": "Data de publicación",
+  "publishDateStaffOnlyHint": "Os elementos só para staff non teñen data de publicación: o staff sempre os ve.",
+  "publishDateAlreadyShownHint": "Xa está visible: non queda nada por publicar.",
   "noTypeOption": "Sen tipo",
   "editScheduleFieldAria": "Editar {field}",
   "colVisibility": "Visibilidade",

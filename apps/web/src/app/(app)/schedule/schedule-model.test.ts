@@ -23,9 +23,9 @@ function item(overrides: Partial<PublicScheduleItem> = {}): PublicScheduleItem {
     endsAt: "2026-07-22T14:00:00.000Z",
     visibility: "hidden",
     publishAt: null,
-    // Most fixtures below are about the audience-having timeline states
-    // (draft/scheduled/public/active/ended); the staff-only branch (no
-    // audience tag) gets its own describe block below.
+    // Most fixtures below are about the audience-having visibility states
+    // (draft/scheduled/public); the staff-only branch (no audience tag) gets
+    // its own case below.
     audiences: ["participant"],
     ...overrides,
   };
@@ -41,27 +41,17 @@ describe("scheduleStatus", () => {
     expect(scheduleStatus(item({ publishAt: "2026-07-22T11:59:00.000Z" }), NOW)).toBe("public");
   });
 
-  it("prioritizes an active or ended time window after publication", () => {
-    expect(
-      scheduleStatus(
-        item({
-          visibility: "shown",
-          startsAt: "2026-07-22T11:00:00.000Z",
-          endsAt: "2026-07-22T13:00:00.000Z",
-        }),
-        NOW,
-      ),
-    ).toBe("active");
-    expect(
-      scheduleStatus(
-        item({
-          visibility: "shown",
-          startsAt: "2026-07-22T10:00:00.000Z",
-          endsAt: "2026-07-22T12:00:00.000Z",
-        }),
-        NOW,
-      ),
-    ).toBe("ended");
+  it("ignores the item's own time window — a run-of-show lists past and future alike", () => {
+    for (const window of [
+      // Running right now.
+      { startsAt: "2026-07-22T11:00:00.000Z", endsAt: "2026-07-22T13:00:00.000Z" },
+      // Long over.
+      { startsAt: "2026-07-22T10:00:00.000Z", endsAt: "2026-07-22T12:00:00.000Z" },
+    ]) {
+      expect(scheduleStatus(item({ visibility: "shown", ...window }), NOW)).toBe("public");
+      expect(scheduleStatus(item({ visibility: "hidden", ...window }), NOW)).toBe("draft");
+      expect(scheduleStatus(item({ audiences: [], ...window }), NOW)).toBe("staffOnly");
+    }
   });
 
   it("an item with no audience is always staffOnly, regardless of visibility/publishAt (H59 follow-up)", () => {
@@ -78,29 +68,6 @@ describe("scheduleStatus", () => {
         NOW,
       ),
     ).toBe("staffOnly");
-  });
-
-  it("a currently-active or ended staff-only item still tracks its own time window", () => {
-    expect(
-      scheduleStatus(
-        item({
-          audiences: [],
-          startsAt: "2026-07-22T11:00:00.000Z",
-          endsAt: "2026-07-22T13:00:00.000Z",
-        }),
-        NOW,
-      ),
-    ).toBe("active");
-    expect(
-      scheduleStatus(
-        item({
-          audiences: [],
-          startsAt: "2026-07-22T10:00:00.000Z",
-          endsAt: "2026-07-22T12:00:00.000Z",
-        }),
-        NOW,
-      ),
-    ).toBe("ended");
   });
 });
 
