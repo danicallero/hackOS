@@ -10,7 +10,7 @@ import { LOCALE_CODES, type Translate } from "@/lib/i18n";
 import type { PublicScheduleItem } from "@/lib/logistics";
 import type { Tone } from "@/lib/tones";
 
-export type ScheduleStatus = "draft" | "scheduled" | "public" | "active" | "ended" | "staffOnly";
+export type ScheduleStatus = "draft" | "scheduled" | "public" | "staffOnly";
 
 const TYPE_ICONS: Record<string, typeof CalendarDaysIcon> = {
   activity: SparklesIcon,
@@ -26,8 +26,6 @@ export const SCHEDULE_STATUS_TONES: Record<ScheduleStatus, Tone> = {
   draft: "neutral",
   scheduled: "warning",
   public: "info",
-  active: "success",
-  ended: "neutral",
   staffOnly: "neutral",
 };
 
@@ -49,36 +47,30 @@ export function scheduleTypeIcon(type: string | null | undefined) {
 }
 
 /**
- * Programme items expose one of six states so staff and public readers can
- * tell what is public now, upcoming, or over without inspecting raw
- * visibility/publishAt fields (H47, H48). An item with no audience tag is
- * staff-only, full stop — visibility/publishAt only describe when a *tagged*
- * audience gets to see an item, and the API forces both back to
- * hidden/null the moment an item has no audience (H59 follow-up,
- * schedule_visibility_requires_audience), so a staff-only item never goes
- * through "draft"/"scheduled": it's always visible to staff, and "active"
- * still tracks whether it's happening right now for their own run-of-show.
+ * A programme item's status is purely *who can see it*: shown, hidden, or
+ * hidden-until-a-publish-date (H47, H48). Manage Schedule is a run-of-show —
+ * a full rundown of every activity, past and future alike — so whether an
+ * item happens to be running right now is not a status and is deliberately
+ * not derived here; the times are already in the Starts/Ends columns.
+ *
+ * An item with no audience tag is staff-only, full stop — visibility/publishAt
+ * only describe when a *tagged* audience gets to see an item, and the API
+ * forces both back to hidden/null the moment an item has no audience (H59
+ * follow-up, schedule_visibility_requires_audience), so a staff-only item
+ * never goes through "draft"/"scheduled": it's always visible to staff.
  */
 export function scheduleStatus(item: PublicScheduleItem, now = Date.now()): ScheduleStatus {
-  const isStaffOnly = (item.audiences ?? []).length === 0;
+  if ((item.audiences ?? []).length === 0) return "staffOnly";
   const publishAtMs = item.publishAt ? new Date(item.publishAt).getTime() : null;
-  const isVisible =
-    isStaffOnly || item.visibility === "shown" || (publishAtMs !== null && publishAtMs <= now);
-  if (!isVisible) return publishAtMs !== null ? "scheduled" : "draft";
-  const startsMs = new Date(item.startsAt).getTime();
-  const endsMs = new Date(item.endsAt).getTime();
-  if (!Number.isNaN(endsMs) && endsMs <= now) return "ended";
-  if (!Number.isNaN(startsMs) && startsMs <= now) return "active";
-  return isStaffOnly ? "staffOnly" : "public";
+  if (item.visibility === "shown" || (publishAtMs !== null && publishAtMs <= now)) return "public";
+  return publishAtMs !== null ? "scheduled" : "draft";
 }
 
 export function scheduleStatusLabel(status: ScheduleStatus, t: Translate): string {
   const labels: Record<ScheduleStatus, string> = {
-    draft: t("dataStatusDraft"),
+    draft: t("hiddenOption"),
     scheduled: t("dataStatusScheduled"),
     public: t("statusPublic"),
-    active: t("statusLive"),
-    ended: t("statusEnded"),
     staffOnly: t("statusStaffOnly"),
   };
   return labels[status];

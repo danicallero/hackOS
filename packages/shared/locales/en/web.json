@@ -847,6 +847,8 @@
   "scheduleAudienceColumn": "Audience",
   "scheduleScannableColumn": "Scannable",
   "schedulePublishDateColumn": "Publish date",
+  "publishDateStaffOnlyHint": "Staff-only items have no publish date — staff always sees them.",
+  "publishDateAlreadyShownHint": "Already shown — there is nothing left to publish.",
   "noTypeOption": "No type",
   "editScheduleFieldAria": "Edit {field}",
   "colVisibility": "Visibility",

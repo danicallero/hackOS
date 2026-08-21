@@ -101,6 +101,7 @@ import {
 import {
   SCHEDULE_AUDIENCES,
   SCHEDULE_STATUS_TONES,
+  type ScheduleStatus,
   scheduleAudienceLabel,
   scheduleDayKey,
   scheduleDayLabel,
@@ -335,6 +336,7 @@ const DEFAULT_COLUMN_ORDER: ColumnId[] = [
 
 const REQUIRED_COLUMNS: ColumnId[] = ["item"];
 const KEYBOARD_COLUMNS: ColumnId[] = [
+  "status",
   "starts",
   "ends",
   "type",
@@ -1370,6 +1372,18 @@ function ActivityRow({
     }
   }
 
+  async function saveVisibility(next: "shown" | "hidden"): Promise<boolean> {
+    if (next === (item.visibility ?? "hidden")) return true;
+    try {
+      const updated = await logisticsApi.updateSchedule(item.id, { visibility: next });
+      onUpdate(updated);
+      return true;
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      return false;
+    }
+  }
+
   async function savePublishAt(next: string | null): Promise<boolean> {
     if (next === item.publishAt) return true;
     try {
@@ -1383,6 +1397,16 @@ function ActivityRow({
   }
 
   const status = scheduleStatus(item);
+  // A staff-only item has no audience waiting to be revealed, and an item
+  // that's already shown has nothing left to schedule — in both cases
+  // publish_at is meaningless (the API forces it back to null for the first),
+  // so the cell reads instead of edits (H59).
+  const isStaffOnly = (item.audiences ?? []).length === 0;
+  const publishAtDisabledHint = isStaffOnly
+    ? t("publishDateStaffOnlyHint")
+    : item.visibility === "shown"
+      ? t("publishDateAlreadyShownHint")
+      : undefined;
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `item-${item.id}`,
     disabled: !canEdit,
@@ -1404,7 +1428,20 @@ function ActivityRow({
   function renderCell(id: ColumnId) {
     switch (id) {
       case "status":
-        return <StatusPill item={item} status={status} />;
+        return canEdit ? (
+          <EditableStatusCell
+            item={item}
+            status={status}
+            // Staff-only items are shown to staff unconditionally and the API
+            // rejects 'shown' on them (0720) — nothing to toggle (H59).
+            disabled={isStaffOnly}
+            disabledHint={isStaffOnly ? t("staffSeeAllHint") : undefined}
+            fieldLabel={t("statusColumn")}
+            onSave={saveVisibility}
+          />
+        ) : (
+          <StatusPill item={item} status={status} />
+        );
       case "starts":
         return canEdit ? (
           <EditableTimeCell
@@ -1471,13 +1508,20 @@ function ActivityRow({
           t("noLabel")
         );
       case "publishAt":
-        return canEdit ? (
+        return canEdit && !publishAtDisabledHint ? (
           <EditablePublishDateCell
             value={item.publishAt}
             locale={language}
             fieldLabel={t("schedulePublishDateColumn")}
             onSave={savePublishAt}
           />
+        ) : canEdit ? (
+          <span
+            className="text-muted-foreground block truncate px-1 py-0.5"
+            title={publishAtDisabledHint}
+          >
+            —
+          </span>
         ) : item.publishAt ? (
           formatScheduledDateTime(item.publishAt, language)
         ) : (
@@ -1629,6 +1673,84 @@ function StatusPill({
     return <span title={new Date(item.publishAt).toLocaleString()}>{badge}</span>;
   }
   return badge;
+}
+
+/**
+ * Status cell (H59): reads as the derived state badge (Draft / Scheduled /
+ * Shown / Live / Ended), and opens a two-option selector so staff can flip an
+ * item between shown and hidden without opening the editor. The stored field
+ * is `visibility`; the rest of the badge's states are derived from the clock
+ * and the audience tags, so they aren't offered as choices.
+ */
+function EditableStatusCell({
+  item,
+  status,
+  disabled,
+  disabledHint,
+  fieldLabel,
+  onSave,
+}: {
+  item: PublicScheduleItem;
+  status: ScheduleStatus;
+  disabled: boolean;
+  disabledHint?: string;
+  fieldLabel: string;
+  onSave: (next: "shown" | "hidden") => Promise<CellSaveResult>;
+}) {
+  const { t } = useLocale();
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  async function change(next: string) {
+    if (next !== "shown" && next !== "hidden") return;
+    setSaving(true);
+    try {
+      const result = await onSave(next);
+      if (result !== false) setOpen(false);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (disabled) {
+    return (
+      <span title={disabledHint} className="block">
+        <StatusPill item={item} status={status} />
+      </span>
+    );
+  }
+
+  return (
+    <Select
+      value={item.visibility ?? "hidden"}
+      open={open}
+      onOpenChange={(next) => {
+        if (!saving) setOpen(next);
+      }}
+      onValueChange={(next) => void change(next)}
+    >
+      <SelectTrigger
+        size="sm"
+        disabled={saving}
+        aria-label={t("editScheduleFieldAria", { field: fieldLabel })}
+        onKeyDown={(event) => {
+          if (open && event.key !== "Tab") return;
+          handleScheduleGridKeyDown(event);
+        }}
+        data-schedule-focusable="true"
+        data-schedule-activate="true"
+        className="w-full border-0 bg-transparent px-1 shadow-none"
+      >
+        <StatusPill item={item} status={status} />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="shown">{t("shownOption")}</SelectItem>
+        <SelectItem value="hidden">{t("hiddenOption")}</SelectItem>
+      </SelectContent>
+    </Select>
+  );
 }
 
 type CellSaveResult = boolean | undefined;

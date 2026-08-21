@@ -256,3 +256,23 @@ html[data-locale-ready="false"] body {
     visibility: visible;
   }
 }
+
+/*
+ * iOS Safari sizes date/time inputs from the intrinsic width of their value
+ * text and refuses to shrink below it, so a picker inside a dialog or grid
+ * column widens its container and leaves the whole modal horizontally
+ * scrollable (H59). Let the control shrink and left-align the value instead
+ * of centring it in the leftover space.
+ */
+input[type="date"],
+input[type="datetime-local"],
+input[type="time"] {
+  max-width: 100%;
+}
+
+input[type="date"]::-webkit-date-and-time-value,
+input[type="datetime-local"]::-webkit-date-and-time-value,
+input[type="time"]::-webkit-date-and-time-value {
+  min-width: 0;
+  text-align: left;
+}
