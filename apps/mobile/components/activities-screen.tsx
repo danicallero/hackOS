@@ -1,3 +1,4 @@
+import { isMealActivityKind } from "@hackos/shared/activity-kinds";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FlatList, Pressable, RefreshControl, Text, useColorScheme, View } from "react-native";
@@ -7,6 +8,7 @@ import { SymbolView } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
 import { listScannerActivities } from "@/lib/scanner-db";
 import type { ScannerActivity } from "@/lib/scanner-types";
+import { activityKindSymbol } from "@/lib/schedule";
 import { useScannerSync } from "@/lib/use-scanner";
 import { colors } from "@/theme/colors";
 
@@ -26,7 +28,7 @@ export function ActivitiesScreen() {
     try {
       setItems(
         (await listScannerActivities()).filter(
-          (item) => item.requiresScan || item.category === "meal",
+          (item) => item.requiresScan || isMealActivityKind(item.category),
         ),
       );
       setError(null);
@@ -161,7 +163,12 @@ export function ActivitiesScreen() {
             }}
           >
             <SymbolView
-              name={item.category === "meal" ? "fork.knife" : "list.bullet.rectangle"}
+              // Scanner activities mirror their schedule item's category, so the
+              // icon comes from the shared kind registry; a category this build
+              // doesn't know (older rows, retired kinds) keeps the generic list icon.
+              // Icon comes from the shared kind registry, so a new category needs no
+              // change here; unknown categories keep the generic list icon.
+              name={activityKindSymbol(item.category, "list.bullet.rectangle")}
               tintColor={colors.accent}
               size={22}
             />
@@ -174,10 +181,10 @@ export function ActivitiesScreen() {
             {item.name}
           </Text>
           <StatusPill
-            tone={item.category === "meal" ? "warning" : "accent"}
+            tone={isMealActivityKind(item.category) ? "warning" : "accent"}
             style={{ alignSelf: "center" }}
           >
-            {item.category === "meal" ? t("scannerMeal") : t("scannerActivity")}
+            {isMealActivityKind(item.category) ? t("scannerMeal") : t("scannerActivity")}
           </StatusPill>
           <SymbolView name="chevron.right" tintColor={colors.tertiaryLabel} size={15} />
         </Pressable>

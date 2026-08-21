@@ -1,4 +1,10 @@
-import { ACTIVITY_KINDS, type ActivityKind } from "@hackos/shared/activity-kinds";
+import {
+  activityKind,
+  activityKindLabelKey,
+  DEFAULT_ACTIVITY_KIND,
+  toActivityKind,
+} from "@hackos/shared/activity-kinds";
+import type { SymbolViewProps } from "@/components/symbol";
 import { apiFetch } from "./api";
 import type { useLocale } from "./i18n";
 import { durationMinutes } from "./presence-timeline";
@@ -124,24 +130,22 @@ export async function removeScheduleOwner(scheduleId: number, ownerId: number): 
 }
 
 export function scheduleTypeLabel(type: string | null | undefined, t: Translate): string {
-  const kind =
-    type && ACTIVITY_KINDS.includes(type as ActivityKind) ? (type as ActivityKind) : null;
-  switch (kind) {
-    case "activity":
-      return t("typeActivity");
-    case "meal":
-      return t("typeMeal");
-    case "workshop":
-      return t("typeWorkshop");
-    case "talk":
-      return t("typeTalk");
-    case "ceremony":
-      return t("typeCeremony");
-    case "deadline":
-      return t("typeDeadline");
-    default:
-      return t("typeOther");
-  }
+  return t(activityKindLabelKey(toActivityKind(type) ?? DEFAULT_ACTIVITY_KIND));
+}
+
+/**
+ * SF Symbol for a schedule item's category (Android aliases live in
+ * components/symbol.tsx, where the registry's symbols are mandatory at
+ * compile time). Categories this build doesn't know — older rows, retired
+ * kinds — get `fallback`. The cast is unavoidable: expo-symbols' name union
+ * isn't referenceable from the shared package.
+ */
+export function activityKindSymbol(
+  category: string | null | undefined,
+  fallback: SymbolViewProps["name"] = "sparkles",
+): SymbolViewProps["name"] {
+  const kind = toActivityKind(category);
+  return kind ? (activityKind(kind).symbol as SymbolViewProps["name"]) : fallback;
 }
 
 /** `1 h 30 min` / `45 min` — the wall-clock length of a schedule item. */

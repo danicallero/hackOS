@@ -27,7 +27,7 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
+import { ACTIVITY_KINDS, isMealActivityKind } from "@hackos/shared/activity-kinds";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import {
   CalendarClockIcon,
@@ -1341,7 +1341,7 @@ function ActivityRow({
 
   async function saveType(next: string | null): Promise<boolean> {
     if (next === (item.type ?? null)) return true;
-    if (next === "meal" && !(item.audiences ?? []).includes("participant")) {
+    if (isMealActivityKind(next) && !(item.audiences ?? []).includes("participant")) {
       toast.error(t("mealNeedsParticipantAudience"));
       return false;
     }
@@ -1356,7 +1356,7 @@ function ActivityRow({
   }
 
   async function saveAudiences(next: ScheduleAudience[]): Promise<boolean> {
-    if (item.type === "meal" && !next.includes("participant")) {
+    if (isMealActivityKind(item.type) && !next.includes("participant")) {
       toast.error(t("mealNeedsParticipantAudience"));
       return false;
     }
@@ -1504,9 +1504,11 @@ function ActivityRow({
         return canEdit ? (
           <EditableScannableCell
             checked={item.requiresScan === true}
-            disabled={item.type === "meal" || !(item.audiences ?? []).includes("participant")}
+            disabled={
+              isMealActivityKind(item.type) || !(item.audiences ?? []).includes("participant")
+            }
             disabledHint={
-              item.type === "meal"
+              isMealActivityKind(item.type)
                 ? t("mealsAlwaysRegistrable")
                 : !(item.audiences ?? []).includes("participant")
                   ? t("scannableRequiresParticipant")

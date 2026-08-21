@@ -1,5 +1,9 @@
 import { MenuView } from "@expo/ui/community/menu";
-import { ACTIVITY_KINDS, type ActivityKind } from "@hackos/shared/activity-kinds";
+import {
+  ACTIVITY_KINDS,
+  type ActivityKind,
+  isMealActivityKind,
+} from "@hackos/shared/activity-kinds";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -204,7 +208,7 @@ export function ScheduleFormModal({
                   return {
                     ...current,
                     type,
-                    requiresScan: type === "meal" || current.requiresScan,
+                    requiresScan: isMealActivityKind(type) || current.requiresScan,
                   };
                 })
               }
@@ -322,7 +326,7 @@ export function ScheduleFormModal({
                     <ToggleRow
                       label={audienceLabel(audience, t)}
                       value={selected}
-                      disabled={values.type === "meal" && audience === "participant"}
+                      disabled={isMealActivityKind(values.type) && audience === "participant"}
                       onChange={(next) => {
                         const audiences = next
                           ? [...(values.audiences ?? []), audience]

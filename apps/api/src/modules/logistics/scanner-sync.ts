@@ -1,3 +1,4 @@
+import { MEAL_ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
 import { pool } from "../../db/pool.js";
 
 /**
@@ -86,8 +87,9 @@ export async function scannerSnapshot() {
       `SELECT a.id, a.name, a.category, a.requires_scan, s.starts_at
          FROM activities a
          LEFT JOIN schedule s ON s.id = a.schedule_id
-        WHERE a.category = 'meal' OR a.requires_scan = true
+        WHERE a.category = ANY($1::text[]) OR a.requires_scan = true
         ORDER BY s.starts_at ASC NULLS LAST, a.name ASC, a.id ASC`,
+      [[...MEAL_ACTIVITY_KINDS]],
     ),
     pool.query(
       `SELECT user_id, activity_id, count(*)::int AS scan_count

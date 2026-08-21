@@ -2,6 +2,7 @@
 
 // Meals and registrable activities consumed by this person (H25-H26).
 
+import { isMealActivityKind } from "@hackos/shared/activity-kinds";
 import { ClipboardListIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { type Column, DataTable } from "@/components/common/data-table";
@@ -74,8 +75,8 @@ export function PhysicalActivity({
       id: "type",
       header: t("colType"),
       cell: (p) => (
-        <StatusBadge tone={p.category === "meal" ? "success" : "info"} dot={false}>
-          {p.category === "meal" ? t("typeMeal") : t("typeWorkshop")}
+        <StatusBadge tone={isMealActivityKind(p.category) ? "success" : "info"} dot={false}>
+          {isMealActivityKind(p.category) ? t("typeMeal") : t("typeWorkshop")}
         </StatusBadge>
       ),
     },

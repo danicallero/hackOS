@@ -1,3 +1,4 @@
+import { ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
 import { z } from "zod";
 import { PERSON_FIELDS } from "./people.js";
 
@@ -239,7 +240,14 @@ export const scheduleBody = z.object({
   title: z.string().min(1).max(300),
   description: z.string().max(4000).nullable().optional(),
   location: z.string().max(300).nullable().optional(),
-  type: z.string().max(80).nullable().optional(),
+  // Categories come from the shared registry (@hackos/shared/activity-kinds)
+  // so backend, web and mobile can never drift apart — adding one there is
+  // the only place a new category is declared (H26, H48, H51).
+  type: z
+    .enum(ACTIVITY_KINDS)
+    .nullable()
+    .optional()
+    .describe("Schedule category. One of the shared activity kinds."),
   requiresScan: z.boolean().optional(),
   startsAt: z.coerce.date(),
   endsAt: z.coerce.date(),

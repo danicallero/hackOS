@@ -5,7 +5,7 @@
 // it here for a full edit, including moving an item to a different day via
 // its full Starts date).
 
-import { ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
+import { ACTIVITY_KINDS, isMealActivityKind } from "@hackos/shared/activity-kinds";
 import { CalendarDaysIcon, ChevronDownIcon, XIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -89,7 +89,7 @@ export function cleanScheduleForm(form: ScheduleInput): ScheduleInput {
     description: form.description?.trim() || null,
     location: form.location?.trim() || null,
     type: form.type?.trim() || null,
-    requiresScan: form.type === "meal" || form.requiresScan === true,
+    requiresScan: isMealActivityKind(form.type) || form.requiresScan === true,
     startsAt: new Date(form.startsAt).toISOString(),
     endsAt: new Date(form.endsAt).toISOString(),
     visibility: form.visibility,
@@ -147,7 +147,7 @@ export function ScheduleFormModal({
   }
 
   const isParticipant = (values.audiences ?? []).includes("participant");
-  const isMeal = values.type === "meal";
+  const isMeal = isMealActivityKind(values.type);
   // An item with no audience tag is staff-only, full stop — visibility/publishAt
   // describe when a *tagged* audience gets to see an item, so they're meaningless
   // (and the API silently forces them back to hidden/null) without one (H59 follow-up).
@@ -191,7 +191,7 @@ export function ScheduleFormModal({
               setValues((v) => ({
                 ...v,
                 type,
-                requiresScan: type === "meal" || v.requiresScan,
+                requiresScan: isMealActivityKind(type) || v.requiresScan,
               }))
             }
           >

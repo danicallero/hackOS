@@ -1,6 +1,14 @@
 import {
+  type ActivityKindIconName,
+  activityKind,
+  activityKindLabelKey,
+  DEFAULT_ACTIVITY_KIND,
+  toActivityKind,
+} from "@hackos/shared/activity-kinds";
+import {
   CalendarDaysIcon,
   FlagIcon,
+  type LucideIcon,
   MicIcon,
   PartyPopperIcon,
   SparklesIcon,
@@ -12,14 +20,18 @@ import type { Tone } from "@/lib/tones";
 
 export type ScheduleStatus = "draft" | "scheduled" | "public" | "staffOnly";
 
-const TYPE_ICONS: Record<string, typeof CalendarDaysIcon> = {
-  activity: SparklesIcon,
-  meal: UtensilsIcon,
-  workshop: MicIcon,
-  talk: MicIcon,
-  ceremony: PartyPopperIcon,
-  deadline: FlagIcon,
-  other: CalendarDaysIcon,
+/**
+ * lucide components for the icon names the shared kind registry references.
+ * Exhaustive by type: a kind added with a new icon name doesn't compile until
+ * its component is mapped here — that's the whole point of the registry.
+ */
+const KIND_ICONS: Record<ActivityKindIconName, LucideIcon> = {
+  "calendar-days": CalendarDaysIcon,
+  flag: FlagIcon,
+  mic: MicIcon,
+  "party-popper": PartyPopperIcon,
+  sparkles: SparklesIcon,
+  utensils: UtensilsIcon,
 };
 
 export const SCHEDULE_STATUS_TONES: Record<ScheduleStatus, Tone> = {
@@ -30,20 +42,12 @@ export const SCHEDULE_STATUS_TONES: Record<ScheduleStatus, Tone> = {
 };
 
 export function scheduleTypeLabel(type: string | null | undefined, t: Translate): string {
-  const labels: Record<string, string> = {
-    activity: t("typeActivity"),
-    meal: t("typeMeal"),
-    workshop: t("typeWorkshop"),
-    talk: t("typeTalk"),
-    ceremony: t("typeCeremony"),
-    deadline: t("typeDeadline"),
-    other: t("typeOther"),
-  };
-  return (type && labels[type]) || t("typeActivity");
+  return t(activityKindLabelKey(toActivityKind(type) ?? DEFAULT_ACTIVITY_KIND));
 }
 
-export function scheduleTypeIcon(type: string | null | undefined) {
-  return (type && TYPE_ICONS[type]) || CalendarDaysIcon;
+export function scheduleTypeIcon(type: string | null | undefined): LucideIcon {
+  const kind = toActivityKind(type);
+  return kind ? KIND_ICONS[activityKind(kind).icon] : CalendarDaysIcon;
 }
 
 /**

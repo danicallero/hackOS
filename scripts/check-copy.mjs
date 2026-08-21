@@ -276,6 +276,36 @@ for (const { dir, resolvable } of CALL_SITE_SOURCES) {
   }
 }
 
+// Schedule/activity categories (H26, H48, H51) live in one registry —
+// packages/shared/src/activity-kinds.ts — and their labels are looked up with
+// *derived* keys (`type<Pascal>` in common, `kind<Pascal>` in web), which the
+// static t("...") scan above can't see. This is the net that keeps adding a
+// category honest: the three locales must exist before the category ships.
+const KIND_REGISTRY = "packages/shared/src/activity-kinds.ts";
+const registrySrc = readFileSync(KIND_REGISTRY, "utf8");
+const registryBody = registrySrc.slice(
+  registrySrc.indexOf("const KINDS = {"),
+  registrySrc.indexOf("} as const satisfies"),
+);
+const kinds = [...registryBody.matchAll(/^\s{2}([a-zA-Z][a-zA-Z0-9_]*):\s*\{/gm)].map((m) => m[1]);
+if (kinds.length === 0) {
+  failures.push(`${KIND_REGISTRY}: could not read any activity kinds — did the registry move?`);
+}
+for (const kind of kinds) {
+  const pascal = kind.charAt(0).toUpperCase() + kind.slice(1);
+  for (const [ns, key] of [
+    ["common", `type${pascal}`],
+    ["web", `kind${pascal}`],
+  ]) {
+    if (!namespaceKeys[ns].has(key)) {
+      failures.push(
+        `${KIND_REGISTRY}: activity kind "${kind}" has no ${ns}/${key} translation ` +
+          `(every category needs a singular common/type* and a plural web/kind* label)`,
+      );
+    }
+  }
+}
+
 for (const guard of RAW_COPY_GUARDS) {
   const src = readFileSync(guard.file, "utf8");
   if (guard.pattern.test(src)) {

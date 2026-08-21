@@ -7,6 +7,7 @@ import {
   frame,
   multilineTextAlignment,
 } from "@expo/ui/swift-ui/modifiers";
+import { isMealActivityKind } from "@hackos/shared/activity-kinds";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Stack } from "expo-router/stack";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -338,7 +339,7 @@ function ActivityResultPanel({
 }) {
   const { t } = useLocale();
   const [actionsRowWidth, setActionsRowWidth] = useState(0);
-  const meal = activity?.category === "meal";
+  const meal = isMealActivityKind(activity?.category);
   const repeatPending = result.state === "repeat_pending";
   const fullName =
     [result.person.name, result.person.surname].filter(Boolean).join(" ") || result.person.email;
@@ -629,7 +630,7 @@ function ActivityStatistics({
   stats: ActivityStats | null;
 }) {
   const { t } = useLocale();
-  const meal = activity?.category === "meal";
+  const meal = isMealActivityKind(activity?.category);
   const items = [
     {
       icon: meal ? "fork.knife" : "qrcode",
