@@ -60,7 +60,7 @@ describe("logistics, event and notifications route policy ledger", () => {
     });
     expect(declared).toContainEqual({
       method: "DELETE",
-      url: "/api/schedule/:id/owners/:userId",
+      url: "/api/schedule/:id/owners/:ownerId",
       policy: { kind: "capability", capability: "schedule:manage" },
     });
     expect(declared).toContainEqual({
