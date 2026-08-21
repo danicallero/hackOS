@@ -47,8 +47,6 @@ jest.mock("@/lib/i18n", () => ({
     language: "en",
     t: (key: string) =>
       ({
-        scheduleShowMore: "Show more",
-        scheduleShowLess: "Show less",
         scheduleReminderOn: "Reminder on",
         scheduleReminderOff: "Reminder off",
         typeMeal: "Meal",
@@ -119,18 +117,13 @@ beforeEach(() => {
 });
 
 describe("schedule list (H374)", () => {
-  it("collapses long entries and expands them in place", async () => {
+  it("clamps a long description instead of expanding in place", async () => {
     await renderMobile(<ScheduleScreen />);
 
-    const showMore = await screen.findByLabelText("Show more");
+    await screen.findByText(LONG_DESCRIPTION);
     expect(screen.getByText(LONG_DESCRIPTION).props.numberOfLines).toBe(2);
-
-    fireEvent.press(showMore);
-
-    expect(await screen.findByLabelText("Show less")).toBeTruthy();
-    expect(screen.getByText(LONG_DESCRIPTION).props.numberOfLines).toBeUndefined();
-    // Expanding must not navigate away from the list.
-    expect(mockPush).not.toHaveBeenCalled();
+    // There's no in-list expand affordance anymore — the whole card opens the detail view.
+    expect(screen.queryByLabelText("Show more")).toBeNull();
   });
 
   it("keeps the type label centered in its metadata row", async () => {
@@ -141,11 +134,10 @@ describe("schedule list (H374)", () => {
     expect(style.alignSelf).toBe("center");
   });
 
-  it("leaves short entries without an expand affordance", async () => {
+  it("leaves a short description unclamped", async () => {
     await renderMobile(<ScheduleScreen />);
 
     await screen.findByText("Check-in");
-    expect(screen.queryAllByLabelText("Show more")).toHaveLength(1);
     expect(screen.getByText("Mesa 1").props.numberOfLines).toBeUndefined();
   });
 

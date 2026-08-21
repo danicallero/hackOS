@@ -124,7 +124,10 @@ export default function ScheduleScreen() {
       grouped.set(key, [...(grouped.get(key) ?? []), item]);
     }
     return [...grouped.entries()].map(([key, dayItems]) => {
-      const rows: SectionRow[] = dayItems.map((item) => ({ ...item, kind: "item" as const }));
+      const rows: SectionRow[] = dayItems.map((item) => ({
+        ...item,
+        kind: "item" as const,
+      }));
       if (key === todayKey) {
         const hasActiveItem = dayItems.some(
           (item) => safeTimestamp(item.startsAt) <= now && safeTimestamp(item.endsAt) >= now,
@@ -210,7 +213,11 @@ export default function ScheduleScreen() {
   function confirmDelete(item: ScheduleItem) {
     Alert.alert(t("scheduleDeleteConfirmTitle"), t("scheduleDeleteConfirmMessage"), [
       { text: t("cancel"), style: "cancel" },
-      { text: t("scheduleDelete"), style: "destructive", onPress: () => void deleteEntry(item) },
+      {
+        text: t("scheduleDelete"),
+        style: "destructive",
+        onPress: () => void deleteEntry(item),
+      },
     ]);
   }
 
@@ -283,7 +290,10 @@ export default function ScheduleScreen() {
         sections={sections}
         keyExtractor={(row) => (row.kind === "now" ? row.id : String(row.id))}
         contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{ flexGrow: 1, paddingBottom: insets.bottom + 24 }}
+        contentContainerStyle={{
+          flexGrow: 1,
+          paddingBottom: insets.bottom + 24,
+        }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         stickySectionHeadersEnabled
         onScrollToIndexFailed={() => {
@@ -346,9 +356,22 @@ export default function ScheduleScreen() {
         )}
         renderItem={({ item, index, section }) =>
           item.kind === "now" ? (
-            <View style={{ alignItems: "center", flexDirection: "row", gap: 8, padding: 16 }}>
+            <View
+              style={{
+                alignItems: "center",
+                flexDirection: "row",
+                gap: 8,
+                padding: 16,
+              }}
+            >
               <View style={{ backgroundColor: colors.accent, flex: 1, height: 2 }} />
-              <Text style={{ color: colors.accent, fontSize: 13, fontWeight: "700" }}>
+              <Text
+                style={{
+                  color: colors.accent,
+                  fontSize: 13,
+                  fontWeight: "700",
+                }}
+              >
                 {t("scheduleNow")}
               </Text>
               <View style={{ backgroundColor: colors.accent, flex: 1, height: 2 }} />
@@ -484,15 +507,25 @@ function safeTimestamp(value: string) {
   return Number.isFinite(timestamp) ? timestamp : Number.MAX_SAFE_INTEGER;
 }
 
+// Space between a time label and the line that follows it — kept tight so
+// the line reads as anchored to the label it belongs to.
+const TIMELINE_GAP_AFTER_LABEL = 6;
+// Space between a line and the time label that follows it — wider, so the
+// upcoming time gets a beat of anticipation before it appears.
+const TIMELINE_GAP_BEFORE_LABEL = 8;
+// Fixed-length connector between one activity's end and the next one's start.
+const TIMELINE_GAP_LINE_LENGTH = 12;
+
 const COLLAPSED_TITLE_LINES = 2;
 const COLLAPSED_DESCRIPTION_LINES = 2;
 
 /**
- * Whether a card is worth an expand affordance. `numberOfLines` clamps without
- * telling us it did, and `onTextLayout` needs a real layout pass, so we go by
- * length: short entries stay affordance-free, long ones collapse (H374).
+ * Whether a card's text needs the collapsed-with-fade treatment. `numberOfLines`
+ * clamps without telling us it did, and `onTextLayout` needs a real layout
+ * pass, so we go by length: short entries render in full, long ones clamp
+ * with a fade hint that there's more to read in the detail view (H374).
  */
-export function isScheduleCardExpandable(item: Pick<ScheduleItem, "title" | "description">) {
+export function isScheduleCardTruncated(item: Pick<ScheduleItem, "title" | "description">) {
   const description = item.description ?? "";
   return description.includes("\n") || description.length > 90 || item.title.length > 60;
 }
@@ -514,13 +547,17 @@ function ScheduleCard({
 }) {
   const { t } = useLocale();
   const router = useRouter();
-  const [expanded, setExpanded] = useState(false);
-  const expandable = isScheduleCardExpandable(item);
-  const collapsed = expandable && !expanded;
+  const truncated = isScheduleCardTruncated(item);
   const startsAt = new Date(item.startsAt);
   const endsAt = new Date(item.endsAt);
-  const time = startsAt.toLocaleTimeString(language, { hour: "2-digit", minute: "2-digit" });
-  const end = endsAt.toLocaleTimeString(language, { hour: "2-digit", minute: "2-digit" });
+  const time = startsAt.toLocaleTimeString(language, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const end = endsAt.toLocaleTimeString(language, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
   function toggleReminder(event: GestureResponderEvent) {
     event.stopPropagation();
@@ -528,92 +565,123 @@ function ScheduleCard({
   }
 
   return (
-    <View
-      style={{ backgroundColor: colors.background, flexDirection: "row", paddingHorizontal: 16 }}
-    >
-      <View style={{ alignItems: "center", width: 70 }}>
-        <Text
-          selectable
+    <View style={{ backgroundColor: colors.background, paddingHorizontal: 16 }}>
+      <View style={{ flexDirection: "row" }}>
+        {/* Purely visual — the card's accessibilityLabel below already announces
+            the start and end times, so this column would otherwise double up. */}
+        <View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={{ alignItems: "center", width: 70 }}
+        >
+          <Text
+            style={{
+              color: colors.label,
+              fontSize: 15,
+              fontVariant: ["tabular-nums"],
+              fontWeight: "600",
+              marginTop: TIMELINE_GAP_BEFORE_LABEL,
+            }}
+          >
+            {time}
+          </Text>
+          {/* Duration: start to end. */}
+          <View
+            style={{
+              backgroundColor: colors.separator,
+              flex: 1,
+              marginTop: TIMELINE_GAP_AFTER_LABEL,
+              width: 1,
+            }}
+          />
+          <Text
+            style={{
+              color: colors.tertiaryLabel,
+              fontSize: 13,
+              fontVariant: ["tabular-nums"],
+              fontWeight: "500",
+              marginBottom: TIMELINE_GAP_AFTER_LABEL,
+              marginTop: TIMELINE_GAP_BEFORE_LABEL,
+            }}
+          >
+            {end}
+          </Text>
+        </View>
+        <Pressable
+          accessibilityLabel={[
+            item.title,
+            time,
+            end,
+            item.location,
+            reminderOn === null
+              ? null
+              : t(reminderOn ? "scheduleReminderOn" : "scheduleReminderOff", {
+                  name: item.title,
+                }),
+          ]
+            .filter(Boolean)
+            .join(", ")}
+          accessibilityRole="button"
+          onPress={() =>
+            router.push({
+              pathname: "/schedule/[id]",
+              params: { id: String(item.id) },
+            })
+          }
           style={{
-            color: colors.label,
-            fontSize: 15,
-            fontVariant: ["tabular-nums"],
-            fontWeight: "600",
+            backgroundColor: colors.surface,
+            borderCurve: "continuous",
+            borderRadius: 14,
+            flex: 1,
+            marginLeft: 8,
+            position: "relative",
           }}
         >
-          {time}
-        </Text>
-        {!last ? (
-          <View style={{ backgroundColor: colors.separator, flex: 1, marginTop: 8, width: 1 }} />
-        ) : null}
-      </View>
-      <Pressable
-        accessibilityLabel={[
-          item.title,
-          time,
-          end,
-          item.location,
-          reminderOn === null
-            ? null
-            : t(reminderOn ? "scheduleReminderOn" : "scheduleReminderOff", {
+          {reminderOn !== null ? (
+            <Pressable
+              accessibilityLabel={t(reminderOn ? "scheduleReminderOn" : "scheduleReminderOff", {
                 name: item.title,
-              }),
-        ]
-          .filter(Boolean)
-          .join(", ")}
-        accessibilityRole="button"
-        onPress={() => router.push({ pathname: "/schedule/[id]", params: { id: String(item.id) } })}
-        style={{
-          alignItems: "center",
-          backgroundColor: colors.surface,
-          borderCurve: "continuous",
-          borderRadius: 14,
-          flex: 1,
-          flexDirection: "row",
-          marginBottom: 12,
-          marginLeft: 8,
-        }}
-      >
-        <View style={{ flex: 1, gap: 9, padding: 16 }}>
-          <View style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
+              })}
+              accessibilityRole="button"
+              accessibilityState={{ selected: reminderOn, busy: reminderBusy }}
+              disabled={reminderBusy}
+              onPress={toggleReminder}
+              hitSlop={{ bottom: 14, left: 14, right: 14, top: 14 }}
+              style={({ pressed }) => ({
+                alignItems: "center",
+                justifyContent: "center",
+                height: 22,
+                position: "absolute",
+                right: 12,
+                top: 12,
+                width: 22,
+                opacity: reminderBusy ? 0.4 : pressed ? 0.65 : 1,
+              })}
+            >
+              <SymbolView
+                name={reminderOn ? "bell.fill" : "bell"}
+                tintColor={reminderOn ? colors.accent : colors.tertiaryLabel}
+                size={19}
+              />
+            </Pressable>
+          ) : null}
+          <View style={{ gap: 11, padding: 18, paddingRight: 40 }}>
             <Text
               selectable
-              numberOfLines={collapsed ? COLLAPSED_TITLE_LINES : undefined}
-              style={{ color: colors.label, flex: 1, fontSize: 17, fontWeight: "700" }}
+              numberOfLines={truncated ? COLLAPSED_TITLE_LINES : undefined}
+              style={{ color: colors.label, fontSize: 17, fontWeight: "700" }}
             >
               {item.title}
             </Text>
-            {reminderOn !== null ? (
-              <Pressable
-                accessibilityLabel={t(reminderOn ? "scheduleReminderOn" : "scheduleReminderOff", {
-                  name: item.title,
-                })}
-                accessibilityRole="button"
-                accessibilityState={{ selected: reminderOn, busy: reminderBusy }}
-                disabled={reminderBusy}
-                onPress={toggleReminder}
-                // hitSlop instead of a 44pt box: the box stretched the header row
-                // and pushed the bell off the title's baseline (H374).
-                hitSlop={{ bottom: 14, left: 14, right: 14, top: 14 }}
-                style={({ pressed }) => ({
-                  alignItems: "center",
-                  justifyContent: "center",
-                  height: 22,
-                  width: 22,
-                  opacity: reminderBusy ? 0.4 : pressed ? 0.65 : 1,
-                })}
-              >
-                <SymbolView
-                  name={reminderOn ? "bell.fill" : "bell"}
-                  tintColor={reminderOn ? colors.accent : colors.tertiaryLabel}
-                  size={19}
-                />
-              </Pressable>
-            ) : null}
-          </View>
-          <View style={{ alignItems: "center", flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
-            {item.type ? (
-              <>
+            <View
+              style={{
+                alignItems: "center",
+                flexDirection: "row",
+                flexWrap: "wrap",
+                gap: 6,
+              }}
+            >
+              {item.type ? (
                 <Text
                   style={{
                     alignSelf: "center",
@@ -624,75 +692,54 @@ function ScheduleCard({
                 >
                   {scheduleTypeLabel(item.type, t)}
                 </Text>
+              ) : null}
+              {item.type && item.location ? (
                 <Text style={{ color: colors.tertiaryLabel, fontSize: 13 }}>·</Text>
-              </>
-            ) : null}
-            <Text
-              selectable
-              style={{
-                color: colors.secondaryLabel,
-                fontSize: 13,
-                fontVariant: ["tabular-nums"],
-              }}
-            >
-              {time}–{end}
-            </Text>
-            {item.location ? (
-              <>
-                <Text style={{ color: colors.tertiaryLabel, fontSize: 13 }}>·</Text>
+              ) : null}
+              {item.location ? (
                 <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13 }}>
                   {item.location}
                 </Text>
-              </>
+              ) : null}
+            </View>
+            {item.description ? (
+              <Text
+                selectable
+                numberOfLines={truncated ? COLLAPSED_DESCRIPTION_LINES : undefined}
+                style={{
+                  color: colors.secondaryLabel,
+                  fontSize: 15,
+                  lineHeight: 21,
+                }}
+              >
+                {item.description}
+              </Text>
             ) : null}
           </View>
-          {item.description ? (
-            <Text
-              selectable
-              numberOfLines={collapsed ? COLLAPSED_DESCRIPTION_LINES : undefined}
-              style={{ color: colors.secondaryLabel, fontSize: 15, lineHeight: 21 }}
-            >
-              {item.description}
-            </Text>
-          ) : null}
-          {expandable ? (
-            <Pressable
-              accessibilityLabel={t(expanded ? "scheduleShowLess" : "scheduleShowMore")}
-              accessibilityRole="button"
-              accessibilityState={{ expanded }}
-              hitSlop={{ bottom: 12, left: 12, right: 12, top: 12 }}
-              onPress={(event) => {
-                event.stopPropagation();
-                void haptic("selection");
-                setExpanded((current) => !current);
-              }}
-              style={({ pressed }) => ({
-                alignItems: "center",
-                alignSelf: "flex-start",
-                flexDirection: "row",
-                gap: 4,
-                opacity: pressed ? 0.65 : 1,
-              })}
-            >
-              <Text style={{ color: colors.accent, fontSize: 13, fontWeight: "600" }}>
-                {t(expanded ? "scheduleShowLess" : "scheduleShowMore")}
-              </Text>
-              <SymbolView
-                name={expanded ? "chevron.up" : "chevron.down"}
-                tintColor={colors.accent}
-                size={11}
-                accessible={false}
-              />
-            </Pressable>
-          ) : null}
-        </View>
-        <SymbolView
-          name="chevron.right"
-          tintColor={colors.tertiaryLabel}
-          size={13}
-          style={{ marginRight: 14 }}
-        />
-      </Pressable>
+          {/* Where "show more" used to sit — the whole card now always opens
+              the detail view instead of expanding in place. */}
+          <SymbolView
+            accessible={false}
+            name="chevron.right"
+            tintColor={colors.tertiaryLabel}
+            size={13}
+            style={{ bottom: 14, position: "absolute", right: 14 }}
+          />
+        </Pressable>
+      </View>
+      <View style={{ flexDirection: "row", height: TIMELINE_GAP_LINE_LENGTH }}>
+        {/* Gap: this activity's end to the next one's start — same tone as
+            the line inside the card above. */}
+        {!last ? (
+          <View
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            style={{ alignItems: "center", width: 70 }}
+          >
+            <View style={{ backgroundColor: colors.separator, flex: 1, width: 1 }} />
+          </View>
+        ) : null}
+      </View>
     </View>
   );
 }

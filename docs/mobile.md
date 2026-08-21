@@ -242,18 +242,24 @@ route below. No migration needed.
   demand, allows an expanded message to be deleted after native confirmation,
   and mirrors the web activity/kind reminder preferences.
 - `app/(tabs)/schedule.tsx` — the participant agenda, grouped by day with a
-  "Now" divider the list auto-scrolls to on first load. Cards are **collapsed
-  by default** when their copy is long (`isScheduleCardExpandable`: a
-  multi-line description, >90 characters of it, or a >60-character title):
-  title and description clamp to two lines behind a "Show more"/"Show less"
-  chevron that expands the card **in place** instead of navigating. The card
-  body still pushes `app/schedule/[id].tsx`. Adjacent overlapping entries get
-  a warning glyph in the time gutter (`entriesOverlap`, `lib/schedule.ts`).
-  The reminder bell sits in the title row (`hitSlop` — a 44pt touch box
-  stretched the row and pulled the bell off the title, H374) and toggles the
-  H59 per-category notification model **straight from the list** via
-  `lib/use-schedule-notifications.ts`; filled/accent means on, outline/grey
-  off. A header row (title + glass Filter/Add/Settings buttons, matching the
+  "Now" divider the list auto-scrolls to on first load. There is no in-place
+  expansion: every card always opens `app/schedule/[id].tsx` for the full
+  detail. Cards whose copy is long (`isScheduleCardTruncated`: a multi-line
+  description, >90 characters of it, or a >60-character title) clamp title
+  and description to two lines, capping the card's height; the chevron
+  affordance sits in the card's bottom-right corner (where the old "Show
+  more" toggle used to be). The timeline gutter draws one continuous line
+  per day: tight
+  spacing (`TIMELINE_GAP_AFTER_LABEL`) right after a time label, wider
+  spacing (`TIMELINE_GAP_BEFORE_LABEL`) as it approaches the next one, so
+  each label reads as anchored to the line above it with a beat of
+  anticipation before the next. Adjacent overlapping entries get a warning
+  glyph in the time gutter (`entriesOverlap`, `lib/schedule.ts`). The
+  reminder bell sits absolutely positioned in the card's top-right corner
+  (`hitSlop` — a 44pt touch box stretched the row and pulled the bell off the
+  title, H374) and toggles the H59 per-category notification model
+  **straight from the list** via `lib/use-schedule-notifications.ts`;
+  filled/accent means on, outline/grey off. A header row (title + glass Filter/Add/Settings buttons, matching the
   scanner screen's glass style) provides a kind filter for everyone plus an
   audience filter for `schedule:manage` holders
   (`components/schedule-filter-button.tsx`), the create form (Add, admin
