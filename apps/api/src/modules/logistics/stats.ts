@@ -1,3 +1,4 @@
+import { MEAL_ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
 import { pool } from "../../db/pool.js";
 import { occupancyEstimate } from "./presence.js";
 
@@ -20,7 +21,10 @@ export interface ActivityAggregate {
  * the linked schedule's start time (nulls last, for activities with no
  * schedule_id) so operators see activities in chronological order.
  */
-async function aggregateActivities(where: string): Promise<ActivityAggregate[]> {
+async function aggregateActivities(
+  where: string,
+  params: unknown[] = [],
+): Promise<ActivityAggregate[]> {
   const { rows } = await pool.query(
     `SELECT a.id, a.name, a.category,
             count(al.id)::int AS count,
@@ -31,6 +35,7 @@ async function aggregateActivities(where: string): Promise<ActivityAggregate[]> 
       WHERE ${where}
       GROUP BY a.id, a.name, a.category, s.starts_at
       ORDER BY s.starts_at ASC NULLS LAST, a.name ASC, a.id ASC`,
+    params,
   );
   return rows.map(
     (r: {
@@ -58,13 +63,15 @@ async function aggregateActivities(where: string): Promise<ActivityAggregate[]> 
 export async function scannableActivities(
   category?: "meal" | "activity",
 ): Promise<ActivityAggregate[]> {
+  // Which categories count as meals comes from the shared kind registry, so
+  // adding a meal-like category needs no SQL change (H25, H26).
   const where =
     category === "meal"
-      ? "a.category = 'meal'"
+      ? "a.category = ANY($1::text[])"
       : category === "activity"
-        ? "a.requires_scan = true AND a.category <> 'meal'"
-        : "a.category = 'meal' OR a.requires_scan = true";
-  return aggregateActivities(where);
+        ? "a.requires_scan = true AND NOT (a.category = ANY($1::text[]))"
+        : "a.category = ANY($1::text[]) OR a.requires_scan = true";
+  return aggregateActivities(where, [[...MEAL_ACTIVITY_KINDS]]);
 }
 
 /** Accreditation totals by operational role; admins are included in staff. */

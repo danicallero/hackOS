@@ -1,3 +1,4 @@
+import { isMealActivityKind } from "@hackos/shared/activity-kinds";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { useEffect, useState } from "react";
 import {
@@ -472,7 +473,7 @@ function ActivityForm({ setCameraSetter, afterSubmit }: FormProps) {
     // (H25/H26): the API 409s repeats sent without allowRepeat.
     if (count > 0) {
       Alert.alert(
-        selected?.category === "meal" ? t("scannerRepeatTitle") : t("scannerRepeatFound"),
+        isMealActivityKind(selected?.category) ? t("scannerRepeatTitle") : t("scannerRepeatFound"),
         t("scannerRepeatBody", { count: String(count) }),
         [
           { text: t("cancel"), style: "cancel" },

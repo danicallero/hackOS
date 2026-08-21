@@ -1,3 +1,4 @@
+import { isMealActivityKind } from "@hackos/shared/activity-kinds";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
@@ -22,7 +23,8 @@ interface ScanResult {
 // ── H25 meals / H26 registrable activities: scan a badge ──────────────────
 
 /**
- * Scan a badge at a meal (category='meal') or any requires_scan activity
+ * Scan a badge at a meal (a category the shared registry marks `scan: "meal"`)
+ * or any requires_scan activity
  * (H25, H26).
  *
  * - Everyone has the right to eat: no entitlement check gates meal scans.
@@ -49,7 +51,7 @@ export async function activityScan(
     activityId,
   ]);
   if (!act.rows[0]) throw new NotFoundError("Activity not found");
-  const isMeal = act.rows[0].category === "meal";
+  const isMeal = isMealActivityKind(act.rows[0].category);
   if (!isMeal && !act.rows[0].requires_scan) {
     throw new BadRequestError("Activity is not scannable", { activityId });
   }

@@ -1,4 +1,5 @@
 import { MenuView } from "@expo/ui/community/menu";
+import { isMealActivityKind } from "@hackos/shared/activity-kinds";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -423,7 +424,7 @@ function iconForSignal(signal: PresenceSignal): {
 } {
   if (signal.kind === "activity") {
     return {
-      icon: signal.category === "meal" ? "fork.knife" : "figure.run",
+      icon: isMealActivityKind(signal.category) ? "fork.knife" : "figure.run",
       background: colors.purple,
     };
   }

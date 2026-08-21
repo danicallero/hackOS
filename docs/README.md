@@ -55,6 +55,11 @@ Architecture & modules:
   `event_config` singleton (identity, doors-open vs hacking window, venue) and
   how the Wallet pass renders from it (field visibility, captions, back fields),
   plus the session-less scoped-token path from the acceptance email.
+- [Schedule categories (activity kinds)](./schedule-categories.md) — the one
+  registry every schedule/activity category comes from, how to add or retire
+  one, and the four guardrails (typed label keys, the web icon map, the mobile
+  Android-symbol map, `pnpm check:copy`) that keep the API, web and mobile from
+  drifting apart.
 - [TV screens](./tv-screens.md) — what the venue's screens show and why: the
   override / timetable / default precedence, the combined live screen and its
   payload, slot rotation, venue Wi-Fi, and how each mode adapts to any screen

@@ -1,4 +1,5 @@
 import { MenuView } from "@expo/ui/community/menu";
+import { type ActivityKindSymbolName, isMealActivityKind } from "@hackos/shared/activity-kinds";
 import { useFocusEffect, useNavigation, useRouter } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Pressable, RefreshControl, Text, useColorScheme, View } from "react-native";
@@ -14,18 +15,9 @@ import {
 import { useLocale } from "@/lib/i18n";
 import { listScannerActivities } from "@/lib/scanner-db";
 import type { ScannerActivity } from "@/lib/scanner-types";
-import { scheduleTypeLabel } from "@/lib/schedule";
+import { activityKindSymbol, scheduleTypeLabel } from "@/lib/schedule";
 import { useScannerSync } from "@/lib/use-scanner";
 import { colors } from "@/theme/colors";
-
-/** The row icons this screen picks from — narrow enough to satisfy both `SymbolView` and the filter menu's `image`. */
-type KindIcon =
-  | "fork.knife"
-  | "hammer"
-  | "person.wave.2"
-  | "sparkles"
-  | "clock"
-  | "list.bullet.rectangle";
 
 /** How often the "Now"/"Next" marker re-evaluates which row it belongs to. */
 const MARKER_TICK_MS = 60_000;
@@ -49,7 +41,7 @@ export function ActivitiesScreen() {
   const load = useCallback(async () => {
     try {
       const next = (await listScannerActivities()).filter(
-        (item) => item.requiresScan || item.category === "meal",
+        (item) => item.requiresScan || isMealActivityKind(item.category),
       );
       // Committing a fresh array on every 15s sync tick re-rendered every row
       // and bounced the scroll offset back under the large title, which read
@@ -126,7 +118,7 @@ export function ActivitiesScreen() {
             ...kinds.map((value) => ({
               id: value,
               title: scheduleTypeLabel(value, t),
-              image: kindIcon(value),
+              image: activityKindSymbol(value) as ActivityKindSymbolName,
               state: (kind === value ? "on" : "off") as "on" | "off",
             })),
           ]}
@@ -287,7 +279,14 @@ function ActivityRow({
           width: 42,
         }}
       >
-        <SymbolView name={kindIcon(item.category)} tintColor={colors.accent} size={22} />
+        <SymbolView
+          // The scanner's activities mirror their schedule item's category, so
+          // the icon comes from the shared kind registry; a category this build
+          // doesn't know (older rows, retired kinds) keeps the generic list icon.
+          name={activityKindSymbol(item.category, "list.bullet.rectangle")}
+          tintColor={colors.accent}
+          size={22}
+        />
       </View>
       <View style={{ flex: 1, gap: 2 }}>
         <Text
@@ -321,7 +320,7 @@ function ActivityRow({
         ) : null}
       </View>
       <StatusPill
-        tone={item.category === "meal" ? "warning" : "accent"}
+        tone={isMealActivityKind(item.category) ? "warning" : "accent"}
         style={{ alignSelf: "center" }}
       >
         {scheduleTypeLabel(item.category, t)}
@@ -329,21 +328,4 @@ function ActivityRow({
       <SymbolView name="chevron.right" tintColor={colors.tertiaryLabel} size={15} />
     </Pressable>
   );
-}
-
-function kindIcon(category: string): KindIcon {
-  switch (category) {
-    case "meal":
-      return "fork.knife";
-    case "workshop":
-      return "hammer";
-    case "talk":
-      return "person.wave.2";
-    case "ceremony":
-      return "sparkles";
-    case "deadline":
-      return "clock";
-    default:
-      return "list.bullet.rectangle";
-  }
 }

@@ -1,3 +1,4 @@
+import { isMealActivityKind } from "@hackos/shared/activity-kinds";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import type { Job } from "bullmq";
 import { pool, withTransaction } from "../../db/pool.js";
@@ -27,7 +28,7 @@ export async function enqueueMealScanBatch(
 ) {
   const activity = await pool.query(`SELECT category FROM activities WHERE id = $1`, [activityId]);
   if (!activity.rows[0]) throw new NotFoundError("Activity not found");
-  if (activity.rows[0].category !== "meal") {
+  if (!isMealActivityKind(activity.rows[0].category)) {
     throw new BadRequestError("Offline meal queue only accepts meal activities", { activityId });
   }
 

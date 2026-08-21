@@ -1,3 +1,4 @@
+import type { ActivityKindSymbolName } from "@hackos/shared/activity-kinds";
 import {
   SymbolView as ExpoSymbolView,
   type SymbolViewProps as ExpoSymbolViewProps,
@@ -12,8 +13,12 @@ export type SymbolViewProps = ExpoSymbolViewProps;
  * the symbol silently renders nothing — every icon in the app would be
  * blank on Android otherwise. This maps every SF Symbol name this app
  * passes as a plain string to its closest Google Material Symbols name.
+ *
+ * The `satisfies` intersection makes the schedule-kind symbols mandatory: add
+ * a category to @hackos/shared/activity-kinds with a new SF Symbol and this
+ * file fails to compile until the Android alias exists.
  */
-const ANDROID_SYMBOL_NAMES: Record<string, string> = {
+const ANDROID_SYMBOL_NAMES = {
   "arrow.clockwise": "refresh",
   "arrow.down.circle": "arrow_circle_down",
   "arrow.left.to.line": "first_page",
@@ -25,6 +30,7 @@ const ANDROID_SYMBOL_NAMES: Record<string, string> = {
   "bell.badge.fill": "notifications_active",
   "bell.fill": "notifications",
   briefcase: "work",
+  calendar: "calendar_month",
   "calendar.badge.clock": "event_upcoming",
   "calendar.badge.exclamationmark": "event_busy",
   "camera.fill": "camera_alt",
@@ -61,7 +67,6 @@ const ANDROID_SYMBOL_NAMES: Record<string, string> = {
   "flashlight.on.fill": "flashlight_on",
   "fork.knife": "restaurant",
   globe: "public",
-  hammer: "handyman",
   hourglass: "hourglass_empty",
   "internaldrive.fill": "save",
   "key.card": "key",
@@ -76,8 +81,10 @@ const ANDROID_SYMBOL_NAMES: Record<string, string> = {
   magnifyingglass: "search",
   "lock.rotation": "sync_lock",
   "mappin.and.ellipse": "location_on",
+  mic: "mic",
   "note.text": "description",
   "number.circle": "pin",
+  "party.popper": "celebration",
   pencil: "edit",
   person: "person",
   "person.2": "group",
@@ -88,7 +95,6 @@ const ANDROID_SYMBOL_NAMES: Record<string, string> = {
   "person.fill": "person",
   "person.line.dotted.person.fill": "supervisor_account",
   "person.text.rectangle": "contact_page",
-  "person.wave.2": "record_voice_over",
   phone: "phone",
   "play.rectangle": "play_circle",
   "plus.circle.fill": "add_circle",
@@ -104,7 +110,7 @@ const ANDROID_SYMBOL_NAMES: Record<string, string> = {
   "wrench.and.screwdriver.fill": "build",
   xmark: "close",
   "xmark.circle.fill": "cancel",
-};
+} as const satisfies Record<string, string> & Record<ActivityKindSymbolName, string>;
 
 /**
  * Drop-in replacement for `expo-symbols`' `SymbolView` that also renders on
@@ -116,7 +122,7 @@ export function SymbolView(props: ExpoSymbolViewProps) {
   if (Platform.OS === "ios" || Platform.OS === "macos" || typeof props.name !== "string") {
     return <ExpoSymbolView {...props} />;
   }
-  const android = ANDROID_SYMBOL_NAMES[props.name];
+  const android = (ANDROID_SYMBOL_NAMES as Record<string, string | undefined>)[props.name];
   if (!android) {
     return <ExpoSymbolView {...props} />;
   }

@@ -1,3 +1,4 @@
+import { DEFAULT_ACTIVITY_KIND, isMealActivityKind } from "@hackos/shared/activity-kinds";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
@@ -10,8 +11,13 @@ import { computeMembershipFlags, mentorOrParticipantType } from "../identity/rol
 const SCHEDULE_COLUMNS =
   "id, title, description, location, type, requires_scan, starts_at, ends_at, visibility, publish_at, reminded_at, audiences, contact_note, notes, created_at, updated_at";
 
+/**
+ * A scanner activity mirrors its schedule item's category verbatim (H25, H26)
+ * — the kind ids are the shared registry's, so "which categories are meals"
+ * is answered by `isMealActivityKind`, never by a hardcoded `'meal'`.
+ */
 function toActivityCategory(type: string | null): string {
-  return type === "meal" ? "meal" : (type ?? "activity");
+  return type ?? DEFAULT_ACTIVITY_KIND;
 }
 
 /**
@@ -203,7 +209,7 @@ export async function listSchedule() {
 
 export async function createScheduleItem(actorId: number | null, input: ScheduleInput) {
   assertWindow(input.startsAt, input.endsAt);
-  const requiresScan = input.type === "meal" || input.requiresScan === true;
+  const requiresScan = isMealActivityKind(input.type) || input.requiresScan === true;
   const audiences = input.audiences ?? [];
   assertScanRequiresParticipantAudience(requiresScan, audiences);
   const { visibility, publishAt } = normalizeVisibilityForAudiences(
@@ -264,7 +270,7 @@ export async function updateScheduleItem(actorId: number | null, id: number, pat
     const nextType =
       patch.type === undefined ? (current.rows[0].type as string | null) : patch.type;
     const nextRequiresScan =
-      nextType === "meal" ||
+      isMealActivityKind(nextType) ||
       patch.requiresScan === true ||
       (patch.requiresScan === undefined && Boolean(current.rows[0].requires_scan));
     const nextAudiences = patch.audiences ?? (current.rows[0].audiences as string[]);

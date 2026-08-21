@@ -10,7 +10,11 @@
 // generic "your own topic" stream despite living in the queue module, so we
 // reuse it here instead of adding a new route.
 
-import { ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
+import {
+  ACTIVITY_KINDS,
+  activityKindPluralKey,
+  toActivityKind,
+} from "@hackos/shared/activity-kinds";
 import { EVENTS } from "@hackos/shared/events";
 import {
   CalendarClockIcon,
@@ -66,21 +70,14 @@ function categoryLabelMap(t: Translate): Record<string, string> {
   };
 }
 
-/** `schedule.type` labels (H51 kind-based reminders) — free text on the backend, not DB-enforced, so unrecognized kinds fall back to the raw string. */
-function kindLabelMap(t: Translate): Record<string, string> {
-  return {
-    meal: t("kindMeal"),
-    workshop: t("kindWorkshop"),
-    talk: t("kindTalk"),
-    ceremony: t("kindCeremony"),
-    activity: t("kindActivity"),
-    deadline: t("kindDeadline"),
-    other: t("kindOther"),
-  };
-}
-
+/**
+ * `schedule.type` labels (H51 kind-based reminders) — plural, from the shared
+ * kind registry. Kinds are free text on the backend for rows created before a
+ * category was retired, so an unrecognized one falls back to the raw string.
+ */
 function kindLabel(kind: string, t: Translate): string {
-  return kindLabelMap(t)[kind] ?? kind;
+  const known = toActivityKind(kind);
+  return known ? t(activityKindPluralKey(known)) : kind;
 }
 
 function channelLabelMap(t: Translate): Record<NotificationChannel, string> {
