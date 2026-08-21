@@ -196,6 +196,50 @@ export function withTimeOfDay(iso: string, hhmm: string): string | null {
   return date.toISOString();
 }
 
+/** One calendar day, in ms — the roll applied when a window crosses midnight. */
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Applies a new HH:mm to one end of a schedule window, rolling the *other*
+ * side to the next day when the edit would otherwise invert it (H59).
+ *
+ * Typing "00:00" as the end of a 23:00 item means "midnight tonight", not
+ * "midnight this morning" — an inline time cell has no field for the date, so
+ * a run-of-show that runs past midnight was impossible to enter without
+ * opening the full editor. The same reading applies from the other side: move
+ * a start past its end and the end is the one that crosses over.
+ *
+ * Returns both timestamps (unchanged ones included) or null if the input
+ * isn't a valid HH:mm.
+ */
+export function withTimeOfDayAcrossMidnight(
+  startsAt: string,
+  endsAt: string,
+  field: "startsAt" | "endsAt",
+  hhmm: string,
+): { startsAt: string; endsAt: string } | null {
+  const next = withTimeOfDay(field === "startsAt" ? startsAt : endsAt, hhmm);
+  if (!next) return null;
+
+  if (field === "endsAt") {
+    const start = new Date(startsAt).getTime();
+    const end = new Date(next).getTime();
+    if (Number.isNaN(start) || Number.isNaN(end)) return null;
+    return {
+      startsAt,
+      endsAt: end > start ? next : new Date(end + ONE_DAY_MS).toISOString(),
+    };
+  }
+
+  const start = new Date(next).getTime();
+  const end = new Date(endsAt).getTime();
+  if (Number.isNaN(start) || Number.isNaN(end)) return null;
+  return {
+    startsAt: next,
+    endsAt: end > start ? endsAt : new Date(end + ONE_DAY_MS).toISOString(),
+  };
+}
+
 /**
  * Re-applies a new calendar date (year/month/day) to an existing ISO
  * timestamp, keeping its time-of-day unchanged — the counterpart to

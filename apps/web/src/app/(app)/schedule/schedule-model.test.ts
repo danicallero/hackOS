@@ -9,6 +9,7 @@ import {
   timeInputValue,
   withDate,
   withTimeOfDay,
+  withTimeOfDayAcrossMidnight,
 } from "./schedule-model";
 
 const NOW = Date.parse("2026-07-22T12:00:00.000Z");
@@ -126,6 +127,41 @@ describe("timeInputValue / withTimeOfDay", () => {
   it("rejects a malformed time or timestamp", () => {
     expect(withTimeOfDay("2026-07-22T08:00:00.000Z", "not-a-time")).toBeNull();
     expect(withTimeOfDay("not-a-date", "14:30")).toBeNull();
+  });
+});
+
+describe("withTimeOfDayAcrossMidnight", () => {
+  // 23:00 -> 23:30 local on a fixed day, written as local time on purpose:
+  // the cell edits a wall clock, not an instant.
+  const startsAt = new Date("2026-08-28T23:00:00").toISOString();
+  const endsAt = new Date("2026-08-28T23:30:00").toISOString();
+
+  it("rolls the end to the next day when it would land before the start", () => {
+    const next = withTimeOfDayAcrossMidnight(startsAt, endsAt, "endsAt", "00:00");
+    expect(next).not.toBeNull();
+    expect(next?.startsAt).toBe(startsAt);
+    expect(timeInputValue(next?.endsAt as string)).toBe("00:00");
+    expect(scheduleDayKey(next?.endsAt as string)).toBe("2026-08-29");
+    expect(scheduleDuration(startsAt, next?.endsAt as string)).toBe("1:00");
+  });
+
+  it("leaves a same-day window alone", () => {
+    const next = withTimeOfDayAcrossMidnight(startsAt, endsAt, "endsAt", "23:45");
+    expect(scheduleDayKey(next?.endsAt as string)).toBe("2026-08-28");
+    expect(scheduleDuration(startsAt, next?.endsAt as string)).toBe("0:45");
+  });
+
+  it("pushes the end over midnight when the start moves past it", () => {
+    const next = withTimeOfDayAcrossMidnight(startsAt, endsAt, "startsAt", "23:40");
+    expect(timeInputValue(next?.startsAt as string)).toBe("23:40");
+    expect(scheduleDayKey(next?.endsAt as string)).toBe("2026-08-29");
+    expect(scheduleDuration(next?.startsAt as string, next?.endsAt as string)).toBe("23:50");
+  });
+
+  it("rejects a malformed time", () => {
+    // Out-of-range digits ("24:99") are the cell's job — TIME_24H_PATTERN
+    // rejects them before this is ever called.
+    expect(withTimeOfDayAcrossMidnight(startsAt, endsAt, "endsAt", "not-a-time")).toBeNull();
   });
 });
 

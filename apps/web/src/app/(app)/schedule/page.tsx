@@ -122,7 +122,7 @@ import {
   scheduleTypeLabel,
   timeInputValue,
   withDate,
-  withTimeOfDay,
+  withTimeOfDayAcrossMidnight,
 } from "./schedule-model";
 
 function ownerDisplayName(owner: {
@@ -1301,10 +1301,13 @@ function ActivityRow({
   const { t, language } = useLocale();
 
   async function saveTime(field: "startsAt" | "endsAt", hhmm: string): Promise<boolean> {
-    const next = withTimeOfDay(item[field], hhmm);
-    if (!next || next === item[field]) return true;
+    // Both ends go up together: an end of 00:00 on a 23:00 item means midnight
+    // *tonight*, so the counterpart may have rolled a day (H59).
+    const next = withTimeOfDayAcrossMidnight(item.startsAt, item.endsAt, field, hhmm);
+    if (!next) return true;
+    if (next.startsAt === item.startsAt && next.endsAt === item.endsAt) return true;
     try {
-      const updated = await logisticsApi.updateSchedule(item.id, { [field]: next });
+      const updated = await logisticsApi.updateSchedule(item.id, next);
       onUpdate(updated);
       return true;
     } catch (err) {
