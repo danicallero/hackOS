@@ -241,8 +241,20 @@ route below. No migration needed.
   fallback. `notifications.tsx` pages past the initial 20 inbox messages on
   demand, allows an expanded message to be deleted after native confirmation,
   and mirrors the web activity/kind reminder preferences.
-- `app/(tabs)/schedule.tsx` — the participant agenda, grouped by day with a
-  "Now" divider the list auto-scrolls to on first load. There is no in-place
+- `app/(tabs)/schedule.tsx` — the participant agenda, grouped by day. On first
+  load it opens (unanimated) on whatever is happening now — the active card, or
+  the "Now" divider drawn between entries when nothing is running — instead of
+  at the top of a multi-day schedule. Tapping the Schedule tab while it is
+  already open animates back there; switching back from another tab leaves the
+  list where you left it. Two details of `SectionList` make this fiddly and are
+  easy to regress: `scrollToLocation`'s `itemIndex` counts the section header as
+  0 (so a row at data index N is `N + 1`), and the call is a silent no-op while
+  the target sits past the list's highest measured row — hence the
+  `onScrollToIndexFailed` handler, which jumps to the estimated offset to force
+  measurement before re-issuing the exact scroll. The tab listener must be
+  registered on the *screen's* own navigation object: "tabPress" is emitted
+  targeted at that route's key, so a listener on the tab navigator never fires.
+  There is no in-place
   expansion: every card always opens `app/schedule/[id].tsx` for the full
   detail. Cards whose copy is long (`isScheduleCardTruncated`: a multi-line
   description, >90 characters of it, or a >60-character title) clamp title

@@ -18,11 +18,15 @@ export interface ScheduleItem {
   startsAt: string;
   endsAt: string;
   audiences: ScheduleAudience[];
+  publishAt?: string | null;
+  contactNote?: string | null;
+  notes?: string | null;
+  owners?: ScheduleOwner[];
   /** Staff-only — present when the caller is staff, telling a draft apart from a live item. */
   visibility?: "shown" | "hidden";
 }
 
-/** Admin-only fields, present on `GET /api/schedule` but never the public feed. */
+/** Complete management record, present on `GET /api/schedule`. */
 export interface AdminScheduleItem extends ScheduleItem {
   requiresScan: boolean;
   visibility: "shown" | "hidden";

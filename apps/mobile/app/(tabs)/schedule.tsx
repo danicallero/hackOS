@@ -1,9 +1,10 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { useRouter } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigation, useRouter } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   type GestureResponderEvent,
+  Platform,
   Pressable,
   RefreshControl,
   SectionList,
@@ -44,7 +45,7 @@ import { itemCategory, useScheduleNotifications } from "@/lib/use-schedule-notif
 import { colors } from "@/theme/colors";
 
 type NowMarker = { kind: "now"; id: string };
-type ItemRow = ScheduleItem & { kind: "item" };
+type ItemRow = ScheduleItem & { kind: "item"; active: boolean };
 type SectionRow = ItemRow | NowMarker;
 
 interface ScheduleSection {
@@ -70,6 +71,10 @@ export default function ScheduleScreen() {
   const [now, setNow] = useState(() => Date.now());
   const listRef = useRef<SectionList<SectionRow, ScheduleSection>>(null);
   const scrolledOnLoad = useRef(false);
+  const scrollRetries = useRef(0);
+  const scrollRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scrollAnimated = useRef(false);
+  const navigation = useNavigation();
   const androidTopInset = useAndroidTopInset();
   const insets = useSafeAreaInsets();
   const headerTopInset = process.env.EXPO_OS === "ios" ? insets.top : androidTopInset;
@@ -124,19 +129,21 @@ export default function ScheduleScreen() {
       grouped.set(key, [...(grouped.get(key) ?? []), item]);
     }
     return [...grouped.entries()].map(([key, dayItems]) => {
-      const rows: SectionRow[] = dayItems.map((item) => ({
+      const activeItemIndex =
+        key === todayKey
+          ? dayItems.findIndex(
+              (item) => safeTimestamp(item.startsAt) <= now && safeTimestamp(item.endsAt) >= now,
+            )
+          : -1;
+      const rows: SectionRow[] = dayItems.map((item, index) => ({
         ...item,
         kind: "item" as const,
+        active: Platform.OS !== "web" && index === activeItemIndex,
       }));
-      if (key === todayKey) {
-        const hasActiveItem = dayItems.some(
-          (item) => safeTimestamp(item.startsAt) <= now && safeTimestamp(item.endsAt) >= now,
-        );
-        if (!hasActiveItem) {
-          const markerIndex = dayItems.findIndex((item) => safeTimestamp(item.startsAt) > now);
-          const insertAt = markerIndex === -1 ? rows.length : markerIndex;
-          rows.splice(insertAt, 0, { kind: "now", id: "now-marker" });
-        }
+      if (key === todayKey && activeItemIndex === -1) {
+        const markerIndex = dayItems.findIndex((item) => safeTimestamp(item.startsAt) > now);
+        const insertAt = markerIndex === -1 ? rows.length : markerIndex;
+        rows.splice(insertAt, 0, { kind: "now", id: "now-marker" });
       }
       return {
         key,
@@ -151,35 +158,97 @@ export default function ScheduleScreen() {
   }, [filteredItems, language, now, todayKey]);
 
   // Jumps straight to "what's happening now" (or the marker between cards)
-  // instead of opening at the beginning of a multi-day schedule.
-  useEffect(() => {
-    if (scrolledOnLoad.current || sections.length === 0) return;
-    scrolledOnLoad.current = true;
-    const sectionIndex = sections.findIndex((section) => section.key === todayKey);
-    if (sectionIndex === -1) return;
-    let itemIndex = sections[sectionIndex].data.findIndex((row) => row.kind === "now");
-    if (itemIndex === -1) {
-      itemIndex = sections[sectionIndex].data.findIndex(
-        (row) =>
-          row.kind === "item" &&
-          safeTimestamp(row.startsAt) <= now &&
-          safeTimestamp(row.endsAt) >= now,
-      );
-    }
-    if (itemIndex === -1) return;
-    requestAnimationFrame(() => {
-      try {
+  // instead of opening at the beginning of a multi-day schedule. Reused below
+  // both for the initial mount and for re-triggering on tab (re)selection —
+  // native tab presses fire "tabPress" whether or not this tab was already
+  // focused, so the listener below covers both "switch back to Schedule" and
+  // "tap Schedule again while already on it".
+  // `animated` is false on mount — the list should simply *open* on the active
+  // card, and animating from a position the user never saw just looks like a
+  // glitch — but true on a tab press, where the user is already looking at the
+  // list and needs to follow where it travels to.
+  const scrollToActive = useCallback(
+    (animated = false) => {
+      const sectionIndex = sections.findIndex((section) => section.key === todayKey);
+      if (sectionIndex === -1) return;
+      const rows = sections[sectionIndex].data;
+      let rowIndex = rows.findIndex((row) => row.kind === "item" && row.active);
+      if (rowIndex === -1) rowIndex = rows.findIndex((row) => row.kind === "now");
+      if (rowIndex === -1) return;
+      scrollAnimated.current = animated;
+      requestAnimationFrame(() => {
         listRef.current?.scrollToLocation({
           sectionIndex,
-          itemIndex,
+          // scrollToLocation counts the (sticky) section header as itemIndex 0,
+          // so the row at data index N lives at itemIndex N + 1. Passing the raw
+          // data index lands one card above the active one.
+          itemIndex: rowIndex + 1,
           viewOffset: 80,
-          animated: false,
+          animated,
         });
-      } catch {
-        // Best-effort — a transient layout mismatch just means no auto-scroll this time.
-      }
+      });
+    },
+    [sections, todayKey],
+  );
+
+  // scrollToLocation is a silent no-op whenever the target sits past the list's
+  // highest *measured* row: these cards are variable-height so there's no
+  // getItemLayout, and VirtualizedList only measures what it has rendered —
+  // initially just initialNumToRender rows at offset 0. Retrying alone never
+  // fixes that, because a list that never moves never measures anything new.
+  // So jump to the estimated offset first (that drags the render window over
+  // the target and gets it measured) and only then re-issue the exact scroll.
+  // The counter is reset wherever a *fresh* scroll is kicked off (mount, tab
+  // press) so each of those gets its own budget.
+  function retryScrollToActive(info: { averageItemLength: number; index: number }) {
+    if (scrollRetries.current >= 5) return;
+    scrollRetries.current += 1;
+    // The estimated jump is a measurement trick, never animated: it lands on a
+    // guess, and the exact scroll right after would fight the animation.
+    listRef.current
+      ?.getScrollResponder()
+      ?.scrollTo({ y: Math.max(0, info.averageItemLength * info.index - 80), animated: false });
+    if (scrollRetryTimer.current) clearTimeout(scrollRetryTimer.current);
+    scrollRetryTimer.current = setTimeout(() => scrollToActive(scrollAnimated.current), 120);
+  }
+
+  useEffect(
+    () => () => {
+      if (scrollRetryTimer.current) clearTimeout(scrollRetryTimer.current);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (scrolledOnLoad.current || loading || sections.length === 0) return;
+    scrolledOnLoad.current = true;
+    scrollRetries.current = 0;
+    scrollToActive();
+  }, [sections, scrollToActive, loading]);
+
+  // Mirrors expo-router's own bundled `useScrollToTop`. The tab navigator emits
+  // "tabPress" with `target` set to the *screen's* route key, and
+  // react-navigation's emitter only delivers an event to listeners registered
+  // under that exact target — so it has to be this screen's own navigation
+  // object. A listener installed on the navigator (via getParent()) is filed
+  // under the navigator's key and therefore never fires at all.
+  //
+  // The event is emitted *before* the tab switch is dispatched, which is what
+  // makes the isFocused() check below mean "Schedule was already the open tab":
+  // coming back from another tab leaves the list where you left it, and only a
+  // second press on an already-open Schedule scrolls back to the active card.
+  useEffect(() => {
+    // "tabPress" isn't part of the generic event map expo-router's
+    // `useNavigation()` exposes, hence the narrow cast rather than `any`.
+    const tabAware = navigation as unknown as {
+      addListener: (type: "tabPress", callback: () => void) => () => void;
+    };
+    return tabAware.addListener("tabPress", () => {
+      if (!navigation.isFocused()) return;
+      scrollRetries.current = 0;
+      scrollToActive(true);
     });
-  }, [now, sections, todayKey]);
+  }, [navigation, scrollToActive]);
 
   async function onRefresh() {
     setRefreshing(true);
@@ -299,10 +368,7 @@ export default function ScheduleScreen() {
         }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         stickySectionHeadersEnabled
-        onScrollToIndexFailed={() => {
-          // Rows above collapse/expand height changes; a silent retry-free
-          // failure is better than a crash — the user can just scroll manually.
-        }}
+        onScrollToIndexFailed={(info) => retryScrollToActive(info)}
         ListHeaderComponent={
           <View style={{ gap: 8 }}>
             <StaleDataBanner
@@ -359,25 +425,24 @@ export default function ScheduleScreen() {
         )}
         renderItem={({ item, index, section }) =>
           item.kind === "now" ? (
-            <View
-              style={{
-                alignItems: "center",
-                flexDirection: "row",
-                gap: 8,
-                padding: 16,
-              }}
-            >
-              <View style={{ backgroundColor: colors.accent, flex: 1, height: 2 }} />
-              <Text
-                style={{
-                  color: colors.accent,
-                  fontSize: 13,
-                  fontWeight: "700",
-                }}
-              >
-                {t("scheduleNow")}
-              </Text>
-              <View style={{ backgroundColor: colors.accent, flex: 1, height: 2 }} />
+            <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <View style={{ width: 70, alignItems: "center" }}>
+                  <Text
+                    style={{
+                      color: colors.accent,
+                      fontSize: 13,
+                      fontVariant: ["tabular-nums"],
+                      fontWeight: "700",
+                    }}
+                  >
+                    {formatTime(now, language)}
+                  </Text>
+                </View>
+                <View
+                  style={{ backgroundColor: colors.accent, flex: 1, height: 2, marginLeft: 8 }}
+                />
+              </View>
             </View>
           ) : (
             <ScheduleSwipeRow
@@ -389,6 +454,7 @@ export default function ScheduleScreen() {
             >
               <ScheduleCard
                 item={item}
+                active={item.active}
                 language={language}
                 last={index === section.data.length - 1}
                 reminderOn={notifications.ready ? notifications.isEntrySubscribed(item) : null}
@@ -513,6 +579,13 @@ function safeTimestamp(value: string) {
   return Number.isFinite(timestamp) ? timestamp : Number.MAX_SAFE_INTEGER;
 }
 
+function formatTime(timestamp: number, locale: string) {
+  return new Date(timestamp).toLocaleTimeString(locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 // Space between a time label and the line that follows it — kept tight so
 // the line reads as anchored to the label it belongs to.
 const TIMELINE_GAP_AFTER_LABEL = 6;
@@ -536,8 +609,40 @@ export function isScheduleCardTruncated(item: Pick<ScheduleItem, "title" | "desc
   return description.includes("\n") || description.length > 90 || item.title.length > 60;
 }
 
+const START_TIME_FLAG_RADIUS = 5;
+const START_TIME_FLAG_PADDING_H = 6;
+const START_TIME_FLAG_PADDING_V = 3;
+const START_TIME_FLAG_GAP = 6;
+
+/** The badge marking the currently-active item's start time. */
+function StartTimeFlag({ time }: { time: string }) {
+  return (
+    <View
+      style={{
+        backgroundColor: colors.accent,
+        borderRadius: START_TIME_FLAG_RADIUS,
+        paddingHorizontal: START_TIME_FLAG_PADDING_H,
+        paddingVertical: START_TIME_FLAG_PADDING_V,
+      }}
+    >
+      <Text
+        style={{
+          color: colors.accentText,
+          fontSize: 13,
+          fontVariant: ["tabular-nums"],
+          fontWeight: "700",
+          lineHeight: 16,
+        }}
+      >
+        {time}
+      </Text>
+    </View>
+  );
+}
+
 function ScheduleCard({
   item,
+  active,
   language,
   last,
   reminderOn,
@@ -545,6 +650,7 @@ function ScheduleCard({
   onToggleReminder,
 }: {
   item: ScheduleItem;
+  active: boolean;
   language: string;
   last: boolean;
   reminderOn: boolean | null;
@@ -580,17 +686,23 @@ function ScheduleCard({
           importantForAccessibility="no-hide-descendants"
           style={{ alignItems: "center", width: 70 }}
         >
-          <Text
-            style={{
-              color: colors.label,
-              fontSize: 15,
-              fontVariant: ["tabular-nums"],
-              fontWeight: "600",
-              marginTop: TIMELINE_GAP_BEFORE_LABEL,
-            }}
-          >
-            {time}
-          </Text>
+          {active ? (
+            <View style={{ marginTop: TIMELINE_GAP_BEFORE_LABEL }}>
+              <StartTimeFlag time={time} />
+            </View>
+          ) : (
+            <Text
+              style={{
+                color: colors.label,
+                fontSize: 15,
+                fontVariant: ["tabular-nums"],
+                fontWeight: "600",
+                marginTop: TIMELINE_GAP_BEFORE_LABEL,
+              }}
+            >
+              {time}
+            </Text>
+          )}
           {/* Duration: start to end. */}
           <View
             style={{

@@ -16,6 +16,13 @@ export default function appConfig({ config }: ConfigContext): ExpoConfig {
 
   return {
     ...config,
+    plugins: [
+      ...(config.plugins ?? []),
+      "expo-font",
+      "expo-secure-store",
+      "expo-status-bar",
+      "expo-web-browser",
+    ],
     name: isDevelopmentBuild ? `${config.name} (Debug)` : config.name,
     ios: {
       ...config.ios,

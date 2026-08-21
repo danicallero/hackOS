@@ -17,7 +17,9 @@ import {
   collapseBlankLines,
   fetchAdminSchedule,
   fetchPublicSchedule,
+  type ScheduleAudience,
   type ScheduleInput,
+  type ScheduleOwner,
   scheduleDurationLabel,
   scheduleTypeLabel,
   updateScheduleItem,
@@ -53,17 +55,20 @@ export default function ScheduleDetailScreen() {
   }, [load, notifications.load]);
 
   useEffect(() => {
-    if (!editing) return;
+    if (!canManage) {
+      setAdminItem(null);
+      return;
+    }
     let cancelled = false;
     void fetchAdminSchedule().then((items) => {
       if (cancelled) return;
       const match = items.find((candidate) => String(candidate.id) === id);
-      if (match) setAdminItem(match);
+      setAdminItem(match ?? null);
     });
     return () => {
       cancelled = true;
     };
-  }, [editing, id]);
+  }, [canManage, id]);
 
   const item = data?.find((candidate) => String(candidate.id) === id) ?? null;
   const reminderOn = item && notifications.ready ? notifications.isEntrySubscribed(item) : null;
@@ -73,13 +78,15 @@ export default function ScheduleDetailScreen() {
     _pendingOwners: ({ userId: number } | { freeTextName: string })[],
   ) {
     if (!item) return;
-    await updateScheduleItem(item.id, values);
+    const updated = await updateScheduleItem(item.id, values);
+    setAdminItem((current) => (current ? { ...updated, owners: current.owners } : updated));
     setEditing(false);
-    setAdminItem(null);
     await load();
   }
-  const startsAt = item ? new Date(item.startsAt) : null;
-  const endsAt = item ? new Date(item.endsAt) : null;
+  const detailItem = adminItem ?? item;
+  const staffItem = adminItem ?? (item?.notes !== undefined ? item : null);
+  const startsAt = detailItem ? new Date(detailItem.startsAt) : null;
+  const endsAt = detailItem ? new Date(detailItem.endsAt) : null;
   const date = startsAt?.toLocaleDateString(language, {
     weekday: "long",
     day: "numeric",
@@ -162,11 +169,11 @@ export default function ScheduleDetailScreen() {
           )
         ) : (
           <View style={{ gap: 24 }}>
-            {item.description ? (
+            {detailItem?.description ? (
               <View style={{ gap: 10 }}>
                 <Text style={sectionHeaderStyle}>{t("scheduleDescription")}</Text>
                 <Text selectable style={{ color: colors.label, fontSize: 16, lineHeight: 24 }}>
-                  {collapseBlankLines(item.description)}
+                  {collapseBlankLines(detailItem.description)}
                 </Text>
               </View>
             ) : null}
@@ -193,6 +200,69 @@ export default function ScheduleDetailScreen() {
                 ) : null}
               </View>
             </View>
+
+            {staffItem ? (
+              <>
+                <View style={{ gap: 8 }}>
+                  <Text style={sectionHeaderStyle}>{t("scheduleStaffInformation")}</Text>
+                  <View
+                    style={{
+                      backgroundColor: colors.surface,
+                      borderCurve: "continuous",
+                      borderRadius: 14,
+                      paddingHorizontal: 16,
+                    }}
+                  >
+                    <PlainInfoRow
+                      label={t("scheduleFilterAudience")}
+                      value={scheduleAudienceSummary(staffItem, t)}
+                    />
+                    {adminItem ? (
+                      <PlainInfoRow
+                        label={t("scheduleRequiresScanLabel")}
+                        value={adminItem.requiresScan ? t("yesLabel") : t("noLabel")}
+                      />
+                    ) : null}
+                    <PlainInfoRow
+                      label={t("scheduleVisibilityLabel")}
+                      value={staffItem.visibility === "shown" ? t("yesLabel") : t("noLabel")}
+                    />
+                    <PlainInfoRow
+                      label={t("schedulePublishAtLabel")}
+                      value={
+                        staffItem.publishAt
+                          ? new Date(staffItem.publishAt).toLocaleString(language)
+                          : t("accountNotSet")
+                      }
+                      last
+                    />
+                  </View>
+                  <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>
+                    {t("scheduleStaffSeeAllHint")}
+                  </Text>
+                </View>
+
+                {staffItem.contactNote ? (
+                  <DetailTextSection
+                    label={t("scheduleContactNoteLabel")}
+                    value={staffItem.contactNote}
+                  />
+                ) : null}
+                {staffItem.notes ? (
+                  <DetailTextSection label={t("scheduleNotesLabel")} value={staffItem.notes} />
+                ) : null}
+                {staffItem.owners ? (
+                  <View style={{ gap: 8 }}>
+                    <Text style={sectionHeaderStyle}>{t("scheduleOwnersLabel")}</Text>
+                    <Text selectable style={{ color: colors.label, fontSize: 16, lineHeight: 24 }}>
+                      {staffItem.owners.length > 0
+                        ? staffItem.owners.map(ownerDisplayName).join(", ")
+                        : t("scheduleOwnersEmpty")}
+                    </Text>
+                  </View>
+                ) : null}
+              </>
+            ) : null}
           </View>
         )}
       </ScrollView>
@@ -226,7 +296,6 @@ export default function ScheduleDetailScreen() {
           visible
           onClose={() => {
             setEditing(false);
-            setAdminItem(null);
           }}
           initial={scheduleItemToForm(adminItem)}
           scheduleId={adminItem.id}
@@ -235,6 +304,44 @@ export default function ScheduleDetailScreen() {
         />
       ) : null}
     </>
+  );
+}
+
+function scheduleAudienceSummary(
+  item: Pick<AdminScheduleItem, "audiences">,
+  t: ReturnType<typeof useLocale>["t"],
+): string {
+  if (item.audiences.length === 0) return t("scheduleStaffOnlyBadge");
+  return item.audiences.map((audience) => scheduleAudienceLabel(audience, t)).join(", ");
+}
+
+function scheduleAudienceLabel(
+  audience: ScheduleAudience,
+  t: ReturnType<typeof useLocale>["t"],
+): string {
+  switch (audience) {
+    case "participant":
+      return t("scheduleAudienceParticipant");
+    case "sponsor":
+      return t("scheduleAudienceSponsor");
+    case "mentor":
+      return t("scheduleAudienceMentor");
+  }
+}
+
+function ownerDisplayName(owner: ScheduleOwner): string {
+  if (owner.freeTextName) return owner.freeTextName;
+  return [owner.name, owner.surname].filter(Boolean).join(" ").trim() || owner.email || "";
+}
+
+function DetailTextSection({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={{ gap: 10 }}>
+      <Text style={sectionHeaderStyle}>{label}</Text>
+      <Text selectable style={{ color: colors.label, fontSize: 16, lineHeight: 24 }}>
+        {collapseBlankLines(value)}
+      </Text>
+    </View>
   );
 }
 

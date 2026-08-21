@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { PublicScheduleItem } from "@/lib/logistics";
-import { scheduleDuration, scheduleStatus, timeInputValue, withTimeOfDay } from "./schedule-model";
+import {
+  scheduleDayKey,
+  scheduleDuration,
+  scheduleStatus,
+  timeInputValue,
+  withDate,
+  withTimeOfDay,
+} from "./schedule-model";
 
 const NOW = Date.parse("2026-07-22T12:00:00.000Z");
 
@@ -122,5 +129,21 @@ describe("timeInputValue / withTimeOfDay", () => {
   it("rejects a malformed time or timestamp", () => {
     expect(withTimeOfDay("2026-07-22T08:00:00.000Z", "not-a-time")).toBeNull();
     expect(withTimeOfDay("not-a-date", "14:30")).toBeNull();
+  });
+});
+
+describe("scheduleDayKey / withDate", () => {
+  it("groups by the local calendar day and moves an item to a YYYY-MM-DD target", () => {
+    const original = "2026-08-27T08:00:00.000Z";
+    const next = withDate(original, "2026-08-28");
+
+    expect(next).not.toBeNull();
+    expect(scheduleDayKey(next as string)).toBe("2026-08-28");
+    expect(timeInputValue(next as string)).toBe(timeInputValue(original));
+  });
+
+  it("rejects invalid source and target dates", () => {
+    expect(withDate("not-a-date", "2026-08-28")).toBeNull();
+    expect(withDate("2026-08-27T08:00:00.000Z", "not-a-date")).toBeNull();
   });
 });
