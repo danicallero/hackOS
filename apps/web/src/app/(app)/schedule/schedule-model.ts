@@ -200,43 +200,66 @@ export function withTimeOfDay(iso: string, hhmm: string): string | null {
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
+ * How long a window the inline time cells will roll into the next day. A
+ * midnight crossing typed into a table with no date field is only ever a
+ * night session (a talk that ends at 01:00, breakfast at 05:00); anything
+ * longer is far more likely a typo — "09:00 to 07:00" is a slip, not a 22-hour
+ * activity — and silently moving that item onto another date is the kind of
+ * mistake nobody notices until the run-of-show is wrong. Past this, the edit
+ * is refused and the item's real dates are set in the full editor (H59).
+ */
+export const MAX_INLINE_ROLLED_HOURS = 12;
+
+export type ScheduleTimeEdit =
+  | { ok: true; startsAt: string; endsAt: string; rolledToNextDay: boolean }
+  | { ok: false; reason: "invalidTime" | "rolledWindowTooLong" };
+
+/**
  * Applies a new HH:mm to one end of a schedule window, rolling the *other*
- * side to the next day when the edit would otherwise invert it (H59).
+ * side into the next day when the edit would otherwise invert it (H59).
  *
  * Typing "00:00" as the end of a 23:00 item means "midnight tonight", not
  * "midnight this morning" — an inline time cell has no field for the date, so
  * a run-of-show that runs past midnight was impossible to enter without
  * opening the full editor. The same reading applies from the other side: move
- * a start past its end and the end is the one that crosses over.
- *
- * Returns both timestamps (unchanged ones included) or null if the input
- * isn't a valid HH:mm.
+ * a start past its end and the end is the one that crosses over. The roll is
+ * capped at MAX_INLINE_ROLLED_HOURS so a mistyped time can't quietly push an
+ * item onto another day.
  */
 export function withTimeOfDayAcrossMidnight(
   startsAt: string,
   endsAt: string,
   field: "startsAt" | "endsAt",
   hhmm: string,
-): { startsAt: string; endsAt: string } | null {
+): ScheduleTimeEdit {
   const next = withTimeOfDay(field === "startsAt" ? startsAt : endsAt, hhmm);
-  if (!next) return null;
+  if (!next) return { ok: false, reason: "invalidTime" };
 
-  if (field === "endsAt") {
-    const start = new Date(startsAt).getTime();
-    const end = new Date(next).getTime();
-    if (Number.isNaN(start) || Number.isNaN(end)) return null;
+  const fixed = new Date(field === "startsAt" ? endsAt : startsAt).getTime();
+  const edited = new Date(next).getTime();
+  if (Number.isNaN(fixed) || Number.isNaN(edited)) return { ok: false, reason: "invalidTime" };
+
+  const start = field === "startsAt" ? edited : fixed;
+  const end = field === "startsAt" ? fixed : edited;
+  if (end > start) {
     return {
-      startsAt,
-      endsAt: end > start ? next : new Date(end + ONE_DAY_MS).toISOString(),
+      ok: true,
+      startsAt: field === "startsAt" ? next : startsAt,
+      endsAt: field === "startsAt" ? endsAt : next,
+      rolledToNextDay: false,
     };
   }
 
-  const start = new Date(next).getTime();
-  const end = new Date(endsAt).getTime();
-  if (Number.isNaN(start) || Number.isNaN(end)) return null;
+  // Inverted: the end is the side that crosses midnight, whichever one moved.
+  const rolledEnd = end + ONE_DAY_MS;
+  if (rolledEnd - start > MAX_INLINE_ROLLED_HOURS * 60 * 60 * 1000) {
+    return { ok: false, reason: "rolledWindowTooLong" };
+  }
   return {
-    startsAt: next,
-    endsAt: end > start ? endsAt : new Date(end + ONE_DAY_MS).toISOString(),
+    ok: true,
+    startsAt: field === "startsAt" ? next : startsAt,
+    endsAt: new Date(rolledEnd).toISOString(),
+    rolledToNextDay: true,
   };
 }
 

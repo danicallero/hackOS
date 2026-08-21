@@ -107,6 +107,7 @@ import {
 } from "./schedule-form-modal";
 import {
   editingNavigationDirection,
+  MAX_INLINE_ROLLED_HOURS,
   SCHEDULE_AUDIENCES,
   SCHEDULE_STATUS_TONES,
   type ScheduleNavigationDirection,
@@ -1304,10 +1305,19 @@ function ActivityRow({
     // Both ends go up together: an end of 00:00 on a 23:00 item means midnight
     // *tonight*, so the counterpart may have rolled a day (H59).
     const next = withTimeOfDayAcrossMidnight(item.startsAt, item.endsAt, field, hhmm);
-    if (!next) return true;
+    if (!next.ok) {
+      if (next.reason === "rolledWindowTooLong") {
+        toast.error(t("inlineTimeRollTooLong", { hours: MAX_INLINE_ROLLED_HOURS }));
+        return false;
+      }
+      return true;
+    }
     if (next.startsAt === item.startsAt && next.endsAt === item.endsAt) return true;
     try {
-      const updated = await logisticsApi.updateSchedule(item.id, next);
+      const updated = await logisticsApi.updateSchedule(item.id, {
+        startsAt: next.startsAt,
+        endsAt: next.endsAt,
+      });
       onUpdate(updated);
       return true;
     } catch (err) {
