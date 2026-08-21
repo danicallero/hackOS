@@ -1,12 +1,11 @@
-import { MenuView } from "@expo/ui/community/menu";
-import { ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
+  Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   Switch,
   Text,
@@ -14,8 +13,17 @@ import {
   View,
 } from "react-native";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
-import Animated, { type SharedValue, useAnimatedStyle } from "react-native-reanimated";
-import { ActionButton, EmptyState, Section, Separator } from "@/components/native-ui";
+import Animated, {
+  runOnJS,
+  type SharedValue,
+  useAnimatedProps,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+} from "react-native-reanimated";
+import Svg, { Circle } from "react-native-svg";
+import { GlassView } from "@/components/glass-view";
+import { EmptyState, Section, Separator } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SegmentedControl } from "@/components/segmented-control";
 import { StaleDataBanner } from "@/components/stale-data-banner";
@@ -29,18 +37,34 @@ import {
   subscribeToCategory,
   subscribeToNotificationChanges,
 } from "@/lib/notification-events";
-import { fetchPublicSchedule, type ScheduleItem } from "@/lib/schedule";
 import { subscribeToServerEvent } from "@/lib/server-events";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { colors } from "@/theme/colors";
 
-type Channel = "in_app" | "email" | "push" | "discord";
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
+type Channel = "in_app" | "email" | "push";
+const VALID_CHANNELS: Channel[] = ["in_app", "email", "push"];
+
+/** Drops any stale channel a device cached before a channel was retired (e.g. the old Discord channel). */
+function validChannels(channels: Channel[]): Channel[] {
+  return channels.filter((channel) => (VALID_CHANNELS as string[]).includes(channel));
+}
 
 interface Preferences {
   channels: Channel[];
   mandatoryCategories: string[];
   overrides: { category: string; channel: Channel; enabled: boolean }[];
+}
+
+/** Mirrors the server's ON CONFLICT upsert, for an instant optimistic local view. */
+function withOverride(prefs: Preferences, category: string, channel: Channel, enabled: boolean) {
+  const overrides = [...prefs.overrides];
+  const index = overrides.findIndex((row) => row.category === category && row.channel === channel);
+  if (index === -1) overrides.push({ category, channel, enabled });
+  else overrides[index] = { category, channel, enabled };
+  return { ...prefs, overrides };
 }
 
 interface InboxItem {
@@ -59,63 +83,223 @@ interface InboxResponse {
 }
 
 const LIMIT = 20;
-const REMINDER_DEFAULT_CHANNELS: Channel[] = ["in_app", "email", "push"];
+
+const LOAD_MORE_THRESHOLD = 130;
+const LOAD_MORE_BANDS = 12;
+
+/** The segmented control + unread-filter bell, memoized so toggling the bell doesn't also re-render the hidden Preferences tree it's shared with. */
+const NotificationsHeader = memo(function NotificationsHeader({
+  selectedIndex,
+  onChangeIndex,
+  active,
+  checked,
+  onToggle,
+  t,
+}: {
+  selectedIndex: number;
+  onChangeIndex: (index: number) => void;
+  active: boolean;
+  checked: boolean;
+  onToggle: () => void;
+  t: ReturnType<typeof useLocale>["t"];
+}) {
+  return (
+    <View style={{ alignItems: "center", flexDirection: "row", gap: 10 }}>
+      <View style={{ flex: 1 }}>
+        <SegmentedControl
+          label={t("tabNotifications")}
+          values={[t("notificationsMessages"), t("notificationsPreferences")]}
+          selectedIndex={selectedIndex}
+          onChange={onChangeIndex}
+        />
+      </View>
+      <GlassView
+        glassEffectStyle="regular"
+        isInteractive={active}
+        tintColor={active && checked ? (colors.accent as string) : undefined}
+        style={{ borderRadius: 18, height: 36, opacity: active ? 1 : 0.4, width: 36 }}
+      >
+        <Pressable
+          accessibilityLabel={t("notificationsUnreadOnly")}
+          accessibilityRole="switch"
+          accessibilityState={{ checked, disabled: !active }}
+          disabled={!active}
+          hitSlop={6}
+          onPress={onToggle}
+          style={({ pressed }) => ({
+            alignItems: "center",
+            flex: 1,
+            justifyContent: "center",
+            opacity: pressed ? 0.6 : 1,
+          })}
+        >
+          <SymbolView
+            name="bell.badge.fill"
+            tintColor={active && checked ? "white" : colors.secondaryLabel}
+            size={17}
+            accessible={false}
+          />
+        </Pressable>
+      </GlassView>
+    </View>
+  );
+});
 
 /** Full in-app inbox and notification preferences, matching the web participant view. */
 export default function NotificationsScreen() {
   useColorScheme();
   const { t } = useLocale();
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [unreadOnly, setUnreadOnly] = useState(false);
   const androidTopInset = useAndroidTopInset();
+  const onMessages = selectedIndex === 0;
 
-  return (
-    <ScrollView
-      contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{
-        gap: 18,
-        padding: 16,
-        paddingBottom: 32,
-        paddingTop: 16 + androidTopInset,
-      }}
-      keyboardShouldPersistTaps="handled"
-    >
-      <SegmentedControl
-        label={t("tabNotifications")}
-        values={[t("notificationsMessages"), t("notificationsPreferences")]}
+  const toggleUnread = useCallback(() => {
+    void haptic("selection");
+    setUnreadOnly((current) => !current);
+  }, []);
+
+  // Two separate header elements (not one shared node) so toggling the bell
+  // — which only matters on the Messages tab — doesn't also re-render the
+  // Preferences tree it would otherwise be passed into: the Preferences
+  // copy's props never change value across that toggle, so the memoized
+  // header bails out and Preferences stays fully idle while the bell flips.
+  const messagesHeader = useMemo(
+    () => (
+      <NotificationsHeader
         selectedIndex={selectedIndex}
-        onChange={setSelectedIndex}
+        onChangeIndex={setSelectedIndex}
+        active={onMessages}
+        checked={unreadOnly}
+        onToggle={toggleUnread}
+        t={t}
       />
-      {selectedIndex === 0 ? <MessagesView /> : <PreferencesView />}
-    </ScrollView>
+    ),
+    [selectedIndex, onMessages, unreadOnly, toggleUnread, t],
+  );
+  const preferencesHeader = useMemo(
+    () => (
+      <NotificationsHeader
+        selectedIndex={selectedIndex}
+        onChangeIndex={setSelectedIndex}
+        active={false}
+        checked={false}
+        onToggle={toggleUnread}
+        t={t}
+      />
+    ),
+    [selectedIndex, toggleUnread, t],
+  );
+
+  // Both tabs stay mounted (toggled with `display`, not conditional
+  // rendering) so switching back to a tab that already loaded its data
+  // shows it instantly instead of remounting into a fresh loading state.
+  // Both view components are memoized, and each header element is stable
+  // unless its own props actually changed, so toggling the bell (which only
+  // matters on Messages) never re-renders the hidden Preferences tree.
+  return (
+    <>
+      <View style={{ display: onMessages ? "flex" : "none", flex: 1 }}>
+        <MessagesView
+          tabSwitcher={messagesHeader}
+          androidTopInset={androidTopInset}
+          unreadOnly={unreadOnly}
+        />
+      </View>
+      <View style={{ display: onMessages ? "none" : "flex", flex: 1 }}>
+        <PreferencesView tabSwitcher={preferencesHeader} androidTopInset={androidTopInset} />
+      </View>
+    </>
   );
 }
 
-function MessagesView() {
+const MessagesView = memo(function MessagesView({
+  tabSwitcher,
+  androidTopInset,
+  unreadOnly,
+}: {
+  tabSwitcher: ReactNode;
+  androidTopInset: number;
+  unreadOnly: boolean;
+}) {
   const { t, language } = useLocale();
   const { me } = useMeContext();
-  const [unreadOnly, setUnreadOnly] = useState(false);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [actionError, setActionError] = useState<Error | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [readingId, setReadingId] = useState<number | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const actionRetry = useRef<(() => Promise<void>) | null>(null);
+  const pullProgress = useSharedValue(0);
+  const pullArmed = useSharedValue(false);
+  const pullBand = useSharedValue(0);
 
-  const fetchInbox = useCallback(async () => {
-    const query = unreadOnly ? "&unread=true" : "";
-    return apiFetch<InboxResponse>(`/api/me/notifications?limit=${LIMIT}&offset=0${query}`);
-  }, [unreadOnly]);
-  const { data, loading, error, staleSince, load, setData } = useCachedApi(
-    `user:${me?.id ?? "unknown"}:notifications:${unreadOnly ? "unread" : "all"}`,
-    fetchInbox,
+  // Two independent caches, both kept warm at once — "unread only" needs to
+  // show every unread message (the server's real unread total), not just
+  // whatever happens to be on the currently-loaded "all" page, so it can't
+  // be a client-side filter. Loading both up front means flipping the bell
+  // swaps between two already-fetched datasets instead of triggering a
+  // fresh request and a loading flash.
+  const fetchAll = useCallback(
+    () => apiFetch<InboxResponse>(`/api/me/notifications?limit=${LIMIT}&offset=0`),
+    [],
   );
+  const fetchUnread = useCallback(
+    () => apiFetch<InboxResponse>(`/api/me/notifications?limit=${LIMIT}&offset=0&unread=true`),
+    [],
+  );
+  const all = useCachedApi(`user:${me?.id ?? "unknown"}:notifications:all`, fetchAll);
+  const unread = useCachedApi(`user:${me?.id ?? "unknown"}:notifications:unread`, fetchUnread);
+  const { data, loading, error, staleSince, load, setData } = unreadOnly ? unread : all;
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    void all.load();
+    void unread.load();
+  }, [all.load, unread.load]);
 
-  useEffect(() => subscribeToCategory("announcements", () => void load()), [load]);
-  useEffect(() => subscribeToServerEvent(EVENTS.USER_NOTIFICATION, () => void load()), [load]);
+  useEffect(() => {
+    const reload = () => {
+      void all.load();
+      void unread.load();
+    };
+    return subscribeToCategory("announcements", reload);
+  }, [all.load, unread.load]);
+  useEffect(() => {
+    const reload = () => {
+      void all.load();
+      void unread.load();
+    };
+    return subscribeToServerEvent(EVENTS.USER_NOTIFICATION, reload);
+  }, [all.load, unread.load]);
+
+  /** Applies an update to whichever of the two caches currently holds `itemId`, keeping both in sync. */
+  function updateBothCaches(itemId: number, update: (row: InboxItem) => InboxItem) {
+    for (const cache of [all, unread]) {
+      cache.setData((current) =>
+        current?.items.some((row) => row.id === itemId)
+          ? {
+              ...current,
+              items: current.items.map((row) => (row.id === itemId ? update(row) : row)),
+            }
+          : current,
+      );
+    }
+  }
+
+  /** Removes `itemId` from both caches (delete, or a read item dropping out of "unread only"). */
+  function removeFromBothCaches(itemId: number) {
+    for (const cache of [all, unread]) {
+      cache.setData((current) =>
+        current?.items.some((row) => row.id === itemId)
+          ? {
+              total: Math.max(0, current.total - 1),
+              items: current.items.filter((row) => row.id !== itemId),
+            }
+          : current,
+      );
+    }
+  }
 
   async function markRead(item: InboxItem) {
     if (item.read_at) return;
@@ -129,13 +313,13 @@ function MessagesView() {
           method: "POST",
         },
       );
-      setData((current) =>
+      updateBothCaches(item.id, (row) => ({ ...row, read_at: result.read_at }));
+      // A now-read item no longer belongs in the "unread only" list.
+      unread.setData((current) =>
         current
           ? {
-              ...current,
-              items: current.items.map((row) =>
-                row.id === item.id ? { ...row, read_at: result.read_at } : row,
-              ),
+              total: Math.max(0, current.total - 1),
+              items: current.items.filter((row) => row.id !== item.id),
             }
           : current,
       );
@@ -178,15 +362,7 @@ function MessagesView() {
       await apiFetch<{ id: number }>(`/api/me/notifications/${item.id}`, {
         method: "DELETE",
       });
-      setData((current) =>
-        current
-          ? {
-              ...current,
-              items: current.items.filter((row) => row.id !== item.id),
-              total: Math.max(0, current.total - 1),
-            }
-          : current,
-      );
+      removeFromBothCaches(item.id);
       setExpanded((current) => {
         const next = new Set(current);
         next.delete(item.id);
@@ -228,33 +404,96 @@ function MessagesView() {
     }
   }
 
+  async function onRefresh() {
+    setRefreshing(true);
+    try {
+      await Promise.all([all.load(), unread.load()]);
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   const items = data?.items ?? [];
+  const canLoadMore = Boolean(data) && items.length < (data?.total ?? 0) && !loadingMore;
+  const canLoadMoreSV = useSharedValue(canLoadMore);
+  useEffect(() => {
+    canLoadMoreSV.value = canLoadMore;
+  }, [canLoadMore, canLoadMoreSV]);
+
+  const loadMoreRef = useRef(loadMore);
+  loadMoreRef.current = loadMore;
+  const triggerLoadMore = useCallback(() => {
+    void loadMoreRef.current();
+  }, []);
+
+  const isDragging = useSharedValue(false);
+
+  // Overscrolling past the bottom (iOS's native rubber-band) drives the ring
+  // continuously on the UI thread (no per-frame React re-render, so it never
+  // steps) and ratchets a light haptic tick every ~1/12th of the way to the
+  // threshold, then a stronger one the moment it arms; releasing while armed
+  // loads the next page, dragging back below the threshold before releasing
+  // cancels silently — same feel as the OS's own pull gestures. Gated on
+  // `isDragging`: a short list whose content is shorter than the viewport
+  // reports a "positive overscroll" at rest (offset 0, contentSize <
+  // layoutMeasurement), which would otherwise show the ring with no finger
+  // on the screen.
+  const scrollHandler = useAnimatedScrollHandler(
+    {
+      onBeginDrag: () => {
+        isDragging.value = true;
+        pullArmed.value = false;
+        pullBand.value = 0;
+        pullProgress.value = 0;
+      },
+      onScroll: (event) => {
+        if (!isDragging.value || !canLoadMoreSV.value) return;
+        const overscroll =
+          event.contentOffset.y + event.layoutMeasurement.height - event.contentSize.height;
+        const progress = Math.max(0, Math.min(1, overscroll / LOAD_MORE_THRESHOLD));
+        pullProgress.value = progress;
+
+        const band = Math.floor(progress * LOAD_MORE_BANDS);
+        if (band !== pullBand.value) {
+          pullBand.value = band;
+          if (band > 0 && band < LOAD_MORE_BANDS) runOnJS(haptic)("selection");
+        }
+
+        const armed = overscroll >= LOAD_MORE_THRESHOLD;
+        if (armed !== pullArmed.value) {
+          pullArmed.value = armed;
+          runOnJS(haptic)(armed ? "medium" : "selection");
+        }
+      },
+      onEndDrag: () => {
+        isDragging.value = false;
+        if (pullArmed.value) runOnJS(triggerLoadMore)();
+        pullArmed.value = false;
+        pullProgress.value = 0;
+      },
+    },
+    [canLoadMoreSV, triggerLoadMore],
+  );
+
   const retryAction = actionRetry.current;
   const actionRetrying = readingId !== null || deletingId !== null || loadingMore;
 
   return (
-    <View style={{ gap: 16 }}>
+    <Animated.ScrollView
+      contentInsetAdjustmentBehavior="automatic"
+      contentContainerStyle={{
+        gap: 16,
+        padding: 16,
+        paddingBottom: 32,
+        paddingTop: 16 + androidTopInset,
+      }}
+      keyboardShouldPersistTaps="handled"
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
+      onScroll={Platform.OS === "ios" ? scrollHandler : undefined}
+      scrollEventThrottle={1}
+    >
+      {tabSwitcher}
       <StaleDataBanner updatedAt={staleSince} onRetry={() => void load()} retrying={loading} />
-      <Section footer={t("notificationsUnreadHint")}>
-        <View
-          style={{
-            alignItems: "center",
-            flexDirection: "row",
-            minHeight: 50,
-            paddingHorizontal: 16,
-          }}
-        >
-          <Text selectable style={{ color: colors.label, flex: 1, fontSize: 16 }}>
-            {t("notificationsUnreadOnly")}
-          </Text>
-          <Switch
-            accessibilityLabel={t("notificationsUnreadOnly")}
-            style={{ alignSelf: "center" }}
-            value={unreadOnly}
-            onValueChange={setUnreadOnly}
-          />
-        </View>
-      </Section>
 
       {error ? <RequestFeedback error={error} onRetry={() => void load()} /> : null}
       {actionError ? (
@@ -294,7 +533,7 @@ function MessagesView() {
       ) : null}
 
       {data && data.total > LIMIT ? (
-        <View style={{ gap: 8 }}>
+        <View style={{ gap: 18 }}>
           <Text
             selectable
             style={{ color: colors.secondaryLabel, fontSize: 13, textAlign: "center" }}
@@ -305,23 +544,143 @@ function MessagesView() {
             })}
           </Text>
           {data.items.length < data.total ? (
-            <ActionButton
-              label={t("notificationsLoadMore")}
-              icon="chevron.down"
-              busy={loadingMore}
-              onPress={() => void loadMore()}
-            />
+            <View
+              style={{
+                alignItems: "center",
+                height: RING_SIZE,
+                justifyContent: "center",
+                position: "relative",
+                width: "100%",
+              }}
+            >
+              <PullHintText
+                progress={pullProgress}
+                label={t("notificationsPullToLoadMore")}
+                style={{ position: "absolute" }}
+              />
+              <LoadMoreRing
+                progress={pullProgress}
+                armed={pullArmed}
+                style={{ position: "absolute" }}
+              />
+            </View>
           ) : null}
         </View>
       ) : null}
+    </Animated.ScrollView>
+  );
+});
 
-      <ActionButton
-        label={t("refreshNotifications")}
-        icon="arrow.clockwise"
-        busy={loading}
-        onPress={() => void load()}
-      />
-    </View>
+const RING_SIZE = 28;
+const RING_STROKE = 2.5;
+const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2;
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+
+/** Gray hint sitting where the ring appears — fades out the moment the ring fades in, never both at once. */
+function PullHintText({
+  progress,
+  label,
+  style,
+}: {
+  progress: SharedValue<number>;
+  label: string;
+  style?: object;
+}) {
+  const hintStyle = useAnimatedStyle(() => ({
+    opacity: 1 - Math.max(0, Math.min(1, progress.value * 6)),
+  }));
+  return (
+    <Animated.View style={[style, hintStyle]}>
+      <Text selectable={false} style={{ color: colors.tertiaryLabel, fontSize: 12 }}>
+        {label}
+      </Text>
+    </Animated.View>
+  );
+}
+
+/**
+ * Closes continuously as `progress` (a shared value, updated every scroll
+ * frame on the UI thread — never through React state) approaches 1. Two
+ * rings are stacked (secondary-color, then accent) and cross-faded by
+ * opacity for the armed switch — animating an SVG stroke *color* directly
+ * crashes RNSVG's Fabric prop conversion, so only numeric props
+ * (`strokeDashoffset`, `opacity`) are ever driven through `useAnimatedProps`/
+ * `useAnimatedStyle`. The center is never filled with a solid disc — the
+ * "release" state is instead a down arrow that the same fill motion reveals
+ * in the last stretch, no text involved.
+ */
+function LoadMoreRing({
+  progress,
+  armed,
+  style,
+}: {
+  progress: SharedValue<number>;
+  armed: SharedValue<boolean>;
+  style?: object;
+}) {
+  const containerStyle = useAnimatedStyle(() => ({
+    opacity: Math.max(0, Math.min(1, progress.value * 6)),
+  }));
+  const dashProps = useAnimatedProps(() => ({
+    strokeDashoffset: RING_CIRCUMFERENCE * (1 - Math.max(0, Math.min(1, progress.value))),
+  }));
+  const accentStyle = useAnimatedStyle(() => ({ opacity: armed.value ? 1 : 0 }));
+  // The arrow keeps growing out of the same fill motion instead of popping
+  // in once armed — it starts appearing in the ring's last quarter-turn.
+  const arrowStyle = useAnimatedStyle(() => {
+    const reveal = Math.max(0, Math.min(1, (progress.value - 0.75) / 0.25));
+    return { opacity: reveal, transform: [{ scale: 0.6 + reveal * 0.4 }] };
+  });
+  return (
+    <Animated.View
+      style={[
+        { alignItems: "center", height: RING_SIZE, justifyContent: "center", width: RING_SIZE },
+        style,
+        containerStyle,
+      ]}
+    >
+      <Svg width={RING_SIZE} height={RING_SIZE} style={{ transform: [{ rotate: "-90deg" }] }}>
+        <Circle
+          cx={RING_SIZE / 2}
+          cy={RING_SIZE / 2}
+          r={RING_RADIUS}
+          stroke={colors.separator}
+          strokeWidth={RING_STROKE}
+          fill="none"
+        />
+        <AnimatedCircle
+          cx={RING_SIZE / 2}
+          cy={RING_SIZE / 2}
+          r={RING_RADIUS}
+          stroke={colors.secondaryLabel}
+          strokeWidth={RING_STROKE}
+          strokeLinecap="round"
+          fill="none"
+          strokeDasharray={RING_CIRCUMFERENCE}
+          animatedProps={dashProps}
+        />
+      </Svg>
+      <Animated.View
+        style={[{ height: RING_SIZE, position: "absolute", width: RING_SIZE }, accentStyle]}
+      >
+        <Svg width={RING_SIZE} height={RING_SIZE} style={{ transform: [{ rotate: "-90deg" }] }}>
+          <AnimatedCircle
+            cx={RING_SIZE / 2}
+            cy={RING_SIZE / 2}
+            r={RING_RADIUS}
+            stroke={colors.accent}
+            strokeWidth={RING_STROKE}
+            strokeLinecap="round"
+            fill="none"
+            strokeDasharray={RING_CIRCUMFERENCE}
+            animatedProps={dashProps}
+          />
+        </Svg>
+      </Animated.View>
+      <Animated.View style={[{ position: "absolute" }, arrowStyle]}>
+        <SymbolView name="arrow.down" tintColor={colors.accent} size={12} accessible={false} />
+      </Animated.View>
+    </Animated.View>
   );
 }
 
@@ -517,18 +876,24 @@ function NotificationRow({
   );
 }
 
-function PreferencesView() {
+/**
+ * Delivery channels only — which of push/email/in-app each category uses.
+ * Per-activity and per-kind reminder subscriptions live on the Schedule
+ * tab's own bell/settings sheet now, not here.
+ */
+const PreferencesView = memo(function PreferencesView({
+  tabSwitcher,
+  androidTopInset,
+}: {
+  tabSwitcher: ReactNode;
+  androidTopInset: number;
+}) {
   const { t } = useLocale();
   const { me } = useMeContext();
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [actionError, setActionError] = useState<Error | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const actionRetry = useRef<(() => Promise<void>) | null>(null);
-  const [removalStates, setRemovalStates] = useState<
-    Record<string, "queued" | "removing" | "failed">
-  >({});
-  const removalQueue = useRef<Array<{ category: string; channels: Channel[] }>>([]);
-  const queuedRemovalCategories = useRef(new Set<string>());
-  const processingRemovals = useRef(false);
 
   const fetchPreferences = useCallback(
     () => apiFetch<Preferences>("/api/me/notification-preferences"),
@@ -542,22 +907,14 @@ function PreferencesView() {
     load,
     setData,
   } = useCachedApi(`user:${me?.id ?? "unknown"}:notification-preferences`, fetchPreferences);
-  const {
-    data: scheduleData,
-    loading: scheduleLoading,
-    error: scheduleError,
-    load: loadSchedule,
-  } = useCachedApi("schedule", fetchPublicSchedule);
-  const scheduleItems = scheduleData ?? [];
 
   useEffect(() => {
     void load();
-    void loadSchedule();
-  }, [load, loadSchedule]);
+  }, [load]);
 
-  // Keeps this tab in sync with reminder toggles made elsewhere (e.g. the
-  // schedule card/detail bell), which mount their own independent cache
-  // instance for the same preferences (H51).
+  // Keeps this tab in sync with toggles made elsewhere (e.g. the schedule
+  // bell), which mount their own independent cache instance for the same
+  // preferences (H51).
   useEffect(() => subscribeToNotificationChanges(() => void load()), [load]);
 
   function enabledFor(category: string, channel: Channel): boolean {
@@ -568,91 +925,56 @@ function PreferencesView() {
   }
 
   async function toggle(category: string, channel: Channel, enabled: boolean) {
+    if (!prefs) return;
     const key = `${category}:${channel}`;
+    const previous = prefs;
     actionRetry.current = () => toggle(category, channel, enabled);
     setSavingKey(key);
     setActionError(null);
+    // Optimistic: flip instantly, reconcile with the server in the
+    // background — only revert if the request actually fails.
+    setData(withOverride(prefs, category, channel, enabled));
+    void haptic("selection");
     try {
       const next = await savePreferences([{ category, channel, enabled }]);
       setData(next);
       emitNotificationChange();
-      void haptic("selection");
     } catch (cause) {
+      setData(previous);
       setActionError(cause instanceof Error ? cause : new Error("Failed to save preference"));
     } finally {
       setSavingKey(null);
     }
   }
 
-  async function addReminder(category: string) {
-    actionRetry.current = () => addReminder(category);
-    setSavingKey(category);
-    setActionError(null);
+  async function onRefresh() {
+    setRefreshing(true);
     try {
-      const next = await savePreferences(
-        REMINDER_DEFAULT_CHANNELS.map((channel) => ({ category, channel, enabled: true })),
-      );
-      setData(next);
-      emitNotificationChange();
-      void haptic("selection");
-    } catch (cause) {
-      setActionError(cause instanceof Error ? cause : new Error(t("notificationsCouldNotAdd")));
+      await load();
     } finally {
-      setSavingKey(null);
+      setRefreshing(false);
     }
   }
 
-  async function drainRemovalQueue() {
-    if (processingRemovals.current) return;
-    processingRemovals.current = true;
-    let changed = false;
-    while (removalQueue.current.length > 0) {
-      const operation = removalQueue.current.shift();
-      if (!operation) continue;
-      setRemovalStates((current) => ({ ...current, [operation.category]: "removing" }));
-      try {
-        const next = await savePreferences(
-          operation.channels.map((channel) => ({
-            category: operation.category,
-            channel,
-            enabled: false,
-          })),
-        );
-        setData(next);
-        setRemovalStates((current) => {
-          const nextStates = { ...current };
-          delete nextStates[operation.category];
-          return nextStates;
-        });
-        void haptic("selection");
-        changed = true;
-      } catch (cause) {
-        setRemovalStates((current) => ({ ...current, [operation.category]: "failed" }));
-        setActionError(
-          cause instanceof Error ? cause : new Error(t("notificationsCouldNotRemove")),
-        );
-      } finally {
-        queuedRemovalCategories.current.delete(operation.category);
-      }
-    }
-    processingRemovals.current = false;
-    if (changed) emitNotificationChange();
-  }
-
-  function enqueueReminderRemoval(category: string, channels: Channel[]) {
-    if (queuedRemovalCategories.current.has(category)) return;
-    actionRetry.current = () => {
-      enqueueReminderRemoval(category, channels);
-      return Promise.resolve();
-    };
-    queuedRemovalCategories.current.add(category);
-    setRemovalStates((current) => ({ ...current, [category]: "queued" }));
-    removalQueue.current.push({ category, channels });
-    void drainRemovalQueue();
-  }
+  const scrollProps = {
+    contentInsetAdjustmentBehavior: "automatic" as const,
+    contentContainerStyle: {
+      gap: 18,
+      padding: 16,
+      paddingBottom: 32,
+      paddingTop: 16 + androidTopInset,
+    },
+    keyboardShouldPersistTaps: "handled" as const,
+    refreshControl: <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />,
+  };
 
   if (!prefs)
-    return <RequestFeedback loading={loading} error={error} onRetry={() => void load()} />;
+    return (
+      <ScrollView {...scrollProps}>
+        {tabSwitcher}
+        <RequestFeedback loading={loading} error={error} onRetry={() => void load()} />
+      </ScrollView>
+    );
 
   // Application decisions are email-only and intentionally have no mobile
   // preference: accepted/rejected applicants must always receive them.
@@ -663,71 +985,34 @@ function PreferencesView() {
     capabilities.includes(CAPABILITIES.QUEUE_OPERATE) ||
     capabilities.includes(CAPABILITIES.QUEUE_ADMIN) ||
     capabilities.includes(CAPABILITIES.JUDGE_PANEL);
-  const enabledReminderCategories = [
-    ...new Set(
-      prefs.overrides
-        .filter((row) => row.enabled && row.category.startsWith("schedule:"))
-        .map((row) => row.category),
-    ),
-  ];
-  const individualReminders = enabledReminderCategories.filter(
-    (category) => !category.startsWith("schedule:type:"),
-  );
-  const kindReminders = enabledReminderCategories.filter((category) =>
-    category.startsWith("schedule:type:"),
-  );
-  const upcomingItems = scheduleItems.filter(
-    (item) => new Date(item.endsAt).getTime() > Date.now(),
-  );
-  const addableActivities = upcomingItems.filter(
-    (item) => !individualReminders.includes(`schedule:${item.id}`),
-  );
-  const addableKinds = [
-    ...new Set([
-      ...ACTIVITY_KINDS,
-      ...scheduleItems.map((item) => item.type).filter((kind): kind is string => !!kind),
-    ]),
-  ].filter((kind) => !kindReminders.includes(`schedule:type:${kind}`));
-  const pendingRemovalCount = Object.values(removalStates).filter(
-    (state) => state === "queued" || state === "removing",
-  ).length;
   const retryAction = actionRetry.current;
 
   return (
-    <View style={{ gap: 18 }}>
+    <ScrollView {...scrollProps}>
+      {tabSwitcher}
       <StaleDataBanner updatedAt={staleSince} onRetry={() => void load()} retrying={loading} />
       {actionError ? (
         <RequestFeedback
           error={actionError}
           onRetry={retryAction ? () => void retryAction() : undefined}
-          retrying={savingKey !== null || pendingRemovalCount > 0}
+          retrying={savingKey !== null}
         />
       ) : null}
       <Section title={t("notificationsRequired")} footer={t("notificationsMandatoryHint")}>
-        <View style={{ alignItems: "center", flexDirection: "row", gap: 12, padding: 16 }}>
-          <SymbolView
-            name="bell.badge.fill"
-            tintColor={colors.accent}
-            size={22}
-            accessible={false}
-          />
-          <Text
-            selectable
-            style={{ color: colors.label, flex: 1, fontSize: 16, fontWeight: "600" }}
-          >
+        <View
+          style={{
+            alignItems: "center",
+            flexDirection: "row",
+            minHeight: 50,
+            paddingHorizontal: 16,
+          }}
+        >
+          <Text selectable style={{ color: colors.label, flex: 1, fontSize: 16 }}>
             {t("queueCalls")}
           </Text>
-          <View style={{ alignItems: "center", flexDirection: "row", gap: 4 }}>
-            <SymbolView
-              name="lock.fill"
-              tintColor={colors.secondaryLabel}
-              size={13}
-              accessible={false}
-            />
-            <Text selectable style={{ color: colors.secondaryLabel, fontSize: 14 }}>
-              {t("notificationsAlwaysOn")}
-            </Text>
-          </View>
+          <Text selectable style={{ color: colors.secondaryLabel, fontSize: 14 }}>
+            {t("notificationsAlwaysOn")}
+          </Text>
         </View>
       </Section>
 
@@ -746,7 +1031,7 @@ function PreferencesView() {
             </Text>
             <Switch
               accessibilityLabel={`${t("notificationsQueueStaff")}, ${t("notificationsPush")}`}
-              disabled={savingKey !== null || pendingRemovalCount > 0}
+              disabled={savingKey !== null}
               style={{ alignSelf: "center" }}
               value={enabledFor("queue.staff", "push")}
               onValueChange={(enabled) => void toggle("queue.staff", "push", enabled)}
@@ -757,7 +1042,7 @@ function PreferencesView() {
 
       {editableCategories.map((category) => (
         <Section key={category} title={categoryLabel(category, t)}>
-          {prefs.channels.map((channel, index) => {
+          {validChannels(prefs.channels).map((channel, index) => {
             return (
               <View key={channel}>
                 {index > 0 ? <Separator /> : null}
@@ -774,7 +1059,7 @@ function PreferencesView() {
                   </Text>
                   <Switch
                     accessibilityLabel={`${categoryLabel(category, t)}, ${channelLabel(channel, t)}`}
-                    disabled={savingKey !== null || pendingRemovalCount > 0}
+                    disabled={savingKey !== null}
                     style={{ alignSelf: "center" }}
                     value={enabledFor(category, channel)}
                     onValueChange={(enabled) => void toggle(category, channel, enabled)}
@@ -785,185 +1070,9 @@ function PreferencesView() {
           })}
         </Section>
       ))}
-
-      <Section
-        title={t("notificationsActivityReminders")}
-        footer={t("notificationsActivityRemindersHint")}
-      >
-        {pendingRemovalCount > 0 ? (
-          <View
-            accessibilityLiveRegion="polite"
-            accessibilityRole="progressbar"
-            style={{
-              alignItems: "center",
-              backgroundColor: colors.elevatedSurface,
-              flexDirection: "row",
-              gap: 10,
-              minHeight: 46,
-              paddingHorizontal: 16,
-            }}
-          >
-            <ActivityIndicator color={colors.accent} size="small" />
-            <Text selectable style={{ color: colors.secondaryLabel, flex: 1, fontSize: 14 }}>
-              {t("notificationsRemovalProgress", { count: String(pendingRemovalCount) })}
-            </Text>
-          </View>
-        ) : null}
-        {pendingRemovalCount > 0 && enabledReminderCategories.length > 0 ? <Separator /> : null}
-        {enabledReminderCategories.length === 0 ? (
-          <Text selectable style={{ color: colors.secondaryLabel, fontSize: 14, padding: 16 }}>
-            {t("notificationsNoActiveReminders")}
-          </Text>
-        ) : (
-          enabledReminderCategories.map((category, index) => {
-            const label = reminderCategoryLabel(category, scheduleItems, t);
-            const removalState = removalStates[category];
-            const removalBusy = removalState === "queued" || removalState === "removing";
-            return (
-              <View key={category}>
-                {index > 0 ? <Separator /> : null}
-                <View
-                  style={{
-                    alignItems: "center",
-                    flexDirection: "row",
-                    gap: 10,
-                    minHeight: 54,
-                    paddingLeft: 16,
-                  }}
-                >
-                  <View style={{ flex: 1, gap: 2, paddingVertical: 9 }}>
-                    <Text selectable style={{ color: colors.label, fontSize: 16 }}>
-                      {label}
-                    </Text>
-                    {removalState ? (
-                      <Text
-                        selectable
-                        accessibilityRole={removalState === "failed" ? "alert" : undefined}
-                        style={{
-                          color:
-                            removalState === "failed" ? colors.destructive : colors.secondaryLabel,
-                          fontSize: 12,
-                        }}
-                      >
-                        {removalState === "queued"
-                          ? t("notificationsRemovalQueued")
-                          : removalState === "removing"
-                            ? t("notificationsRemoving")
-                            : t("notificationsCouldNotRemove")}
-                      </Text>
-                    ) : null}
-                  </View>
-                  <ActionButton
-                    label={removalState === "failed" ? t("retry") : t("notificationsTurnOff")}
-                    busy={removalBusy}
-                    disabled={savingKey !== null}
-                    haptic={false}
-                    onPress={() => enqueueReminderRemoval(category, prefs.channels)}
-                    style={{ minHeight: 54 }}
-                  />
-                </View>
-              </View>
-            );
-          })
-        )}
-      </Section>
-
-      <Section title={t("notificationsAddActivityReminder")}>
-        {scheduleLoading && !scheduleItems.length ? (
-          <View style={{ alignItems: "center", minHeight: 50, justifyContent: "center" }}>
-            <ActivityIndicator color={colors.accent} />
-          </View>
-        ) : scheduleError ? (
-          <ActionButton
-            label={t("retry")}
-            icon="arrow.clockwise"
-            onPress={() => void loadSchedule()}
-          />
-        ) : addableActivities.length === 0 ? (
-          <Text selectable style={{ color: colors.secondaryLabel, fontSize: 14, padding: 16 }}>
-            {t("notificationsNoUpcomingActivities")}
-          </Text>
-        ) : (
-          <MenuView
-            actions={addableActivities.map((item) => ({
-              id: String(item.id),
-              title: item.title,
-            }))}
-            onPressAction={({ nativeEvent }) => void addReminder(`schedule:${nativeEvent.event}`)}
-          >
-            <Pressable
-              accessibilityRole="button"
-              accessibilityState={{ disabled: savingKey !== null || pendingRemovalCount > 0 }}
-              disabled={savingKey !== null || pendingRemovalCount > 0}
-            >
-              <ReminderPickerRow label={t("notificationsChooseActivity")} />
-            </Pressable>
-          </MenuView>
-        )}
-      </Section>
-
-      <Section title={t("notificationsAddKindReminder")}>
-        <MenuView
-          actions={addableKinds.map((kind) => ({
-            id: kind,
-            title: activityKindLabel(kind, t),
-          }))}
-          onPressAction={({ nativeEvent }) =>
-            void addReminder(`schedule:type:${nativeEvent.event}`)
-          }
-        >
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{
-              disabled: savingKey !== null || pendingRemovalCount > 0 || addableKinds.length === 0,
-            }}
-            disabled={savingKey !== null || pendingRemovalCount > 0 || addableKinds.length === 0}
-          >
-            <ReminderPickerRow
-              label={
-                addableKinds.length > 0
-                  ? t("notificationsChooseKind")
-                  : t("notificationsAllKindsEnabled")
-              }
-            />
-          </Pressable>
-        </MenuView>
-      </Section>
-
-      <ActionButton
-        label={t("refreshNotifications")}
-        icon="arrow.clockwise"
-        busy={loading}
-        onPress={() => void load()}
-      />
-    </View>
+    </ScrollView>
   );
-}
-
-function ReminderPickerRow({ label }: { label: string }) {
-  return (
-    <View
-      style={{
-        alignItems: "center",
-        flexDirection: "row",
-        gap: 10,
-        minHeight: 50,
-        paddingHorizontal: 16,
-      }}
-    >
-      <SymbolView name="plus.circle.fill" tintColor={colors.accent} size={20} accessible={false} />
-      <Text selectable style={{ color: colors.label, flex: 1, fontSize: 16 }}>
-        {label}
-      </Text>
-      <SymbolView
-        name="chevron.down"
-        tintColor={colors.tertiaryLabel}
-        size={13}
-        accessible={false}
-      />
-    </View>
-  );
-}
+});
 
 function savePreferences(
   preferences: Array<{ category: string; channel: Channel; enabled: boolean }>,
@@ -1043,40 +1152,11 @@ function categoryLabel(category: string, t: ReturnType<typeof useLocale>["t"]) {
   return t("notificationsApplications");
 }
 
-function activityKindLabel(kind: string, t: ReturnType<typeof useLocale>["t"]): string {
-  const labels: Record<string, string> = {
-    activity: t("notificationsKindActivity"),
-    meal: t("notificationsKindMeal"),
-    workshop: t("notificationsKindWorkshop"),
-    talk: t("notificationsKindTalk"),
-    ceremony: t("notificationsKindCeremony"),
-    deadline: t("notificationsKindDeadline"),
-    other: t("notificationsKindOther"),
-  };
-  return labels[kind] ?? kind;
-}
-
-function reminderCategoryLabel(
-  category: string,
-  scheduleItems: ScheduleItem[],
-  t: ReturnType<typeof useLocale>["t"],
-): string {
-  if (category.startsWith("schedule:type:")) {
-    return t("notificationsAllKind", {
-      kind: activityKindLabel(category.slice("schedule:type:".length), t),
-    });
-  }
-  const id = Number(category.slice("schedule:".length));
-  const item = scheduleItems.find((candidate) => candidate.id === id);
-  return item?.title ?? t("notificationsUnavailableActivity", { id: String(id) });
-}
-
 function channelLabel(channel: Channel, t: ReturnType<typeof useLocale>["t"]) {
   const labels: Record<Channel, string> = {
     in_app: t("notificationsInApp"),
     email: t("emailLabel"),
     push: t("notificationsPush"),
-    discord: "Discord",
   };
   return labels[channel];
 }
