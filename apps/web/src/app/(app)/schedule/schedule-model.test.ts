@@ -3,6 +3,7 @@ import type { PublicScheduleItem } from "@/lib/logistics";
 import {
   editingNavigationDirection,
   MAX_INLINE_ROLLED_HOURS,
+  parseTimeOfDay,
   scheduleDayKey,
   scheduleDuration,
   scheduleNavigationDirection,
@@ -128,6 +129,38 @@ describe("timeInputValue / withTimeOfDay", () => {
   it("rejects a malformed time or timestamp", () => {
     expect(withTimeOfDay("2026-07-22T08:00:00.000Z", "not-a-time")).toBeNull();
     expect(withTimeOfDay("not-a-date", "14:30")).toBeNull();
+  });
+});
+
+describe("parseTimeOfDay", () => {
+  it("reads a time typed at speed and returns it canonical", () => {
+    expect(parseTimeOfDay("9")).toBe("09:00");
+    expect(parseTimeOfDay("9:0")).toBe("09:00");
+    expect(parseTimeOfDay("9:5")).toBe("09:05");
+    expect(parseTimeOfDay("09:00")).toBe("09:00");
+    expect(parseTimeOfDay("930")).toBe("09:30");
+    expect(parseTimeOfDay("0930")).toBe("09:30");
+    expect(parseTimeOfDay("2345")).toBe("23:45");
+    expect(parseTimeOfDay("23:45")).toBe("23:45");
+    expect(parseTimeOfDay("0")).toBe("00:00");
+    expect(parseTimeOfDay("00:00")).toBe("00:00");
+  });
+
+  it("accepts the separators people actually type, and stray spaces", () => {
+    expect(parseTimeOfDay(" 9.30 ")).toBe("09:30");
+    expect(parseTimeOfDay("9,30")).toBe("09:30");
+    expect(parseTimeOfDay("9h30")).toBe("09:30");
+    expect(parseTimeOfDay("9h")).toBe("09:00");
+    expect(parseTimeOfDay("9:")).toBe("09:00");
+  });
+
+  it("rejects rather than wraps an impossible time", () => {
+    expect(parseTimeOfDay("25:00")).toBeNull();
+    expect(parseTimeOfDay("9:75")).toBeNull();
+    expect(parseTimeOfDay("2475")).toBeNull();
+    expect(parseTimeOfDay("")).toBeNull();
+    expect(parseTimeOfDay("noon")).toBeNull();
+    expect(parseTimeOfDay("12345")).toBeNull();
   });
 });
 

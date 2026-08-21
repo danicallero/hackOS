@@ -186,6 +186,38 @@ export function timeInputValue(iso: string): string {
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
+/**
+ * Reads whatever a hurried typist put in a time cell and returns canonical
+ * "HH:mm", or null if it isn't a time at all (H59). A run-of-show is typed
+ * fast, and demanding four digits and a colon for every cell is friction with
+ * no payoff: "9:0", "9", "930" and "9.30" all say a time unambiguously.
+ *
+ *   "9"     -> "09:00"      "930"   -> "09:30"
+ *   "9:0"   -> "09:00"      "0930"  -> "09:30"
+ *   "9:5"   -> "09:05"      "9.30"  -> "09:30"
+ *   "23:45" -> "23:45"      "9h30"  -> "09:30"
+ *
+ * Out-of-range values ("25:00", "9:75") are rejected rather than wrapped —
+ * a wrapped time is a wrong time nobody asked for.
+ */
+export function parseTimeOfDay(raw: string): string | null {
+  const cleaned = raw
+    .trim()
+    .replace(/[.,;hH]/g, ":")
+    .replace(/:$/, "");
+  const match =
+    /^(\d{1,2})(?::(\d{1,2}))?$/.exec(cleaned) ??
+    // Digits only, no separator: the last two are the minutes ("930", "0930").
+    /^(\d{1,2})(\d{2})$/.exec(cleaned.replace(/:/g, ""));
+  if (!match) return null;
+
+  const hours = Number(match[1]);
+  const minutes = match[2] === undefined ? 0 : Number(match[2]);
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes)) return null;
+  if (hours > 23 || minutes > 59) return null;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
 /** Re-applies a new HH:mm to an existing ISO timestamp's date, keeping the date unchanged. */
 export function withTimeOfDay(iso: string, hhmm: string): string | null {
   const match = /^(\d{2}):(\d{2})$/.exec(hhmm);

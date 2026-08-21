@@ -108,6 +108,7 @@ import {
 import {
   editingNavigationDirection,
   MAX_INLINE_ROLLED_HOURS,
+  parseTimeOfDay,
   SCHEDULE_AUDIENCES,
   SCHEDULE_STATUS_TONES,
   type ScheduleNavigationDirection,
@@ -1916,13 +1917,13 @@ function EditableTextCell({
   );
 }
 
-/** HH:MM, 24-hour, e.g. "08:00" or "23:45" — rejects anything else. */
-const TIME_24H_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
-
 /**
  * Plain HH:MM text field, not the native `<input type="time">` — that
  * control's AM/PM-vs-24h rendering follows the OS locale, not this app's
  * locale, so it can't guarantee a 24-hour clock across browsers/systems.
+ * What's typed is read leniently (parseTimeOfDay: "9", "9:0", "930" all mean
+ * 09:00/09:30) and committed canonical, so a run-of-show can be typed at
+ * speed without four digits and a colon every time.
  */
 function EditableTimeCell({
   value,
@@ -1947,14 +1948,16 @@ function EditableTimeCell({
 
   async function commit(nextDraft = draft): Promise<boolean> {
     if (saving) return false;
-    if (!TIME_24H_PATTERN.test(nextDraft)) {
+    const parsed = parseTimeOfDay(nextDraft);
+    if (!parsed) {
       setDraft(value);
       setEditing(false);
       return false;
     }
+    setDraft(parsed);
     setSaving(true);
     try {
-      const result = await onSave(nextDraft);
+      const result = await onSave(parsed);
       const saved = result !== false;
       if (saved) setEditing(false);
       return saved;
