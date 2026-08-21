@@ -389,6 +389,23 @@ route below. No migration needed.
   `app/_layout.tsx`) reveals a delete action that discards it (`deleteScan`
   in `lib/scanner-db.ts`) on the follow-up tap — always a manual, per-scan
   gesture, never automatic or triggered by attempt count alone.
+- `components/activities-screen.tsx` (`app/(tabs)/activities/index.tsx`) — the
+  operator's list of scannable activities, read straight from the local
+  `scanner_activities` cache. A native search field and a kind filter live in
+  the nav bar (`headerSearchBarOptions` + a `MenuView` `headerRight`, same
+  pattern as the people directory); both narrow the list together, and the
+  pure filtering/marker helpers sit in `lib/activity-list.ts`
+  (`lib/activity-list.test.ts`). Each row shows its start time and its real
+  kind pill (`scheduleTypeLabel`, so a talk no longer reads "Activity"), and
+  the activity closest to the current time is outlined and labelled
+  "Now"/"Next" — "Now" only while it started within the last two hours, since
+  the scanner snapshot carries no end time. Two things kept the list visibly
+  flickering and snapping back under the large title: the `RefreshControl` was
+  wired to `sync.syncing`, so the background 15s scan-queue tick opened the
+  spinner on its own, and every reload committed a brand-new array even when
+  nothing had changed. The spinner is now driven by a local `refreshing` flag
+  set only by pull-to-refresh, and reloads keep the previous array identity
+  when `sameActivities` says the data is unchanged.
 
 **Scanner cache encryption & isolation.** Staff/scanner devices carry two
 distinct local caches, split into separate SQLite files with different

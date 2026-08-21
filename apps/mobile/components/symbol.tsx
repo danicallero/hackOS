@@ -78,6 +78,7 @@ const ANDROID_SYMBOL_NAMES = {
   "list.bullet": "list",
   "list.bullet.rectangle": "list_alt",
   "lock.fill": "lock",
+  magnifyingglass: "search",
   "lock.rotation": "sync_lock",
   "mappin.and.ellipse": "location_on",
   mic: "mic",
