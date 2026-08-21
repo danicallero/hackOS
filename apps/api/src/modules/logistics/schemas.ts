@@ -263,10 +263,21 @@ export const scheduleBulkPublishAtBody = z.object({
   publishAt: z.coerce.date().nullable(),
 });
 
-export const scheduleOwnerBody = z.object({ userId: z.coerce.number().int().positive() });
+/**
+ * Exactly one of userId (a real hackOS account) or freeTextName (an external
+ * name with no login — a vendor, a volunteer) per schedule_owners_exactly_one_identity (0719).
+ */
+export const scheduleOwnerBody = z
+  .object({
+    userId: z.coerce.number().int().positive().optional(),
+    freeTextName: z.string().trim().min(1).max(200).optional(),
+  })
+  .refine((v) => (v.userId !== undefined) !== (v.freeTextName !== undefined), {
+    message: "Provide exactly one of userId or freeTextName",
+  });
 export const scheduleOwnerParams = z.object({
   id: z.coerce.number().int().positive(),
-  userId: z.coerce.number().int().positive(),
+  ownerId: z.coerce.number().int().positive(),
 });
 
 export const scheduleOwnerCandidatesQuery = z.object({

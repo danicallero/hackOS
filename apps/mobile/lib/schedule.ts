@@ -18,6 +18,8 @@ export interface ScheduleItem {
   startsAt: string;
   endsAt: string;
   audiences: ScheduleAudience[];
+  /** Staff-only — present when the caller is staff, telling a draft apart from a live item. */
+  visibility?: "shown" | "hidden";
 }
 
 /** Admin-only fields, present on `GET /api/schedule` but never the public feed. */
@@ -30,11 +32,17 @@ export interface AdminScheduleItem extends ScheduleItem {
   owners: ScheduleOwner[];
 }
 
+/**
+ * Either a real hackOS account (userId set, name/surname/email from `users`)
+ * or a free-text name with no login (freeTextName set) — never both.
+ */
 export interface ScheduleOwner {
-  userId: number;
+  id: number;
+  userId: number | null;
   name: string | null;
   surname: string | null;
   email?: string;
+  freeTextName: string | null;
 }
 
 export interface ScheduleInput {
@@ -96,16 +104,19 @@ export async function fetchScheduleOwnerCandidates(
   return response.users;
 }
 
-export async function addScheduleOwner(scheduleId: number, userId: number): Promise<void> {
-  await apiFetch(`/api/schedule/${scheduleId}/owners`, {
+export async function addScheduleOwner(
+  scheduleId: number,
+  input: { userId: number } | { freeTextName: string },
+): Promise<ScheduleOwner> {
+  return apiFetch<ScheduleOwner>(`/api/schedule/${scheduleId}/owners`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ userId }),
+    body: JSON.stringify(input),
   });
 }
 
-export async function removeScheduleOwner(scheduleId: number, userId: number): Promise<void> {
-  await apiFetch(`/api/schedule/${scheduleId}/owners/${userId}`, { method: "DELETE" });
+export async function removeScheduleOwner(scheduleId: number, ownerId: number): Promise<void> {
+  await apiFetch(`/api/schedule/${scheduleId}/owners/${ownerId}`, { method: "DELETE" });
 }
 
 export function scheduleTypeLabel(type: string | null | undefined, t: Translate): string {

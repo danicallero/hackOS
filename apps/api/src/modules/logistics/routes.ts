@@ -143,13 +143,16 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
     owners: z
       .array(
         z.object({
-          userId: z.number().int(),
+          id: z.number().int(),
+          userId: z.number().int().nullable(),
           name: z.string().nullable(),
           surname: z.string().nullable(),
+          freeTextName: z.string().nullable(),
         }),
       )
       .optional(),
     notes: z.string().nullable().optional(),
+    visibility: z.enum(["shown", "hidden"]).optional(),
   });
 
   const accredit = requireCapability(CAPABILITIES.ACCREDIT_SCAN);
@@ -250,7 +253,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Published schedule, audience-aware",
         description:
-          "H47/H48/H59 schedule feed. Contains only items currently live (visibility='shown', publishAt due). Every item is unconditionally visible to staff (any authenticated account holding at least one capability) — the full run-of-show, each with its notes and owners/contactNote. Everyone else (including anonymous callers, treated as 'participant') only sees items whose optional audiences ('sponsor'/'participant'/'mentor') overlap their own; a sponsor rep's audience always additionally includes 'participant', so they see the entire public schedule plus their sponsor-tagged items on top, getting owners/contactNote (never the staff-only notes) on the latter. Every item's own `audiences` array is included so a caller can pick out the items relevant to a given audience client-side.",
+          "H47/H48/H59 schedule feed. Everyone else (including anonymous callers, treated as 'participant') only sees items currently live (visibility='shown', publishAt due) whose optional audiences ('sponsor'/'participant'/'mentor') overlap their own; a sponsor rep's audience always additionally includes 'participant', so they see the entire public schedule plus their sponsor-tagged items on top, getting owners/contactNote (never the staff-only notes) on the latter. Staff (any authenticated account holding at least one capability) is unconditionally exempt from both the audience filter *and* the visibility/publishAt one — the full run-of-show including drafts and items scheduled to reveal later, each with its notes, owners/contactNote, and its own `visibility` so a staff client can tell a draft apart from a live item (H59 follow-up: previewing a draft on the run-of-show shouldn't require publishing it first). Every item's own `audiences` array is included so a caller can pick out the items relevant to a given audience client-side.",
         response: { 200: z.object({ items: z.array(publicActivitySchema) }) },
       },
     },
@@ -762,7 +765,12 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
     {
       ...routeAccess(access.scheduleManage),
       preHandler: scheduleManage,
-      schema: { params: scheduleIdParam },
+      schema: {
+        params: scheduleIdParam,
+        summary: "List a schedule item's responsible person(s)",
+        description:
+          "H59: who's responsible for a schedule item. Each row is either a real hackOS account (userId, name/surname/email) or a free-text name with no login (freeTextName) — never both.",
+      },
     },
     async (req) => ({ owners: await listScheduleOwners(req.params.id) }),
   );
@@ -772,23 +780,37 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
     {
       ...routeAccess(access.scheduleManage),
       preHandler: scheduleManage,
-      schema: { params: scheduleIdParam, body: scheduleOwnerBody },
+      schema: {
+        params: scheduleIdParam,
+        body: scheduleOwnerBody,
+        summary: "Assign a responsible person to a schedule item",
+        description:
+          "H59: assigns either a real hackOS account (userId) or a free-text name with no login (freeTextName) as responsible for a schedule item — exactly one of the two. 409 if that account is already an owner; free-text names allow duplicates (no account identity to dedupe on).",
+      },
     },
-    async (req, reply) =>
-      reply
-        .code(201)
-        .send(await addScheduleOwner(actor(req.userId), req.params.id, req.body.userId)),
+    async (req, reply) => {
+      const input =
+        req.body.userId !== undefined
+          ? { userId: req.body.userId }
+          : { freeTextName: req.body.freeTextName as string };
+      reply.code(201).send(await addScheduleOwner(actor(req.userId), req.params.id, input));
+    },
   );
 
   typed.delete(
-    "/api/schedule/:id/owners/:userId",
+    "/api/schedule/:id/owners/:ownerId",
     {
       ...routeAccess(access.scheduleManage),
       preHandler: scheduleManage,
-      schema: { params: scheduleOwnerParams },
+      schema: {
+        params: scheduleOwnerParams,
+        summary: "Remove a responsible person from a schedule item",
+        description:
+          "H59: unassigns one owner row by its own id (not by userId — a free-text owner has none).",
+      },
     },
     async (req, reply) => {
-      await removeScheduleOwner(actor(req.userId), req.params.id, req.params.userId);
+      await removeScheduleOwner(actor(req.userId), req.params.id, req.params.ownerId);
       return reply.code(204).send();
     },
   );

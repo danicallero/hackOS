@@ -113,11 +113,11 @@ export function ScheduleFormModal({
   title: string;
   initial: ScheduleInput;
   /**
-   * `pendingOwnerIds` is only populated in create mode (no `scheduleId` yet)
+   * `pendingOwners` is only populated in create mode (no `scheduleId` yet)
    * — the caller is responsible for assigning them to the newly created item
    * (H59: the responsible-person picker needs to work before the row exists).
    */
-  onSubmit: (values: ScheduleInput, pendingOwnerIds: number[]) => Promise<void>;
+  onSubmit: (values: ScheduleInput, pendingOwners: PendingOwner[]) => Promise<void>;
   /** Present only when editing an existing item — owner assignment needs a real id. */
   scheduleId?: number;
 }) {
@@ -126,7 +126,7 @@ export function ScheduleFormModal({
   const [pending, setPending] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [scheduledPublish, setScheduledPublish] = useState(Boolean(initial.publishAt));
-  const [pendingOwners, setPendingOwners] = useState<UserOption[]>([]);
+  const [pendingOwners, setPendingOwners] = useState<PendingOwner[]>([]);
 
   useEffect(() => {
     setValues(initial);
@@ -138,10 +138,7 @@ export function ScheduleFormModal({
   async function submit() {
     setPending(true);
     try {
-      await onSubmit(
-        values,
-        pendingOwners.map((o) => o.id),
-      );
+      await onSubmit(values, pendingOwners);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
     } finally {
@@ -151,6 +148,10 @@ export function ScheduleFormModal({
 
   const isParticipant = (values.audiences ?? []).includes("participant");
   const isMeal = values.type === "meal";
+  // An item with no audience tag is staff-only, full stop — visibility/publishAt
+  // describe when a *tagged* audience gets to see an item, so they're meaningless
+  // (and the API silently forces them back to hidden/null) without one (H59 follow-up).
+  const hasAudience = (values.audiences ?? []).length > 0;
 
   function toggleAudience(audience: (typeof SCHEDULE_AUDIENCES)[number], checked: boolean) {
     setValues((v) => {
@@ -159,7 +160,15 @@ export function ScheduleFormModal({
       else current.delete(audience);
       // Only a participant-visible item can be scanner-registrable (H59).
       const requiresScan = audience === "participant" && !checked ? false : v.requiresScan;
-      return { ...v, audiences: Array.from(current), requiresScan };
+      const next = { ...v, audiences: Array.from(current), requiresScan };
+      // Mirror the API's own normalization immediately so the form never shows
+      // a "Shown"/scheduled-publish state that's about to become a no-op.
+      if (next.audiences.length === 0) {
+        next.visibility = "hidden";
+        next.publishAt = null;
+        setScheduledPublish(false);
+      }
+      return next;
     });
   }
 
@@ -175,47 +184,29 @@ export function ScheduleFormModal({
           />
         </Field>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field id="schedule-type" label={t("colType")}>
-            <Select
-              value={values.type ?? "activity"}
-              onValueChange={(type) =>
-                setValues((v) => ({
-                  ...v,
-                  type,
-                  requiresScan: type === "meal" || v.requiresScan,
-                }))
-              }
-            >
-              <SelectTrigger id="schedule-type" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {ACTIVITY_KINDS.map((type) => (
-                  <SelectItem key={type} value={type}>
-                    {scheduleTypeLabel(type, t)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field id="schedule-visibility" label={t("colVisibility")}>
-            <Select
-              value={values.visibility}
-              onValueChange={(visibility) =>
-                setValues((v) => ({ ...v, visibility: visibility as "shown" | "hidden" }))
-              }
-            >
-              <SelectTrigger id="schedule-visibility" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="hidden">{t("hiddenOption")}</SelectItem>
-                <SelectItem value="shown">{t("shownOption")}</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-        </div>
+        <Field id="schedule-type" label={t("colType")}>
+          <Select
+            value={values.type ?? "activity"}
+            onValueChange={(type) =>
+              setValues((v) => ({
+                ...v,
+                type,
+                requiresScan: type === "meal" || v.requiresScan,
+              }))
+            }
+          >
+            <SelectTrigger id="schedule-type" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {ACTIVITY_KINDS.map((type) => (
+                <SelectItem key={type} value={type}>
+                  {scheduleTypeLabel(type, t)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
 
         <Field id="schedule-audiences" label={t("audienceLabel")}>
           <div className="flex flex-wrap gap-4">
@@ -232,7 +223,29 @@ export function ScheduleFormModal({
               </div>
             ))}
           </div>
+          <p className="text-muted-foreground text-sm text-pretty">
+            {hasAudience ? t("audienceVisibilityHint") : t("staffOnlyHint")}
+          </p>
         </Field>
+
+        {hasAudience && (
+          <Field id="schedule-visibility" label={t("colVisibility")}>
+            <Select
+              value={values.visibility}
+              onValueChange={(visibility) =>
+                setValues((v) => ({ ...v, visibility: visibility as "shown" | "hidden" }))
+              }
+            >
+              <SelectTrigger id="schedule-visibility" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="hidden">{t("hiddenOption")}</SelectItem>
+                <SelectItem value="shown">{t("shownOption")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+        )}
 
         {isParticipant && (
           <div className="flex items-center gap-2">
@@ -295,39 +308,43 @@ export function ScheduleFormModal({
             </Button>
           </CollapsibleTrigger>
           <CollapsibleContent className="space-y-5 pt-3">
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="schedule-publication-toggle"
-                  checked={scheduledPublish}
-                  onCheckedChange={(checked) => {
-                    const next = checked === true;
-                    setScheduledPublish(next);
-                    setValues((v) => ({
-                      ...v,
-                      publishAt: next ? toDatetimeLocal(new Date().toISOString()) : null,
-                    }));
-                  }}
-                />
-                <Label htmlFor="schedule-publication-toggle" className="font-normal">
-                  {t("schedulePublicationLabel")}
-                </Label>
-              </div>
-              {scheduledPublish && (
-                <Field id="schedule-publish-at" label={t("publishAtLabel")}>
-                  <DateTimeInput
-                    id="schedule-publish-at"
-                    value={values.publishAt ?? ""}
-                    onChange={(publishAt) =>
-                      setValues((v) => ({ ...v, publishAt: publishAt || null }))
-                    }
+            {hasAudience ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="schedule-publication-toggle"
+                    checked={scheduledPublish}
+                    onCheckedChange={(checked) => {
+                      const next = checked === true;
+                      setScheduledPublish(next);
+                      setValues((v) => ({
+                        ...v,
+                        publishAt: next ? toDatetimeLocal(new Date().toISOString()) : null,
+                      }));
+                    }}
                   />
-                  <p className="text-muted-foreground text-sm text-pretty">
-                    {t("publishDestinationsHint", { timezone: getTimeZoneLabel() })}
-                  </p>
-                </Field>
-              )}
-            </div>
+                  <Label htmlFor="schedule-publication-toggle" className="font-normal">
+                    {t("schedulePublicationLabel")}
+                  </Label>
+                </div>
+                {scheduledPublish && (
+                  <Field id="schedule-publish-at" label={t("publishAtLabel")}>
+                    <DateTimeInput
+                      id="schedule-publish-at"
+                      value={values.publishAt ?? ""}
+                      onChange={(publishAt) =>
+                        setValues((v) => ({ ...v, publishAt: publishAt || null }))
+                      }
+                    />
+                    <p className="text-muted-foreground text-sm text-pretty">
+                      {t("publishDestinationsHint", { timezone: getTimeZoneLabel() })}
+                    </p>
+                  </Field>
+                )}
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-sm text-pretty">{t("staffOnlyHint")}</p>
+            )}
             <Field id="schedule-notes" label={t("internalNotesLabel")}>
               <Textarea
                 id="schedule-notes"
@@ -379,6 +396,29 @@ function Field({ id, label, children }: { id: string; label: string; children: R
 }
 
 /**
+ * A pending owner assignment before the item exists (H59) — either a real
+ * hackOS account picked via UserPicker, or a free-text name with no login
+ * (an external vendor, a volunteer). Mirrors the addScheduleOwner union.
+ */
+export type PendingOwner = { kind: "user"; user: UserOption } | { kind: "freeText"; name: string };
+
+function pendingOwnerLabel(owner: PendingOwner): string {
+  if (owner.kind === "freeText") return owner.name;
+  return [owner.user.name, owner.user.surname].filter(Boolean).join(" ").trim() || owner.user.email;
+}
+
+function pendingOwnerKey(owner: PendingOwner): string {
+  return owner.kind === "user" ? `user:${owner.user.id}` : `text:${owner.name}`;
+}
+
+/** Converts a pending owner into the shape addScheduleOwner's body expects. */
+export function pendingOwnerToInput(
+  owner: PendingOwner,
+): { userId: number } | { freeTextName: string } {
+  return owner.kind === "user" ? { userId: owner.user.id } : { freeTextName: owner.name };
+}
+
+/**
  * Responsible-person picker for a new (not-yet-created) item (H59) — a
  * schedule_owners row needs a real schedule_id, so selections just live in
  * local state here until the caller creates the item and assigns them.
@@ -387,13 +427,16 @@ function PendingOwnersField({
   owners,
   onChange,
 }: {
-  owners: UserOption[];
-  onChange: (next: UserOption[]) => void;
+  owners: PendingOwner[];
+  onChange: (next: PendingOwner[]) => void;
 }) {
   const { t } = useLocale();
   const [selectedUserId, setSelectedUserId] = useState("");
+  const [freeTextName, setFreeTextName] = useState("");
 
-  const ownerIds = new Set(owners.map((o) => o.id));
+  const ownerIds = new Set(
+    owners.filter((o) => o.kind === "user").map((o) => (o as { user: UserOption }).user.id),
+  );
   async function searchAvailableUsers(query: string): Promise<UserOption[]> {
     try {
       const r = await logisticsApi.scheduleOwnerCandidates(query);
@@ -405,6 +448,13 @@ function PendingOwnersField({
     }
   }
 
+  function addFreeText() {
+    const name = freeTextName.trim();
+    if (!name) return;
+    onChange([...owners, { kind: "freeText", name }]);
+    setFreeTextName("");
+  }
+
   return (
     <SectionCard title={t("ownersLabel")}>
       <div className="space-y-4">
@@ -414,7 +464,7 @@ function PendingOwnersField({
             onChange={(value, user) => {
               setSelectedUserId(value);
               if (user && !ownerIds.has(user.id)) {
-                onChange([...owners, user]);
+                onChange([...owners, { kind: "user", user }]);
                 setSelectedUserId("");
               }
             }}
@@ -423,21 +473,46 @@ function PendingOwnersField({
             inDialog
           />
         </div>
+        <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+          <Input
+            value={freeTextName}
+            onChange={(e) => setFreeTextName(e.target.value)}
+            placeholder={t("ownerFreeTextPlaceholder")}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                addFreeText();
+              }
+            }}
+          />
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={!freeTextName.trim()}
+            onClick={addFreeText}
+          >
+            {t("addAction")}
+          </Button>
+        </div>
         {owners.length === 0 ? (
           <p className="text-muted-foreground text-sm">{t("noOwnersYet")}</p>
         ) : (
           <ul className="divide-border divide-y">
             {owners.map((owner) => (
-              <li key={owner.id} className="flex items-center justify-between gap-2 py-2">
-                <span className="text-sm">
-                  {[owner.name, owner.surname].filter(Boolean).join(" ").trim() || owner.email}
-                </span>
+              <li
+                key={pendingOwnerKey(owner)}
+                className="flex items-center justify-between gap-2 py-2"
+              >
+                <span className="text-sm">{pendingOwnerLabel(owner)}</span>
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
                   aria-label={t("remove")}
-                  onClick={() => onChange(owners.filter((o) => o.id !== owner.id))}
+                  onClick={() =>
+                    onChange(owners.filter((o) => pendingOwnerKey(o) !== pendingOwnerKey(owner)))
+                  }
                 >
                   <XIcon className="size-4" />
                 </Button>
@@ -455,6 +530,7 @@ function OwnersField({ scheduleId }: { scheduleId: number }) {
   const { t } = useLocale();
   const [owners, setOwners] = useState<ScheduleOwner[] | null>(null);
   const [selectedUserId, setSelectedUserId] = useState("");
+  const [freeTextName, setFreeTextName] = useState("");
   const [busy, setBusy] = useState(false);
 
   const loadOwners = useCallback(async () => {
@@ -470,7 +546,7 @@ function OwnersField({ scheduleId }: { scheduleId: number }) {
     void loadOwners();
   }, [loadOwners]);
 
-  const ownerUserIds = new Set((owners ?? []).map((o) => o.userId));
+  const ownerUserIds = new Set((owners ?? []).flatMap((o) => (o.userId ? [o.userId] : [])));
   async function searchAvailableUsers(query: string): Promise<UserOption[]> {
     try {
       const r = await logisticsApi.scheduleOwnerCandidates(query);
@@ -482,11 +558,12 @@ function OwnersField({ scheduleId }: { scheduleId: number }) {
     }
   }
 
-  async function add(userId: number) {
+  async function add(input: { userId: number } | { freeTextName: string }) {
     setBusy(true);
     try {
-      await logisticsApi.addScheduleOwner(scheduleId, userId);
+      await logisticsApi.addScheduleOwner(scheduleId, input);
       setSelectedUserId("");
+      setFreeTextName("");
       await loadOwners();
       toast.success(t("userAffiliated"));
     } catch (err) {
@@ -496,10 +573,10 @@ function OwnersField({ scheduleId }: { scheduleId: number }) {
     }
   }
 
-  async function remove(userId: number) {
+  async function remove(ownerId: number) {
     setBusy(true);
     try {
-      await logisticsApi.removeScheduleOwner(scheduleId, userId);
+      await logisticsApi.removeScheduleOwner(scheduleId, ownerId);
       await loadOwners();
       toast.success(t("affiliationRemoved"));
     } catch (err) {
@@ -526,7 +603,29 @@ function OwnersField({ scheduleId }: { scheduleId: number }) {
             size="sm"
             variant="outline"
             disabled={busy || !selectedUserId}
-            onClick={() => add(Number(selectedUserId))}
+            onClick={() => add({ userId: Number(selectedUserId) })}
+          >
+            {t("addAction")}
+          </Button>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+          <Input
+            value={freeTextName}
+            onChange={(e) => setFreeTextName(e.target.value)}
+            placeholder={t("ownerFreeTextPlaceholder")}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                if (freeTextName.trim()) add({ freeTextName: freeTextName.trim() });
+              }
+            }}
+          />
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={busy || !freeTextName.trim()}
+            onClick={() => add({ freeTextName: freeTextName.trim() })}
           >
             {t("addAction")}
           </Button>
@@ -538,9 +637,10 @@ function OwnersField({ scheduleId }: { scheduleId: number }) {
         ) : (
           <ul className="divide-border divide-y">
             {owners.map((owner) => (
-              <li key={owner.userId} className="flex items-center justify-between gap-2 py-2">
+              <li key={owner.id} className="flex items-center justify-between gap-2 py-2">
                 <span className="text-sm">
-                  {[owner.name, owner.surname].filter(Boolean).join(" ").trim() || owner.email}
+                  {owner.freeTextName ??
+                    ([owner.name, owner.surname].filter(Boolean).join(" ").trim() || owner.email)}
                 </span>
                 <Button
                   type="button"
@@ -548,7 +648,7 @@ function OwnersField({ scheduleId }: { scheduleId: number }) {
                   size="icon"
                   aria-label={t("remove")}
                   disabled={busy}
-                  onClick={() => remove(owner.userId)}
+                  onClick={() => remove(owner.id)}
                 >
                   <XIcon className="size-4" />
                 </Button>

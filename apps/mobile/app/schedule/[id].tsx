@@ -68,7 +68,10 @@ export default function ScheduleDetailScreen() {
   const item = data?.find((candidate) => String(candidate.id) === id) ?? null;
   const reminderOn = item && notifications.ready ? notifications.isEntrySubscribed(item) : null;
 
-  async function saveEdit(values: ScheduleInput, _pendingOwnerIds: number[]) {
+  async function saveEdit(
+    values: ScheduleInput,
+    _pendingOwners: ({ userId: number } | { freeTextName: string })[],
+  ) {
     if (!item) return;
     await updateScheduleItem(item.id, values);
     setEditing(false);

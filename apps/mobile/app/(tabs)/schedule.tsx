@@ -12,7 +12,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { EmptyState } from "@/components/native-ui";
+import { EmptyState, StatusPill } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import {
   type AudienceFilterValue,
@@ -221,10 +221,13 @@ export default function ScheduleScreen() {
     ]);
   }
 
-  async function submitForm(values: ScheduleInput, pendingOwnerIds: number[]) {
+  async function submitForm(
+    values: ScheduleInput,
+    pendingOwners: ({ userId: number } | { freeTextName: string })[],
+  ) {
     if (formTarget === "create") {
       const created = await createScheduleItem(values);
-      for (const userId of pendingOwnerIds) await addScheduleOwner(created.id, userId);
+      for (const input of pendingOwners) await addScheduleOwner(created.id, input);
     } else if (formTarget) {
       await updateScheduleItem(formTarget.id, values);
     }
@@ -436,7 +439,10 @@ function AdminScheduleFormLoader({
 }: {
   target: "create" | ScheduleItem | null;
   onClose: () => void;
-  onSubmit: (values: ScheduleInput, pendingOwnerIds: number[]) => Promise<void>;
+  onSubmit: (
+    values: ScheduleInput,
+    pendingOwners: ({ userId: number } | { freeTextName: string })[],
+  ) => Promise<void>;
 }) {
   const [loaded, setLoaded] = useState<Awaited<ReturnType<typeof fetchAdminSchedule>> | null>(null);
 
@@ -666,13 +672,24 @@ function ScheduleCard({
             </Pressable>
           ) : null}
           <View style={{ gap: 11, padding: 18, paddingRight: 40 }}>
-            <Text
-              selectable
-              numberOfLines={truncated ? COLLAPSED_TITLE_LINES : undefined}
-              style={{ color: colors.label, fontSize: 17, fontWeight: "700" }}
-            >
-              {item.title}
-            </Text>
+            <View style={{ alignItems: "center", flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+              <Text
+                selectable
+                numberOfLines={truncated ? COLLAPSED_TITLE_LINES : undefined}
+                style={{ color: colors.label, flexShrink: 1, fontSize: 17, fontWeight: "700" }}
+              >
+                {item.title}
+              </Text>
+              {item.audiences.length === 0 ? (
+                <StatusPill tone="neutral" style={{ alignSelf: "center" }}>
+                  {t("scheduleStaffOnlyBadge")}
+                </StatusPill>
+              ) : item.visibility === "hidden" ? (
+                <StatusPill tone="warning" style={{ alignSelf: "center" }}>
+                  {t("scheduleDraftBadge")}
+                </StatusPill>
+              ) : null}
+            </View>
             <View
               style={{
                 alignItems: "center",

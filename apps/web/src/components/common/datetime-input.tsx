@@ -69,6 +69,14 @@ export function DateTimeInput({
           type={type}
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          onBlur={(e) => {
+            // Belt-and-braces: keyboard-only entry (type a segment, Tab to
+            // the next field, never touching the picker) can leave the
+            // native control showing a fully-typed value whose final
+            // segment never fired a React onChange — re-sync from the DOM
+            // on blur so a value the user can see never fails to save.
+            if (e.target.value !== value) onChange(e.target.value);
+          }}
           disabled={disabled || (nullOption ? isBlank : false)}
           className={cn(
             type === "date" ? "min-w-[9.5rem]" : "min-w-[14rem]",

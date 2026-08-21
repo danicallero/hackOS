@@ -16,6 +16,8 @@ import {
   type DragEndEvent,
   KeyboardSensor,
   PointerSensor,
+  useDraggable,
+  useDroppable,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
@@ -28,10 +30,12 @@ import {
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import {
   CalendarClockIcon,
+  CalendarPlusIcon,
   CopyIcon,
   EyeIcon,
   EyeOffIcon,
   FilterIcon,
+  GripVerticalIcon,
   PencilIcon,
   PlusIcon,
   SearchIcon,
@@ -47,8 +51,10 @@ import { ContextualError } from "@/components/common/contextual-error";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { DragHandle, SortableItem } from "@/components/common/drag-handle";
 import { EmptyState } from "@/components/common/empty-state";
+import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
 import { StatusBadge } from "@/components/common/status-badge";
+import { SubmitButton } from "@/components/common/submit-button";
 import { type UserOption, UserPicker } from "@/components/common/user-picker";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -65,6 +71,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ApiError } from "@/lib/api";
+import { toDatetimeLocal } from "@/lib/datetime";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import {
   logisticsApi,
@@ -73,9 +80,11 @@ import {
   uiPrefsApi,
 } from "@/lib/logistics";
 import { useCan, useMe } from "@/lib/session";
+import { cn } from "@/lib/utils";
 import {
   cleanScheduleForm,
   EMPTY_SCHEDULE_FORM,
+  pendingOwnerToInput,
   ScheduleFormModal,
   scheduleDuplicateForm,
   scheduleItemToForm,
@@ -90,17 +99,30 @@ import {
   scheduleStatusLabel,
   scheduleTimeOfDay,
   timeInputValue,
+  withDate,
   withTimeOfDay,
 } from "./schedule-model";
 
+function ownerDisplayName(owner: {
+  name: string | null;
+  surname: string | null;
+  email?: string;
+  freeTextName: string | null;
+}): string {
+  return (
+    owner.freeTextName ??
+    ([owner.name, owner.surname].filter(Boolean).join(" ") || owner.email || "")
+  );
+}
+
 function ownerNames(item: PublicScheduleItem): string {
-  return (item.owners ?? [])
-    .map((o) => [o.name, o.surname].filter(Boolean).join(" ") || o.email)
-    .join(", ");
+  return (item.owners ?? []).map(ownerDisplayName).join(", ");
 }
 
 interface DayGroup {
   label: string;
+  /** One item's startsAt from this day — the reference date drag-and-drop targets shift onto. */
+  date: string;
   items: PublicScheduleItem[];
 }
 
@@ -110,7 +132,7 @@ function groupByDay(items: PublicScheduleItem[], language: Parameters<typeof sch
     const label = scheduleDayLabel(item.startsAt, language);
     const last = groups.at(-1);
     if (last?.label === label) last.items.push(item);
-    else groups.push({ label, items: [item] });
+    else groups.push({ label, date: item.startsAt, items: [item] });
   }
   return groups;
 }
@@ -494,6 +516,10 @@ export default function SchedulePage() {
     () => ({ ...tableConfig.widths, ...liveWidths }),
     [tableConfig.widths, liveWidths],
   );
+  const rowDragSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
 
   const handleColumnResize = useCallback((id: ColumnId, width: number) => {
     setLiveWidths((prev) => ({ ...prev, [id]: width }));
@@ -533,6 +559,48 @@ export default function SchedulePage() {
   const updateItem = useCallback((id: number, patch: Partial<PublicScheduleItem>) => {
     setItems((prev) => prev?.map((it) => (it.id === id ? { ...it, ...patch } : it)) ?? prev);
   }, []);
+
+  const [moveToDateItem, setMoveToDateItem] = useState<PublicScheduleItem | null>(null);
+
+  // Shifts an item's startsAt/endsAt to a new calendar date, keeping the
+  // item's own duration and time-of-day (H59 drag-to-reschedule). Both ends
+  // must move together in one PATCH — the API's window check compares
+  // whichever one isn't sent against the *current* value, so sending only
+  // startsAt would spuriously fail once its shifted date lands after the
+  // still-old endsAt.
+  const moveItemToDate = useCallback(
+    async (item: PublicScheduleItem, targetDateIso: string) => {
+      const nextStartsAt = withDate(item.startsAt, targetDateIso);
+      const nextEndsAt = withDate(item.endsAt, targetDateIso);
+      if (!nextStartsAt || !nextEndsAt) return;
+      if (nextStartsAt === item.startsAt && nextEndsAt === item.endsAt) return;
+      try {
+        const updated = await logisticsApi.updateSchedule(item.id, {
+          startsAt: nextStartsAt,
+          endsAt: nextEndsAt,
+        });
+        updateItem(item.id, updated);
+      } catch (err) {
+        toast.error(err instanceof ApiError ? err.message : t("couldNotMoveScheduleItem"));
+      }
+    },
+    [t, updateItem],
+  );
+
+  function onRowDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || !items) return;
+    const itemId = Number(String(active.id).replace(/^item-/, ""));
+    const item = items.find((i) => i.id === itemId);
+    if (!item) return;
+    const overId = String(over.id);
+    if (overId === "new-day-dropzone") {
+      setMoveToDateItem(item);
+      return;
+    }
+    const targetDateIso = (over.data.current as { date?: string } | undefined)?.date;
+    if (targetDateIso) void moveItemToDate(item, targetDateIso);
+  }
 
   const filtered = useMemo(() => {
     if (!items) return [];
@@ -676,105 +744,111 @@ export default function SchedulePage() {
         </div>
 
         <div className="overflow-x-auto">
-          <Table className="table-fixed">
-            <colgroup>
-              {canEdit && <col style={{ width: 40 }} />}
-              {visibleColumns.map((id) => (
-                <col key={id} style={{ width: columnWidths[id] }} />
-              ))}
-              {canEdit && <col style={{ width: 96 }} />}
-            </colgroup>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                {canEdit && (
-                  <TableHead>
-                    <Checkbox
-                      checked={allSelected}
-                      aria-label={t("selectAllAria")}
-                      onCheckedChange={(checked) =>
-                        setSelectedIds(
-                          checked === true ? new Set(filtered.map((i) => i.id)) : new Set(),
-                        )
-                      }
-                    />
-                  </TableHead>
-                )}
+          <DndContext
+            sensors={rowDragSensors}
+            collisionDetection={closestCenter}
+            onDragEnd={onRowDragEnd}
+          >
+            <Table className="table-fixed">
+              <colgroup>
+                {canEdit && <col style={{ width: 64 }} />}
                 {visibleColumns.map((id) => (
-                  <ResizableHead
-                    key={id}
-                    id={id}
-                    width={columnWidths[id]}
-                    onResize={handleColumnResize}
-                    onResizeEnd={handleColumnResizeEnd}
-                  >
-                    {t(COLUMN_LABEL_KEYS[id])}
-                  </ResizableHead>
+                  <col key={id} style={{ width: columnWidths[id] }} />
                 ))}
-                {canEdit && <TableHead className="text-right">{t("actionsColumn")}</TableHead>}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {error ? (
+                {canEdit && <col style={{ width: 96 }} />}
+              </colgroup>
+              <TableHeader>
                 <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={visibleColumns.length + 2} className="p-4">
-                    <ContextualError message={error} onRetry={load} />
-                  </TableCell>
-                </TableRow>
-              ) : items === null ? (
-                Array.from({ length: 6 }, (_, i) => (
-                  // biome-ignore lint/suspicious/noArrayIndexKey: skeleton placeholder rows.
-                  <TableRow key={i} className="hover:bg-transparent">
-                    {Array.from({ length: visibleColumns.length + 2 }, (_, j) => (
-                      // biome-ignore lint/suspicious/noArrayIndexKey: skeleton placeholder cells.
-                      <TableCell key={j}>
-                        <Skeleton className="h-4 w-full max-w-24" />
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                ))
-              ) : groups.length === 0 ? (
-                <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={visibleColumns.length + 2} className="p-0">
-                    <EmptyState icon={CalendarClockIcon} title={t("noScheduleItemsYet")} />
-                  </TableCell>
-                </TableRow>
-              ) : (
-                groups.map((group) => (
-                  <Fragment key={group.label}>
-                    <TableRow className="hover:bg-transparent">
-                      <TableCell
-                        colSpan={visibleColumns.length + 2}
-                        className="bg-muted/50 text-muted-foreground py-1.5 text-xs font-medium"
-                      >
-                        {group.label}
-                      </TableCell>
-                    </TableRow>
-                    {group.items.map((item) => (
-                      <ActivityRow
-                        key={item.id}
-                        item={item}
-                        columns={visibleColumns}
-                        canEdit={canEdit}
-                        selected={selectedIds.has(item.id)}
-                        onToggleSelected={(checked) =>
-                          setSelectedIds((prev) => {
-                            const next = new Set(prev);
-                            if (checked) next.add(item.id);
-                            else next.delete(item.id);
-                            return next;
-                          })
+                  {canEdit && (
+                    <TableHead>
+                      <Checkbox
+                        checked={allSelected}
+                        aria-label={t("selectAllAria")}
+                        onCheckedChange={(checked) =>
+                          setSelectedIds(
+                            checked === true ? new Set(filtered.map((i) => i.id)) : new Set(),
+                          )
                         }
-                        onUpdate={(patch) => updateItem(item.id, patch)}
-                        onOpenEdit={() => setEditingItem(item)}
-                        onDuplicate={() => setDuplicatingItem(item)}
-                        onDelete={() => setDeletingItem(item)}
                       />
-                    ))}
-                  </Fragment>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                    </TableHead>
+                  )}
+                  {visibleColumns.map((id) => (
+                    <ResizableHead
+                      key={id}
+                      id={id}
+                      width={columnWidths[id]}
+                      onResize={handleColumnResize}
+                      onResizeEnd={handleColumnResizeEnd}
+                    >
+                      {t(COLUMN_LABEL_KEYS[id])}
+                    </ResizableHead>
+                  ))}
+                  {canEdit && <TableHead className="text-right">{t("actionsColumn")}</TableHead>}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {error ? (
+                  <TableRow className="hover:bg-transparent">
+                    <TableCell colSpan={visibleColumns.length + 2} className="p-4">
+                      <ContextualError message={error} onRetry={load} />
+                    </TableCell>
+                  </TableRow>
+                ) : items === null ? (
+                  Array.from({ length: 6 }, (_, i) => (
+                    // biome-ignore lint/suspicious/noArrayIndexKey: skeleton placeholder rows.
+                    <TableRow key={i} className="hover:bg-transparent">
+                      {Array.from({ length: visibleColumns.length + 2 }, (_, j) => (
+                        // biome-ignore lint/suspicious/noArrayIndexKey: skeleton placeholder cells.
+                        <TableCell key={j}>
+                          <Skeleton className="h-4 w-full max-w-24" />
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                ) : groups.length === 0 ? (
+                  <TableRow className="hover:bg-transparent">
+                    <TableCell colSpan={visibleColumns.length + 2} className="p-0">
+                      <EmptyState icon={CalendarClockIcon} title={t("noScheduleItemsYet")} />
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  groups.map((group) => (
+                    <Fragment key={group.label}>
+                      <DayGroupHeaderRow
+                        group={group}
+                        colSpan={visibleColumns.length + 2}
+                        droppable={canEdit}
+                      />
+                      {group.items.map((item) => (
+                        <ActivityRow
+                          key={item.id}
+                          item={item}
+                          columns={visibleColumns}
+                          canEdit={canEdit}
+                          selected={selectedIds.has(item.id)}
+                          onToggleSelected={(checked) =>
+                            setSelectedIds((prev) => {
+                              const next = new Set(prev);
+                              if (checked) next.add(item.id);
+                              else next.delete(item.id);
+                              return next;
+                            })
+                          }
+                          onUpdate={(patch) => updateItem(item.id, patch)}
+                          onOpenEdit={() => setEditingItem(item)}
+                          onDuplicate={() => setDuplicatingItem(item)}
+                          onDelete={() => setDeletingItem(item)}
+                        />
+                      ))}
+                    </Fragment>
+                  ))
+                )}
+                {canEdit && groups.length > 0 && (
+                  <NewDayDropzoneRow colSpan={visibleColumns.length + 2} />
+                )}
+              </TableBody>
+            </Table>
+          </DndContext>
         </div>
       </Card>
 
@@ -783,10 +857,12 @@ export default function SchedulePage() {
         onOpenChange={setCreateOpen}
         title={t("newScheduleItem")}
         initial={EMPTY_SCHEDULE_FORM}
-        onSubmit={async (values, pendingOwnerIds) => {
+        onSubmit={async (values, pendingOwners) => {
           const created = await logisticsApi.createSchedule(cleanScheduleForm(values));
           await Promise.all(
-            pendingOwnerIds.map((userId) => logisticsApi.addScheduleOwner(created.id, userId)),
+            pendingOwners.map((owner) =>
+              logisticsApi.addScheduleOwner(created.id, pendingOwnerToInput(owner)),
+            ),
           );
           toast.success(t("scheduleItemCreated"));
           setCreateOpen(false);
@@ -822,10 +898,12 @@ export default function SchedulePage() {
           }}
           title={t("duplicateScheduleItem")}
           initial={scheduleDuplicateForm(duplicatingItem)}
-          onSubmit={async (values, pendingOwnerIds) => {
+          onSubmit={async (values, pendingOwners) => {
             const created = await logisticsApi.createSchedule(cleanScheduleForm(values));
             await Promise.all(
-              pendingOwnerIds.map((userId) => logisticsApi.addScheduleOwner(created.id, userId)),
+              pendingOwners.map((owner) =>
+                logisticsApi.addScheduleOwner(created.id, pendingOwnerToInput(owner)),
+              ),
             );
             toast.success(t("scheduleItemDuplicated"));
             setDuplicatingItem(null);
@@ -849,7 +927,76 @@ export default function SchedulePage() {
           onConfirm={() => void remove(deletingItem)}
         />
       )}
+
+      {moveToDateItem && (
+        <MoveToDateModal
+          item={moveToDateItem}
+          onOpenChange={(open) => {
+            if (!open) setMoveToDateItem(null);
+          }}
+          onConfirm={async (targetDateIso) => {
+            await moveItemToDate(moveToDateItem, targetDateIso);
+            setMoveToDateItem(null);
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+/**
+ * Opens when a row is dropped on the "new date" dropzone (H59 drag-to-
+ * reschedule) — day sections aren't stored objects, just a groupBy of
+ * startsAt, so "create a new day" just means picking a date nothing is
+ * grouped under yet, via the same date input the create/edit form uses.
+ */
+function MoveToDateModal({
+  item,
+  onOpenChange,
+  onConfirm,
+}: {
+  item: PublicScheduleItem;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: (targetDateIso: string) => Promise<void>;
+}) {
+  const { t } = useLocale();
+  const [value, setValue] = useState(() => toDatetimeLocal(item.startsAt).slice(0, 10));
+  const [pending, setPending] = useState(false);
+
+  async function confirm() {
+    if (!value) return;
+    setPending(true);
+    try {
+      await onConfirm(new Date(value).toISOString());
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <Modal
+      open
+      onOpenChange={onOpenChange}
+      title={t("moveToDateTitle")}
+      icon={CalendarPlusIcon}
+      footer={
+        <>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            {t("cancel")}
+          </Button>
+          <SubmitButton pending={pending} onClick={confirm} disabled={!value}>
+            {t("moveAction")}
+          </SubmitButton>
+        </>
+      }
+    >
+      <div className="space-y-2">
+        <label htmlFor="move-to-date" className="text-sm font-medium">
+          {t("moveToDateLabel")}
+        </label>
+        <DateTimeInput id="move-to-date" type="date" value={value} onChange={setValue} />
+      </div>
+    </Modal>
   );
 }
 
@@ -891,6 +1038,57 @@ function BulkSchedulePopover({
         </div>
       </PopoverContent>
     </Popover>
+  );
+}
+
+/** Day-section header row — also the drop target a dragged row lands on to move to that day. */
+function DayGroupHeaderRow({
+  group,
+  colSpan,
+  droppable,
+}: {
+  group: DayGroup;
+  colSpan: number;
+  droppable: boolean;
+}) {
+  const { t } = useLocale();
+  const { setNodeRef, isOver } = useDroppable({
+    id: `day-${group.label}`,
+    disabled: !droppable,
+    data: { date: group.date },
+  });
+  return (
+    <TableRow
+      ref={droppable ? setNodeRef : undefined}
+      className={cn("hover:bg-transparent", isOver && "ring-primary/40 ring-2")}
+      title={droppable ? t("dropOnDayHint", { day: group.label }) : undefined}
+    >
+      <TableCell
+        colSpan={colSpan}
+        className="bg-muted/50 text-muted-foreground py-1.5 text-xs font-medium"
+      >
+        {group.label}
+      </TableCell>
+    </TableRow>
+  );
+}
+
+/** Always-present drop target below the table for moving an item to a day with no items yet. */
+function NewDayDropzoneRow({ colSpan }: { colSpan: number }) {
+  const { t } = useLocale();
+  const { setNodeRef, isOver } = useDroppable({ id: "new-day-dropzone" });
+  return (
+    <TableRow ref={setNodeRef} className="hover:bg-transparent">
+      <TableCell
+        colSpan={colSpan}
+        className={cn(
+          "text-muted-foreground border-t border-dashed py-2 text-center text-xs",
+          isOver && "bg-muted/50 text-foreground",
+        )}
+      >
+        {t("dropNewDayLabel")}
+      </TableCell>
+    </TableRow>
   );
 }
 
@@ -939,6 +1137,10 @@ function ActivityRow({
   }
 
   const status = scheduleStatus(item);
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `item-${item.id}`,
+    disabled: !canEdit,
+  });
 
   function renderCell(id: ColumnId) {
     switch (id) {
@@ -1011,14 +1213,37 @@ function ActivityRow({
   }
 
   return (
-    <TableRow data-state={selected ? "selected" : undefined}>
+    <TableRow
+      ref={setNodeRef}
+      data-state={selected ? "selected" : undefined}
+      style={
+        transform
+          ? {
+              transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+              position: "relative",
+            }
+          : undefined
+      }
+      className={cn(isDragging && "z-10 opacity-60 shadow-lg")}
+    >
       {canEdit && (
         <TableCell>
-          <Checkbox
-            checked={selected}
-            aria-label={t("selectRowAria")}
-            onCheckedChange={(checked) => onToggleSelected(checked === true)}
-          />
+          <div className="flex items-center gap-0.5">
+            <button
+              type="button"
+              className="text-muted-foreground hover:bg-muted hover:text-foreground -ml-1.5 flex size-7 shrink-0 cursor-grab touch-none items-center justify-center rounded-md active:cursor-grabbing"
+              {...attributes}
+              {...listeners}
+            >
+              <GripVerticalIcon className="size-4" />
+              <span className="sr-only">{t("dragItemAria")}</span>
+            </button>
+            <Checkbox
+              checked={selected}
+              aria-label={t("selectRowAria")}
+              onCheckedChange={(checked) => onToggleSelected(checked === true)}
+            />
+          </div>
         </TableCell>
       )}
       {columns.map((id) => (
@@ -1251,10 +1476,11 @@ function EditableOwnersCell({
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState("");
+  const [freeTextName, setFreeTextName] = useState("");
   const [busy, setBusy] = useState(false);
   const owners = item.owners ?? [];
 
-  const ownerUserIds = new Set(owners.map((o) => o.userId));
+  const ownerUserIds = new Set(owners.flatMap((o) => (o.userId ? [o.userId] : [])));
   async function searchAvailableUsers(query: string): Promise<UserOption[]> {
     try {
       const r = await logisticsApi.scheduleOwnerCandidates(query);
@@ -1268,26 +1494,25 @@ function EditableOwnersCell({
 
   async function refresh() {
     const r = await logisticsApi.scheduleOwners(item.id);
-    onUpdate({
-      owners: r.owners.map((o) => ({ userId: o.userId, name: o.name, surname: o.surname })),
-    });
+    onUpdate({ owners: r.owners });
   }
 
-  async function add(userId: number) {
+  async function add(input: { userId: number } | { freeTextName: string }) {
     setBusy(true);
     try {
-      await logisticsApi.addScheduleOwner(item.id, userId);
+      await logisticsApi.addScheduleOwner(item.id, input);
       setSelectedUserId("");
+      setFreeTextName("");
       await refresh();
     } finally {
       setBusy(false);
     }
   }
 
-  async function remove(userId: number) {
+  async function remove(ownerId: number) {
     setBusy(true);
     try {
-      await logisticsApi.removeScheduleOwner(item.id, userId);
+      await logisticsApi.removeScheduleOwner(item.id, ownerId);
       await refresh();
     } finally {
       setBusy(false);
@@ -1318,7 +1543,29 @@ function EditableOwnersCell({
             size="sm"
             variant="outline"
             disabled={busy || !selectedUserId}
-            onClick={() => add(Number(selectedUserId))}
+            onClick={() => add({ userId: Number(selectedUserId) })}
+          >
+            {t("addAction")}
+          </Button>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+          <Input
+            value={freeTextName}
+            onChange={(e) => setFreeTextName(e.target.value)}
+            placeholder={t("ownerFreeTextPlaceholder")}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                if (freeTextName.trim()) add({ freeTextName: freeTextName.trim() });
+              }
+            }}
+          />
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={busy || !freeTextName.trim()}
+            onClick={() => add({ freeTextName: freeTextName.trim() })}
           >
             {t("addAction")}
           </Button>
@@ -1328,8 +1575,8 @@ function EditableOwnersCell({
         ) : (
           <ul className="space-y-1">
             {owners.map((owner) => (
-              <li key={owner.userId} className="flex items-center justify-between gap-2 text-sm">
-                {[owner.name, owner.surname].filter(Boolean).join(" ") || t("noOwnersYet")}
+              <li key={owner.id} className="flex items-center justify-between gap-2 text-sm">
+                {ownerDisplayName(owner) || t("noOwnersYet")}
                 <Button
                   type="button"
                   variant="ghost"
@@ -1337,7 +1584,7 @@ function EditableOwnersCell({
                   className="size-6"
                   aria-label={t("remove")}
                   disabled={busy}
-                  onClick={() => remove(owner.userId)}
+                  onClick={() => remove(owner.id)}
                 >
                   <XIcon className="size-3.5" />
                 </Button>

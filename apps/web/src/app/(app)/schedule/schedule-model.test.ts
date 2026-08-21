@@ -16,6 +16,10 @@ function item(overrides: Partial<PublicScheduleItem> = {}): PublicScheduleItem {
     endsAt: "2026-07-22T14:00:00.000Z",
     visibility: "hidden",
     publishAt: null,
+    // Most fixtures below are about the audience-having timeline states
+    // (draft/scheduled/public/active/ended); the staff-only branch (no
+    // audience tag) gets its own describe block below.
+    audiences: ["participant"],
     ...overrides,
   };
 }
@@ -45,6 +49,45 @@ describe("scheduleStatus", () => {
       scheduleStatus(
         item({
           visibility: "shown",
+          startsAt: "2026-07-22T10:00:00.000Z",
+          endsAt: "2026-07-22T12:00:00.000Z",
+        }),
+        NOW,
+      ),
+    ).toBe("ended");
+  });
+
+  it("an item with no audience is always staffOnly, regardless of visibility/publishAt (H59 follow-up)", () => {
+    expect(
+      scheduleStatus(item({ audiences: [], visibility: "hidden", publishAt: null }), NOW),
+    ).toBe("staffOnly");
+    // Never "draft"/"scheduled"/"public" even if those fields were somehow
+    // still set — the API itself forces them back to hidden/null the moment
+    // audiences goes empty (schedule_visibility_requires_audience, 0720),
+    // but the client-side status derivation stays defensive regardless.
+    expect(
+      scheduleStatus(
+        item({ audiences: [], visibility: "shown", publishAt: "2026-07-22T11:59:00.000Z" }),
+        NOW,
+      ),
+    ).toBe("staffOnly");
+  });
+
+  it("a currently-active or ended staff-only item still tracks its own time window", () => {
+    expect(
+      scheduleStatus(
+        item({
+          audiences: [],
+          startsAt: "2026-07-22T11:00:00.000Z",
+          endsAt: "2026-07-22T13:00:00.000Z",
+        }),
+        NOW,
+      ),
+    ).toBe("active");
+    expect(
+      scheduleStatus(
+        item({
+          audiences: [],
           startsAt: "2026-07-22T10:00:00.000Z",
           endsAt: "2026-07-22T12:00:00.000Z",
         }),
