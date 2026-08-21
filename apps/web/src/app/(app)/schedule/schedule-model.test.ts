@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { PublicScheduleItem } from "@/lib/logistics";
 import {
   editingNavigationDirection,
+  MAX_INLINE_ROLLED_HOURS,
+  parseTimeOfDay,
   scheduleDayKey,
   scheduleDuration,
   scheduleNavigationDirection,
@@ -9,6 +11,7 @@ import {
   timeInputValue,
   withDate,
   withTimeOfDay,
+  withTimeOfDayAcrossMidnight,
 } from "./schedule-model";
 
 const NOW = Date.parse("2026-07-22T12:00:00.000Z");
@@ -126,6 +129,123 @@ describe("timeInputValue / withTimeOfDay", () => {
   it("rejects a malformed time or timestamp", () => {
     expect(withTimeOfDay("2026-07-22T08:00:00.000Z", "not-a-time")).toBeNull();
     expect(withTimeOfDay("not-a-date", "14:30")).toBeNull();
+  });
+});
+
+describe("parseTimeOfDay", () => {
+  it("reads a time typed at speed and returns it canonical", () => {
+    expect(parseTimeOfDay("9")).toBe("09:00");
+    expect(parseTimeOfDay("9:0")).toBe("09:00");
+    expect(parseTimeOfDay("9:5")).toBe("09:05");
+    expect(parseTimeOfDay("09:00")).toBe("09:00");
+    expect(parseTimeOfDay("930")).toBe("09:30");
+    expect(parseTimeOfDay("0930")).toBe("09:30");
+    expect(parseTimeOfDay("2345")).toBe("23:45");
+    expect(parseTimeOfDay("23:45")).toBe("23:45");
+    expect(parseTimeOfDay("0")).toBe("00:00");
+    expect(parseTimeOfDay("00:00")).toBe("00:00");
+  });
+
+  it("accepts the separators people actually type, and stray spaces", () => {
+    expect(parseTimeOfDay(" 9.30 ")).toBe("09:30");
+    expect(parseTimeOfDay("9,30")).toBe("09:30");
+    expect(parseTimeOfDay("9h30")).toBe("09:30");
+    expect(parseTimeOfDay("9h")).toBe("09:00");
+    expect(parseTimeOfDay("9:")).toBe("09:00");
+  });
+
+  it("rejects rather than wraps an impossible time", () => {
+    expect(parseTimeOfDay("25:00")).toBeNull();
+    expect(parseTimeOfDay("9:75")).toBeNull();
+    expect(parseTimeOfDay("2475")).toBeNull();
+    expect(parseTimeOfDay("")).toBeNull();
+    expect(parseTimeOfDay("noon")).toBeNull();
+    expect(parseTimeOfDay("12345")).toBeNull();
+  });
+});
+
+describe("withTimeOfDayAcrossMidnight", () => {
+  // Local wall-clock fixtures on purpose: the cell edits a clock, not an instant.
+  const startsAt = new Date("2026-08-28T23:00:00").toISOString();
+  const endsAt = new Date("2026-08-28T23:30:00").toISOString();
+
+  function ok(result: ReturnType<typeof withTimeOfDayAcrossMidnight>) {
+    if (!result.ok) throw new Error(`expected an accepted edit, got ${result.reason}`);
+    return result;
+  }
+
+  it("rolls the end into the next day when it would land before the start", () => {
+    const next = ok(withTimeOfDayAcrossMidnight(startsAt, endsAt, "endsAt", "00:00"));
+    expect(next.startsAt).toBe(startsAt);
+    expect(next.rolledToNextDay).toBe(true);
+    expect(timeInputValue(next.endsAt)).toBe("00:00");
+    expect(scheduleDayKey(next.endsAt)).toBe("2026-08-29");
+    expect(scheduleDuration(startsAt, next.endsAt)).toBe("1:00");
+  });
+
+  it("leaves a same-day window alone", () => {
+    const next = ok(withTimeOfDayAcrossMidnight(startsAt, endsAt, "endsAt", "23:45"));
+    expect(next.rolledToNextDay).toBe(false);
+    expect(scheduleDayKey(next.endsAt)).toBe("2026-08-28");
+    expect(scheduleDuration(startsAt, next.endsAt)).toBe("0:45");
+  });
+
+  it("pushes the end over midnight when the start moves past it", () => {
+    // A 01:00-02:00 item re-timed to start at 22:00 is a night session: the
+    // end is the side that crosses over, giving 22:00 -> 02:00.
+    const lateNight = new Date("2026-08-29T01:00:00").toISOString();
+    const lateNightEnd = new Date("2026-08-29T02:00:00").toISOString();
+    const next = ok(withTimeOfDayAcrossMidnight(lateNight, lateNightEnd, "startsAt", "22:00"));
+    expect(timeInputValue(next.startsAt)).toBe("22:00");
+    expect(next.rolledToNextDay).toBe(true);
+    expect(scheduleDayKey(next.startsAt)).toBe("2026-08-29");
+    expect(scheduleDayKey(next.endsAt)).toBe("2026-08-30");
+    expect(scheduleDuration(next.startsAt, next.endsAt)).toBe("4:00");
+  });
+
+  it("refuses a start nudged just past its end — that is a typo, not a 23-hour item", () => {
+    expect(withTimeOfDayAcrossMidnight(startsAt, endsAt, "startsAt", "23:40")).toEqual({
+      ok: false,
+      reason: "rolledWindowTooLong",
+    });
+  });
+
+  it("rolls a night session right up to the cap", () => {
+    const evening = new Date("2026-08-28T20:00:00").toISOString();
+    const next = ok(withTimeOfDayAcrossMidnight(evening, endsAt, "endsAt", "08:00"));
+    expect(scheduleDayKey(next.endsAt)).toBe("2026-08-29");
+    expect(scheduleDuration(next.startsAt, next.endsAt)).toBe(`${MAX_INLINE_ROLLED_HOURS}:00`);
+  });
+
+  it("refuses a roll past the cap — a mistyped time must not move an item to another day", () => {
+    const morning = new Date("2026-08-28T09:00:00").toISOString();
+    const evening = new Date("2026-08-28T17:00:00").toISOString();
+    // "09:00 to 07:00" is a slip, not a 22-hour activity.
+    expect(withTimeOfDayAcrossMidnight(morning, evening, "endsAt", "07:00")).toEqual({
+      ok: false,
+      reason: "rolledWindowTooLong",
+    });
+    // An end equal to the start would mean a 24 h item; also refused.
+    expect(withTimeOfDayAcrossMidnight(morning, evening, "endsAt", "09:00")).toEqual({
+      ok: false,
+      reason: "rolledWindowTooLong",
+    });
+  });
+
+  it("still allows a long window that doesn't cross midnight", () => {
+    const morning = new Date("2026-08-28T09:00:00").toISOString();
+    const next = ok(withTimeOfDayAcrossMidnight(morning, endsAt, "endsAt", "23:59"));
+    expect(next.rolledToNextDay).toBe(false);
+    expect(scheduleDayKey(next.endsAt)).toBe("2026-08-28");
+  });
+
+  it("rejects a malformed time", () => {
+    // Out-of-range digits ("24:99") are the cell's job — TIME_24H_PATTERN
+    // rejects them before this is ever called.
+    expect(withTimeOfDayAcrossMidnight(startsAt, endsAt, "endsAt", "not-a-time")).toEqual({
+      ok: false,
+      reason: "invalidTime",
+    });
   });
 });
 

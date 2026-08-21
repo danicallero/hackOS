@@ -107,6 +107,8 @@ import {
 } from "./schedule-form-modal";
 import {
   editingNavigationDirection,
+  MAX_INLINE_ROLLED_HOURS,
+  parseTimeOfDay,
   SCHEDULE_AUDIENCES,
   SCHEDULE_STATUS_TONES,
   type ScheduleNavigationDirection,
@@ -122,7 +124,7 @@ import {
   scheduleTypeLabel,
   timeInputValue,
   withDate,
-  withTimeOfDay,
+  withTimeOfDayAcrossMidnight,
 } from "./schedule-model";
 
 function ownerDisplayName(owner: {
@@ -1301,10 +1303,22 @@ function ActivityRow({
   const { t, language } = useLocale();
 
   async function saveTime(field: "startsAt" | "endsAt", hhmm: string): Promise<boolean> {
-    const next = withTimeOfDay(item[field], hhmm);
-    if (!next || next === item[field]) return true;
+    // Both ends go up together: an end of 00:00 on a 23:00 item means midnight
+    // *tonight*, so the counterpart may have rolled a day (H59).
+    const next = withTimeOfDayAcrossMidnight(item.startsAt, item.endsAt, field, hhmm);
+    if (!next.ok) {
+      if (next.reason === "rolledWindowTooLong") {
+        toast.error(t("inlineTimeRollTooLong", { hours: MAX_INLINE_ROLLED_HOURS }));
+        return false;
+      }
+      return true;
+    }
+    if (next.startsAt === item.startsAt && next.endsAt === item.endsAt) return true;
     try {
-      const updated = await logisticsApi.updateSchedule(item.id, { [field]: next });
+      const updated = await logisticsApi.updateSchedule(item.id, {
+        startsAt: next.startsAt,
+        endsAt: next.endsAt,
+      });
       onUpdate(updated);
       return true;
     } catch (err) {
@@ -1903,13 +1917,13 @@ function EditableTextCell({
   );
 }
 
-/** HH:MM, 24-hour, e.g. "08:00" or "23:45" — rejects anything else. */
-const TIME_24H_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
-
 /**
  * Plain HH:MM text field, not the native `<input type="time">` — that
  * control's AM/PM-vs-24h rendering follows the OS locale, not this app's
  * locale, so it can't guarantee a 24-hour clock across browsers/systems.
+ * What's typed is read leniently (parseTimeOfDay: "9", "9:0", "930" all mean
+ * 09:00/09:30) and committed canonical, so a run-of-show can be typed at
+ * speed without four digits and a colon every time.
  */
 function EditableTimeCell({
   value,
@@ -1934,14 +1948,16 @@ function EditableTimeCell({
 
   async function commit(nextDraft = draft): Promise<boolean> {
     if (saving) return false;
-    if (!TIME_24H_PATTERN.test(nextDraft)) {
+    const parsed = parseTimeOfDay(nextDraft);
+    if (!parsed) {
       setDraft(value);
       setEditing(false);
       return false;
     }
+    setDraft(parsed);
     setSaving(true);
     try {
-      const result = await onSave(nextDraft);
+      const result = await onSave(parsed);
       const saved = result !== false;
       if (saved) setEditing(false);
       return saved;

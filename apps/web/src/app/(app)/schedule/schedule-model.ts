@@ -186,6 +186,38 @@ export function timeInputValue(iso: string): string {
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
+/**
+ * Reads whatever a hurried typist put in a time cell and returns canonical
+ * "HH:mm", or null if it isn't a time at all (H59). A run-of-show is typed
+ * fast, and demanding four digits and a colon for every cell is friction with
+ * no payoff: "9:0", "9", "930" and "9.30" all say a time unambiguously.
+ *
+ *   "9"     -> "09:00"      "930"   -> "09:30"
+ *   "9:0"   -> "09:00"      "0930"  -> "09:30"
+ *   "9:5"   -> "09:05"      "9.30"  -> "09:30"
+ *   "23:45" -> "23:45"      "9h30"  -> "09:30"
+ *
+ * Out-of-range values ("25:00", "9:75") are rejected rather than wrapped —
+ * a wrapped time is a wrong time nobody asked for.
+ */
+export function parseTimeOfDay(raw: string): string | null {
+  const cleaned = raw
+    .trim()
+    .replace(/[.,;hH]/g, ":")
+    .replace(/:$/, "");
+  const match =
+    /^(\d{1,2})(?::(\d{1,2}))?$/.exec(cleaned) ??
+    // Digits only, no separator: the last two are the minutes ("930", "0930").
+    /^(\d{1,2})(\d{2})$/.exec(cleaned.replace(/:/g, ""));
+  if (!match) return null;
+
+  const hours = Number(match[1]);
+  const minutes = match[2] === undefined ? 0 : Number(match[2]);
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes)) return null;
+  if (hours > 23 || minutes > 59) return null;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
 /** Re-applies a new HH:mm to an existing ISO timestamp's date, keeping the date unchanged. */
 export function withTimeOfDay(iso: string, hhmm: string): string | null {
   const match = /^(\d{2}):(\d{2})$/.exec(hhmm);
@@ -194,6 +226,73 @@ export function withTimeOfDay(iso: string, hhmm: string): string | null {
   if (Number.isNaN(date.getTime())) return null;
   date.setHours(Number(match[1]), Number(match[2]), 0, 0);
   return date.toISOString();
+}
+
+/** One calendar day, in ms — the roll applied when a window crosses midnight. */
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * How long a window the inline time cells will roll into the next day. A
+ * midnight crossing typed into a table with no date field is only ever a
+ * night session (a talk that ends at 01:00, breakfast at 05:00); anything
+ * longer is far more likely a typo — "09:00 to 07:00" is a slip, not a 22-hour
+ * activity — and silently moving that item onto another date is the kind of
+ * mistake nobody notices until the run-of-show is wrong. Past this, the edit
+ * is refused and the item's real dates are set in the full editor (H59).
+ */
+export const MAX_INLINE_ROLLED_HOURS = 12;
+
+export type ScheduleTimeEdit =
+  | { ok: true; startsAt: string; endsAt: string; rolledToNextDay: boolean }
+  | { ok: false; reason: "invalidTime" | "rolledWindowTooLong" };
+
+/**
+ * Applies a new HH:mm to one end of a schedule window, rolling the *other*
+ * side into the next day when the edit would otherwise invert it (H59).
+ *
+ * Typing "00:00" as the end of a 23:00 item means "midnight tonight", not
+ * "midnight this morning" — an inline time cell has no field for the date, so
+ * a run-of-show that runs past midnight was impossible to enter without
+ * opening the full editor. The same reading applies from the other side: move
+ * a start past its end and the end is the one that crosses over. The roll is
+ * capped at MAX_INLINE_ROLLED_HOURS so a mistyped time can't quietly push an
+ * item onto another day.
+ */
+export function withTimeOfDayAcrossMidnight(
+  startsAt: string,
+  endsAt: string,
+  field: "startsAt" | "endsAt",
+  hhmm: string,
+): ScheduleTimeEdit {
+  const next = withTimeOfDay(field === "startsAt" ? startsAt : endsAt, hhmm);
+  if (!next) return { ok: false, reason: "invalidTime" };
+
+  const fixed = new Date(field === "startsAt" ? endsAt : startsAt).getTime();
+  const edited = new Date(next).getTime();
+  if (Number.isNaN(fixed) || Number.isNaN(edited)) return { ok: false, reason: "invalidTime" };
+
+  const start = field === "startsAt" ? edited : fixed;
+  const end = field === "startsAt" ? fixed : edited;
+  if (end > start) {
+    return {
+      ok: true,
+      startsAt: field === "startsAt" ? next : startsAt,
+      endsAt: field === "startsAt" ? endsAt : next,
+      rolledToNextDay: false,
+    };
+  }
+
+  // Inverted: the end is the side that crosses midnight, whichever one moved.
+  const rolledEnd = end + ONE_DAY_MS;
+  if (rolledEnd - start > MAX_INLINE_ROLLED_HOURS * 60 * 60 * 1000) {
+    return { ok: false, reason: "rolledWindowTooLong" };
+  }
+  return {
+    ok: true,
+    startsAt: field === "startsAt" ? next : startsAt,
+    endsAt: new Date(rolledEnd).toISOString(),
+    rolledToNextDay: true,
+  };
 }
 
 /**

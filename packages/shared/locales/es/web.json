@@ -847,6 +847,7 @@
   "scheduleAudienceColumn": "Audiencia",
   "scheduleScannableColumn": "Escaneable",
   "schedulePublishDateColumn": "Fecha de publicación",
+  "inlineTimeRollTooLong": "Más de {hours} h al pasar de medianoche: pon las fechas en el editor del elemento.",
   "publishDateStaffOnlyHint": "Los elementos solo para staff no tienen fecha de publicación: el staff siempre los ve.",
   "publishDateAlreadyShownHint": "Ya está visible: no queda nada por publicar.",
   "noTypeOption": "Sin tipo",

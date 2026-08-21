@@ -104,6 +104,7 @@ export function ScheduleTimeline({
   const { language, t } = useLocale();
   const now = Date.now();
   const focusRef = useRef<HTMLElement | null>(null);
+  const agendaFocusRef = useRef<HTMLElement | null>(null);
   const [selectedItem, setSelectedItem] = useState<PublicScheduleItem | null>(null);
   const ordered = useMemo(
     () => [...items].sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt)),
@@ -119,7 +120,13 @@ export function ScheduleTimeline({
   }, [ordered, timezone]);
 
   useEffect(() => {
-    focusRef.current?.scrollIntoView({ block: "center" });
+    // Both views are rendered and one is hidden by a media query, so scroll
+    // the one that actually has a layout — offsetParent is null under
+    // `display: none`.
+    const target = [agendaFocusRef.current, focusRef.current].find(
+      (node) => node && node.offsetParent !== null,
+    );
+    target?.scrollIntoView({ block: "center" });
   }, []);
 
   if (!ordered.length) {
@@ -177,7 +184,7 @@ export function ScheduleTimeline({
                 </span>
               )}
             </div>
-            <div className="relative ml-1" style={{ height }}>
+            <div className="relative ml-1 hidden sm:block" style={{ height }}>
               {hours.map((hour, index) => (
                 <div
                   key={hour}
@@ -270,6 +277,67 @@ export function ScheduleTimeline({
                 </div>
               )}
             </div>
+
+            {/*
+              Phones get a plain agenda instead of the lane grid: four
+              overlapping talks share a ~70px lane on a 390px screen, which
+              breaks titles mid-word and stacks cards on top of each other.
+              A list keeps every item legible and still reads chronologically
+              (H47) — the grid returns from `sm` up, where lanes have room.
+            */}
+            <ol className="divide-border divide-y border-border rounded-lg border sm:hidden">
+              {dayItems.map((item) => {
+                const starts = Date.parse(item.startsAt);
+                const ends = Date.parse(item.endsAt);
+                const active = starts <= now && ends >= now;
+                const passed = ends < now;
+                const shouldFocus = active || (!showNow && item.id === firstFutureId);
+                return (
+                  <li
+                    key={item.id}
+                    ref={
+                      shouldFocus
+                        ? (node) => {
+                            agendaFocusRef.current = node;
+                          }
+                        : undefined
+                    }
+                    className={cn(
+                      "first:rounded-t-lg last:rounded-b-lg",
+                      active && "bg-primary/5",
+                      passed && "opacity-60",
+                    )}
+                  >
+                    <button
+                      type="button"
+                      className="focus-visible:ring-ring flex w-full items-start gap-3 px-3 py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset"
+                      onClick={() => setSelectedItem(item)}
+                    >
+                      <span className="text-muted-foreground w-14 shrink-0 text-xs tabular-nums">
+                        <span className="text-foreground block font-medium">
+                          {timeFormatter.format(new Date(starts))}
+                        </span>
+                        {timeFormatter.format(new Date(ends))}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-pretty text-sm font-medium">{item.title}</span>
+                        {item.location && (
+                          <span className="text-muted-foreground mt-0.5 flex items-start gap-1 text-pretty text-xs">
+                            <MapPinIcon className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
+                            {item.location}
+                          </span>
+                        )}
+                      </span>
+                      {active && (
+                        <span className="text-primary shrink-0 text-xs font-medium">
+                          {t("happeningNow")}
+                        </span>
+                      )}
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
           </section>
         );
       })}

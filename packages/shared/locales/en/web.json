@@ -847,6 +847,7 @@
   "scheduleAudienceColumn": "Audience",
   "scheduleScannableColumn": "Scannable",
   "schedulePublishDateColumn": "Publish date",
+  "inlineTimeRollTooLong": "Over {hours} h once it crosses midnight — set the dates in the item editor.",
   "publishDateStaffOnlyHint": "Staff-only items have no publish date — staff always sees them.",
   "publishDateAlreadyShownHint": "Already shown — there is nothing left to publish.",
   "noTypeOption": "No type",
