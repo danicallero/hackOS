@@ -199,7 +199,14 @@ export function ScheduleFormModal({
                 state: values.type === kind ? ("on" as const) : ("off" as const),
               }))}
               onPressAction={({ nativeEvent }) =>
-                setValues((current) => ({ ...current, type: nativeEvent.event as ActivityKind }))
+                setValues((current) => {
+                  const type = nativeEvent.event as ActivityKind;
+                  return {
+                    ...current,
+                    type,
+                    requiresScan: type === "meal" || current.requiresScan,
+                  };
+                })
               }
             >
               <View
@@ -301,58 +308,68 @@ export function ScheduleFormModal({
             />
           </View>
 
-          <Section title={t("scheduleFilterAudience")}>
-            {SCHEDULE_AUDIENCES.map((audience, index) => {
-              const selected = (values.audiences ?? []).includes(audience);
-              return (
-                <View key={audience}>
-                  {index > 0 ? (
-                    <View
-                      style={{ backgroundColor: colors.separator, height: 0.5, marginLeft: 16 }}
+          <View style={{ gap: 6 }}>
+            <Section title={t("scheduleFilterAudience")}>
+              {SCHEDULE_AUDIENCES.map((audience, index) => {
+                const selected = (values.audiences ?? []).includes(audience);
+                return (
+                  <View key={audience}>
+                    {index > 0 ? (
+                      <View
+                        style={{ backgroundColor: colors.separator, height: 0.5, marginLeft: 16 }}
+                      />
+                    ) : null}
+                    <ToggleRow
+                      label={audienceLabel(audience, t)}
+                      value={selected}
+                      disabled={values.type === "meal" && audience === "participant"}
+                      onChange={(next) => {
+                        const audiences = next
+                          ? [...(values.audiences ?? []), audience]
+                          : (values.audiences ?? []).filter((a) => a !== audience);
+                        setValues((current) => ({
+                          ...current,
+                          audiences,
+                          requiresScan: audiences.includes("participant")
+                            ? current.requiresScan
+                            : false,
+                          // Mirror the API's own normalization immediately so the
+                          // form never shows a "Shown"/scheduled-publish state
+                          // that's about to become a no-op (H59 follow-up).
+                          ...(audiences.length === 0
+                            ? { visibility: "hidden" as const, publishAt: null }
+                            : {}),
+                        }));
+                        if (audiences.length === 0) setScheduledPublish(false);
+                      }}
                     />
-                  ) : null}
-                  <ToggleRow
-                    label={audienceLabel(audience, t)}
-                    value={selected}
-                    onChange={(next) => {
-                      const audiences = next
-                        ? [...(values.audiences ?? []), audience]
-                        : (values.audiences ?? []).filter((a) => a !== audience);
-                      setValues((current) => ({
-                        ...current,
-                        audiences,
-                        // Mirror the API's own normalization immediately so the
-                        // form never shows a "Shown"/scheduled-publish state
-                        // that's about to become a no-op (H59 follow-up).
-                        ...(audiences.length === 0
-                          ? { visibility: "hidden" as const, publishAt: null }
-                          : {}),
-                      }));
-                      if (audiences.length === 0) setScheduledPublish(false);
-                    }}
-                  />
-                </View>
-              );
-            })}
-          </Section>
+                  </View>
+                );
+              })}
+            </Section>
+
+            <Text style={{ color: colors.secondaryLabel, fontSize: 13, paddingHorizontal: 16 }}>
+              {t("scheduleStaffSeeAllHint")}
+            </Text>
+          </View>
 
           {hasAudience ? (
-            <>
-              <Section>
-                <ToggleRow
-                  label={t("scheduleVisibilityLabel")}
-                  value={values.visibility === "shown"}
-                  onChange={(shown) =>
-                    setValues((current) => ({
-                      ...current,
-                      visibility: shown ? "shown" : "hidden",
-                    }))
-                  }
-                />
-              </Section>
-
+            <Section>
+              <ToggleRow
+                label={t("scheduleVisibilityLabel")}
+                value={values.visibility === "shown"}
+                onChange={(shown) =>
+                  setValues((current) => ({
+                    ...current,
+                    visibility: shown ? "shown" : "hidden",
+                  }))
+                }
+              />
               {values.visibility === "shown" ? null : (
-                <Section title={t("schedulePublishAtLabel")}>
+                <>
+                  <View
+                    style={{ backgroundColor: colors.separator, height: 0.5, marginLeft: 16 }}
+                  />
                   <ToggleRow
                     label={t("schedulePublishAtLabel")}
                     value={scheduledPublish}
@@ -370,26 +387,20 @@ export function ScheduleFormModal({
                       />
                     </View>
                   ) : null}
-                </Section>
+                </>
               )}
-            </>
-          ) : (
-            <Section>
-              <View style={{ padding: 16 }}>
-                <Text style={{ color: colors.secondaryLabel, fontSize: 14, lineHeight: 20 }}>
-                  {t("staffOnlyHint")}
-                </Text>
-              </View>
             </Section>
-          )}
+          ) : null}
 
-          <Section>
-            <ToggleRow
-              label={t("scheduleRequiresScanLabel")}
-              value={values.requiresScan}
-              onChange={(requiresScan) => setValues((current) => ({ ...current, requiresScan }))}
-            />
-          </Section>
+          {hasAudience && (values.audiences ?? []).includes("participant") ? (
+            <Section>
+              <ToggleRow
+                label={t("scheduleRequiresScanLabel")}
+                value={values.requiresScan}
+                onChange={(requiresScan) => setValues((current) => ({ ...current, requiresScan }))}
+              />
+            </Section>
+          ) : null}
 
           <Section title={t("scheduleContactNoteLabel")}>
             <TextInput
@@ -463,10 +474,12 @@ function ToggleRow({
   label,
   value,
   onChange,
+  disabled = false,
 }: {
   label: string;
   value: boolean;
   onChange: (value: boolean) => void;
+  disabled?: boolean;
 }) {
   return (
     <View
@@ -479,8 +492,12 @@ function ToggleRow({
         paddingVertical: 10,
       }}
     >
-      <Text style={{ color: colors.label, flex: 1, fontSize: 16 }}>{label}</Text>
-      <Switch onValueChange={onChange} value={value} />
+      <Text
+        style={{ color: disabled ? colors.tertiaryLabel : colors.label, flex: 1, fontSize: 16 }}
+      >
+        {label}
+      </Text>
+      <Switch disabled={disabled} onValueChange={onChange} value={value} />
     </View>
   );
 }
