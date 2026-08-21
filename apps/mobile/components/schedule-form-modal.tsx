@@ -99,7 +99,10 @@ export function ScheduleFormModal({
   initial?: ScheduleInput;
   scheduleId?: number;
   initialOwners?: ScheduleOwner[];
-  onSubmit: (values: ScheduleInput, pendingOwnerIds: number[]) => Promise<void>;
+  onSubmit: (
+    values: ScheduleInput,
+    pendingOwners: ({ userId: number } | { freeTextName: string })[],
+  ) => Promise<void>;
 }) {
   const { t } = useLocale();
   const insets = useSafeAreaInsets();
@@ -108,6 +111,10 @@ export function ScheduleFormModal({
   const [scheduledPublish, setScheduledPublish] = useState(Boolean(initial?.publishAt));
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // An item with no audience tag is staff-only, full stop — visibility/publishAt
+  // describe when a *tagged* audience gets to see an item, so they're meaningless
+  // (and the API silently forces them back to hidden/null) without one (H59 follow-up).
+  const hasAudience = (values.audiences ?? []).length > 0;
 
   useEffect(() => {
     if (!visible) return;
@@ -131,7 +138,11 @@ export function ScheduleFormModal({
           title: values.title.trim(),
           publishAt: scheduledPublish ? values.publishAt : null,
         },
-        owners.map((owner) => owner.userId),
+        owners.map((owner) =>
+          owner.userId !== null
+            ? { userId: owner.userId }
+            : { freeTextName: owner.freeTextName as string },
+        ),
       );
     } catch {
       setError(t("scheduleSaveError"));
@@ -290,46 +301,6 @@ export function ScheduleFormModal({
             />
           </View>
 
-          <Section>
-            <ToggleRow
-              label={t("scheduleVisibilityLabel")}
-              value={values.visibility === "shown"}
-              onChange={(shown) =>
-                setValues((current) => ({ ...current, visibility: shown ? "shown" : "hidden" }))
-              }
-            />
-          </Section>
-
-          <Section>
-            <ToggleRow
-              label={t("scheduleRequiresScanLabel")}
-              value={values.requiresScan}
-              onChange={(requiresScan) => setValues((current) => ({ ...current, requiresScan }))}
-            />
-          </Section>
-
-          {values.visibility === "shown" ? null : (
-            <Section title={t("schedulePublishAtLabel")}>
-              <ToggleRow
-                label={t("schedulePublishAtLabel")}
-                value={scheduledPublish}
-                onChange={setScheduledPublish}
-              />
-              {scheduledPublish ? (
-                <View style={{ padding: 16, paddingTop: 0 }}>
-                  <DateTimeField
-                    dateAccessibilityLabel={t("schedulePublishAtLabel")}
-                    timeAccessibilityLabel={t("schedulePublishAtLabel")}
-                    value={values.publishAt ? new Date(values.publishAt) : new Date()}
-                    onChange={(date) =>
-                      setValues((current) => ({ ...current, publishAt: date.toISOString() }))
-                    }
-                  />
-                </View>
-              ) : null}
-            </Section>
-          )}
-
           <Section title={t("scheduleFilterAudience")}>
             {SCHEDULE_AUDIENCES.map((audience, index) => {
               const selected = (values.audiences ?? []).includes(audience);
@@ -343,18 +314,81 @@ export function ScheduleFormModal({
                   <ToggleRow
                     label={audienceLabel(audience, t)}
                     value={selected}
-                    onChange={(next) =>
+                    onChange={(next) => {
+                      const audiences = next
+                        ? [...(values.audiences ?? []), audience]
+                        : (values.audiences ?? []).filter((a) => a !== audience);
                       setValues((current) => ({
                         ...current,
-                        audiences: next
-                          ? [...(current.audiences ?? []), audience]
-                          : (current.audiences ?? []).filter((a) => a !== audience),
-                      }))
-                    }
+                        audiences,
+                        // Mirror the API's own normalization immediately so the
+                        // form never shows a "Shown"/scheduled-publish state
+                        // that's about to become a no-op (H59 follow-up).
+                        ...(audiences.length === 0
+                          ? { visibility: "hidden" as const, publishAt: null }
+                          : {}),
+                      }));
+                      if (audiences.length === 0) setScheduledPublish(false);
+                    }}
                   />
                 </View>
               );
             })}
+          </Section>
+
+          {hasAudience ? (
+            <>
+              <Section>
+                <ToggleRow
+                  label={t("scheduleVisibilityLabel")}
+                  value={values.visibility === "shown"}
+                  onChange={(shown) =>
+                    setValues((current) => ({
+                      ...current,
+                      visibility: shown ? "shown" : "hidden",
+                    }))
+                  }
+                />
+              </Section>
+
+              {values.visibility === "shown" ? null : (
+                <Section title={t("schedulePublishAtLabel")}>
+                  <ToggleRow
+                    label={t("schedulePublishAtLabel")}
+                    value={scheduledPublish}
+                    onChange={setScheduledPublish}
+                  />
+                  {scheduledPublish ? (
+                    <View style={{ padding: 16, paddingTop: 0 }}>
+                      <DateTimeField
+                        dateAccessibilityLabel={t("schedulePublishAtLabel")}
+                        timeAccessibilityLabel={t("schedulePublishAtLabel")}
+                        value={values.publishAt ? new Date(values.publishAt) : new Date()}
+                        onChange={(date) =>
+                          setValues((current) => ({ ...current, publishAt: date.toISOString() }))
+                        }
+                      />
+                    </View>
+                  ) : null}
+                </Section>
+              )}
+            </>
+          ) : (
+            <Section>
+              <View style={{ padding: 16 }}>
+                <Text style={{ color: colors.secondaryLabel, fontSize: 14, lineHeight: 20 }}>
+                  {t("staffOnlyHint")}
+                </Text>
+              </View>
+            </Section>
+          )}
+
+          <Section>
+            <ToggleRow
+              label={t("scheduleRequiresScanLabel")}
+              value={values.requiresScan}
+              onChange={(requiresScan) => setValues((current) => ({ ...current, requiresScan }))}
+            />
           </Section>
 
           <Section title={t("scheduleContactNoteLabel")}>
@@ -464,6 +498,9 @@ function ownerCandidateName(candidate: OwnerCandidate): string {
   return [candidate.name, candidate.surname].filter(Boolean).join(" ").trim() || candidate.email;
 }
 
+/** Negative, decrementing — real owner ids from the API are always positive. */
+let nextLocalOwnerId = -1;
+
 function OwnersField({
   owners,
   onChange,
@@ -475,6 +512,7 @@ function OwnersField({
 }) {
   const { t } = useLocale();
   const [query, setQuery] = useState("");
+  const [freeTextName, setFreeTextName] = useState("");
   const [results, setResults] = useState<OwnerCandidate[]>([]);
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
@@ -482,7 +520,7 @@ function OwnersField({
   const [mutation, setMutation] = useState<string | null>(null);
   const requestId = useRef(0);
 
-  const ownerIds = new Set(owners.map((owner) => owner.userId));
+  const ownerIds = new Set(owners.flatMap((owner) => (owner.userId ? [owner.userId] : [])));
 
   async function search() {
     const trimmed = query.trim();
@@ -510,19 +548,25 @@ function OwnersField({
 
   async function add(candidate: OwnerCandidate) {
     if (ownerIds.has(candidate.id)) return;
-    setMutation(`add:${candidate.id}`);
+    setMutation(`add-user:${candidate.id}`);
     setSearchError(null);
     try {
-      if (scheduleId) await addScheduleOwner(scheduleId, candidate.id);
-      onChange([
-        ...owners,
-        {
-          userId: candidate.id,
-          name: candidate.name,
-          surname: candidate.surname,
-          email: candidate.email,
-        },
-      ]);
+      if (scheduleId) {
+        const created = await addScheduleOwner(scheduleId, { userId: candidate.id });
+        onChange([...owners, created]);
+      } else {
+        onChange([
+          ...owners,
+          {
+            id: nextLocalOwnerId--,
+            userId: candidate.id,
+            name: candidate.name,
+            surname: candidate.surname,
+            email: candidate.email,
+            freeTextName: null,
+          },
+        ]);
+      }
     } catch (cause) {
       setSearchError(cause instanceof Error ? cause : new Error("Add failed"));
     } finally {
@@ -530,12 +574,41 @@ function OwnersField({
     }
   }
 
-  async function remove(userId: number) {
-    setMutation(`remove:${userId}`);
+  async function addFreeText() {
+    const name = freeTextName.trim();
+    if (!name) return;
+    setMutation("add-text");
     setSearchError(null);
     try {
-      if (scheduleId) await removeScheduleOwner(scheduleId, userId);
-      onChange(owners.filter((owner) => owner.userId !== userId));
+      if (scheduleId) {
+        const created = await addScheduleOwner(scheduleId, { freeTextName: name });
+        onChange([...owners, created]);
+      } else {
+        onChange([
+          ...owners,
+          {
+            id: nextLocalOwnerId--,
+            userId: null,
+            name: null,
+            surname: null,
+            freeTextName: name,
+          },
+        ]);
+      }
+      setFreeTextName("");
+    } catch (cause) {
+      setSearchError(cause instanceof Error ? cause : new Error("Add failed"));
+    } finally {
+      setMutation(null);
+    }
+  }
+
+  async function remove(ownerId: number) {
+    setMutation(`remove:${ownerId}`);
+    setSearchError(null);
+    try {
+      if (scheduleId && ownerId > 0) await removeScheduleOwner(scheduleId, ownerId);
+      onChange(owners.filter((owner) => owner.id !== ownerId));
     } catch (cause) {
       setSearchError(cause instanceof Error ? cause : new Error("Remove failed"));
     } finally {
@@ -629,7 +702,7 @@ function OwnersField({
                 {candidate.email}
               </Text>
             </View>
-            {mutation === `add:${candidate.id}` ? (
+            {mutation === `add-user:${candidate.id}` ? (
               <ActivityIndicator size="small" color={colors.accent} />
             ) : (
               <Pressable
@@ -659,6 +732,53 @@ function OwnersField({
           </Text>
         </View>
       ) : null}
+      <View
+        style={{
+          alignItems: "center",
+          borderTopColor: colors.separator,
+          borderTopWidth: 0.5,
+          flexDirection: "row",
+          gap: 8,
+          padding: 16,
+        }}
+      >
+        <TextInput
+          accessibilityLabel={t("ownerFreeTextPlaceholder")}
+          editable={mutation === null}
+          onChangeText={setFreeTextName}
+          onSubmitEditing={() => void addFreeText()}
+          placeholder={t("ownerFreeTextPlaceholder")}
+          placeholderTextColor={colors.tertiaryLabel}
+          returnKeyType="done"
+          value={freeTextName}
+          style={{
+            backgroundColor: colors.elevatedSurface,
+            borderCurve: "continuous",
+            borderRadius: 10,
+            color: colors.label,
+            flex: 1,
+            fontSize: 16,
+            minHeight: 36,
+            paddingHorizontal: 8,
+          }}
+        />
+        {mutation === "add-text" ? (
+          <ActivityIndicator size="small" color={colors.accent} />
+        ) : (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t("scheduleOwnerAdd")}
+            disabled={mutation !== null || !freeTextName.trim()}
+            onPress={() => void addFreeText()}
+            hitSlop={8}
+            style={({ pressed }) => ({
+              opacity: pressed || !freeTextName.trim() ? 0.5 : 1,
+            })}
+          >
+            <Text style={{ color: colors.accent, fontSize: 16 }}>{t("add")}</Text>
+          </Pressable>
+        )}
+      </View>
       {owners.length === 0 ? (
         <View style={{ borderTopColor: colors.separator, borderTopWidth: 0.5, padding: 16 }}>
           <Text style={{ color: colors.tertiaryLabel, fontSize: 14 }}>
@@ -667,7 +787,7 @@ function OwnersField({
         </View>
       ) : (
         owners.map((owner) => (
-          <View key={owner.userId}>
+          <View key={owner.id}>
             <View style={{ backgroundColor: colors.separator, height: 0.5, marginLeft: 16 }} />
             <View
               style={{
@@ -684,16 +804,19 @@ function OwnersField({
                 numberOfLines={1}
                 style={{ color: colors.label, flex: 1, fontSize: 16 }}
               >
-                {[owner.name, owner.surname].filter(Boolean).join(" ").trim() || owner.email}
+                {owner.freeTextName ??
+                  ([owner.name, owner.surname].filter(Boolean).join(" ").trim() ||
+                    owner.email ||
+                    "")}
               </Text>
-              {mutation === `remove:${owner.userId}` ? (
+              {mutation === `remove:${owner.id}` ? (
                 <ActivityIndicator size="small" color={colors.destructive} />
               ) : (
                 <Pressable
                   accessibilityLabel={t("scheduleDelete")}
                   accessibilityRole="button"
                   disabled={mutation !== null}
-                  onPress={() => void remove(owner.userId)}
+                  onPress={() => void remove(owner.id)}
                   hitSlop={8}
                   style={({ pressed }) => ({
                     alignItems: "center",

@@ -224,11 +224,17 @@ export interface ScannableActivity {
 }
 
 export type ScheduleAudience = "sponsor" | "participant" | "mentor";
+/**
+ * Either a real hackOS account (userId set, name/surname/email from `users`)
+ * or a free-text name with no login (freeTextName set) — never both.
+ */
 export interface ScheduleOwner {
-  userId: number;
+  id: number;
+  userId: number | null;
   name: string | null;
   surname: string | null;
   email?: string;
+  freeTextName: string | null;
   assignedAt?: string;
 }
 
@@ -369,10 +375,10 @@ export const logisticsApi = {
     ),
   scheduleOwners: (id: number) =>
     api.get<{ owners: ScheduleOwner[] }>(`/api/schedule/${id}/owners`),
-  addScheduleOwner: (id: number, userId: number) =>
-    api.post<ScheduleOwner>(`/api/schedule/${id}/owners`, { userId }),
-  removeScheduleOwner: (id: number, userId: number) =>
-    api.delete<void>(`/api/schedule/${id}/owners/${userId}`),
+  addScheduleOwner: (id: number, input: { userId: number } | { freeTextName: string }) =>
+    api.post<ScheduleOwner>(`/api/schedule/${id}/owners`, input),
+  removeScheduleOwner: (id: number, ownerId: number) =>
+    api.delete<void>(`/api/schedule/${id}/owners/${ownerId}`),
   scheduleOwnerCandidates: (q: string, limit = 8) =>
     api.get<{
       users: { id: number; email: string; name: string | null; surname: string | null }[];

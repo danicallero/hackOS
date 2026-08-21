@@ -46,12 +46,19 @@ async function createItem(opts: {
   audiences: string[];
   notes?: string | null;
   contactNote?: string | null;
+  visibility?: "shown" | "hidden";
 }): Promise<number> {
   const { rows } = await pool.query(
     `INSERT INTO schedule (title, starts_at, ends_at, visibility, audiences, notes, contact_note)
-     VALUES ($1, now() + interval '1 day', now() + interval '1 day 1 hour', 'shown', $2, $3, $4)
+     VALUES ($1, now() + interval '1 day', now() + interval '1 day 1 hour', $5, $2, $3, $4)
      RETURNING id`,
-    [opts.title, opts.audiences, opts.notes ?? null, opts.contactNote ?? null],
+    [
+      opts.title,
+      opts.audiences,
+      opts.notes ?? null,
+      opts.contactNote ?? null,
+      opts.visibility ?? "shown",
+    ],
   );
   return rows[0].id;
 }
@@ -113,6 +120,32 @@ describe("audience-aware schedule feed (H59)", () => {
     const staffOnlyItem = items.find((i: { id: number }) => i.id === staffOnlyId);
     expect(staffOnlyItem.notes).toBe("Set up chairs");
     expect(staffOnlyItem.contactNote).toBe("Ask at the info desk");
+  });
+
+  it("staff sees draft/hidden items too, with their own visibility field, while participants and sponsor reps never do", async () => {
+    const a = await getApp();
+    const staffUser = await createUserWithCapabilities([CAPABILITIES.ACTIVITY_SCAN]);
+    const draftId = await createItem({
+      title: "Load-in prep",
+      audiences: ["participant"],
+      visibility: "hidden",
+    });
+    const liveId = await createItem({ title: "Opening ceremony", audiences: ["participant"] });
+
+    const staffRes = await a.inject({
+      method: "GET",
+      url: "/api/public/activities",
+      headers: asUser(staffUser),
+    });
+    const staffItems = staffRes.json().items;
+    expect(staffItems.map((i: { id: number }) => i.id).sort()).toEqual([draftId, liveId].sort());
+    expect(staffItems.find((i: { id: number }) => i.id === draftId).visibility).toBe("hidden");
+    expect(staffItems.find((i: { id: number }) => i.id === liveId).visibility).toBe("shown");
+
+    const anonRes = await a.inject({ method: "GET", url: "/api/public/activities" });
+    const anonItems = anonRes.json().items;
+    expect(anonItems.map((i: { id: number }) => i.id)).toEqual([liveId]);
+    expect(anonItems[0].visibility).toBeUndefined();
   });
 
   it("a sponsor rep sees the entire public schedule plus their sponsor-tagged items, with owners/contact but never the staff-only notes", async () => {
@@ -279,6 +312,7 @@ describe("schedule owners (H59)", () => {
       payload: { userId: owner },
     });
     expect(add.statusCode).toBe(201);
+    const ownerId = add.json().id;
 
     const list = await a.inject({
       method: "GET",
@@ -297,16 +331,71 @@ describe("schedule owners (H59)", () => {
 
     const remove = await a.inject({
       method: "DELETE",
-      url: `/api/schedule/${scheduleId}/owners/${owner}`,
+      url: `/api/schedule/${scheduleId}/owners/${ownerId}`,
       headers: asUser(admin),
     });
     expect(remove.statusCode).toBe(204);
 
     const { rows } = await pool.query(
       `SELECT action FROM audit_log WHERE entity_type = 'schedule_owner' AND entity_id = $1 ORDER BY id`,
-      [`${scheduleId}:${owner}`],
+      [`${scheduleId}:${ownerId}`],
     );
     expect(rows.map((r) => r.action)).toEqual(["create", "delete"]);
+  });
+
+  it("SCHEDULE_MANAGE can assign a free-text name with no hackOS account, and unassign it", async () => {
+    const a = await getApp();
+    const admin = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const scheduleId = await createItem({ title: "Load-in", audiences: [] });
+
+    const add = await a.inject({
+      method: "POST",
+      url: `/api/schedule/${scheduleId}/owners`,
+      headers: asUser(admin),
+      payload: { freeTextName: "External AV vendor" },
+    });
+    expect(add.statusCode).toBe(201);
+    expect(add.json()).toMatchObject({ userId: null, freeTextName: "External AV vendor" });
+    const ownerId = add.json().id;
+
+    const list = await a.inject({
+      method: "GET",
+      url: `/api/schedule/${scheduleId}/owners`,
+      headers: asUser(admin),
+    });
+    expect(list.json().owners).toEqual([
+      expect.objectContaining({ userId: null, freeTextName: "External AV vendor" }),
+    ]);
+
+    const remove = await a.inject({
+      method: "DELETE",
+      url: `/api/schedule/${scheduleId}/owners/${ownerId}`,
+      headers: asUser(admin),
+    });
+    expect(remove.statusCode).toBe(204);
+  });
+
+  it("rejects an owner payload with both or neither of userId/freeTextName", async () => {
+    const a = await getApp();
+    const admin = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const owner = await createUser();
+    const scheduleId = await createItem({ title: "Load-in", audiences: [] });
+
+    const neither = await a.inject({
+      method: "POST",
+      url: `/api/schedule/${scheduleId}/owners`,
+      headers: asUser(admin),
+      payload: {},
+    });
+    expect(neither.statusCode).toBe(400);
+
+    const both = await a.inject({
+      method: "POST",
+      url: `/api/schedule/${scheduleId}/owners`,
+      headers: asUser(admin),
+      payload: { userId: owner, freeTextName: "External AV vendor" },
+    });
+    expect(both.statusCode).toBe(400);
   });
 
   it("a non-SCHEDULE_MANAGE user cannot assign an owner", async () => {
@@ -360,5 +449,106 @@ describe("bulk schedule publish-at (H59)", () => {
       payload: { ids: [id], publishAt: new Date().toISOString() },
     });
     expect(res.statusCode).toBe(403);
+  });
+});
+
+describe("visibility requires an audience (H59 follow-up)", () => {
+  function itemBody(overrides: Record<string, unknown> = {}) {
+    return {
+      title: "Load-in prep",
+      startsAt: new Date(Date.now() + 3_600_000).toISOString(),
+      endsAt: new Date(Date.now() + 7_200_000).toISOString(),
+      visibility: "shown",
+      audiences: [],
+      ...overrides,
+    };
+  }
+
+  it("create silently forces visibility back to hidden and drops publishAt when audiences is empty", async () => {
+    const a = await getApp();
+    const admin = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/schedule",
+      headers: asUser(admin),
+      payload: itemBody({ publishAt: new Date(Date.now() + 3_600_000).toISOString() }),
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.json()).toMatchObject({ visibility: "hidden", publishAt: null });
+  });
+
+  it("update silently forces visibility back to hidden and drops publishAt the moment the last audience is removed", async () => {
+    const a = await getApp();
+    const admin = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const created = await a.inject({
+      method: "POST",
+      url: "/api/schedule",
+      headers: asUser(admin),
+      payload: itemBody({ audiences: ["participant"] }),
+    });
+    const id = created.json().id;
+
+    const res = await a.inject({
+      method: "PATCH",
+      url: `/api/schedule/${id}`,
+      headers: asUser(admin),
+      payload: { audiences: [] },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ visibility: "hidden", publishAt: null });
+  });
+
+  it("bulk show and bulk publish-at silently skip staff-only items in the batch instead of failing it", async () => {
+    const a = await getApp();
+    const admin = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const staffOnlyId = await createItem({ title: "Staff-only prep", audiences: [] });
+    const publicId = await createItem({ title: "Opening ceremony", audiences: ["participant"] });
+
+    const visRes = await a.inject({
+      method: "POST",
+      url: "/api/schedule/visibility",
+      headers: asUser(admin),
+      payload: { ids: [staffOnlyId, publicId], visibility: "shown" },
+    });
+    expect(visRes.statusCode).toBe(200);
+    expect(visRes.json().updated).toBe(1);
+    expect(visRes.json().ids).toEqual([publicId]);
+
+    const publishAt = new Date(Date.now() + 3_600_000).toISOString();
+    const pubRes = await a.inject({
+      method: "POST",
+      url: "/api/schedule/publish-at",
+      headers: asUser(admin),
+      payload: { ids: [staffOnlyId, publicId], publishAt },
+    });
+    expect(pubRes.statusCode).toBe(200);
+    expect(pubRes.json().updated).toBe(1);
+    expect(pubRes.json().ids).toEqual([publicId]);
+
+    const { rows } = await pool.query(
+      `SELECT id, visibility, publish_at FROM schedule WHERE id = $1`,
+      [staffOnlyId],
+    );
+    expect(rows[0].visibility).toBe("hidden");
+    expect(rows[0].publish_at).toBeNull();
+  });
+
+  it("staff still sees a staff-only item unconditionally even though it's always stored as hidden", async () => {
+    const a = await getApp();
+    const staffUser = await createUserWithCapabilities([CAPABILITIES.ACTIVITY_SCAN]);
+    const staffOnlyId = await createItem({
+      title: "Staff-only prep",
+      audiences: [],
+      visibility: "hidden",
+    });
+
+    const res = await a.inject({
+      method: "GET",
+      url: "/api/public/activities",
+      headers: asUser(staffUser),
+    });
+    const item = res.json().items.find((i: { id: number }) => i.id === staffOnlyId);
+    expect(item).toBeDefined();
+    expect(item.visibility).toBe("hidden");
   });
 });

@@ -125,16 +125,30 @@ mutation routes carry `idempotencyGuard` so an offline device's queued retries
 never double-apply.
 
 Schedule items (H48) carry an optional `audiences` set
-(`sponsor`/`participant`/`mentor`, independent of `visibility`/`publishAt`).
-Staff always sees every live item unconditionally and is never a stored
-audience value; an empty `audiences` array means "staff-only". There is no
-separate `public` audience — the anonymous web/TV feed is served exactly the
-`participant` slice. Items also carry an optional staff-only `notes`
+(`sponsor`/`participant`/`mentor`). Staff always sees every item
+unconditionally and is never a stored audience value; an empty `audiences`
+array means "staff-only" — and a staff-only item has no meaningful
+`visibility` at all, since `visibility`/`publishAt` only describe *when a
+tagged audience* gets to see an item. `createScheduleItem`/`updateScheduleItem`
+silently force `visibility` back to `hidden` and `publishAt` to `null` the
+moment an item ends up with no audience (not a validation error — removing
+the last audience tag is a normal edit); the bulk `POST /api/schedule/visibility`
+(`shown`) and `POST /api/schedule/publish-at` (non-null) routes silently skip
+any staff-only item in their batch rather than fail it. A DB constraint,
+`schedule_visibility_requires_audience` (0720), backstops this at the data
+layer: `array_length(audiences,1) > 0 OR (visibility = 'hidden' AND publish_at
+IS NULL)`. There is no separate `public` audience — the anonymous web/TV feed
+is served exactly the `participant` slice. Items also carry an optional
+staff-only `notes`
 free-text field (the run-of-show's "observations" column), an optional
 `contactNote`, and responsible-person assignment via `schedule_owners`
-(`GET/POST /api/schedule/:id/owners`, `DELETE /api/schedule/:id/owners/:userId`,
+(`GET/POST /api/schedule/:id/owners`, `DELETE /api/schedule/:id/owners/:ownerId`,
 `SCHEDULE_MANAGE`-gated, modeled on the `sponsors` enterprise-member join
-table). Picking a responsible person searches `GET /api/schedule/owner-candidates`
+table). Each owner row is either a real hackOS account (`userId`) or a
+free-text name with no login (`freeTextName`) — exactly one of the two, per
+`schedule_owners_exactly_one_identity`; the delete route keys off the owner
+row's own `id`, not `userId`, since a free-text row has none. Picking a
+responsible person searches `GET /api/schedule/owner-candidates`
 — `SCHEDULE_MANAGE`-gated like the write itself, deliberately not the broader
 `USERS_READ` (mirrors `projects`' `listProjectMemberCandidates`). A scannable
 item must include `participant` in its `audiences`; the API rejects
@@ -145,12 +159,16 @@ one audit entry + one broadcast for the whole batch), alongside the existing
 single-item `publishAt` field and the bulk `POST /api/schedule/visibility`.
 `GET /api/public/activities` is audience-aware and anonymous-callable
 (treated as `participant`). An authenticated caller holding any capability
-("staff") bypasses the audience filter entirely and sees every *live* item —
-the full run-of-show, each with its owners, contactNote, and notes; the
-`SCHEDULE_MANAGE`-gated `GET /api/schedule` additionally includes hidden/draft
-items and is what the web "Manage Schedule" table uses. A linked sponsor rep
-instead only sees items explicitly tagged `sponsor`, with owners/contactNote
-but never the (staff-internal) notes. One feed, not three parallel endpoints.
+("staff") bypasses both the audience filter *and* the visibility/publishAt
+one — every item regardless of state, including drafts and items still
+scheduled to reveal, each with its owners, contactNote, notes, and its own
+`visibility` (staff-only field, lets a client tell a draft apart from a live
+item) — previewing a draft on the run-of-show doesn't require publishing it
+first. The `SCHEDULE_MANAGE`-gated `GET /api/schedule` is the same full
+listing plus bulk-management concerns and is what the web "Manage Schedule"
+table uses. A linked sponsor rep instead only sees *live* items explicitly
+tagged `sponsor`, with owners/contactNote but never the (staff-internal)
+notes/visibility. One feed, not three parallel endpoints.
 
 ### notifications (H50–H53)
 The in-app inbox, scheduled announcements (with translations and a

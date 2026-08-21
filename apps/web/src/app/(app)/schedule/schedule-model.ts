@@ -10,7 +10,7 @@ import { LOCALE_CODES, type Translate } from "@/lib/i18n";
 import type { PublicScheduleItem } from "@/lib/logistics";
 import type { Tone } from "@/lib/tones";
 
-export type ScheduleStatus = "draft" | "scheduled" | "public" | "active" | "ended";
+export type ScheduleStatus = "draft" | "scheduled" | "public" | "active" | "ended" | "staffOnly";
 
 const TYPE_ICONS: Record<string, typeof CalendarDaysIcon> = {
   activity: SparklesIcon,
@@ -28,6 +28,7 @@ export const SCHEDULE_STATUS_TONES: Record<ScheduleStatus, Tone> = {
   public: "info",
   active: "success",
   ended: "neutral",
+  staffOnly: "neutral",
 };
 
 export function scheduleTypeLabel(type: string | null | undefined, t: Translate): string {
@@ -48,19 +49,27 @@ export function scheduleTypeIcon(type: string | null | undefined) {
 }
 
 /**
- * Programme items expose one of five states so staff and public readers can
+ * Programme items expose one of six states so staff and public readers can
  * tell what is public now, upcoming, or over without inspecting raw
- * visibility/publishAt fields (H47, H48).
+ * visibility/publishAt fields (H47, H48). An item with no audience tag is
+ * staff-only, full stop — visibility/publishAt only describe when a *tagged*
+ * audience gets to see an item, and the API forces both back to
+ * hidden/null the moment an item has no audience (H59 follow-up,
+ * schedule_visibility_requires_audience), so a staff-only item never goes
+ * through "draft"/"scheduled": it's always visible to staff, and "active"
+ * still tracks whether it's happening right now for their own run-of-show.
  */
 export function scheduleStatus(item: PublicScheduleItem, now = Date.now()): ScheduleStatus {
+  const isStaffOnly = (item.audiences ?? []).length === 0;
   const publishAtMs = item.publishAt ? new Date(item.publishAt).getTime() : null;
-  const isVisible = item.visibility === "shown" || (publishAtMs !== null && publishAtMs <= now);
+  const isVisible =
+    isStaffOnly || item.visibility === "shown" || (publishAtMs !== null && publishAtMs <= now);
   if (!isVisible) return publishAtMs !== null ? "scheduled" : "draft";
   const startsMs = new Date(item.startsAt).getTime();
   const endsMs = new Date(item.endsAt).getTime();
   if (!Number.isNaN(endsMs) && endsMs <= now) return "ended";
   if (!Number.isNaN(startsMs) && startsMs <= now) return "active";
-  return "public";
+  return isStaffOnly ? "staffOnly" : "public";
 }
 
 export function scheduleStatusLabel(status: ScheduleStatus, t: Translate): string {
@@ -70,6 +79,7 @@ export function scheduleStatusLabel(status: ScheduleStatus, t: Translate): strin
     public: t("statusPublic"),
     active: t("statusLive"),
     ended: t("statusEnded"),
+    staffOnly: t("statusStaffOnly"),
   };
   return labels[status];
 }
@@ -140,5 +150,19 @@ export function withTimeOfDay(iso: string, hhmm: string): string | null {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return null;
   date.setHours(Number(match[1]), Number(match[2]), 0, 0);
+  return date.toISOString();
+}
+
+/**
+ * Re-applies a new calendar date (year/month/day) to an existing ISO
+ * timestamp, keeping its time-of-day unchanged — the counterpart to
+ * withTimeOfDay, used to drag a schedule item onto a different day without
+ * disturbing when it starts/ends during that day.
+ */
+export function withDate(iso: string, targetDateIso: string): string | null {
+  const date = new Date(iso);
+  const target = new Date(targetDateIso);
+  if (Number.isNaN(date.getTime()) || Number.isNaN(target.getTime())) return null;
+  date.setFullYear(target.getFullYear(), target.getMonth(), target.getDate());
   return date.toISOString();
 }
