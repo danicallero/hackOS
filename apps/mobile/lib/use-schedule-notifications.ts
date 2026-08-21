@@ -37,6 +37,22 @@ function savePreferences(
   });
 }
 
+/** Mirrors the server's ON CONFLICT upsert, for an instant optimistic local view. */
+function withOverrides(
+  prefs: Preferences,
+  updates: Array<{ category: string; channel: Channel; enabled: boolean }>,
+): Preferences {
+  const overrides = [...prefs.overrides];
+  for (const update of updates) {
+    const index = overrides.findIndex(
+      (row) => row.category === update.category && row.channel === update.channel,
+    );
+    if (index === -1) overrides.push(update);
+    else overrides[index] = update;
+  }
+  return { ...prefs, overrides };
+}
+
 /**
  * H59 per-category schedule notification model. Storage is the existing H51
  * `notification_preferences` table — no new tables:
@@ -108,16 +124,24 @@ export function useScheduleNotifications(items: ScheduleItem[]) {
       const key = itemCategory(item.id);
       const currentlySubscribed = isEntrySubscribed(item);
       const category = itemCategory(item.id);
+      const previous = prefs;
       retryAction.current = () => toggleEntry(item);
       setSavingKey(key);
       setActionError(null);
+      // Optimistic: flip the switch instantly and reconcile with the server
+      // in the background — only roll back if the request actually fails,
+      // instead of visually snapping back to the stale value every time
+      // while the request is in flight.
+      setData(
+        withOverrides(prefs, [{ category, channel: CHANNEL, enabled: !currentlySubscribed }]),
+      );
+      void haptic("selection");
       try {
         const next = await savePreferences([
           { category, channel: CHANNEL, enabled: !currentlySubscribed },
         ]);
         setData(next);
         emitNotificationChange();
-        void haptic("selection");
 
         // Promotion: once every currently-loaded item of this kind has been
         // individually subscribed, fold that into the category flag instead
@@ -140,6 +164,7 @@ export function useScheduleNotifications(items: ScheduleItem[]) {
           }
         }
       } catch (cause) {
+        setData(previous);
         setActionError(cause instanceof Error ? cause : new Error("Notification update failed"));
       } finally {
         setSavingKey(null);
@@ -152,24 +177,29 @@ export function useScheduleNotifications(items: ScheduleItem[]) {
     async (kind: string, enabled: boolean) => {
       if (!prefs) return;
       const key = kindCategory(kind);
+      const previous = prefs;
       retryAction.current = () => toggleCategory(kind, enabled);
       setSavingKey(key);
       setActionError(null);
+      const kindItems = items.filter((item) => item.type === kind);
+      const preferences: Array<{ category: string; channel: Channel; enabled: boolean }> = [
+        { category: key, channel: CHANNEL, enabled },
+        // Clearing the muted (off) or stray individually-subscribed (on)
+        // per-item rows keeps a later toggle starting from a clean slate.
+        ...kindItems
+          .filter((item) => itemRow(item.id) !== undefined)
+          .map((item) => ({ category: itemCategory(item.id), channel: CHANNEL, enabled })),
+      ];
+      // Optimistic, same reasoning as toggleEntry — flip instantly, roll
+      // back only if the request actually fails.
+      setData(withOverrides(prefs, preferences));
+      void haptic("selection");
       try {
-        const kindItems = items.filter((item) => item.type === kind);
-        const preferences: Array<{ category: string; channel: Channel; enabled: boolean }> = [
-          { category: key, channel: CHANNEL, enabled },
-          // Clearing the muted (off) or stray individually-subscribed (on)
-          // per-item rows keeps a later toggle starting from a clean slate.
-          ...kindItems
-            .filter((item) => itemRow(item.id) !== undefined)
-            .map((item) => ({ category: itemCategory(item.id), channel: CHANNEL, enabled })),
-        ];
         const next = await savePreferences(preferences);
         setData(next);
         emitNotificationChange();
-        void haptic("selection");
       } catch (cause) {
+        setData(previous);
         setActionError(cause instanceof Error ? cause : new Error("Notification update failed"));
       } finally {
         setSavingKey(null);
