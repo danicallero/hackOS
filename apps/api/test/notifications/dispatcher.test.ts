@@ -158,24 +158,6 @@ describe("drainOutboxOnce", () => {
     expect(rows[0].n).toBe(1);
   });
 
-  it("discord rows park immediately as 'channel not configured' (post-MVP no-op)", async () => {
-    const userId = await createUser();
-    const [id] = await notify(pool, {
-      userId,
-      category: "announcements",
-      channels: ["discord"],
-      payload: { subject: "x", body: "y" },
-    });
-
-    const result = await drainOutboxOnce();
-    expect(result.parked).toBe(1);
-
-    const row = await getOutboxRow(id as number);
-    expect(row.status).toBe("failed");
-    expect(row.last_error).toBe("channel not configured");
-    expect(row.attempts).toBe(1);
-  });
-
   it("two concurrent drains never double-send (FOR UPDATE SKIP LOCKED)", async () => {
     const ids: number[] = [];
     for (let i = 0; i < 10; i += 1) {

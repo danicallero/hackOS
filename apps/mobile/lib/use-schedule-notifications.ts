@@ -7,7 +7,7 @@ import { emitNotificationChange, subscribeToNotificationChanges } from "./notifi
 import type { ScheduleItem } from "./schedule";
 import { useCachedApi } from "./use-cached-api";
 
-type Channel = "in_app" | "email" | "push" | "discord";
+type Channel = "in_app" | "email" | "push";
 
 interface Preferences {
   channels: Channel[];

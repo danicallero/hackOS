@@ -791,7 +791,6 @@
   "categoryReminderChannels": "Recordatorios de actividades",
   "channelInApp": "En la app",
   "channelPush": "Push",
-  "channelDiscord": "Discord",
   "activityLabel": "Actividad: {title}",
   "activityUnavailable": "Actividad #{id} (no disponible)",
   "reminderKindLabel": "Todas: {kind}",

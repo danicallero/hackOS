@@ -19,10 +19,10 @@ import { type EmailPayload, normalizeLanguage, renderEmailTemplate } from "./tem
  * notification_preferences entirely and always gets every requested channel.
  */
 
-export type NotificationChannel = "in_app" | "email" | "push" | "discord";
-export const ALL_CHANNELS: NotificationChannel[] = ["in_app", "email", "push", "discord"];
-/** Channels used when a caller doesn't name any explicitly. Discord opts in only when asked (post-MVP no-op). */
-export const DEFAULT_CHANNELS: NotificationChannel[] = ["in_app", "email", "push"];
+export type NotificationChannel = "in_app" | "email" | "push";
+export const ALL_CHANNELS: NotificationChannel[] = ["in_app", "email", "push"];
+/** Channels used when a caller doesn't name any explicitly. */
+export const DEFAULT_CHANNELS: NotificationChannel[] = ALL_CHANNELS;
 
 export const QUEUE_CATEGORY = "queue";
 export const QUEUE_STAFF_CATEGORY = "queue.staff";

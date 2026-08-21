@@ -17,8 +17,8 @@ import { PermanentDispatchError, SupersededDispatchError } from "./errors.js";
  *   - failure, attempts < MAX_ATTEMPTS -> attempts++, last_error set,
  *     next_attempt_at pushed out by exponential backoff (never touches status)
  *   - failure, attempts reaches MAX_ATTEMPTS, OR a PermanentDispatchError
- *     (e.g. discord's "channel not configured") -> status='failed' — parked,
- *     never deleted, always visible via last_error for the admin/audit surface.
+ *     -> status='failed' — parked, never deleted, always visible via
+ *     last_error for the admin/audit surface.
  *   - a SupersededDispatchError (H51/H52: the queue transition it describes
  *     is no longer current) -> status='superseded' immediately, no retry —
  *     this is not a failure, sending it would just be stale/duplicate noise.

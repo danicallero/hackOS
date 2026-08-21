@@ -88,11 +88,10 @@ function channelLabelMap(t: Translate): Record<NotificationChannel, string> {
     in_app: t("channelInApp"),
     email: t("email"),
     push: t("channelPush"),
-    discord: t("channelDiscord"),
   };
 }
 
-/** Channels a fresh schedule-reminder opt-in writes explicitly (discord stays post-MVP, same as service.ts DEFAULT_CHANNELS). */
+/** Channels a fresh schedule-reminder opt-in writes explicitly, matching service.ts DEFAULT_CHANNELS. */
 const REMINDER_DEFAULT_CHANNELS: NotificationChannel[] = ["in_app", "email", "push"];
 
 function payloadField(payload: unknown, key: "subject" | "body"): string | null {
