@@ -5,7 +5,11 @@ const mockPush = jest.fn();
 
 jest.mock("expo-router", () => ({
   useFocusEffect: () => {},
-  useNavigation: () => ({ setOptions: jest.fn() }),
+  useNavigation: () => ({
+    addListener: () => () => {},
+    isFocused: () => true,
+    setOptions: jest.fn(),
+  }),
   useRouter: () => ({ push: mockPush }),
 }));
 jest.mock("expo-router/stack", () => ({
@@ -79,6 +83,7 @@ const items = [
     title: "Comida Sábado",
     description: LONG_DESCRIPTION,
     location: "Hall",
+    audiences: [],
     type: "meal",
     startsAt: "2026-07-04T12:00:00.000Z",
     endsAt: "2026-07-04T13:00:00.000Z",
@@ -88,6 +93,7 @@ const items = [
     title: "Check-in",
     description: "Mesa 1",
     location: null,
+    audiences: [],
     type: "other",
     startsAt: "2026-07-04T15:00:00.000Z",
     endsAt: "2026-07-04T15:30:00.000Z",
