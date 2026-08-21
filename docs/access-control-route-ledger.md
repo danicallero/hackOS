@@ -137,6 +137,8 @@ Public/token snapshot: public rows are health, public content/announcement/TV/in
 | POST | `/api/me/secondary-email` | authenticated |
 | POST | `/api/me/secondary-email/verify` | authenticated |
 | GET | `/api/me/ticket` | authenticated |
+| GET | `/api/me/ui-prefs` | authenticated |
+| PATCH | `/api/me/ui-prefs` | authenticated |
 | GET | `/api/me/wallet/apple/:purpose.pkpass` | authenticated |
 | GET | `/api/me/wallet/google/:purpose` | authenticated |
 | GET | `/api/permission-group-templates` | capability:permissions:manage |
@@ -262,6 +264,11 @@ Public/token snapshot: public rows are health, public content/announcement/TV/in
 | POST | `/api/schedule` | capability:schedule:manage |
 | DELETE | `/api/schedule/:id` | capability:schedule:manage |
 | PATCH | `/api/schedule/:id` | capability:schedule:manage |
+| GET | `/api/schedule/:id/owners` | capability:schedule:manage |
+| POST | `/api/schedule/:id/owners` | capability:schedule:manage |
+| DELETE | `/api/schedule/:id/owners/:userId` | capability:schedule:manage |
+| GET | `/api/schedule/owner-candidates` | capability:schedule:manage |
+| POST | `/api/schedule/publish-at` | capability:schedule:manage |
 | POST | `/api/schedule/visibility` | capability:schedule:manage |
 | GET | `/api/sponsor-faq` | contextual:sponsor-portal-access |
 | PUT | `/api/sponsor-faq` | capability:sponsors:manage |

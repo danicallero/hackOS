@@ -62,7 +62,7 @@ export function registerInboxRoutes(app: FastifyInstance): void {
         summary: "Delete an inbox notification",
         description:
           "Removes a single H50/H51 in-app inbox row belonging to the caller. Only the " +
-          "in_app outbox row is deleted, so this never touches email/push/discord delivery " +
+          "in_app outbox row is deleted, so this never touches email/push delivery " +
           "records for the same notification.",
         params: notificationIdParamsSchema,
       },

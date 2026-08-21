@@ -50,6 +50,8 @@ describe("GET /api/activities/scannable (H25/H26)", () => {
           requiresScan,
           startsAt: start.toISOString(),
           endsAt: new Date(start.getTime() + 60 * 60_000).toISOString(),
+          // A scannable item must be participant-visible (H59).
+          audiences: ["participant"],
         },
       });
       expect(res.statusCode).toBe(201);

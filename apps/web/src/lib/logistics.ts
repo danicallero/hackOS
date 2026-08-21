@@ -223,6 +223,15 @@ export interface ScannableActivity {
   repeats: number;
 }
 
+export type ScheduleAudience = "sponsor" | "participant" | "mentor";
+export interface ScheduleOwner {
+  userId: number;
+  name: string | null;
+  surname: string | null;
+  email?: string;
+  assignedAt?: string;
+}
+
 export interface PublicScheduleItem {
   id: number;
   title: string;
@@ -235,6 +244,12 @@ export interface PublicScheduleItem {
   visibility?: "shown" | "hidden";
   publishAt: string | null;
   remindedAt?: string | null;
+  audiences?: ScheduleAudience[];
+  contactNote?: string | null;
+  /** Staff-only free-form notes — the run-of-show's "observations" column. */
+  notes?: string | null;
+  /** Only present on the audience-aware feed, when the caller shares a non-public audience. */
+  owners?: ScheduleOwner[];
   createdAt?: string;
   updatedAt?: string;
 }
@@ -262,6 +277,9 @@ export interface ScheduleInput {
   endsAt: string;
   visibility: "shown" | "hidden";
   publishAt?: string | null;
+  audiences?: ScheduleAudience[];
+  contactNote?: string | null;
+  notes?: string | null;
 }
 
 export function idempotencyHeaders(prefix: string): Record<string, string> {
@@ -344,6 +362,21 @@ export const logisticsApi = {
       "/api/schedule/visibility",
       { ids, visibility },
     ),
+  setScheduleBulkPublishAt: (ids: number[], publishAt: string | null) =>
+    api.post<{ ids: number[]; publishAt: string | null; updated: number }>(
+      "/api/schedule/publish-at",
+      { ids, publishAt },
+    ),
+  scheduleOwners: (id: number) =>
+    api.get<{ owners: ScheduleOwner[] }>(`/api/schedule/${id}/owners`),
+  addScheduleOwner: (id: number, userId: number) =>
+    api.post<ScheduleOwner>(`/api/schedule/${id}/owners`, { userId }),
+  removeScheduleOwner: (id: number, userId: number) =>
+    api.delete<void>(`/api/schedule/${id}/owners/${userId}`),
+  scheduleOwnerCandidates: (q: string, limit = 8) =>
+    api.get<{
+      users: { id: number; email: string; name: string | null; surname: string | null }[];
+    }>("/api/schedule/owner-candidates", { query: { q, limit } }),
   activityScan: (
     activityId: number,
     body: { badgeId: string; allowRepeat?: boolean; scannedAt?: string },
@@ -370,6 +403,13 @@ export const logisticsApi = {
   googleWalletSaveUrl: (purpose: "ticket" | "badge") =>
     api.get<{ saveUrl: string }>(`/api/me/wallet/google/${purpose}`),
   userTicket: (userId: number) => api.get<TicketQrPayload>(`/api/users/${userId}/ticket`),
+};
+
+/** Per-account UI preferences (H59) — cross-device sync for things like the schedule table's column config. */
+export const uiPrefsApi = {
+  get: () => api.get<Record<string, unknown>>("/api/me/ui-prefs"),
+  set: (key: string, value: unknown) =>
+    api.patch<Record<string, unknown>>("/api/me/ui-prefs", { key, value }),
 };
 
 export function personName(card: Pick<PersonCard, "name" | "surname" | "userId">): string {

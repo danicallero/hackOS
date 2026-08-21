@@ -19,7 +19,8 @@ The browser/native UI test framework and device prerequisites are in
 | H55 | One app, capability-driven tabs, permission changes apply without reinstall | ✅ Done | `lib/tabs.ts` + `app/(tabs)/_layout.tsx`. Five-item native bar (`UITabBarController` collapses a sixth item into iOS's own "More" screen). Participants: schedule/queue/wallet/notifications + Account. Operators: schedule/**Scanner**/Activities (`activity:scan` only)/notifications + the "Others" dropdown selector, behind which Queue, Wallet, and Account live as pseudo-tabs — see `docs/navigation.md`. |
 | H38 | Participant sees queue status/position/ETA, pre-alert, call notice | 🟡 Device QA | Push receipt/tap and the authenticated `GET /api/queue/me/stream` native fetch stream both refetch queue state immediately; 15s focused polling is the recovery path. Code/tests are complete, but APNs/FCM delivery still needs real-device verification. |
 | H29–H31 | Queue operations: room overview, called teams, queue head and re-notification | ✅ Done | `components/queue-operations-screen.tsx` reads capability-protected room views, refreshes while focused, and posts the existing idempotent `notify-enter` transition. |
-| H51 | Notification channel preferences per category; queue calls non-optional | ✅ Done | Static category preferences and mandatory queue notices are available on mobile. `schedule:<id>` per-activity reminder opt-in is available via the calendar bell (`lib/use-activity-reminders.ts`) and the preferences tab. The tab also exposes the shared `schedule` reminder channels and `schedule:type:<kind>` kind opt-ins. Reminder removals use a visible serial queue, so several can be tapped without racing full preference responses. |
+| H51 | Notification channel preferences per category; queue calls non-optional | ✅ Done | Static category preferences and mandatory queue notices are available on mobile. Schedule reminders (H59 rework) are per-category (`schedule:type:<kind>`) or per-item (`schedule:<id>`), covered by `lib/use-schedule-notifications.ts` and the calendar bell + the Horario settings sheet — see the H59 row below. The preferences tab also exposes the shared `schedule` reminder channels. Reminder removals use a visible serial queue, so several can be tapped without racing full preference responses. |
+| H59 | Horario admin CRUD, audience filter, category notification model at parity with web | ✅ Done | `app/(tabs)/schedule.tsx` (list) and `app/schedule/[id].tsx` (detail) — see the file notes below. |
 | H28 | Ticket/badge in Apple & Google Wallet; old pass auto-invalidates on badge rotation | 🟡 Device QA | QR wallet, authenticated Apple `.pkpass` download/share, Google save URL, server-side pass invalidation/push, and foreground wallet refetch on `LOGISTICS_WALLET_PASS_UPDATED` are wired. Real Wallet apps/credentials still need device QA. |
 | H22 | Accreditation scanner: local SQLite lookup, badge assignment, server-confirmed | 🟡 Device QA | Ticket/person cards live in SQLite. An unassigned person is classified as participant or mentor before the badge scan, which atomically issues their ticket; the assignment is persisted/retried but is explicitly shown as **not accredited** until the API acknowledges the idempotent request. |
 | H23 | Badge replacement, offline-first, revocation synced later | 🟡 Device QA | Rotation updates the originating scanner immediately; each successful full snapshot replaces the complete revoked-badge set so every scanner rejects old badges. |
@@ -241,25 +242,43 @@ route below. No migration needed.
   demand, allows an expanded message to be deleted after native confirmation,
   and mirrors the web activity/kind reminder preferences.
 - `app/(tabs)/schedule.tsx` — the participant agenda, grouped by day with a
-  "Now" divider the list auto-scrolls to on first load. Cards are **collapsed
-  by default** when their copy is long (`isScheduleCardExpandable`: a
-  multi-line description, >90 characters of it, or a >60-character title):
-  title and description clamp to two lines behind a "Show more"/"Show less"
-  chevron that expands the card **in place** instead of navigating. The card
-  body still pushes `app/schedule/[id].tsx`. The reminder bell sits in the
-  header row next to the title and type pill (`alignItems: "center"` plus
-  `hitSlop` — a 44pt touch box stretched the row and pulled the bell off the
-  title) and toggles `schedule:<id>` push reminders **straight from the list**
-  via `lib/use-activity-reminders.ts`; filled/accent means on, outline/grey
-  off. Covered by `test/ui/schedule-list.test.tsx`.
-- `app/schedule/[id].tsx` — the detail screen's title/subtitle float over the
-  scrolling body inside a fixed overlay; the overlay's backing is a
-  `expo-blur` `BlurView` masked (`@react-native-masked-view/masked-view` +
-  `expo-linear-gradient`) so the blur is solid only behind the header text
-  and fades to nothing both upward (through the button row, clearing near
-  the status bar) and downward over `HEADER_FADE_HEIGHT` into the scrolled
-  content — subtle translucency contained around the text instead of an
-  opaque bar or full glass material.
+  "Now" divider the list auto-scrolls to on first load. There is no in-place
+  expansion: every card always opens `app/schedule/[id].tsx` for the full
+  detail. Cards whose copy is long (`isScheduleCardTruncated`: a multi-line
+  description, >90 characters of it, or a >60-character title) clamp title
+  and description to two lines, capping the card's height; the chevron
+  affordance sits in the card's bottom-right corner (where the old "Show
+  more" toggle used to be). The timeline gutter draws one continuous line
+  per day: tight
+  spacing (`TIMELINE_GAP_AFTER_LABEL`) right after a time label, wider
+  spacing (`TIMELINE_GAP_BEFORE_LABEL`) as it approaches the next one, so
+  each label reads as anchored to the line above it with a beat of
+  anticipation before the next. Adjacent overlapping entries get a warning
+  glyph in the time gutter (`entriesOverlap`, `lib/schedule.ts`). The
+  reminder bell sits absolutely positioned in the card's top-right corner
+  (`hitSlop` — a 44pt touch box stretched the row and pulled the bell off the
+  title, H374) and toggles the H59 per-category notification model
+  **straight from the list** via `lib/use-schedule-notifications.ts`;
+  filled/accent means on, outline/grey off. A header row (title + glass Filter/Add/Settings buttons, matching the
+  scanner screen's glass style) provides a kind filter for everyone plus an
+  audience filter for `schedule:manage` holders
+  (`components/schedule-filter-button.tsx`), the create form (Add, admin
+  only), and the category settings sheet
+  (`components/schedule-notifications-sheet.tsx`, on/off/partial per kind).
+  Admin rows are swipeable to reveal edit/delete
+  (`components/schedule-swipe-row.tsx`); both the swipe's edit action and the
+  Add button open `components/schedule-form-modal.tsx`, which mirrors the web
+  admin's `ScheduleFormModal` field-for-field (including the
+  responsible-person picker). Covered by `test/ui/schedule-list.test.tsx`.
+- `app/schedule/[id].tsx` — a real native large-title nav bar
+  (`headerLargeTitle` + `headerTransparent` on the `schedule/[id]`
+  `Stack.Screen` in `app/_layout.tsx`, `contentInsetAdjustmentBehavior=
+  "automatic"` on the `ScrollView`) replaces an earlier hand-rolled
+  pinned-header overlay that had no opaque background of its own and let
+  scrolled content show through the title. The reminder bell is a proper
+  `headerRight` item; back reads "Horario" via `headerBackTitle`. Admins get
+  a floating glass pencil (bottom-right, clear of the home indicator) that
+  opens the same `ScheduleFormModal` as the list's swipe-to-edit.
 - `components/queue-operations-screen.tsx` — Queue operations is available to
   `queue:operate`, `queue:admin`, and `*`. It first lists only the caller's
   authorized rooms, then loads each protected room view. Each card keeps the

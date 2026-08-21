@@ -6,7 +6,7 @@
  */
 import { api } from "./api";
 
-export type NotificationChannel = "in_app" | "email" | "push" | "discord";
+export type NotificationChannel = "in_app" | "email" | "push";
 export type AnnouncementScreenPlacement = "none" | "embedded" | "fullscreen";
 export type AnnouncementTranslations = Partial<
   Record<"es" | "gl" | "en", { title: string; body: string }>

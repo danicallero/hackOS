@@ -140,7 +140,7 @@ export async function activityLog(
 export async function setNotificationPreference(
   userId: number,
   category = "queue",
-  channel: "in_app" | "email" | "discord" | "push" = "in_app",
+  channel: "in_app" | "email" | "push" = "in_app",
 ): Promise<void> {
   await pool.query(
     `INSERT INTO notification_preferences (user_id, category, channel) VALUES ($1, $2, $3)`,

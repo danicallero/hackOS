@@ -2,7 +2,6 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { pool } from "../../db/pool.js";
 import {
   requireAnyCapability,
   requireAuth,
@@ -46,9 +45,16 @@ import {
 import { queryScanLog, staffScanCounts, staffScanRanking } from "./scan-log.js";
 import { scannerSnapshot } from "./scanner-sync.js";
 import {
+  addScheduleOwner,
+  callerScheduleAudiences,
   createScheduleItem,
   deleteScheduleItem,
   listSchedule,
+  listScheduleForAudiences,
+  listScheduleOwnerCandidates,
+  listScheduleOwners,
+  removeScheduleOwner,
+  setScheduleBulkPublishAt,
   setScheduleVisibility,
   updateScheduleItem,
 } from "./schedule.js";
@@ -78,7 +84,11 @@ import {
   scannerRoleStatsResponse,
   scannerSnapshotResponse,
   scheduleBody,
+  scheduleBulkPublishAtBody,
   scheduleIdParam,
+  scheduleOwnerBody,
+  scheduleOwnerCandidatesQuery,
+  scheduleOwnerParams,
   schedulePatchBody,
   scheduleVisibilityBody,
   staffScanRankingResponse,
@@ -128,6 +138,18 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
     startsAt: z.string(),
     endsAt: z.string(),
     publishAt: z.string().nullable(),
+    audiences: z.array(z.string()),
+    contactNote: z.string().nullable().optional(),
+    owners: z
+      .array(
+        z.object({
+          userId: z.number().int(),
+          name: z.string().nullable(),
+          surname: z.string().nullable(),
+        }),
+      )
+      .optional(),
+    notes: z.string().nullable().optional(),
   });
 
   const accredit = requireCapability(CAPABILITIES.ACCREDIT_SCAN);
@@ -226,32 +248,15 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
     {
       ...routeAccess(access.publicContent),
       schema: {
-        summary: "Published public schedule",
+        summary: "Published schedule, audience-aware",
         description:
-          "Anonymous H47/H48 schedule feed. It contains only items currently visible in the public programme; drafts and scheduled future items are omitted.",
+          "H47/H48/H59 schedule feed. Contains only items currently live (visibility='shown', publishAt due). Every item is unconditionally visible to staff (any authenticated account holding at least one capability) — the full run-of-show, each with its notes and owners/contactNote. Everyone else (including anonymous callers, treated as 'participant') only sees items whose optional audiences ('sponsor'/'participant'/'mentor') overlap their own; a sponsor rep's audience always additionally includes 'participant', so they see the entire public schedule plus their sponsor-tagged items on top, getting owners/contactNote (never the staff-only notes) on the latter. Every item's own `audiences` array is included so a caller can pick out the items relevant to a given audience client-side.",
         response: { 200: z.object({ items: z.array(publicActivitySchema) }) },
       },
     },
-    async () => {
-      const { rows } = await pool.query(
-        `SELECT id, title, description, location, type, starts_at, ends_at, publish_at
-           FROM schedule
-          WHERE visibility = 'shown'
-            AND (publish_at IS NULL OR publish_at <= now())
-          ORDER BY starts_at ASC, id ASC`,
-      );
-      return {
-        items: rows.map((r: Record<string, unknown>) => ({
-          id: Number(r.id),
-          title: String(r.title),
-          description: (r.description as string | null) ?? null,
-          location: (r.location as string | null) ?? null,
-          type: (r.type as string | null) ?? null,
-          startsAt: (r.starts_at as Date).toISOString(),
-          endsAt: (r.ends_at as Date).toISOString(),
-          publishAt: r.publish_at instanceof Date ? r.publish_at.toISOString() : null,
-        })),
-      };
+    async (req) => {
+      const caller = await callerScheduleAudiences(req.userId);
+      return { items: await listScheduleForAudiences(caller) };
     },
   );
 
@@ -667,6 +672,9 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
           endsAt: req.body.endsAt,
           visibility: req.body.visibility,
           publishAt: req.body.publishAt ?? null,
+          audiences: req.body.audiences,
+          contactNote: req.body.contactNote ?? null,
+          notes: req.body.notes ?? null,
         }),
       ),
   );
@@ -689,6 +697,9 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
         endsAt: req.body.endsAt,
         visibility: req.body.visibility,
         publishAt: req.body.publishAt,
+        audiences: req.body.audiences,
+        contactNote: req.body.contactNote,
+        notes: req.body.notes,
       }),
   );
 
@@ -710,6 +721,76 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       schema: { body: scheduleVisibilityBody },
     },
     async (req) => setScheduleVisibility(actor(req.userId), req.body.ids, req.body.visibility),
+  );
+
+  typed.post(
+    "/api/schedule/publish-at",
+    {
+      ...routeAccess(access.scheduleManage),
+      preHandler: scheduleManage,
+      schema: {
+        body: scheduleBulkPublishAtBody,
+        summary: "Bulk-schedule a reveal time for several hidden items",
+        description:
+          "Sets publishAt on every listed item at once (H59) — the table's 'schedule for' bulk action. publishAt: null clears scheduling back to manual-only.",
+      },
+    },
+    async (req) => setScheduleBulkPublishAt(actor(req.userId), req.body.ids, req.body.publishAt),
+  );
+
+  // ── H59: who's responsible for a schedule item ──────────────────────
+
+  typed.get(
+    "/api/schedule/owner-candidates",
+    {
+      ...routeAccess(access.scheduleManage),
+      preHandler: scheduleManage,
+      schema: {
+        querystring: scheduleOwnerCandidatesQuery,
+        summary: "Search schedule owner candidates",
+        description:
+          "Minimal account identity fields for a SCHEDULE_MANAGE holder assigning a schedule item's responsible person(s) (H59) — deliberately not gated by the broader USERS_READ.",
+      },
+    },
+    async (req) => ({
+      users: await listScheduleOwnerCandidates(req.query.q, req.query.limit),
+    }),
+  );
+
+  typed.get(
+    "/api/schedule/:id/owners",
+    {
+      ...routeAccess(access.scheduleManage),
+      preHandler: scheduleManage,
+      schema: { params: scheduleIdParam },
+    },
+    async (req) => ({ owners: await listScheduleOwners(req.params.id) }),
+  );
+
+  typed.post(
+    "/api/schedule/:id/owners",
+    {
+      ...routeAccess(access.scheduleManage),
+      preHandler: scheduleManage,
+      schema: { params: scheduleIdParam, body: scheduleOwnerBody },
+    },
+    async (req, reply) =>
+      reply
+        .code(201)
+        .send(await addScheduleOwner(actor(req.userId), req.params.id, req.body.userId)),
+  );
+
+  typed.delete(
+    "/api/schedule/:id/owners/:userId",
+    {
+      ...routeAccess(access.scheduleManage),
+      preHandler: scheduleManage,
+      schema: { params: scheduleOwnerParams },
+    },
+    async (req, reply) => {
+      await removeScheduleOwner(actor(req.userId), req.params.id, req.params.userId);
+      return reply.code(204).send();
+    },
   );
 
   typed.get(

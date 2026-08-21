@@ -2,7 +2,6 @@ import type { Queryable } from "../../../db/pool.js";
 import { SupersededDispatchError } from "../errors.js";
 import { QUEUE_CATEGORY } from "../service.js";
 import type { EmailPayload } from "../templates.js";
-import { dispatchDiscord } from "./discord.js";
 import { sendEmail } from "./email.js";
 import { dispatchInApp } from "./in-app.js";
 import { dispatchPush } from "./push.js";
@@ -61,8 +60,6 @@ export async function dispatchChannel(db: Queryable, row: OutboxRow): Promise<vo
         throw new SupersededDispatchError("Queue transition no longer current");
       }
       return dispatchPush(db, row.user_id, payload, row.category);
-    case "discord":
-      return dispatchDiscord();
     default:
       throw new Error(`Unknown notification channel: ${row.channel}`);
   }

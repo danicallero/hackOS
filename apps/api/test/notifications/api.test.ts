@@ -43,7 +43,7 @@ describe("notification preferences (H51)", () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({
-      channels: ["in_app", "email", "push", "discord"],
+      channels: ["in_app", "email", "push"],
       mandatoryCategories: ["queue"],
       overrides: [],
     });
@@ -137,7 +137,7 @@ describe("notification preferences (H51)", () => {
       headers: asUser(userId),
       payload: {
         preferences: [
-          { category: "schedule", channel: "discord", enabled: false },
+          { category: "schedule", channel: "push", enabled: false },
           { category: "schedule:type:meal", channel: "in_app", enabled: true },
         ],
       },
@@ -145,7 +145,7 @@ describe("notification preferences (H51)", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().overrides).toEqual(
       expect.arrayContaining([
-        { category: "schedule", channel: "discord", enabled: false },
+        { category: "schedule", channel: "push", enabled: false },
         { category: "schedule:type:meal", channel: "in_app", enabled: true },
       ]),
     );

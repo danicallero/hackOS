@@ -12,7 +12,7 @@ const STAFF_SCAN_CAPABILITIES = [
   CAPABILITIES.ACTIVITY_SCAN,
 ] as const;
 
-function has(capabilities: string[], capability: string): boolean {
+export function has(capabilities: string[], capability: string): boolean {
   return capabilities.includes(capability) || capabilities.includes(CAPABILITIES.ADMIN_ALL);
 }
 

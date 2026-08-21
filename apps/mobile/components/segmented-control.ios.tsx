@@ -3,7 +3,7 @@ import { frame, pickerStyle, tag } from "@expo/ui/swift-ui/modifiers";
 
 import type { SegmentedControlProps } from "./segmented-control";
 
-const HEIGHT = 50;
+const HEIGHT = 36;
 
 /** A real SwiftUI segmented Picker. @expo/ui is included in Expo Go. */
 export function SegmentedControl({

@@ -30,6 +30,22 @@ export async function computeDerivedRole(db: Queryable, userId: number): Promise
   // *something* operational beyond being a plain participant.
   if (capabilities.size > 0) return "staff";
 
+  const attendeeType = await mentorOrParticipantType(db, userId);
+  return attendeeType ?? "unassigned";
+}
+
+/**
+ * Whether this user is (manually assigned or self-applied as) a mentor or a
+ * participant — extracted from computeDerivedRole so the schedule module's
+ * audience resolution (H59: a schedule item's `participant`/`mentor`
+ * audience toggles) can reuse the exact same lookup without duplicating the
+ * manual-role/application-type SQL. Mutually exclusive, mentor takes
+ * priority, matching computeDerivedRole's own priority order.
+ */
+export async function mentorOrParticipantType(
+  db: Queryable,
+  userId: number,
+): Promise<"mentor" | "participant" | null> {
   const manual = await db.query(`SELECT role FROM manual_attendee_roles WHERE user_id = $1`, [
     userId,
   ]);
@@ -48,7 +64,7 @@ export async function computeDerivedRole(db: Queryable, userId: number): Promise
   );
   if (rows[0]?.type === "mentor") return "mentor";
   if (rows[0]?.type === "participant") return "participant";
-  return "unassigned";
+  return null;
 }
 
 /**

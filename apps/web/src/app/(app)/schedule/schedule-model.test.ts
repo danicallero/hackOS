@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PublicScheduleItem } from "@/lib/logistics";
-import { scheduleStatus } from "./schedule-model";
+import { scheduleDuration, scheduleStatus, timeInputValue, withTimeOfDay } from "./schedule-model";
 
 const NOW = Date.parse("2026-07-22T12:00:00.000Z");
 
@@ -51,5 +51,33 @@ describe("scheduleStatus", () => {
         NOW,
       ),
     ).toBe("ended");
+  });
+});
+
+describe("scheduleDuration", () => {
+  it("computes h:mm between two timestamps", () => {
+    expect(scheduleDuration("2026-07-22T08:00:00.000Z", "2026-07-22T09:30:00.000Z")).toBe("1:30");
+    expect(scheduleDuration("2026-07-22T08:00:00.000Z", "2026-07-22T08:05:00.000Z")).toBe("0:05");
+  });
+
+  it("is empty when the window is invalid or non-positive", () => {
+    expect(scheduleDuration("2026-07-22T09:00:00.000Z", "2026-07-22T08:00:00.000Z")).toBe("");
+    expect(scheduleDuration("not-a-date", "2026-07-22T08:00:00.000Z")).toBe("");
+  });
+});
+
+describe("timeInputValue / withTimeOfDay", () => {
+  it("round-trips a new time-of-day onto the original date", () => {
+    const original = new Date("2026-07-22T08:00:00.000").toISOString();
+    const next = withTimeOfDay(original, "14:30");
+    expect(next).not.toBeNull();
+    expect(timeInputValue(next as string)).toBe("14:30");
+    // The calendar date itself is untouched.
+    expect(new Date(next as string).toDateString()).toBe(new Date(original).toDateString());
+  });
+
+  it("rejects a malformed time or timestamp", () => {
+    expect(withTimeOfDay("2026-07-22T08:00:00.000Z", "not-a-time")).toBeNull();
+    expect(withTimeOfDay("not-a-date", "14:30")).toBeNull();
   });
 });

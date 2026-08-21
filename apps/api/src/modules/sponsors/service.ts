@@ -2,7 +2,7 @@ import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import { issueTicket } from "../logistics/tickets.js";
-import type { CreateEnterpriseBody, UpdateEnterpriseBody } from "./schemas.js";
+import type { CreateEnterpriseBody, FaqItem, UpdateEnterpriseBody } from "./schemas.js";
 
 const COLUMNS = `id, name, website, logo_url,
   COALESCE(logo_negative_url, logo_url) AS logo_negative_url, description, tier_id,
@@ -349,30 +349,30 @@ export async function revealDueEnterprises(client: Queryable = pool): Promise<nu
   return rows.map((r: { id: number }) => Number(r.id));
 }
 
-/** H58: sponsor-only logistics/FAQ content, singleton row. */
-export async function getSponsorFaq(): Promise<{ contentI18n: Record<string, string> }> {
-  const { rows } = await pool.query(`SELECT content_i18n FROM sponsor_faq WHERE id = 1`);
-  return { contentI18n: rows[0]?.content_i18n ?? { en: "", es: "", gl: "" } };
+/** H58: sponsor-only FAQ, an ordered list of Q&A/text items, singleton row. */
+export async function getSponsorFaq(): Promise<{ items: FaqItem[] }> {
+  const { rows } = await pool.query(`SELECT items FROM sponsor_faq WHERE id = 1`);
+  return { items: rows[0]?.items ?? [] };
 }
 
 export async function updateSponsorFaq(
   actorId: number,
-  contentI18n: { en: string; es: string; gl: string },
-): Promise<{ contentI18n: Record<string, string> }> {
+  items: FaqItem[],
+): Promise<{ items: FaqItem[] }> {
   return withTransaction(async (client) => {
     const { rows } = await client.query(
-      `INSERT INTO sponsor_faq (id, content_i18n) VALUES (1, $1::jsonb)
-       ON CONFLICT (id) DO UPDATE SET content_i18n = EXCLUDED.content_i18n
-       RETURNING content_i18n`,
-      [JSON.stringify(contentI18n)],
+      `INSERT INTO sponsor_faq (id, items) VALUES (1, $1::jsonb)
+       ON CONFLICT (id) DO UPDATE SET items = EXCLUDED.items
+       RETURNING items`,
+      [JSON.stringify(items)],
     );
     await audit(client, {
       actorId,
       entityType: "sponsor_faq",
       entityId: 1,
       action: "updated",
-      after: { contentI18n: rows[0].content_i18n },
+      after: { items: rows[0].items },
     });
-    return { contentI18n: rows[0].content_i18n };
+    return { items: rows[0].items };
   });
 }
