@@ -57,7 +57,9 @@ async function createItem(opts: {
       opts.audiences,
       opts.notes ?? null,
       opts.contactNote ?? null,
-      opts.visibility ?? "shown",
+      // A staff-only item is always stored hidden — schedule_visibility_requires_audience
+      // (0720/0721) rejects anything else, so the default follows the audiences.
+      opts.visibility ?? (opts.audiences.length > 0 ? "shown" : "hidden"),
     ],
   );
   return rows[0].id;
@@ -449,6 +451,79 @@ describe("bulk schedule publish-at (H59)", () => {
       payload: { ids: [id], publishAt: new Date().toISOString() },
     });
     expect(res.statusCode).toBe(403);
+  });
+});
+
+describe("hiding a published item sticks (H59 follow-up)", () => {
+  /** A revealed item keeps its publish_at, which is what makes re-hiding it delicate. */
+  async function createRevealedItem(): Promise<number> {
+    const id = await createItem({ title: "Already revealed", audiences: ["participant"] });
+    await pool.query(`UPDATE schedule SET publish_at = now() - interval '1 hour' WHERE id = $1`, [
+      id,
+    ]);
+    return id;
+  }
+
+  it("PATCH to hidden clears a spent publish date so the publisher can't re-reveal it", async () => {
+    const a = await getApp();
+    const admin = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const id = await createRevealedItem();
+
+    const res = await a.inject({
+      method: "PATCH",
+      url: `/api/schedule/${id}`,
+      headers: asUser(admin),
+      payload: { visibility: "hidden" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().visibility).toBe("hidden");
+    expect(res.json().publishAt).toBeNull();
+
+    const { revealDueScheduleItems } = await import("../../src/modules/logistics/schedule.js");
+    expect(await revealDueScheduleItems()).toEqual([]);
+    const { rows } = await pool.query(`SELECT visibility FROM schedule WHERE id = $1`, [id]);
+    expect(rows[0].visibility).toBe("hidden");
+  });
+
+  it("bulk hide clears spent publish dates the same way", async () => {
+    const a = await getApp();
+    const admin = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const id = await createRevealedItem();
+
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/schedule/visibility",
+      headers: asUser(admin),
+      payload: { ids: [id], visibility: "hidden" },
+    });
+    expect(res.statusCode).toBe(200);
+
+    const { revealDueScheduleItems } = await import("../../src/modules/logistics/schedule.js");
+    expect(await revealDueScheduleItems()).toEqual([]);
+    const { rows } = await pool.query(`SELECT visibility, publish_at FROM schedule WHERE id = $1`, [
+      id,
+    ]);
+    expect(rows[0].visibility).toBe("hidden");
+    expect(rows[0].publish_at).toBeNull();
+  });
+
+  it("keeps a future publish date — 'hide it again until Saturday' is a real intent", async () => {
+    const a = await getApp();
+    const admin = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const id = await createItem({ title: "Back to hidden", audiences: ["participant"] });
+    const publishAt = new Date(Date.now() + 3_600_000).toISOString();
+
+    const res = await a.inject({
+      method: "PATCH",
+      url: `/api/schedule/${id}`,
+      headers: asUser(admin),
+      payload: { visibility: "hidden", publishAt },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().publishAt).toBe(publishAt);
+    expect(
+      await (await import("../../src/modules/logistics/schedule.js")).revealDueScheduleItems(),
+    ).toEqual([]);
   });
 });
 

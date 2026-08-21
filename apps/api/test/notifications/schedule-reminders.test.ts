@@ -39,8 +39,10 @@ afterAll(async () => {
 
 async function createScheduleItem(startsAt: Date, type: string | null = null): Promise<number> {
   const { rows } = await pool.query(
-    `INSERT INTO schedule (title, starts_at, ends_at, visibility, type)
-     VALUES ($1, $2::timestamptz, $2::timestamptz + interval '1 hour', 'shown', $3)
+    // A shown item needs at least one audience — schedule_visibility_requires_audience
+    // (0720/0721); a reminder is something a participant opted into, so that's the tag.
+    `INSERT INTO schedule (title, starts_at, ends_at, visibility, type, audiences)
+     VALUES ($1, $2::timestamptz, $2::timestamptz + interval '1 hour', 'shown', $3, ARRAY['participant'])
      RETURNING id`,
     [`Activity ${crypto.randomUUID()}`, startsAt, type],
   );
@@ -218,8 +220,8 @@ describe("schedule reminders (H51, issue #80)", () => {
 
     const startsAt = new Date(Date.now() + 10 * 60_000);
     const { rows } = await pool.query(
-      `INSERT INTO schedule (title, starts_at, ends_at, visibility, location)
-       VALUES ($1, $2::timestamptz, $2::timestamptz + interval '1 hour', 'shown', $3)
+      `INSERT INTO schedule (title, starts_at, ends_at, visibility, location, audiences)
+       VALUES ($1, $2::timestamptz, $2::timestamptz + interval '1 hour', 'shown', $3, ARRAY['participant'])
        RETURNING id`,
       [`Desayuno ${crypto.randomUUID()}`, startsAt, "Planta 1"],
     );
@@ -248,8 +250,8 @@ describe("schedule reminders (H51, issue #80)", () => {
 
     const startsAt = new Date(Date.now() + 10 * 60_000);
     const { rows } = await pool.query(
-      `INSERT INTO schedule (title, starts_at, ends_at, visibility, location)
-       VALUES ($1, $2::timestamptz, $2::timestamptz + interval '1 hour', 'shown', $3)
+      `INSERT INTO schedule (title, starts_at, ends_at, visibility, location, audiences)
+       VALUES ($1, $2::timestamptz, $2::timestamptz + interval '1 hour', 'shown', $3, ARRAY['participant'])
        RETURNING id`,
       ["Desayuno Sábado", startsAt, "Planta 1"],
     );

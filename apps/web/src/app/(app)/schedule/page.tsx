@@ -60,6 +60,13 @@ import { type UserOption, UserPicker } from "@/components/common/user-picker";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -99,13 +106,16 @@ import {
   scheduleItemToForm,
 } from "./schedule-form-modal";
 import {
+  editingNavigationDirection,
   SCHEDULE_AUDIENCES,
   SCHEDULE_STATUS_TONES,
+  type ScheduleNavigationDirection,
   type ScheduleStatus,
   scheduleAudienceLabel,
   scheduleDayKey,
   scheduleDayLabel,
   scheduleDuration,
+  scheduleNavigationDirection,
   scheduleStatus,
   scheduleStatusLabel,
   scheduleTimeOfDay,
@@ -155,28 +165,9 @@ function compareScheduleItems(a: PublicScheduleItem, b: PublicScheduleItem): num
   return startDelta || a.id - b.id;
 }
 
-type ScheduleNavigationDirection =
-  | "next"
-  | "previous"
-  | "nextInRow"
-  | "previousInRow"
-  | "nextInColumn"
-  | "previousInColumn";
-
 interface ScheduleCellAddress {
   row: string;
   column: string;
-}
-
-function scheduleNavigationDirection(
-  event: React.KeyboardEvent<HTMLElement>,
-): ScheduleNavigationDirection | null {
-  if (event.key === "Tab") return event.shiftKey ? "previous" : "next";
-  if (event.key === "ArrowLeft") return "previousInRow";
-  if (event.key === "ArrowRight") return "nextInRow";
-  if (event.key === "ArrowUp") return "previousInColumn";
-  if (event.key === "ArrowDown") return "nextInColumn";
-  return null;
 }
 
 function scheduleCellAddress(element: HTMLElement): ScheduleCellAddress | null {
@@ -254,11 +245,24 @@ function handleScheduleGridKeyDown(event: React.KeyboardEvent<HTMLElement>): boo
   return true;
 }
 
+/**
+ * Hands focus back to a cell's own trigger once an inline edit ends without
+ * moving (Enter, Escape). `activate: false` matters: refocusing must not
+ * re-open the editor the user just left, and without this the trigger the
+ * input replaced is gone, so focus would fall back to <body> and the whole
+ * grid would have to be re-entered by hand (H59).
+ */
+function refocusScheduleCell(element: HTMLElement): void {
+  const address = scheduleCellAddress(element);
+  if (!address) return;
+  requestAnimationFrame(() => focusScheduleCell(address, false));
+}
+
 async function commitAndNavigate(
   event: React.KeyboardEvent<HTMLElement>,
   commit: () => Promise<boolean>,
 ): Promise<boolean> {
-  const direction = scheduleNavigationDirection(event);
+  const direction = editingNavigationDirection(event);
   if (!direction) return false;
   const target = scheduleNavigationTarget(event.currentTarget, direction);
   if (!target) return false;
@@ -335,6 +339,15 @@ const DEFAULT_COLUMN_ORDER: ColumnId[] = [
 ];
 
 const REQUIRED_COLUMNS: ColumnId[] = ["item"];
+
+/**
+ * Grid addresses for the two fixed columns that aren't configurable data
+ * columns — the row-selection checkbox and the row actions. They can't be
+ * hidden or reordered, so they live outside ColumnId, but they still take part
+ * in arrow-key navigation (H59).
+ */
+const SELECT_COLUMN = "__select__";
+const ACTIONS_COLUMN = "__actions__";
 const KEYBOARD_COLUMNS: ColumnId[] = [
   "status",
   "starts",
@@ -1591,7 +1604,15 @@ function ActivityRow({
       )}
     >
       {canEdit && (
-        <TableCell>
+        // The selection checkbox is a grid cell like any other, so arrow keys
+        // reach it — selecting rows for the bulk actions shouldn't need a
+        // mouse (H59). The drag handle stays out: reordering has its own
+        // keyboard path via the Move-to-date action.
+        <TableCell
+          data-schedule-cell="true"
+          data-schedule-row={item.id}
+          data-schedule-column={SELECT_COLUMN}
+        >
           <div className="flex items-center gap-0.5">
             <button
               type="button"
@@ -1605,6 +1626,8 @@ function ActivityRow({
             <Checkbox
               checked={selected}
               aria-label={t("selectRowAria")}
+              onKeyDown={handleScheduleGridKeyDown}
+              data-schedule-focusable="true"
               onCheckedChange={(checked) => onToggleSelected(checked === true)}
             />
           </div>
@@ -1622,13 +1645,26 @@ function ActivityRow({
         </TableCell>
       ))}
       {canEdit && (
-        <TableCell className="text-right">
+        // Also a grid cell, so ArrowRight off the last column lands on the row
+        // actions instead of dead-ending; Tab from there walks the three
+        // buttons natively, which is why this one trigger doesn't take Tab.
+        <TableCell
+          className="text-right"
+          data-schedule-cell="true"
+          data-schedule-row={item.id}
+          data-schedule-column={ACTIONS_COLUMN}
+        >
           <div className="flex justify-end gap-0.5">
             <Button
               variant="ghost"
               size="icon"
               aria-label={t("editItemAria")}
               className="size-7"
+              data-schedule-focusable="true"
+              onKeyDown={(event) => {
+                if (event.key === "Tab") return;
+                handleScheduleGridKeyDown(event);
+              }}
               onClick={onOpenEdit}
             >
               <PencilIcon className="size-3.5" />
@@ -1658,6 +1694,11 @@ function ActivityRow({
   );
 }
 
+/**
+ * A staff-only item has no visibility to report — staff sees it, nobody else
+ * does, and that's already spelled out in the Audience column — so the status
+ * column stays empty for it rather than repeating "Staff only" on every row.
+ */
 function StatusPill({
   item,
   status,
@@ -1666,6 +1707,13 @@ function StatusPill({
   status: ReturnType<typeof scheduleStatus>;
 }) {
   const { t } = useLocale();
+  if (status === "staffOnly") {
+    return (
+      <span className="text-muted-foreground" title={t("staffSeeAllHint")}>
+        —
+      </span>
+    );
+  }
   const badge = (
     <StatusBadge tone={SCHEDULE_STATUS_TONES[status]}>{scheduleStatusLabel(status, t)}</StatusBadge>
   );
@@ -1676,11 +1724,12 @@ function StatusPill({
 }
 
 /**
- * Status cell (H59): reads as the derived state badge (Draft / Scheduled /
- * Shown / Live / Ended), and opens a two-option selector so staff can flip an
- * item between shown and hidden without opening the editor. The stored field
- * is `visibility`; the rest of the badge's states are derived from the clock
- * and the audience tags, so they aren't offered as choices.
+ * Status cell (H59): reads as the plain state badge (Hidden / Scheduled /
+ * Shown / Staff only) and opens a two-option menu so staff can flip an item
+ * between shown and hidden without opening the editor. Deliberately a bare
+ * badge rather than a bordered `<Select>` — a pill nested inside a second box
+ * with its own chevron reads as two controls, and this column is scanned far
+ * more often than it's edited (docs/DESIGN.md § container hierarchy).
  */
 function EditableStatusCell({
   item,
@@ -1723,33 +1772,38 @@ function EditableStatusCell({
   }
 
   return (
-    <Select
-      value={item.visibility ?? "hidden"}
+    <DropdownMenu
       open={open}
       onOpenChange={(next) => {
         if (!saving) setOpen(next);
       }}
-      onValueChange={(next) => void change(next)}
     >
-      <SelectTrigger
-        size="sm"
-        disabled={saving}
-        aria-label={t("editScheduleFieldAria", { field: fieldLabel })}
-        onKeyDown={(event) => {
-          if (open && event.key !== "Tab") return;
-          handleScheduleGridKeyDown(event);
-        }}
-        data-schedule-focusable="true"
-        data-schedule-activate="true"
-        className="w-full border-0 bg-transparent px-1 shadow-none"
-      >
-        <StatusPill item={item} status={status} />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="shown">{t("shownOption")}</SelectItem>
-        <SelectItem value="hidden">{t("hiddenOption")}</SelectItem>
-      </SelectContent>
-    </Select>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          disabled={saving}
+          aria-label={t("editScheduleFieldAria", { field: fieldLabel })}
+          onKeyDown={(event) => {
+            if (open && event.key !== "Tab") return;
+            handleScheduleGridKeyDown(event);
+          }}
+          data-schedule-focusable="true"
+          data-schedule-activate="true"
+          className="hover:bg-muted -mx-1 block rounded px-1 py-0.5 text-left"
+        >
+          <StatusPill item={item} status={status} />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        <DropdownMenuRadioGroup
+          value={item.visibility ?? "hidden"}
+          onValueChange={(next) => void change(next)}
+        >
+          <DropdownMenuRadioItem value="shown">{t("shownOption")}</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="hidden">{t("hiddenOption")}</DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -1829,16 +1883,18 @@ function EditableTextCell({
         onChange={(e) => setDraft(e.target.value)}
         onBlur={(event) => void commit(event.currentTarget.value)}
         onKeyDown={(e) => {
-          if (scheduleNavigationDirection(e)) {
+          if (editingNavigationDirection(e)) {
             void commitAndNavigate(e, () => commit(e.currentTarget.value));
             return;
           }
+          const input = e.currentTarget;
           if (e.key === "Enter") {
             e.preventDefault();
-            void commit(e.currentTarget.value);
+            void commit(input.value).then(() => refocusScheduleCell(input));
           } else if (e.key === "Escape") {
             setDraft(value);
             setEditing(false);
+            refocusScheduleCell(input);
           }
         }}
         className="h-7 w-full border-0 bg-transparent text-sm shadow-none"
@@ -1927,16 +1983,18 @@ function EditableTimeCell({
         onChange={(e) => setDraft(e.target.value)}
         onBlur={(event) => void commit(event.currentTarget.value)}
         onKeyDown={(e) => {
-          if (scheduleNavigationDirection(e)) {
+          if (editingNavigationDirection(e)) {
             void commitAndNavigate(e, () => commit(e.currentTarget.value));
             return;
           }
+          const input = e.currentTarget;
           if (e.key === "Enter") {
             e.preventDefault();
-            void commit(e.currentTarget.value);
+            void commit(input.value).then(() => refocusScheduleCell(input));
           } else if (e.key === "Escape") {
             setDraft(value);
             setEditing(false);
+            refocusScheduleCell(input);
           }
         }}
         className="h-7 w-full border-0 bg-transparent font-mono text-sm tabular-nums shadow-none"
@@ -2227,16 +2285,18 @@ function EditablePublishDateCell({
         }}
         onClear={() => void commit("")}
         onKeyDown={(event) => {
-          if (scheduleNavigationDirection(event)) {
+          if (editingNavigationDirection(event)) {
             void commitAndNavigate(event, () => commit(event.currentTarget.value));
             return;
           }
+          const input = event.currentTarget;
           if (event.key === "Enter") {
             event.preventDefault();
-            void commit(event.currentTarget.value);
+            void commit(input.value).then(() => refocusScheduleCell(input));
           } else if (event.key === "Escape") {
             setDraft(toDatetimeLocal(value));
             setEditing(false);
+            refocusScheduleCell(input);
           }
         }}
         disabled={saving}

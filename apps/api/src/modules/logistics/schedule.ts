@@ -91,6 +91,22 @@ function normalizeVisibilityForAudiences<
   return { ...next, visibility: "hidden", publishAt: null };
 }
 
+/**
+ * Hiding an item by hand has to stick. `publish_at` is left behind when the
+ * publisher reveals an item (revealDueScheduleItems), so an item hidden again
+ * later still carries a due date — and the next publisher tick would flip it
+ * straight back to 'shown'. A publish date already in the past has done its
+ * job, so clear it whenever staff hides an item; a *future* one survives,
+ * since "hide it again until Saturday" is a real intent (H59).
+ */
+function clearSpentPublishAt<T extends { visibility: "shown" | "hidden"; publishAt: Date | null }>(
+  next: T,
+  now = new Date(),
+): T {
+  if (next.visibility !== "hidden" || next.publishAt === null) return next;
+  return next.publishAt.getTime() <= now.getTime() ? { ...next, publishAt: null } : next;
+}
+
 function assertWindow(startsAt: Date, endsAt: Date) {
   if (endsAt.getTime() <= startsAt.getTime()) {
     throw new BadRequestError("endsAt must be after startsAt");
@@ -254,14 +270,15 @@ export async function updateScheduleItem(actorId: number | null, id: number, pat
     const nextAudiences = patch.audiences ?? (current.rows[0].audiences as string[]);
     assertWindow(nextStartsAt, nextEndsAt);
     assertScanRequiresParticipantAudience(nextRequiresScan, nextAudiences);
-    const { visibility: nextVisibility, publishAt: nextPublishAt } =
+    const { visibility: nextVisibility, publishAt: nextPublishAt } = clearSpentPublishAt(
       normalizeVisibilityForAudiences(
         {
           visibility: patch.visibility ?? (current.rows[0].visibility as "shown" | "hidden"),
           publishAt: patch.publishAt === undefined ? current.rows[0].publish_at : patch.publishAt,
         },
         nextAudiences,
-      );
+      ),
+    );
 
     const { rows } = await client.query(
       `UPDATE schedule
@@ -365,7 +382,14 @@ export async function setScheduleVisibility(
         ? `UPDATE schedule SET visibility = $2
             WHERE id = ANY($1::int[]) AND array_length(audiences, 1) > 0
           RETURNING id`
-        : `UPDATE schedule SET visibility = $2 WHERE id = ANY($1::int[]) RETURNING id`,
+        : // Same spent-publish_at rule as updateScheduleItem: a due date left
+          // over from an earlier reveal would have the publisher flip these
+          // rows back to 'shown' on its next tick.
+          `UPDATE schedule
+              SET visibility = $2,
+                  publish_at = CASE WHEN publish_at <= now() THEN NULL ELSE publish_at END
+            WHERE id = ANY($1::int[])
+          RETURNING id`,
       [ids, visibility],
     );
     await audit(client, {
