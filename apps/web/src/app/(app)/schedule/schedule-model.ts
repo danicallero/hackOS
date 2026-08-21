@@ -114,6 +114,14 @@ export function scheduleDayLabel(iso: string, language: keyof typeof LOCALE_CODE
   }).format(date);
 }
 
+/** Stable local calendar key used to group schedule rows (H59). */
+export function scheduleDayKey(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
 /** "08:00" time-of-day for a run-of-show table's separate Start/End columns (H59). */
 export function scheduleTimeOfDay(iso: string, language: keyof typeof LOCALE_CODES): string {
   const date = new Date(iso);
@@ -161,8 +169,23 @@ export function withTimeOfDay(iso: string, hhmm: string): string | null {
  */
 export function withDate(iso: string, targetDateIso: string): string | null {
   const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+
+  // A YYYY-MM-DD value is a calendar date, not a UTC timestamp. Parsing it
+  // with `new Date()` would turn midnight into the previous local day in
+  // western time zones, so extract the parts explicitly (H59).
+  const calendarMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(targetDateIso);
+  if (calendarMatch) {
+    date.setFullYear(
+      Number(calendarMatch[1]),
+      Number(calendarMatch[2]) - 1,
+      Number(calendarMatch[3]),
+    );
+    return date.toISOString();
+  }
+
   const target = new Date(targetDateIso);
-  if (Number.isNaN(date.getTime()) || Number.isNaN(target.getTime())) return null;
+  if (Number.isNaN(target.getTime())) return null;
   date.setFullYear(target.getFullYear(), target.getMonth(), target.getDate());
   return date.toISOString();
 }

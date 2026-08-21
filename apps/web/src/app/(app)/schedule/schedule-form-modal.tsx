@@ -63,10 +63,10 @@ export function scheduleItemToForm(item: PublicScheduleItem): ScheduleInput {
     location: item.location ?? "",
     type: item.type ?? "activity",
     requiresScan: item.requiresScan ?? false,
-    startsAt: item.startsAt,
-    endsAt: item.endsAt,
+    startsAt: toDatetimeLocal(item.startsAt),
+    endsAt: toDatetimeLocal(item.endsAt),
     visibility: item.visibility ?? "hidden",
-    publishAt: item.publishAt,
+    publishAt: toDatetimeLocal(item.publishAt),
     audiences: item.audiences ?? [],
     contactNote: item.contactNote ?? "",
     notes: item.notes ?? "",
@@ -209,6 +209,7 @@ export function ScheduleFormModal({
         </Field>
 
         <Field id="schedule-audiences" label={t("audienceLabel")}>
+          <p className="text-muted-foreground -mt-1 text-xs">{t("staffSeeAllHint")}</p>
           <div className="flex flex-wrap gap-4">
             {SCHEDULE_AUDIENCES.map((audience) => (
               <div key={audience} className="flex items-center gap-2">
@@ -223,10 +224,24 @@ export function ScheduleFormModal({
               </div>
             ))}
           </div>
-          <p className="text-muted-foreground text-sm text-pretty">
-            {hasAudience ? t("audienceVisibilityHint") : t("staffOnlyHint")}
-          </p>
         </Field>
+
+        {isParticipant && (
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="requires-scan"
+              checked={isMeal || values.requiresScan === true}
+              disabled={isMeal}
+              onCheckedChange={(checked) =>
+                setValues((v) => ({ ...v, requiresScan: checked === true }))
+              }
+            />
+            <Label htmlFor="requires-scan" className="font-normal">
+              {t("registrableByScanner")}
+              {isMeal ? t("mealsAlwaysRegistrable") : ""}
+            </Label>
+          </div>
+        )}
 
         {hasAudience && (
           <Field id="schedule-visibility" label={t("colVisibility")}>
@@ -245,23 +260,6 @@ export function ScheduleFormModal({
               </SelectContent>
             </Select>
           </Field>
-        )}
-
-        {isParticipant && (
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id="requires-scan"
-              checked={isMeal || values.requiresScan === true}
-              disabled={isMeal}
-              onCheckedChange={(checked) =>
-                setValues((v) => ({ ...v, requiresScan: checked === true }))
-              }
-            />
-            <Label htmlFor="requires-scan" className="font-normal">
-              {t("registrableByScanner")}
-              {isMeal ? t("mealsAlwaysRegistrable") : ""}
-            </Label>
-          </div>
         )}
 
         <div className="grid gap-3 sm:grid-cols-3">
@@ -308,7 +306,7 @@ export function ScheduleFormModal({
             </Button>
           </CollapsibleTrigger>
           <CollapsibleContent className="space-y-5 pt-3">
-            {hasAudience ? (
+            {hasAudience && (
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Checkbox
@@ -342,8 +340,6 @@ export function ScheduleFormModal({
                   </Field>
                 )}
               </div>
-            ) : (
-              <p className="text-muted-foreground text-sm text-pretty">{t("staffOnlyHint")}</p>
             )}
             <Field id="schedule-notes" label={t("internalNotesLabel")}>
               <Textarea

@@ -29,6 +29,7 @@ export function DateTimeInput({
   type = "datetime-local",
   nullOption,
   disabled,
+  onClear,
   ...props
 }: {
   value: string;
@@ -37,6 +38,7 @@ export function DateTimeInput({
   type?: "date" | "datetime-local";
   nullOption?: { label: string; defaultValue?: () => string };
   disabled?: boolean;
+  onClear?: () => void;
 } & Omit<React.ComponentProps<typeof Input>, "value" | "onChange" | "type" | "disabled">) {
   const { t } = useLocale();
   const checkboxId = useId();
@@ -90,7 +92,12 @@ export function DateTimeInput({
             type="button"
             variant="ghost"
             size="icon"
-            onClick={() => onChange("")}
+            tabIndex={-1}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => {
+              onChange("");
+              onClear?.();
+            }}
             className="text-muted-foreground absolute top-1/2 right-1 size-7 -translate-y-1/2"
             aria-label={t("clearDate")}
           >

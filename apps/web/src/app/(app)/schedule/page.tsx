@@ -27,6 +27,7 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
+import { ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import {
   CalendarClockIcon,
@@ -43,7 +44,7 @@ import {
   Trash2Icon,
   XIcon,
 } from "lucide-react";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AccessDenied } from "@/components/common/access-denied";
 import { AlertModal } from "@/components/common/alert-modal";
@@ -60,7 +61,15 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -71,7 +80,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ApiError } from "@/lib/api";
-import { toDatetimeLocal } from "@/lib/datetime";
+import { formatScheduledDateTime, toDatetimeLocal } from "@/lib/datetime";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import {
   logisticsApi,
@@ -93,11 +102,13 @@ import {
   SCHEDULE_AUDIENCES,
   SCHEDULE_STATUS_TONES,
   scheduleAudienceLabel,
+  scheduleDayKey,
   scheduleDayLabel,
   scheduleDuration,
   scheduleStatus,
   scheduleStatusLabel,
   scheduleTimeOfDay,
+  scheduleTypeLabel,
   timeInputValue,
   withDate,
   withTimeOfDay,
@@ -121,7 +132,7 @@ function ownerNames(item: PublicScheduleItem): string {
 
 interface DayGroup {
   label: string;
-  /** One item's startsAt from this day — the reference date drag-and-drop targets shift onto. */
+  /** Local YYYY-MM-DD key; unlike the label it stays unique across locales. */
   date: string;
   items: PublicScheduleItem[];
 }
@@ -129,12 +140,130 @@ interface DayGroup {
 function groupByDay(items: PublicScheduleItem[], language: Parameters<typeof scheduleDayLabel>[1]) {
   const groups: DayGroup[] = [];
   for (const item of items) {
+    const date = scheduleDayKey(item.startsAt);
     const label = scheduleDayLabel(item.startsAt, language);
     const last = groups.at(-1);
-    if (last?.label === label) last.items.push(item);
-    else groups.push({ label, date: item.startsAt, items: [item] });
+    if (last?.date === date) last.items.push(item);
+    else groups.push({ label, date, items: [item] });
   }
   return groups;
+}
+
+function compareScheduleItems(a: PublicScheduleItem, b: PublicScheduleItem): number {
+  const startDelta = new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime();
+  return startDelta || a.id - b.id;
+}
+
+type ScheduleNavigationDirection =
+  | "next"
+  | "previous"
+  | "nextInRow"
+  | "previousInRow"
+  | "nextInColumn"
+  | "previousInColumn";
+
+interface ScheduleCellAddress {
+  row: string;
+  column: string;
+}
+
+function scheduleNavigationDirection(
+  event: React.KeyboardEvent<HTMLElement>,
+): ScheduleNavigationDirection | null {
+  if (event.key === "Tab") return event.shiftKey ? "previous" : "next";
+  if (event.key === "ArrowLeft") return "previousInRow";
+  if (event.key === "ArrowRight") return "nextInRow";
+  if (event.key === "ArrowUp") return "previousInColumn";
+  if (event.key === "ArrowDown") return "nextInColumn";
+  return null;
+}
+
+function scheduleCellAddress(element: HTMLElement): ScheduleCellAddress | null {
+  const cell = element.closest<HTMLElement>('[data-schedule-cell="true"]');
+  if (!cell?.dataset.scheduleRow || !cell.dataset.scheduleColumn) return null;
+  return { row: cell.dataset.scheduleRow, column: cell.dataset.scheduleColumn };
+}
+
+function scheduleCellElements(): HTMLElement[] {
+  return Array.from(document.querySelectorAll<HTMLElement>('[data-schedule-cell="true"]')).filter(
+    (cell) => {
+      const target = cell.querySelector<HTMLElement>('[data-schedule-focusable="true"]');
+      return target !== null && !target.hasAttribute("disabled");
+    },
+  );
+}
+
+function scheduleCellTarget(address: ScheduleCellAddress): HTMLElement | null {
+  const cell = scheduleCellElements().find(
+    (candidate) =>
+      candidate.dataset.scheduleRow === address.row &&
+      candidate.dataset.scheduleColumn === address.column,
+  );
+  return cell?.querySelector<HTMLElement>('[data-schedule-focusable="true"]') ?? null;
+}
+
+function scheduleNavigationTarget(
+  element: HTMLElement,
+  direction: ScheduleNavigationDirection,
+): ScheduleCellAddress | null {
+  const current = scheduleCellAddress(element);
+  if (!current) return null;
+
+  const cells = scheduleCellElements();
+  const currentIndex = cells.findIndex(
+    (cell) =>
+      cell.dataset.scheduleRow === current.row && cell.dataset.scheduleColumn === current.column,
+  );
+  if (currentIndex === -1) return null;
+
+  let candidates: HTMLElement[];
+  let targetIndex: number;
+  if (direction === "next" || direction === "previous") {
+    candidates = cells;
+    targetIndex = currentIndex + (direction === "next" ? 1 : -1);
+  } else if (direction === "nextInRow" || direction === "previousInRow") {
+    candidates = cells.filter((cell) => cell.dataset.scheduleRow === current.row);
+    const rowIndex = candidates.findIndex((cell) => cell.dataset.scheduleColumn === current.column);
+    targetIndex = rowIndex + (direction === "nextInRow" ? 1 : -1);
+  } else {
+    candidates = cells.filter((cell) => cell.dataset.scheduleColumn === current.column);
+    const columnIndex = candidates.findIndex((cell) => cell.dataset.scheduleRow === current.row);
+    targetIndex = columnIndex + (direction === "nextInColumn" ? 1 : -1);
+  }
+
+  const target = candidates[targetIndex];
+  if (!target?.dataset.scheduleRow || !target.dataset.scheduleColumn) return null;
+  return { row: target.dataset.scheduleRow, column: target.dataset.scheduleColumn };
+}
+
+function focusScheduleCell(address: ScheduleCellAddress, activate = true): void {
+  const target = scheduleCellTarget(address);
+  if (!target) return;
+  target.focus();
+  if (activate && target.dataset.scheduleActivate === "true") target.click();
+}
+
+function handleScheduleGridKeyDown(event: React.KeyboardEvent<HTMLElement>): boolean {
+  const direction = scheduleNavigationDirection(event);
+  if (!direction) return false;
+  const target = scheduleNavigationTarget(event.currentTarget, direction);
+  if (!target) return false;
+  event.preventDefault();
+  requestAnimationFrame(() => focusScheduleCell(target));
+  return true;
+}
+
+async function commitAndNavigate(
+  event: React.KeyboardEvent<HTMLElement>,
+  commit: () => Promise<boolean>,
+): Promise<boolean> {
+  const direction = scheduleNavigationDirection(event);
+  if (!direction) return false;
+  const target = scheduleNavigationTarget(event.currentTarget, direction);
+  if (!target) return false;
+  event.preventDefault();
+  if (await commit()) requestAnimationFrame(() => focusScheduleCell(target));
+  return true;
 }
 
 // --- Column configuration (H59): which columns show, and in what order,
@@ -146,6 +275,10 @@ type ColumnId =
   | "starts"
   | "ends"
   | "duration"
+  | "type"
+  | "audience"
+  | "scannable"
+  | "publishAt"
   | "location"
   | "item"
   | "owners"
@@ -156,6 +289,10 @@ const COLUMN_LABEL_KEYS: Record<ColumnId, MessageKey> = {
   starts: "colStarts",
   ends: "endsLabel",
   duration: "colDuration",
+  type: "scheduleKindColumn",
+  audience: "scheduleAudienceColumn",
+  scannable: "scheduleScannableColumn",
+  publishAt: "schedulePublishDateColumn",
   location: "locationLabel",
   item: "colItem",
   owners: "ownersLabel",
@@ -167,6 +304,10 @@ const DEFAULT_COLUMN_WIDTHS: Record<ColumnId, number> = {
   starts: 72,
   ends: 72,
   duration: 64,
+  type: 124,
+  audience: 150,
+  scannable: 96,
+  publishAt: 156,
   location: 140,
   item: 320,
   owners: 180,
@@ -181,6 +322,10 @@ const DEFAULT_COLUMN_ORDER: ColumnId[] = [
   "starts",
   "ends",
   "duration",
+  "type",
+  "audience",
+  "scannable",
+  "publishAt",
   "location",
   "item",
   "owners",
@@ -189,6 +334,17 @@ const DEFAULT_COLUMN_ORDER: ColumnId[] = [
 ];
 
 const REQUIRED_COLUMNS: ColumnId[] = ["item"];
+const KEYBOARD_COLUMNS: ColumnId[] = [
+  "starts",
+  "ends",
+  "type",
+  "audience",
+  "scannable",
+  "publishAt",
+  "location",
+  "owners",
+  "notes",
+];
 
 interface TableConfig {
   order: ColumnId[];
@@ -201,10 +357,14 @@ const DEFAULT_TABLE_CONFIG: TableConfig = {
   hidden: [],
   widths: DEFAULT_COLUMN_WIDTHS,
 };
-const STORAGE_KEY = "hackos:scheduleTable:v3";
+const STORAGE_KEY = "hackos:scheduleTable:v4";
 
 function isColumnId(value: unknown): value is ColumnId {
   return typeof value === "string" && value in COLUMN_LABEL_KEYS;
+}
+
+function isKeyboardColumn(id: ColumnId): boolean {
+  return KEYBOARD_COLUMNS.includes(id);
 }
 
 function clampWidth(width: number): number {
@@ -569,9 +729,13 @@ export default function SchedulePage() {
   // startsAt would spuriously fail once its shifted date lands after the
   // still-old endsAt.
   const moveItemToDate = useCallback(
-    async (item: PublicScheduleItem, targetDateIso: string) => {
-      const nextStartsAt = withDate(item.startsAt, targetDateIso);
-      const nextEndsAt = withDate(item.endsAt, targetDateIso);
+    async (item: PublicScheduleItem, targetDate: string) => {
+      const nextStartsAt = withDate(item.startsAt, targetDate);
+      const durationMs = new Date(item.endsAt).getTime() - new Date(item.startsAt).getTime();
+      const nextEndsAt =
+        nextStartsAt && Number.isFinite(durationMs)
+          ? new Date(new Date(nextStartsAt).getTime() + durationMs).toISOString()
+          : null;
       if (!nextStartsAt || !nextEndsAt) return;
       if (nextStartsAt === item.startsAt && nextEndsAt === item.endsAt) return;
       try {
@@ -598,8 +762,8 @@ export default function SchedulePage() {
       setMoveToDateItem(item);
       return;
     }
-    const targetDateIso = (over.data.current as { date?: string } | undefined)?.date;
-    if (targetDateIso) void moveItemToDate(item, targetDateIso);
+    const targetDate = (over.data.current as { date?: string } | undefined)?.date;
+    if (targetDate) void moveItemToDate(item, targetDate);
   }
 
   const filtered = useMemo(() => {
@@ -617,7 +781,10 @@ export default function SchedulePage() {
         return audiences.some((a) => audienceFilter.has(a));
       });
     }
-    return list;
+    // groupByDay merges same-day items only when they're adjacent in this
+    // list — sort chronologically first so every day forms exactly one
+    // contiguous (and correctly ordered) group.
+    return [...list].sort(compareScheduleItems);
   }, [items, query, audienceFilter, staffOnlyFilter]);
 
   const groups = useMemo(() => groupByDay(filtered, language), [filtered, language]);
@@ -813,7 +980,7 @@ export default function SchedulePage() {
                   </TableRow>
                 ) : (
                   groups.map((group) => (
-                    <Fragment key={group.label}>
+                    <Fragment key={group.date}>
                       <DayGroupHeaderRow
                         group={group}
                         colSpan={visibleColumns.length + 2}
@@ -838,6 +1005,7 @@ export default function SchedulePage() {
                           onOpenEdit={() => setEditingItem(item)}
                           onDuplicate={() => setDuplicatingItem(item)}
                           onDelete={() => setDeletingItem(item)}
+                          dayKey={scheduleDayKey(item.startsAt)}
                         />
                       ))}
                     </Fragment>
@@ -957,7 +1125,7 @@ function MoveToDateModal({
 }: {
   item: PublicScheduleItem;
   onOpenChange: (open: boolean) => void;
-  onConfirm: (targetDateIso: string) => Promise<void>;
+  onConfirm: (targetDate: string) => Promise<void>;
 }) {
   const { t } = useLocale();
   const [value, setValue] = useState(() => toDatetimeLocal(item.startsAt).slice(0, 10));
@@ -967,7 +1135,7 @@ function MoveToDateModal({
     if (!value) return;
     setPending(true);
     try {
-      await onConfirm(new Date(value).toISOString());
+      await onConfirm(value);
     } finally {
       setPending(false);
     }
@@ -1094,6 +1262,7 @@ function NewDayDropzoneRow({ colSpan }: { colSpan: number }) {
 
 function ActivityRow({
   item,
+  dayKey,
   columns,
   canEdit,
   selected,
@@ -1104,6 +1273,7 @@ function ActivityRow({
   onDelete,
 }: {
   item: PublicScheduleItem;
+  dayKey: string;
   columns: ColumnId[];
   canEdit: boolean;
   selected: boolean;
@@ -1115,25 +1285,101 @@ function ActivityRow({
 }) {
   const { t, language } = useLocale();
 
-  async function saveTime(field: "startsAt" | "endsAt", hhmm: string) {
+  async function saveTime(field: "startsAt" | "endsAt", hhmm: string): Promise<boolean> {
     const next = withTimeOfDay(item[field], hhmm);
-    if (!next || next === item[field]) return;
-    const updated = await logisticsApi.updateSchedule(item.id, { [field]: next });
-    onUpdate(updated);
+    if (!next || next === item[field]) return true;
+    try {
+      const updated = await logisticsApi.updateSchedule(item.id, { [field]: next });
+      onUpdate(updated);
+      return true;
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      return false;
+    }
   }
 
-  async function saveLocation(next: string) {
+  async function saveLocation(next: string): Promise<boolean> {
     const trimmed = next.trim();
-    if (trimmed === (item.location ?? "")) return;
-    const updated = await logisticsApi.updateSchedule(item.id, { location: trimmed || null });
-    onUpdate(updated);
+    if (trimmed === (item.location ?? "")) return true;
+    try {
+      const updated = await logisticsApi.updateSchedule(item.id, { location: trimmed || null });
+      onUpdate(updated);
+      return true;
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      return false;
+    }
   }
 
-  async function saveNotes(next: string) {
+  async function saveNotes(next: string): Promise<boolean> {
     const trimmed = next.trim();
-    if (trimmed === (item.notes ?? "")) return;
-    const updated = await logisticsApi.updateSchedule(item.id, { notes: trimmed || null });
-    onUpdate(updated);
+    if (trimmed === (item.notes ?? "")) return true;
+    try {
+      const updated = await logisticsApi.updateSchedule(item.id, { notes: trimmed || null });
+      onUpdate(updated);
+      return true;
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      return false;
+    }
+  }
+
+  async function saveType(next: string | null): Promise<boolean> {
+    if (next === (item.type ?? null)) return true;
+    if (next === "meal" && !(item.audiences ?? []).includes("participant")) {
+      toast.error(t("mealNeedsParticipantAudience"));
+      return false;
+    }
+    try {
+      const updated = await logisticsApi.updateSchedule(item.id, { type: next });
+      onUpdate(updated);
+      return true;
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      return false;
+    }
+  }
+
+  async function saveAudiences(next: ScheduleAudience[]): Promise<boolean> {
+    if (item.type === "meal" && !next.includes("participant")) {
+      toast.error(t("mealNeedsParticipantAudience"));
+      return false;
+    }
+    const requiresScan = next.includes("participant") ? item.requiresScan === true : false;
+    try {
+      const updated = await logisticsApi.updateSchedule(item.id, {
+        audiences: next,
+        requiresScan,
+      });
+      onUpdate(updated);
+      return true;
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      return false;
+    }
+  }
+
+  async function saveScannable(next: boolean): Promise<boolean> {
+    try {
+      const updated = await logisticsApi.updateSchedule(item.id, { requiresScan: next });
+      onUpdate(updated);
+      return true;
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      return false;
+    }
+  }
+
+  async function savePublishAt(next: string | null): Promise<boolean> {
+    if (next === item.publishAt) return true;
+    try {
+      const updated = await logisticsApi.updateSchedule(item.id, { publishAt: next });
+      onUpdate(updated);
+      return true;
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      return false;
+    }
   }
 
   const status = scheduleStatus(item);
@@ -1141,6 +1387,19 @@ function ActivityRow({
     id: `item-${item.id}`,
     disabled: !canEdit,
   });
+  const { setNodeRef: setDropNodeRef, isOver } = useDroppable({
+    id: `row-drop-${item.id}`,
+    disabled: !canEdit,
+    data: { date: dayKey },
+  });
+
+  const setRowNodeRef = useCallback(
+    (node: HTMLTableRowElement | null) => {
+      setNodeRef(node);
+      setDropNodeRef(node);
+    },
+    [setNodeRef, setDropNodeRef],
+  );
 
   function renderCell(id: ColumnId) {
     switch (id) {
@@ -1166,6 +1425,64 @@ function ActivityRow({
         );
       case "duration":
         return scheduleDuration(item.startsAt, item.endsAt);
+      case "type":
+        return canEdit ? (
+          <EditableSelectCell
+            value={item.type}
+            options={[...ACTIVITY_KINDS]}
+            labelForOption={(value) => scheduleTypeLabel(value, t)}
+            emptyLabel={t("noTypeOption")}
+            fieldLabel={t("scheduleKindColumn")}
+            onSave={saveType}
+          />
+        ) : item.type ? (
+          scheduleTypeLabel(item.type, t)
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        );
+      case "audience":
+        return canEdit ? (
+          <EditableAudienceCell
+            audiences={item.audiences ?? []}
+            fieldLabel={t("scheduleAudienceColumn")}
+            onSave={saveAudiences}
+          />
+        ) : (
+          audienceSummary(item.audiences ?? [], t)
+        );
+      case "scannable":
+        return canEdit ? (
+          <EditableScannableCell
+            checked={item.requiresScan === true}
+            disabled={item.type === "meal" || !(item.audiences ?? []).includes("participant")}
+            disabledHint={
+              item.type === "meal"
+                ? t("mealsAlwaysRegistrable")
+                : !(item.audiences ?? []).includes("participant")
+                  ? t("scannableRequiresParticipant")
+                  : undefined
+            }
+            fieldLabel={t("scheduleScannableColumn")}
+            onSave={saveScannable}
+          />
+        ) : item.requiresScan ? (
+          t("yesLabel")
+        ) : (
+          t("noLabel")
+        );
+      case "publishAt":
+        return canEdit ? (
+          <EditablePublishDateCell
+            value={item.publishAt}
+            locale={language}
+            fieldLabel={t("schedulePublishDateColumn")}
+            onSave={savePublishAt}
+          />
+        ) : item.publishAt ? (
+          formatScheduledDateTime(item.publishAt, language)
+        ) : (
+          t("notSet")
+        );
       case "location":
         return canEdit ? (
           <EditableTextCell
@@ -1214,7 +1531,7 @@ function ActivityRow({
 
   return (
     <TableRow
-      ref={setNodeRef}
+      ref={setRowNodeRef}
       data-state={selected ? "selected" : undefined}
       style={
         transform
@@ -1224,7 +1541,10 @@ function ActivityRow({
             }
           : undefined
       }
-      className={cn(isDragging && "z-10 opacity-60 shadow-lg")}
+      className={cn(
+        isDragging && "z-10 opacity-60 shadow-lg",
+        isOver && !isDragging && "bg-muted/50",
+      )}
     >
       {canEdit && (
         <TableCell>
@@ -1247,7 +1567,13 @@ function ActivityRow({
         </TableCell>
       )}
       {columns.map((id) => (
-        <TableCell key={id} className="relative">
+        <TableCell
+          key={id}
+          className="relative"
+          data-schedule-cell={canEdit && isKeyboardColumn(id) ? "true" : undefined}
+          data-schedule-row={canEdit && isKeyboardColumn(id) ? item.id : undefined}
+          data-schedule-column={canEdit && isKeyboardColumn(id) ? id : undefined}
+        >
           {renderCell(id)}
         </TableCell>
       ))}
@@ -1305,6 +1631,8 @@ function StatusPill({
   return badge;
 }
 
+type CellSaveResult = boolean | undefined;
+
 /**
  * Click (mouse or keyboard Enter/Space on the focused trigger) to edit;
  * Enter or blur commits, Escape reverts — the same contract for every
@@ -1317,8 +1645,9 @@ function EditableTextCell({
 }: {
   value: string;
   placeholder?: string;
-  onSave: (next: string) => Promise<void>;
+  onSave: (next: string) => Promise<CellSaveResult>;
 }) {
+  const { t } = useLocale();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const [saving, setSaving] = useState(false);
@@ -1332,13 +1661,19 @@ function EditableTextCell({
     if (editing) inputRef.current?.focus();
   }, [editing]);
 
-  async function commit() {
+  async function commit(nextDraft = draft): Promise<boolean> {
+    if (saving) return false;
     setSaving(true);
     try {
-      await onSave(draft);
+      const result = await onSave(nextDraft);
+      const saved = result !== false;
+      if (saved) setEditing(false);
+      return saved;
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      return false;
     } finally {
       setSaving(false);
-      setEditing(false);
     }
   }
 
@@ -1347,6 +1682,9 @@ function EditableTextCell({
       <button
         type="button"
         onClick={() => setEditing(true)}
+        onKeyDown={handleScheduleGridKeyDown}
+        data-schedule-focusable="true"
+        data-schedule-activate="true"
         className="hover:bg-muted -mx-1 block w-full truncate rounded px-1 py-0.5 text-left"
       >
         {value || <span className="text-muted-foreground">{placeholder ?? "—"}</span>}
@@ -1365,12 +1703,17 @@ function EditableTextCell({
         ref={inputRef}
         value={draft}
         disabled={saving}
+        data-schedule-focusable="true"
         onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
+        onBlur={(event) => void commit(event.currentTarget.value)}
         onKeyDown={(e) => {
+          if (scheduleNavigationDirection(e)) {
+            void commitAndNavigate(e, () => commit(e.currentTarget.value));
+            return;
+          }
           if (e.key === "Enter") {
             e.preventDefault();
-            commit();
+            void commit(e.currentTarget.value);
           } else if (e.key === "Escape") {
             setDraft(value);
             setEditing(false);
@@ -1395,8 +1738,9 @@ function EditableTimeCell({
   onSave,
 }: {
   value: string;
-  onSave: (next: string) => Promise<void>;
+  onSave: (next: string) => Promise<CellSaveResult>;
 }) {
+  const { t } = useLocale();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const [saving, setSaving] = useState(false);
@@ -1410,18 +1754,24 @@ function EditableTimeCell({
     if (editing) inputRef.current?.focus();
   }, [editing]);
 
-  async function commit() {
-    if (!TIME_24H_PATTERN.test(draft)) {
+  async function commit(nextDraft = draft): Promise<boolean> {
+    if (saving) return false;
+    if (!TIME_24H_PATTERN.test(nextDraft)) {
       setDraft(value);
       setEditing(false);
-      return;
+      return false;
     }
     setSaving(true);
     try {
-      await onSave(draft);
+      const result = await onSave(nextDraft);
+      const saved = result !== false;
+      if (saved) setEditing(false);
+      return saved;
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      return false;
     } finally {
       setSaving(false);
-      setEditing(false);
     }
   }
 
@@ -1430,6 +1780,9 @@ function EditableTimeCell({
       <button
         type="button"
         onClick={() => setEditing(true)}
+        onKeyDown={handleScheduleGridKeyDown}
+        data-schedule-focusable="true"
+        data-schedule-activate="true"
         className="hover:bg-muted -mx-1 w-full rounded px-1 py-0.5 text-left"
       >
         {value}
@@ -1448,18 +1801,326 @@ function EditableTimeCell({
         placeholder="HH:MM"
         value={draft}
         disabled={saving}
+        data-schedule-focusable="true"
         onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
+        onBlur={(event) => void commit(event.currentTarget.value)}
         onKeyDown={(e) => {
+          if (scheduleNavigationDirection(e)) {
+            void commitAndNavigate(e, () => commit(e.currentTarget.value));
+            return;
+          }
           if (e.key === "Enter") {
             e.preventDefault();
-            commit();
+            void commit(e.currentTarget.value);
           } else if (e.key === "Escape") {
             setDraft(value);
             setEditing(false);
           }
         }}
         className="h-7 w-full border-0 bg-transparent font-mono text-sm tabular-nums shadow-none"
+      />
+    </div>
+  );
+}
+
+const EMPTY_SCHEDULE_TYPE = "__schedule_type_none__";
+
+function EditableSelectCell({
+  value,
+  options,
+  labelForOption,
+  emptyLabel,
+  fieldLabel,
+  onSave,
+}: {
+  value: string | null | undefined;
+  options: string[];
+  labelForOption: (value: string) => string;
+  emptyLabel: string;
+  fieldLabel: string;
+  onSave: (next: string | null) => Promise<CellSaveResult>;
+}) {
+  const { t } = useLocale();
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  async function change(next: string) {
+    setSaving(true);
+    try {
+      const result = await onSave(next === EMPTY_SCHEDULE_TYPE ? null : next);
+      if (result !== false) setOpen(false);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Select
+      value={value ?? EMPTY_SCHEDULE_TYPE}
+      open={open}
+      onOpenChange={(next) => {
+        if (!saving) setOpen(next);
+      }}
+      onValueChange={(next) => void change(next)}
+    >
+      <SelectTrigger
+        size="sm"
+        disabled={saving}
+        aria-label={t("editScheduleFieldAria", { field: fieldLabel })}
+        onKeyDown={(event) => {
+          // Once the menu is open, the native select keyboard controls the
+          // options. The table-level arrows apply to the closed cell trigger.
+          if (open && event.key !== "Tab") return;
+          handleScheduleGridKeyDown(event);
+        }}
+        data-schedule-focusable="true"
+        data-schedule-activate="true"
+        className="w-full border-0 bg-transparent px-1 shadow-none"
+      >
+        <SelectValue placeholder={emptyLabel} />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={EMPTY_SCHEDULE_TYPE}>{emptyLabel}</SelectItem>
+        {options.map((option) => (
+          <SelectItem key={option} value={option}>
+            {labelForOption(option)}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function audienceSummary(
+  audiences: ScheduleAudience[],
+  t: ReturnType<typeof useLocale>["t"],
+): string {
+  if (audiences.length === 0) return t("audienceFilterStaffOnly");
+  return audiences.map((audience) => scheduleAudienceLabel(audience, t)).join(", ");
+}
+
+function EditableAudienceCell({
+  audiences,
+  fieldLabel,
+  onSave,
+}: {
+  audiences: ScheduleAudience[];
+  fieldLabel: string;
+  onSave: (next: ScheduleAudience[]) => Promise<CellSaveResult>;
+}) {
+  const { t } = useLocale();
+  const inputId = useId();
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<ScheduleAudience[]>(audiences);
+  const [saving, setSaving] = useState(false);
+
+  function setPopoverOpen(next: boolean) {
+    if (next) setDraft(audiences);
+    setOpen(next);
+  }
+
+  function toggle(audience: ScheduleAudience, checked: boolean) {
+    setDraft((current) => {
+      const next = new Set(current);
+      if (checked) next.add(audience);
+      else next.delete(audience);
+      return SCHEDULE_AUDIENCES.filter((option) => next.has(option));
+    });
+  }
+
+  async function apply() {
+    setSaving(true);
+    try {
+      const result = await onSave(draft);
+      if (result !== false) setOpen(false);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setPopoverOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          disabled={saving}
+          className="hover:bg-muted -mx-1 block w-full truncate rounded px-1 py-0.5 text-left"
+          aria-label={t("editScheduleFieldAria", { field: fieldLabel })}
+          onKeyDown={handleScheduleGridKeyDown}
+          data-schedule-focusable="true"
+          data-schedule-activate="true"
+        >
+          {audienceSummary(audiences, t)}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-64 space-y-3">
+        <div className="space-y-1">
+          {SCHEDULE_AUDIENCES.map((audience) => (
+            <div key={audience} className="flex items-center gap-2 py-1 text-sm">
+              <Checkbox
+                id={`${inputId}-${audience}`}
+                checked={draft.includes(audience)}
+                disabled={saving}
+                onCheckedChange={(checked) => toggle(audience, checked === true)}
+              />
+              <Label htmlFor={`${inputId}-${audience}`}>{scheduleAudienceLabel(audience, t)}</Label>
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-end gap-2 border-t pt-3">
+          <Button type="button" size="sm" variant="outline" onClick={() => setOpen(false)}>
+            {t("cancel")}
+          </Button>
+          <Button type="button" size="sm" disabled={saving} onClick={() => void apply()}>
+            {t("applyAction")}
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function EditableScannableCell({
+  checked,
+  disabled,
+  disabledHint,
+  fieldLabel,
+  onSave,
+}: {
+  checked: boolean;
+  disabled: boolean;
+  disabledHint?: string;
+  fieldLabel: string;
+  onSave: (next: boolean) => Promise<CellSaveResult>;
+}) {
+  const { t } = useLocale();
+  const inputId = useId();
+  const [saving, setSaving] = useState(false);
+
+  async function change(next: boolean) {
+    setSaving(true);
+    try {
+      await onSave(next);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div
+      className="flex min-h-8 items-center gap-2 rounded px-1 py-0.5 text-sm"
+      title={disabledHint}
+    >
+      <Checkbox
+        id={inputId}
+        checked={checked}
+        disabled={disabled || saving}
+        aria-label={fieldLabel}
+        onKeyDown={handleScheduleGridKeyDown}
+        onCheckedChange={(next) => void change(next === true)}
+        data-schedule-focusable="true"
+      />
+      <Label htmlFor={inputId}>{checked ? t("yesLabel") : t("noLabel")}</Label>
+    </div>
+  );
+}
+
+function EditablePublishDateCell({
+  value,
+  locale,
+  fieldLabel,
+  onSave,
+}: {
+  value: string | null;
+  locale: string;
+  fieldLabel: string;
+  onSave: (next: string | null) => Promise<CellSaveResult>;
+}) {
+  const { t } = useLocale();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(() => toDatetimeLocal(value));
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!editing) setDraft(toDatetimeLocal(value));
+  }, [value, editing]);
+
+  async function commit(nextDraft = draft): Promise<boolean> {
+    if (saving) return false;
+    const parsed = nextDraft ? new Date(nextDraft) : null;
+    if (parsed && Number.isNaN(parsed.getTime())) return false;
+    const next = parsed ? parsed.toISOString() : null;
+    if (next === value) {
+      setEditing(false);
+      return true;
+    }
+    setSaving(true);
+    try {
+      const result = await onSave(next);
+      const saved = result !== false;
+      if (saved) setEditing(false);
+      return saved;
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        onKeyDown={handleScheduleGridKeyDown}
+        data-schedule-focusable="true"
+        data-schedule-activate="true"
+        className="hover:bg-muted -mx-1 block w-full truncate rounded px-1 py-0.5 text-left"
+        aria-label={t("editScheduleFieldAria", { field: fieldLabel })}
+      >
+        {value ? formatScheduledDateTime(value, locale) : t("notSet")}
+      </button>
+    );
+  }
+
+  return (
+    <div
+      className="bg-popover border-border absolute inset-y-0 left-0 z-20 flex items-center rounded-md border shadow-md"
+      style={{ width: "max(100%, 15rem)" }}
+    >
+      <DateTimeInput
+        value={draft}
+        onChange={setDraft}
+        onBlur={(event) => {
+          const next = event.currentTarget.value;
+          setDraft(next);
+          void commit(next);
+        }}
+        onClear={() => void commit("")}
+        onKeyDown={(event) => {
+          if (scheduleNavigationDirection(event)) {
+            void commitAndNavigate(event, () => commit(event.currentTarget.value));
+            return;
+          }
+          if (event.key === "Enter") {
+            event.preventDefault();
+            void commit(event.currentTarget.value);
+          } else if (event.key === "Escape") {
+            setDraft(toDatetimeLocal(value));
+            setEditing(false);
+          }
+        }}
+        disabled={saving}
+        aria-label={fieldLabel}
+        data-schedule-focusable="true"
+        className="h-7 border-0 bg-transparent shadow-none"
       />
     </div>
   );
@@ -1525,6 +2186,9 @@ function EditableOwnersCell({
         <button
           type="button"
           className="hover:bg-muted -mx-1 block w-full truncate rounded px-1 py-0.5 text-left"
+          onKeyDown={handleScheduleGridKeyDown}
+          data-schedule-focusable="true"
+          data-schedule-activate="true"
         >
           {ownerNames(item) || <span className="text-muted-foreground">{t("noOwnersYet")}</span>}
         </button>
