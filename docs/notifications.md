@@ -125,3 +125,17 @@ exclusivity is visible in the UI, channel checkboxes, and a publication
 section whose fields change shape depending on `screenPlacement`/targeting
 mode). There are no dedicated `/announcements/new` or `/announcements/[id]`
 routes.
+
+## Mobile admin UI
+
+Reached from the Notifications tab (`apps/mobile/app/(tabs)/notifications.tsx`):
+holding `ANNOUNCEMENTS_MANAGE` adds a third "Manage" segment next to
+Messages/Preferences, with a header Add button and
+`ManageAnnouncementsView` (`components/announcement-manage-view.tsx`) — a
+swipeable list (`ScheduleSwipeRow`, reused from the Schedule tab) whose
+edit/Add actions open `AnnouncementFormModal`
+(`components/announcement-form-modal.tsx`), which mirrors the web admin
+form field-for-field, same as `ScheduleFormModal` does for schedule items.
+`lib/announcements-admin.ts` holds the admin API client, including
+`fetchAnnouncementRecipientCandidates` against the `ANNOUNCEMENTS_MANAGE`-scoped
+candidates endpoint above.

@@ -40,6 +40,7 @@ documented in full in its own section below.
 | H38 | Queue status/ETA, pre-alert, call notice | [Participant screens](#participant-screens) |
 | H29–H31 | Queue operations: rooms, called teams, re-notification | [Queue operations](#queue-operations) |
 | H51 | Notification channel preferences per category | [Participant screens](#participant-screens) |
+| H50 | Announcement admin CRUD (audience/recipient targeting, channels, screen placement) | [Participant screens](#participant-screens) |
 | H59 | Horario admin CRUD, audience filter, category notifications | [Participant screens](#participant-screens) |
 | H28 | Apple & Google Wallet, badge-rotation invalidation | [Participant screens](#participant-screens) |
 | H22 | Accreditation scanner | [Scanner](#scanner) |
@@ -267,7 +268,21 @@ route below. No migration needed.
   (below) and also polls `GET /api/queue/me` every 15s while focused as a
   fallback. `notifications.tsx` pages past the initial 20 inbox messages on
   demand, allows an expanded message to be deleted after native confirmation,
-  and mirrors the web activity/kind reminder preferences.
+  and mirrors the web activity/kind reminder preferences. A third "Manage"
+  segment (`ANNOUNCEMENTS_MANAGE` only) adds announcement administration —
+  `components/announcement-manage-view.tsx` lists admin announcements with
+  the same swipeable edit/delete rows as Schedule
+  (`components/schedule-swipe-row.tsx`, reused as-is), and both the header
+  Add button and a row's swipe-to-edit open
+  `components/announcement-form-modal.tsx`, which mirrors the web admin's
+  `AnnouncementFormModal` field-for-field (H50, DELTA 0722) — same
+  audience/specific-recipient targeting exclusivity, per-announcement
+  channel candidates, and the notify-only-vs-screen-placed window
+  distinction. The recipient picker hits
+  `GET /api/announcements/recipient-candidates`
+  (`lib/announcements-admin.ts`'s `fetchAnnouncementRecipientCandidates`),
+  scoped to `ANNOUNCEMENTS_MANAGE` rather than the broader `USERS_READ`,
+  mirroring `/api/schedule/owner-candidates`.
 - `app/(tabs)/schedule.tsx` — the participant agenda, grouped by day. On first
   load it opens (unanimated) on whatever is happening now — the active card, or
   the "Now" divider drawn between entries when nothing is running — instead of
