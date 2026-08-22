@@ -10,6 +10,27 @@ repository (Expo SDK 57, React Native 0.86, pnpm 10). Store rules and build
 images change independently of this repository. Re-check the linked official
 Expo, Apple, and Google documentation before each production release.
 
+## Contents
+
+- [Current release readiness](#current-release-readiness)
+- [1. Required accounts and local tools](#1-required-accounts-and-local-tools)
+- [2. Install and run the full stack](#2-install-and-run-the-full-stack)
+- [3. App identity and Expo project setup](#3-app-identity-and-expo-project-setup)
+- [4. EAS environments and API URLs](#4-eas-environments-and-api-urls)
+- [5. Configure build and submission profiles](#5-configure-build-and-submission-profiles)
+- [6. Prebuild and generated native projects](#6-prebuild-and-generated-native-projects)
+- [7. Compile and run locally](#7-compile-and-run-locally)
+- [8. EAS preview and production builds](#8-eas-preview-and-production-builds)
+- [9. Signing credentials and certificates](#9-signing-credentials-and-certificates)
+- [10. Push notification credentials](#10-push-notification-credentials)
+- [11. Apple Wallet certificates are separate](#11-apple-wallet-certificates-are-separate)
+- [12. Icons, splash screen, and store artwork](#12-icons-splash-screen-and-store-artwork)
+- [13. Privacy, permissions, and store declarations](#13-privacy-permissions-and-store-declarations)
+- [14. Create the store records](#14-create-the-store-records)
+- [15. Submit builds](#15-submit-builds)
+- [16. Release acceptance checklist](#16-release-acceptance-checklist)
+- [17. After release](#17-after-release)
+
 ## Current release readiness
 
 As of this document's last update, do **not** submit the app to either store
@@ -19,10 +40,6 @@ without resolving these items:
   `com.hackudc.os`. Confirm that this is the permanent, organization-owned
   identifier before creating the store records; it cannot be renamed after
   release without creating a different app.
-- The project is not linked to an EAS project: `extra.eas.projectId` is absent.
-  This ID is also used to attribute Expo push tokens to the correct project.
-- `apps/mobile/eas.json` does not exist, so development, preview, production,
-  and submission profiles are not configured.
 - The PNGs have technically valid dimensions, but must be reviewed as final
   hackOS artwork, at actual launcher sizes, on light/dark device backgrounds.
 - A dedicated Android notification status icon is not configured. Create a
@@ -35,8 +52,11 @@ without resolving these items:
 - Create stable reviewer accounts with participant and staff scanner
   capabilities, plus safe sample ticket/badge QR codes and written review
   instructions. Keep the review backend online for the entire review window.
-- Real-device acceptance is still required for offline queue persistence,
-  camera permissions, APNs/FCM, authenticated SSE, and Apple/Google Wallet.
+- Offline queue persistence, camera permissions, APNs/FCM, authenticated SSE,
+  and Apple/Google Wallet have been verified on real iOS/Android hardware.
+  The simulator/emulator cannot substitute for this: push delivery, camera
+  capture, and Wallet integration don't function there, so any future
+  behavior change in these areas needs a real-device re-check before release.
 
 Treat bundle identifiers, Android package names, and signing keys as durable
 production identity, not per-developer settings. Changing them creates a
@@ -504,14 +524,14 @@ a clean physical-device build and installation succeeds.
 
 ### `expo start` exits silently with no error (EMFILE)
 
-Symptom: `pnpm exec expo start` (or `npx expo start`) prints the Metro banner
+Symptom: `pnpm exec expo start` prints the Metro banner
 and then returns straight to the shell prompt — no QR code, no dev menu, no
 visible error, even with `EXPO_DEBUG=true`. Re-running with the raw `debug`
 namespace open shows the actual cause was there all along, just past what a
 plain terminal paste usually captures:
 
 ```sh
-DEBUG='Metro:*,expo:*' npx expo start
+DEBUG='Metro:*,expo:*' pnpm exec expo start
 ```
 
 ```
@@ -534,7 +554,7 @@ Fix:
 ```sh
 ulimit -n 10240          # raise the fd ceiling for this shell
 echo 'ulimit -n 10240' >> ~/.zshrc   # make it permanent
-npx expo start
+pnpm exec expo start
 ```
 
 If it still exits silently right after raising the limit, the crashed

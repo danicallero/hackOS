@@ -19,6 +19,16 @@ Use an accessible role/name first; add a selector there only when a flow needs
 a stable cross-locale contract. Do not select by CSS classes, layout text, or
 component implementation details.
 
+## Contents
+
+- [Test layers](#test-layers)
+- [Browser tests](#browser-tests)
+- [Native mobile tests](#native-mobile-tests)
+- [Adding a flow](#adding-a-flow)
+- [Screenshots on UI PRs](#screenshots-on-ui-prs)
+  - [Native: build, drive, capture](#native-build-drive-capture)
+  - [Posting them](#posting-them)
+
 ## Browser tests
 
 Install the Playwright browsers once:
