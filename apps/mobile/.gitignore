@@ -50,3 +50,7 @@ yarn-error.*
 # native module build output (e.g. modules/*/android/build, modules/*/ios/build)
 modules/**/build/
 modules/**/.cxx/
+
+# local EAS/simulator build artifacts
+build-*.tar.gz
+*.app/
