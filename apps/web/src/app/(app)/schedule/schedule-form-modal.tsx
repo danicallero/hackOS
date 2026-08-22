@@ -262,7 +262,15 @@ export function ScheduleFormModal({
           </Field>
         )}
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        {/*
+          Each field now renders a native date input plus a native time
+          input (see DateTimeInput) — three columns need more room than the
+          `sm` breakpoint (640px) guarantees inside this modal, or the two
+          controls collapse into unreadable clipped boxes without actually
+          overflowing the modal (H59 follow-up, #490). `lg` lines up with
+          where the xl modal is reliably at its full 896px cap.
+        */}
+        <div className="grid gap-3 lg:grid-cols-3">
           <Field id="schedule-starts" label={t("colStarts")} className="min-w-0">
             <DateTimeInput
               id="schedule-starts"
