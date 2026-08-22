@@ -1,6 +1,6 @@
 # Mobile app (`apps/mobile`)
 
-Native Expo Router app for issue #73: Better Auth session continuity,
+Native Expo Router client for hackOS: Better Auth session continuity,
 capability-driven tabs, participant-facing screens, authenticated realtime,
 and offline SQLite scanners for accreditation, badge rotation, presence,
 meals, and registrable activities.
@@ -11,24 +11,42 @@ store assets, submission, and the release checklist, see
 The browser/native UI test framework and device prerequisites are in
 [`ui-testing.md`](./ui-testing.md).
 
-## Story coverage registry (issue #73: H4, H22–H26, H28–H31, H38, H51, H55)
+## Contents
 
-| Story | Scope | Status | Notes |
-| --- | --- | --- | --- |
-| H4 | Login/logout, session persists via Better Auth Expo + `expo-secure-store` | ✅ Done | `lib/auth-client.ts`, `app/(auth)/sign-in.tsx`. Server-side logout (session revocation) reuses the existing Better Auth endpoint — no mobile-specific work needed. A `GET /api/me` fetch that fails without confirming the session is invalid (no connectivity, timeout, 5xx) falls back to the last profile cached on-device (`lib/use-me.ts`, `lib/offline-cache.ts`) instead of blocking navigation behind "verifying session" forever — this is what lets a staff member with a stale session keep using the app (and the already-offline-capable scanner queue, `lib/scanner-db.ts`/`lib/scanner-sync.ts`) with no connection. Only a confirmed `401` clears the cached profile and routes to `components/session-state.tsx`'s retry/sign-out screen. `expo-network`'s `addNetworkStateListener` retries the live fetch as soon as connectivity returns, in addition to the existing foreground refetch. |
-| H55 | One app, capability-driven tabs, permission changes apply without reinstall | ✅ Done | `lib/tabs.ts` + `app/(tabs)/_layout.tsx`. Five-item native bar (`UITabBarController` collapses a sixth item into iOS's own "More" screen). Participants: schedule/queue/wallet/notifications + Account. Operators: schedule/**Scanner**/Activities (`activity:scan` only)/notifications + the "Others" dropdown selector, behind which Queue, Wallet, and Account live as pseudo-tabs — see `docs/navigation.md`. |
-| H38 | Participant sees queue status/position/ETA, pre-alert, call notice | ✅ Done | Push receipt/tap and the authenticated `GET /api/queue/me/stream` native fetch stream both refetch queue state immediately; 15s focused polling is the recovery path. Verified end-to-end including APNs/FCM delivery on real devices. |
-| H29–H31 | Queue operations: room overview, called teams, queue head and re-notification | ✅ Done | `components/queue-operations-screen.tsx` reads capability-protected room views, refreshes while focused, and posts the existing idempotent `notify-enter` transition. |
-| H51 | Notification channel preferences per category; queue calls non-optional | ✅ Done | Static category preferences and mandatory queue notices are available on mobile. Schedule reminders (H59 rework) are per-category (`schedule:type:<kind>`) or per-item (`schedule:<id>`), covered by `lib/use-schedule-notifications.ts` and the calendar bell + the Horario settings sheet — see the H59 row below. The preferences tab also exposes the shared `schedule` reminder channels. Reminder removals use a visible serial queue, so several can be tapped without racing full preference responses. |
-| H59 | Horario admin CRUD, audience filter, category notification model at parity with web | ✅ Done | `app/(tabs)/schedule.tsx` (list) and `app/schedule/[id].tsx` (detail) — see the file notes below. |
-| H28 | Ticket/badge in Apple & Google Wallet; old pass auto-invalidates on badge rotation | ✅ Done | QR wallet, authenticated Apple `.pkpass` download/share, Google save URL, server-side pass invalidation/push, and foreground wallet refetch on `LOGISTICS_WALLET_PASS_UPDATED` are wired and verified against real Wallet apps/credentials on device. |
-| H22 | Accreditation scanner: local SQLite lookup, badge assignment, server-confirmed | ✅ Done | Ticket/person cards live in SQLite. An unassigned person is classified as participant or mentor before the badge scan, which atomically issues their ticket; the assignment is persisted/retried but is explicitly shown as **not accredited** until the API acknowledges the idempotent request. |
-| H23 | Badge replacement, offline-first, revocation synced later | ✅ Done | Rotation updates the originating scanner immediately; each successful full snapshot replaces the complete revoked-badge set so every scanner rejects old badges. |
-| H24 | Presence (door in/out) scanner, offline queue, manual back-dated entries | ✅ Done | In/out and optional ISO backdated timestamps use the durable shared queue and idempotent replay; server rejections (e.g. entry on an open session) are surfaced to the operator instead of failing silently, and auth/throttling errors keep scans queued rather than dropping them. The per-person presence view is a single unified timeline (each entry/activity point carries its certainty-window meter inline) with a guaranteed vs provisional hours summary, and surfaces the API's `conflicts[]` (illegal in→in pairs, only reachable via manual edits) as a red banner whose "Resolve timeline gap" sheet clamps the date picker strictly between the two conflicting entries; system-recorded logs (event-end automatic exit) show as "Recorded automatically". Adding a manual activity point picks from a searchable sheet (not a native menu — the list is event-sized), and the timeline endpoint only offers *scannable* activities (meals + `requires_scan`) plus any this person already has a log against. |
-| H25 | Meals scanner, offline queue, repeat-serving confirmation | ✅ Done | Everyone may eat; local count data drives first-serving/repeat confirmation. Every accepted scan stays queued until API acknowledgement. |
-| H26 | Registrable-activity scanner, same offline contract as H25 | ✅ Done | Scannable activities are synchronized locally and use the same durable idempotent replay contract. |
+- [Story index](#story-index)
+- [Backend changes](#backend-changes)
+- [Navigation & tabs](#navigation--tabs)
+- [Auth flow](#auth-flow)
+- [Participant screens](#participant-screens)
+- [Operator screens](#operator-screens)
+  - [Queue operations](#queue-operations)
+  - [Scanner](#scanner)
+  - [Activities](#activities)
+- [Scanner cache encryption & isolation](#scanner-cache-encryption--isolation)
+- [Realtime & notifications infrastructure](#realtime--notifications-infrastructure)
+- [Other infrastructure](#other-infrastructure)
+- [UI testing](#ui-testing)
+- [Scanner state transitions](#scanner-state-transitions)
 
-Legend: ✅ done · 🟡 partial (core flow works, a sub-requirement is missing) · ❌ not started.
+## Story index
+
+Quick lookup from a user story to where it's implemented; each area is
+documented in full in its own section below.
+
+| Story | Area | See |
+| --- | --- | --- |
+| H4 | Session continuity, offline-tolerant `/api/me` | [Auth flow](#auth-flow) |
+| H55 | Capability-driven tab bar, no-reinstall permission changes | [Navigation & tabs](#navigation--tabs) |
+| H38 | Queue status/ETA, pre-alert, call notice | [Participant screens](#participant-screens) |
+| H29–H31 | Queue operations: rooms, called teams, re-notification | [Queue operations](#queue-operations) |
+| H51 | Notification channel preferences per category | [Participant screens](#participant-screens) |
+| H59 | Horario admin CRUD, audience filter, category notifications | [Participant screens](#participant-screens) |
+| H28 | Apple & Google Wallet, badge-rotation invalidation | [Participant screens](#participant-screens) |
+| H22 | Accreditation scanner | [Scanner](#scanner) |
+| H23 | Badge replacement, offline-first, deferred revocation sync | [Scanner](#scanner) |
+| H24 | Presence (door in/out) scanner, manual back-dated entries | [Scanner](#scanner) |
+| H25 | Meals scanner, repeat-serving confirmation | [Scanner](#scanner) |
+| H26 | Registrable-activity scanner | [Scanner](#scanner), [Activities](#activities) |
 
 ## Backend changes
 
@@ -38,7 +56,7 @@ route below. No migration needed.
 
 **Endpoints / hooks.**
 - `POST /api/me/push-tokens` (`apps/api/src/modules/notifications/routes/push-tokens.ts`)
-  — new route. Upserts the caller's Expo push token; re-registering the same
+  — upserts the caller's Expo push token; re-registering the same
   token (app restart, re-login) reassigns it rather than duplicating rows.
 - `expo()` plugin on the Better Auth instance
   (`apps/api/src/modules/identity/auth.ts`), paired with the client's

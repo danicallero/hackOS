@@ -10,6 +10,27 @@ repository (Expo SDK 57, React Native 0.86, pnpm 10). Store rules and build
 images change independently of this repository. Re-check the linked official
 Expo, Apple, and Google documentation before each production release.
 
+## Contents
+
+- [Current release readiness](#current-release-readiness)
+- [1. Required accounts and local tools](#1-required-accounts-and-local-tools)
+- [2. Install and run the full stack](#2-install-and-run-the-full-stack)
+- [3. App identity and Expo project setup](#3-app-identity-and-expo-project-setup)
+- [4. EAS environments and API URLs](#4-eas-environments-and-api-urls)
+- [5. Configure build and submission profiles](#5-configure-build-and-submission-profiles)
+- [6. Prebuild and generated native projects](#6-prebuild-and-generated-native-projects)
+- [7. Compile and run locally](#7-compile-and-run-locally)
+- [8. EAS preview and production builds](#8-eas-preview-and-production-builds)
+- [9. Signing credentials and certificates](#9-signing-credentials-and-certificates)
+- [10. Push notification credentials](#10-push-notification-credentials)
+- [11. Apple Wallet certificates are separate](#11-apple-wallet-certificates-are-separate)
+- [12. Icons, splash screen, and store artwork](#12-icons-splash-screen-and-store-artwork)
+- [13. Privacy, permissions, and store declarations](#13-privacy-permissions-and-store-declarations)
+- [14. Create the store records](#14-create-the-store-records)
+- [15. Submit builds](#15-submit-builds)
+- [16. Release acceptance checklist](#16-release-acceptance-checklist)
+- [17. After release](#17-after-release)
+
 ## Current release readiness
 
 As of this document's last update, do **not** submit the app to either store

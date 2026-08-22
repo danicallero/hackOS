@@ -1,13 +1,24 @@
 # Navigation: capability-based workspaces
 
-Implements issue [#187](https://github.com/danicallero/hackOS/issues/187)
-(IA rules now consolidated in [`DESIGN.md`](./DESIGN.md) §7). Stories: H8
-(capability groups, never role), H55
-(one app, additive tabs), and every domain story a workspace links to.
+The web sidebar and the mobile tab bar are both driven by capability and
+association data, never by a display role. IA rules live in
+[`DESIGN.md`](./DESIGN.md) §7 (H8: capability groups, never role; H55: one
+app, additive tabs).
 
 Web: `apps/web/src/lib/nav.ts` (data) + `apps/web/src/components/layout/app-sidebar.tsx`
 (rendering). Mobile: `apps/mobile/lib/tabs.ts` (data) +
 `apps/mobile/app/(tabs)/_layout.tsx` (rendering).
+
+## Contents
+
+- [Principle](#principle)
+- [Web: personal area + workspaces](#web-personal-area--workspaces)
+  - [Stable personal area](#stable-personal-area-personal_nav)
+  - [Work workspaces](#work-workspaces-workspaces)
+  - [Behaviour](#behaviour)
+- [Mobile: overflow selector for operators](#mobile-overflow-selector-for-operators-h55)
+- [Decision-only applications](#decision-only-applications)
+- [Association-aware domain pages](#association-aware-domain-pages)
 
 ## Principle
 
@@ -49,22 +60,19 @@ queue, project, wallet) already has its own stable nav entry above.
 
 My project and My queue also hide independently of `isPureApplicant` for
 **any** account — participant, judge, or sponsor rep — that currently has no
-project/queue data of its own (issue [#424](https://github.com/danicallero/hackOS/issues/424)):
-`GET /api/me`'s `hasProject`/`hasQueueItems` booleans
-(`apps/api/src/modules/projects/service.ts#hasMyProject`,
+project/queue data of its own: `GET /api/me`'s `hasProject`/`hasQueueItems`
+booleans (`apps/api/src/modules/projects/service.ts#hasMyProject`,
 `apps/api/src/modules/queue/reads.ts#hasMyQueueItems`) back
 `NavItem.hideIfNoProject`/`hideIfNoQueueItems` in `nav.ts`. My project stays
 visible without a project yet when `canCreateProject` is true (H19
-self-creation currently open to the caller) — otherwise hiding the link would
-remove their only entry point to create one. Sponsor reps have no H19
-self-creation path, so for them My project hides exactly when they have no
-project.
+self-creation open to the caller) — otherwise hiding the link would remove
+their only entry point to create one. Sponsor reps have no H19 self-creation
+path, so for them My project hides exactly when they have no project.
 
 ### Work workspaces (`WORKSPACES`)
 
-Eight capability-gated groups replace the old flat "operations" +
-"administration" sections. A workspace renders only when at least one of its
-items is visible; each visible item still checks its own capability so a
+Eight capability-gated groups. A workspace renders only when at least one of
+its items is visible; each visible item still checks its own capability so a
 workspace never over-grants access.
 
 | Workspace | Items | Visible when |
@@ -89,20 +97,19 @@ every workspace and every item (`apps/web/src/lib/session.tsx`).
   `lib/nav.ts`); on the next visit, the workspace containing the active route
   wins, and otherwise the persisted last workspace re-opens.
   Collapsed to the icon rail (`Sidebar collapsible="icon"`) or on the mobile
-  sheet, the accordion is bypassed and every item stays directly reachable —
-  matching the pre-#187 icon-rail behaviour exactly.
+  sheet, the accordion is bypassed and every item stays directly reachable.
 - The sticky top bar carries the **workspace**, never the leaf
   (`components/layout/header-title.tsx`, resolved by `workspaceForPath`): the
   page already renders its own name in the `h1`, so naming the nav item there
-  printed the same string twice (issue #297). Personal-area routes and
+  would print the same string twice. Personal-area routes and
   single-destination workspaces render nothing — the sidebar draws no group
   header for the latter either, so their label names the leaf.
 - One name per destination: `nav.ts` and the page `h1` reference the same
   message key. `/timetable` is **Schedule** (the read-only programme every
   participant uses) and `/schedule` is **Manage schedule** (the editor); no
   multi-destination workspace is labelled with one of its own items.
-- No routes moved: every href in `nav.ts` matches the previously published
-  URL, so existing deep links and bookmarks keep working without a redirect.
+- Every href in `nav.ts` is a stable, published URL: existing deep links and
+  bookmarks must keep working without a redirect.
 
 ## Mobile: overflow selector for operators (H55)
 
@@ -119,10 +126,9 @@ toggled per experience with `hidden` (hidden screens stay routable):
 - **Operator** (any of `accredit:scan`, `presence:scan`, `activity:scan`, or
   the admin wildcard): the daily shift tools take the bar — schedule,
   **Scanner**, Activities (`activity:scan` holders only), notifications —
-  honouring the #187 finding that scanning must never sit behind an
-  ellipsis. The fifth slot becomes the **"Others" overflow selector**, and
-  the less-frequent personal destinations (Queue, Wallet, Account) move
-  behind it as pseudo-tabs.
+  scanning must never sit behind an ellipsis. The fifth slot becomes the
+  **"Others" overflow selector**, and the less-frequent personal
+  destinations (Queue, Wallet, Account) move behind it as pseudo-tabs.
 - **Queue-only operator** (`queue:operate`, `queue:admin`, or `*`, without a
   scanner capability): Queue operations is a direct tab alongside Schedule and
   Alerts; Queue, Wallet, and Account move to Others. If the person also has a
@@ -180,25 +186,24 @@ capability.
 
 ## Association-aware domain pages
 
-`apps/web/src/app/(app)/judging/page.tsx` was fixed to `isRoomJudge` by
-issue #225 (H40): the page previously gated `canUse`/`canJudge` purely on
-`judge:panel`/`queue:operate`/`queue:admin` capabilities
-(`apps/web/src/lib/judging-workspace.ts#workspaceAccess`), so a room judge
-added by a sponsor rep with zero capability grants could see the nav link
-(`judgeVisible: true`) but landed on a client-side "no access" empty state —
-even though the backend already allowed them in via the `room_judges`
-fallback. `workspaceAccess` now takes `isRoomJudge` and folds it into
-`canJudge`/`canUse` alongside the capability checks.
+Several domain pages gate access on association facts (`isRoomJudge`,
+`isSponsorRep`) in addition to capabilities, because a room judge or sponsor
+rep can be granted access to a domain without holding the matching
+capability directly — the backend already authorizes them through the
+association (`room_judges`, sponsor-rep links), so the frontend gate must
+check the same fact or it strands them on a client-side "no access" screen
+despite a working API.
 
-`apps/web/src/app/(app)/projects/page.tsx` was fixed the same way: `canView`
-gated judges on `judge:panel` (missing the `room_judges` association
-fallback, H40) and gated sponsors on `me?.role === "sponsor"` — which
-collapses to `"judge"` for a sponsor rep who also judges, per the single-
-priority `role` problem this doc calls out above — instead of `isSponsorRep`
-(H46). `GET /api/repos` (`resolveRepoScope` in
-`apps/api/src/modules/projects/routes.ts`) already scoped correctly for
-both; only the frontend gate was stale.
-
-`apps/web/src/app/(app)/challenges/page.tsx`, `apps/web/src/app/(app)/enterprises/page.tsx`,
-and `apps/web/src/app/(app)/queue/rooms/page.tsx` were fixed to `isSponsorRep`
-by #192 (Sponsor workspace).
+- `apps/web/src/app/(app)/judging/page.tsx` — `canUse`/`canJudge`
+  (`apps/web/src/lib/judging-workspace.ts#workspaceAccess`) fold in
+  `isRoomJudge` alongside `judge:panel`/`queue:operate`/`queue:admin`.
+- `apps/web/src/app/(app)/projects/page.tsx` — `canView` folds in
+  `isRoomJudge` for judges (rather than `judge:panel` alone) and
+  `isSponsorRep` for sponsors (rather than `me?.role === "sponsor"`, which
+  collapses to `"judge"` for a sponsor rep who also judges — see
+  [Principle](#principle)). `GET /api/repos`
+  (`resolveRepoScope` in `apps/api/src/modules/projects/routes.ts`) scopes
+  correctly for both already; only the frontend gate needs to match.
+- `apps/web/src/app/(app)/challenges/page.tsx`,
+  `apps/web/src/app/(app)/enterprises/page.tsx`, and
+  `apps/web/src/app/(app)/queue/rooms/page.tsx` gate on `isSponsorRep`.
