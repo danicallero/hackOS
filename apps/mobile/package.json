@@ -70,6 +70,9 @@
   },
   "jest": {
     "preset": "jest-expo",
+    "setupFiles": [
+      "./jest.setup.js"
+    ],
     "testMatch": [
       "**/lib/**/*.test.ts",
       "**/test/**/*.test.tsx"

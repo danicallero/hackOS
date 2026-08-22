@@ -768,8 +768,6 @@ export function TeamOperationsScreen() {
                 {t("teamDetailAddMemberHint")}
               </Text>
               <View
-                accessible
-                accessibilityLabel={t("teamDetailMemberSearch")}
                 style={{
                   alignItems: "center",
                   backgroundColor: colors.elevatedSurface,
@@ -781,12 +779,14 @@ export function TeamOperationsScreen() {
                   paddingHorizontal: 8,
                 }}
               >
-                <SymbolView
-                  name="magnifyingglass"
-                  tintColor={colors.tertiaryLabel}
-                  size={15}
-                  accessible={false}
-                />
+                <Pressable
+                  accessibilityLabel={t("teamDetailMemberSearch")}
+                  accessibilityRole="button"
+                  onPress={() => void findMemberCandidates()}
+                  hitSlop={8}
+                >
+                  <SymbolView name="magnifyingglass" tintColor={colors.tertiaryLabel} size={15} />
+                </Pressable>
                 <TextInput
                   accessibilityLabel={t("teamDetailMemberSearch")}
                   editable={memberMutation === null && !memberCandidatesLoading}

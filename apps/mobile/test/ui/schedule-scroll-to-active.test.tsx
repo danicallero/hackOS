@@ -79,27 +79,6 @@ jest.mock("@/lib/me-context", () => ({
   useMeContext: () => ({ me: { id: 1, capabilities: [] } }),
 }));
 jest.mock("@/lib/use-android-top-inset", () => ({ useAndroidTopInset: () => 0 }));
-jest.mock("react-native-safe-area-context", () => ({
-  useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
-}));
-jest.mock("react-native-gesture-handler/ReanimatedSwipeable", () => ({
-  __esModule: true,
-  default: ({ children }: { children: unknown }) => {
-    const ReactLib = require("react");
-    return ReactLib.createElement(ReactLib.Fragment, null, children);
-  },
-}));
-jest.mock("react-native-reanimated", () => ({
-  __esModule: true,
-  default: {
-    View: ({ children }: { children: unknown }) => {
-      const ReactLib = require("react");
-      return ReactLib.createElement(ReactLib.Fragment, null, children);
-    },
-  },
-  interpolate: () => 1,
-  useAnimatedStyle: (factory: () => unknown) => factory(),
-}));
 jest.mock("@/lib/i18n", () => ({
   useLocale: () => ({ language: "en", t: (key: string) => key }),
 }));
@@ -121,8 +100,15 @@ import { renderMobile } from "./render";
 
 const preferences = { channels: ["push"], mandatoryCategories: [], overrides: [] };
 
+// Fixed at local noon so the yesterday/today section split can't flip
+// depending on what time of day the suite happens to run — the screen itself
+// reads Date.now() for "today", so it has to see the same fixed instant the
+// fixture below is built from.
+const FIXED_NOW = new Date(2026, 0, 15, 12, 0, 0).getTime();
+jest.spyOn(Date, "now").mockReturnValue(FIXED_NOW);
+
 function minutesFromNow(minutes: number) {
-  return new Date(Date.now() + minutes * 60_000).toISOString();
+  return new Date(FIXED_NOW + minutes * 60_000).toISOString();
 }
 
 function entry(id: number, title: string, startMinutes: number, endMinutes: number) {
