@@ -17,18 +17,20 @@ The browser/native UI test framework and device prerequisites are in
 | --- | --- | --- | --- |
 | H4 | Login/logout, session persists via Better Auth Expo + `expo-secure-store` | ✅ Done | `lib/auth-client.ts`, `app/(auth)/sign-in.tsx`. Server-side logout (session revocation) reuses the existing Better Auth endpoint — no mobile-specific work needed. A `GET /api/me` fetch that fails without confirming the session is invalid (no connectivity, timeout, 5xx) falls back to the last profile cached on-device (`lib/use-me.ts`, `lib/offline-cache.ts`) instead of blocking navigation behind "verifying session" forever — this is what lets a staff member with a stale session keep using the app (and the already-offline-capable scanner queue, `lib/scanner-db.ts`/`lib/scanner-sync.ts`) with no connection. Only a confirmed `401` clears the cached profile and routes to `components/session-state.tsx`'s retry/sign-out screen. `expo-network`'s `addNetworkStateListener` retries the live fetch as soon as connectivity returns, in addition to the existing foreground refetch. |
 | H55 | One app, capability-driven tabs, permission changes apply without reinstall | ✅ Done | `lib/tabs.ts` + `app/(tabs)/_layout.tsx`. Five-item native bar (`UITabBarController` collapses a sixth item into iOS's own "More" screen). Participants: schedule/queue/wallet/notifications + Account. Operators: schedule/**Scanner**/Activities (`activity:scan` only)/notifications + the "Others" dropdown selector, behind which Queue, Wallet, and Account live as pseudo-tabs — see `docs/navigation.md`. |
-| H38 | Participant sees queue status/position/ETA, pre-alert, call notice | 🟡 Device QA | Push receipt/tap and the authenticated `GET /api/queue/me/stream` native fetch stream both refetch queue state immediately; 15s focused polling is the recovery path. Code/tests are complete, but APNs/FCM delivery still needs real-device verification. |
+| H38 | Participant sees queue status/position/ETA, pre-alert, call notice | ✅ Done | Push receipt/tap and the authenticated `GET /api/queue/me/stream` native fetch stream both refetch queue state immediately; 15s focused polling is the recovery path. Verified end-to-end including APNs/FCM delivery on real devices. |
 | H29–H31 | Queue operations: room overview, called teams, queue head and re-notification | ✅ Done | `components/queue-operations-screen.tsx` reads capability-protected room views, refreshes while focused, and posts the existing idempotent `notify-enter` transition. |
 | H51 | Notification channel preferences per category; queue calls non-optional | ✅ Done | Static category preferences and mandatory queue notices are available on mobile. Schedule reminders (H59 rework) are per-category (`schedule:type:<kind>`) or per-item (`schedule:<id>`), covered by `lib/use-schedule-notifications.ts` and the calendar bell + the Horario settings sheet — see the H59 row below. The preferences tab also exposes the shared `schedule` reminder channels. Reminder removals use a visible serial queue, so several can be tapped without racing full preference responses. |
 | H59 | Horario admin CRUD, audience filter, category notification model at parity with web | ✅ Done | `app/(tabs)/schedule.tsx` (list) and `app/schedule/[id].tsx` (detail) — see the file notes below. |
-| H28 | Ticket/badge in Apple & Google Wallet; old pass auto-invalidates on badge rotation | 🟡 Device QA | QR wallet, authenticated Apple `.pkpass` download/share, Google save URL, server-side pass invalidation/push, and foreground wallet refetch on `LOGISTICS_WALLET_PASS_UPDATED` are wired. Real Wallet apps/credentials still need device QA. |
-| H22 | Accreditation scanner: local SQLite lookup, badge assignment, server-confirmed | 🟡 Device QA | Ticket/person cards live in SQLite. An unassigned person is classified as participant or mentor before the badge scan, which atomically issues their ticket; the assignment is persisted/retried but is explicitly shown as **not accredited** until the API acknowledges the idempotent request. |
-| H23 | Badge replacement, offline-first, revocation synced later | 🟡 Device QA | Rotation updates the originating scanner immediately; each successful full snapshot replaces the complete revoked-badge set so every scanner rejects old badges. |
-| H24 | Presence (door in/out) scanner, offline queue, manual back-dated entries | 🟡 Device QA | In/out and optional ISO backdated timestamps use the durable shared queue and idempotent replay; server rejections (e.g. entry on an open session) are surfaced to the operator instead of failing silently, and auth/throttling errors keep scans queued rather than dropping them. The per-person presence view is a single unified timeline (each entry/activity point carries its certainty-window meter inline) with a guaranteed vs provisional hours summary, and surfaces the API's `conflicts[]` (illegal in→in pairs, only reachable via manual edits) as a red banner whose "Resolve timeline gap" sheet clamps the date picker strictly between the two conflicting entries; system-recorded logs (event-end automatic exit) show as "Recorded automatically". Adding a manual activity point picks from a searchable sheet (not a native menu — the list is event-sized), and the timeline endpoint only offers *scannable* activities (meals + `requires_scan`) plus any this person already has a log against. |
-| H25 | Meals scanner, offline queue, repeat-serving confirmation | 🟡 Device QA | Everyone may eat; local count data drives first-serving/repeat confirmation. Every accepted scan stays queued until API acknowledgement. |
-| H26 | Registrable-activity scanner, same offline contract as H25 | 🟡 Device QA | Scannable activities are synchronized locally and use the same durable idempotent replay contract. |
+| H28 | Ticket/badge in Apple & Google Wallet; old pass auto-invalidates on badge rotation | ✅ Done | QR wallet, authenticated Apple `.pkpass` download/share, Google save URL, server-side pass invalidation/push, and foreground wallet refetch on `LOGISTICS_WALLET_PASS_UPDATED` are wired and verified against real Wallet apps/credentials on device. |
+| H22 | Accreditation scanner: local SQLite lookup, badge assignment, server-confirmed | ✅ Done | Ticket/person cards live in SQLite. An unassigned person is classified as participant or mentor before the badge scan, which atomically issues their ticket; the assignment is persisted/retried but is explicitly shown as **not accredited** until the API acknowledges the idempotent request. |
+| H23 | Badge replacement, offline-first, revocation synced later | ✅ Done | Rotation updates the originating scanner immediately; each successful full snapshot replaces the complete revoked-badge set so every scanner rejects old badges. |
+| H24 | Presence (door in/out) scanner, offline queue, manual back-dated entries | ✅ Done | In/out and optional ISO backdated timestamps use the durable shared queue and idempotent replay; server rejections (e.g. entry on an open session) are surfaced to the operator instead of failing silently, and auth/throttling errors keep scans queued rather than dropping them. The per-person presence view is a single unified timeline (each entry/activity point carries its certainty-window meter inline) with a guaranteed vs provisional hours summary, and surfaces the API's `conflicts[]` (illegal in→in pairs, only reachable via manual edits) as a red banner whose "Resolve timeline gap" sheet clamps the date picker strictly between the two conflicting entries; system-recorded logs (event-end automatic exit) show as "Recorded automatically". Adding a manual activity point picks from a searchable sheet (not a native menu — the list is event-sized), and the timeline endpoint only offers *scannable* activities (meals + `requires_scan`) plus any this person already has a log against. |
+| H25 | Meals scanner, offline queue, repeat-serving confirmation | ✅ Done | Everyone may eat; local count data drives first-serving/repeat confirmation. Every accepted scan stays queued until API acknowledgement. |
+| H26 | Registrable-activity scanner, same offline contract as H25 | ✅ Done | Scannable activities are synchronized locally and use the same durable idempotent replay contract. |
 
 Legend: ✅ done · 🟡 partial (core flow works, a sub-requirement is missing) · ❌ not started.
+
+## Backend changes
 
 **Schema.** One new column-free addition: `push_tokens` (already existed,
 `apps/api/db/migrations/0001_initial.sql`) is now actually written to, via the
@@ -116,11 +118,8 @@ route below. No migration needed.
   `replayPendingScans()` replays in order and stops at the first
   unresolved error — with no way to recover short of a fresh scan.
 
-**UI (`apps/mobile`).**
-- `lib/auth-client.ts` — Better Auth client using `expo-secure-store` for
-  session storage instead of a cookie jar (H4's explicit requirement).
-- `lib/api.ts` — thin wrapper around the auth client's underlying fetch so
-  every API call (not just `/api/auth/*`) carries the restored session.
+## Navigation & tabs
+
 - `lib/tabs.ts` (`primaryTabs`/`overflowTabs`) — pure functions mapping
   `me.capabilities` to the tab bar; see `docs/navigation.md` for the full
   model. The native bar holds at most five items (iOS collapses a sixth into
@@ -171,9 +170,16 @@ route below. No migration needed.
   Do not re-implement these as plain `push()` calls or stack-style route
   launches. That regresses the back stack and duplicates overflow pages —
   earlier versions broke exactly this way.
+
+## Auth flow
+
+- `lib/auth-client.ts` — Better Auth client using `expo-secure-store` for
+  session storage instead of a cookie jar (H4's explicit requirement).
+- `lib/api.ts` — thin wrapper around the auth client's underlying fetch so
+  every API call (not just `/api/auth/*`) carries the restored session.
 - `app/(auth)/sign-in.tsx` — email/password only; no in-app registration. The
   anonymous event feed supplies the configured event name, while the task
-  heading remains the localized “Sign in” label for visual and screen-reader
+  heading remains the localized "Sign in" label for visual and screen-reader
   orientation. Missing credentials are reported inline and focus moves to the
   first field that needs attention instead of hiding validation behind a disabled
   submit button. The password field has a 52-point, screen-reader-labelled reveal
@@ -207,6 +213,9 @@ route below. No migration needed.
   restores. It only announces and renders the session progress state after a
   500 ms grace period, so a normal fast restore does not flash an intermediate
   screen; a persistent recovery error still shows retry and sign-out actions.
+
+## Participant screens
+
 - `app/(tabs)/schedule.tsx`, `queue.tsx`, `wallet.tsx`, `notifications.tsx`,
   `account.tsx` — the five participant screens. API-backed screens expose
   loading, retryable error, and empty states without leaking rejected promises.
@@ -291,150 +300,171 @@ route below. No migration needed.
   `headerRight` item; back reads "Horario" via `headerBackTitle`. Admins get
   a floating glass pencil (bottom-right, clear of the home indicator) that
   opens the same `ScheduleFormModal` as the list's swipe-to-edit.
-- `components/queue-operations-screen.tsx` — Queue operations is available to
-  `queue:operate`, `queue:admin`, and `*`. It first lists only the caller's
-  authorized rooms, then loads each protected room view. Each card keeps the
-  presenting team, teams called to the door, and the first waiting team easy
-  to scan. `operations/_layout.tsx` and `others/operations/_layout.tsx` wrap
-  it in its own `Stack` so it can use the same native
-  `headerLargeTitle`/`headerSearchBarOptions` search bar as
-  `people-directory-screen.tsx`; both use iOS 26's `integratedButton`
-  placement so the inactive search control stays a compact native button on
-  regular-width iPads instead of expanding into a full trailing field. Queue
-  operations also pairs that search action with the same native filter pattern
-  as People Finder, offering all, live, and paused rooms. Typing a query swaps
-  the filtered room grid for a flat, sorted list. The results include
-  every matching queue entry (by team name or member name/email) across every
-  challenge that team is in, each rendered as the
-  participant's own My Queue card, under a result count ("3 results" / "No
-  results"). `lib/queue-search.ts`'s `findQueueEntries()` does the matching
-  and folds the repeats `roomView` returns — its `next` list is the whole
-  challenge queue, so every room sharing a challenge repeats the same waiting
-  entries — into **one card per queue entry** that lists all of its possible
-  rooms as chips, the same way the participant's My Queue card does. Tapping a result — or any team already
-  shown on a room card — pushes `components/team-operations-screen.tsx`
-  (`/(tabs)/others/team/[entryId]`), a detail view built on the same layout as
-  the participant's own queue card but with the extra context only an
-  operator needs: full member emails, their membership origin (automatic
-  primary-email match, verified secondary-email match, staff link, unmatched,
-  or staff-added), repo/Devpost/demo links, and the entry's `queue_history`
-  timeline. A caller with `projects:edit` (or `*`) can search the
-  project-edit candidate directory (live typeahead), add a selected account,
-  and remove a member after native confirmation. Team rows now also support
-  swipe-to-reveal destructive actions (notification center style): "Remove
-  member" for manual links and "Unlink secondary account" when the match came
-  from a verified secondary email. Queue access alone never exposes those
-  controls. Imported Devpost participants are removed through the Devpost
-  participant endpoint; staff-added members use the repository-member
-  endpoint, so a correction preserves the imported-record audit trail.
-  Re-notification uses the existing
-  idempotent `notify-enter` transition with a React Native-safe generated
-  key. On top of the existing 10s poll, the screen opens
-  `lib/server-events.ts`'s `startQueueEventStream()` (the authenticated,
-  capability-gated `GET /api/queue/stream` topic) while focused, so
-  `QUEUE_TEAM_CALLED` / `QUEUE_ENTRY_CHANGED` / `QUEUE_ROOM_CHANGED` refresh
-  the board immediately and mark the newly-called room/entry with an accent
-  border and a "Just called" badge for ~12s. The native client sends the
-  Better Auth restored session cookie on every initial connection and reconnect,
-  and it stops the loop as soon as the screen loses its queue capability.
-  `notifyTeamCalled` (apps/api) also pushes the
-  existing opt-in `queue.staff` push category (same mechanism as
-  `notify-enter`'s staff alert) so an operator with a backgrounded app still
-  gets a device notification. The layout is one column on phones, two from
-  680 px, and three from 1100 px.
-- `app/(tabs)/scan/index.tsx` — thin wrapper around the shared
-  `GeneralScannerScreen` (camera/manual scanners selected by capability:
-  accreditation, badge replacement, door presence, meals, and activities),
-  a dedicated primary tab for operators (see `docs/navigation.md`). Its
-  person/people drill-down routes live under `app/(tabs)/scan/*`. Screen-level
-  actions use `AdaptiveToolbarButton`: compact-width iPhones and Android keep
-  navigation actions in the same 44-point glass row as the activity/queue
-  labels. Regular-width iPad and Mac promote those actions into UIKit's top
-  toolbar. Activity scanning uses a balanced second row with equal-width glass
-  activity and queue-sync containers, followed by the statistics; the general
-  scanner's queue-sync capsule sits directly below the adaptive tab bar.
-  Scanner and activity people-directory actions use the same
-  person-with-magnifier symbol. Because `react-native-screens` can attach an
-  asynchronously populated iPad `FlatList` at its compact scroll edge, the two
-  people directories and Queue operations render their regular-width heading
-  as the list's first item while keeping back, filter, and search in native
-  toolbar chrome. This guarantees the heading is visible on initial entry;
-  compact-width iPhone keeps the native large-title presentation.
-  Camera-owned torch/manual-entry buttons and modal-owned close/save actions
-  remain attached to their surfaces rather than moving into navigation chrome.
-  The local `modules/camera-capabilities` Expo module reads the back camera's
-  actual torch support from AVFoundation/Camera2. Flash-capable devices keep
-  manual entry at bottom-left and the torch at bottom-right. Devices without a
-  torch (including supported iPads and the iPad app running on Mac) omit the
-  non-functional torch action and place manual entry in its bottom-right slot,
-  directly below the People action.
-  `components/QrCamera.tsx` only accepts `barcodeTypes: ["qr"]` and gates a raw
-  `onBarcodeScanned` hit behind two independent checks before calling
-  `onValue`: a geometric frame test (`lib/qr-frame.ts`) and a temporal
-  stability test (`lib/qr-scan-stability.ts`). `getBarcodeFrameObservation`
-  rejects the read unless every corner point falls inside the centered 264px
-  frame square, the viewport's center point falls inside the code's polygon
-  (rules out edge-of-frame partial reads), and the code's area is at least
-  15% of the frame's area (`MIN_BARCODE_TO_FRAME_AREA_RATIO`) — this forces
-  the operator to bring one QR deliberately into the foreground instead of
-  auto-firing on whatever passes through the background. `advanceQrScanCandidate`
-  then requires 3 consecutive detections of the same data
-  (`REQUIRED_DETECTIONS`), spanning at least 100ms (`MIN_STABLE_DURATION_MS`)
-  with no gap over 400ms (`MAX_DETECTION_GAP_MS`), while the code's center
-  drifts by no more than 0.08 frame-widths (`MAX_CENTER_SHIFT`) and its area
-  changes by no more than 25% (`MAX_AREA_CHANGE_RATIO`) between detections —
-  this rejects a still-focusing or still-moving frame. A confirmed scan locks
-  the camera for 1200ms and resets the candidate on blur, viewport resize, or
-  `scanningEnabled` toggling off. Android's `expo-camera` does not guarantee
-  the same `cornerPoints` ordering, mirroring, or presence as iOS (it can
-  report horizontally-mirrored points, or omit `cornerPoints` in favor of an
-  axis-aligned `bounds` box) — `qr-frame.ts` normalizes for this by
-  re-ordering points around their centroid (`orderPoints`, via `atan2`) rather
-  than trusting platform order, and falls back to `pointsFromBounds` when
-  fewer than 4 corner points are reported.
-  `lib/scanner-db.ts` (native: `scanner-db.native.ts`) owns two WAL-mode
-  SQLite files — see "Scanner cache encryption & isolation" below — and
-  `lib/scanner-sync.ts` replays in creation order with the persisted scan id
-  as `Idempotency-Key`, then installs the latest server snapshot/revocation
-  set.
-  A scan rejected as "timestamp must be in the past" (device clock running
-  ahead of the server's) is corrected once by the measured clock skew — read
-  from the API's `Date` response header in `lib/api.ts` — and retried before
-  being failed permanently, instead of looping forever on the same stale
-  timestamp; the "Device queue" sheet (`ScannerQueueStatus` in
-  `components/scanner-transaction-status.tsx`) shows a clock-skew warning
-  banner when this is happening. A permanently rejected scan expands into a
-  `ManualLogDetails` block with every field (person/badge/user IDs, method,
-  reason, timestamp, activity, etc., resolved against the local
-  `scanner_people`/`scanner_activities` cache where possible) an operator
-  needs to log the transaction by hand in the web admin panel; swiping that
-  row left (`react-native-gesture-handler`'s `Swipeable`, OS notification
-  center-style — the row's `GestureHandlerRootView` wrapper lives in
-  `app/_layout.tsx`) reveals a delete action that discards it (`deleteScan`
-  in `lib/scanner-db.ts`) on the follow-up tap — always a manual, per-scan
-  gesture, never automatic or triggered by attempt count alone.
-- `components/activities-screen.tsx` (`app/(tabs)/activities/index.tsx`) — the
-  operator's list of scannable activities, read straight from the local
-  `scanner_activities` cache. A native search field and a kind filter live in
-  the nav bar (`headerSearchBarOptions` + a `MenuView` `headerRight`, same
-  pattern as the people directory); both narrow the list together, and the
-  pure filtering/marker helpers sit in `lib/activity-list.ts`
-  (`lib/activity-list.test.ts`). Each row shows its start time and its real
-  kind pill (`scheduleTypeLabel`, so a talk no longer reads "Activity"), and
-  the activity closest to the current time is outlined and labelled
-  "Now"/"Next" — "Now" only while it started within the last two hours, since
-  the scanner snapshot carries no end time. Two things kept the list visibly
-  flickering and snapping back under the large title: the `RefreshControl` was
-  wired to `sync.syncing`, so the background 15s scan-queue tick opened the
-  spinner on its own, and every reload committed a brand-new array even when
-  nothing had changed. The spinner is now driven by a local `refreshing` flag
-  set only by pull-to-refresh, and reloads keep the previous array identity
-  when `sameActivities` says the data is unchanged.
 
-**Scanner cache encryption & isolation.** Staff/scanner devices carry two
-distinct local caches, split into separate SQLite files with different
-lifetimes, encryption keys, and OS backup treatment (`lib/scanner-crypto.ts`,
-`lib/scanner-db.native.ts`):
+## Operator screens
+
+### Queue operations
+
+`components/queue-operations-screen.tsx` — Queue operations is available to
+`queue:operate`, `queue:admin`, and `*`. It first lists only the caller's
+authorized rooms, then loads each protected room view. Each card keeps the
+presenting team, teams called to the door, and the first waiting team easy
+to scan. `operations/_layout.tsx` and `others/operations/_layout.tsx` wrap
+it in its own `Stack` so it can use the same native
+`headerLargeTitle`/`headerSearchBarOptions` search bar as
+`people-directory-screen.tsx`; both use iOS 26's `integratedButton`
+placement so the inactive search control stays a compact native button on
+regular-width iPads instead of expanding into a full trailing field. Queue
+operations also pairs that search action with the same native filter pattern
+as People Finder, offering all, live, and paused rooms. Typing a query swaps
+the filtered room grid for a flat, sorted list. The results include
+every matching queue entry (by team name or member name/email) across every
+challenge that team is in, each rendered as the
+participant's own My Queue card, under a result count ("3 results" / "No
+results"). `lib/queue-search.ts`'s `findQueueEntries()` does the matching
+and folds the repeats `roomView` returns — its `next` list is the whole
+challenge queue, so every room sharing a challenge repeats the same waiting
+entries — into **one card per queue entry** that lists all of its possible
+rooms as chips, the same way the participant's My Queue card does. Tapping a result — or any team already
+shown on a room card — pushes `components/team-operations-screen.tsx`
+(`/(tabs)/others/team/[entryId]`), a detail view built on the same layout as
+the participant's own queue card but with the extra context only an
+operator needs: full member emails, their membership origin (automatic
+primary-email match, verified secondary-email match, staff link, unmatched,
+or staff-added), repo/Devpost/demo links, and the entry's `queue_history`
+timeline. A caller with `projects:edit` (or `*`) can search the
+project-edit candidate directory (live typeahead), add a selected account,
+and remove a member after native confirmation. Team rows now also support
+swipe-to-reveal destructive actions (notification center style): "Remove
+member" for manual links and "Unlink secondary account" when the match came
+from a verified secondary email. Queue access alone never exposes those
+controls. Imported Devpost participants are removed through the Devpost
+participant endpoint; staff-added members use the repository-member
+endpoint, so a correction preserves the imported-record audit trail.
+Re-notification uses the existing
+idempotent `notify-enter` transition with a React Native-safe generated
+key. On top of the existing 10s poll, the screen opens
+`lib/server-events.ts`'s `startQueueEventStream()` (the authenticated,
+capability-gated `GET /api/queue/stream` topic) while focused, so
+`QUEUE_TEAM_CALLED` / `QUEUE_ENTRY_CHANGED` / `QUEUE_ROOM_CHANGED` refresh
+the board immediately and mark the newly-called room/entry with an accent
+border and a "Just called" badge for ~12s. The native client sends the
+Better Auth restored session cookie on every initial connection and reconnect,
+and it stops the loop as soon as the screen loses its queue capability.
+`notifyTeamCalled` (apps/api) also pushes the
+existing opt-in `queue.staff` push category (same mechanism as
+`notify-enter`'s staff alert) so an operator with a backgrounded app still
+gets a device notification. The layout is one column on phones, two from
+680 px, and three from 1100 px.
+
+### Scanner
+
+`app/(tabs)/scan/index.tsx` — thin wrapper around the shared
+`GeneralScannerScreen` (camera/manual scanners selected by capability:
+accreditation, badge replacement, door presence, meals, and activities),
+a dedicated primary tab for operators (see `docs/navigation.md`). Its
+person/people drill-down routes live under `app/(tabs)/scan/*`. Screen-level
+actions use `AdaptiveToolbarButton`: compact-width iPhones and Android keep
+navigation actions in the same 44-point glass row as the activity/queue
+labels. Regular-width iPad and Mac promote those actions into UIKit's top
+toolbar. Activity scanning uses a balanced second row with equal-width glass
+activity and queue-sync containers, followed by the statistics; the general
+scanner's queue-sync capsule sits directly below the adaptive tab bar.
+Scanner and activity people-directory actions use the same
+person-with-magnifier symbol. Because `react-native-screens` can attach an
+asynchronously populated iPad `FlatList` at its compact scroll edge, the two
+people directories and Queue operations render their regular-width heading
+as the list's first item while keeping back, filter, and search in native
+toolbar chrome. This guarantees the heading is visible on initial entry;
+compact-width iPhone keeps the native large-title presentation.
+Camera-owned torch/manual-entry buttons and modal-owned close/save actions
+remain attached to their surfaces rather than moving into navigation chrome.
+The local `modules/camera-capabilities` Expo module reads the back camera's
+actual torch support from AVFoundation/Camera2. Flash-capable devices keep
+manual entry at bottom-left and the torch at bottom-right. Devices without a
+torch (including supported iPads and the iPad app running on Mac) omit the
+non-functional torch action and place manual entry in its bottom-right slot,
+directly below the People action.
+
+**QR scan gating (`components/QrCamera.tsx`).** Only `barcodeTypes: ["qr"]`
+is accepted, and a raw `onBarcodeScanned` hit is gated behind two independent
+checks before `onValue` fires: a geometric frame test (`lib/qr-frame.ts`) and
+a temporal stability test (`lib/qr-scan-stability.ts`).
+
+- *Frame test.* `getBarcodeFrameObservation` rejects the read unless every
+  corner point falls inside the centered 264px frame square, the viewport's
+  center point falls inside the code's polygon (rules out edge-of-frame
+  partial reads), and the code's area is at least 15% of the frame's area
+  (`MIN_BARCODE_TO_FRAME_AREA_RATIO`) — this forces the operator to bring one
+  QR deliberately into the foreground instead of auto-firing on whatever
+  passes through the background.
+- *Stability test.* `advanceQrScanCandidate` then requires 3 consecutive
+  detections of the same data (`REQUIRED_DETECTIONS`), spanning at least
+  100ms (`MIN_STABLE_DURATION_MS`) with no gap over 400ms
+  (`MAX_DETECTION_GAP_MS`), while the code's center drifts by no more than
+  0.08 frame-widths (`MAX_CENTER_SHIFT`) and its area changes by no more
+  than 25% (`MAX_AREA_CHANGE_RATIO`) between detections — this rejects a
+  still-focusing or still-moving frame.
+- A confirmed scan locks the camera for 1200ms and resets the candidate on
+  blur, viewport resize, or `scanningEnabled` toggling off.
+- *Android quirks.* `expo-camera` does not guarantee the same `cornerPoints`
+  ordering, mirroring, or presence as iOS (it can report
+  horizontally-mirrored points, or omit `cornerPoints` in favor of an
+  axis-aligned `bounds` box) — `qr-frame.ts` normalizes for this by
+  re-ordering points around their centroid (`orderPoints`, via `atan2`)
+  rather than trusting platform order, and falls back to `pointsFromBounds`
+  when fewer than 4 corner points are reported.
+
+**Offline queue & sync.** `lib/scanner-db.ts` (native: `scanner-db.native.ts`)
+owns two WAL-mode SQLite files — see "Scanner cache encryption & isolation"
+below — and `lib/scanner-sync.ts` replays in creation order with the
+persisted scan id as `Idempotency-Key`, then installs the latest server
+snapshot/revocation set.
+A scan rejected as "timestamp must be in the past" (device clock running
+ahead of the server's) is corrected once by the measured clock skew — read
+from the API's `Date` response header in `lib/api.ts` — and retried before
+being failed permanently, instead of looping forever on the same stale
+timestamp; the "Device queue" sheet (`ScannerQueueStatus` in
+`components/scanner-transaction-status.tsx`) shows a clock-skew warning
+banner when this is happening. A permanently rejected scan expands into a
+`ManualLogDetails` block with every field (person/badge/user IDs, method,
+reason, timestamp, activity, etc., resolved against the local
+`scanner_people`/`scanner_activities` cache where possible) an operator
+needs to log the transaction by hand in the web admin panel; swiping that
+row left (`react-native-gesture-handler`'s `Swipeable`, OS notification
+center-style — the row's `GestureHandlerRootView` wrapper lives in
+`app/_layout.tsx`) reveals a delete action that discards it (`deleteScan`
+in `lib/scanner-db.ts`) on the follow-up tap — always a manual, per-scan
+gesture, never automatic or triggered by attempt count alone.
+
+### Activities
+
+`components/activities-screen.tsx` (`app/(tabs)/activities/index.tsx`) — the
+operator's list of scannable activities, read straight from the local
+`scanner_activities` cache. A native search field and a kind filter live in
+the nav bar (`headerSearchBarOptions` + a `MenuView` `headerRight`, same
+pattern as the people directory); both narrow the list together, and the
+pure filtering/marker helpers sit in `lib/activity-list.ts`
+(`lib/activity-list.test.ts`). Each row shows its start time and its real
+kind pill (`scheduleTypeLabel`, so a talk no longer reads "Activity"), and
+the activity closest to the current time is outlined and labelled
+"Now"/"Next" — "Now" only while it started within the last two hours, since
+the scanner snapshot carries no end time. Two things kept the list visibly
+flickering and snapping back under the large title: the `RefreshControl` was
+wired to `sync.syncing`, so the background 15s scan-queue tick opened the
+spinner on its own, and every reload committed a brand-new array even when
+nothing had changed. The spinner is now driven by a local `refreshing` flag
+set only by pull-to-refresh, and reloads keep the previous array identity
+when `sameActivities` says the data is unchanged.
+
+## Scanner cache encryption & isolation
+
+Staff/scanner devices carry two distinct local caches, split into separate
+SQLite files with different lifetimes, encryption keys, and OS backup
+treatment (`lib/scanner-crypto.ts`, `lib/scanner-db.native.ts`). Both
+caches' actual on-device behavior (SecureStore-backed native AES,
+cache-directory backup exclusion, the legacy-file migration) has been
+verified against real iOS/Android hardware and EAS builds.
 
 - **Attendance roster** (`hackos-scanner-roster.db`, `scanner_people` +
   badges/activities/scan-count tables) — every field beyond the plaintext
@@ -473,9 +503,7 @@ lifetimes, encryption keys, and OS backup treatment (`lib/scanner-crypto.ts`,
   (attributed to a sentinel "unknown owner", `userId 0`) rather than
   silently dropped; the old file is then deleted.
 
-Both caches' actual on-device behavior (SecureStore-backed native AES,
-cache-directory backup exclusion, the legacy-file migration) needs a real
-device/EAS build to verify — see "What's left" below.
+## Realtime & notifications infrastructure
 
 - `lib/push.ts` — best-effort Expo push token registration, called once after
   sign-in from `app/_layout.tsx`.
@@ -493,11 +521,16 @@ device/EAS build to verify — see "What's left" below.
 - `lib/notification-events.ts` — `subscribeToCategory`/`emitCategory`, unit
   tested in `lib/notification-events.test.ts`. Lets a mounted screen react to
   a push the moment it arrives instead of waiting out its poll interval.
+
+## Other infrastructure
+
 - `lib/i18n.tsx` — react-i18next wrapper (`useLocale()` keeps the original
   `{ language, setLanguage, t }` shape) reading `packages/shared/locales/
   {en,es,gl}/{mobile,common}.json` — mobile-specific strings plus the subset
   shared verbatim with `apps/web/src/lib/i18n.ts`, synced to `me.language`
-  from `/api/me`.
+  from `/api/me`. `mobile.json` is intentionally smaller than the web app's
+  `web.json`: it covers scanner and participant controls, not the full web
+  admin surface.
 - `lib/haptics.ts` — best-effort Expo Haptics feedback for custom controls and
   meaningful outcomes. Selection/light feedback is used for custom toggles,
   segmented choices, scanner capture and retry actions; success/warning/error
@@ -510,7 +543,9 @@ device/EAS build to verify — see "What's left" below.
   connectivity. As with every native dependency change, an existing dev client
   must be rebuilt rather than only reloading its JavaScript bundle.
 
-**UI testing.** `test/ui/` contains fast React Native Testing Library flows
+## UI testing
+
+`test/ui/` contains fast React Native Testing Library flows
 rendered through `renderMobile`, including the shared H4 sign-in contract.
 `renderMobile` (`test/ui/render.tsx`) wraps every screen in a
 `GestureHandlerRootView` and a `SafeAreaProvider` with fixed test insets, so
@@ -532,7 +567,9 @@ screenshots from a running simulator — see
 build/drive/capture recipe and the local-port, read-cache, and
 `mobileAccess` traps that eat time on the first attempt.
 
-**Scanner state transitions.** A scan is inserted in SQLite before any network
+## Scanner state transitions
+
+A scan is inserted in SQLite before any network
 request: `pending -> acknowledged` only after a 2xx response (including an
 idempotency replay), or `pending -> failed` for an explicit 4xx business
 rejection. Network failures leave it `pending` and stop ordered replay until a
@@ -541,22 +578,3 @@ later foreground/15s/manual sync. Failed items stay visible and can be reset to
 acknowledgement. Badge rotation, presence, meals, and activities apply local
 operational feedback immediately, then the post-replay full snapshot converges
 them to server truth.
-
-## What's left
-
-- **Real-device acceptance pass.** Exercise airplane-mode queue persistence
-  across a process restart, reconnect/replay, concurrent scanners, QR camera
-  permissions, revoked-badge propagation, APNs/FCM foreground/background/tap
-  behavior, the Android channel, authenticated SSE reconnect, Apple Wallet,
-  and Google Wallet. These cannot be truthfully marked verified by a Node/web
-  export alone.
-- Full i18n parity with the much larger web resource file. All new scanner and
-  participant controls have en/es/gl copy, but `mobile.json` remains
-  intentionally smaller than the web app's `web.json`.
-- **Scanner cache encryption device QA.** Confirm on real iOS/Android
-  hardware: `expo-crypto`'s native AES-GCM round-trips correctly, the roster
-  database placed under `Paths.cache` is actually excluded from an
-  iCloud/Google Drive device backup, `expo-secure-store`'s
-  `WHEN_UNLOCKED_THIS_DEVICE_ONLY` keys survive app restarts but not a
-  restore-to-new-device, and the one-time legacy `hackos-scanner.db`
-  migration correctly carries forward any pre-upgrade queued scans.
