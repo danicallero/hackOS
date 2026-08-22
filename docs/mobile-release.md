@@ -40,10 +40,6 @@ without resolving these items:
   `com.hackudc.os`. Confirm that this is the permanent, organization-owned
   identifier before creating the store records; it cannot be renamed after
   release without creating a different app.
-- The project is not linked to an EAS project: `extra.eas.projectId` is absent.
-  This ID is also used to attribute Expo push tokens to the correct project.
-- `apps/mobile/eas.json` does not exist, so development, preview, production,
-  and submission profiles are not configured.
 - The PNGs have technically valid dimensions, but must be reviewed as final
   hackOS artwork, at actual launcher sizes, on light/dark device backgrounds.
 - A dedicated Android notification status icon is not configured. Create a
