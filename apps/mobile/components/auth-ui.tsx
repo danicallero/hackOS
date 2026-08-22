@@ -290,7 +290,7 @@ export function AuthAlert({ message, testID }: { message: string; testID?: strin
         padding: 12,
       }}
     >
-      <Text selectable style={{ color: colors.destructive, fontSize: 14, lineHeight: 20 }}>
+      <Text selectable style={{ color: colors.onDestructiveSurface, fontSize: 14, lineHeight: 20 }}>
         {message}
       </Text>
     </View>

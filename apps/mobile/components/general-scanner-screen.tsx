@@ -338,6 +338,7 @@ function ScannerGroupFilterButton({
         />
       ) : null}
       <GlassView
+        colorScheme="dark"
         glassEffectStyle="regular"
         isInteractive
         style={{

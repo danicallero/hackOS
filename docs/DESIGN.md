@@ -477,6 +477,29 @@ Full architecture: [`mobile.md`](./mobile.md).**
 - Touch and layout: primary targets ≥ 44 pt; safe-area insets respected for
   fixed actions and scanner feedback; critical scan actions never depend on
   small overflow menus.
+- **Android chrome is not iOS chrome, and the code has to say so.**
+  `headerTransparent` / `headerLargeTitle` and `contentInsetAdjustmentBehavior`
+  are iOS-only: on Android they leave a floating header over unshifted content.
+  Gate those options on `process.env.EXPO_OS === "ios"` and let Android keep its
+  opaque compact app bar, or pad the scroll content by the full header height
+  yourself. Header-less Android tab screens draw edge-to-edge under a
+  transparent status bar, so they need `AndroidStatusBarScrim` (`native-ui`) to
+  keep scrolled rows from sliding behind the clock.
+- **`presentationStyle="pageSheet"` is an iOS presentation.** On Android the
+  same `Modal` is a plain full-screen window with no inset card, so every sheet
+  adds the status-bar inset to its own header padding and floating chrome
+  (`sheetTopInset`) instead of assuming the sheet starts below the status bar.
+- **Semantic colors resolve per platform, per scheme.** `theme/colors.ts` is the
+  only place that knows which system palette a token comes from: UIKit's dynamic
+  colors on iOS, the *same palette as an explicit light/dark pair* on Android.
+  Material You was tried and rejected — its neutrals are lavender-tinted with
+  almost no contrast between page and card, and its `*Container` roles look
+  nothing like this app's tinted banners. Android tokens are read lazily against
+  the current scheme, never resolved once at module load (that froze the palette
+  to the scheme the app launched in), so avoid capturing a token in a
+  module-scope `StyleSheet.create`. Text or icons on a tinted `…Surface` use the
+  matching `on…Surface` token; the base tone is for a tinted mark on the
+  ordinary page background.
 - Mobile authentication keeps submit actions discoverable, reports missing
   values inline and focuses the first invalid field. Sign-in uses the native
   `username`/`current-password` credential pairing plus the configured iOS

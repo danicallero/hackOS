@@ -101,7 +101,7 @@ export default function ScheduleDetailScreen() {
     <>
       <Stack.Screen
         options={{
-          title: item?.title ?? "",
+          title: item?.title ?? (process.env.EXPO_OS === "android" ? t("scheduleDetails") : ""),
           headerRight:
             item && reminderOn !== null
               ? () => (

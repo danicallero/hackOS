@@ -187,11 +187,14 @@ export default function WalletScreen() {
         >
           <SymbolView
             name="checkmark.circle.fill"
-            tintColor={colors.success}
+            tintColor={colors.onSuccessSurface}
             size={21}
             accessible={false}
           />
-          <Text selectable style={{ color: colors.success, flex: 1, fontSize: 15, lineHeight: 21 }}>
+          <Text
+            selectable
+            style={{ color: colors.onSuccessSurface, flex: 1, fontSize: 15, lineHeight: 21 }}
+          >
             {t("walletSpotConfirmed")}
           </Text>
         </View>
@@ -231,7 +234,10 @@ export default function WalletScreen() {
                   padding: 12,
                 }}
               >
-                <Text selectable style={{ color: colors.warning, fontSize: 14, lineHeight: 20 }}>
+                <Text
+                  selectable
+                  style={{ color: colors.onWarningSurface, fontSize: 14, lineHeight: 20 }}
+                >
                   {t("walletSpotExpired")}
                 </Text>
               </View>

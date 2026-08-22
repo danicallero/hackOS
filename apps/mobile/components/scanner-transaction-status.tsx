@@ -32,15 +32,18 @@ function ClockSkewBanner() {
     >
       <SymbolView
         name="clock.badge.exclamationmark.fill"
-        tintColor={colors.warning}
+        tintColor={colors.onWarningSurface}
         size={20}
         accessible={false}
       />
       <View style={{ flex: 1, gap: 3 }}>
-        <Text selectable style={{ color: colors.warning, fontSize: 15, fontWeight: "700" }}>
+        <Text
+          selectable
+          style={{ color: colors.onWarningSurface, fontSize: 15, fontWeight: "700" }}
+        >
           {t("clockSkewTitle")}
         </Text>
-        <Text selectable style={{ color: colors.warning, fontSize: 13, lineHeight: 18 }}>
+        <Text selectable style={{ color: colors.onWarningSurface, fontSize: 13, lineHeight: 18 }}>
           {t("clockSkewBody")}
         </Text>
       </View>
@@ -477,6 +480,9 @@ export function ScannerQueueStatus({
   const { t } = useLocale();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  // Android has no page-sheet presentation: the modal is full-screen, so its
+  // chrome has to clear the status bar itself.
+  const sheetTopInset = process.env.EXPO_OS === "android" ? insets.top : 0;
   const [open, setOpen] = useState(false);
   const [people, setPeople] = useState<ScannerPerson[]>([]);
   const [activities, setActivities] = useState<ScannerActivity[]>([]);
@@ -564,7 +570,7 @@ export function ScannerQueueStatus({
               gap: 22,
               padding: 16,
               paddingBottom: Math.max(32, insets.bottom + 16),
-              paddingTop: 16,
+              paddingTop: 16 + sheetTopInset,
             }}
           >
             <View style={{ justifyContent: "center", minHeight: 44, paddingHorizontal: 52 }}>
@@ -753,14 +759,14 @@ export function ScannerQueueStatus({
           </ScrollView>
 
           <FloatingGlassButton
-            top={16}
+            top={16 + sheetTopInset}
             side="left"
             icon="xmark"
             accessibilityLabel={t("close")}
             onPress={() => setOpen(false)}
           />
           <FloatingGlassButton
-            top={16}
+            top={16 + sheetTopInset}
             side="right"
             icon={hasAttention ? "exclamationmark.arrow.circlepath" : "arrow.triangle.2.circlepath"}
             tintColor={hasAttention ? colors.destructive : colors.accent}

@@ -3,7 +3,14 @@ import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { Alert, ScrollView, Text, useColorScheme, View } from "react-native";
 
-import { ActionButton, InfoRow, Section, Separator, StatusPill } from "@/components/native-ui";
+import {
+  ActionButton,
+  AndroidStatusBarScrim,
+  InfoRow,
+  Section,
+  Separator,
+  StatusPill,
+} from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { apiFetch } from "@/lib/api";
 import { signOut } from "@/lib/auth-client";
@@ -164,244 +171,244 @@ export default function AccountScreen() {
     .join(", ");
 
   return (
-    <ScrollView
-      contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{
-        gap: 20,
-        padding: 16,
-        paddingBottom: 36,
-        paddingTop: 16 + androidTopInset,
-      }}
-    >
-      {error ? <RequestFeedback error={error} onRetry={() => void refetch()} /> : null}
-      {signOutError ? (
-        <RequestFeedback
-          error={signOutError}
-          message={t("signOutError")}
-          onRetry={() => void endSession()}
-          retrying={signingOut}
-        />
-      ) : null}
-      {languageError ? (
-        <RequestFeedback
-          error={languageError}
-          message={t("accountLanguageError")}
-          onRetry={languageRetry ? () => void changeLanguage(languageRetry) : undefined}
-          retrying={savingLanguage}
-        />
-      ) : null}
-      {storageError ? (
-        <RequestFeedback
-          error={storageError}
-          message={t("storageClearError")}
-          onRetry={confirmClearCache}
-          retrying={clearingCache}
-        />
-      ) : null}
+    <View style={{ flex: 1 }}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={{
+          gap: 20,
+          padding: 16,
+          paddingBottom: 36,
+          paddingTop: 16 + androidTopInset,
+        }}
+      >
+        {error ? <RequestFeedback error={error} onRetry={() => void refetch()} /> : null}
+        {signOutError ? (
+          <RequestFeedback
+            error={signOutError}
+            message={t("signOutError")}
+            onRetry={() => void endSession()}
+            retrying={signingOut}
+          />
+        ) : null}
+        {languageError ? (
+          <RequestFeedback
+            error={languageError}
+            message={t("accountLanguageError")}
+            onRetry={languageRetry ? () => void changeLanguage(languageRetry) : undefined}
+            retrying={savingLanguage}
+          />
+        ) : null}
+        {storageError ? (
+          <RequestFeedback
+            error={storageError}
+            message={t("storageClearError")}
+            onRetry={confirmClearCache}
+            retrying={clearingCache}
+          />
+        ) : null}
 
-      <View style={{ alignItems: "center", gap: 10, paddingVertical: 10 }}>
-        <View
-          style={{
-            alignItems: "center",
-            backgroundColor: colors.accent,
-            borderRadius: 42,
-            height: 84,
-            justifyContent: "center",
-            width: 84,
-          }}
-        >
-          <Text selectable style={{ color: colors.accentText, fontSize: 30, fontWeight: "700" }}>
-            {initials}
-          </Text>
-        </View>
-        <View style={{ alignItems: "center", gap: 5 }}>
-          <Text
-            selectable
-            style={{ color: colors.label, fontSize: 23, fontWeight: "700", textAlign: "center" }}
-          >
-            {fullName}
-          </Text>
-          <Text selectable style={{ color: colors.secondaryLabel, fontSize: 15 }}>
-            {roleLabel(me.role, t)}
-          </Text>
-          <StatusPill tone={me.badgeId ? "success" : "neutral"} style={{ alignSelf: "center" }}>
-            {me.badgeId ? t("accountAccredited") : t("accountNotAccredited")}
-          </StatusPill>
-        </View>
-      </View>
-
-      <Section title={t("accountProfile")}>
-        <InfoRow label={t("accountName")} value={fullName} icon="person" />
-        <Separator inset={48} />
-        <MenuView
-          actions={LANGUAGES.map(
-            (lang): MenuAction => ({
-              id: lang,
-              title: languageName(lang),
-              state: lang === me.language ? "on" : "off",
-            }),
-          )}
-          onPressAction={({ nativeEvent }) => void changeLanguage(nativeEvent.event as Lang)}
-        >
-          {/*
-           * A plain (non-interactive) View, not a Pressable: on Android,
-           * MenuView already wraps this child in its own native trigger
-           * Pressable (see @expo/ui's MenuView.android.tsx). Nesting another
-           * touchable here claims the touch responder first and blocks the
-           * native trigger from ever opening the menu — the picker looks
-           * inert. `changeLanguage` itself still no-ops while
-           * `savingLanguage` is true, so no separate disabled affordance is
-           * needed on the trigger.
-           */}
+        <View style={{ alignItems: "center", gap: 10, paddingVertical: 10 }}>
           <View
-            accessibilityLabel={t("accountLanguage")}
-            accessibilityRole="button"
-            accessibilityState={{ disabled: savingLanguage, busy: savingLanguage }}
+            style={{
+              alignItems: "center",
+              backgroundColor: colors.accent,
+              borderRadius: 42,
+              height: 84,
+              justifyContent: "center",
+              width: 84,
+            }}
           >
-            <InfoRow
-              label={t("accountLanguage")}
-              value={languageName(me.language)}
-              icon="globe"
-              accessoryIcon="chevron.down"
-            />
+            <Text selectable style={{ color: colors.accentText, fontSize: 30, fontWeight: "700" }}>
+              {initials}
+            </Text>
           </View>
-        </MenuView>
-        <Separator inset={48} />
-        <InfoRow
-          label={t("accountShirtSize")}
-          value={me.shirtSize || t("accountNotSet")}
-          icon="tshirt"
-        />
-      </Section>
+          <View style={{ alignItems: "center", gap: 5 }}>
+            <Text
+              selectable
+              style={{ color: colors.label, fontSize: 23, fontWeight: "700", textAlign: "center" }}
+            >
+              {fullName}
+            </Text>
+            <Text selectable style={{ color: colors.secondaryLabel, fontSize: 15 }}>
+              {roleLabel(me.role, t)}
+            </Text>
+            <StatusPill tone={me.badgeId ? "success" : "neutral"} style={{ alignSelf: "center" }}>
+              {me.badgeId ? t("accountAccredited") : t("accountNotAccredited")}
+            </StatusPill>
+          </View>
+        </View>
 
-      <Section title={t("accountContact")}>
-        <InfoRow
-          label={t("accountEmail")}
-          value={me.email}
-          icon="envelope"
-          accessoryIcon={me.emailVerified ? "checkmark.seal.fill" : "exclamationmark.triangle.fill"}
-          accessoryColor={me.emailVerified ? colors.success : colors.warning}
-          accessoryLabel={me.emailVerified ? t("accountVerified") : t("accountNotVerified")}
-        />
-        {me.secondaryEmail ? (
-          <>
-            <Separator inset={48} />
-            <InfoRow
-              label={t("accountSecondaryEmail")}
-              value={me.secondaryEmail}
-              icon="envelope.badge"
-              accessoryIcon={
-                me.secondaryEmailVerified ? "checkmark.seal.fill" : "exclamationmark.triangle.fill"
-              }
-              accessoryColor={me.secondaryEmailVerified ? colors.success : colors.warning}
-              accessoryLabel={
-                me.secondaryEmailVerified ? t("accountVerified") : t("accountNotVerified")
-              }
-            />
-          </>
-        ) : null}
-      </Section>
-
-      <Section title={t("accountEventDetails")}>
-        <InfoRow
-          label={t("accountBadge")}
-          value={me.badgeId ?? t("accountNoBadge")}
-          icon="key.card"
-        />
-        <Separator inset={48} />
-        <InfoRow
-          label={t("accountFoodIntolerances")}
-          value={dietaryLabels || t("accountNoneDeclared")}
-          icon="fork.knife"
-        />
-        {me.foodIntoleranceNotes ? (
-          <>
-            <Separator inset={48} />
-            <View style={{ gap: 5, padding: 16 }}>
-              <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13 }}>
-                {t("accountDietaryNotes")}
-              </Text>
-              <Text selectable style={{ color: colors.label, fontSize: 16, lineHeight: 22 }}>
-                {me.foodIntoleranceNotes}
-              </Text>
+        <Section title={t("accountProfile")}>
+          <InfoRow label={t("accountName")} value={fullName} icon="person" />
+          <Separator inset={48} />
+          <MenuView
+            actions={LANGUAGES.map(
+              (lang): MenuAction => ({
+                id: lang,
+                title: languageName(lang),
+                state: lang === me.language ? "on" : "off",
+                attributes: savingLanguage ? { disabled: true } : undefined,
+              }),
+            )}
+            onPressAction={({ nativeEvent }) => void changeLanguage(nativeEvent.event as Lang)}
+          >
+            <View
+              accessible
+              accessibilityLabel={t("accountLanguage")}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: savingLanguage, busy: savingLanguage }}
+            >
+              <InfoRow
+                label={t("accountLanguage")}
+                value={languageName(me.language)}
+                icon="globe"
+                accessoryIcon="chevron.down"
+              />
             </View>
-          </>
-        ) : null}
-      </Section>
-
-      {operator ? (
-        <Section title={t("myStatsTitle")}>
-          <InfoRow
-            label={t("myStatsAccreditation")}
-            value={myStats ? String(myStats.accreditationCount) : "—"}
-            icon="person.badge.key.fill"
-          />
+          </MenuView>
           <Separator inset={48} />
           <InfoRow
-            label={t("myStatsPresence")}
-            value={myStats ? String(myStats.presenceCount) : "—"}
-            icon="door.left.hand.open"
-          />
-          <Separator inset={48} />
-          <InfoRow
-            label={t("myStatsActivity")}
-            value={myStats ? String(myStats.activityCount) : "—"}
-            icon="list.bullet.rectangle"
-          />
-          <Separator inset={48} />
-          <ActionButton
-            label={t("scannerSeeHistory")}
-            icon="clock.arrow.circlepath"
-            onPress={() => router.push("/(tabs)/scan/scan-log")}
+            label={t("accountShirtSize")}
+            value={me.shirtSize || t("accountNotSet")}
+            icon="tshirt"
           />
         </Section>
-      ) : null}
 
-      <Section title={t("storageTitle")} footer={t("storageFooter")}>
-        <InfoRow
-          label={t("storageOfflineData")}
-          value={storageUsage ? formatBytes(storageUsage.offlineDataBytes) : "—"}
-          icon="arrow.down.circle"
-        />
-        <Separator inset={48} />
-        <InfoRow
-          label={t("storageDownloadedFiles")}
-          value={storageUsage ? formatBytes(storageUsage.downloadedFilesBytes) : "—"}
-          icon="doc"
-        />
-        <Separator inset={48} />
-        <InfoRow
-          label={t("storageTotal")}
-          value={storageUsage ? formatBytes(storageUsage.totalBytes) : "—"}
-          icon="internaldrive.fill"
-        />
-        <Separator />
-        <ActionButton
-          label={t("storageClearAction")}
-          icon="trash"
-          destructive
-          busy={clearingCache}
-          onPress={confirmClearCache}
-        />
-      </Section>
+        <Section title={t("accountContact")}>
+          <InfoRow
+            label={t("accountEmail")}
+            value={me.email}
+            icon="envelope"
+            accessoryIcon={
+              me.emailVerified ? "checkmark.seal.fill" : "exclamationmark.triangle.fill"
+            }
+            accessoryColor={me.emailVerified ? colors.success : colors.warning}
+            accessoryLabel={me.emailVerified ? t("accountVerified") : t("accountNotVerified")}
+          />
+          {me.secondaryEmail ? (
+            <>
+              <Separator inset={48} />
+              <InfoRow
+                label={t("accountSecondaryEmail")}
+                value={me.secondaryEmail}
+                icon="envelope.badge"
+                accessoryIcon={
+                  me.secondaryEmailVerified
+                    ? "checkmark.seal.fill"
+                    : "exclamationmark.triangle.fill"
+                }
+                accessoryColor={me.secondaryEmailVerified ? colors.success : colors.warning}
+                accessoryLabel={
+                  me.secondaryEmailVerified ? t("accountVerified") : t("accountNotVerified")
+                }
+              />
+            </>
+          ) : null}
+        </Section>
 
-      <Section title={t("sessionTitle")} footer={t("sessionActive", { email: me.email })}>
-        <ActionButton
-          label={t("refreshAccount")}
-          icon="arrow.clockwise"
-          busy={loading}
-          onPress={() => void refetch()}
-        />
-        <Separator />
-        <ActionButton
-          label={t("signOut")}
-          icon="rectangle.portrait.and.arrow.right"
-          destructive
-          busy={signingOut}
-          onPress={confirmSignOut}
-        />
-      </Section>
-    </ScrollView>
+        <Section title={t("accountEventDetails")}>
+          <InfoRow
+            label={t("accountBadge")}
+            value={me.badgeId ?? t("accountNoBadge")}
+            icon="key.card"
+          />
+          <Separator inset={48} />
+          <InfoRow
+            label={t("accountFoodIntolerances")}
+            value={dietaryLabels || t("accountNoneDeclared")}
+            icon="fork.knife"
+          />
+          {me.foodIntoleranceNotes ? (
+            <>
+              <Separator inset={48} />
+              <View style={{ gap: 5, padding: 16 }}>
+                <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13 }}>
+                  {t("accountDietaryNotes")}
+                </Text>
+                <Text selectable style={{ color: colors.label, fontSize: 16, lineHeight: 22 }}>
+                  {me.foodIntoleranceNotes}
+                </Text>
+              </View>
+            </>
+          ) : null}
+        </Section>
+
+        {operator ? (
+          <Section title={t("myStatsTitle")}>
+            <InfoRow
+              label={t("myStatsAccreditation")}
+              value={myStats ? String(myStats.accreditationCount) : "—"}
+              icon="person.badge.key.fill"
+            />
+            <Separator inset={48} />
+            <InfoRow
+              label={t("myStatsPresence")}
+              value={myStats ? String(myStats.presenceCount) : "—"}
+              icon="door.left.hand.open"
+            />
+            <Separator inset={48} />
+            <InfoRow
+              label={t("myStatsActivity")}
+              value={myStats ? String(myStats.activityCount) : "—"}
+              icon="list.bullet.rectangle"
+            />
+            <Separator inset={48} />
+            <ActionButton
+              label={t("scannerSeeHistory")}
+              icon="clock.arrow.circlepath"
+              onPress={() => router.push("/(tabs)/scan/scan-log")}
+            />
+          </Section>
+        ) : null}
+
+        <Section title={t("storageTitle")} footer={t("storageFooter")}>
+          <InfoRow
+            label={t("storageOfflineData")}
+            value={storageUsage ? formatBytes(storageUsage.offlineDataBytes) : "—"}
+            icon="arrow.down.circle"
+          />
+          <Separator inset={48} />
+          <InfoRow
+            label={t("storageDownloadedFiles")}
+            value={storageUsage ? formatBytes(storageUsage.downloadedFilesBytes) : "—"}
+            icon="doc"
+          />
+          <Separator inset={48} />
+          <InfoRow
+            label={t("storageTotal")}
+            value={storageUsage ? formatBytes(storageUsage.totalBytes) : "—"}
+            icon="internaldrive.fill"
+          />
+          <Separator />
+          <ActionButton
+            label={t("storageClearAction")}
+            icon="trash"
+            destructive
+            busy={clearingCache}
+            onPress={confirmClearCache}
+          />
+        </Section>
+
+        <Section title={t("sessionTitle")} footer={t("sessionActive", { email: me.email })}>
+          <ActionButton
+            label={t("refreshAccount")}
+            icon="arrow.clockwise"
+            busy={loading}
+            onPress={() => void refetch()}
+          />
+          <Separator />
+          <ActionButton
+            label={t("signOut")}
+            icon="rectangle.portrait.and.arrow.right"
+            destructive
+            busy={signingOut}
+            onPress={confirmSignOut}
+          />
+        </Section>
+      </ScrollView>
+      <AndroidStatusBarScrim />
+    </View>
   );
 }
 

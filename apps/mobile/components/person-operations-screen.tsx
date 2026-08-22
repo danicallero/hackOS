@@ -505,6 +505,11 @@ export function PersonOperationsScreen() {
   // both buttons instead create the signal directly via createPresenceSignal.
   const isActivityOpenDivergence = divergence.primaryOverride !== null;
   const directionTone = (dir: "in" | "out") => (dir === "in" ? colors.accent : colors.warning);
+  // The primary button fills with the matching tinted container, so its
+  // label/icon need that container's own foreground — Material's base tone
+  // on top of its own container is a pale-on-pale button on Android.
+  const directionOnSurfaceTone = (dir: "in" | "out") =>
+    dir === "in" ? colors.onAccentSurface : colors.onWarningSurface;
   const directionIcon = (dir: "in" | "out") =>
     dir === "in" ? "arrow.right.to.line" : "arrow.left.to.line";
   const directionLabel = (dir: "in" | "out") => (dir === "in" ? t("scannerIn") : t("scannerOut"));
@@ -563,11 +568,17 @@ export function PersonOperationsScreen() {
     >
       <SymbolView
         name={directionIcon(effectiveDirection)}
-        tintColor={directionTone(effectiveDirection)}
+        tintColor={directionOnSurfaceTone(effectiveDirection)}
         size={18}
         weight="semibold"
       />
-      <Text style={{ color: directionTone(effectiveDirection), fontSize: 17, fontWeight: "600" }}>
+      <Text
+        style={{
+          color: directionOnSurfaceTone(effectiveDirection),
+          fontSize: 17,
+          fontWeight: "600",
+        }}
+      >
         {directionLabel(effectiveDirection)}
       </Text>
     </Pressable>
@@ -689,6 +700,11 @@ export function PersonOperationsScreen() {
   // content (and the scroll indicator) below its real height for free,
   // instead of us guessing at a duplicate of that space ourselves.
   const headerHeight = insets.top + BUTTON_ROW_HEIGHT + HEADER_TEXT_HEIGHT;
+  // Android has neither that native bar nor `contentInsetAdjustmentBehavior`
+  // (an iOS-only prop), so nothing insets the content there — it has to clear
+  // the whole floating header itself, status bar and button row included.
+  const contentPaddingTop =
+    process.env.EXPO_OS === "ios" ? HEADER_TEXT_HEIGHT + 10 : headerHeight + 10;
 
   return (
     <>
@@ -699,10 +715,10 @@ export function PersonOperationsScreen() {
           gap: 22,
           paddingBottom: 40,
           paddingHorizontal: CONTENT_PADDING,
-          // Only the extra name/email text below the native bar's own
+          // On iOS only the extra name/email text below the native bar's own
           // (automatically-inset) space — not the full `headerHeight`,
           // which would double-count that native bar's height on top of it.
-          paddingTop: HEADER_TEXT_HEIGHT + 10,
+          paddingTop: contentPaddingTop,
         }}
         style={{ backgroundColor: colors.background }}
       >
@@ -811,17 +827,33 @@ export function PersonOperationsScreen() {
           top: 0,
         }}
       >
-        <BlurView
-          intensity={9}
-          tint={colorScheme === "dark" ? "dark" : "light"}
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            height: headerHeight,
-          }}
-        />
+        {process.env.EXPO_OS === "ios" ? (
+          <BlurView
+            intensity={9}
+            tint={colorScheme === "dark" ? "dark" : "light"}
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              height: headerHeight,
+            }}
+          />
+        ) : (
+          // Android's blur fallback is close to transparent, which would let
+          // the scrolled content show through the name/email header. Content
+          // is padded clear of this band, so an opaque fill is correct there.
+          <View
+            style={{
+              backgroundColor: colors.background,
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              height: headerHeight,
+            }}
+          />
+        )}
         <View
           style={{
             left: 0,

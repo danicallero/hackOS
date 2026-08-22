@@ -81,7 +81,9 @@ export function PeopleDirectoryScreen() {
       // Both entry points open the same people directory. Keep the screen
       // title stable; the search field already explains the available action.
       title: usesListTitle ? "" : t("scannerPeople"),
-      headerLargeTitle: !usesListTitle,
+      // Large titles are an iOS-only presentation; on Android the native
+      // app bar stays compact and opaque so the list scrolls below it.
+      headerLargeTitle: process.env.EXPO_OS === "ios" && !usesListTitle,
       headerSearchBarOptions: {
         placeholder: t("scannerPeopleSearchPlaceholder"),
         autoCapitalize: "none",
@@ -278,7 +280,12 @@ function PersonRow({ person, onPress }: { person: ScannerPerson; onPress: () => 
           width: 40,
         }}
       >
-        <SymbolView name="person.fill" tintColor={colors.accent} size={18} accessible={false} />
+        <SymbolView
+          name="person.fill"
+          tintColor={colors.onAccentSurface}
+          size={18}
+          accessible={false}
+        />
       </View>
       <View style={{ flex: 1, gap: 2 }}>
         <Text

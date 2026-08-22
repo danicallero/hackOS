@@ -110,6 +110,9 @@ export function ScheduleFormModal({
 }) {
   const { t } = useLocale();
   const insets = useSafeAreaInsets();
+  // Android has no page-sheet presentation: the modal is full-screen, so its
+  // chrome has to clear the status bar itself.
+  const sheetTopInset = process.env.EXPO_OS === "android" ? insets.top : 0;
   const [values, setValues] = useState<ScheduleInput>(initial ?? emptyForm());
   const [owners, setOwners] = useState<ScheduleOwner[]>(initialOwners ?? []);
   const [scheduledPublish, setScheduledPublish] = useState(Boolean(initial?.publishAt));
@@ -172,7 +175,7 @@ export function ScheduleFormModal({
             gap: 22,
             padding: 16,
             paddingBottom: Math.max(32, insets.bottom + 16),
-            paddingTop: 16,
+            paddingTop: 16 + sheetTopInset,
           }}
         >
           <View style={{ justifyContent: "center", minHeight: 44, paddingHorizontal: 52 }}>
@@ -453,14 +456,14 @@ export function ScheduleFormModal({
         </ScrollView>
 
         <FloatingGlassButton
-          top={16}
+          top={16 + sheetTopInset}
           side="left"
           icon="xmark"
           accessibilityLabel={t("cancel")}
           onPress={onClose}
         />
         <FloatingGlassButton
-          top={16}
+          top={16 + sheetTopInset}
           side="right"
           icon="checkmark"
           tintColor={colors.accent}

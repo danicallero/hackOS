@@ -3,6 +3,8 @@ import { EVENTS } from "@hackos/shared/events";
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   Platform,
   Pressable,
   RefreshControl,
@@ -86,6 +88,7 @@ const LIMIT = 20;
 
 const LOAD_MORE_THRESHOLD = 130;
 const LOAD_MORE_BANDS = 12;
+const LOAD_MORE_END_DISTANCE = 24;
 
 /** The segmented control + unread-filter bell, memoized so toggling the bell doesn't also re-render the hidden Preferences tree it's shared with. */
 const NotificationsHeader = memo(function NotificationsHeader({
@@ -231,6 +234,8 @@ const MessagesView = memo(function MessagesView({
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const actionRetry = useRef<(() => Promise<void>) | null>(null);
+  const loadingMoreRef = useRef(false);
+  const loadMoreRef = useRef<() => Promise<void>>(() => Promise.resolve());
   const pullProgress = useSharedValue(0);
   const pullArmed = useSharedValue(false);
   const pullBand = useSharedValue(0);
@@ -378,7 +383,11 @@ const MessagesView = memo(function MessagesView({
   }
 
   async function loadMore() {
-    if (!data || loadingMore || data.items.length >= data.total) return;
+    // Android can report both the end of a drag and the end of its momentum
+    // for one gesture. Keep the guard synchronous so those callbacks cannot
+    // start the same page twice before React has rendered `loadingMore`.
+    if (!data || loadingMoreRef.current || data.items.length >= data.total) return;
+    loadingMoreRef.current = true;
     actionRetry.current = () => loadMore();
     setLoadingMore(true);
     setActionError(null);
@@ -400,6 +409,7 @@ const MessagesView = memo(function MessagesView({
         cause instanceof Error ? cause : new Error(t("notificationsCouldNotLoadMore")),
       );
     } finally {
+      loadingMoreRef.current = false;
       setLoadingMore(false);
     }
   }
@@ -420,10 +430,21 @@ const MessagesView = memo(function MessagesView({
     canLoadMoreSV.value = canLoadMore;
   }, [canLoadMore, canLoadMoreSV]);
 
-  const loadMoreRef = useRef(loadMore);
   loadMoreRef.current = loadMore;
   const triggerLoadMore = useCallback(() => {
     void loadMoreRef.current();
+  }, []);
+
+  const loadMoreAtAndroidEnd = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (Platform.OS !== "android") return;
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    const distanceFromEnd = contentSize.height - (contentOffset.y + layoutMeasurement.height);
+    // Avoid firing for a short list that is resting at offset 0. The
+    // visible button below remains the fallback when the content cannot
+    // scroll far enough to produce an end-of-list gesture.
+    if (contentOffset.y > 0 && distanceFromEnd <= LOAD_MORE_END_DISTANCE) {
+      void loadMoreRef.current();
+    }
   }, []);
 
   const isDragging = useSharedValue(false);
@@ -438,16 +459,6 @@ const MessagesView = memo(function MessagesView({
   // reports a "positive overscroll" at rest (offset 0, contentSize <
   // layoutMeasurement), which would otherwise show the ring with no finger
   // on the screen.
-  //
-  // Android's ScrollView doesn't rubber-band past its content the way iOS's
-  // does — `contentOffset.y` never exceeds the scrollable range, so the
-  // overscroll math above always reads ~0 and load-more could never arm
-  // (this is the root cause of the Android pull-to-load-more bug). Android
-  // instead gets a plain "near the bottom of normal scroll" trigger: the
-  // moment the remaining distance to the end drops under the threshold,
-  // fire load-more once (latched via `pullArmed` so it doesn't refire every
-  // frame while the finger stays there) and reset the latch once the list
-  // scrolls back away from the bottom.
   const scrollHandler = useAnimatedScrollHandler(
     {
       onBeginDrag: () => {
@@ -457,22 +468,7 @@ const MessagesView = memo(function MessagesView({
         pullProgress.value = 0;
       },
       onScroll: (event) => {
-        if (!canLoadMoreSV.value) return;
-
-        if (Platform.OS === "android") {
-          const distanceFromEnd =
-            event.contentSize.height - (event.contentOffset.y + event.layoutMeasurement.height);
-          const armed = distanceFromEnd <= LOAD_MORE_THRESHOLD;
-          if (armed && !pullArmed.value) {
-            pullArmed.value = true;
-            runOnJS(triggerLoadMore)();
-          } else if (!armed && pullArmed.value) {
-            pullArmed.value = false;
-          }
-          return;
-        }
-
-        if (!isDragging.value) return;
+        if (!isDragging.value || !canLoadMoreSV.value) return;
         const overscroll =
           event.contentOffset.y + event.layoutMeasurement.height - event.contentSize.height;
         const progress = Math.max(0, Math.min(1, overscroll / LOAD_MORE_THRESHOLD));
@@ -492,7 +488,6 @@ const MessagesView = memo(function MessagesView({
       },
       onEndDrag: () => {
         isDragging.value = false;
-        if (Platform.OS === "android") return;
         if (pullArmed.value) runOnJS(triggerLoadMore)();
         pullArmed.value = false;
         pullProgress.value = 0;
@@ -503,6 +498,16 @@ const MessagesView = memo(function MessagesView({
 
   const retryAction = actionRetry.current;
   const actionRetrying = readingId !== null || deletingId !== null || loadingMore;
+  const loadMoreIndicator = (
+    <>
+      <PullHintText
+        progress={pullProgress}
+        label={t("notificationsPullToLoadMore")}
+        style={{ position: "absolute" }}
+      />
+      <LoadMoreRing progress={pullProgress} armed={pullArmed} style={{ position: "absolute" }} />
+    </>
+  );
 
   return (
     <Animated.ScrollView
@@ -515,7 +520,9 @@ const MessagesView = memo(function MessagesView({
       }}
       keyboardShouldPersistTaps="handled"
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
-      onScroll={scrollHandler}
+      onScroll={Platform.OS === "ios" ? scrollHandler : undefined}
+      onScrollEndDrag={Platform.OS === "android" ? loadMoreAtAndroidEnd : undefined}
+      onMomentumScrollEnd={Platform.OS === "android" ? loadMoreAtAndroidEnd : undefined}
       scrollEventThrottle={1}
     >
       {tabSwitcher}
@@ -562,6 +569,7 @@ const MessagesView = memo(function MessagesView({
         <View style={{ gap: 18 }}>
           <Text
             selectable
+            accessibilityLiveRegion="polite"
             style={{ color: colors.secondaryLabel, fontSize: 13, textAlign: "center" }}
           >
             {t("notificationsShowingLatest", {
@@ -570,26 +578,37 @@ const MessagesView = memo(function MessagesView({
             })}
           </Text>
           {data.items.length < data.total ? (
-            <View
-              style={{
-                alignItems: "center",
-                height: RING_SIZE,
-                justifyContent: "center",
-                position: "relative",
-                width: "100%",
-              }}
-            >
-              <PullHintText
-                progress={pullProgress}
-                label={t("notificationsPullToLoadMore")}
-                style={{ position: "absolute" }}
-              />
-              <LoadMoreRing
-                progress={pullProgress}
-                armed={pullArmed}
-                style={{ position: "absolute" }}
-              />
-            </View>
+            Platform.OS === "android" ? (
+              <Pressable
+                accessibilityLabel={t("notificationsPullToLoadMore")}
+                accessibilityRole="button"
+                accessibilityState={{ busy: loadingMore, disabled: loadingMore }}
+                disabled={loadingMore}
+                onPress={() => void loadMoreRef.current()}
+                style={({ pressed }) => ({
+                  alignItems: "center",
+                  height: 44,
+                  justifyContent: "center",
+                  opacity: loadingMore ? 0.55 : pressed ? 0.65 : 1,
+                  position: "relative",
+                  width: "100%",
+                })}
+              >
+                {loadMoreIndicator}
+              </Pressable>
+            ) : (
+              <View
+                style={{
+                  alignItems: "center",
+                  height: RING_SIZE,
+                  justifyContent: "center",
+                  position: "relative",
+                  width: "100%",
+                }}
+              >
+                {loadMoreIndicator}
+              </View>
+            )
           ) : null}
         </View>
       ) : null}

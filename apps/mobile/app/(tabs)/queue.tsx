@@ -186,19 +186,22 @@ function QueueCard({ item, precalled }: { item: QueueEntry; precalled: boolean }
           <View style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
             <SymbolView
               name="door.left.hand.open"
-              tintColor={colors.success}
+              tintColor={colors.onSuccessSurface}
               size={22}
               accessible={false}
             />
             <Text
               selectable
-              style={{ color: colors.success, flex: 1, fontSize: 17, fontWeight: "800" }}
+              style={{ color: colors.onSuccessSurface, flex: 1, fontSize: 17, fontWeight: "800" }}
             >
               {t("queueCalled", { room: calledRoom.name })}
             </Text>
           </View>
           {calledRoom.location ? (
-            <Text selectable style={{ color: colors.success, fontSize: 14, paddingLeft: 30 }}>
+            <Text
+              selectable
+              style={{ color: colors.onSuccessSurface, fontSize: 14, paddingLeft: 30 }}
+            >
               {calledRoom.location}
             </Text>
           ) : null}
@@ -219,13 +222,13 @@ function QueueCard({ item, precalled }: { item: QueueEntry; precalled: boolean }
             >
               <SymbolView
                 name="bell.badge.fill"
-                tintColor={colors.warning}
+                tintColor={colors.onWarningSurface}
                 size={19}
                 accessible={false}
               />
               <Text
                 selectable
-                style={{ color: colors.warning, flex: 1, fontSize: 15, fontWeight: "700" }}
+                style={{ color: colors.onWarningSurface, flex: 1, fontSize: 15, fontWeight: "700" }}
               >
                 {t("queuePrecalled")}
               </Text>

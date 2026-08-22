@@ -263,7 +263,7 @@ export function QueueOperationsScreen() {
         padding: 12,
       }}
     >
-      <Text selectable style={{ color: colors.destructive, fontSize: 14 }}>
+      <Text selectable style={{ color: colors.onDestructiveSurface, fontSize: 14 }}>
         {actionError}
       </Text>
     </View>
@@ -469,11 +469,13 @@ function TeamQueueCard({
         >
           <SymbolView
             name="door.left.hand.open"
-            tintColor={colors.success}
+            tintColor={colors.onSuccessSurface}
             size={19}
             accessible={false}
           />
-          <Text style={{ color: colors.success, flex: 1, fontSize: 15, fontWeight: "700" }}>
+          <Text
+            style={{ color: colors.onSuccessSurface, flex: 1, fontSize: 15, fontWeight: "700" }}
+          >
             {calledRoom.name}
             {calledRoom.location ? ` · ${calledRoom.location}` : ""}
           </Text>
@@ -649,11 +651,11 @@ function RoomCard({
           >
             <SymbolView
               name="bell.badge.fill"
-              tintColor={colors.accent}
+              tintColor={colors.onAccentSurface}
               size={12}
               accessible={false}
             />
-            <Text style={{ color: colors.accent, fontSize: 12, fontWeight: "700" }}>
+            <Text style={{ color: colors.onAccentSurface, fontSize: 12, fontWeight: "700" }}>
               {t("queueOpsJustCalled")}
             </Text>
           </View>

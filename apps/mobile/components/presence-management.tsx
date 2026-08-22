@@ -1,4 +1,3 @@
-import { MenuView } from "@expo/ui/community/menu";
 import { isMealActivityKind } from "@hackos/shared/activity-kinds";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -695,6 +694,158 @@ function buildDraftPayload(draft: SignalDraft, userId: number, notes: string | n
   };
 }
 
+/**
+ * The activity a manual signal points at. A native `MenuView` was fine while
+ * the list was short, but the timeline offers every scannable activity of the
+ * event — too many to scan visually and impossible to filter — so this is a
+ * sheet with its own search field on both platforms.
+ */
+function ActivityPicker({
+  activities,
+  selectedId,
+  onSelect,
+}: {
+  activities: PresenceTimeline["activities"];
+  selectedId: number | null;
+  onSelect: (activityId: number) => void;
+}) {
+  const { t } = useLocale();
+  const insets = useSafeAreaInsets();
+  const sheetTopInset = process.env.EXPO_OS === "android" ? insets.top : 0;
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+
+  const selected = activities.find((activity) => activity.id === selectedId);
+  const needle = query.trim().toLocaleLowerCase();
+  const filtered = needle
+    ? activities.filter((activity) =>
+        `${activity.name} ${activity.category}`.toLocaleLowerCase().includes(needle),
+      )
+    : activities;
+
+  return (
+    <>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t("presenceChooseActivity")}
+        onPress={() => {
+          setQuery("");
+          setOpen(true);
+        }}
+        style={({ pressed }) => ({
+          alignItems: "center",
+          flexDirection: "row",
+          gap: 12,
+          minHeight: 50,
+          opacity: pressed ? 0.6 : 1,
+          padding: 16,
+        })}
+      >
+        <Text selectable numberOfLines={1} style={{ color: colors.label, flex: 1, fontSize: 16 }}>
+          {selected ? `${selected.name} · ${selected.category}` : t("presenceChooseActivity")}
+        </Text>
+        <SymbolView name="chevron.up.chevron.down" tintColor={colors.secondaryLabel} size={15} />
+      </Pressable>
+
+      <Modal
+        animationType="slide"
+        onRequestClose={() => setOpen(false)}
+        presentationStyle="pageSheet"
+        visible={open}
+      >
+        <View style={{ backgroundColor: colors.background, flex: 1 }}>
+          <ScrollView
+            contentInsetAdjustmentBehavior="automatic"
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{
+              gap: 22,
+              padding: 16,
+              paddingBottom: Math.max(32, insets.bottom + 16),
+              paddingTop: 16 + sheetTopInset,
+            }}
+          >
+            <View style={{ justifyContent: "center", minHeight: 44, paddingHorizontal: 52 }}>
+              <Text
+                style={{
+                  color: colors.label,
+                  fontSize: 20,
+                  fontWeight: "700",
+                  textAlign: "center",
+                }}
+              >
+                {t("presenceActivity")}
+              </Text>
+            </View>
+
+            <Section>
+              <TextInput
+                accessibilityLabel={t("scannerActivitiesSearchPlaceholder")}
+                autoCapitalize="none"
+                autoCorrect={false}
+                clearButtonMode="while-editing"
+                onChangeText={setQuery}
+                placeholder={t("scannerActivitiesSearchPlaceholder")}
+                placeholderTextColor={colors.tertiaryLabel}
+                style={{ color: colors.label, fontSize: 16, padding: 16 }}
+                value={query}
+              />
+            </Section>
+
+            {filtered.length === 0 ? (
+              <Text selectable style={{ color: colors.secondaryLabel, padding: 16 }}>
+                {t("scannerNoResults")}
+              </Text>
+            ) : (
+              <Section>
+                {filtered.map((activity, index) => (
+                  <View key={activity.id}>
+                    {index > 0 ? <Separator /> : null}
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: activity.id === selectedId }}
+                      onPress={() => {
+                        void haptic("light");
+                        onSelect(activity.id);
+                        setOpen(false);
+                      }}
+                      style={({ pressed }) => ({
+                        alignItems: "center",
+                        flexDirection: "row",
+                        gap: 12,
+                        minHeight: 50,
+                        opacity: pressed ? 0.6 : 1,
+                        padding: 16,
+                      })}
+                    >
+                      <Text
+                        numberOfLines={1}
+                        style={{ color: colors.label, flex: 1, fontSize: 16 }}
+                      >
+                        {`${activity.name} · ${activity.category}`}
+                      </Text>
+                      {activity.id === selectedId ? (
+                        <SymbolView name="checkmark" tintColor={colors.accent} size={15} />
+                      ) : null}
+                    </Pressable>
+                  </View>
+                ))}
+              </Section>
+            )}
+          </ScrollView>
+
+          <FloatingGlassButton
+            top={16 + sheetTopInset}
+            side="left"
+            icon="xmark"
+            accessibilityLabel={t("close")}
+            onPress={() => setOpen(false)}
+          />
+        </View>
+      </Modal>
+    </>
+  );
+}
+
 function SignalEditor({
   activities,
   draft,
@@ -717,6 +868,10 @@ function SignalEditor({
   useColorScheme();
   const { t } = useLocale();
   const insets = useSafeAreaInsets();
+  // `presentationStyle="pageSheet"` is an iOS presentation: on Android the
+  // modal is a plain full-screen window, so its own chrome has to clear the
+  // status bar instead of starting inside an inset card.
+  const sheetTopInset = process.env.EXPO_OS === "android" ? insets.top : 0;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -765,7 +920,7 @@ function SignalEditor({
             gap: 22,
             padding: 16,
             paddingBottom: Math.max(32, insets.bottom + 16),
-            paddingTop: 16,
+            paddingTop: 16 + sheetTopInset,
           }}
         >
           <View style={{ justifyContent: "center", minHeight: 44, paddingHorizontal: 52 }}>
@@ -803,46 +958,11 @@ function SignalEditor({
           {draft.kind === "activity" ? (
             <Section title={t("presenceActivity")}>
               {activities.length > 0 ? (
-                <MenuView
-                  actions={activities.map((activity) => ({
-                    id: String(activity.id),
-                    title: `${activity.name} · ${activity.category}`,
-                    state: draft.activityId === activity.id ? ("on" as const) : ("off" as const),
-                  }))}
-                  onPressAction={({ nativeEvent }) =>
-                    onChange({ ...draft, activityId: Number(nativeEvent.event) })
-                  }
-                >
-                  <View
-                    style={{
-                      alignItems: "center",
-                      flexDirection: "row",
-                      gap: 12,
-                      minHeight: 50,
-                      padding: 16,
-                    }}
-                  >
-                    <Text
-                      selectable
-                      numberOfLines={1}
-                      style={{ color: colors.label, flex: 1, fontSize: 16 }}
-                    >
-                      {(() => {
-                        const selected = activities.find(
-                          (activity) => activity.id === draft.activityId,
-                        );
-                        return selected
-                          ? `${selected.name} · ${selected.category}`
-                          : t("presenceChooseActivity");
-                      })()}
-                    </Text>
-                    <SymbolView
-                      name="chevron.up.chevron.down"
-                      tintColor={colors.secondaryLabel}
-                      size={15}
-                    />
-                  </View>
-                </MenuView>
+                <ActivityPicker
+                  activities={activities}
+                  selectedId={draft.activityId}
+                  onSelect={(activityId) => onChange({ ...draft, activityId })}
+                />
               ) : (
                 <Text selectable style={{ color: colors.secondaryLabel, padding: 16 }}>
                   {t("presenceNoActivities")}
@@ -893,14 +1013,14 @@ function SignalEditor({
         </ScrollView>
 
         <FloatingGlassButton
-          top={16}
+          top={16 + sheetTopInset}
           side="left"
           icon="xmark"
           accessibilityLabel={t("cancel")}
           onPress={onClose}
         />
         <FloatingGlassButton
-          top={16}
+          top={16 + sheetTopInset}
           side="right"
           icon="checkmark"
           tintColor={colors.accent}
