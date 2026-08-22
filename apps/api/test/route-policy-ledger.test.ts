@@ -12,11 +12,11 @@ describe("final route-policy ledger", () => {
   it("has the exact classified rows, allowlists, and sole Better Auth exemption", async () => {
     app = await buildTestApp();
     const rows = app.routePolicyLedger.filter((row) => row.method !== "HEAD");
-    expect(rows).toHaveLength(303);
+    expect(rows).toHaveLength(304);
     expect(rows.filter((row) => row.policy.kind === "public")).toHaveLength(15);
     expect(rows.filter((row) => row.policy.kind === "token")).toHaveLength(12);
     expect(rows.filter((row) => row.policy.kind === "authenticated")).toHaveLength(42);
-    expect(rows.filter((row) => row.policy.kind === "capability")).toHaveLength(182);
+    expect(rows.filter((row) => row.policy.kind === "capability")).toHaveLength(183);
     expect(rows.filter((row) => row.policy.kind === "contextual")).toHaveLength(52);
     expect(app.routePolicyExemptions).toEqual([
       { url: "/api/auth/*", exemption: "better-auth-generated" },

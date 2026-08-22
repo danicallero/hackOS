@@ -281,6 +281,9 @@ describe("visibility window (H50 vigencia — DELTA expires_at)", () => {
         payload: {
           title: "too late",
           body: "b",
+          // expires_at only stays meaningful for screen-placed rows (H50,
+          // DELTA 0722) — a notify-only row can't carry one at all.
+          screenPlacement: "fullscreen",
           publishAt: iso(-120_000),
           expiresAt: iso(-60_000),
           notifyUsers: true,
@@ -320,6 +323,233 @@ describe("announcement delivery controls", () => {
     const rows = await outboxRowsFor();
     const userIds = [...new Set(rows.map((r) => r.user_id))];
     expect(userIds).toEqual([adminId, firstUserId, secondUserId]);
+  });
+});
+
+async function makeAttendee(role: "participant" | "mentor"): Promise<number> {
+  const userId = await createUser();
+  await pool.query(`INSERT INTO manual_attendee_roles (user_id, role) VALUES ($1, $2)`, [
+    userId,
+    role,
+  ]);
+  return userId;
+}
+
+async function makeSponsor(): Promise<number> {
+  const userId = await createUser();
+  const { rows } = await pool.query(`INSERT INTO enterprises (name) VALUES ($1) RETURNING id`, [
+    `ent-${crypto.randomUUID()}`,
+  ]);
+  await pool.query(`INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2)`, [
+    rows[0].id,
+    userId,
+  ]);
+  return userId;
+}
+
+describe("audience and recipient targeting (H50, DELTA 0722)", () => {
+  it("an audience-tagged announcement only reaches matching accounts (sponsor implies participant)", async () => {
+    const adminId = await createUserWithCapabilities([CAPABILITIES.ANNOUNCEMENTS_MANAGE]);
+    const mentorId = await makeAttendee("mentor");
+    const participantId = await makeAttendee("participant");
+    const sponsorId = await makeSponsor();
+    await createUser(); // unaffiliated account, should never be reached
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/announcements",
+      headers: asUser(adminId),
+      payload: { title: "mentors only", body: "b", notifyUsers: true, audiences: ["mentor"] },
+    });
+    expect(res.statusCode).toBe(201);
+
+    const userIds = [...new Set((await outboxRowsFor()).map((r) => r.user_id))];
+    expect(userIds).toEqual([mentorId]);
+    expect(userIds).not.toContain(participantId);
+    expect(userIds).not.toContain(sponsorId);
+
+    const participantAudience = await app.inject({
+      method: "POST",
+      url: "/api/announcements",
+      headers: asUser(adminId),
+      payload: {
+        title: "participants and sponsors",
+        body: "b",
+        notifyUsers: true,
+        audiences: ["participant"],
+      },
+    });
+    expect(participantAudience.statusCode).toBe(201);
+    const secondRoundUserIds = [
+      ...new Set((await outboxRowsFor()).map((r) => r.user_id).filter((id) => id !== mentorId)),
+    ];
+    expect(secondRoundUserIds.sort()).toEqual([participantId, sponsorId].sort());
+  });
+
+  it("a specific-recipient announcement only reaches the listed accounts", async () => {
+    const adminId = await createUserWithCapabilities([CAPABILITIES.ANNOUNCEMENTS_MANAGE]);
+    const targetId = await createUser();
+    await createUser(); // not targeted
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/announcements",
+      headers: asUser(adminId),
+      payload: {
+        title: "just you",
+        body: "b",
+        notifyUsers: true,
+        recipientUserIds: [targetId],
+      },
+    });
+    expect(res.statusCode).toBe(201);
+
+    const userIds = [...new Set((await outboxRowsFor()).map((r) => r.user_id))];
+    expect(userIds).toEqual([targetId]);
+  });
+
+  it("rejects an audience together with specific recipients", async () => {
+    const adminId = await createUserWithCapabilities([CAPABILITIES.ANNOUNCEMENTS_MANAGE]);
+    const targetId = await createUser();
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/announcements",
+      headers: asUser(adminId),
+      payload: {
+        title: "both",
+        body: "b",
+        notifyUsers: true,
+        audiences: ["mentor"],
+        recipientUserIds: [targetId],
+      },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("rejects expiresAt on a notify-only announcement", async () => {
+    const adminId = await createUserWithCapabilities([CAPABILITIES.ANNOUNCEMENTS_MANAGE]);
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/announcements",
+      headers: asUser(adminId),
+      payload: {
+        title: "no window",
+        body: "b",
+        notifyUsers: true,
+        screenPlacement: "none",
+        expiresAt: iso(60_000),
+      },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("rejects specific recipients on a screen-placed announcement", async () => {
+    const adminId = await createUserWithCapabilities([CAPABILITIES.ANNOUNCEMENTS_MANAGE]);
+    const targetId = await createUser();
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/announcements",
+      headers: asUser(adminId),
+      payload: {
+        title: "on screen",
+        body: "b",
+        screenPlacement: "embedded",
+        recipientUserIds: [targetId],
+      },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("filters candidate channels through each recipient's own preferences, never bypassing them", async () => {
+    const adminId = await createUserWithCapabilities([CAPABILITIES.ANNOUNCEMENTS_MANAGE]);
+    const pushOffId = await createUser();
+    await pool.query(
+      `INSERT INTO notification_preferences (user_id, category, channel, enabled)
+       VALUES ($1, 'announcements', 'push', false)`,
+      [pushOffId],
+    );
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/announcements",
+      headers: asUser(adminId),
+      payload: {
+        title: "push only",
+        body: "b",
+        notifyUsers: true,
+        channels: ["push"],
+        recipientUserIds: [pushOffId],
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(await outboxRowsFor()).toEqual([]);
+  });
+
+  it("recipient-candidates search is scoped to ANNOUNCEMENTS_MANAGE, not the broader USERS_READ", async () => {
+    const adminId = await createUserWithCapabilities([CAPABILITIES.ANNOUNCEMENTS_MANAGE]);
+    const targetId = await createUser({ name: "Findable Person" });
+    await createUser({ name: "Someone Else" });
+
+    const anon = await app.inject({
+      method: "GET",
+      url: "/api/announcements/recipient-candidates?q=Findable",
+    });
+    expect(anon.statusCode).toBe(401);
+
+    const forbidden = await app.inject({
+      method: "GET",
+      url: "/api/announcements/recipient-candidates?q=Findable",
+      headers: asUser(await createUser()),
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/announcements/recipient-candidates?q=Findable",
+      headers: asUser(adminId),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().users.map((u: { id: number }) => u.id)).toEqual([targetId]);
+  });
+
+  it("a screen+notify announcement fans out exactly once and keeps its screen window independent of the fan-out", async () => {
+    const adminId = await createUserWithCapabilities([CAPABILITIES.ANNOUNCEMENTS_MANAGE]);
+    await createUser();
+
+    const created = (
+      await app.inject({
+        method: "POST",
+        url: "/api/announcements",
+        headers: asUser(adminId),
+        payload: {
+          title: "screen + notify",
+          body: "b",
+          screenPlacement: "embedded",
+          notifyUsers: true,
+          publishAt: iso(60_000),
+          expiresAt: iso(120_000),
+        },
+      })
+    ).json();
+    expect(created.fanned_out_at).toBeNull();
+
+    expect((await runAnnouncementsPublisherOnce()).published).toBe(0);
+
+    await pool.query(
+      `UPDATE announcements SET publish_at = now() - interval '1 second' WHERE id = $1`,
+      [created.id],
+    );
+    expect((await runAnnouncementsPublisherOnce()).published).toBe(1);
+    const afterFirst = await outboxRowsFor();
+    expect(afterFirst.length).toBeGreaterThan(0);
+
+    // still on-screen (window hasn't expired) but must not fan out again
+    expect((await runAnnouncementsPublisherOnce()).published).toBe(0);
+    expect(await outboxRowsFor()).toHaveLength(afterFirst.length);
+
+    const publicRes = await app.inject({ method: "GET", url: "/api/announcements/public" });
+    expect(publicRes.json().items.map((a: { id: number }) => a.id)).toContain(created.id);
   });
 });
 
