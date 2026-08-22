@@ -516,6 +516,44 @@ describe("H24 illegal in→in conflicts in the timeline", () => {
   });
 });
 
+describe("H24 timeline activity picker list", () => {
+  it("offers only scannable activities, plus any this person already logged", async () => {
+    const uid = await createUser();
+    const { createActivity } = await import("./fixtures.js");
+    const meal = await createMeal("Breakfast");
+    const scannable = await createActivity({
+      category: "activity",
+      requiresScan: true,
+      name: "Workshop",
+    });
+    await createActivity({ category: "activity", requiresScan: false, name: "Hidden" });
+    const logged = await createActivity({
+      category: "activity",
+      requiresScan: false,
+      name: "Already logged",
+    });
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `INSERT INTO activity_logs (user_id, activity_id, logged_by, logged_at)
+       VALUES ($1, $2, $3, now())`,
+      [uid, logged, doorStaff],
+    );
+
+    const timeline = await app.inject({
+      method: "GET",
+      url: `/api/presence/timeline/${uid}`,
+      headers: asUser(statsStaff),
+    });
+    expect(timeline.statusCode).toBe(200);
+    const names = timeline.json().activities.map((a: { name: string }) => a.name);
+    expect(names).toEqual(expect.arrayContaining(["Breakfast", "Workshop", "Already logged"]));
+    expect(names).not.toContain("Hidden");
+    expect(timeline.json().activities.map((a: { id: number }) => a.id)).toEqual(
+      expect.arrayContaining([meal, scannable, logged]),
+    );
+  });
+});
+
 describe("H24 event-end automatic exit (product override: the one system-closed out)", () => {
   it("closes open sessions at event_ends_at, audits them, and is idempotent", async () => {
     const uid = await createUser();

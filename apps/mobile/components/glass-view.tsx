@@ -1,9 +1,18 @@
 import { GlassView as ExpoGlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 import type { ComponentProps } from "react";
-import { Platform, useColorScheme, View } from "react-native";
+import { type ColorSchemeName, Platform, useColorScheme, View } from "react-native";
 import { colors } from "@/theme/colors";
 
 export type GlassViewProps = ComponentProps<typeof ExpoGlassView>;
+
+type GlassColorScheme = NonNullable<GlassViewProps["colorScheme"]>;
+
+/** Resolve the fallback surface without letting Android dynamic colors ignore an explicit scheme. */
+export function glassFallbackSurface(colorScheme: GlassColorScheme, systemScheme: ColorSchemeName) {
+  if (colorScheme === "dark") return colors.glassDarkSurface;
+  if (colorScheme === "light") return colors.glassLightSurface;
+  return systemScheme === "dark" ? colors.elevatedSurface : colors.surface;
+}
 
 /**
  * `expo-glass-effect` ships iOS-only native code — on Android its `GlassView`
@@ -39,25 +48,7 @@ export function GlassView({
       />
     );
   }
-  const scheme = colorScheme === "auto" ? (systemScheme ?? "light") : colorScheme;
-  // `colors.surface` / `colors.elevatedSurface` resolve to Android's dynamic
-  // Material You colors (`Color.android.dynamic.*`), which always track the
-  // device's SYSTEM appearance and ignore this component's own `scheme`
-  // decision entirely. That's fine when the caller left `colorScheme` at
-  // "auto" — it should follow the system — but when a caller explicitly asks
-  // for dark glass (e.g. floating chrome whose children assume white
-  // text/icons), the dynamic color can still resolve light on a light-mode
-  // device, leaving that white content invisible. Use fixed Material
-  // surfaces on Android whenever the scheme was explicitly requested.
-  const surface =
-    Platform.OS === "android" && colorScheme !== "auto"
-      ? scheme === "dark"
-        ? "#2c2c2e"
-        : "#ffffff"
-      : scheme === "dark"
-        ? colors.elevatedSurface
-        : colors.surface;
-  const background = tintColor ?? surface;
+  const background = tintColor ?? glassFallbackSurface(colorScheme, systemScheme);
   return (
     <View
       {...viewProps}
@@ -65,7 +56,6 @@ export function GlassView({
         {
           backgroundColor: background,
           boxShadow: colors.controlShadow,
-          overflow: "hidden",
         },
         style,
       ]}

@@ -2,6 +2,7 @@ import Stack from "expo-router/stack";
 import type { ReactNode } from "react";
 import {
   ActivityIndicator,
+  type ColorValue,
   Pressable,
   Text,
   type TextStyle,
@@ -9,10 +10,11 @@ import {
   View,
   type ViewStyle,
 } from "react-native";
-import { GlassView } from "@/components/glass-view";
+import { GlassView, type GlassViewProps } from "@/components/glass-view";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
 import { type HapticIntent, haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
+import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { colors } from "@/theme/colors";
 
 export function Section({
@@ -168,10 +170,13 @@ export function StatusPill({
 }) {
   const palette = {
     neutral: { background: colors.elevatedSurface, foreground: colors.secondaryLabel },
-    accent: { background: colors.accentSurface, foreground: colors.accent },
-    success: { background: colors.successSurface, foreground: colors.success },
-    warning: { background: colors.warningSurface, foreground: colors.warning },
-    destructive: { background: colors.destructiveSurface, foreground: colors.destructive },
+    accent: { background: colors.accentSurface, foreground: colors.onAccentSurface },
+    success: { background: colors.successSurface, foreground: colors.onSuccessSurface },
+    warning: { background: colors.warningSurface, foreground: colors.onWarningSurface },
+    destructive: {
+      background: colors.destructiveSurface,
+      foreground: colors.onDestructiveSurface,
+    },
   }[tone];
   return (
     <View
@@ -259,6 +264,7 @@ export function AdaptiveToolbarButton({
   side = "left",
   icon,
   tintColor,
+  colorScheme = "auto",
   accessibilityLabel,
   accessibilityState,
   disabled = false,
@@ -268,6 +274,7 @@ export function AdaptiveToolbarButton({
   side?: "left" | "right";
   icon: Extract<SymbolViewProps["name"], string>;
   tintColor?: SymbolViewProps["tintColor"];
+  colorScheme?: GlassViewProps["colorScheme"];
   accessibilityLabel: string;
   accessibilityState?: { selected?: boolean; busy?: boolean };
   disabled?: boolean;
@@ -296,6 +303,7 @@ export function AdaptiveToolbarButton({
       side={side}
       icon={icon}
       tintColor={tintColor}
+      colorScheme={colorScheme}
       accessibilityLabel={accessibilityLabel}
       accessibilityState={accessibilityState}
       disabled={disabled}
@@ -310,6 +318,7 @@ export function FloatingGlassButton({
   side = "left",
   icon,
   tintColor,
+  colorScheme = "auto",
   accessibilityLabel,
   accessibilityState,
   disabled = false,
@@ -319,6 +328,9 @@ export function FloatingGlassButton({
   side?: "left" | "right";
   icon: SymbolViewProps["name"];
   tintColor?: SymbolViewProps["tintColor"];
+  /** Camera surfaces pass "dark" so the non-Liquid-Glass (Android, iOS <26)
+      opaque fallback doesn't turn into a white pill over the viewfinder. */
+  colorScheme?: GlassViewProps["colorScheme"];
   accessibilityLabel: string;
   accessibilityState?: { selected?: boolean; busy?: boolean };
   disabled?: boolean;
@@ -326,6 +338,7 @@ export function FloatingGlassButton({
 }) {
   return (
     <GlassView
+      colorScheme={colorScheme}
       glassEffectStyle="regular"
       isInteractive
       style={{
@@ -356,13 +369,50 @@ export function FloatingGlassButton({
   );
 }
 
+/**
+ * Android draws edge-to-edge with a transparent status bar, and these
+ * header-less tab screens have no native bar to blur their content under —
+ * so scrolled rows slide behind the clock. An opaque band of exactly the
+ * status-bar inset keeps them hidden instead. No-op on iOS, where the native
+ * (large-title) bar already owns that space.
+ */
+export function AndroidStatusBarScrim({ color = colors.background }: { color?: ColorValue }) {
+  const inset = useAndroidTopInset();
+  if (inset === 0) return null;
+  return (
+    <View
+      pointerEvents="none"
+      style={{
+        backgroundColor: color,
+        height: inset,
+        left: 0,
+        position: "absolute",
+        right: 0,
+        top: 0,
+      }}
+    />
+  );
+}
+
 /** Adaptive navigation back action; `top` is used by the non-iOS fallback. */
-export function AdaptiveBackButton({ top, onPress }: { top: number; onPress: () => void }) {
+export function AdaptiveBackButton({
+  top,
+  colorScheme = "auto",
+  tintColor,
+  onPress,
+}: {
+  top: number;
+  colorScheme?: GlassViewProps["colorScheme"];
+  tintColor?: SymbolViewProps["tintColor"];
+  onPress: () => void;
+}) {
   const { t } = useLocale();
   return (
     <AdaptiveToolbarButton
       top={top}
       icon="chevron.left"
+      colorScheme={colorScheme}
+      tintColor={tintColor}
       accessibilityLabel={t("back")}
       onPress={onPress}
     />

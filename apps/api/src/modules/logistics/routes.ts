@@ -466,7 +466,10 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
           "certainty windows (secured/provisional/invalid, plus a `conflict` flag on windows " +
           "invalidated by an illegal in→in sequence), the effective certainty-window duration, " +
           "and `conflicts[]` — pairs of consecutive door entries with no exit/activity between " +
-          "them, with the log ids and time bounds needed to insert the missing signal.",
+          "them, with the log ids and time bounds needed to insert the missing signal. " +
+          "`activities[]` lists the activities a manual activity signal can point at: the " +
+          "scannable set (meals + `requires_scan`), plus any activity this person already " +
+          "has a log against so an existing signal stays editable.",
       },
     },
     async (req) => presenceTimeline(req.params.userId),

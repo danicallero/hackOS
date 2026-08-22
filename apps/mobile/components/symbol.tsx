@@ -77,6 +77,7 @@ const ANDROID_SYMBOL_NAMES = {
   keyboard: "keyboard",
   "line.3.horizontal.decrease": "filter_list",
   "line.3.horizontal.decrease.circle.fill": "filter_alt",
+  lanyardcard: "badge",
   "list.bullet": "list",
   "list.bullet.rectangle": "list_alt",
   "lock.fill": "lock",
@@ -116,7 +117,13 @@ const ANDROID_SYMBOL_NAMES = {
   "wrench.and.screwdriver.fill": "build",
   xmark: "close",
   "xmark.circle.fill": "cancel",
+  "building.2": "business",
 } as const satisfies Record<string, string> & Record<ActivityKindSymbolName, string>;
+
+/** Return the Material Symbol alias used by Android/web, when one exists. */
+export function androidSymbolName(name: string): string | undefined {
+  return (ANDROID_SYMBOL_NAMES as Record<string, string | undefined>)[name];
+}
 
 /**
  * Drop-in replacement for `expo-symbols`' `SymbolView` that also renders on
@@ -128,7 +135,7 @@ export function SymbolView(props: ExpoSymbolViewProps) {
   if (Platform.OS === "ios" || Platform.OS === "macos" || typeof props.name !== "string") {
     return <ExpoSymbolView {...props} />;
   }
-  const android = (ANDROID_SYMBOL_NAMES as Record<string, string | undefined>)[props.name];
+  const android = androidSymbolName(props.name);
   if (!android) {
     return <ExpoSymbolView {...props} />;
   }

@@ -196,11 +196,17 @@ export function ActivityScannerScreen() {
         onValue={(value) => void scanned(value)}
         scanningEnabled={Boolean(activity) && !result}
       />
-      <AdaptiveBackButton top={insets.top + 12} onPress={() => router.back()} />
+      <AdaptiveBackButton
+        top={insets.top + 12}
+        colorScheme="dark"
+        tintColor="white"
+        onPress={() => router.back()}
+      />
       <AdaptiveToolbarButton
         top={insets.top + 12}
         side="right"
         icon="person.crop.badge.magnifyingglass"
+        colorScheme="dark"
         tintColor="white"
         accessibilityLabel={t("scannerSearchPerson")}
         onPress={() =>

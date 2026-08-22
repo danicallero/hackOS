@@ -1,3 +1,4 @@
+import { MEAL_ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
@@ -553,7 +554,22 @@ export async function presenceTimeline(userId: number, cutoff?: number) {
      ORDER BY occurred_at ASC, id ASC`,
       [userId],
     ),
-    pool.query(`SELECT id, name, category FROM activities ORDER BY name ASC, id ASC`),
+    // Only activities an operator could have scanned (H25 meals + H26
+    // `requires_scan`) are offerable as a manual activity signal — the same
+    // set as /api/activities/scannable. Anything this person already has a
+    // log against stays listed regardless, so editing an existing signal
+    // never loses its own activity from the picker.
+    pool.query(
+      `SELECT a.id, a.name, a.category
+         FROM activities a
+         LEFT JOIN schedule s ON s.id = a.schedule_id
+        WHERE a.category = ANY($2::text[])
+           OR a.requires_scan = true
+           OR EXISTS (SELECT 1 FROM activity_logs al
+                       WHERE al.activity_id = a.id AND al.user_id = $1)
+        ORDER BY s.starts_at ASC NULLS LAST, a.name ASC, a.id ASC`,
+      [userId, [...MEAL_ACTIVITY_KINDS]],
+    ),
   ]);
   const signals = rows.map((row) => ({
     id: Number(row.id),

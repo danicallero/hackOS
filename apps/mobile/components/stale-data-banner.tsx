@@ -50,15 +50,18 @@ export function StaleDataBanner({
     >
       <SymbolView
         name="exclamationmark.triangle.fill"
-        tintColor={colors.warning}
+        tintColor={colors.onWarningSurface}
         size={20}
         accessible={false}
       />
       <View style={{ flex: 1, gap: 3 }}>
-        <Text selectable style={{ color: colors.warning, fontSize: 15, fontWeight: "700" }}>
+        <Text
+          selectable
+          style={{ color: colors.onWarningSurface, fontSize: 15, fontWeight: "700" }}
+        >
           {t("offlineDataTitle")}
         </Text>
-        <Text selectable style={{ color: colors.warning, fontSize: 13, lineHeight: 18 }}>
+        <Text selectable style={{ color: colors.onWarningSurface, fontSize: 13, lineHeight: 18 }}>
           {t("offlineDataBody", { updatedAt: formatted })}
         </Text>
         {onRetry ? (
@@ -82,8 +85,8 @@ export function StaleDataBanner({
               paddingHorizontal: 4,
             })}
           >
-            {retrying ? <ActivityIndicator color={colors.warning} size="small" /> : null}
-            <Text style={{ color: colors.warning, fontSize: 14, fontWeight: "700" }}>
+            {retrying ? <ActivityIndicator color={colors.onWarningSurface} size="small" /> : null}
+            <Text style={{ color: colors.onWarningSurface, fontSize: 14, fontWeight: "700" }}>
               {t("retry")}
             </Text>
           </Pressable>

@@ -103,6 +103,9 @@ export function TeamOperationsScreen() {
   const { t, language } = useLocale();
   const { me } = useMeContext();
   const insets = useSafeAreaInsets();
+  // Android has no page-sheet presentation: these modals are full-screen, so
+  // their chrome has to clear the status bar itself.
+  const sheetTopInset = process.env.EXPO_OS === "android" ? insets.top : 0;
   const [entry, setEntry] = useState<TeamEntry | null>(null);
   const [room, setRoom] = useState<RoomView["room"] | null>(null);
   const [repoChallenges, setRepoChallenges] = useState<RepoChallenge[]>([]);
@@ -677,16 +680,18 @@ export function TeamOperationsScreen() {
           <View style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
             <SymbolView
               name="door.left.hand.open"
-              tintColor={colors.success}
+              tintColor={colors.onSuccessSurface}
               size={22}
               accessible={false}
             />
-            <Text style={{ color: colors.success, flex: 1, fontSize: 17, fontWeight: "800" }}>
+            <Text
+              style={{ color: colors.onSuccessSurface, flex: 1, fontSize: 17, fontWeight: "800" }}
+            >
               {t("teamDetailAtDoor", { room: room.name })}
             </Text>
           </View>
           {room.location ? (
-            <Text style={{ color: colors.success, fontSize: 14, paddingLeft: 30 }}>
+            <Text style={{ color: colors.onSuccessSurface, fontSize: 14, paddingLeft: 30 }}>
               {room.location}
             </Text>
           ) : null}
@@ -976,7 +981,7 @@ export function TeamOperationsScreen() {
                 gap: 22,
                 padding: 16,
                 paddingBottom: Math.max(32, insets.bottom + 16),
-                paddingTop: 16,
+                paddingTop: 16 + sheetTopInset,
               }}
             >
               <View style={{ justifyContent: "center", minHeight: 44, paddingHorizontal: 52 }}>
@@ -1083,7 +1088,7 @@ export function TeamOperationsScreen() {
                     paddingVertical: 12,
                   }}
                 >
-                  <Text style={{ color: colors.success, fontSize: 15 }}>
+                  <Text style={{ color: colors.onSuccessSurface, fontSize: 15 }}>
                     {t("teamDetailLinkSuccess")}
                   </Text>
                 </View>
@@ -1153,7 +1158,7 @@ export function TeamOperationsScreen() {
             </ScrollView>
 
             <FloatingGlassButton
-              top={16}
+              top={16 + sheetTopInset}
               side="left"
               icon="xmark"
               accessibilityLabel={t("cancel")}
@@ -1177,7 +1182,7 @@ export function TeamOperationsScreen() {
                 gap: 22,
                 padding: 16,
                 paddingBottom: Math.max(32, insets.bottom + 16),
-                paddingTop: 16,
+                paddingTop: 16 + sheetTopInset,
               }}
             >
               <View style={{ justifyContent: "center", minHeight: 44, paddingHorizontal: 52 }}>
@@ -1266,7 +1271,7 @@ export function TeamOperationsScreen() {
             </ScrollView>
 
             <FloatingGlassButton
-              top={16}
+              top={16 + sheetTopInset}
               side="left"
               icon="xmark"
               accessibilityLabel={t("cancel")}

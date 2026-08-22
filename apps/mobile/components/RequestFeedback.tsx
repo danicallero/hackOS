@@ -58,7 +58,7 @@ export function RequestFeedback({
       ]}
       accessibilityRole="alert"
     >
-      <Text selectable style={[styles.error, { color: colors.destructive }]}>
+      <Text selectable style={[styles.error, { color: colors.onDestructiveSurface }]}>
         {message ?? t(errorKey(error))}
       </Text>
       {onRetry ? (
@@ -76,8 +76,10 @@ export function RequestFeedback({
             { opacity: retrying ? 0.45 : pressed ? 0.65 : 1 },
           ]}
         >
-          {retrying ? <ActivityIndicator color={colors.accent} size="small" /> : null}
-          <Text style={[styles.buttonText, { color: colors.accent }]}>{t("retry")}</Text>
+          {retrying ? <ActivityIndicator color={colors.onDestructiveSurface} size="small" /> : null}
+          <Text style={[styles.buttonText, { color: colors.onDestructiveSurface }]}>
+            {t("retry")}
+          </Text>
         </Pressable>
       ) : null}
     </View>

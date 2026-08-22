@@ -284,7 +284,7 @@ function ActivityRow({
           // the icon comes from the shared kind registry; a category this build
           // doesn't know (older rows, retired kinds) keeps the generic list icon.
           name={activityKindSymbol(item.category, "list.bullet.rectangle")}
-          tintColor={colors.accent}
+          tintColor={colors.onAccentSurface}
           size={22}
         />
       </View>

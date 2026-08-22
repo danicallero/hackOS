@@ -10,6 +10,10 @@ const CONTENT_PADDING = 16;
 // The floating back button sits at `topInset + 12` with a 44pt diameter —
 // the page title has to clear that whole row.
 const BUTTON_ROW_HEIGHT = 20;
+// Android has no native nav bar here and ignores `contentInsetAdjustmentBehavior`
+// (an iOS-only prop), so the title has to clear the status bar and the whole
+// floating button row (12pt above it, 44pt tall, 12pt below) on its own.
+const ANDROID_BUTTON_ROW_HEIGHT = 68;
 
 export function PresenceScreen() {
   const { id, draftKind, draftAt } = useLocalSearchParams<{
@@ -35,11 +39,14 @@ export function PresenceScreen() {
           gap: 22,
           paddingBottom: 40,
           paddingHorizontal: CONTENT_PADDING,
-          // Not `insets.top + BUTTON_ROW_HEIGHT`: this screen sits under the
-          // same route group's invisible native nav bar as the profile
-          // screen, and `automatic` above already pushes content below its
-          // real height — adding `insets.top` again double-counts it.
-          paddingTop: BUTTON_ROW_HEIGHT,
+          // On iOS, not `insets.top + BUTTON_ROW_HEIGHT`: this screen sits
+          // under the same route group's invisible native nav bar as the
+          // profile screen, and `automatic` above already pushes content
+          // below its real height — adding `insets.top` again double-counts it.
+          paddingTop:
+            process.env.EXPO_OS === "ios"
+              ? BUTTON_ROW_HEIGHT
+              : insets.top + ANDROID_BUTTON_ROW_HEIGHT,
         }}
         style={{ backgroundColor: colors.background }}
       >
