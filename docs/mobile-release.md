@@ -56,8 +56,11 @@ without resolving these items:
 - Create stable reviewer accounts with participant and staff scanner
   capabilities, plus safe sample ticket/badge QR codes and written review
   instructions. Keep the review backend online for the entire review window.
-- Real-device acceptance is still required for offline queue persistence,
-  camera permissions, APNs/FCM, authenticated SSE, and Apple/Google Wallet.
+- Offline queue persistence, camera permissions, APNs/FCM, authenticated SSE,
+  and Apple/Google Wallet have been verified on real iOS/Android hardware.
+  The simulator/emulator cannot substitute for this: push delivery, camera
+  capture, and Wallet integration don't function there, so any future
+  behavior change in these areas needs a real-device re-check before release.
 
 Treat bundle identifiers, Android package names, and signing keys as durable
 production identity, not per-developer settings. Changing them creates a
