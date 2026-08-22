@@ -438,6 +438,16 @@ const MessagesView = memo(function MessagesView({
   // reports a "positive overscroll" at rest (offset 0, contentSize <
   // layoutMeasurement), which would otherwise show the ring with no finger
   // on the screen.
+  //
+  // Android's ScrollView doesn't rubber-band past its content the way iOS's
+  // does — `contentOffset.y` never exceeds the scrollable range, so the
+  // overscroll math above always reads ~0 and load-more could never arm
+  // (this is the root cause of the Android pull-to-load-more bug). Android
+  // instead gets a plain "near the bottom of normal scroll" trigger: the
+  // moment the remaining distance to the end drops under the threshold,
+  // fire load-more once (latched via `pullArmed` so it doesn't refire every
+  // frame while the finger stays there) and reset the latch once the list
+  // scrolls back away from the bottom.
   const scrollHandler = useAnimatedScrollHandler(
     {
       onBeginDrag: () => {
@@ -447,7 +457,22 @@ const MessagesView = memo(function MessagesView({
         pullProgress.value = 0;
       },
       onScroll: (event) => {
-        if (!isDragging.value || !canLoadMoreSV.value) return;
+        if (!canLoadMoreSV.value) return;
+
+        if (Platform.OS === "android") {
+          const distanceFromEnd =
+            event.contentSize.height - (event.contentOffset.y + event.layoutMeasurement.height);
+          const armed = distanceFromEnd <= LOAD_MORE_THRESHOLD;
+          if (armed && !pullArmed.value) {
+            pullArmed.value = true;
+            runOnJS(triggerLoadMore)();
+          } else if (!armed && pullArmed.value) {
+            pullArmed.value = false;
+          }
+          return;
+        }
+
+        if (!isDragging.value) return;
         const overscroll =
           event.contentOffset.y + event.layoutMeasurement.height - event.contentSize.height;
         const progress = Math.max(0, Math.min(1, overscroll / LOAD_MORE_THRESHOLD));
@@ -467,6 +492,7 @@ const MessagesView = memo(function MessagesView({
       },
       onEndDrag: () => {
         isDragging.value = false;
+        if (Platform.OS === "android") return;
         if (pullArmed.value) runOnJS(triggerLoadMore)();
         pullArmed.value = false;
         pullProgress.value = 0;
@@ -489,7 +515,7 @@ const MessagesView = memo(function MessagesView({
       }}
       keyboardShouldPersistTaps="handled"
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
-      onScroll={Platform.OS === "ios" ? scrollHandler : undefined}
+      onScroll={scrollHandler}
       scrollEventThrottle={1}
     >
       {tabSwitcher}

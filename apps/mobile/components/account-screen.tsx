@@ -1,7 +1,7 @@
 import { type MenuAction, MenuView } from "@expo/ui/community/menu";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, useColorScheme, View } from "react-native";
+import { Alert, ScrollView, Text, useColorScheme, View } from "react-native";
 
 import { ActionButton, InfoRow, Section, Separator, StatusPill } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
@@ -243,11 +243,20 @@ export default function AccountScreen() {
           )}
           onPressAction={({ nativeEvent }) => void changeLanguage(nativeEvent.event as Lang)}
         >
-          <Pressable
+          {/*
+           * A plain (non-interactive) View, not a Pressable: on Android,
+           * MenuView already wraps this child in its own native trigger
+           * Pressable (see @expo/ui's MenuView.android.tsx). Nesting another
+           * touchable here claims the touch responder first and blocks the
+           * native trigger from ever opening the menu — the picker looks
+           * inert. `changeLanguage` itself still no-ops while
+           * `savingLanguage` is true, so no separate disabled affordance is
+           * needed on the trigger.
+           */}
+          <View
             accessibilityLabel={t("accountLanguage")}
             accessibilityRole="button"
             accessibilityState={{ disabled: savingLanguage, busy: savingLanguage }}
-            disabled={savingLanguage}
           >
             <InfoRow
               label={t("accountLanguage")}
@@ -255,7 +264,7 @@ export default function AccountScreen() {
               icon="globe"
               accessoryIcon="chevron.down"
             />
-          </Pressable>
+          </View>
         </MenuView>
         <Separator inset={48} />
         <InfoRow
