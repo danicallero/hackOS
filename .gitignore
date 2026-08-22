@@ -13,5 +13,6 @@ artifacts/
 .DS_Store
 .turbo/
 example-csvs/
+.vscode/
 
 *.ipa
