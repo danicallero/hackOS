@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Modal, Pressable, ScrollView, Switch, Text, View } from "react-native";
+import { Modal, Platform, Pressable, ScrollView, Switch, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   runOnJS,
@@ -197,7 +197,11 @@ export function ScheduleNotificationsSheet({
           </ScrollView>
 
           <FloatingGlassButton
-            top={16}
+            // `presentationStyle="pageSheet"` is iOS-only; on Android the Modal
+            // renders edge-to-edge under the status bar, so the close button
+            // needs the safe-area top inset added on top of the base offset
+            // to avoid crowding the status bar / notch (#481).
+            top={Platform.OS === "android" ? insets.top + 16 : 16}
             side="left"
             icon={viewingKind ? "chevron.left" : "xmark"}
             accessibilityLabel={viewingKind ? t("back") : t("close")}
