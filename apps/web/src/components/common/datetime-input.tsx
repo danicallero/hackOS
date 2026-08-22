@@ -1,7 +1,7 @@
 "use client";
 
 import { XIcon } from "lucide-react";
-import { useId } from "react";
+import { useId, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -32,7 +32,31 @@ import { cn } from "@/lib/utils";
  * two single-purpose native controls means the date picker has no time to
  * touch. Values still join/split as one "yyyy-MM-ddTHH:mm" string at the
  * `value`/`onChange` boundary, so callers are unaffected.
+ *
+ * Safari (desktop and iOS) doesn't put a Tab-focused date/time control into
+ * "type a segment" mode the way Chromium/Gecko do — without a mouse click
+ * the field is unusable there (#490). There's no DOM API to select a segment
+ * directly, but `showPicker()` opens the control's own native picker, whose
+ * arrow-key/Enter controls are keyboard-operable, so on Safari,
+ * focus-via-keyboard opens it for them. This only became safe to do once
+ * date and time were split above — on the old combined datetime-local
+ * input, auto-opening the picker surfaced the same time-reset bug on every
+ * keyboard tab-in. Now each input's picker only ever touches that input's
+ * own segment.
+ *
+ * Gated to Safari specifically (`isSafari()`, feature-detection has no
+ * equivalent for "does this engine already enter segment-edit mode on
+ * focus") — confirmed in headless Chrome that calling `showPicker()`
+ * unconditionally breaks the type-a-segment-then-Tab flow that already
+ * works fine there (the open picker popup swallows the following
+ * keystrokes), so applying this to a browser that isn't broken would trade
+ * one bug for another. Focus-via-pointer also skips this, so a mouse click
+ * into a segment to type over it isn't interrupted by an unwanted popover.
  */
+function isSafari(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
+}
 export function DateTimeInput({
   value,
   onChange,
@@ -62,6 +86,29 @@ export function DateTimeInput({
   const isBlank = value === "";
   const [datePart, timePart] = splitDateTimeLocal(value);
   const isDisabled = disabled || (nullOption ? isBlank : false);
+  const dateFocusedViaPointer = useRef(false);
+  const timeFocusedViaPointer = useRef(false);
+
+  function openPickerOnKeyboardFocus(
+    pointerRef: React.RefObject<boolean>,
+  ): Pick<React.ComponentProps<typeof Input>, "onPointerDown" | "onFocus"> {
+    return {
+      onPointerDown: () => {
+        pointerRef.current = true;
+      },
+      onFocus: (e) => {
+        const viaPointer = pointerRef.current;
+        pointerRef.current = false;
+        if (!viaPointer && isSafari()) {
+          try {
+            e.currentTarget.showPicker?.();
+          } catch {
+            // No transient user activation (e.g. programmatic focus) — skip silently.
+          }
+        }
+      },
+    };
+  }
 
   // `min`/`max` describe one combined timestamp boundary, which a lone date
   // input or lone time input can't fully express — a min of
@@ -126,6 +173,7 @@ export function DateTimeInput({
           disabled={isDisabled}
           min={minDate || undefined}
           max={maxDate || undefined}
+          {...openPickerOnKeyboardFocus(dateFocusedViaPointer)}
           className={cn(
             "min-w-0 max-w-full sm:min-w-[9.5rem]",
             type === "date" && value && "pr-9",
@@ -145,6 +193,7 @@ export function DateTimeInput({
             min={timeMin}
             max={timeMax}
             step={step}
+            {...openPickerOnKeyboardFocus(timeFocusedViaPointer)}
             aria-label={t("timeLabel")}
             className={cn("min-w-0 max-w-full sm:min-w-[6.5rem]", value && "pr-9", className)}
           />
