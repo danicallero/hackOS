@@ -65,6 +65,39 @@ export function getQueueKey(userId: number): Promise<AESEncryptionKey> {
   return key;
 }
 
+const BASE64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/**
+ * Decodes a base64 string into raw bytes without relying on `atob`/`Buffer`
+ * globals, which aren't guaranteed to exist in every RN/Hermes + web
+ * environment this module runs in.
+ *
+ * expo-crypto's TS types claim `AESSealedData.fromCombined` accepts a plain
+ * base64 string (`BinaryInput = string | Uint8Array | ArrayBuffer`), and
+ * that's true for the web and iOS native bridges. On Android, though, the
+ * native bridge throws `"Value is a string, expected an Object"` — it only
+ * accepts decoded bytes. Decoding to a `Uint8Array` ourselves before calling
+ * into the bridge works identically on all three platforms, so we always do
+ * it rather than relying on the (Android-incompatible) string overload.
+ */
+function base64ToBytes(base64: string): Uint8Array {
+  const clean = base64.replace(/=+$/, "");
+  const bytes: number[] = [];
+  let buffer = 0;
+  let bits = 0;
+  for (const char of clean) {
+    const value = BASE64_CHARS.indexOf(char);
+    if (value === -1) continue;
+    buffer = (buffer << 6) | value;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      bytes.push((buffer >> bits) & 0xff);
+    }
+  }
+  return new Uint8Array(bytes);
+}
+
 export async function encryptJson(value: unknown, key: AESEncryptionKey): Promise<string> {
   const bytes = new TextEncoder().encode(JSON.stringify(value));
   const sealed = await aesEncryptAsync(bytes, key);
@@ -72,7 +105,7 @@ export async function encryptJson(value: unknown, key: AESEncryptionKey): Promis
 }
 
 export async function decryptJson<T>(combined: string, key: AESEncryptionKey): Promise<T> {
-  const sealed = AESSealedData.fromCombined(combined);
+  const sealed = AESSealedData.fromCombined(base64ToBytes(combined));
   const bytes = await aesDecryptAsync(sealed, key, { output: "bytes" });
   return JSON.parse(new TextDecoder().decode(bytes as Uint8Array)) as T;
 }
