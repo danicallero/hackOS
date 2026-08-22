@@ -2,7 +2,7 @@ import { type BarcodeScanningResult, CameraView, useCameraPermissions } from "ex
 import { useIsFocused } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
-  KeyboardAvoidingView,
+  Keyboard,
   Modal,
   Platform,
   Pressable,
@@ -52,6 +52,7 @@ export function QrCamera({
   });
   const [manualEntryVisible, setManualEntryVisible] = useState(false);
   const [manualCode, setManualCode] = useState("");
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const frameLeft = (width - FRAME) / 2;
   const frameTop = (height - FRAME) / 2;
   const frameRight = frameLeft + FRAME;
@@ -88,6 +89,18 @@ export function QrCamera({
     scanCandidate.current = null;
     if (scanningEnabled) locked.current = false;
   }, [scanningEnabled]);
+
+  useEffect(() => {
+    if (Platform.OS !== "ios") return;
+    const showSub = Keyboard.addListener("keyboardWillShow", (e) =>
+      setKeyboardHeight(e.endCoordinates.height),
+    );
+    const hideSub = Keyboard.addListener("keyboardWillHide", () => setKeyboardHeight(0));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   function submitManualEntry() {
     const value = manualCode.trim();
@@ -268,7 +281,7 @@ export function QrCamera({
         </GlassView>
       ) : null}
       <Modal
-        animationType="slide"
+        animationType="fade"
         transparent
         visible={manualEntryVisible}
         onRequestClose={() => setManualEntryVisible(false)}
@@ -279,12 +292,14 @@ export function QrCamera({
           onPress={() => setManualEntryVisible(false)}
           style={styles.manualEntryBackdrop}
         />
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        <View
           pointerEvents="box-none"
-          style={styles.manualEntryWrapper}
+          style={[
+            styles.manualEntryWrapper,
+            { bottom: (keyboardHeight > 0 ? keyboardHeight : insets.bottom) + 40 },
+          ]}
         >
-          <View style={[styles.manualEntrySheet, { paddingBottom: insets.bottom + 20 }]}>
+          <GlassView colorScheme="dark" glassEffectStyle="regular" style={styles.manualEntrySheet}>
             <Text selectable style={styles.manualEntryTitle}>
               {t("scannerManualEntryTitle")}
             </Text>
@@ -296,7 +311,7 @@ export function QrCamera({
               onChangeText={setManualCode}
               onSubmitEditing={submitManualEntry}
               placeholder={t("scannerManualEntryPlaceholder")}
-              placeholderTextColor={colors.secondaryLabel}
+              placeholderTextColor="rgba(255,255,255,0.5)"
               returnKeyType="done"
               style={styles.manualEntryInput}
               value={manualCode}
@@ -310,8 +325,8 @@ export function QrCamera({
             >
               <Text style={styles.primaryButtonText}>{t("scannerManualEntrySubmit")}</Text>
             </Pressable>
-          </View>
-        </KeyboardAvoidingView>
+          </GlassView>
+        </View>
       </Modal>
     </View>
   );
@@ -430,22 +445,28 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
   },
-  manualEntryWrapper: { flex: 1, justifyContent: "flex-end" },
-  manualEntrySheet: {
-    backgroundColor: colors.background,
-    borderCurve: "continuous",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    gap: 14,
+  manualEntryWrapper: {
+    alignItems: "center",
+    left: 0,
     paddingHorizontal: 20,
-    paddingTop: 20,
+    position: "absolute",
+    right: 0,
   },
-  manualEntryTitle: { color: colors.label, fontSize: 18, fontWeight: "700" },
+  manualEntrySheet: {
+    borderCurve: "continuous",
+    borderRadius: 28,
+    gap: 14,
+    maxWidth: 390,
+    overflow: "hidden",
+    padding: 20,
+    width: "100%",
+  },
+  manualEntryTitle: { color: "white", fontSize: 18, fontWeight: "700" },
   manualEntryInput: {
-    backgroundColor: colors.surface,
+    backgroundColor: "rgba(255,255,255,0.12)",
     borderCurve: "continuous",
     borderRadius: 12,
-    color: colors.label,
+    color: "white",
     fontSize: 17,
     padding: 14,
   },

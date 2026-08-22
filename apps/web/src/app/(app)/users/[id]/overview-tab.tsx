@@ -187,6 +187,8 @@ export function StaffEditForm({
 
   const [secEmail, setSecEmail] = useState("");
   const [secSending, setSecSending] = useState(false);
+  const [primaryEmail, setPrimaryEmail] = useState("");
+  const [primarySending, setPrimarySending] = useState(false);
 
   async function onSubmit(values: EditValues) {
     try {
@@ -204,6 +206,22 @@ export function StaffEditForm({
       toast.success(t("profileUpdated"));
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("couldNotSaveProfile"));
+    }
+  }
+
+  async function handleChangePrimaryEmail() {
+    setPrimarySending(true);
+    try {
+      await api.patch(`/api/users/${user.id}/email`, {
+        email: primaryEmail.trim().toLowerCase(),
+      });
+      toast.success(t("primaryEmailChanged"));
+      setPrimaryEmail("");
+      await onUpdated();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotChangePrimaryEmail"));
+    } finally {
+      setPrimarySending(false);
     }
   }
 
@@ -380,6 +398,44 @@ export function StaffEditForm({
               </FormItem>
             )}
           />
+          <Separator className="my-4" />
+          <div className="space-y-4">
+            <h4 className="text-sm font-medium">{t("primaryEmailLabel")}</h4>
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-muted-foreground">
+                {t("currentEmailInline", { email: user.email })}
+              </span>
+              <StatusBadge tone={user.emailVerified ? "success" : "warning"} dot={false}>
+                {user.emailVerified ? t("verified") : t("unverified")}
+              </StatusBadge>
+            </div>
+            <div className="flex items-end gap-2">
+              <div className="flex-1 space-y-2">
+                <Label htmlFor="admin-primary-email">{t("changePrimaryEmailLabel")}</Label>
+                <Input
+                  id="admin-primary-email"
+                  type="email"
+                  value={primaryEmail}
+                  onChange={(e) => setPrimaryEmail(e.target.value)}
+                  placeholder="email@example.com"
+                />
+              </div>
+              <AlertModal
+                title={t("changePrimaryEmailTitle")}
+                description={t("changePrimaryEmailStaffDesc", { email: primaryEmail.trim() })}
+                cancelLabel={t("cancel")}
+                confirmLabel={t("change")}
+                autoClose
+                pending={primarySending}
+                trigger={
+                  <Button variant="outline" disabled={!primaryEmail.includes("@")}>
+                    {t("change")}
+                  </Button>
+                }
+                onConfirm={handleChangePrimaryEmail}
+              />
+            </div>
+          </div>
           <Separator className="my-4" />
           <div className="space-y-4">
             <h4 className="text-sm font-medium">{t("secondaryEmailLabel")}</h4>
