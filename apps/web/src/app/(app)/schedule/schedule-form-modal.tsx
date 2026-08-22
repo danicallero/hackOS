@@ -263,21 +263,21 @@ export function ScheduleFormModal({
         )}
 
         <div className="grid gap-3 sm:grid-cols-3">
-          <Field id="schedule-starts" label={t("colStarts")}>
+          <Field id="schedule-starts" label={t("colStarts")} className="min-w-0">
             <DateTimeInput
               id="schedule-starts"
               value={values.startsAt}
               onChange={(startsAt) => setValues((v) => ({ ...v, startsAt }))}
             />
           </Field>
-          <Field id="schedule-ends" label={t("endsLabel")}>
+          <Field id="schedule-ends" label={t("endsLabel")} className="min-w-0">
             <DateTimeInput
               id="schedule-ends"
               value={values.endsAt}
               onChange={(endsAt) => setValues((v) => ({ ...v, endsAt }))}
             />
           </Field>
-          <Field id="schedule-location" label={t("locationLabel")}>
+          <Field id="schedule-location" label={t("locationLabel")} className="min-w-0">
             <Input
               id="schedule-location"
               value={values.location ?? ""}
@@ -382,9 +382,19 @@ export function ScheduleFormModal({
   );
 }
 
-function Field({ id, label, children }: { id: string; label: string; children: React.ReactNode }) {
+function Field({
+  id,
+  label,
+  className,
+  children,
+}: {
+  id: string;
+  label: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="space-y-2">
+    <div className={cn("space-y-2", className)}>
       <Label htmlFor={id}>{label}</Label>
       {children}
     </div>
