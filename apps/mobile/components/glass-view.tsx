@@ -40,7 +40,24 @@ export function GlassView({
     );
   }
   const scheme = colorScheme === "auto" ? (systemScheme ?? "light") : colorScheme;
-  const background = tintColor ?? (scheme === "dark" ? colors.elevatedSurface : colors.surface);
+  // `colors.surface` / `colors.elevatedSurface` resolve to Android's dynamic
+  // Material You colors (`Color.android.dynamic.*`), which always track the
+  // device's SYSTEM appearance and ignore this component's own `scheme`
+  // decision entirely. That's fine when the caller left `colorScheme` at
+  // "auto" — it should follow the system — but when a caller explicitly asks
+  // for dark glass (e.g. floating chrome whose children assume white
+  // text/icons), the dynamic color can still resolve light on a light-mode
+  // device, leaving that white content invisible. Use fixed Material
+  // surfaces on Android whenever the scheme was explicitly requested.
+  const surface =
+    Platform.OS === "android" && colorScheme !== "auto"
+      ? scheme === "dark"
+        ? "#2c2c2e"
+        : "#ffffff"
+      : scheme === "dark"
+        ? colors.elevatedSurface
+        : colors.surface;
+  const background = tintColor ?? surface;
   return (
     <View
       {...viewProps}
