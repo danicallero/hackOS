@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { PublicScheduleItem } from "@/lib/logistics";
 import {
+  compareScheduleItems,
   DRAFT_DEFAULT_MINUTES,
   draftWindowBetween,
   editingNavigationDirection,
+  groupByDay,
   MAX_INLINE_ROLLED_HOURS,
+  ownerNames,
   parseTimeOfDay,
   scheduleDayKey,
   scheduleDuration,
@@ -333,5 +336,72 @@ describe("draftWindowBetween", () => {
 
   it("rejects a day key that isn't a calendar date", () => {
     expect(draftWindowBetween(null, null, "not-a-day")).toBeNull();
+  });
+});
+
+describe("groupByDay / compareScheduleItems", () => {
+  it("opens one group per calendar day, in the order the items arrive", () => {
+    const groups = groupByDay(
+      [
+        item({ id: 1, startsAt: "2026-07-22T09:00:00.000Z" }),
+        item({ id: 2, startsAt: "2026-07-22T11:00:00.000Z" }),
+        item({ id: 3, startsAt: "2026-07-23T09:00:00.000Z" }),
+      ],
+      "en",
+    );
+
+    expect(groups.map((group) => group.items.map((it) => it.id))).toEqual([[1, 2], [3]]);
+    expect(groups.map((group) => group.date)).toEqual(["2026-07-22", "2026-07-23"]);
+  });
+
+  it("reopens a day that isn't contiguous — which is why the page sorts first", () => {
+    const groups = groupByDay(
+      [
+        item({ id: 1, startsAt: "2026-07-22T09:00:00.000Z" }),
+        item({ id: 2, startsAt: "2026-07-23T09:00:00.000Z" }),
+        item({ id: 3, startsAt: "2026-07-22T11:00:00.000Z" }),
+      ],
+      "en",
+    );
+
+    expect(groups).toHaveLength(3);
+  });
+
+  it("orders by start time, then by id to keep equal starts stable", () => {
+    const early = item({ id: 9, startsAt: "2026-07-22T09:00:00.000Z" });
+    const late = item({ id: 2, startsAt: "2026-07-22T11:00:00.000Z" });
+    const sameAsEarly = item({ id: 4, startsAt: "2026-07-22T09:00:00.000Z" });
+
+    expect([late, sameAsEarly, early].sort(compareScheduleItems).map((it) => it.id)).toEqual([
+      4, 9, 2,
+    ]);
+  });
+});
+
+describe("ownerNames", () => {
+  it("prefers a free-text name, then the full name, then the email", () => {
+    expect(
+      ownerNames(
+        item({
+          owners: [
+            { id: 1, userId: null, name: null, surname: null, freeTextName: "Ana (external)" },
+            { id: 2, userId: 7, name: "Dani", surname: "Callero", freeTextName: null },
+            {
+              id: 3,
+              userId: 8,
+              name: null,
+              surname: null,
+              email: "x@example.com",
+              freeTextName: null,
+            },
+          ],
+        }),
+      ),
+    ).toBe("Ana (external), Dani Callero, x@example.com");
+  });
+
+  it("is empty when an item has no owners", () => {
+    expect(ownerNames(item({ owners: [] }))).toBe("");
+    expect(ownerNames(item({ owners: undefined }))).toBe("");
   });
 });

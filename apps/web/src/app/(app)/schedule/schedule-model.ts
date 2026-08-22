@@ -396,3 +396,58 @@ export function draftWindowBetween(
     endsAt: new Date(start + defaultMs).toISOString(),
   };
 }
+
+// --- Grouping and ordering (H59) -------------------------------------------
+
+export function ownerDisplayName(owner: {
+  name: string | null;
+  surname: string | null;
+  email?: string;
+  freeTextName: string | null;
+}): string {
+  return (
+    owner.freeTextName ??
+    ([owner.name, owner.surname].filter(Boolean).join(" ") || owner.email || "")
+  );
+}
+
+export function ownerNames(item: PublicScheduleItem): string {
+  return (item.owners ?? []).map(ownerDisplayName).join(", ");
+}
+
+export interface DayGroup {
+  label: string;
+  /** Local YYYY-MM-DD key; unlike the label it stays unique across locales. */
+  date: string;
+  items: PublicScheduleItem[];
+}
+
+/** A row typed into the table but not created yet (H59 inline row creation). */
+export interface ScheduleDraft {
+  /** Local YYYY-MM-DD key of the day section it belongs to. */
+  dayKey: string;
+  /** Slot between that day's rows: 0 is above the first, `items.length` below the last. */
+  index: number;
+  startsAt: string;
+  endsAt: string;
+}
+
+export function groupByDay(
+  items: PublicScheduleItem[],
+  language: Parameters<typeof scheduleDayLabel>[1],
+) {
+  const groups: DayGroup[] = [];
+  for (const item of items) {
+    const date = scheduleDayKey(item.startsAt);
+    const label = scheduleDayLabel(item.startsAt, language);
+    const last = groups.at(-1);
+    if (last?.date === date) last.items.push(item);
+    else groups.push({ label, date, items: [item] });
+  }
+  return groups;
+}
+
+export function compareScheduleItems(a: PublicScheduleItem, b: PublicScheduleItem): number {
+  const startDelta = new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime();
+  return startDelta || a.id - b.id;
+}
