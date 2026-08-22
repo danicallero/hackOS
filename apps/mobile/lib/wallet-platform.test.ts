@@ -6,14 +6,12 @@ import { DeviceType } from "expo-device";
 import { supportsAppleWalletButton, supportsAppleWalletFileHandoff } from "./wallet-platform";
 
 describe("supportsAppleWalletButton", () => {
-  it.each([
-    DeviceType.PHONE,
-    DeviceType.TABLET,
-  ])("allows the native PassKit button on iOS device type %s", (deviceType) => {
-    expect(supportsAppleWalletButton("ios", deviceType)).toBe(true);
+  it("allows the native PassKit button on iOS phones", () => {
+    expect(supportsAppleWalletButton("ios", DeviceType.PHONE)).toBe(true);
   });
 
   it.each([
+    DeviceType.TABLET,
     DeviceType.DESKTOP,
     DeviceType.TV,
     DeviceType.UNKNOWN,
