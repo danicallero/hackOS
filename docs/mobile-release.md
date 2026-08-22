@@ -524,14 +524,14 @@ a clean physical-device build and installation succeeds.
 
 ### `expo start` exits silently with no error (EMFILE)
 
-Symptom: `pnpm exec expo start` (or `npx expo start`) prints the Metro banner
+Symptom: `pnpm exec expo start` prints the Metro banner
 and then returns straight to the shell prompt — no QR code, no dev menu, no
 visible error, even with `EXPO_DEBUG=true`. Re-running with the raw `debug`
 namespace open shows the actual cause was there all along, just past what a
 plain terminal paste usually captures:
 
 ```sh
-DEBUG='Metro:*,expo:*' npx expo start
+DEBUG='Metro:*,expo:*' pnpm exec expo start
 ```
 
 ```
@@ -554,7 +554,7 @@ Fix:
 ```sh
 ulimit -n 10240          # raise the fd ceiling for this shell
 echo 'ulimit -n 10240' >> ~/.zshrc   # make it permanent
-npx expo start
+pnpm exec expo start
 ```
 
 If it still exits silently right after raising the limit, the crashed
