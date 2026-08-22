@@ -9,6 +9,13 @@ const envSchema = z.object({
   HOST: z.string().default("0.0.0.0"),
 
   DATABASE_URL: z.string().default("postgres://hackos:hackos@localhost:5433/hackos"),
+  /**
+   * Max size of the `pg` connection pool (per process — api and worker each
+   * hold their own). Raise this for big-event load, but check it against
+   * Postgres's own `max_connections` first: total across all api+worker
+   * replicas must stay under it. See docs/big-event-readiness.md.
+   */
+  DB_POOL_MAX: z.coerce.number().int().min(1).max(200).default(20),
   VALKEY_URL: z.string().default("redis://localhost:6379"),
 
   BETTER_AUTH_URL: z.string().default("http://localhost:3000"),
@@ -103,6 +110,17 @@ const envSchema = z.object({
   MOBILE_APP_SCHEME: z.string().default("hackos"),
 
   LOG_LEVEL: z.string().default("info"),
+
+  /**
+   * Rows claimed per outbox-dispatcher tick (H52, plan/07 §5.4), each
+   * dispatched and committed in its own transaction (dispatcher.ts) so
+   * raising this doesn't grow the duplicate-send blast radius of a mid-batch
+   * crash. The drain runs every 5s regardless of batch size; 100 covers a
+   * mass-send (an announcement fanned out to every attendee on 2-3 channels
+   * at once) without needing to bump it per event. See
+   * docs/big-event-readiness.md.
+   */
+  NOTIFICATION_OUTBOX_BATCH_SIZE: z.coerce.number().int().min(1).max(500).default(100),
 
   /**
    * Apple Wallet / PassKit (H28). Neither platform is boot-mandatory — a

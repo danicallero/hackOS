@@ -70,6 +70,7 @@ the same `DATABASE_URL`/config-loading code path.
 |---|---|---|---|
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | compose-level | yes | Interpolated into `DATABASE_URL` (`postgres://user:pass@postgres:5432/db`) before the container ever starts. Must be the exact values given to the `postgres` service — this repo has no runtime reconciliation between them. |
 | `VALKEY_PASSWORD` | compose-level | yes 🔒 | Interpolated into `VALKEY_URL` the same way, for BullMQ and the SSE/read-cache layer. |
+| `DB_POOL_MAX` | container | no | Max size of this process's `pg` pool, default `20`. Raise for big-event load, but check the total against Postgres's own `max_connections` (default 100) first — api and worker each hold their own pool, and every replica of each multiplies it. See `docs/big-event-readiness.md`. |
 | `API_DOMAIN` | compose-level | yes | The public hostname this API answers on. Becomes both `BETTER_AUTH_URL` (so Better Auth issues cookies/links for the right origin) and the Traefik router's `Host()` rule. |
 | `WEB_DOMAIN` | compose-level | yes | Becomes `WEB_URL` — the browser-facing origin auth emails (verification, password reset) link back to after the API finishes its part. Without it, those links point at the API itself instead of a real page. |
 | `BETTER_AUTH_SECRET` | container | yes 🔒 | Signs and encrypts Better Auth sessions/tokens. Rotating it invalidates every existing session — everyone gets logged out — so treat it as a "break glass" secret, not something to rotate casually. |
@@ -106,6 +107,8 @@ browser or links back to the web app), plus:
 |---|---|---|---|
 | `WORKERS_INLINE` | container | fixed `false` | Baked into the compose file, not user-configurable here. In dev this flag runs BullMQ workers inside the API process; in this deployment it's forced off because the worker container *is* the dedicated process — see `docs/background-workers.md`. |
 | `WORKER_MEM_LIMIT` | compose-level | no | Memory cap, default `512m`. Bump this if you scale worker replicas for notification/queue throughput (dispatcher uses `SELECT ... FOR UPDATE SKIP LOCKED`, so replicas don't double-send). |
+| `DB_POOL_MAX` | container | no | Same as on `api` — the worker holds its own separate pool, so this is a separate budget against Postgres's `max_connections`. |
+| `NOTIFICATION_OUTBOX_BATCH_SIZE` | container | no | Rows the outbox dispatcher claims per 5s tick, default `100` — each row dispatched and committed in its own transaction, so raising this doesn't grow the duplicate-send risk of a mid-batch crash. Only the `worker` container's value matters in production (it's the one running the dispatcher). See `docs/big-event-readiness.md`. |
 
 Everything else — `DATABASE_URL`/`VALKEY_URL` inputs, `BETTER_AUTH_URL`,
 `BETTER_AUTH_SECRET`, the S3 block, the mail block, both wallet blocks — is

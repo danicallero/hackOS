@@ -10,6 +10,7 @@
 x-app-env: &app-env
   NODE_ENV: production
   DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
+  DB_POOL_MAX: "${DB_POOL_MAX:-20}"
   VALKEY_URL: "redis://:${VALKEY_PASSWORD}@valkey:6379"
   BETTER_AUTH_URL: "https://${API_DOMAIN}"
   WEB_URL: "https://${WEB_DOMAIN}"

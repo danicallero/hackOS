@@ -278,6 +278,57 @@ mode is a single Compose service containing every container.
 
 ---
 
+## Splitting Postgres onto its own host (optional, advanced)
+
+The default topology (§Architecture above) puts every service — including
+`postgres` — on one Docker host, reachable only through the private
+`instance` bridge network with **no host ports published at all**. That's
+the right default: simplest to run, and datastores are unreachable from
+anywhere but the app containers.
+
+For a big event on Hetzner where you'd rather isolate Postgres's CPU/I/O from
+the `api`/`worker`/`web` tier — so a request-handling burst can't starve the
+database, or vice versa — split it onto a second Hetzner Cloud server. This
+changes one invariant: `postgres` (and optionally `valkey`/`minio`) can no
+longer sit on a purely internal Docker bridge network, since a plain Docker
+bridge network doesn't span hosts. The replacement is Hetzner's **private
+Cloud Network**, which is not internet-routable on its own — it's a
+host-to-host boundary, not a public one.
+
+1. **Create a Hetzner Cloud Network** (Hetzner Console → Networks, or `hcloud
+   network create`) and attach both servers to it — the app server and the
+   new database server. Each gets a private IP in that network (e.g.
+   `10.0.0.2` app, `10.0.0.3` db) in addition to its public IP.
+2. **Lock it down with a Hetzner Cloud Firewall** on the db server: allow
+   `5432/tcp` (and `6379`/`9000` if you move Valkey/MinIO too) **only** from
+   the app server's private IP, deny everything else inbound on that
+   interface. This is the defense-in-depth replacement for "no host ports at
+   all" — the port is published, but only reachable from one specific private
+   IP, never from the public internet.
+3. **Register both servers in Dokploy** (Dokploy's *Servers* panel supports
+   more than one Docker host per project via SSH) and assign the `postgres`
+   compose service to the db server, keeping `api`/`worker`/`web`/`valkey`/
+   `minio` on the app server. Consult Dokploy's own docs for the exact
+   multi-server flow — the panel details change between versions.
+4. **Point `DATABASE_URL` at the db server's private IP** instead of the
+   `postgres` hostname (`postgres://user:pass@10.0.0.3:5432/db`) in the
+   `api`/`worker`/`migrate` environment — the Docker-internal-DNS hostname
+   resolution (`postgres:5432`) only works when both containers share a
+   Docker network, which is no longer true once they're on different hosts.
+5. **`postgres`'s own compose file** needs its `ports:` changed from "none"
+   to a host-bound publish on the private interface only —
+   `ports: ["10.0.0.3:5432:5432"]` — instead of relying on the Docker network
+   boundary for isolation.
+
+Only do this if you actually have headroom to spend on a second box and a
+concrete reason (co-located Postgres is measurably the bottleneck, or you
+want blast-radius isolation). For ~600 CCU, a single well-sized Hetzner box
+(see [`docs/big-event-readiness.md`](../docs/big-event-readiness.md)) is
+normally enough — this is the lever to reach for only if that's not true for
+your event.
+
+---
+
 ## Multiple instances
 
 Every instance is isolated by three unique values: **`STACK_NAME`**,

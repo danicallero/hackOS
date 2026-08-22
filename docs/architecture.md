@@ -295,7 +295,10 @@ not replica count, bounds latency for the periodic drains — tune `every: N` if
 bottleneck that keeps correctness simple. Headroom, in order of reach-for:
 1. Bigger box / more memory (the partial indexes keep the hot claim query cheap).
 2. A connection pooler (PgBouncer) once api+worker replica count pushes the
-   connection count up.
+   connection count up. Each api/worker process holds its own `pg` pool
+   (`DB_POOL_MAX`, default 20) — total connections across all replicas of
+   both must stay under Postgres's `max_connections` (default 100). See
+   `docs/big-event-readiness.md` for sizing this for a specific event.
 3. Read replicas — but the app already absorbs read load with the SSE-driven
    read-cache, so this is rarely the first lever.
 4. Partition/prune `notification_outbox` (and audit) for a very large event.

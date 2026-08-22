@@ -3,7 +3,7 @@ import { config } from "../config.js";
 
 export const pool = new pg.Pool({
   connectionString: config.DATABASE_URL,
-  max: config.isTest ? 5 : 10,
+  max: config.isTest ? 5 : config.DB_POOL_MAX,
 });
 
 export type Queryable = pg.Pool | pg.PoolClient;
