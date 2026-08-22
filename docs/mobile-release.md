@@ -847,9 +847,9 @@ and color rather than copying the example blindly. See Expo's SDK 57
 1. Create/select the Firebase project owned by the organization.
 2. Register an Android app whose package exactly matches `android.package`.
 3. Download `google-services.json` into `apps/mobile/google-services.json`,
-   referenced by `android.googleServicesFile` in `app.json`. This file is
-   committed: it is a public client config baked into every built APK
-   regardless, not a secret.
+   referenced by `android.googleServicesFile` in `app.json`. It contains a
+   Google API key and is gitignored; every dev/CI machine building Android
+   must fetch it from the Firebase console separately.
 4. Create a dedicated service-account key with the required Firebase Messaging
    role.
 5. Run `eas credentials`, choose Android and the production profile, then
