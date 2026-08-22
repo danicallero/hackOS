@@ -34,9 +34,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:py-8">
             {/* Pages opt into a wider column with data-wide (e.g. the judging
                 panel's two-column operator layout). */}
-            <div className="mx-auto w-full max-w-6xl has-[[data-wide]]:max-w-[96rem]">
-              {children}
-            </div>
+            <div className="mx-auto w-full max-w-6xl has-[[data-wide]]:max-w-none">{children}</div>
           </main>
         </SidebarInset>
       </SidebarProvider>
