@@ -114,3 +114,14 @@ itself. Two background workers do the actual work:
 their preferences matrix even with zero override rows; `queue` is the one
 mandatory (non-optional) category (H51).
 
+## Web admin UI
+
+`apps/web/src/app/(app)/announcements/` — a list page
+(`page.tsx`) that opens `AnnouncementFormModal`
+(`announcement-form.tsx`) for both create and edit, mirroring the schedule
+module's modal pattern (progressive sections, a 3-way targeting selector
+instead of two independently-toggleable blocks so the audience/specific-user
+exclusivity is visible in the UI, channel checkboxes, and a publication
+section whose fields change shape depending on `screenPlacement`/targeting
+mode). There are no dedicated `/announcements/new` or `/announcements/[id]`
+routes.
