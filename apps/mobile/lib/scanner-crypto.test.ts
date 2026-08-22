@@ -44,12 +44,29 @@ jest.mock("expo-crypto", () => {
       this.keyMaterial = keyMaterial;
       this.json = json;
     }
-    static fromCombined(combined: string) {
-      const [keyMaterial, json] = JSON.parse(combined);
+    // Mirrors the real Android native bridge's contract: it throws when
+    // handed a raw base64 string instead of decoded bytes, with exactly the
+    // error scanner-crypto.ts was seen crashing with in #481 ("Value is a
+    // string, expected an Object"). A mock that accepted a string here would
+    // pass even the pre-fix code, defeating the point of this test.
+    static fromCombined(combined: unknown) {
+      if (typeof combined === "string") {
+        throw new TypeError("Value is a string, expected an Object");
+      }
+      if (!(combined instanceof Uint8Array)) {
+        throw new TypeError("expected combined to be a Uint8Array");
+      }
+      const [keyMaterial, json] = JSON.parse(new TextDecoder().decode(combined));
       return new MockAESSealedData(keyMaterial, json);
     }
-    combined() {
-      return JSON.stringify([this.keyMaterial, this.json]);
+    combined(encoding?: "bytes" | "base64") {
+      const bytes = new TextEncoder().encode(JSON.stringify([this.keyMaterial, this.json]));
+      if (encoding === "base64") {
+        let binary = "";
+        for (const byte of bytes) binary += String.fromCharCode(byte);
+        return btoa(binary);
+      }
+      return bytes;
     }
   }
 
