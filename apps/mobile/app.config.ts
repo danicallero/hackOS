@@ -22,6 +22,7 @@ export default function appConfig({ config }: ConfigContext): ExpoConfig {
       "expo-secure-store",
       "expo-status-bar",
       "expo-web-browser",
+      "./plugins/withAndroidResConfigs.js",
     ],
     name: isDevelopmentBuild ? `${config.name} (Debug)` : config.name,
     ios: {
