@@ -368,6 +368,30 @@ route below. No migration needed.
   torch (including supported iPads and the iPad app running on Mac) omit the
   non-functional torch action and place manual entry in its bottom-right slot,
   directly below the People action.
+  `components/QrCamera.tsx` only accepts `barcodeTypes: ["qr"]` and gates a raw
+  `onBarcodeScanned` hit behind two independent checks before calling
+  `onValue`: a geometric frame test (`lib/qr-frame.ts`) and a temporal
+  stability test (`lib/qr-scan-stability.ts`). `getBarcodeFrameObservation`
+  rejects the read unless every corner point falls inside the centered 264px
+  frame square, the viewport's center point falls inside the code's polygon
+  (rules out edge-of-frame partial reads), and the code's area is at least
+  15% of the frame's area (`MIN_BARCODE_TO_FRAME_AREA_RATIO`) — this forces
+  the operator to bring one QR deliberately into the foreground instead of
+  auto-firing on whatever passes through the background. `advanceQrScanCandidate`
+  then requires 3 consecutive detections of the same data
+  (`REQUIRED_DETECTIONS`), spanning at least 100ms (`MIN_STABLE_DURATION_MS`)
+  with no gap over 400ms (`MAX_DETECTION_GAP_MS`), while the code's center
+  drifts by no more than 0.08 frame-widths (`MAX_CENTER_SHIFT`) and its area
+  changes by no more than 25% (`MAX_AREA_CHANGE_RATIO`) between detections —
+  this rejects a still-focusing or still-moving frame. A confirmed scan locks
+  the camera for 1200ms and resets the candidate on blur, viewport resize, or
+  `scanningEnabled` toggling off. Android's `expo-camera` does not guarantee
+  the same `cornerPoints` ordering, mirroring, or presence as iOS (it can
+  report horizontally-mirrored points, or omit `cornerPoints` in favor of an
+  axis-aligned `bounds` box) — `qr-frame.ts` normalizes for this by
+  re-ordering points around their centroid (`orderPoints`, via `atan2`) rather
+  than trusting platform order, and falls back to `pointsFromBounds` when
+  fewer than 4 corner points are reported.
   `lib/scanner-db.ts` (native: `scanner-db.native.ts`) owns two WAL-mode
   SQLite files — see "Scanner cache encryption & isolation" below — and
   `lib/scanner-sync.ts` replays in creation order with the persisted scan id
