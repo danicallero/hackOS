@@ -318,16 +318,10 @@ const MessagesView = memo(function MessagesView({
           method: "POST",
         },
       );
+      // Stays in the "unread only" list — just no longer styled as unread —
+      // until the user collapses it again (H489): removing it immediately
+      // would filter out the very item they just opened to read.
       updateBothCaches(item.id, (row) => ({ ...row, read_at: result.read_at }));
-      // A now-read item no longer belongs in the "unread only" list.
-      unread.setData((current) =>
-        current
-          ? {
-              total: Math.max(0, current.total - 1),
-              items: current.items.filter((row) => row.id !== item.id),
-            }
-          : current,
-      );
       emitNotificationChange();
     } catch (cause) {
       setActionError(
@@ -339,13 +333,27 @@ const MessagesView = memo(function MessagesView({
   }
 
   function toggleExpanded(item: InboxItem) {
+    const wasExpanded = expanded.has(item.id);
     setExpanded((current) => {
       const next = new Set(current);
       if (next.has(item.id)) next.delete(item.id);
       else next.add(item.id);
       return next;
     });
-    if (!item.read_at) void markRead(item);
+    if (!item.read_at) {
+      void markRead(item);
+    } else if (wasExpanded && unreadOnly) {
+      // Collapsing an already-read item while filtering unread-only: its
+      // grace period is over, so it can now drop out of the list (H489).
+      unread.setData((current) =>
+        current
+          ? {
+              total: Math.max(0, current.total - 1),
+              items: current.items.filter((row) => row.id !== item.id),
+            }
+          : current,
+      );
+    }
   }
 
   function confirmDelete(item: InboxItem) {
