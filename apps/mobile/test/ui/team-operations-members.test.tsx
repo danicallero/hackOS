@@ -62,24 +62,6 @@ jest.mock("@/theme/colors", () => ({
 jest.mock("@/lib/i18n", () => ({
   useLocale: () => ({ t: mockT }),
 }));
-jest.mock("react-native-gesture-handler/ReanimatedSwipeable", () => ({
-  __esModule: true,
-  default: ({ children }: { children: unknown }) => {
-    const ReactLib = require("react");
-    return ReactLib.createElement(ReactLib.Fragment, null, children);
-  },
-}));
-jest.mock("react-native-reanimated", () => ({
-  __esModule: true,
-  default: {
-    View: ({ children }: { children: unknown }) => {
-      const ReactLib = require("react");
-      return ReactLib.createElement(ReactLib.Fragment, null, children);
-    },
-  },
-  interpolate: () => 1,
-  useAnimatedStyle: (factory: () => unknown) => factory(),
-}));
 
 import { TeamOperationsScreen } from "@/components/team-operations-screen";
 import { apiFetch } from "@/lib/api";

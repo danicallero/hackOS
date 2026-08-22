@@ -488,6 +488,15 @@ device/EAS build to verify — see "What's left" below.
 
 **UI testing.** `test/ui/` contains fast React Native Testing Library flows
 rendered through `renderMobile`, including the shared H4 sign-in contract.
+`renderMobile` (`test/ui/render.tsx`) wraps every screen in a
+`GestureHandlerRootView` and a `SafeAreaProvider` with fixed test insets, so
+components using `useSafeAreaInsets()` or gesture-handler's
+`GestureDetector`/`Swipeable` don't need a per-test workaround. `jest.setup.js`
+mocks `react-native-reanimated`, `react-native-worklets`, and
+`react-native-gesture-handler` at the root — real gesture recognition and
+worklet scheduling aren't meaningful under jest, so `Gesture`/`GestureDetector`
+are no-op pass-throughs and `Swipeable` renders its `renderLeftActions`/
+`renderRightActions` statically instead of waiting for a simulated drag.
 Cross-surface hooks come from `@hackos/shared/ui-test-ids` and are wired to
 web `data-testid` and native `testID` attributes. Detox scenarios in
 `e2e/mobile/` cover the same contract against a built simulator/emulator app;
