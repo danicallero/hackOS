@@ -8,7 +8,7 @@ import { api } from "./api";
 
 export type NotificationChannel = "in_app" | "email" | "push";
 export type AnnouncementScreenPlacement = "none" | "embedded" | "fullscreen";
-export type AnnouncementAudience = "sponsor" | "participant" | "mentor";
+export type AnnouncementAudience = "sponsor" | "participant" | "mentor" | "staff";
 export type AnnouncementTranslations = Partial<
   Record<"es" | "gl" | "en", { title: string; body: string }>
 >;
@@ -123,6 +123,15 @@ export const notificationsApi = {
     api.get<{ users: AnnouncementRecipient[] }>("/api/announcements/recipient-candidates", {
       query: { q, limit },
     }),
+
+  translateAvailability: () =>
+    api.get<{ available: boolean }>("/api/announcements/translate-availability"),
+  translateAnnouncement: (body: {
+    title: string;
+    body: string;
+    sourceLanguage: "es" | "gl" | "en";
+    targetLanguages: ("es" | "gl" | "en")[];
+  }) => api.post<{ translations: AnnouncementTranslations }>("/api/announcements/translate", body),
 
   listInbox: (opts: { unread?: boolean; limit: number; offset: number }) =>
     api.get<{ items: InboxItem[]; total: number }>("/api/me/notifications", {

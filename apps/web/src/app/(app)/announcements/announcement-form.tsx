@@ -32,7 +32,7 @@ import type {
 } from "@/lib/notifications";
 import { notificationsApi } from "@/lib/notifications";
 
-const AUDIENCES: AnnouncementAudience[] = ["sponsor", "participant", "mentor"];
+const AUDIENCES: AnnouncementAudience[] = ["sponsor", "participant", "mentor", "staff"];
 const CHANNELS: NotificationChannel[] = ["in_app", "email", "push"];
 
 function audienceLabel(audience: AnnouncementAudience, t: Translate): string {
@@ -40,6 +40,7 @@ function audienceLabel(audience: AnnouncementAudience, t: Translate): string {
     sponsor: t("audienceSponsor"),
     participant: t("audienceParticipant"),
     mentor: t("audienceMentor"),
+    staff: t("audienceStaff"),
   };
   return map[audience];
 }
@@ -126,6 +127,11 @@ export function AnnouncementFormModal({
   const [targetingMode, setTargetingModeState] = useState<TargetingMode>(targetingModeOf(initial));
   const [pending, setPending] = useState(false);
   const [contentError, setContentError] = useState<string | null>(null);
+  // Hidden by default: only shown once the availability check confirms a
+  // provider is configured, so the form works identically (manual entry
+  // only) on a deployment with no translation provider at all.
+  const [translateAvailable, setTranslateAvailable] = useState(false);
+  const [translating, setTranslating] = useState(false);
 
   useEffect(() => {
     setValues(initial);
@@ -133,6 +139,67 @@ export function AnnouncementFormModal({
     setTargetingModeState(targetingModeOf(initial));
     setContentError(null);
   }, [initial, initialRecipients]);
+
+  useEffect(() => {
+    let cancelled = false;
+    notificationsApi
+      .translateAvailability()
+      .then((result) => {
+        if (!cancelled) setTranslateAvailable(result.available);
+      })
+      .catch(() => {
+        if (!cancelled) setTranslateAvailable(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /**
+   * Staff can write the primary content in whichever of the three languages
+   * comes naturally, not just Spanish — this picks the first non-empty
+   * language as the source and fills every still-empty one from it. Never
+   * overwrites a field someone already typed into, in any language.
+   */
+  async function autoTranslate() {
+    const content: Record<"es" | "gl" | "en", { title: string; body: string }> = {
+      es: { title: values.title, body: values.body },
+      gl: values.translations.gl,
+      en: values.translations.en,
+    };
+    const isFilled = (language: "es" | "gl" | "en") =>
+      Boolean(content[language].title.trim() && content[language].body.trim());
+    const source = (["es", "gl", "en"] as const).find(isFilled);
+    const targets = (["es", "gl", "en"] as const).filter((language) => !isFilled(language));
+    if (!source || targets.length === 0) return;
+    setTranslating(true);
+    try {
+      const { translations } = await notificationsApi.translateAnnouncement({
+        title: content[source].title,
+        body: content[source].body,
+        sourceLanguage: source,
+        targetLanguages: targets,
+      });
+      setValues((v) => {
+        const nextTranslations = { ...v.translations, ...translations };
+        return {
+          ...v,
+          title: translations.es?.title ?? v.title,
+          body: translations.es?.body ?? v.body,
+          translations: nextTranslations,
+        };
+      });
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotTranslate"));
+    } finally {
+      setTranslating(false);
+    }
+  }
+
+  const canAutoTranslate =
+    (Boolean(values.title.trim()) && Boolean(values.body.trim())) ||
+    (Boolean(values.translations.gl.title.trim()) && Boolean(values.translations.gl.body.trim())) ||
+    (Boolean(values.translations.en.title.trim()) && Boolean(values.translations.en.body.trim()));
 
   const invalidWindow =
     Boolean(values.publishAt) &&
@@ -282,7 +349,20 @@ export function AnnouncementFormModal({
               />
             </Field>
             <fieldset className="space-y-3 rounded-lg border p-4">
-              <legend className="px-1 text-sm font-medium">{t("translationsAndSettings")}</legend>
+              <legend className="flex w-full items-center justify-between gap-3 px-1 text-sm font-medium">
+                {t("translationsAndSettings")}
+                {translateAvailable ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={translating || !canAutoTranslate}
+                    onClick={() => void autoTranslate()}
+                  >
+                    {translating ? t("translatingInProgress") : t("translateAutomatically")}
+                  </Button>
+                ) : null}
+              </legend>
               <div className="grid gap-4 md:grid-cols-2">
                 {(["gl", "en"] as const).map((language) => (
                   <div key={language} className="grid gap-3">
