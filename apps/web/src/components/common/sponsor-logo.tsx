@@ -1,3 +1,4 @@
+import Image from "next/image";
 import type { ImgHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
@@ -11,6 +12,7 @@ export function SponsorLogo({
   onLoad,
 }: {
   logoUrl: string;
+  /** Dark-mode variant; falls back to `logoUrl` when unset. */
   logoNegativeUrl?: string | null;
   alt: string;
   className?: string;
@@ -23,19 +25,24 @@ export function SponsorLogo({
 
   return (
     <>
-      {/* biome-ignore lint/performance/noImgElement: External sponsor logo URL. */}
-      <img
+      {/* Sponsor URLs are user-entered external URLs (H44), so they cannot be safely allowlisted. */}
+      <Image
         src={logoUrl}
         alt={alt}
-        className={cn(className, "dark:hidden")}
+        width={1}
+        height={1}
+        unoptimized
+        className={cn("size-auto", className, "dark:hidden")}
         onError={onError}
         onLoad={onLoad}
       />
-      {/* biome-ignore lint/performance/noImgElement: External sponsor logo URL. */}
-      <img
+      <Image
         src={negative}
         alt={alt}
-        className={cn(className, "hidden dark:block")}
+        width={1}
+        height={1}
+        unoptimized
+        className={cn("size-auto", className, "hidden dark:block")}
         onError={onError}
         onLoad={onLoad}
       />

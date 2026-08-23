@@ -74,6 +74,7 @@ export function TimezonePicker({
   inDialog = false,
   className,
 }: {
+  /** Selected IANA zone name (e.g. "Europe/Madrid"), or "" when unset. */
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
@@ -109,7 +110,7 @@ export function TimezonePicker({
       sideOffset={4}
       collisionPadding={8}
       {...contentProps}
-      className="bg-popover text-popover-foreground z-50 flex max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] flex-col rounded-md border shadow-md outline-hidden"
+      className="bg-popover text-popover-foreground z-50 flex max-h-(--radix-popover-content-available-height) w-(--radix-popover-trigger-width) flex-col rounded-md border shadow-md outline-hidden"
     >
       <Command shouldFilter={false}>
         <CommandInput

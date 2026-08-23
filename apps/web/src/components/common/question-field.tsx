@@ -69,6 +69,8 @@ export function normalizeAnswers(
   return next;
 }
 
+/** Renders the input control matching `question.kind` (scale, integer/float,
+ *  boolean, single/multi choice, long text, or plain text). */
 export function QuestionField({
   question,
   value,
@@ -76,6 +78,7 @@ export function QuestionField({
   onChange,
 }: {
   question: Question;
+  /** Current answer; use `normalizeAnswers`/`defaultValue` to seed this from storage. */
   value: AnswerValue | undefined;
   disabled: boolean;
   onChange: (value: AnswerValue) => void;

@@ -13,9 +13,12 @@ import { TONE_FG, type Tone } from "@/lib/tones";
 import { cn } from "@/lib/utils";
 
 export interface DonutSegment {
+  /** Unique id for the segment; also the chart config/legend key. */
   key: string;
+  /** Legend/tooltip label; falls back to `key` when omitted. */
   label?: string;
   value: number;
+  /** Segment color; cycles through `FALLBACK` by index when omitted. */
   tone?: Tone;
 }
 
@@ -35,7 +38,10 @@ export function DonutChart({
   className,
 }: {
   data: DonutSegment[];
+  /** Small caption under the centered value, e.g. a total's unit. */
   centerLabel?: string;
+  /** Big centered value, e.g. a total count. Renders the center label group
+   *  only when this or `centerLabel` is set. */
   centerValue?: React.ReactNode;
   height?: number;
   showLegend?: boolean;

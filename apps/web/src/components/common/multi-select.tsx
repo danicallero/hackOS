@@ -2,7 +2,7 @@
 
 import { CheckIcon, ChevronsUpDownIcon, XIcon } from "lucide-react";
 import { Popover as PopoverPrimitive } from "radix-ui";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import {
@@ -49,10 +49,14 @@ export function MultiSelect({
   "aria-invalid": ariaInvalid,
 }: {
   options: MultiSelectOption[];
+  /** Selected option values. */
   value: string[];
   onChange: (value: string[]) => void;
+  /** Shown in the trigger when nothing is selected. */
   placeholder?: string;
+  /** Shown inside the popover's search input. */
   searchPlaceholder?: string;
+  /** Shown when the search matches no options. */
   emptyText?: string;
   disabled?: boolean;
   inDialog?: boolean;
@@ -66,6 +70,7 @@ export function MultiSelect({
 }) {
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
+  const listboxId = useId();
   const { ref: boxRef, portalProps, contentProps } = useDialogPortal(inDialog);
   const selected = new Set(value);
   const toggle = (v: string) =>
@@ -78,7 +83,8 @@ export function MultiSelect({
       sideOffset={4}
       collisionPadding={8}
       {...contentProps}
-      className="bg-popover text-popover-foreground z-50 flex max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] flex-col rounded-md border shadow-md outline-hidden"
+      id={listboxId}
+      className="bg-popover text-popover-foreground z-50 flex max-h-(--radix-popover-content-available-height) w-(--radix-popover-trigger-width) flex-col rounded-md border shadow-md outline-hidden"
     >
       <Command>
         <CommandInput placeholder={searchPlaceholder ?? t("genericSearchPlaceholder")} />
@@ -152,6 +158,7 @@ export function MultiSelect({
               type="button"
               disabled={disabled}
               role="combobox"
+              aria-controls={listboxId}
               aria-expanded={open}
               aria-haspopup="listbox"
               aria-label={ariaLabel}

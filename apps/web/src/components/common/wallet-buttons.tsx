@@ -71,7 +71,6 @@ export function WalletButtons({ purpose, accessToken }: WalletButtonsProps) {
   return (
     <div className="flex flex-wrap items-center gap-3">
       <a href={appleHref} className="inline-flex w-fit">
-        {/* eslint-disable-next-line @next/next/no-img-element -- official Apple badge, must not be re-processed by next/image */}
         {/* biome-ignore lint/performance/noImgElement: official Apple badge, must not be re-processed by next/image */}
         <img src={appleBadgeSrc} alt={t("addToAppleWallet")} className="h-12 w-auto" />
       </a>
@@ -82,7 +81,6 @@ export function WalletButtons({ purpose, accessToken }: WalletButtonsProps) {
         disabled={googleLoading}
         onClick={() => void openGoogleWallet()}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element -- official Google button, must not be re-processed by next/image */}
         {/* biome-ignore lint/performance/noImgElement: official Google button, must not be re-processed by next/image */}
         <img src={googleButtonSrc} alt={t("addToGoogleWallet")} className="h-12 w-auto" />
       </button>
@@ -90,10 +88,7 @@ export function WalletButtons({ purpose, accessToken }: WalletButtonsProps) {
   );
 }
 
-/**
- * Not the shared api client. We don't want the session cookie.
- * (issue #369)
- */
+/** Bypasses the shared api client — no session cookie should go out with a scoped token (issue #369). */
 async function scopedGoogleSaveUrl(
   purpose: WalletPurpose,
   token: string,

@@ -10,7 +10,9 @@ export function ReviewStatusBadge({
   status,
   score,
 }: {
+  /** null renders "not started". */
   status: "draft" | "submitted" | null;
+  /** Shown inline when status is "submitted"; ignored otherwise. */
   score?: number | null;
 }) {
   const { t } = useLocale();

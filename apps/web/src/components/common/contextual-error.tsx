@@ -9,7 +9,9 @@ export function ContextualError({
   onRetry,
   className,
 }: {
+  /** User-facing failure description, already localized. */
   message: string;
+  /** Shows a Retry button when provided; omit for non-retriable failures. */
   onRetry?: () => void;
   className?: string;
 }) {

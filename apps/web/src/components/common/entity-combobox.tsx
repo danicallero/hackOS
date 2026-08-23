@@ -8,7 +8,7 @@
 
 import { CheckIcon, ChevronsUpDownIcon } from "lucide-react";
 import { Popover as PopoverPrimitive } from "radix-ui";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -42,7 +42,9 @@ export function EntityCombobox<T>({
   /** Selected option id as a string, or "" when unset. */
   value: string;
   onChange: (value: string) => void;
+  /** Extracts the id `value` compares against, from an option. */
   getId: (option: T) => string | number;
+  /** Extracts the display/searchable text for an option. */
   getLabel: (option: T) => string;
   disabled?: boolean;
   inDialog?: boolean;
@@ -57,6 +59,7 @@ export function EntityCombobox<T>({
   const { t } = useLocale();
   const { ref: anchorRef, portalProps, contentProps } = useDialogPortal(inDialog);
   const [open, setOpen] = useState(false);
+  const listboxId = useId();
 
   const selected = options.find((option) => String(getId(option)) === value) ?? null;
   const label = selected ? getLabel(selected) : null;
@@ -67,7 +70,8 @@ export function EntityCombobox<T>({
       sideOffset={4}
       collisionPadding={8}
       {...contentProps}
-      className="bg-popover text-popover-foreground z-50 flex max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] flex-col rounded-md border shadow-md outline-hidden"
+      id={listboxId}
+      className="bg-popover text-popover-foreground z-50 flex max-h-(--radix-popover-content-available-height) w-(--radix-popover-trigger-width) flex-col rounded-md border shadow-md outline-hidden"
     >
       <Command>
         <CommandInput placeholder={searchPlaceholder ?? t("typeToFilterEllipsis")} />

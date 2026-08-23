@@ -6,7 +6,9 @@ import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 type DurationInputProps = Omit<React.ComponentProps<"input">, "onChange" | "type" | "value"> & {
+  /** Total duration in whole seconds, as a string (e.g. "125"), or "" for unset. */
   value: string;
+  /** Fires with the new total-seconds string whenever minutes or seconds changes. */
   onChange: (value: string) => void;
 };
 
@@ -35,6 +37,7 @@ function toDurationSeconds(minutes: string, seconds: string) {
   return total > 0 ? String(total) : "";
 }
 
+/** Minutes + seconds pair of native inputs backed by a single total-seconds value. */
 const DurationInput = React.forwardRef<HTMLInputElement, DurationInputProps>(
   ({ value, onChange, className, disabled, id, ...props }, ref) => {
     const { t } = useLocale();

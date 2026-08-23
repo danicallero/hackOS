@@ -7,7 +7,7 @@
 
 import { CheckIcon, ChevronsUpDownIcon } from "lucide-react";
 import { Popover as PopoverPrimitive } from "radix-ui";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -63,6 +63,7 @@ export function UserPicker({
 }) {
   const { t } = useLocale();
   const { ref: anchorRef, portalProps, contentProps } = useDialogPortal(inDialog);
+  const listboxId = useId();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [options, setOptions] = useState<UserOption[]>([]);
@@ -70,23 +71,21 @@ export function UserPicker({
   const [searchError, setSearchError] = useState(false);
   const [selected, setSelected] = useState<UserOption | null>(null);
 
-  // `search` is almost always a fresh closure every render (callers rarely
-  // memoize it) — reading it via a ref, rather than depending on it
-  // directly, keeps a re-render mid-type from restarting the debounce timer
-  // before it ever fires, which otherwise gets the search permanently stuck
-  // on "Searching…" if the caller re-renders more often than the debounce.
+  // `search` is a fresh closure most renders (callers rarely memoize it); reading
+  // it via a ref instead of depending on it directly stops a mid-type re-render
+  // from restarting the debounce before it fires, which would otherwise stick
+  // the search on "Searching…" forever.
   const searchRef = useRef(search);
-  searchRef.current = search;
+  useEffect(() => {
+    searchRef.current = search;
+  });
 
   useEffect(() => {
-    if (!open || query.trim().length < minQueryLength) {
-      setOptions([]);
-      return;
-    }
+    if (!open || query.trim().length < minQueryLength) return;
     let active = true;
-    setLoading(true);
-    setSearchError(false);
     const handle = setTimeout(async () => {
+      setLoading(true);
+      setSearchError(false);
       try {
         const users = await searchRef.current(query.trim());
         if (active) setOptions(users);
@@ -105,9 +104,11 @@ export function UserPicker({
     };
   }, [open, query, minQueryLength]);
 
-  useEffect(() => {
+  const [prevValue, setPrevValue] = useState(value);
+  if (value !== prevValue) {
+    setPrevValue(value);
     if (!value) setSelected(null);
-  }, [value]);
+  }
 
   function select(user: UserOption) {
     setSelected(user);
@@ -116,6 +117,7 @@ export function UserPicker({
   }
 
   const label = selected ? userOptionLabel(selected) : null;
+  const visibleOptions = query.trim().length < minQueryLength ? [] : options;
 
   const content = (
     <PopoverPrimitive.Content
@@ -123,7 +125,8 @@ export function UserPicker({
       sideOffset={4}
       collisionPadding={8}
       {...contentProps}
-      className="bg-popover text-popover-foreground z-50 flex max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] flex-col rounded-md border shadow-md outline-hidden"
+      id={listboxId}
+      className="bg-popover text-popover-foreground z-50 flex max-h-(--radix-popover-content-available-height) w-(--radix-popover-trigger-width) flex-col rounded-md border shadow-md outline-hidden"
     >
       <Command shouldFilter={false}>
         <CommandInput
@@ -142,11 +145,11 @@ export function UserPicker({
             </div>
           ) : query.trim().length < minQueryLength ? (
             <CommandEmpty>{t("typeToSearchUsers")}</CommandEmpty>
-          ) : options.length === 0 ? (
+          ) : visibleOptions.length === 0 ? (
             <CommandEmpty>{t("noMatchingUsersPeriod")}</CommandEmpty>
           ) : null}
           <CommandGroup>
-            {options.map((user) => (
+            {visibleOptions.map((user) => (
               <CommandItem key={user.id} value={String(user.id)} onSelect={() => select(user)}>
                 <CheckIcon
                   aria-hidden="true"
@@ -171,6 +174,7 @@ export function UserPicker({
           variant="outline"
           disabled={disabled}
           role="combobox"
+          aria-controls={listboxId}
           aria-expanded={open}
           aria-haspopup="listbox"
           aria-labelledby={ariaLabelledBy}

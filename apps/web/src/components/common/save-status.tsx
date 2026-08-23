@@ -5,6 +5,7 @@ import { useLocale } from "@/lib/i18n";
 import { type SaveState, saveStateLabel } from "@/lib/save-state";
 import { cn } from "@/lib/utils";
 
+/** Icon + label for an autosave field's current state (saved/saving/unsaved/error). */
 export function SaveStatus({ state, className }: { state: SaveState; className?: string }) {
   const { t } = useLocale();
   const Icon = {

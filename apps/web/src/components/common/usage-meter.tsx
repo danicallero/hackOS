@@ -15,9 +15,12 @@ export function UsageMeter({
   className,
 }: {
   value: number;
+  /** Defaults to 100; the meter clamps to [0, max]. */
   max?: number;
   tone?: Tone;
+  /** Left-aligned caption above the bar, e.g. "Storage used". */
   label?: string;
+  /** Right-aligned caption above the bar, e.g. "3.2 / 10 GB". */
   caption?: string;
   className?: string;
 }) {
