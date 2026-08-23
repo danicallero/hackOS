@@ -53,6 +53,7 @@ export default function appConfig({ config }: ConfigContext): ExpoConfig {
     android: {
       ...config.android,
       package: isDevelopmentBuild ? `${config.android?.package}.debug` : config.android?.package,
+      googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? config.android?.googleServicesFile,
     },
   } as ExpoConfig;
 }
