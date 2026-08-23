@@ -97,6 +97,7 @@ export function EnterpriseOverviewCard({
   // H43-H46: keep challenge publication and affiliation changes live in the summary.
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadChallenges();
     void loadMembers();
   }, [loadChallenges, loadMembers, liveRefresh]);

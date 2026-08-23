@@ -70,6 +70,7 @@ export function InviteLinksCard({ enterpriseId }: { enterpriseId: number }) {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load, liveRefresh]);
 
