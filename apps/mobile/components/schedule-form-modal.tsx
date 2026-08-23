@@ -160,6 +160,7 @@ export function ScheduleFormModal({
   const [translations, setTranslations] = useState<ScheduleTranslations>(initialTranslations ?? {});
   const [translateAvailable, setTranslateAvailable] = useState(false);
   const [translating, setTranslating] = useState(false);
+  const [translationsOpen, setTranslationsOpen] = useState(false);
   // An item with no audience tag is staff-only, full stop — visibility/publishAt
   // describe when a *tagged* audience gets to see an item, so they're meaningless
   // (and the API silently forces them back to hidden/null) without one (H59 follow-up).
@@ -171,6 +172,7 @@ export function ScheduleFormModal({
     setOwners(initialOwners ?? []);
     setScheduledPublish(Boolean(initial?.publishAt));
     setTranslations(initialTranslations ?? {});
+    setTranslationsOpen(false);
     setError(null);
   }, [visible, initial, initialOwners, initialTranslations]);
 
@@ -283,6 +285,27 @@ export function ScheduleFormModal({
             />
           </Section>
 
+          <Section title={`${t("scheduleDescriptionLabel")} · ${languageTag(primaryLanguage, t)}`}>
+            <TextInput
+              accessibilityLabel={t("scheduleDescriptionLabel")}
+              multiline
+              onChangeText={(description) =>
+                setValues((current) => ({ ...current, description: description || null }))
+              }
+              placeholder={t("scheduleDescriptionLabel")}
+              placeholderTextColor={colors.tertiaryLabel}
+              style={{
+                color: colors.label,
+                fontSize: 16,
+                lineHeight: 22,
+                minHeight: 90,
+                padding: 16,
+                textAlignVertical: "top",
+              }}
+              value={values.description ?? ""}
+            />
+          </Section>
+
           <Section title={t("scheduleTypeLabel")}>
             <MenuView
               actions={ACTIVITY_KINDS.map((kind) => ({
@@ -322,102 +345,115 @@ export function ScheduleFormModal({
             </MenuView>
           </Section>
 
-          <Section title={`${t("scheduleDescriptionLabel")} · ${languageTag(primaryLanguage, t)}`}>
-            <TextInput
-              accessibilityLabel={t("scheduleDescriptionLabel")}
-              multiline
-              onChangeText={(description) =>
-                setValues((current) => ({ ...current, description: description || null }))
-              }
-              placeholder={t("scheduleDescriptionLabel")}
-              placeholderTextColor={colors.tertiaryLabel}
-              style={{
-                color: colors.label,
-                fontSize: 16,
-                lineHeight: 22,
-                minHeight: 90,
-                padding: 16,
-                textAlignVertical: "top",
-              }}
-              value={values.description ?? ""}
-            />
-          </Section>
-
-          {targetLanguages.map((language) => (
-            <View key={language} style={{ gap: 8 }}>
-              <Section title={`${t("scheduleTitleLabel")} · ${languageTag(language, t)}`}>
-                <TextInput
-                  accessibilityLabel={t("scheduleTitleLabel")}
-                  onChangeText={(title) =>
-                    setTranslations((current) => ({
-                      ...current,
-                      [language]: { ...current[language], title },
-                    }))
-                  }
-                  placeholderTextColor={colors.tertiaryLabel}
-                  style={{ color: colors.label, fontSize: 16, padding: 16 }}
-                  value={translations[language]?.title ?? ""}
+          <View style={{ gap: 8 }}>
+            <View style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t("translationsAndSettings")}
+                accessibilityState={{ expanded: translationsOpen }}
+                onPress={() => setTranslationsOpen((open) => !open)}
+                hitSlop={8}
+                style={({ pressed }) => ({
+                  alignItems: "center",
+                  flex: 1,
+                  flexDirection: "row",
+                  gap: 6,
+                  opacity: pressed ? 0.6 : 1,
+                  paddingVertical: 8,
+                })}
+              >
+                <SymbolView
+                  name="chevron.right"
+                  tintColor={colors.secondaryLabel}
+                  size={13}
+                  weight="semibold"
+                  style={{ transform: [{ rotate: translationsOpen ? "90deg" : "0deg" }] }}
                 />
-              </Section>
-              <Section title={`${t("scheduleDescriptionLabel")} · ${languageTag(language, t)}`}>
-                <TextInput
-                  accessibilityLabel={t("scheduleDescriptionLabel")}
-                  multiline
-                  onChangeText={(description) =>
-                    setTranslations((current) => ({
-                      ...current,
-                      [language]: { ...current[language], description },
-                    }))
-                  }
-                  placeholderTextColor={colors.tertiaryLabel}
-                  style={{
-                    color: colors.label,
-                    fontSize: 16,
-                    lineHeight: 22,
-                    minHeight: 70,
-                    padding: 16,
-                    textAlignVertical: "top",
+                <Text style={{ color: colors.secondaryLabel, fontSize: 13, fontWeight: "600" }}>
+                  {t("translationsAndSettings")}
+                </Text>
+              </Pressable>
+              {translateAvailable ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t("translateAutomatically")}
+                  accessibilityState={{
+                    busy: translating,
+                    disabled: blankTargetLanguages.length === 0,
                   }}
-                  value={translations[language]?.description ?? ""}
-                />
-              </Section>
+                  disabled={translating || blankTargetLanguages.length === 0}
+                  onPress={() => void autoTranslate()}
+                  style={({ pressed }) => ({
+                    alignItems: "center",
+                    backgroundColor: colors.elevatedSurface,
+                    borderCurve: "continuous",
+                    borderRadius: 10,
+                    flexDirection: "row",
+                    gap: 8,
+                    opacity:
+                      translating || blankTargetLanguages.length === 0 ? 0.5 : pressed ? 0.7 : 1,
+                    paddingHorizontal: 16,
+                    paddingVertical: 10,
+                  })}
+                >
+                  <SymbolView
+                    name="character.book.closed"
+                    tintColor={colors.accent}
+                    size={16}
+                    accessible={false}
+                  />
+                  <Text style={{ color: colors.accent, fontSize: 15, fontWeight: "600" }}>
+                    {translating ? t("translatingInProgress") : t("translateAutomatically")}
+                  </Text>
+                </Pressable>
+              ) : null}
             </View>
-          ))}
 
-          {translateAvailable ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t("translateAutomatically")}
-              accessibilityState={{
-                busy: translating,
-                disabled: blankTargetLanguages.length === 0,
-              }}
-              disabled={translating || blankTargetLanguages.length === 0}
-              onPress={() => void autoTranslate()}
-              style={({ pressed }) => ({
-                alignItems: "center",
-                alignSelf: "center",
-                backgroundColor: colors.elevatedSurface,
-                borderCurve: "continuous",
-                borderRadius: 10,
-                flexDirection: "row",
-                gap: 8,
-                opacity: translating || blankTargetLanguages.length === 0 ? 0.5 : pressed ? 0.7 : 1,
-                paddingHorizontal: 16,
-                paddingVertical: 10,
-              })}
-            >
-              <SymbolView
-                name="character.book.closed"
-                tintColor={colors.accent}
-                size={16}
-                accessible={false}
-              />
-              <Text style={{ color: colors.accent, fontSize: 15, fontWeight: "600" }}>
-                {translating ? t("translatingInProgress") : t("translateAutomatically")}
-              </Text>
-            </Pressable>
-          ) : null}
+            {translationsOpen
+              ? targetLanguages.map((language) => (
+                  <View key={language} style={{ gap: 8 }}>
+                    <Section title={`${t("scheduleTitleLabel")} · ${languageTag(language, t)}`}>
+                      <TextInput
+                        accessibilityLabel={t("scheduleTitleLabel")}
+                        onChangeText={(title) =>
+                          setTranslations((current) => ({
+                            ...current,
+                            [language]: { ...current[language], title },
+                          }))
+                        }
+                        placeholderTextColor={colors.tertiaryLabel}
+                        style={{ color: colors.label, fontSize: 16, padding: 16 }}
+                        value={translations[language]?.title ?? ""}
+                      />
+                    </Section>
+                    <Section
+                      title={`${t("scheduleDescriptionLabel")} · ${languageTag(language, t)}`}
+                    >
+                      <TextInput
+                        accessibilityLabel={t("scheduleDescriptionLabel")}
+                        multiline
+                        onChangeText={(description) =>
+                          setTranslations((current) => ({
+                            ...current,
+                            [language]: { ...current[language], description },
+                          }))
+                        }
+                        placeholderTextColor={colors.tertiaryLabel}
+                        style={{
+                          color: colors.label,
+                          fontSize: 16,
+                          lineHeight: 22,
+                          minHeight: 70,
+                          padding: 16,
+                          textAlignVertical: "top",
+                        }}
+                        value={translations[language]?.description ?? ""}
+                      />
+                    </Section>
+                  </View>
+                ))
+              : null}
+          </View>
 
           <Section title={t("scheduleLocationLabel")}>
             <TextInput

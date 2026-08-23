@@ -168,10 +168,12 @@ export function ScheduleFormModal({
   const [translations, setTranslations] = useState<ScheduleTranslations>(initialTranslations ?? {});
   const [translateAvailable, setTranslateAvailable] = useState(false);
   const [translating, setTranslating] = useState(false);
+  const [translationsOpen, setTranslationsOpen] = useState(false);
 
   useEffect(() => {
     setValues(initial);
     setAdvancedOpen(false);
+    setTranslationsOpen(false);
     setScheduledPublish(Boolean(initial.publishAt));
     setPendingOwners([]);
     setTranslations(initialTranslations ?? {});
@@ -274,6 +276,18 @@ export function ScheduleFormModal({
             value={values.title}
             onChange={(e) => setValues((v) => ({ ...v, title: e.target.value }))}
             placeholder={t("openingCeremonyPlaceholder")}
+          />
+        </Field>
+
+        <Field
+          id="schedule-description"
+          label={`${t("descriptionLabel")} · ${languageTag(primaryLanguage, t)}`}
+        >
+          <Textarea
+            id="schedule-description"
+            value={values.description ?? ""}
+            onChange={(e) => setValues((v) => ({ ...v, description: e.target.value }))}
+            placeholder={t("visibleInPublicAgenda")}
           />
         </Field>
 
@@ -388,21 +402,16 @@ export function ScheduleFormModal({
           </Field>
         </div>
 
-        <Field
-          id="schedule-description"
-          label={`${t("descriptionLabel")} · ${languageTag(primaryLanguage, t)}`}
-        >
-          <Textarea
-            id="schedule-description"
-            value={values.description ?? ""}
-            onChange={(e) => setValues((v) => ({ ...v, description: e.target.value }))}
-            placeholder={t("visibleInPublicAgenda")}
-          />
-        </Field>
-
-        <fieldset className="space-y-3 rounded-lg border p-4">
-          <legend className="flex w-full items-center justify-between gap-3 px-1 text-sm font-medium">
-            {t("translationsAndSettings")}
+        <Collapsible open={translationsOpen} onOpenChange={setTranslationsOpen}>
+          <div className="flex w-full items-center justify-between gap-3 rounded-lg border px-4 py-3">
+            <CollapsibleTrigger asChild>
+              <button type="button" className="flex items-center gap-2 text-sm font-medium">
+                <ChevronDownIcon
+                  className={cn("size-4 transition-transform", translationsOpen && "rotate-180")}
+                />
+                {t("translationsAndSettings")}
+              </button>
+            </CollapsibleTrigger>
             {translateAvailable ? (
               <Button
                 type="button"
@@ -414,35 +423,37 @@ export function ScheduleFormModal({
                 {translating ? t("translatingInProgress") : t("translateAutomatically")}
               </Button>
             ) : null}
-          </legend>
-          <div className="grid gap-4 md:grid-cols-2">
-            {targetLanguages.map((language) => (
-              <div key={language} className="grid gap-3">
-                <Field
-                  id={`schedule-title-${language}`}
-                  label={`${t("titleLabel")} · ${languageTag(language, t)}`}
-                >
-                  <Input
-                    id={`schedule-title-${language}`}
-                    value={translations[language]?.title ?? ""}
-                    onChange={(e) => setTranslationField(language, "title", e.target.value)}
-                  />
-                </Field>
-                <Field
-                  id={`schedule-description-${language}`}
-                  label={`${t("descriptionLabel")} · ${languageTag(language, t)}`}
-                >
-                  <Textarea
-                    id={`schedule-description-${language}`}
-                    rows={3}
-                    value={translations[language]?.description ?? ""}
-                    onChange={(e) => setTranslationField(language, "description", e.target.value)}
-                  />
-                </Field>
-              </div>
-            ))}
           </div>
-        </fieldset>
+          <CollapsibleContent className="rounded-b-lg border border-t-0 px-4 pt-3 pb-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              {targetLanguages.map((language) => (
+                <div key={language} className="grid gap-3">
+                  <Field
+                    id={`schedule-title-${language}`}
+                    label={`${t("titleLabel")} · ${languageTag(language, t)}`}
+                  >
+                    <Input
+                      id={`schedule-title-${language}`}
+                      value={translations[language]?.title ?? ""}
+                      onChange={(e) => setTranslationField(language, "title", e.target.value)}
+                    />
+                  </Field>
+                  <Field
+                    id={`schedule-description-${language}`}
+                    label={`${t("descriptionLabel")} · ${languageTag(language, t)}`}
+                  >
+                    <Textarea
+                      id={`schedule-description-${language}`}
+                      rows={3}
+                      value={translations[language]?.description ?? ""}
+                      onChange={(e) => setTranslationField(language, "description", e.target.value)}
+                    />
+                  </Field>
+                </div>
+              ))}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
 
         <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
           <CollapsibleTrigger asChild>
