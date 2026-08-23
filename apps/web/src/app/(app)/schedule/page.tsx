@@ -55,6 +55,7 @@ import {
   ScheduleFormModal,
   scheduleDuplicateForm,
   scheduleItemToForm,
+  scheduleItemToTranslations,
 } from "./schedule-form-modal";
 import {
   compareScheduleItems,
@@ -572,6 +573,7 @@ export default function SchedulePage() {
           }}
           title={t("editScheduleItem")}
           initial={scheduleItemToForm(editingItem)}
+          initialTranslations={scheduleItemToTranslations(editingItem)}
           scheduleId={editingItem.id}
           onSubmit={async (values) => {
             await logisticsApi.updateSchedule(editingItem.id, cleanScheduleForm(values));

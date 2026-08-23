@@ -236,6 +236,9 @@ export const scheduleIdParam = z.object({ id: z.coerce.number().int().positive()
  */
 export const scheduleAudience = z.enum(["sponsor", "participant", "mentor"]);
 
+/** H50 extension: shared es/gl/en set every translatable entity uses. */
+export const languageSchema = z.enum(["es", "gl", "en"]);
+
 export const scheduleBody = z.object({
   title: z.string().min(1).max(300),
   description: z.string().max(4000).nullable().optional(),
@@ -256,23 +259,42 @@ export const scheduleBody = z.object({
   audiences: z.array(scheduleAudience).max(3).default([]),
   contactNote: z.string().max(300).nullable().optional(),
   notes: z.string().max(4000).nullable().optional(),
+  primaryLanguage: languageSchema.default("es"),
 });
 
 /**
  * `.partial()` alone is NOT enough here: it makes a key optional but keeps its
- * `.default(...)`, so an absent `visibility`/`audiences` would still arrive as
- * "hidden"/[] and quietly hide an item — and strip its audience tags — on any
- * unrelated PATCH (an inline time or location edit). A patch must carry only
- * what the caller actually sent, so both fields are re-declared without their
+ * `.default(...)`, so an absent `visibility`/`audiences`/`primaryLanguage`
+ * would still arrive as "hidden"/[]/"es" and quietly hide an item — strip its
+ * audience tags, or re-anchor its language — on any unrelated PATCH (an
+ * inline time or location edit). A patch must carry only what the caller
+ * actually sent, so all three fields are re-declared without their
  * create-time defaults (H59).
  */
 export const schedulePatchBody = scheduleBody
-  .omit({ visibility: true, audiences: true })
+  .omit({ visibility: true, audiences: true, primaryLanguage: true })
   .partial()
   .extend({
     visibility: z.enum(["shown", "hidden"]).optional(),
     audiences: z.array(scheduleAudience).max(3).optional(),
+    primaryLanguage: languageSchema.optional(),
   });
+
+/** H50 extension: machine-translate this item's title+description into targetLanguages via the configured provider. */
+export const scheduleTranslateBody = z.object({
+  targetLanguages: z.array(languageSchema).min(1),
+});
+
+/** H50 extension: manually save/redo one or more locales' title/description without touching others. */
+export const scheduleTranslationsBody = z.object({
+  translations: z.partialRecord(
+    languageSchema,
+    z.object({
+      title: z.string().min(1).max(300).optional(),
+      description: z.string().max(4000).nullable().optional(),
+    }),
+  ),
+});
 
 export const scheduleVisibilityBody = z.object({
   ids: z.array(z.coerce.number().int().positive()).min(1).max(200),

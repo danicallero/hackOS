@@ -1,6 +1,7 @@
 import type { Queryable } from "../../db/pool.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
 import { type NotificationChannel, notify } from "./service.js";
+import type { Language } from "./translate/index.js";
 
 /**
  * H50 announcements: publish_at + expires_at is the vigencia window
@@ -34,7 +35,7 @@ export interface AnnouncementInput {
 
 export const SCREEN_PLACEMENTS = ["none", "embedded", "fullscreen"] as const;
 export type ScreenPlacement = (typeof SCREEN_PLACEMENTS)[number];
-export type AnnouncementLanguage = "es" | "gl" | "en";
+export type AnnouncementLanguage = Language;
 export type AnnouncementTranslation = { title: string; body: string };
 export type AnnouncementTranslations = Partial<
   Record<AnnouncementLanguage, AnnouncementTranslation>

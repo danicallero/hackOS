@@ -336,6 +336,8 @@
   "scheduleDeleteError": "Couldn't delete the activity. Check your connection and try again.",
   "scheduleTitleLabel": "Title",
   "scheduleDescriptionLabel": "Description",
+  "primaryLanguageLabel": "Primary language",
+  "scheduleTranslateAfterSaveHint": "Save the item first to add translations.",
   "scheduleLocationLabel": "Location",
   "scheduleTypeLabel": "Type",
   "scheduleStartsAtLabel": "Starts",

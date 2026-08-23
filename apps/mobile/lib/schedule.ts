@@ -4,6 +4,7 @@ import {
   DEFAULT_ACTIVITY_KIND,
   toActivityKind,
 } from "@hackos/shared/activity-kinds";
+import type { Language } from "@hackos/shared/locale";
 import type { SymbolViewProps } from "@/components/symbol";
 import { apiFetch } from "./api";
 import type { useLocale } from "./i18n";
@@ -30,6 +31,10 @@ export interface ScheduleItem {
   owners?: ScheduleOwner[];
   /** Staff-only — present when the caller is staff, telling a draft apart from a live item. */
   visibility?: "shown" | "hidden";
+  /** Language `title`/`description` are authored in — every viewer resolves their own display text: preferred language, else English, else this. */
+  primaryLanguage: Language;
+  titleI18n: Partial<Record<Language, string>>;
+  descriptionI18n: Partial<Record<Language, string | null>>;
 }
 
 /** Complete management record, present on `GET /api/schedule`. */
@@ -68,6 +73,65 @@ export interface ScheduleInput {
   audiences: ScheduleAudience[];
   contactNote: string | null;
   notes: string | null;
+  primaryLanguage: Language;
+}
+
+export type ScheduleTranslation = { title?: string; description?: string | null };
+export type ScheduleTranslations = Partial<Record<Language, ScheduleTranslation>>;
+
+/**
+ * Resolves what a viewer sees for a schedule item's title/description (H50
+ * extension): their preferred language if translated, else English, else the
+ * item's primary (authored) language — never blank, since primaryLanguage's
+ * canonical `title`/`description` is always filled.
+ */
+export function resolveScheduleText(
+  item: ScheduleItem,
+  language: Language,
+): { title: string; description: string | null } {
+  const canonical = { title: item.title, description: item.description };
+  if (language === item.primaryLanguage) return canonical;
+  const translated = {
+    title: item.titleI18n?.[language],
+    description: item.descriptionI18n?.[language],
+  };
+  if (translated.title)
+    return { title: translated.title, description: translated.description ?? null };
+  if (language !== "en") {
+    const english = { title: item.titleI18n?.en, description: item.descriptionI18n?.en };
+    if (english.title) return { title: english.title, description: english.description ?? null };
+  }
+  return canonical;
+}
+
+/** H50 extension: whether automatic translation is configured for this deployment. */
+export async function fetchScheduleTranslateAvailability(): Promise<boolean> {
+  const response = await apiFetch<{ available: boolean }>("/api/schedule/translate-availability");
+  return response.available;
+}
+
+/** Machine-translates a schedule item's title+description from its primary language — safe to call again to redo a translation. */
+export async function translateScheduleItem(
+  id: number,
+  targetLanguages: Language[],
+): Promise<AdminScheduleItem> {
+  return apiFetch<AdminScheduleItem>(`/api/schedule/${id}/translate`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ targetLanguages }),
+  });
+}
+
+/** Manually saves/redoes one or more locales' title/description without touching the others. */
+export async function saveScheduleTranslations(
+  id: number,
+  translations: ScheduleTranslations,
+): Promise<AdminScheduleItem> {
+  return apiFetch<AdminScheduleItem>(`/api/schedule/${id}/translations`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ translations }),
+  });
 }
 
 export async function fetchPublicSchedule(): Promise<ScheduleItem[]> {

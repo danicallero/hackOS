@@ -129,20 +129,61 @@ both frontends detect the first non-empty language as the source and only
 fill languages that are still empty, never overwriting a manual edit.
 
 The provider is fully optional and isolated behind
-`modules/notifications/translate/`: `translateAnnouncementContent()` /
+`modules/notifications/translate/`: `translateFields()` /
 `isTranslationAvailable()` in `translate/index.ts` are the only functions
 anything else calls, dispatching on `TRANSLATE_PROVIDER` to either the
 Google Cloud Translation v2 adapter (`translate/google.ts`,
 `GOOGLE_TRANSLATE_API_KEY`) or a self-hosted LibreTranslate adapter
 (`translate/libretranslate.ts`, `LIBRETRANSLATE_URL` +
 `LIBRETRANSLATE_API_KEY`, see `docs/env-vars.md`) — mirroring the
-`MAIL_PROVIDER` adapter split in `channels/email-adapters/`. `GET
-/api/announcements/translate-availability`
+`MAIL_PROVIDER` adapter split in `channels/email-adapters/`. `translateFields`
+is field-shape-agnostic (announcements pass `{title, body}`, schedule passes
+`{title, description}`) so a third translatable entity needs no provider
+change. `GET /api/announcements/translate-availability`
 lets both frontends hide/disable the action when unset instead of offering
 one that will 503; every translation surface keeps working with manual-only
 entry regardless of whether a provider is configured. Exercised in tests via
 a stubbed `global.fetch`, never a live network call (same convention as the
 Resend email adapter).
+
+### Schedule item translation (H50 extension)
+
+Schedule items (`logistics/schedule.ts`) get the same treatment, but with the
+challenges (H44) per-field `_i18n` jsonb-column convention instead of
+announcements' single blob: `schedule.title_i18n` / `schedule.description_i18n`,
+keyed by locale, so a title and description can be redone independently.
+`schedule.primary_language` records which language `title`/`description` were
+authored in — the canonical columns are that language's mirror, not a fixed
+English lock. `POST /api/schedule/:id/translate` (`translateScheduleItem`)
+machine-translates from `primaryLanguage` into the requested targets and
+persists via `saveScheduleTranslations`, which also mirrors the result onto
+the item's linked `activities` row (`name_i18n`/`description_i18n`,
+`primary_language`) — the same mirroring `updateScheduleItem` already does
+for the canonical title/description, so the H25/H26 scanner station and
+activity tracker see translated labels too, with no separate translate action
+of their own. `PUT /api/schedule/:id/translations` saves hand-edited text for
+one or more locales without disturbing the others. Every schedule read
+(`listSchedule`, `listScheduleForAudiences`) returns `primaryLanguage` +
+`titleI18n`/`descriptionI18n` so every viewer — not just an editor — can
+resolve their own display text: preferred language, else English, else
+`primaryLanguage`'s canonical text. `resolveScheduleText` (`apps/web/src/lib/logistics.ts`,
+`apps/mobile/lib/schedule.ts`) implements that fallback client-side; every
+viewer-facing schedule read (web `/timetable`, `/horario`, the TV display;
+mobile's Schedule tab and detail screen) resolves through it before handing
+items to their renderers, so those renderers keep reading plain
+`item.title`/`item.description` unchanged. `ScheduleFormModal` (both
+frontends) gets a primary-language picker next to Title/Description plus a
+translations panel (auto-translate, redo, or hand-edit) that only appears
+once the item has a real id — translation always targets the item's
+currently-saved primary content.
+
+Known gap: the mobile scan-station UI (`components/activities-screen.tsx`,
+`activity-scanner-screen.tsx`) reads `ScannerActivity` from the offline SQLite
+sync snapshot (`scanner-sync.ts`/`scannerSnapshot()`), a separate pipeline
+from `scannableActivities()` above — the snapshot schema doesn't carry
+`primaryLanguage`/`nameI18n`/`descriptionI18n` yet, so those two screens don't
+show translated activity names even though the underlying `activities` row
+does. Wiring that through the offline sync schema is unstarted follow-up.
 
 ## Web admin UI
 

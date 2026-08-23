@@ -30,15 +30,23 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api";
 import { getTimeZoneLabel, toDatetimeLocal } from "@/lib/datetime";
-import { useLocale } from "@/lib/i18n";
+import { type Translate, useLocale } from "@/lib/i18n";
 import {
   logisticsApi,
   type PublicScheduleItem,
   type ScheduleInput,
   type ScheduleOwner,
+  type ScheduleTranslations,
 } from "@/lib/logistics";
+import type { Language } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { SCHEDULE_AUDIENCES, scheduleAudienceLabel, scheduleTypeLabel } from "./schedule-model";
+
+const LANGUAGES = ["es", "gl", "en"] as const;
+
+function languageTag(language: Language, t: Translate): string {
+  return t(language === "es" ? "spanishTag" : language === "gl" ? "galicianTag" : "englishTag");
+}
 
 export const EMPTY_SCHEDULE_FORM: ScheduleInput = {
   title: "",
@@ -54,6 +62,7 @@ export const EMPTY_SCHEDULE_FORM: ScheduleInput = {
   audiences: [],
   contactNote: "",
   notes: "",
+  primaryLanguage: "es",
 };
 
 export function scheduleItemToForm(item: PublicScheduleItem): ScheduleInput {
@@ -70,7 +79,21 @@ export function scheduleItemToForm(item: PublicScheduleItem): ScheduleInput {
     audiences: item.audiences ?? [],
     contactNote: item.contactNote ?? "",
     notes: item.notes ?? "",
+    primaryLanguage: item.primaryLanguage ?? "es",
   };
+}
+
+/** The two non-primary locales' hand-edited/machine-translated title+description (H50 extension). */
+export function scheduleItemToTranslations(item: PublicScheduleItem): ScheduleTranslations {
+  const translations: ScheduleTranslations = {};
+  for (const language of LANGUAGES) {
+    const title = item.titleI18n?.[language];
+    const description = item.descriptionI18n?.[language];
+    if (title !== undefined || description !== undefined) {
+      translations[language] = { title, description };
+    }
+  }
+  return translations;
 }
 
 export function scheduleDuplicateForm(item: PublicScheduleItem): ScheduleInput {
@@ -97,6 +120,7 @@ export function cleanScheduleForm(form: ScheduleInput): ScheduleInput {
     audiences: form.audiences ?? [],
     contactNote: form.contactNote?.trim() || null,
     notes: form.notes?.trim() || null,
+    primaryLanguage: form.primaryLanguage,
   };
 }
 
@@ -105,6 +129,7 @@ export function ScheduleFormModal({
   onOpenChange,
   title,
   initial,
+  initialTranslations,
   onSubmit,
   scheduleId,
 }: {
@@ -112,6 +137,8 @@ export function ScheduleFormModal({
   onOpenChange: (open: boolean) => void;
   title: string;
   initial: ScheduleInput;
+  /** Present only when editing an existing item — same reason as scheduleId below. */
+  initialTranslations?: ScheduleTranslations;
   /**
    * `pendingOwners` is only populated in create mode (no `scheduleId` yet)
    * — the caller is responsible for assigning them to the newly created item
@@ -175,14 +202,38 @@ export function ScheduleFormModal({
   return (
     <Modal open={open} onOpenChange={onOpenChange} title={title} icon={CalendarDaysIcon} size="xl">
       <div className="space-y-5">
-        <Field id="schedule-title" label={t("titleLabel")}>
-          <Input
+        <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+          <Field
             id="schedule-title"
-            value={values.title}
-            onChange={(e) => setValues((v) => ({ ...v, title: e.target.value }))}
-            placeholder={t("openingCeremonyPlaceholder")}
-          />
-        </Field>
+            label={`${t("titleLabel")} · ${languageTag(values.primaryLanguage, t)}`}
+          >
+            <Input
+              id="schedule-title"
+              value={values.title}
+              onChange={(e) => setValues((v) => ({ ...v, title: e.target.value }))}
+              placeholder={t("openingCeremonyPlaceholder")}
+            />
+          </Field>
+          <Field id="schedule-primary-language" label={t("primaryLanguageLabel")}>
+            <Select
+              value={values.primaryLanguage}
+              onValueChange={(primaryLanguage) =>
+                setValues((v) => ({ ...v, primaryLanguage: primaryLanguage as Language }))
+              }
+            >
+              <SelectTrigger id="schedule-primary-language" className="w-full sm:w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {LANGUAGES.map((language) => (
+                  <SelectItem key={language} value={language}>
+                    {languageTag(language, t)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+        </div>
 
         <Field id="schedule-type" label={t("colType")}>
           <Select
@@ -295,7 +346,10 @@ export function ScheduleFormModal({
           </Field>
         </div>
 
-        <Field id="schedule-description" label={t("descriptionLabel")}>
+        <Field
+          id="schedule-description"
+          label={`${t("descriptionLabel")} · ${languageTag(values.primaryLanguage, t)}`}
+        >
           <Textarea
             id="schedule-description"
             value={values.description ?? ""}
@@ -303,6 +357,16 @@ export function ScheduleFormModal({
             placeholder={t("visibleInPublicAgenda")}
           />
         </Field>
+
+        {scheduleId ? (
+          <TranslationsField
+            scheduleId={scheduleId}
+            primaryLanguage={values.primaryLanguage}
+            initial={initialTranslations ?? {}}
+          />
+        ) : (
+          <p className="text-muted-foreground text-sm">{t("scheduleTranslateAfterSaveHint")}</p>
+        )}
 
         <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
           <CollapsibleTrigger asChild>
@@ -672,5 +736,134 @@ function OwnersField({ scheduleId }: { scheduleId: number }) {
         )}
       </div>
     </SectionCard>
+  );
+}
+
+/**
+ * H50 extension: machine-translate or hand-edit this item's title+description
+ * into the two non-primary locales, mirroring AnnouncementFormModal's
+ * translations fieldset. Self-contained (like OwnersField) — it persists via
+ * its own API calls rather than folding into the main form's Save button, so
+ * it only shows up once the item has a real id (translation always targets
+ * the item's currently-saved primary content).
+ */
+function TranslationsField({
+  scheduleId,
+  primaryLanguage,
+  initial,
+}: {
+  scheduleId: number;
+  primaryLanguage: Language;
+  initial: ScheduleTranslations;
+}) {
+  const { t } = useLocale();
+  const [translations, setTranslations] = useState<ScheduleTranslations>(initial);
+  const [translateAvailable, setTranslateAvailable] = useState(false);
+  const [translating, setTranslating] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setTranslations(initial);
+  }, [initial]);
+
+  useEffect(() => {
+    let cancelled = false;
+    logisticsApi
+      .scheduleTranslateAvailability()
+      .then((result) => {
+        if (!cancelled) setTranslateAvailable(result.available);
+      })
+      .catch(() => {
+        if (!cancelled) setTranslateAvailable(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const targetLanguages = LANGUAGES.filter((language) => language !== primaryLanguage);
+
+  async function autoTranslate() {
+    setTranslating(true);
+    try {
+      const updated = await logisticsApi.translateSchedule(scheduleId, targetLanguages);
+      setTranslations(scheduleItemToTranslations(updated));
+      toast.success(t("translationsSaved"));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotTranslate"));
+    } finally {
+      setTranslating(false);
+    }
+  }
+
+  async function save() {
+    setSaving(true);
+    try {
+      const updated = await logisticsApi.saveScheduleTranslations(scheduleId, translations);
+      setTranslations(scheduleItemToTranslations(updated));
+      toast.success(t("translationsSaved"));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function setField(language: Language, field: "title" | "description", value: string) {
+    setTranslations((prev) => ({
+      ...prev,
+      [language]: { ...prev[language as keyof ScheduleTranslations], [field]: value },
+    }));
+  }
+
+  return (
+    <fieldset className="space-y-3 rounded-lg border p-4">
+      <legend className="flex w-full items-center justify-between gap-3 px-1 text-sm font-medium">
+        {t("translationsAndSettings")}
+        <div className="flex gap-2">
+          {translateAvailable ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={translating}
+              onClick={() => void autoTranslate()}
+            >
+              {translating ? t("translatingInProgress") : t("translateAutomatically")}
+            </Button>
+          ) : null}
+          <SubmitButton pending={saving} onClick={save} size="sm">
+            {t("save")}
+          </SubmitButton>
+        </div>
+      </legend>
+      <div className="grid gap-4 md:grid-cols-2">
+        {targetLanguages.map((language) => (
+          <div key={language} className="grid gap-3">
+            <Field
+              id={`schedule-title-${language}`}
+              label={`${t("titleLabel")} · ${languageTag(language, t)}`}
+            >
+              <Input
+                id={`schedule-title-${language}`}
+                value={translations[language]?.title ?? ""}
+                onChange={(e) => setField(language, "title", e.target.value)}
+              />
+            </Field>
+            <Field
+              id={`schedule-description-${language}`}
+              label={`${t("descriptionLabel")} · ${languageTag(language, t)}`}
+            >
+              <Textarea
+                id={`schedule-description-${language}`}
+                rows={3}
+                value={translations[language]?.description ?? ""}
+                onChange={(e) => setField(language, "description", e.target.value)}
+              />
+            </Field>
+          </div>
+        ))}
+      </div>
+    </fieldset>
   );
 }

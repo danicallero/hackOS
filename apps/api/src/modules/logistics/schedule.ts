@@ -7,9 +7,24 @@ import { getEffectiveCapabilities } from "../../lib/capabilities.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
 import { computeMembershipFlags, mentorOrParticipantType } from "../identity/role.js";
+import type { Language } from "../notifications/translate/index.js";
+import { translateFields } from "../notifications/translate/index.js";
 
 const SCHEDULE_COLUMNS =
-  "id, title, description, location, type, requires_scan, starts_at, ends_at, visibility, publish_at, reminded_at, audiences, contact_note, notes, created_at, updated_at";
+  "id, title, description, location, type, requires_scan, starts_at, ends_at, visibility, publish_at, reminded_at, audiences, contact_note, notes, primary_language, title_i18n, description_i18n, created_at, updated_at";
+
+/**
+ * Extends H50's translate-on-demand mechanism (announcements) to schedule
+ * items (and, mirrored, their linked activity — see toActivityTranslations
+ * below): `title`/`description` stay the canonical mirror of whatever
+ * language the item was authored in (`primaryLanguage`), machine-translated
+ * on demand into the other two locales and re-translatable at any time.
+ * Per-field `_i18n` jsonb columns (title_i18n/description_i18n), matching
+ * the challenges (H44) convention rather than announcements' single blob, so
+ * title and description can be redone independently.
+ */
+export type ScheduleTranslation = { title?: string; description?: string | null };
+export type ScheduleTranslations = Partial<Record<Language, ScheduleTranslation>>;
 
 /**
  * A scanner activity mirrors its schedule item's category verbatim (H25, H26)
@@ -42,6 +57,8 @@ export interface ScheduleInput {
   audiences?: ScheduleAudience[];
   contactNote?: string | null;
   notes?: string | null;
+  /** Language `title`/`description` are authored in. Defaults to "es". */
+  primaryLanguage?: Language;
 }
 
 export interface SchedulePatch {
@@ -57,6 +74,12 @@ export interface SchedulePatch {
   audiences?: ScheduleAudience[];
   contactNote?: string | null;
   notes?: string | null;
+  /**
+   * Changing the primary language re-anchors what `title`/`description` mean
+   * but deliberately does NOT clear title_i18n/description_i18n — stale
+   * entries for the old primary just become redo candidates.
+   */
+  primaryLanguage?: Language;
 }
 
 function serialize(row: Record<string, unknown>) {
@@ -75,6 +98,9 @@ function serialize(row: Record<string, unknown>) {
     audiences: (row.audiences as string[] | null) ?? [],
     contactNote: (row.contact_note as string | null) ?? null,
     notes: (row.notes as string | null) ?? null,
+    primaryLanguage: (row.primary_language as Language | null) ?? "es",
+    titleI18n: (row.title_i18n as Record<string, string> | null) ?? {},
+    descriptionI18n: (row.description_i18n as Record<string, string | null> | null) ?? {},
     createdAt: (row.created_at as Date).toISOString(),
     updatedAt: (row.updated_at as Date).toISOString(),
   };
@@ -219,8 +245,8 @@ export async function createScheduleItem(actorId: number | null, input: Schedule
   const item = await withTransaction(async (client) => {
     const { rows } = await client.query(
       `INSERT INTO schedule
-         (title, description, location, type, requires_scan, starts_at, ends_at, visibility, publish_at, audiences, contact_note, notes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+         (title, description, location, type, requires_scan, starts_at, ends_at, visibility, publish_at, audiences, contact_note, notes, primary_language)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING ${SCHEDULE_COLUMNS}`,
       [
         input.title,
@@ -235,13 +261,21 @@ export async function createScheduleItem(actorId: number | null, input: Schedule
         audiences,
         input.contactNote ?? null,
         input.notes ?? null,
+        input.primaryLanguage ?? "es",
       ],
     );
     const item = serialize(rows[0]);
     await client.query(
-      `INSERT INTO activities (name, description, category, requires_scan, schedule_id)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [item.title, item.description, toActivityCategory(item.type), item.requiresScan, item.id],
+      `INSERT INTO activities (name, description, category, requires_scan, schedule_id, primary_language)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        item.title,
+        item.description,
+        toActivityCategory(item.type),
+        item.requiresScan,
+        item.id,
+        item.primaryLanguage,
+      ],
     );
     await audit(client, {
       actorId,
@@ -286,6 +320,8 @@ export async function updateScheduleItem(actorId: number | null, id: number, pat
       ),
     );
 
+    const nextPrimaryLanguage =
+      patch.primaryLanguage ?? (current.rows[0].primary_language as Language);
     const { rows } = await client.query(
       `UPDATE schedule
           SET title = $2,
@@ -299,7 +335,8 @@ export async function updateScheduleItem(actorId: number | null, id: number, pat
               publish_at = $10,
               audiences = $11,
               contact_note = $12,
-              notes = $13
+              notes = $13,
+              primary_language = $14
         WHERE id = $1
         RETURNING ${SCHEDULE_COLUMNS}`,
       [
@@ -316,6 +353,7 @@ export async function updateScheduleItem(actorId: number | null, id: number, pat
         nextAudiences,
         patch.contactNote === undefined ? current.rows[0].contact_note : patch.contactNote,
         patch.notes === undefined ? current.rows[0].notes : patch.notes,
+        nextPrimaryLanguage,
       ],
     );
     const after = serialize(rows[0]);
@@ -324,9 +362,17 @@ export async function updateScheduleItem(actorId: number | null, id: number, pat
           SET name = $2,
               description = $3,
               category = $4,
-              requires_scan = $5
+              requires_scan = $5,
+              primary_language = $6
         WHERE schedule_id = $1`,
-      [id, after.title, after.description, toActivityCategory(after.type), after.requiresScan],
+      [
+        id,
+        after.title,
+        after.description,
+        toActivityCategory(after.type),
+        after.requiresScan,
+        after.primaryLanguage,
+      ],
     );
     await audit(client, {
       actorId,
@@ -367,6 +413,90 @@ export async function deleteScheduleItem(actorId: number | null, id: number) {
   });
   await emitScheduleChanged({ action: "delete", id });
   return { deleted: true as const };
+}
+
+/**
+ * Merges translations into title_i18n/description_i18n (each locale entry
+ * merged independently, so redoing English doesn't touch a manually-edited
+ * Galician entry) and mirrors the result onto the linked activity row, same
+ * as title/description already are in updateScheduleItem. Used both by the
+ * manual "edit a translation" flow and by translateScheduleItem below.
+ */
+export async function saveScheduleTranslations(
+  actorId: number | null,
+  id: number,
+  translations: ScheduleTranslations,
+) {
+  const item = await withTransaction(async (client) => {
+    const current = await client.query(
+      `SELECT ${SCHEDULE_COLUMNS} FROM schedule WHERE id = $1 FOR UPDATE`,
+      [id],
+    );
+    if (!current.rows[0]) throw new NotFoundError("Schedule item not found", { id });
+    const before = serialize(current.rows[0]);
+    const nextTitleI18n = { ...before.titleI18n } as Record<string, string>;
+    const nextDescriptionI18n = { ...before.descriptionI18n } as Record<string, string | null>;
+    for (const [lang, translation] of Object.entries(translations) as [
+      Language,
+      ScheduleTranslation,
+    ][]) {
+      if (translation.title !== undefined) nextTitleI18n[lang] = translation.title;
+      if (translation.description !== undefined)
+        nextDescriptionI18n[lang] = translation.description;
+    }
+    const { rows } = await client.query(
+      `UPDATE schedule SET title_i18n = $2, description_i18n = $3
+        WHERE id = $1
+        RETURNING ${SCHEDULE_COLUMNS}`,
+      [id, nextTitleI18n, nextDescriptionI18n],
+    );
+    const after = serialize(rows[0]);
+    await client.query(
+      `UPDATE activities SET name_i18n = $2, description_i18n = $3 WHERE schedule_id = $1`,
+      [id, after.titleI18n, after.descriptionI18n],
+    );
+    await audit(client, {
+      actorId,
+      entityType: "schedule",
+      entityId: id,
+      action: "update_translations",
+      before: { titleI18n: before.titleI18n, descriptionI18n: before.descriptionI18n },
+      after: { titleI18n: after.titleI18n, descriptionI18n: after.descriptionI18n },
+    });
+    return after;
+  });
+  await emitScheduleChanged({ action: "update", item });
+  return item;
+}
+
+/**
+ * Machine-translates this item's title+description from its primary
+ * language into `targets` via the configured provider (H50's translate/
+ * module) and persists the result — this is the "redo translations" action,
+ * safe to call again at any time to overwrite stale machine translations
+ * (a manually-edited locale is only overwritten if it's requested again).
+ */
+export async function translateScheduleItem(
+  actorId: number | null,
+  id: number,
+  targets: Language[],
+) {
+  const { rows } = await pool.query(`SELECT ${SCHEDULE_COLUMNS} FROM schedule WHERE id = $1`, [id]);
+  if (!rows[0]) throw new NotFoundError("Schedule item not found", { id });
+  const item = serialize(rows[0]);
+  const translated = await translateFields(
+    { title: item.title, description: item.description ?? "" },
+    item.primaryLanguage,
+    targets,
+  );
+  const translations: ScheduleTranslations = {};
+  for (const [lang, fields] of Object.entries(translated) as [
+    Language,
+    { title: string; description: string },
+  ][]) {
+    translations[lang] = { title: fields.title, description: fields.description || null };
+  }
+  return saveScheduleTranslations(actorId, id, translations);
 }
 
 export async function setScheduleVisibility(
@@ -696,6 +826,10 @@ export interface AudienceScheduleItem {
   notes?: string | null;
   /** Staff-only — lets a staff client tell a draft/hidden item apart from a live one. */
   visibility?: "shown" | "hidden";
+  /** Language `title`/`description` are authored in — every viewer gets this, to resolve their own fallback (English, then this). */
+  primaryLanguage: Language;
+  titleI18n: Record<string, string>;
+  descriptionI18n: Record<string, string | null>;
 }
 
 export async function listScheduleForAudiences(
@@ -709,7 +843,7 @@ export async function listScheduleForAudiences(
   // to preview it on the run-of-show).
   const { rows } = await pool.query(
     `SELECT id, title, description, location, type, starts_at, ends_at, publish_at,
-            audiences, contact_note, notes, visibility
+            audiences, contact_note, notes, visibility, primary_language, title_i18n, description_i18n
        FROM schedule
       WHERE $2
          OR (
@@ -739,6 +873,9 @@ export async function listScheduleForAudiences(
       // rep's client can pick out "sponsor-relevant" items from the general
       // feed (H59), same as it already lets a staff caller do the same.
       audiences: Array.from(itemAudiences),
+      primaryLanguage: ((row.primary_language as Language | null) ?? "es") as Language,
+      titleI18n: (row.title_i18n as Record<string, string> | null) ?? {},
+      descriptionI18n: (row.description_i18n as Record<string, string | null> | null) ?? {},
     };
     // Staff sees owners/contact/notes for every item, regardless of that
     // item's own audience tags — operational detail is a staff concern, not

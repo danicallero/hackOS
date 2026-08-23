@@ -336,6 +336,8 @@
   "scheduleDeleteError": "No se pudo eliminar la actividad. Revisa la conexión e inténtalo de nuevo.",
   "scheduleTitleLabel": "Título",
   "scheduleDescriptionLabel": "Descripción",
+  "primaryLanguageLabel": "Idioma principal",
+  "scheduleTranslateAfterSaveHint": "Guarda el elemento para poder añadir traducciones.",
   "scheduleLocationLabel": "Ubicación",
   "scheduleTypeLabel": "Tipo",
   "scheduleStartsAtLabel": "Inicio",
