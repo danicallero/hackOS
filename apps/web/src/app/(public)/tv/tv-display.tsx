@@ -18,6 +18,7 @@ import { logisticsApi, type PublicScheduleItem, resolveScheduleText } from "@/li
 import { getAllRoomViews, type QueueEntry, type RoomView } from "@/lib/queue";
 import {
   bestSponsorColumns,
+  DEFAULT_ROTATION_SECONDS,
   getTvState,
   getTvVenueConfig,
   liveConfigFrom,
@@ -80,14 +81,24 @@ type TvData = {
 
 type ScreenPlacement = NonNullable<PublicAnnouncement["screenPlacement"]>;
 
+/** Same cadence as the tv library's mode-slot rotation, for a consistent feel
+ * across the venue whenever more than one notice shares a placement. */
+const ANNOUNCEMENT_ROTATION_MS = DEFAULT_ROTATION_SECONDS * 1000;
+
 /** The public feed is already filtered to the announcement's validity window.
- * Select the first one in its server-defined order so every venue display
- * makes the same choice when an operator accidentally overlaps two notices. */
+ * When exactly one notice occupies this placement, show it; when several do,
+ * rotate through them by wall-clock time (not per-mount state) so every venue
+ * display lands on the same one at the same moment. */
 export function activeAnnouncement(
   announcements: PublicAnnouncement[],
   placement: ScreenPlacement,
 ): PublicAnnouncement | undefined {
-  return announcements.find((announcement) => announcement.screenPlacement === placement);
+  const candidates = announcements.filter(
+    (announcement) => announcement.screenPlacement === placement,
+  );
+  if (candidates.length <= 1) return candidates[0];
+  const index = Math.floor(Date.now() / ANNOUNCEMENT_ROTATION_MS) % candidates.length;
+  return candidates[index];
 }
 
 /** A room considered "ready" (not paused) vs. paused — mirrors the room's own
@@ -648,6 +659,17 @@ function useRotatedState(state: TvState): { mode: TvState["mode"]; payload: unkn
   return { mode: active.mode, payload: active.payload };
 }
 
+/** `activeAnnouncement` derives its pick purely from `Date.now()`, so nothing
+ * re-renders the screen when a rotation boundary passes on its own — this
+ * forces one on a fixed cadence well below the rotation interval. */
+function useAnnouncementRotationTick(): void {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((tick) => tick + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+}
+
 export function TvDisplay() {
   const { t, language } = useLocale();
   const [data, setData] = useState<TvData | null>(null);
@@ -733,6 +755,7 @@ function TvView({ data, error }: { data: TvData | null; error: string | null }) 
     slot: null,
   };
   const { mode, payload } = useRotatedState(data?.state ?? fallbackState);
+  useAnnouncementRotationTick();
 
   if (!data && !error)
     return (

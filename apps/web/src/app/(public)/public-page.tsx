@@ -28,13 +28,14 @@ import { api } from "@/lib/api";
 import { LOCALE_CODES, type Translate, useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem } from "@/lib/logistics";
 import { withReturnPath } from "@/lib/return-path";
+import { useSessionContext } from "@/lib/session";
 
 type Content = {
   event: PublicEvent;
   schedule: PublicScheduleItem[];
   sponsors: PublicSponsor[];
   challenges: PublicChallenge[];
-  announcements: PublicAnnouncement[];
+  screenAnnouncements: PublicAnnouncement[];
   openApplications: PublicApplicationForm[];
 };
 
@@ -60,6 +61,13 @@ function applicationTypeLabel(type: string, t: Translate): string {
 
 export function PublicPage() {
   const { language, t } = useLocale();
+  // The landing page is worth visiting whether or not you're signed in
+  // already (schedule, challenges, sponsors), so its entry point should never
+  // read "Log in" to someone who already has a session — send them straight
+  // into the app instead of back through the sign-in form.
+  const { status } = useSessionContext();
+  const appHref = status === "authenticated" ? "/timetable" : "/login";
+  const appLabel = status === "authenticated" ? t("goToApp") : t("logIn");
   const [content, setContent] = useState<Content | null>(null);
   const [error, setError] = useState<string | null>(null);
   const load = useCallback(async () => {
@@ -84,7 +92,12 @@ export function PublicPage() {
         schedule: schedule.items,
         sponsors: sponsorResult.items,
         challenges: challengeResult.items,
-        announcements: announcementResult.items,
+        // Only announcements actually being shown on a venue screen right now
+        // (H50/H41-H42) belong on the public site — everything else on this
+        // feed exists purely for notification delivery, never for display.
+        screenAnnouncements: announcementResult.items.filter(
+          (item) => item.screenPlacement && item.screenPlacement !== "none",
+        ),
         openApplications: applicationResult.applications,
       });
       setError(null);
@@ -115,8 +128,8 @@ export function PublicPage() {
             <LanguageSelect />
             <ThemeToggle />
             <Button size="sm" asChild className="hidden sm:inline-flex">
-              <Link href="/signup">
-                {t("createAccount")}
+              <Link href={appHref}>
+                {appLabel}
                 <ArrowRightIcon className="size-4" />
               </Link>
             </Button>
@@ -145,7 +158,15 @@ export function PublicPage() {
           </div>
         )}
 
-        {content && <PublicPageContent content={content} language={language} t={t} />}
+        {content && (
+          <PublicPageContent
+            content={content}
+            language={language}
+            t={t}
+            appHref={appHref}
+            appLabel={appLabel}
+          />
+        )}
 
         <footer className="text-muted-foreground border-t py-8 text-center text-xs">
           <nav
@@ -169,12 +190,16 @@ function PublicPageContent({
   content,
   language,
   t,
+  appHref,
+  appLabel,
 }: {
   content: Content;
   language: "es" | "gl" | "en";
   t: Translate;
+  appHref: string;
+  appLabel: string;
 }) {
-  const { event, schedule, sponsors, challenges, announcements, openApplications } = content;
+  const { event, schedule, sponsors, challenges, screenAnnouncements, openApplications } = content;
   const upcomingSchedule = schedule
     .filter((item) => Date.parse(item.endsAt) >= Date.now())
     .slice(0, 4);
@@ -200,7 +225,7 @@ function PublicPageContent({
             </Button>
           )}
           <Button size="lg" variant="outline" asChild>
-            <Link href="/login">{t("logIn")}</Link>
+            <Link href={appHref}>{appLabel}</Link>
           </Button>
         </div>
         {eventPhase.kind !== "none" && (
@@ -246,13 +271,13 @@ function PublicPageContent({
         </section>
       )}
 
-      {announcements.length > 0 && (
+      {screenAnnouncements.length > 0 && (
         <section aria-labelledby="announcements-title" className="border-t py-12">
           <SectionHeading icon={MegaphoneIcon} id="announcements-title">
             {t("publicAnnouncements")}
           </SectionHeading>
           <div className="mt-6 grid gap-3 md:grid-cols-2">
-            {announcements.map((item) => (
+            {screenAnnouncements.map((item) => (
               <article
                 key={item.id}
                 className="hover:border-primary/30 rounded-xl border p-5 shadow-sm transition-colors hover:shadow-md"

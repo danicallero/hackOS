@@ -907,7 +907,7 @@
   "announcementPlacementNone": "Do not show",
   "announcementPlacementEmbedded": "Embedded",
   "announcementPlacementFullscreen": "Full screen",
-  "announcementTranslationsRequired": "Complete the title and message in Spanish, Galician, and English.",
+  "announcementTranslationsRequired": "Complete the title and message in at least one language.",
   "translateAutomatically": "Translate automatically",
   "translatingInProgress": "Translating…",
   "couldNotTranslate": "Could not translate automatically. You can still fill these in by hand.",

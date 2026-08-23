@@ -147,6 +147,7 @@ export function ScheduleFormModal({
   scheduleId,
   initialOwners,
   onSubmit,
+  onSaved,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -164,7 +165,9 @@ export function ScheduleFormModal({
   onSubmit: (
     values: ScheduleInput,
     pendingOwners: ({ userId: number } | { freeTextName: string })[],
-  ) => Promise<{ id: number }>;
+  ) => Promise<AdminScheduleItem>;
+  /** Called after the item and its translations have both been persisted. */
+  onSaved?: (item: AdminScheduleItem) => void | Promise<void>;
 }) {
   const { t, language: accountLanguage } = useLocale();
   const insets = useSafeAreaInsets();
@@ -244,7 +247,7 @@ export function ScheduleFormModal({
     setPending(true);
     setError(null);
     try {
-      const result = await onSubmit(
+      let result = await onSubmit(
         {
           ...values,
           title: values.title.trim(),
@@ -257,8 +260,9 @@ export function ScheduleFormModal({
         ),
       );
       if (Object.keys(translations).length > 0) {
-        await saveScheduleTranslations(result.id, translations);
+        result = await saveScheduleTranslations(result.id, translations);
       }
+      await onSaved?.(result);
     } catch {
       setError(t("scheduleSaveError"));
     } finally {

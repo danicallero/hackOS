@@ -41,6 +41,42 @@ export type AnnouncementTranslations = Partial<
   Record<AnnouncementLanguage, AnnouncementTranslation>
 >;
 
+const ANNOUNCEMENT_LANGUAGES: AnnouncementLanguage[] = ["es", "gl", "en"];
+
+function isCompleteTranslation(
+  value: AnnouncementTranslation | undefined,
+): value is AnnouncementTranslation {
+  return Boolean(value?.title.trim() && value.body.trim());
+}
+
+/**
+ * Keep the canonical fields aligned with the first complete translation. An
+ * announcement may intentionally contain just one language; those canonical
+ * fields are the final fallback for every recipient (H50).
+ */
+export function normalizeAnnouncementContent(input: {
+  title: string;
+  body: string;
+  translations: AnnouncementTranslations;
+}): Pick<AnnouncementInput, "title" | "body" | "translations"> {
+  const translations = Object.fromEntries(
+    ANNOUNCEMENT_LANGUAGES.flatMap((language) => {
+      const value = input.translations[language];
+      return isCompleteTranslation(value)
+        ? [[language, { title: value.title.trim(), body: value.body.trim() }]]
+        : [];
+    }),
+  ) as AnnouncementTranslations;
+  const primary = ANNOUNCEMENT_LANGUAGES.map((language) => translations[language]).find(
+    isCompleteTranslation,
+  );
+  return {
+    title: primary?.title ?? input.title.trim(),
+    body: primary?.body ?? input.body.trim(),
+    translations,
+  };
+}
+
 export interface Announcement {
   id: number;
   author_id: number;
@@ -175,6 +211,7 @@ export async function createAnnouncement(
   authorId: number,
   input: AnnouncementInput,
 ): Promise<Announcement> {
+  const content = normalizeAnnouncementContent(input);
   assertVisibilityWindow(
     input.screenPlacement,
     input.notifyUsers,
@@ -189,9 +226,9 @@ export async function createAnnouncement(
      RETURNING *`,
     [
       authorId,
-      input.title,
-      input.body,
-      JSON.stringify(input.translations),
+      content.title,
+      content.body,
+      JSON.stringify(content.translations),
       input.notifyUsers,
       input.screenPlacement,
       input.publishAt,
@@ -215,10 +252,20 @@ export async function updateAnnouncement(
     input.recipientUserIds !== undefined
       ? input.recipientUserIds
       : await getAnnouncementRecipientIds(db, id);
+  const content =
+    input.translations !== undefined
+      ? normalizeAnnouncementContent({
+          title: input.title ?? existing.title,
+          body: input.body ?? existing.body,
+          translations: input.translations,
+        })
+      : {
+          title: (input.title ?? existing.title).trim(),
+          body: (input.body ?? existing.body).trim(),
+          translations: existing.translations,
+        };
   const merged = {
-    title: input.title ?? existing.title,
-    body: input.body ?? existing.body,
-    translations: input.translations ?? existing.translations,
+    ...content,
     notifyUsers: input.notifyUsers ?? existing.notify_users,
     screenPlacement: input.screenPlacement ?? existing.screen_placement,
     publishAt: input.publishAt !== undefined ? input.publishAt : existing.publish_at,
@@ -387,7 +434,9 @@ function translatedContent(
   const preferred = language === "es" || language === "gl" || language === "en" ? language : "es";
   return (
     translations[preferred] ??
-    translations.es ?? { title: announcement.title, body: announcement.body }
+    translations.es ??
+    translations.gl ??
+    translations.en ?? { title: announcement.title, body: announcement.body }
   );
 }
 

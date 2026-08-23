@@ -4,7 +4,7 @@ import * as Device from "expo-device";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Linking, Platform, ScrollView, Text, useColorScheme, View } from "react-native";
+import { Linking, Platform, ScrollView, Text, useColorScheme, View } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 import { ActionButton, EmptyState, InfoRow, Section, Separator } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
@@ -28,6 +28,7 @@ interface TicketPayload {
   userId: number;
   ticketToken: string | null;
   badgeId: string | null;
+  applePassTypeIdentifier: string;
   acceptedSpots: Array<{
     responseId: number;
     applicationName: string;
@@ -84,7 +85,11 @@ export default function WalletScreen() {
     } catch (cause) {
       const code = (cause as { code?: string } | null)?.code;
       if (code === "PASS_ALREADY_EXISTS") {
-        Alert.alert(t("walletPassAlreadyAddedTitle"), t("walletPassAlreadyAddedBody"));
+        try {
+          await WalletManager.viewInWallet(ticket!.applePassTypeIdentifier);
+        } catch {
+          // The pass is already visible in Wallet; nothing more to do.
+        }
         return;
       }
       if (code === "USER_CANCELLED") return;

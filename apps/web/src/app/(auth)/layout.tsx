@@ -29,7 +29,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         </div>
       </header>
       <main className="flex flex-1 items-center justify-center px-4 py-10">
-        <div className="w-full max-w-sm">{children}</div>
+        <div className="w-full max-w-md">{children}</div>
       </main>
       <footer className="text-muted-foreground px-6 py-4 text-center text-xs">
         <nav

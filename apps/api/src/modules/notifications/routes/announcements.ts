@@ -164,7 +164,7 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Create announcement",
         description:
-          "Creates an auditable announcement with optional es/gl/en translations, a screen placement, and delivery settings. notifyUsers fans out through the chosen channels (candidates only — each still filtered by the recipient's own H51 preferences), addressed either to everyone (default), an audience of sponsor/participant/mentor tags, or an explicit recipient list — audience tags and an explicit recipient list are mutually exclusive, and a screen-placed announcement can't target specific recipients. A notify-only announcement (screenPlacement 'none') fires once at publishAt and can't have an expiresAt; screen-placed announcements keep the publishAt/expiresAt visibility window unchanged.",
+          "Creates an auditable announcement with one or more optional complete es/gl/en translations, a screen placement, and delivery settings. At least one complete language is enough; when the others are blank, that language becomes the canonical fallback for recipients. notifyUsers fans out through the chosen channels (candidates only — each still filtered by the recipient's own H51 preferences), addressed either to everyone (default), an audience of sponsor/participant/mentor tags, or an explicit recipient list — audience tags and an explicit recipient list are mutually exclusive, and a screen-placed announcement can't target specific recipients. A notify-only announcement (screenPlacement 'none') fires once at publishAt and can't have an expiresAt; screen-placed announcements keep the publishAt/expiresAt visibility window unchanged.",
         body: announcementBodySchema,
       },
     },
@@ -207,7 +207,7 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Update announcement",
         description:
-          "Updates an auditable announcement's translations, delivery opt-in, channels, audience/recipient targeting, screen placement or publication window (see the create route for the targeting/channel/window rules, which apply identically here). A notification fan-out occurs at most once when notifyUsers is enabled and the announcement becomes visible.",
+          "Updates an auditable announcement's translations, delivery opt-in, channels, audience/recipient targeting, screen placement or publication window (see the create route for the targeting/channel/window rules, which apply identically here). One complete language is enough when the other translations are blank, and becomes the canonical fallback for recipients without a matching translation. A notification fan-out occurs at most once when notifyUsers is enabled and the announcement becomes visible.",
         params: announcementIdParamsSchema,
         body: announcementUpdateBodySchema,
       },
