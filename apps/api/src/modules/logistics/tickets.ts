@@ -3,6 +3,7 @@ import type pg from "pg";
 import { pool } from "../../db/pool.js";
 import { NotFoundError } from "../../lib/errors.js";
 import { hasEventAccess } from "../identity/role.js";
+import { PASS_TYPE_IDENTIFIER } from "./wallet.js";
 
 /**
  * Creates the permanent entrance credential for any attendee category. The
@@ -53,6 +54,7 @@ export async function ticketQrPayload(userId: number) {
     // otherwise a declined/revoked spot would keep showing a live QR/ticket.
     ticketToken: eventAccess ? ((row.token as string | null) ?? null) : null,
     badgeId: (row.badge_id as string | null) ?? null,
+    applePassTypeIdentifier: PASS_TYPE_IDENTIFIER,
     acceptedSpots: acceptedRows.map((accepted) => ({
       responseId: accepted.response_id as number,
       applicationName: accepted.application_name as string,
