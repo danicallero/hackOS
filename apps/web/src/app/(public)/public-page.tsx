@@ -34,7 +34,7 @@ type Content = {
   schedule: PublicScheduleItem[];
   sponsors: PublicSponsor[];
   challenges: PublicChallenge[];
-  announcements: PublicAnnouncement[];
+  screenAnnouncements: PublicAnnouncement[];
   openApplications: PublicApplicationForm[];
 };
 
@@ -84,7 +84,12 @@ export function PublicPage() {
         schedule: schedule.items,
         sponsors: sponsorResult.items,
         challenges: challengeResult.items,
-        announcements: announcementResult.items,
+        // Only announcements actually being shown on a venue screen right now
+        // (H50/H41-H42) belong on the public site — everything else on this
+        // feed exists purely for notification delivery, never for display.
+        screenAnnouncements: announcementResult.items.filter(
+          (item) => item.screenPlacement && item.screenPlacement !== "none",
+        ),
         openApplications: applicationResult.applications,
       });
       setError(null);
@@ -115,8 +120,8 @@ export function PublicPage() {
             <LanguageSelect />
             <ThemeToggle />
             <Button size="sm" asChild className="hidden sm:inline-flex">
-              <Link href="/signup">
-                {t("createAccount")}
+              <Link href="/login">
+                {t("logIn")}
                 <ArrowRightIcon className="size-4" />
               </Link>
             </Button>
@@ -174,7 +179,7 @@ function PublicPageContent({
   language: "es" | "gl" | "en";
   t: Translate;
 }) {
-  const { event, schedule, sponsors, challenges, announcements, openApplications } = content;
+  const { event, schedule, sponsors, challenges, screenAnnouncements, openApplications } = content;
   const upcomingSchedule = schedule
     .filter((item) => Date.parse(item.endsAt) >= Date.now())
     .slice(0, 4);
@@ -246,13 +251,13 @@ function PublicPageContent({
         </section>
       )}
 
-      {announcements.length > 0 && (
+      {screenAnnouncements.length > 0 && (
         <section aria-labelledby="announcements-title" className="border-t py-12">
           <SectionHeading icon={MegaphoneIcon} id="announcements-title">
             {t("publicAnnouncements")}
           </SectionHeading>
           <div className="mt-6 grid gap-3 md:grid-cols-2">
-            {announcements.map((item) => (
+            {screenAnnouncements.map((item) => (
               <article
                 key={item.id}
                 className="hover:border-primary/30 rounded-xl border p-5 shadow-sm transition-colors hover:shadow-md"
