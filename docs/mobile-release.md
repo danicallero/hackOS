@@ -707,13 +707,19 @@ This reproduces EAS build steps while using local native tools:
 
 ```sh
 cd apps/mobile
-pnpm dlx eas-cli@latest build --platform android --profile production --local
+GOOGLE_SERVICES_JSON="$(pwd)/google-services.json" \
+  pnpm dlx eas-cli@latest build --platform android --profile production --local
 pnpm dlx eas-cli@latest build --platform ios --profile production --local
 ```
 
 Local EAS iOS builds require macOS, Xcode, CocoaPods, and fastlane. Local EAS
-builds do not have all cloud features—particularly EAS Secret variables and
-build caching—so export required variables in the shell. See the official
+builds do not fetch EAS environment/secret variables — unlike a cloud build,
+`--local` never resolves the `GOOGLE_SERVICES_JSON` file variable described in
+Section 10, so Android local builds fail on `google-services.json` unless you
+export it yourself, pointing at the real local file's **absolute** path (a
+relative path breaks because the local builder copies the project into a temp
+directory first). Export any other required variables in the shell the same
+way. See the official
 [local EAS limitations](https://docs.expo.dev/build-reference/local-builds/).
 
 ## 8. EAS preview and production builds
@@ -866,10 +872,26 @@ and color rather than copying the example blindly. See Expo's SDK 57
 
 1. Create/select the Firebase project owned by the organization.
 2. Register an Android app whose package exactly matches `android.package`.
-3. Download `google-services.json` into `apps/mobile/google-services.json`,
-   referenced by `android.googleServicesFile` in `app.json`. It contains a
-   Google API key and is gitignored; every dev/CI machine building Android
-   must fetch it from the Firebase console separately.
+3. Download `google-services.json` into `apps/mobile/google-services.json`
+   for local builds. It contains a Google API key and is gitignored; every
+   dev machine building Android locally must fetch it from the Firebase
+   console separately. `app.config.ts` resolves
+   `android.googleServicesFile` from the `GOOGLE_SERVICES_JSON` env var when
+   set, falling back to the local file otherwise — EAS cloud builds never
+   have the gitignored file, so they read it from an EAS environment file
+   variable instead. Upload it once per environment used by `eas.json`
+   (`development`, `preview`, `production`):
+
+   ```sh
+   cd apps/mobile
+   pnpm dlx eas-cli@latest env:set --name GOOGLE_SERVICES_JSON --type file \
+     --value ./google-services.json --environment production \
+     --visibility sensitive
+   ```
+
+   Re-run for `preview` and `development`, and again whenever the file is
+   rotated. Each `build` profile in `eas.json` must declare a matching
+   `"environment"` key or EAS never injects the variable.
 4. Create a dedicated service-account key with the required Firebase Messaging
    role.
 5. Run `eas credentials`, choose Android and the production profile, then
