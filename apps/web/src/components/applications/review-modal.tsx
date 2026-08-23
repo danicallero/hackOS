@@ -1,10 +1,8 @@
 "use client";
 
-// Review one submitted application response (H13): the answers as an applicant
-// gave them, staff/my-review scoring, and — for a decider — the accept/reject
-// call. Lives here rather than in applications/[id] because users/[id] opens
-// the same modal from a person's profile; a route's page.tsx must not be
-// imported by another route.
+// Review one submitted application response. Lives here rather than in
+// applications/[id] because users/[id] opens the same modal from a person's
+// profile, and a route's page.tsx must not be imported by another route.
 
 import { sponsorShareKey } from "@hackos/shared/applications";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
@@ -41,21 +39,18 @@ import type { SaveState } from "@/lib/save-state";
 import { useCan, useMe } from "@/lib/session";
 import type { Intolerance, Language } from "@/lib/types";
 
-/** Reserved section the shirt-size/dietary fields are grouped under (H11) —
- *  synthetic, never stored in `application.sections`. Mirrors the identically
- *  named constant in `applications/[id]/shared.ts` and `my-applications/lib.ts`
- *  (types/helpers declared locally per module convention). */
+/** Synthetic section for the shirt-size/dietary fields, that is never stored in
+ *  `application.sections`.
+ *  Mirrors `applications/[id]/shared.ts` and `my-applications/lib.ts`. */
 const LOGISTICS_SECTION_KEY = "__logistics__";
 const LOGISTICS_SECTION: FormSection = {
   key: LOGISTICS_SECTION_KEY,
   title: { en: "Logistics", es: "Logística", gl: "Loxística" },
 };
 
-/** The read-only shirt-size/dietary "fields" this modal synthesizes so they
- *  render as ordinary answer rows grouped under Logistics, instead of a
- *  separate hardcoded block. Values come from the response row directly
- *  (H12: this data lives on the user row, not `response.responses`) — editing
- *  it happens on the applicant's profile, not through this form. */
+/** Fake "fields" for shirt size/dietary data so they render as ordinary answer
+ *  rows instead of a hardcoded block. Read-only: this data lives on the user
+ *  row, edited from the applicant's profile, not through this form. */
 function logisticsAnswerFields(
   askShirtSize: boolean,
   askFoodIntolerances: boolean,
@@ -103,8 +98,7 @@ interface AnswerGroup {
 }
 
 /** Groups a flat field list under its sections, ungrouped fields leading —
- *  matches the builder's own layout. Mirrors the identically-named helper in
- *  `applications/[id]/shared.ts`/`my-applications/lib.ts`. */
+ *  matches the builder's layout. Mirrors the same helper in `applications/[id]/shared.ts`. */
 function groupFieldsBySections(fields: TemplateField[], sections: FormSection[]): AnswerGroup[] {
   const knownKeys = new Set(sections.map((s) => s.key));
   const ungrouped = fields.filter((f) => !f.section_key || !knownKeys.has(f.section_key));
@@ -115,6 +109,8 @@ function groupFieldsBySections(fields: TemplateField[], sections: FormSection[])
   return groups.filter((g) => g.fields.length > 0);
 }
 
+/** Turns a stored answer into display text per field kind — options resolve
+ *  through `field.options`/`universities` rather than showing the raw value. */
 function renderAnswer(
   field: TemplateField,
   value: unknown,
@@ -154,8 +150,8 @@ function renderAnswer(
 /** Format a stored date answer (yyyy-MM-dd, or an ISO datetime) as a plain date. */
 function fmtDate(value: unknown): string {
   if (typeof value !== "string" || !value) return "—";
-  // Anchor a date-only string to UTC noon so the local-timezone render can't
-  // roll it to the previous/next day.
+  // Noon UTC so local-timezone rendering can't roll a date-only value to the
+  // previous/next day.
   const iso = /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T12:00:00Z` : value;
   const d = new Date(iso);
   return Number.isNaN(d.getTime())
@@ -180,9 +176,7 @@ export function AnswerValue({
   sharedWithSponsors?: boolean;
 }) {
   const { t } = useLocale();
-  // A text field validated as a URL is a link the applicant typed: show it
-  // clickable so staff can read and click through. A file is a private
-  // upload key with no meaningful text, so it stays a generic "View file" link.
+  // A URL-validated text field is a link the applicant typed — make it clickable.
   if (field.validation?.text_condition === "url" && typeof value === "string" && value) {
     return (
       <a
@@ -228,9 +222,7 @@ export function ReviewModal({
   /** The form's named sections (H11), so answers group the same way the
    *  builder and applicant form do. */
   sections?: FormSection[];
-  /** Whether this form asks for shirt size/dietary data (H12) — shown here
-   *  read-only under a synthetic Logistics section; edited on the applicant's
-   *  profile, not through this modal (see `logisticsAnswerFields`). */
+  /** Whether this form asks for shirt size/dietary data (H12) — see `logisticsAnswerFields`. */
   askShirtSize?: boolean;
   askFoodIntolerances?: boolean;
   onClose: () => void;
@@ -266,8 +258,7 @@ export function ReviewModal({
       .get<{ intolerances: Intolerance[] }>("/api/public/food-intolerances")
       .then((res) => setIntolerances(res.intolerances))
       .catch(() => {});
-    // Resolve exactly the university ids this response references (by id, not the
-    // alphabetical top-50) so the name always renders instead of the raw id.
+    // Fetch by id, not the alphabetical top-50, so the name always renders.
     const uniIds = new Set<string>();
     for (const f of template ?? []) {
       if (f.kind !== "university") continue;
@@ -282,16 +273,14 @@ export function ReviewModal({
       .then((res) => setUniversities(res.universities))
       .catch(() => {});
   }, [template, response.responses]);
-  // No GET for a reviewer's own row exists — the score/notes inputs are
-  // write-only (blank each open); the list column shows the average + count.
+  // Blank on open — there's no GET for a reviewer's own row, only the list's avg + count.
   const [myScore, setMyScore] = useState("");
   const [myNotes, setMyNotes] = useState("");
   const [reviewHydrated, setReviewHydrated] = useState(false);
   const [reviewSaveState, setReviewSaveState] = useState<SaveState>("saved");
   const [busy, setBusy] = useState(false);
-  // Staff edit of the applicant's answers (APPLICATIONS_EDIT_RESPONSE). Seeded
-  // from the current responses; the API replaces the whole object and re-validates
-  // against the enriched template, so we send every original key back untouched.
+  // The PUT replaces the whole responses object, so editValues seeds from every
+  // existing key, not just the ones the template shows.
   const [editing, setEditing] = useState(false);
   const [editValues, setEditValues] = useState<Record<string, unknown>>(response.responses);
   const [savingEdit, setSavingEdit] = useState(false);
@@ -316,14 +305,21 @@ export function ReviewModal({
       });
   }, [response.id, me?.id, canReview]);
 
-  useEffect(() => {
-    if (!reviewHydrated || !canReview) return;
-    const scoreNum = myScore.trim() ? Number(myScore) : null;
-    if (scoreNum !== null && (!Number.isInteger(scoreNum) || scoreNum < 0 || scoreNum > 100)) {
-      setReviewSaveState("error");
-      return;
-    }
+  const scoreNum = myScore.trim() ? Number(myScore) : null;
+  const scoreOutOfRange =
+    scoreNum !== null && (!Number.isInteger(scoreNum) || scoreNum < 0 || scoreNum > 100);
+  // "unsaved" is set here, on keystroke — the effect below only fires the debounced save.
+  function handleScoreChange(v: string) {
+    setMyScore(v);
     setReviewSaveState("unsaved");
+  }
+  function handleNotesChange(v: string) {
+    setMyNotes(v);
+    setReviewSaveState("unsaved");
+  }
+
+  useEffect(() => {
+    if (!reviewHydrated || !canReview || scoreOutOfRange) return;
     const handle = window.setTimeout(async () => {
       setReviewSaveState("saving");
       try {
@@ -337,7 +333,7 @@ export function ReviewModal({
       }
     }, 700);
     return () => window.clearTimeout(handle);
-  }, [response.id, myScore, myNotes, reviewHydrated, canReview]);
+  }, [response.id, myNotes, reviewHydrated, canReview, scoreOutOfRange, scoreNum]);
 
   function startEdit() {
     setEditValues({ ...response.responses });
@@ -359,6 +355,7 @@ export function ReviewModal({
     }
   }
 
+  /** Runs a decision action, refreshes the parent, and toasts the result. */
   async function run(label: string, fn: () => Promise<unknown>) {
     setBusy(true);
     try {
@@ -389,7 +386,9 @@ export function ReviewModal({
   }
 
   const st = response.status;
+  // A draft hasn't been submitted yet, so there's nothing for a reviewer to score.
   const canScore = canReview && st !== "draft";
+  const reviewSaveStateDisplay: SaveState = scoreOutOfRange ? "error" : reviewSaveState;
 
   return (
     <Modal
@@ -422,320 +421,65 @@ export function ReviewModal({
           </Alert>
         )}
 
-        {/* Answers */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-medium">{t("answersLabel")}</p>
-            {canEdit && template && template.length > 0 && !editing && (
-              <Button size="sm" variant="outline" onClick={startEdit}>
-                <PencilIcon />
-                {t("editAnswers")}
-              </Button>
-            )}
-          </div>
-          {editing && template ? (
-            <div className="space-y-4">
-              {template.map((f) => (
-                <TemplateFieldControl
-                  key={f.key}
-                  field={f}
-                  applicationId={applicationId}
-                  value={editValues[f.key] as FieldValue}
-                  onChange={(v) => setEditValues((prev) => ({ ...prev, [f.key]: v }))}
-                  sharedWithSponsors={editValues[sponsorShareKey(f.key)] === true}
-                  onSharedWithSponsorsChange={(v) =>
-                    setEditValues((prev) => ({ ...prev, [sponsorShareKey(f.key)]: v }))
-                  }
-                  lang={lang}
-                  inDialog
-                />
-              ))}
-              <div className="flex justify-end gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={savingEdit}
-                  onClick={() => setEditing(false)}
-                >
-                  {t("cancel")}
-                </Button>
-                <Button size="sm" disabled={savingEdit} onClick={saveEdit}>
-                  {savingEdit && <Spinner />}
-                  {t("saveAnswers")}
-                </Button>
-              </div>
-            </div>
-          ) : answerFields.length > 0 ? (
-            <div className="space-y-4">
-              {groupFieldsBySections(answerFields, answerSections).map((group, i) => (
-                <div key={group.section?.key ?? `ungrouped-${i}`} className="space-y-1">
-                  {group.section && (
-                    <p className="text-muted-foreground text-xs font-semibold uppercase">
-                      {pickText(group.section.title, lang)}
-                    </p>
-                  )}
-                  <div className="divide-border divide-y">
-                    {group.fields.map((f) => (
-                      <div key={f.key} className="py-3 first:pt-0 last:pb-0">
-                        <p className="text-muted-foreground mb-1 text-xs font-medium uppercase">
-                          {pickText(f.label, lang) || f.key}
-                        </p>
-                        <div className="text-sm">
-                          <AnswerValue
-                            field={f}
-                            value={answerValues[f.key]}
-                            universities={universities}
-                            lang={lang}
-                            sharedWithSponsors={response.responses[sponsorShareKey(f.key)] === true}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  {group.section?.key === LOGISTICS_SECTION_KEY && (
-                    <Link
-                      href={`/users/${response.user_id}`}
-                      className="text-primary text-xs underline underline-offset-4"
-                    >
-                      {t("editInProfileLink")}
-                    </Link>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : Object.keys(response.responses).length > 0 ? (
-            <div className="divide-border divide-y">
-              {Object.entries(response.responses).map(([k, v]) => (
-                <div key={k} className="py-3 first:pt-0 last:pb-0">
-                  <p className="text-muted-foreground mb-1 text-xs font-medium uppercase">{k}</p>
-                  <div className="whitespace-pre-wrap text-sm">
-                    {typeof v === "object" ? JSON.stringify(v) : String(v)}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-muted-foreground text-sm">{t("noAnswersRecorded")}</p>
-          )}
-        </div>
+        <AnswersSection
+          template={template}
+          applicationId={applicationId}
+          canEdit={canEdit}
+          editing={editing}
+          setEditing={setEditing}
+          editValues={editValues}
+          setEditValues={setEditValues}
+          savingEdit={savingEdit}
+          startEdit={startEdit}
+          saveEdit={saveEdit}
+          answerFields={answerFields}
+          answerSections={answerSections}
+          answerValues={answerValues}
+          response={response}
+          universities={universities}
+          lang={lang}
+        />
 
-        {/* Shared staff notes (H13) */}
         {canReview && (
-          <div className="space-y-2">
-            <Label htmlFor="review-shared-staff-notes" className="text-sm font-medium">
-              {t("sharedStaffNotes")}
-            </Label>
-            <Textarea
-              id="review-shared-staff-notes"
-              rows={2}
-              value={staffNotes}
-              onChange={(e) => setStaffNotes(e.target.value)}
-              placeholder={t("visibleToAllReviewersPlaceholder")}
-            />
-            <div className="flex justify-end">
-              <Button size="sm" variant="outline" disabled={savingNotes} onClick={saveStaffNotes}>
-                {savingNotes && <Spinner />}
-                {t("saveNotes")}
-              </Button>
-            </div>
-          </div>
+          <StaffNotesCard
+            staffNotes={staffNotes}
+            setStaffNotes={setStaffNotes}
+            savingNotes={savingNotes}
+            saveStaffNotes={saveStaffNotes}
+          />
         )}
 
-        {/* This reviewer's score (H13) */}
         {canScore && (
-          <div className="border-border space-y-3 rounded-lg border p-4">
-            <p className="text-sm font-medium">{t("yourReview")}</p>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-muted-foreground text-xs">{t("reviewAutosaveHint")}</p>
-              <SaveStatus state={reviewSaveState} />
-            </div>
-            <div className="grid gap-3 sm:grid-cols-[8rem_1fr]">
-              <div className="space-y-1.5">
-                <Label htmlFor="review-score" className="text-muted-foreground text-xs uppercase">
-                  {t("scoreRangeLabel")}
-                </Label>
-                <Input
-                  id="review-score"
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={myScore}
-                  onChange={(e) => setMyScore(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="review-notes" className="text-muted-foreground text-xs uppercase">
-                  {t("notesLabel")}
-                </Label>
-                <Input
-                  id="review-notes"
-                  value={myNotes}
-                  onChange={(e) => setMyNotes(e.target.value)}
-                />
-              </div>
-            </div>
-          </div>
+          <MyReviewCard
+            myScore={myScore}
+            onScoreChange={handleScoreChange}
+            myNotes={myNotes}
+            onNotesChange={handleNotesChange}
+            reviewSaveState={reviewSaveStateDisplay}
+          />
         )}
 
-        {/* Decide accept/reject — lives in the review workspace itself now, no
-            separate "decisions" tab duplicating this row set (H13/H14). */}
+        {/* Accept/reject inline here (H13/H14) — no separate "decisions" tab. */}
         {workspace === "review" && (st === "review" || st === "submitted") && (
-          <div className="border-border space-y-3 rounded-lg border p-4">
-            <p className="text-sm font-medium">{t("decisionLabel")}</p>
-            {canDecide ? (
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  size="sm"
-                  disabled={busy}
-                  onClick={() =>
-                    run(t("acceptedUnsentToast"), () =>
-                      api.post(`/api/responses/${response.id}/decide`, { decision: "accepted" }),
-                    )
-                  }
-                >
-                  {t("accept")}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  disabled={busy}
-                  onClick={() =>
-                    run(t("rejectedUnsentToast"), () =>
-                      api.post(`/api/responses/${response.id}/decide`, { decision: "rejected" }),
-                    )
-                  }
-                >
-                  {t("reject")}
-                </Button>
-              </div>
-            ) : (
-              <p className="text-muted-foreground text-xs">{t("needDecideCapability")}</p>
-            )}
-          </div>
+          <ReviewDecisionCard
+            canDecide={canDecide}
+            busy={busy}
+            run={run}
+            responseId={response.id}
+          />
         )}
 
-        {/* Decision controls (H14) */}
+        {/* Elsewhere, status + workspace (outbox/sent) picks the buttons (H14). */}
         {workspace !== "review" && canDecide && (
-          <div className="border-border space-y-3 rounded-lg border p-4">
-            <p className="text-sm font-medium">{t("decisionLabel")}</p>
-            <div className="flex flex-wrap gap-2">
-              {workspace === "outbox" &&
-                (st === "accepted_internal" || st === "rejected_internal") && (
-                  <>
-                    <Button
-                      size="sm"
-                      disabled={busy}
-                      onClick={() =>
-                        run(t("decisionSent"), () =>
-                          api.post(`/api/responses/${response.id}/send-decision`),
-                        )
-                      }
-                    >
-                      <SendIcon />
-                      {t("sendDecision")}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={busy}
-                      onClick={() =>
-                        run(t("movedBackToReview"), () =>
-                          api.post(`/api/responses/${response.id}/revert-decision`, {
-                            decision: "review",
-                          }),
-                        )
-                      }
-                    >
-                      {t("backToReview")}
-                    </Button>
-                  </>
-                )}
-              {workspace === "sent" &&
-                (st === "accepted" || st === "rejected" || st === "expired") && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() =>
-                      run(t("decisionResent"), () =>
-                        api.post(`/api/responses/${response.id}/resend-decision`),
-                      )
-                    }
-                  >
-                    {t("resend")}
-                  </Button>
-                )}
-              {workspace === "sent" && (st === "accepted" || st === "rejected") && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={busy}
-                  onClick={() =>
-                    run(t("movedBackToReview"), () =>
-                      api.post(`/api/responses/${response.id}/revert-decision`, {
-                        decision: "review",
-                      }),
-                    )
-                  }
-                >
-                  {t("backToReview")}
-                </Button>
-              )}
-              {workspace === "sent" &&
-                (st === "rejected" || st === "declined" || st === "expired") && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() =>
-                      run(t("reacceptedUnsent"), () =>
-                        api.post(`/api/responses/${response.id}/re-accept`),
-                      )
-                    }
-                  >
-                    {t("reaccept")}
-                  </Button>
-                )}
-              {workspace === "sent" && (st === "accepted" || st === "confirmed") && (
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  disabled={busy}
-                  onClick={() => setConfirmRevoke(true)}
-                >
-                  {t("revokeSpot")}
-                </Button>
-              )}
-              {workspace === "sent" && canOverride && st === "accepted" && (
-                <>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() =>
-                      run(t("spotConfirmed"), () =>
-                        api.post(`/api/responses/${response.id}/confirm`),
-                      )
-                    }
-                  >
-                    {t("confirmOverride")}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() =>
-                      run(t("spotDeclined"), () =>
-                        api.post(`/api/responses/${response.id}/decline`),
-                      )
-                    }
-                  >
-                    {t("declineOverride")}
-                  </Button>
-                </>
-              )}
-            </div>
-          </div>
+          <LifecycleDecisionCard
+            workspace={workspace}
+            status={st}
+            busy={busy}
+            run={run}
+            responseId={response.id}
+            canOverride={canOverride}
+            onRequestRevoke={() => setConfirmRevoke(true)}
+          />
         )}
         <AlertModal
           open={confirmRevoke}
@@ -754,5 +498,410 @@ export function ReviewModal({
         />
       </div>
     </Modal>
+  );
+}
+
+/** The applicant's answers: read-only grouped-by-section view, an inline
+ *  edit form (APPLICATIONS_EDIT_RESPONSE), or a raw key/value fallback when
+ *  the form has no template. */
+function AnswersSection({
+  template,
+  applicationId,
+  canEdit,
+  editing,
+  setEditing,
+  editValues,
+  setEditValues,
+  savingEdit,
+  startEdit,
+  saveEdit,
+  answerFields,
+  answerSections,
+  answerValues,
+  response,
+  universities,
+  lang,
+}: {
+  template: TemplateField[] | null;
+  applicationId: number;
+  canEdit: boolean;
+  editing: boolean;
+  setEditing: (v: boolean) => void;
+  editValues: Record<string, unknown>;
+  setEditValues: (fn: (prev: Record<string, unknown>) => Record<string, unknown>) => void;
+  savingEdit: boolean;
+  startEdit: () => void;
+  saveEdit: () => Promise<void>;
+  answerFields: TemplateField[];
+  answerSections: FormSection[];
+  answerValues: Record<string, unknown>;
+  response: ResponseRow;
+  universities: { id: number; name: string }[];
+  lang: Language;
+}) {
+  const { t } = useLocale();
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-medium">{t("answersLabel")}</p>
+        {canEdit && template && template.length > 0 && !editing && (
+          <Button size="sm" variant="outline" onClick={startEdit}>
+            <PencilIcon />
+            {t("editAnswers")}
+          </Button>
+        )}
+      </div>
+      {editing && template ? (
+        <div className="space-y-4">
+          {template.map((f) => (
+            <TemplateFieldControl
+              key={f.key}
+              field={f}
+              applicationId={applicationId}
+              value={editValues[f.key] as FieldValue}
+              onChange={(v) => setEditValues((prev) => ({ ...prev, [f.key]: v }))}
+              sharedWithSponsors={editValues[sponsorShareKey(f.key)] === true}
+              onSharedWithSponsorsChange={(v) =>
+                setEditValues((prev) => ({ ...prev, [sponsorShareKey(f.key)]: v }))
+              }
+              lang={lang}
+              inDialog
+            />
+          ))}
+          <div className="flex justify-end gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={savingEdit}
+              onClick={() => setEditing(false)}
+            >
+              {t("cancel")}
+            </Button>
+            <Button size="sm" disabled={savingEdit} onClick={saveEdit}>
+              {savingEdit && <Spinner />}
+              {t("saveAnswers")}
+            </Button>
+          </div>
+        </div>
+      ) : answerFields.length > 0 ? (
+        <div className="space-y-4">
+          {groupFieldsBySections(answerFields, answerSections).map((group, i) => (
+            <div key={group.section?.key ?? `ungrouped-${i}`} className="space-y-1">
+              {group.section && (
+                <p className="text-muted-foreground text-xs font-semibold uppercase">
+                  {pickText(group.section.title, lang)}
+                </p>
+              )}
+              <div className="divide-border divide-y">
+                {group.fields.map((f) => (
+                  <div key={f.key} className="py-3 first:pt-0 last:pb-0">
+                    <p className="text-muted-foreground mb-1 text-xs font-medium uppercase">
+                      {pickText(f.label, lang) || f.key}
+                    </p>
+                    <div className="text-sm">
+                      <AnswerValue
+                        field={f}
+                        value={answerValues[f.key]}
+                        universities={universities}
+                        lang={lang}
+                        sharedWithSponsors={response.responses[sponsorShareKey(f.key)] === true}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {group.section?.key === LOGISTICS_SECTION_KEY && (
+                <Link
+                  href={`/users/${response.user_id}`}
+                  className="text-primary text-xs underline underline-offset-4"
+                >
+                  {t("editInProfileLink")}
+                </Link>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : Object.keys(response.responses).length > 0 ? (
+        <div className="divide-border divide-y">
+          {Object.entries(response.responses).map(([k, v]) => (
+            <div key={k} className="py-3 first:pt-0 last:pb-0">
+              <p className="text-muted-foreground mb-1 text-xs font-medium uppercase">{k}</p>
+              <div className="whitespace-pre-wrap text-sm">
+                {typeof v === "object" ? JSON.stringify(v) : String(v)}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-muted-foreground text-sm">{t("noAnswersRecorded")}</p>
+      )}
+    </div>
+  );
+}
+
+function StaffNotesCard({
+  staffNotes,
+  setStaffNotes,
+  savingNotes,
+  saveStaffNotes,
+}: {
+  staffNotes: string;
+  setStaffNotes: (v: string) => void;
+  savingNotes: boolean;
+  saveStaffNotes: () => Promise<void>;
+}) {
+  const { t } = useLocale();
+  return (
+    <div className="space-y-2">
+      <Label htmlFor="review-shared-staff-notes" className="text-sm font-medium">
+        {t("sharedStaffNotes")}
+      </Label>
+      <Textarea
+        id="review-shared-staff-notes"
+        rows={2}
+        value={staffNotes}
+        onChange={(e) => setStaffNotes(e.target.value)}
+        placeholder={t("visibleToAllReviewersPlaceholder")}
+      />
+      <div className="flex justify-end">
+        <Button size="sm" variant="outline" disabled={savingNotes} onClick={saveStaffNotes}>
+          {savingNotes && <Spinner />}
+          {t("saveNotes")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function MyReviewCard({
+  myScore,
+  onScoreChange,
+  myNotes,
+  onNotesChange,
+  reviewSaveState,
+}: {
+  myScore: string;
+  onScoreChange: (v: string) => void;
+  myNotes: string;
+  onNotesChange: (v: string) => void;
+  reviewSaveState: SaveState;
+}) {
+  const { t } = useLocale();
+  return (
+    <div className="border-border space-y-3 rounded-lg border p-4">
+      <p className="text-sm font-medium">{t("yourReview")}</p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-muted-foreground text-xs">{t("reviewAutosaveHint")}</p>
+        <SaveStatus state={reviewSaveState} />
+      </div>
+      <div className="grid gap-3 sm:grid-cols-[8rem_1fr]">
+        <div className="space-y-1.5">
+          <Label htmlFor="review-score" className="text-muted-foreground text-xs uppercase">
+            {t("scoreRangeLabel")}
+          </Label>
+          <Input
+            id="review-score"
+            type="number"
+            min={0}
+            max={100}
+            value={myScore}
+            onChange={(e) => onScoreChange(e.target.value)}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="review-notes" className="text-muted-foreground text-xs uppercase">
+            {t("notesLabel")}
+          </Label>
+          <Input
+            id="review-notes"
+            value={myNotes}
+            onChange={(e) => onNotesChange(e.target.value)}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type RunAction = (label: string, fn: () => Promise<unknown>) => Promise<void>;
+
+/** Inline accept/reject in the review workspace itself (H13/H14) — no separate
+ *  "decisions" tab duplicating this row set. */
+function ReviewDecisionCard({
+  canDecide,
+  busy,
+  run,
+  responseId,
+}: {
+  canDecide: boolean;
+  busy: boolean;
+  run: RunAction;
+  responseId: number;
+}) {
+  const { t } = useLocale();
+  return (
+    <div className="border-border space-y-3 rounded-lg border p-4">
+      <p className="text-sm font-medium">{t("decisionLabel")}</p>
+      {canDecide ? (
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            disabled={busy}
+            onClick={() =>
+              run(t("acceptedUnsentToast"), () =>
+                api.post(`/api/responses/${responseId}/decide`, { decision: "accepted" }),
+              )
+            }
+          >
+            {t("accept")}
+          </Button>
+          <Button
+            size="sm"
+            variant="destructive"
+            disabled={busy}
+            onClick={() =>
+              run(t("rejectedUnsentToast"), () =>
+                api.post(`/api/responses/${responseId}/decide`, { decision: "rejected" }),
+              )
+            }
+          >
+            {t("reject")}
+          </Button>
+        </div>
+      ) : (
+        <p className="text-muted-foreground text-xs">{t("needDecideCapability")}</p>
+      )}
+    </div>
+  );
+}
+
+/** Decision controls (H14) outside the review workspace — buttons here depend
+ *  on which of outbox/sent the row is in, not just its status. */
+function LifecycleDecisionCard({
+  workspace,
+  status,
+  busy,
+  run,
+  responseId,
+  canOverride,
+  onRequestRevoke,
+}: {
+  workspace: ApplicationWorkspace;
+  status: ResponseRow["status"];
+  busy: boolean;
+  run: RunAction;
+  responseId: number;
+  canOverride: boolean;
+  onRequestRevoke: () => void;
+}) {
+  const { t } = useLocale();
+  return (
+    <div className="border-border space-y-3 rounded-lg border p-4">
+      <p className="text-sm font-medium">{t("decisionLabel")}</p>
+      <div className="flex flex-wrap gap-2">
+        {workspace === "outbox" &&
+          (status === "accepted_internal" || status === "rejected_internal") && (
+            <>
+              <Button
+                size="sm"
+                disabled={busy}
+                onClick={() =>
+                  run(t("decisionSent"), () =>
+                    api.post(`/api/responses/${responseId}/send-decision`),
+                  )
+                }
+              >
+                <SendIcon />
+                {t("sendDecision")}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                onClick={() =>
+                  run(t("movedBackToReview"), () =>
+                    api.post(`/api/responses/${responseId}/revert-decision`, {
+                      decision: "review",
+                    }),
+                  )
+                }
+              >
+                {t("backToReview")}
+              </Button>
+            </>
+          )}
+        {workspace === "sent" &&
+          (status === "accepted" || status === "rejected" || status === "expired") && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={() =>
+                run(t("decisionResent"), () =>
+                  api.post(`/api/responses/${responseId}/resend-decision`),
+                )
+              }
+            >
+              {t("resend")}
+            </Button>
+          )}
+        {workspace === "sent" && (status === "accepted" || status === "rejected") && (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy}
+            onClick={() =>
+              run(t("movedBackToReview"), () =>
+                api.post(`/api/responses/${responseId}/revert-decision`, { decision: "review" }),
+              )
+            }
+          >
+            {t("backToReview")}
+          </Button>
+        )}
+        {workspace === "sent" &&
+          (status === "rejected" || status === "declined" || status === "expired") && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={() =>
+                run(t("reacceptedUnsent"), () => api.post(`/api/responses/${responseId}/re-accept`))
+              }
+            >
+              {t("reaccept")}
+            </Button>
+          )}
+        {workspace === "sent" && (status === "accepted" || status === "confirmed") && (
+          <Button size="sm" variant="destructive" disabled={busy} onClick={onRequestRevoke}>
+            {t("revokeSpot")}
+          </Button>
+        )}
+        {workspace === "sent" && canOverride && status === "accepted" && (
+          <>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={() =>
+                run(t("spotConfirmed"), () => api.post(`/api/responses/${responseId}/confirm`))
+              }
+            >
+              {t("confirmOverride")}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={() =>
+                run(t("spotDeclined"), () => api.post(`/api/responses/${responseId}/decline`))
+              }
+            >
+              {t("declineOverride")}
+            </Button>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
