@@ -192,7 +192,10 @@ export default function JudgingWindowSettingsPage() {
                   </FormItem>
                 )}
               />
-              <PacePreview startsAt={values.judgingStartsAt} endsAt={values.judgingEndsAt} />
+              <PacePreview
+                startsAt={values.judgingStartsAt ?? ""}
+                endsAt={values.judgingEndsAt ?? ""}
+              />
             </SectionCard>
           </form>
         </Form>

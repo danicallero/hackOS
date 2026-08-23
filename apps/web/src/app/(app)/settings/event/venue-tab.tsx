@@ -177,12 +177,10 @@ export function VenueTab({
   if (status !== "ready" || !config) {
     return <EventConfigLoadState icon={icon} title={t("venueSectionTitle")} />;
   }
-  const previewLat = values.venueLatitude.trim()
-    ? parseCoordinate(values.venueLatitude, "lat")
-    : null;
-  const previewLon = values.venueLongitude.trim()
-    ? parseCoordinate(values.venueLongitude, "lon")
-    : null;
+  const venueLatitude = values.venueLatitude ?? "";
+  const venueLongitude = values.venueLongitude ?? "";
+  const previewLat = venueLatitude.trim() ? parseCoordinate(venueLatitude, "lat") : null;
+  const previewLon = venueLongitude.trim() ? parseCoordinate(venueLongitude, "lon") : null;
 
   return (
     <Form {...form}>
@@ -249,7 +247,7 @@ export function VenueTab({
             />
           </div>
           <p className="text-muted-foreground text-sm">{t("coordsFormatsHint")}</p>
-          <VenuePreview name={values.venueName.trim()} lat={previewLat} lon={previewLon} />
+          <VenuePreview name={(values.venueName ?? "").trim()} lat={previewLat} lon={previewLon} />
         </SectionCard>
         <SectionCard
           className="mt-6"

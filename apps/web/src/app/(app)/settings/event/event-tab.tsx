@@ -75,7 +75,7 @@ function CountdownPreview({
   judgingStartsAt,
   judgingEndsAt,
 }: {
-  values: Values;
+  values: Pick<Values, "hackingStartsAt" | "hackingEndsAt" | "showStartCountdown">;
   judgingStartsAt: string | null;
   judgingEndsAt: string | null;
 }) {
@@ -310,7 +310,11 @@ export function EventTab({
             )}
           />
           <CountdownPreview
-            values={values}
+            values={{
+              hackingStartsAt: values.hackingStartsAt ?? "",
+              hackingEndsAt: values.hackingEndsAt ?? "",
+              showStartCountdown: values.showStartCountdown ?? false,
+            }}
             judgingStartsAt={config.judgingStartsAt}
             judgingEndsAt={config.judgingEndsAt}
           />
