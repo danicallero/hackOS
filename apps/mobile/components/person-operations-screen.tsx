@@ -1,8 +1,7 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { BlurView } from "expo-blur";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, useColorScheme, View } from "react-native";
+import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -43,12 +42,11 @@ interface PersonDetails extends ScannerPerson {
 }
 
 const CONTENT_PADDING = 16;
-// The floating back button sits at `topInset + 12` with a 44pt diameter —
-// the header's own text has to clear that whole row.
-const BUTTON_ROW_HEIGHT = 60;
-// Approximate height of the header's own name + email text, so the
-// scrolling content below starts clear of it instead of underneath it.
-const HEADER_TEXT_HEIGHT = 56;
+// The floating back button sits at `topInset + 6` with a 44pt diameter and
+// a small margin below it — Android (no `contentInsetAdjustmentBehavior`,
+// no native bar here since this screen is headerless there) has to clear
+// the whole thing itself.
+const ANDROID_BUTTON_ROW_HEIGHT = 60;
 
 /**
  * The action panel revealed by swiping the current-badge row left, matching
@@ -121,7 +119,6 @@ function AccreditationRevealActions({
 type PersonLoadState = "loading" | "ready" | "missing" | "error";
 
 export function PersonOperationsScreen() {
-  const colorScheme = useColorScheme();
   const { id } = useLocalSearchParams<{ id: string }>();
   const userId = Number(id);
   const router = useRouter();
@@ -424,7 +421,7 @@ export function PersonOperationsScreen() {
         }}
       >
         <RequestFeedback loading />
-        <AdaptiveBackButton top={insets.top + 12} onPress={() => router.back()} />
+        <AdaptiveBackButton top={insets.top + 6} onPress={() => router.back()} />
       </View>
     );
   }
@@ -440,7 +437,7 @@ export function PersonOperationsScreen() {
         }}
       >
         <RequestFeedback error={loadError} onRetry={() => void load()} />
-        <AdaptiveBackButton top={insets.top + 12} onPress={() => router.back()} />
+        <AdaptiveBackButton top={insets.top + 6} onPress={() => router.back()} />
       </View>
     );
   }
@@ -459,7 +456,7 @@ export function PersonOperationsScreen() {
           title={t("screenNotFoundTitle")}
           description={t("requestUnavailable")}
         />
-        <AdaptiveBackButton top={insets.top + 12} onPress={() => router.back()} />
+        <AdaptiveBackButton top={insets.top + 6} onPress={() => router.back()} />
       </View>
     );
   }
@@ -693,31 +690,25 @@ export function PersonOperationsScreen() {
       </Section>
     ) : null;
 
-  // `app/(tabs)/scan/person/_layout.tsx` shows a real (transparent,
-  // title-less) native nav bar on iOS for this screen, kept only so
-  // `AdaptiveBackButton` can dock in the native toolbar on iPad widths. It's
+  // The Stack.Screen this route registers in `(tabs)/activities/_layout.tsx`
+  // / `(tabs)/scan/_layout.tsx` shows a real (transparent, title-less)
+  // native nav bar on iOS, kept only so `AdaptiveBackButton` can dock into
+  // it — merging into NativeTabs' own shared row at iPad widths. It's
   // invisible, but its frame still exists — `automatic` below lets iOS push
-  // content (and the scroll indicator) below its real height for free,
-  // instead of us guessing at a duplicate of that space ourselves.
-  const headerHeight = insets.top + BUTTON_ROW_HEIGHT + HEADER_TEXT_HEIGHT;
-  // Android has neither that native bar nor `contentInsetAdjustmentBehavior`
-  // (an iOS-only prop), so nothing insets the content there — it has to clear
-  // the whole floating header itself, status bar and button row included.
+  // content below its real height for free. Android has neither that native
+  // bar nor `contentInsetAdjustmentBehavior` (an iOS-only prop), so content
+  // there has to clear the floating back button row itself.
   const contentPaddingTop =
-    process.env.EXPO_OS === "ios" ? HEADER_TEXT_HEIGHT + 10 : headerHeight + 10;
+    process.env.EXPO_OS === "ios" ? CONTENT_PADDING : insets.top + ANDROID_BUTTON_ROW_HEIGHT;
 
   return (
     <>
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
-        scrollIndicatorInsets={{ top: 60 }}
         contentContainerStyle={{
           gap: 22,
           paddingBottom: 40,
           paddingHorizontal: CONTENT_PADDING,
-          // On iOS only the extra name/email text below the native bar's own
-          // (automatically-inset) space — not the full `headerHeight`,
-          // which would double-count that native bar's height on top of it.
           paddingTop: contentPaddingTop,
         }}
         style={{ backgroundColor: colors.background }}
@@ -725,6 +716,26 @@ export function PersonOperationsScreen() {
         {loadState === "error" && loadError ? (
           <RequestFeedback error={loadError} onRetry={() => void load()} />
         ) : null}
+
+        <View style={{ gap: 2 }}>
+          <Text
+            selectable
+            accessibilityRole="header"
+            numberOfLines={1}
+            style={{ color: colors.label, fontSize: 28, fontWeight: "800" }}
+          >
+            {fullName}
+          </Text>
+          {person.email ? (
+            <Text
+              selectable
+              numberOfLines={1}
+              style={{ color: colors.secondaryLabel, fontSize: 15 }}
+            >
+              {person.email}
+            </Text>
+          ) : null}
+        </View>
 
         <Section title={t("personPersonalData")}>
           {person.secondaryEmail ? (
@@ -817,73 +828,7 @@ export function PersonOperationsScreen() {
         {accreditationSection}
       </ScrollView>
 
-      <View
-        pointerEvents="none"
-        style={{
-          height: headerHeight,
-          left: 0,
-          position: "absolute",
-          right: 0,
-          top: 0,
-        }}
-      >
-        {process.env.EXPO_OS === "ios" ? (
-          <BlurView
-            intensity={9}
-            tint={colorScheme === "dark" ? "dark" : "light"}
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              right: 0,
-              height: headerHeight,
-            }}
-          />
-        ) : (
-          // Android's blur fallback is close to transparent, which would let
-          // the scrolled content show through the name/email header. Content
-          // is padded clear of this band, so an opaque fill is correct there.
-          <View
-            style={{
-              backgroundColor: colors.background,
-              position: "absolute",
-              top: 0,
-              left: 0,
-              right: 0,
-              height: headerHeight,
-            }}
-          />
-        )}
-        <View
-          style={{
-            left: 0,
-            paddingHorizontal: CONTENT_PADDING,
-            paddingTop: insets.top + BUTTON_ROW_HEIGHT,
-            position: "absolute",
-            right: 0,
-            top: 0,
-          }}
-        >
-          <Text
-            selectable
-            numberOfLines={1}
-            style={{ color: colors.label, fontSize: 22, fontWeight: "800" }}
-          >
-            {fullName}
-          </Text>
-          {person.email ? (
-            <Text
-              selectable
-              numberOfLines={1}
-              style={{ color: colors.secondaryLabel, fontSize: 14, marginTop: 2 }}
-            >
-              {person.email}
-            </Text>
-          ) : null}
-        </View>
-      </View>
-
-      <AdaptiveBackButton top={insets.top + 12} onPress={() => router.back()} />
+      <AdaptiveBackButton top={insets.top + 6} onPress={() => router.back()} />
       {!person.accepted ? (
         <View
           pointerEvents="none"
@@ -893,7 +838,7 @@ export function PersonOperationsScreen() {
             justifyContent: "center",
             position: "absolute",
             right: 16,
-            top: insets.top + 12,
+            top: insets.top + 6,
           }}
         >
           <StatusPill tone="warning">{t("scannerNoAcceptedPlace")}</StatusPill>

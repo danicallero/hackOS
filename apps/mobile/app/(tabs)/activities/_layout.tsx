@@ -37,7 +37,21 @@ export default function ActivitiesLayout() {
           },
         }}
       />
-      <Stack.Screen name="person" options={{ headerShown: false }} />
+      {/* Kept as a direct child of this Stack (not a nested one) so its
+          transparent native bar merges into NativeTabs' own shared row on
+          iPad, the same way `[id]` above does — see `others/_layout.tsx`
+          for the fuller explanation of why a second Stack here would create
+          a visible double bar. */}
+      <Stack.Screen
+        name="person/[id]"
+        options={{
+          headerShown: process.env.EXPO_OS === "ios",
+          headerTransparent: true,
+          headerShadowVisible: false,
+          headerTitle: "",
+          headerBackVisible: false,
+        }}
+      />
     </Stack>
   );
 }
