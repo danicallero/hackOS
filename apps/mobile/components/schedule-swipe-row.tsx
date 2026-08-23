@@ -15,9 +15,9 @@ export function ScheduleSwipeRow({
   children,
 }: {
   enabled: boolean;
-  editLabel: string;
+  editLabel?: string;
   deleteLabel: string;
-  onEdit: () => void;
+  onEdit?: () => void;
   onDelete: () => void;
   children: ReactNode;
 }) {
@@ -25,7 +25,7 @@ export function ScheduleSwipeRow({
   return (
     <Swipeable
       enabled
-      containerStyle={{ flex: 1 }}
+      containerStyle={{ width: "100%" }}
       rightThreshold={40}
       renderRightActions={(progress) => (
         <RevealActions
@@ -50,9 +50,9 @@ function RevealActions({
   onDelete,
 }: {
   progress: SharedValue<number>;
-  editLabel: string;
+  editLabel?: string;
   deleteLabel: string;
-  onEdit: () => void;
+  onEdit?: () => void;
   onDelete: () => void;
 }) {
   const animatedStyle = useAnimatedStyle(() => ({
@@ -66,25 +66,27 @@ function RevealActions({
         animatedStyle,
       ]}
     >
-      <Pressable
-        accessibilityLabel={editLabel}
-        accessibilityRole="button"
-        onPress={onEdit}
-        style={({ pressed }) => ({
-          alignItems: "center",
-          alignSelf: "stretch",
-          backgroundColor: colors.accent,
-          borderCurve: "continuous",
-          borderRadius: 14,
-          gap: 6,
-          justifyContent: "center",
-          opacity: pressed ? 0.75 : 1,
-          paddingHorizontal: 18,
-        })}
-      >
-        <SymbolView name="pencil" tintColor="white" size={16} accessible={false} />
-        <Text style={{ color: "white", fontSize: 13, fontWeight: "700" }}>{editLabel}</Text>
-      </Pressable>
+      {onEdit && editLabel ? (
+        <Pressable
+          accessibilityLabel={editLabel}
+          accessibilityRole="button"
+          onPress={onEdit}
+          style={({ pressed }) => ({
+            alignItems: "center",
+            alignSelf: "stretch",
+            backgroundColor: colors.accent,
+            borderCurve: "continuous",
+            borderRadius: 14,
+            gap: 6,
+            justifyContent: "center",
+            opacity: pressed ? 0.75 : 1,
+            paddingHorizontal: 18,
+          })}
+        >
+          <SymbolView name="pencil" tintColor="white" size={16} accessible={false} />
+          <Text style={{ color: "white", fontSize: 13, fontWeight: "700" }}>{editLabel}</Text>
+        </Pressable>
+      ) : null}
       <Pressable
         accessibilityLabel={deleteLabel}
         accessibilityRole="button"

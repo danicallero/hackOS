@@ -116,7 +116,7 @@ const NotificationsHeader = memo(function NotificationsHeader({
           onChange={onChangeIndex}
         />
       </View>
-      {trailing}
+      {trailing ?? <View style={{ width: 36 }} />}
     </View>
   );
 });

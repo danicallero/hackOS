@@ -172,14 +172,15 @@ export function ManageAnnouncementsView({
           <Section>
             {items.map((item, index) => {
               const status = announcementStatus(item);
+              const editable = status === "scheduled";
               return (
                 <View key={item.id}>
                   {index > 0 ? <Separator inset={16} /> : null}
                   <ScheduleSwipeRow
                     enabled
-                    editLabel={t("announcementEdit")}
+                    editLabel={editable ? t("announcementEdit") : undefined}
                     deleteLabel={t("announcementDelete")}
-                    onEdit={() => onFormOpenChange(item.id)}
+                    onEdit={editable ? () => onFormOpenChange(item.id) : undefined}
                     onDelete={() => confirmDelete(item)}
                   >
                     <View style={{ gap: 6, paddingHorizontal: 16, paddingVertical: 14 }}>
