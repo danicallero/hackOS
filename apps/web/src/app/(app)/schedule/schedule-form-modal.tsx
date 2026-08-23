@@ -197,7 +197,8 @@ export function ScheduleFormModal({
   const [translationsOpen, setTranslationsOpen] = useState(false);
 
   useEffect(() => {
-    setValues(initial);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setValues(initial); // Reset form state when editing different item or switching create/edit mode.
     setAdvancedOpen(false);
     setTranslationsOpen(false);
     setScheduledPublish(Boolean(initial.publishAt));
@@ -734,7 +735,8 @@ function OwnersField({ scheduleId }: { scheduleId: number }) {
   }, [scheduleId]);
 
   useEffect(() => {
-    void loadOwners();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadOwners(); // Load owners when viewing/editing an existing schedule item.
   }, [loadOwners]);
 
   const ownerUserIds = new Set((owners ?? []).flatMap((o) => (o.userId ? [o.userId] : [])));

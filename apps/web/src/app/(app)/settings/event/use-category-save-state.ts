@@ -21,6 +21,7 @@ export function useCategorySaveState(
   }, [isDirty, onDirtyChange]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Derive save-status state from dirty flag; reflects form edits without losing in-flight state.
     if (isDirty) setState((prev) => (prev === "saving" ? prev : "unsaved"));
   }, [isDirty]);
 

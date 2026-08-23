@@ -121,6 +121,7 @@ export default function SchedulePage() {
     (id: ColumnId, width: number) => {
       setTableConfig({ ...tableConfig, widths: { ...tableConfig.widths, [id]: width } });
       setLiveWidths((prev) => {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { [id]: _removed, ...rest } = prev;
         return rest;
       });
@@ -145,7 +146,8 @@ export default function SchedulePage() {
   }, [t, canEdit]);
 
   useEffect(() => {
-    if (canView) load();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (canView) load(); // Data fetch when capability becomes available; load() callback is stable.
   }, [canView, load]);
 
   const updateItem = useCallback((id: number, patch: Partial<PublicScheduleItem>) => {
@@ -232,26 +234,39 @@ export default function SchedulePage() {
   const [newDayOpen, setNewDayOpen] = useState(false);
   const draftIsNewDay = draft !== null && !groups.some((group) => group.date === draft.dayKey);
 
-  const openDraft = useCallback((group: DayGroup, index: number) => {
-    const previous = index > 0 ? group.items[index - 1] : null;
-    const next = index < group.items.length ? group.items[index] : null;
-    const window = draftWindowBetween(previous?.endsAt ?? null, next?.startsAt ?? null, group.date);
-    if (!window) return;
-    setNewDayOpen(false);
-    setDraft({ dayKey: group.date, index, ...window });
-  }, []);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: setState setters are stable and unnecessary for biome, but the React Compiler wants them listed to preserve this useCallback's memoization.
+  const openDraft = useCallback(
+    (group: DayGroup, index: number) => {
+      const previous = index > 0 ? group.items[index - 1] : null;
+      const next = index < group.items.length ? group.items[index] : null;
+      const window = draftWindowBetween(
+        previous?.endsAt ?? null,
+        next?.startsAt ?? null,
+        group.date,
+      );
+      if (!window) return;
+      setNewDayOpen(false);
+      setDraft({ dayKey: group.date, index, ...window });
+    },
+    [setNewDayOpen, setDraft],
+  );
 
-  const openDraftOnNewDay = useCallback((dayKey: string) => {
-    const window = draftWindowBetween(null, null, dayKey);
-    if (!window) return;
-    setNewDayOpen(false);
-    setDraft({ dayKey, index: 0, ...window });
-  }, []);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: setState setters are stable and unnecessary for biome, but the React Compiler wants them listed to preserve this useCallback's memoization.
+  const openDraftOnNewDay = useCallback(
+    (dayKey: string) => {
+      const window = draftWindowBetween(null, null, dayKey);
+      if (!window) return;
+      setNewDayOpen(false);
+      setDraft({ dayKey, index: 0, ...window });
+    },
+    [setNewDayOpen, setDraft],
+  );
 
   // Creates from the draft row with nothing but a title: the slot it was
   // inserted at already decided when it happens, and every other field is
   // editable in the row itself once it exists (the full editor stays one
   // click away in the row's actions).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: setState setters are stable and unnecessary for biome, but the React Compiler wants them listed to preserve this useCallback's memoization.
   const createDraft = useCallback(
     async (title: string) => {
       if (!draft) return;
@@ -274,7 +289,7 @@ export default function SchedulePage() {
         setBusy(false);
       }
     },
-    [draft, load, t],
+    [draft, load, t, setDraft, setBusy],
   );
 
   /** Either the draft row itself, when it was inserted here, or the "+" that opens it. */

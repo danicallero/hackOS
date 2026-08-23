@@ -270,10 +270,10 @@ function PassPreview({
                 key={key}
                 className="grid min-w-0 grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] items-start gap-2 text-sm"
               >
-                <dt className="text-muted-foreground min-w-0 break-words text-pretty">
+                <dt className="text-muted-foreground min-w-0 wrap-break-word text-pretty">
                   {labels[key] || t(titleKey)}
                 </dt>
-                <dd className="min-w-0 break-words text-pretty font-medium">{sample[key]}</dd>
+                <dd className="min-w-0 wrap-break-word text-pretty font-medium">{sample[key]}</dd>
               </div>
             ))}
           </dl>
@@ -288,10 +288,10 @@ function PassPreview({
                 key={f.caption}
                 className="grid min-w-0 grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] items-start gap-2 text-sm"
               >
-                <dt className="text-muted-foreground min-w-0 break-words text-pretty">
+                <dt className="text-muted-foreground min-w-0 wrap-break-word text-pretty">
                   {f.caption}
                 </dt>
-                <dd className="min-w-0 break-words text-pretty font-medium">{f.value}</dd>
+                <dd className="min-w-0 wrap-break-word text-pretty font-medium">{f.value}</dd>
               </div>
             ))}
             {backFields.map((f) => (
@@ -299,10 +299,10 @@ function PassPreview({
                 key={`${f.label}-${f.value}`}
                 className="grid min-w-0 grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] items-start gap-2 text-sm"
               >
-                <dt className="text-muted-foreground min-w-0 break-words text-pretty">
+                <dt className="text-muted-foreground min-w-0 wrap-break-word text-pretty">
                   {f.label || t("notSetYet")}
                 </dt>
-                <dd className="min-w-0 break-words text-pretty font-medium">
+                <dd className="min-w-0 wrap-break-word text-pretty font-medium">
                   {f.value || t("notSetYet")}
                 </dd>
               </div>
@@ -340,6 +340,7 @@ export function WalletTab({
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Sync local form state from loaded event config; populate inputs when config arrives.
     if (config) applyFromConfig(config);
   }, [config, applyFromConfig]);
 

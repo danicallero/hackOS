@@ -71,7 +71,8 @@ export function NewDayDropzoneRow({
   const [date, setDate] = useState("");
 
   useEffect(() => {
-    if (!open) setDate("");
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!open) setDate(""); // Clear date input when new-day popover closes.
   }, [open]);
 
   if (open) {

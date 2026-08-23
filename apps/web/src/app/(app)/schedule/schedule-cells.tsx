@@ -178,7 +178,8 @@ export function EditableTextCell({
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!editing) setDraft(value);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!editing) setDraft(value); // Resync to latest value while not mid-edit.
   }, [value, editing]);
 
   useEffect(() => {
@@ -273,7 +274,8 @@ export function EditableTimeCell({
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!editing) setDraft(value);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!editing) setDraft(value); // Resync to latest value while not mid-edit.
   }, [value, editing]);
 
   useEffect(() => {
@@ -578,7 +580,8 @@ export function EditablePublishDateCell({
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!editing) setDraft(toDatetimeLocal(value));
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!editing) setDraft(toDatetimeLocal(value)); // Resync local draft to latest server value while not mid-edit.
   }, [value, editing]);
 
   async function commit(nextDraft = draft): Promise<boolean> {
