@@ -53,20 +53,18 @@ import {
 
 const CREATE_FORM_ID = "application-create-form";
 
-// Module-level schema kept only for type inference (z.infer); the runtime
-// validator used by the form is built inside the component with useMemo so
-// its error message can be localized via t("required").
-const createSchema = z.object({
-  name: z.string().min(1, "Required").max(200),
-  type: z.enum(APPLICATION_TYPES),
-  open_at: z.string(),
-  close_at: z.string(),
-  capacity: z.string(),
-  confirmation_window_hours: z.string(),
-  ask_shirt_size: z.boolean(),
-  ask_food_intolerances: z.boolean(),
-});
-type CreateValues = z.infer<typeof createSchema>;
+// Runtime validator is built inside the component with useMemo so its error
+// message can be localized via t("required"). Type is defined separately.
+type CreateValues = {
+  name: string;
+  type: (typeof APPLICATION_TYPES)[number];
+  open_at: string;
+  close_at: string;
+  capacity: string;
+  confirmation_window_hours: string;
+  ask_shirt_size: boolean;
+  ask_food_intolerances: boolean;
+};
 
 const EMPTY: CreateValues = {
   name: "",
@@ -133,6 +131,7 @@ export default function ApplicationsPage() {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetching the applications list from the API on mount is a legitimate external-system sync
     load();
   }, [load, liveRefresh]);
 

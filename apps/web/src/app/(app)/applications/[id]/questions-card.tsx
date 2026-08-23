@@ -8,7 +8,6 @@ import {
   closestCenter,
   DndContext,
   type DragEndEvent,
-  type DragStartEvent,
   KeyboardSensor,
   PointerSensor,
   useSensor,
@@ -210,6 +209,7 @@ export function QuestionsCard({
   // Re-seed if the form reloads (e.g. after a metadata save).
   useEffect(() => {
     if (saveState !== "saved") return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resyncing local editable state to the just-saved server snapshot
     setFields(withIds(form.template));
     setSections(withIds(form.sections));
   }, [form.template, form.sections, saveState]);
@@ -409,7 +409,7 @@ export function QuestionsCard({
     setSaveState("unsaved");
   }
 
-  function handleDragStart(_event: DragStartEvent) {
+  function handleDragStart() {
     setDragging(true);
   }
 
