@@ -72,7 +72,6 @@ interface DataTableProps<T> {
     active: boolean;
     onClear: () => void;
     title?: string;
-    description?: string;
   };
   error?: { message: string; onRetry?: () => void };
   /** Persistent mutation feedback that leaves the current rows available. */
@@ -337,7 +336,6 @@ export function DataTable<T>({
                   {query.trim() || filteredEmpty?.active ? (
                     <EmptyState
                       title={filteredEmpty?.title ?? t("noFilteredResults")}
-                      description={filteredEmpty?.description ?? t("tryDifferentSearch")}
                       action={
                         <Button
                           type="button"

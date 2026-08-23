@@ -563,7 +563,6 @@ export default function UsersPage() {
         empty={{
           icon: UsersIcon,
           title: t("noUsersYet"),
-          description: t("usersAppearHere"),
         }}
         filteredEmpty={{ active: hasFilters, onClear: clearUserFilters }}
       />

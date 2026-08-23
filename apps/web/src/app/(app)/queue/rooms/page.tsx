@@ -306,7 +306,7 @@ export default function QueueRoomsPage() {
       />
 
       <SectionCard
-        title={t("rooms")}
+        title={t("roomQueues")}
         description={
           !loading && !loadError && rooms.length > 0
             ? t("roomsSummary", { active: activeCount, total: rooms.length })
@@ -366,9 +366,7 @@ export default function QueueRoomsPage() {
           if (!open) closeModal();
         }}
         title={modalMode === "create" ? t("createRoom") : (selectedRoom?.name ?? t("roomFallback"))}
-        description={
-          modalMode === "create" ? t("baseRoomDetails") : (selectedRoom?.slug ?? undefined)
-        }
+        description={modalMode === "create" ? undefined : (selectedRoom?.slug ?? undefined)}
         size="xl"
         footer={
           modalMode === "create" ? (

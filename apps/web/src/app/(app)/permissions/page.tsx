@@ -20,7 +20,6 @@ import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -203,7 +202,6 @@ export default function PermissionsPage() {
           empty={{
             icon: ShieldCheckIcon,
             title: t("noPermissionGroupsYetTitle"),
-            description: t("createGroupToStart"),
             action: (
               <Button type="button" onClick={() => setCreateOpen(true)}>
                 <PlusIcon aria-hidden="true" />
@@ -345,7 +343,6 @@ export default function PermissionsPage() {
                       emptyText={t("noMatchingCapability")}
                     />
                   </FormControl>
-                  <FormDescription>{t("canChangeLaterDesc")}</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

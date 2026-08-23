@@ -317,7 +317,6 @@ export function MetadataCard({
                   <FormControl>
                     <Input type="number" min={1} {...field} />
                   </FormControl>
-                  <FormDescription>{t("hoursToConfirmDesc")}</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

@@ -584,7 +584,6 @@ export function EditCard({
                       <FormControl>
                         <Input inputMode="numeric" {...field} />
                       </FormControl>
-                      <FormDescription>{t("tierReferenceOptionalDesc")}</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}

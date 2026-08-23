@@ -36,6 +36,15 @@ conflict, that file wins. Hard invariants live in `plan/07-datos-relevantes-ers.
    per queue action (plan/07 invariant 5).
 8. **Raw SQL** with parameterized queries (`pg`). No ORM. Schema changes via
    SQL migrations only.
+9. **UI copy is minimal and purposeful** (any surface: web, mobile, TV). Don't
+   add labels, subtitles, descriptions, helper text, or tooltips that restate
+   what a heading, label, icon, or control already makes obvious — headings
+   and controls should speak for themselves. Keep copy only for risk,
+   consequence, policy, an unusual interaction, or genuinely unfamiliar domain
+   rules. Don't reach for `CardDescription`/`FormDescription`/
+   `DialogDescription`/tooltips just because the component offers a slot for
+   them. When uncertain, prefer less copy. Full writing rules and calibration
+   examples: `docs/DESIGN.md` §10 and §15.
 
 ## Database & migrations
 

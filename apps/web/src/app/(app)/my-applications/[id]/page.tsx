@@ -37,6 +37,7 @@ import { SubmitButton } from "@/components/common/submit-button";
 import { TemplateFieldControl, templateFieldId } from "@/components/common/template-field-control";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Section } from "@/components/ui/surface";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useShirtSizes } from "@/hooks/use-shirt-sizes";
 import { ApiError, api } from "@/lib/api";
@@ -443,7 +444,11 @@ export default function MyApplicationDetailPage() {
         {loadError ? (
           <ContextualError message={loadError} onRetry={retry} />
         ) : (
-          <SectionCard title={t("notAvailable")} bodyClassName="p-0">
+          <Section
+            padding="none"
+            aria-label={t("applicationNotOpenTitle")}
+            className="overflow-hidden"
+          >
             <EmptyState
               icon={ClipboardListIcon}
               title={t("applicationNotOpenTitle")}
@@ -454,7 +459,7 @@ export default function MyApplicationDetailPage() {
                 </Button>
               }
             />
-          </SectionCard>
+          </Section>
         )}
       </div>
     );
@@ -512,11 +517,7 @@ export default function MyApplicationDetailPage() {
       )}
 
       {status === "confirmed" && (
-        <SectionCard
-          icon={CheckCircle2Icon}
-          title={t("placeConfirmed")}
-          description={t("placeConfirmedDesc")}
-        >
+        <SectionCard icon={CheckCircle2Icon} title={t("placeConfirmed")}>
           <p className="text-muted-foreground text-sm">{t("canReleaseAnytime")}</p>
           <div className="flex flex-wrap gap-2">
             <Button asChild>

@@ -38,6 +38,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Surface } from "@/components/ui/surface";
 import { ApiError, api } from "@/lib/api";
 import { type I18nText, useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem } from "@/lib/logistics";
@@ -105,13 +106,13 @@ export default function SponsorFaqPage() {
   return (
     <div className="space-y-6">
       <PageHeader title={t("sponsorFaq")} />
-      <SectionCard title={t("sponsorFaq")}>
+      <Surface padding="default">
         {canManage ? (
           <FaqItemBuilder items={draft} onChange={setDraft} onSave={save} saving={saving} />
         ) : (
           <FaqItemsDisplay items={items} />
         )}
-      </SectionCard>
+      </Surface>
       <SponsorScheduleCard />
     </div>
   );

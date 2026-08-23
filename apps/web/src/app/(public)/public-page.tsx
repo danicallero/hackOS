@@ -114,9 +114,6 @@ export function PublicPage() {
           <div className="flex items-center gap-1.5 sm:gap-2">
             <LanguageSelect />
             <ThemeToggle />
-            <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
-              <Link href="/login">{t("logIn")}</Link>
-            </Button>
             <Button size="sm" asChild className="hidden sm:inline-flex">
               <Link href="/signup">
                 {t("createAccount")}

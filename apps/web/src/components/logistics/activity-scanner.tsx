@@ -326,7 +326,6 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
                     variant="outline"
                     size="icon"
                     aria-label={t("personSearchTitle")}
-                    title={t("personSearchTitle")}
                     onClick={() => setFindOpen(true)}
                   >
                     <UsersIcon className="size-4" />

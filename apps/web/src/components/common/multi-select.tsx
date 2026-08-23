@@ -43,6 +43,7 @@ export function MultiSelect({
   className,
   id,
   name,
+  "aria-label": ariaLabel,
   "aria-labelledby": ariaLabelledBy,
   "aria-describedby": ariaDescribedBy,
   "aria-invalid": ariaInvalid,
@@ -58,6 +59,7 @@ export function MultiSelect({
   className?: string;
   id?: string;
   name?: string;
+  "aria-label"?: string;
   "aria-labelledby"?: string;
   "aria-describedby"?: string;
   "aria-invalid"?: React.AriaAttributes["aria-invalid"];
@@ -152,6 +154,7 @@ export function MultiSelect({
               role="combobox"
               aria-expanded={open}
               aria-haspopup="listbox"
+              aria-label={ariaLabel}
               aria-labelledby={ariaLabelledBy}
               aria-describedby={ariaDescribedBy}
               aria-invalid={ariaInvalid}

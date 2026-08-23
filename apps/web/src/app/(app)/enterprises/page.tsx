@@ -418,7 +418,6 @@ function CreateEnterpriseModal({
       onOpenChange={onOpenChange}
       icon={Building2Icon}
       title={t("newEnterprise")}
-      description={t("newEnterpriseModalDesc")}
       footer={
         <SubmitButton form="create-enterprise-form" pending={form.formState.isSubmitting}>
           {t("createEnterprise")}
@@ -466,7 +465,6 @@ function CreateEnterpriseModal({
                 <FormControl>
                   <Input type="url" placeholder="https://…/logo.png" {...field} />
                 </FormControl>
-                <FormDescription>{t("optionalUploadLater")}</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -508,7 +506,6 @@ function CreateEnterpriseModal({
                   <FormControl>
                     <Input inputMode="numeric" placeholder={`${t("egPrefix")} 1`} {...field} />
                   </FormControl>
-                  <FormDescription>{t("tierReferenceOptionalDesc")}</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

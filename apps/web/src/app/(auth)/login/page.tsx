@@ -11,7 +11,7 @@ import { PasswordInput } from "@/components/common/password-input";
 import { Spinner } from "@/components/common/spinner";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Form,
   FormControl,
@@ -101,7 +101,6 @@ function LoginInner() {
     <Card>
       <CardHeader>
         <CardTitle>{t("welcomeBack")}</CardTitle>
-        <CardDescription>{t("signInDescription")}</CardDescription>
       </CardHeader>
       <CardContent>
         <Form {...form}>
