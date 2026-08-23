@@ -87,6 +87,7 @@ export function ApplicationTab({ userId }: { userId: number }) {
   );
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadRows();
   }, [loadRows]);
 

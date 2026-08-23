@@ -31,6 +31,7 @@ export function PhysicalActivity({
   // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey is a ping-only nonce from the profile event stream.
   useEffect(() => {
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setState("loading");
     api
       .get<UserActivity>(`/api/users/${userId}/activity`)
