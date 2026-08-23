@@ -12,7 +12,7 @@ import {
   TrophyIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 import { AlertModal } from "@/components/common/alert-modal";
@@ -229,8 +229,8 @@ export function EditCard({
   }
 
   const generalDisabled = !canAdmin && challenge.visibility === "visible";
-  const watchedVisibility = form.watch("visibility");
-  const watchedAvailableFrom = form.watch("availableFrom");
+  const watchedVisibility = useWatch({ control: form.control, name: "visibility" });
+  const watchedAvailableFrom = useWatch({ control: form.control, name: "availableFrom" });
   const hasUnsavedChanges =
     form.formState.isDirty ||
     JSON.stringify(titleI18n) !==
