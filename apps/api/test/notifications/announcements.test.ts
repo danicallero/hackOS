@@ -386,6 +386,23 @@ describe("audience and recipient targeting (H50, DELTA 0722)", () => {
     expect(secondRoundUserIds.sort()).toEqual([participantId, sponsorId].sort());
   });
 
+  it("a staff-audience announcement reaches every capability holder, including via a nested group", async () => {
+    const adminId = await createUserWithCapabilities([CAPABILITIES.ANNOUNCEMENTS_MANAGE]);
+    const staffId = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    await makeAttendee("participant"); // plain participant, not staff
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/announcements",
+      headers: asUser(adminId),
+      payload: { title: "staff only", body: "b", notifyUsers: true, audiences: ["staff"] },
+    });
+    expect(res.statusCode).toBe(201);
+
+    const userIds = [...new Set((await outboxRowsFor()).map((r) => r.user_id))].sort();
+    expect(userIds).toEqual([adminId, staffId].sort());
+  });
+
   it("a specific-recipient announcement only reaches the listed accounts", async () => {
     const adminId = await createUserWithCapabilities([CAPABILITIES.ANNOUNCEMENTS_MANAGE]);
     const targetId = await createUser();

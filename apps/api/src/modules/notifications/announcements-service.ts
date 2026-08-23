@@ -16,7 +16,7 @@ import { type NotificationChannel, notify } from "./service.js";
  * Empty audiences AND no recipients means "everyone", unchanged from before.
  */
 
-export const ANNOUNCEMENT_AUDIENCES = ["sponsor", "participant", "mentor"] as const;
+export const ANNOUNCEMENT_AUDIENCES = ["sponsor", "participant", "mentor", "staff"] as const;
 export type AnnouncementAudience = (typeof ANNOUNCEMENT_AUDIENCES)[number];
 
 export interface AnnouncementInput {
@@ -334,7 +334,22 @@ async function resolveRecipients(
   }
 
   const { rows } = await db.query(
-    `WITH attendee AS (
+    `WITH RECURSIVE user_groups AS (
+       SELECT pgm.user_id, pgm.group_id
+       FROM permission_group_members pgm
+       UNION
+       SELECT ug.user_id, gi.child_group_id
+       FROM permission_group_includes gi
+       JOIN user_groups ug ON ug.group_id = gi.parent_group_id
+     ),
+     staff AS (
+       -- Same "holds at least one capability" definition as
+       -- getEffectiveCapabilities/computeDerivedRole's staff bucket.
+       SELECT DISTINCT ug.user_id
+       FROM user_groups ug
+       JOIN group_capabilities gc ON gc.group_id = ug.group_id
+     ),
+     attendee AS (
        SELECT u.id AS user_id,
          COALESCE(
            (SELECT mar.role FROM manual_attendee_roles mar
@@ -354,8 +369,10 @@ async function resolveRecipients(
      FROM users u
      LEFT JOIN attendee at ON at.user_id = u.id
      LEFT JOIN sponsor sp ON sp.user_id = u.id
+     LEFT JOIN staff st ON st.user_id = u.id
      WHERE at.type = ANY($1::text[])
-        OR (sp.user_id IS NOT NULL AND ($1::text[] && ARRAY['sponsor', 'participant']::text[]))`,
+        OR (sp.user_id IS NOT NULL AND ($1::text[] && ARRAY['sponsor', 'participant']::text[]))
+        OR (st.user_id IS NOT NULL AND 'staff' = ANY($1::text[]))`,
     [announcement.audiences],
   );
   return rows as Array<{ id: number; language: string | null }>;

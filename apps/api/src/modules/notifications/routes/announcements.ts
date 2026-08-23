@@ -26,8 +26,10 @@ import {
   announcementBodySchema,
   announcementIdParamsSchema,
   announcementRecipientCandidatesQuerySchema,
+  announcementTranslateBodySchema,
   announcementUpdateBodySchema,
 } from "../schemas.js";
+import { isTranslationAvailable, translateAnnouncementContent } from "../translate/index.js";
 
 /**
  * H50 announcements: CRUD behind ANNOUNCEMENTS_MANAGE, a public visibility-windowed
@@ -96,6 +98,43 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
     async (req) => ({
       users: await listAnnouncementRecipientCandidates(pool, req.query.q, req.query.limit),
     }),
+  );
+
+  typedApp.get(
+    "/api/announcements/translate-availability",
+    {
+      ...routeAccess(manage),
+      preHandler: requireCapability(CAPABILITIES.ANNOUNCEMENTS_MANAGE),
+      schema: {
+        summary: "Whether automatic translation is configured",
+        description:
+          "Lets both frontends hide/disable the auto-translate action when no provider is configured, instead of offering an action that will fail (see modules/notifications/translate/).",
+      },
+    },
+    async () => ({ available: isTranslationAvailable() }),
+  );
+
+  typedApp.post(
+    "/api/announcements/translate",
+    {
+      ...routeAccess(manage),
+      preHandler: requireCapability(CAPABILITIES.ANNOUNCEMENTS_MANAGE),
+      schema: {
+        summary: "Auto-translate announcement content",
+        description:
+          "Machine-translates a title+body from sourceLanguage into each of targetLanguages via the configured provider (modules/notifications/translate/). Returns 503 when no provider is configured — always optional, manual translation entry keeps working either way.",
+        body: announcementTranslateBodySchema,
+      },
+    },
+    async (req) => {
+      const { title, body, sourceLanguage, targetLanguages } = req.body;
+      const translations = await translateAnnouncementContent(
+        { title, body },
+        sourceLanguage,
+        targetLanguages,
+      );
+      return { translations };
+    },
   );
 
   typedApp.get(

@@ -30,7 +30,7 @@ export const notificationIdParamsSchema = z.object({
   id: z.coerce.number().int().positive(),
 });
 
-export const announcementAudienceSchema = z.enum(["sponsor", "participant", "mentor"]);
+export const announcementAudienceSchema = z.enum(["sponsor", "participant", "mentor", "staff"]);
 
 const announcementBodyObjectSchema = z.object({
   title: z.string().min(1).max(200),
@@ -48,7 +48,7 @@ const announcementBodyObjectSchema = z.object({
   publishAt: z.iso.datetime({ offset: true }).nullable().optional(),
   expiresAt: z.iso.datetime({ offset: true }).nullable().optional(),
   /** Sponsor/participant/mentor tags (H59 vocabulary). Empty + no recipients = everyone. */
-  audiences: z.array(announcementAudienceSchema).max(3).optional().default([]),
+  audiences: z.array(announcementAudienceSchema).max(4).optional().default([]),
   /** Mutually exclusive with `audiences` — see the refine below. */
   recipientUserIds: z.array(z.number().int().positive()).optional().default([]),
   channels: z
@@ -111,6 +111,15 @@ export const announcementIdParamsSchema = z.object({
 export const announcementRecipientCandidatesQuerySchema = z.object({
   q: z.string().trim().min(2),
   limit: z.coerce.number().int().min(1).max(50).default(20),
+});
+
+const announcementLanguageSchema = z.enum(["es", "gl", "en"]);
+
+export const announcementTranslateBodySchema = z.object({
+  title: z.string().min(1).max(200),
+  body: z.string().min(1),
+  sourceLanguage: announcementLanguageSchema,
+  targetLanguages: z.array(announcementLanguageSchema).min(1),
 });
 
 export const auditQuerySchema = z.object({

@@ -54,12 +54,18 @@ Delivery reaches one of three mutually exclusive audiences, resolved by
 - **Everyone** (default): `audiences = []` and no `announcement_recipients`
   rows.
 - **Audience tags**: `audiences` (`text[]`, values `sponsor | participant |
-  mentor`) — the same vocabulary as schedule's H59 audiences
+  mentor | staff`) — the first three reuse schedule's H59 vocabulary
   (`docs/schedule-categories.md` doesn't cover this; see
-  `apps/web/src/app/(app)/schedule/schedule-model.ts`'s `SCHEDULE_AUDIENCES`).
+  `apps/web/src/app/(app)/schedule/schedule-model.ts`'s `SCHEDULE_AUDIENCES`);
+  `staff` is announcement-specific and means "holds at least one capability"
+  — the same definition `getEffectiveCapabilities`/`computeDerivedRole` use,
+  inlined as a recursive CTE over `permission_group_members` +
+  `permission_group_includes` + `group_capabilities` (unlike schedule, where
+  staff always sees everything and is never a *stored* tag — here it has to
+  be storable since it's a delivery target, not a visibility rule).
   `sponsor` implies `participant`, matching schedule's own rule. Resolved in
   one SQL query against `manual_attendee_roles`, `application_responses` /
-  `applications`, and `sponsors` — no per-user round-trips.
+  `applications`, `sponsors`, and the capability CTE — no per-user round-trips.
 - **Specific recipients**: an explicit list in the `announcement_recipients`
   join table (`announcement_id, user_id`). Rejected together with `audiences`
   (choose one), and rejected together with a non-`none` `screen_placement` —
@@ -114,6 +120,28 @@ itself. Two background workers do the actual work:
 their preferences matrix even with zero override rows; `queue` is the one
 mandatory (non-optional) category (H51).
 
+## Automatic translation (optional)
+
+`translations` (`title`/`body` per `es | gl | en`) can be filled by hand, or
+staff can write the content in whichever of the three languages comes
+naturally and hit "Translate automatically" to machine-translate the rest —
+both frontends detect the first non-empty language as the source and only
+fill languages that are still empty, never overwriting a manual edit.
+
+The provider is fully optional and isolated behind
+`modules/notifications/translate/`: `translateAnnouncementContent()` /
+`isTranslationAvailable()` in `translate/index.ts` are the only functions
+anything else calls; the Google Cloud Translation v2 implementation lives
+entirely in `translate/google.ts` (`GOOGLE_TRANSLATE_API_KEY`, see
+`docs/env-vars.md`), so swapping providers later is a one-file change plus a
+new env var — mirroring the `MAIL_PROVIDER` adapter split in
+`channels/email-adapters/`. `GET /api/announcements/translate-availability`
+lets both frontends hide/disable the action when unset instead of offering
+one that will 503; every translation surface keeps working with manual-only
+entry regardless of whether a provider is configured. Exercised in tests via
+a stubbed `global.fetch`, never a live network call (same convention as the
+Resend email adapter).
+
 ## Web admin UI
 
 `apps/web/src/app/(app)/announcements/` — a list page
@@ -138,4 +166,8 @@ edit/Add actions open `AnnouncementFormModal`
 form field-for-field, same as `ScheduleFormModal` does for schedule items.
 `lib/announcements-admin.ts` holds the admin API client, including
 `fetchAnnouncementRecipientCandidates` against the `ANNOUNCEMENTS_MANAGE`-scoped
-candidates endpoint above.
+candidates endpoint above, plus `fetchTranslateAvailability`/`translateAnnouncement`
+for the same optional auto-translate action as web. Each language's Title
+field has `returnKeyType="next"` chained to its own Message field
+(`bodyRefs`) — a multiline field's own return key inserts a newline instead,
+so the chain stops there rather than trying to jump languages.
