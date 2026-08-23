@@ -743,6 +743,8 @@ function WinnersCard({ challengeId }: { challengeId: number }) {
   }, [challengeId, t]);
 
   useEffect(() => {
+    // fetching winners data from the API on mount is a legitimate external-system sync
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
 

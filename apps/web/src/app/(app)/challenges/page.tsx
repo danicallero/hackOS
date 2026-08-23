@@ -151,6 +151,8 @@ export default function ChallengesPage() {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
+    // fetching challenges list from the API on mount/refresh is a legitimate external-system sync
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load, liveRefresh]);
 

@@ -2,11 +2,9 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import type { Question } from "@hackos/shared/questions";
 import { TrophyIcon } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { z } from "zod";
 import { BackLink } from "@/components/common/back-link";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
@@ -14,8 +12,6 @@ import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
-import { toDatetimeLocal } from "@/lib/datetime";
-import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
 import { listDevpostPrizes } from "@/lib/projects";
 import { useSessionContext } from "@/lib/session";
@@ -24,41 +20,9 @@ import {
   type Challenge,
   canAccessSponsorWorkspace,
   isScheduled,
-  type Prize,
   textForDisplay,
   visibilityTone,
 } from "../shared";
-
-const optionalPositiveInt = z
-  .string()
-  .refine((v) => v === "" || (/^\d+$/.test(v) && Number(v) > 0), "Must be a positive number");
-
-const editSchema = z.object({
-  maxPresentationSeconds: optionalPositiveInt,
-  maxInWaitingArea: optionalPositiveInt,
-  visibility: z.enum(["visible", "hidden"]),
-  availableFrom: z.string(),
-});
-type EditValues = z.infer<typeof editSchema>;
-
-function _toFormValues(challenge: Challenge): EditValues {
-  return {
-    maxPresentationSeconds:
-      challenge.max_presentation_seconds != null ? String(challenge.max_presentation_seconds) : "",
-    maxInWaitingArea:
-      challenge.max_in_waiting_area != null ? String(challenge.max_in_waiting_area) : "",
-    visibility: challenge.visibility,
-    availableFrom: toDatetimeLocal(challenge.available_from),
-  };
-}
-
-function _asPrizes(value: Prize[] | null): Prize[] {
-  return Array.isArray(value) ? value : [];
-}
-
-function _asQuestions(value: Question[] | null): Question[] {
-  return Array.isArray(value) ? value : [];
-}
 
 type DevpostPrize = {
   name: string;
@@ -67,10 +31,6 @@ type DevpostPrize = {
   mappedChallengeId: number | null;
   mappedChallengeTitle: string | null;
 };
-
-function _exportHref(path: string): string {
-  return `${API_URL}${path}`;
-}
 
 import { EditCard } from "./challenge-cards";
 
@@ -124,8 +84,13 @@ export default function ChallengeDetailPage() {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
-    if (Number.isFinite(id)) void load();
-    else setStatus("error");
+    if (Number.isFinite(id)) {
+      // fetching challenge data from the API on mount/refresh is a legitimate external-system sync
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      void load();
+    } else {
+      setStatus("error");
+    }
   }, [id, load, liveRefresh]);
 
   if (status === "loading") {

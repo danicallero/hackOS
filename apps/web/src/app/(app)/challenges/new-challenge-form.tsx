@@ -81,6 +81,8 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
   // biome-ignore lint/correctness/useExhaustiveDependencies: retryNonce intentionally retriggers this safe authoring-data load.
   useEffect(() => {
     let cancelled = false;
+    // populating form dropdown options from the API on mount/retry is a legitimate external-system sync
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoadingData(true);
     setLoadError(null);
     Promise.all([
