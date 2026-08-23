@@ -90,6 +90,8 @@ export default function AuditPage() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
     if (!canRead) {
+      // Setting loading state when authorization fails is a valid early-exit pattern; the effect cancels before any data fetch runs.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(false);
       return;
     }
@@ -342,15 +344,15 @@ export default function AuditPage() {
             <dl className="grid grid-cols-2 gap-3">
               <div>
                 <dt className="text-muted-foreground text-xs">{t("colWhen")}</dt>
-                <dd className="break-words">{timeFmt.format(new Date(selected.created_at))}</dd>
+                <dd className="wrap-break-word">{timeFmt.format(new Date(selected.created_at))}</dd>
               </div>
               <div>
                 <dt className="text-muted-foreground text-xs">{t("colSource")}</dt>
-                <dd className="break-words">{selected.source ?? "—"}</dd>
+                <dd className="wrap-break-word">{selected.source ?? "—"}</dd>
               </div>
               <div>
                 <dt className="text-muted-foreground text-xs">{t("colEntity")}</dt>
-                <dd className="break-words">
+                <dd className="wrap-break-word">
                   {selected.entity_type === "user" ? (
                     <Link
                       href={`/users/${selected.entity_id}`}
@@ -366,7 +368,7 @@ export default function AuditPage() {
               </div>
               <div>
                 <dt className="text-muted-foreground text-xs">{t("colActor")}</dt>
-                <dd className="break-words">
+                <dd className="wrap-break-word">
                   {selected.actor_id ? (
                     <Link
                       href={`/users/${selected.actor_id}`}
@@ -382,15 +384,15 @@ export default function AuditPage() {
               </div>
               <div>
                 <dt className="text-muted-foreground text-xs">{t("reasonLabel")}</dt>
-                <dd className="break-words">{selected.reason ?? "—"}</dd>
+                <dd className="wrap-break-word">{selected.reason ?? "—"}</dd>
               </div>
               <div>
                 <dt className="text-muted-foreground text-xs">{t("ipLabel")}</dt>
-                <dd className="break-words">{selected.ip ?? "—"}</dd>
+                <dd className="wrap-break-word">{selected.ip ?? "—"}</dd>
               </div>
               <div>
                 <dt className="text-muted-foreground text-xs">{t("userAgentLabel")}</dt>
-                <dd className="break-words">{selected.user_agent ?? "—"}</dd>
+                <dd className="wrap-break-word">{selected.user_agent ?? "—"}</dd>
               </div>
             </dl>
             <div className="grid gap-3 sm:grid-cols-2">
