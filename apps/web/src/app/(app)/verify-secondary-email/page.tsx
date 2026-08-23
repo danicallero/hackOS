@@ -57,6 +57,7 @@ function VerifySecondaryInner() {
 
   useEffect(() => {
     if (!token) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setState({ status: "error", message: t("linkMissingToken") });
       return;
     }

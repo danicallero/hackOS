@@ -82,6 +82,7 @@ export default function SponsorFaqPage() {
   }, [t]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (canView) load();
   }, [canView, load]);
 
@@ -256,6 +257,7 @@ function SponsorScheduleCard() {
   }, [t]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);
 
