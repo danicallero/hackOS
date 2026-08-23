@@ -71,10 +71,12 @@ export default function PublicChallengePage() {
   }, [t]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadApplications();
   }, [loadApplications]);
 

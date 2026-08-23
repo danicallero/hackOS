@@ -70,6 +70,12 @@ export function PublicPage() {
   const appLabel = status === "authenticated" ? t("goToApp") : t("logIn");
   const [content, setContent] = useState<Content | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Track "now" as ticking state for schedule filtering purity (60s refresh).
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
   const load = useCallback(async () => {
     try {
       const [
@@ -106,6 +112,7 @@ export function PublicPage() {
     }
   }, [t]);
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
   // The browser tab should read the configured event's name, not a generic
@@ -117,8 +124,8 @@ export function PublicPage() {
     <div className="relative overflow-x-clip">
       {/* Decorative glow, purely cosmetic — sits behind all content. */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10">
-        <div className="bg-primary/10 absolute -top-32 -left-32 size-[28rem] rounded-full blur-3xl" />
-        <div className="bg-chart-2/10 absolute top-40 -right-24 size-[24rem] rounded-full blur-3xl" />
+        <div className="bg-primary/10 absolute -top-32 -left-32 size-112 rounded-full blur-3xl" />
+        <div className="bg-chart-2/10 absolute top-40 -right-24 size-96 rounded-full blur-3xl" />
       </div>
 
       <div className="mx-auto max-w-6xl px-5 sm:px-8">
@@ -165,6 +172,7 @@ export function PublicPage() {
             t={t}
             appHref={appHref}
             appLabel={appLabel}
+            now={now}
           />
         )}
 
@@ -192,22 +200,22 @@ function PublicPageContent({
   t,
   appHref,
   appLabel,
+  now,
 }: {
   content: Content;
   language: "es" | "gl" | "en";
   t: Translate;
   appHref: string;
   appLabel: string;
+  now: number;
 }) {
   const { event, schedule, sponsors, challenges, screenAnnouncements, openApplications } = content;
-  const upcomingSchedule = schedule
-    .filter((item) => Date.parse(item.endsAt) >= Date.now())
-    .slice(0, 4);
+  const upcomingSchedule = schedule.filter((item) => Date.parse(item.endsAt) >= now).slice(0, 4);
   const eventPhase = useEventPhase(event);
   return (
     <>
       <section className="py-12 sm:py-24">
-        <h1 className="text-balance break-words text-4xl font-semibold tracking-tight sm:text-6xl">
+        <h1 className="text-balance wrap-break-word text-4xl font-semibold tracking-tight sm:text-6xl">
           {event.name ?? "hackOS"}
         </h1>
         {event.tagline && (
