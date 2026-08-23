@@ -14,9 +14,12 @@ import {
   type AnnouncementAudience,
   type AnnouncementChannel,
   type AnnouncementInput,
+  type AnnouncementLanguage,
   type AnnouncementRecipient,
   type AnnouncementScreenPlacement,
   fetchAnnouncementRecipientCandidates,
+  fetchTranslateAvailability,
+  translateAnnouncement,
 } from "@/lib/announcements-admin";
 import { useLocale } from "@/lib/i18n";
 import { colors } from "@/theme/colors";
@@ -32,6 +35,8 @@ function audienceLabel(
       return t("scheduleAudienceParticipant");
     case "mentor":
       return t("scheduleAudienceMentor");
+    case "staff":
+      return t("scheduleAudienceStaff");
   }
 }
 
@@ -148,8 +153,21 @@ export function AnnouncementFormModal({
   );
   const [scheduledSend, setScheduledSend] = useState(Boolean(initial?.publishAt));
   const [scheduledExpiry, setScheduledExpiry] = useState(Boolean(initial?.expiresAt));
+  // Lets each language's Title field's "next" key jump straight into its own
+  // Message field — a multiline field's own return key inserts a newline
+  // instead, so chaining stops there rather than trying to jump languages.
+  const bodyRefs = useRef<Record<AnnouncementLanguage, TextInput | null>>({
+    es: null,
+    gl: null,
+    en: null,
+  });
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Hidden by default: only shown once the availability check confirms a
+  // provider is configured, so the form works identically (manual entry
+  // only) with no translation provider set up at all.
+  const [translateAvailable, setTranslateAvailable] = useState(false);
+  const [translating, setTranslating] = useState(false);
 
   const canTargetSpecific = values.screenPlacement === "none";
 
@@ -163,6 +181,60 @@ export function AnnouncementFormModal({
     setScheduledExpiry(Boolean(next.expiresAt));
     setError(null);
   }, [visible, initial, initialRecipients]);
+
+  useEffect(() => {
+    if (!visible) return;
+    let cancelled = false;
+    void fetchTranslateAvailability()
+      .then((available) => {
+        if (!cancelled) setTranslateAvailable(available);
+      })
+      .catch(() => {
+        if (!cancelled) setTranslateAvailable(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [visible]);
+
+  /**
+   * Staff can write the primary content in whichever of the three languages
+   * comes naturally — this picks the first non-empty language as the source
+   * and fills every still-empty one from it, never overwriting a field
+   * someone already typed into.
+   */
+  async function autoTranslate() {
+    const content: Record<AnnouncementLanguage, { title: string; body: string }> = {
+      es: { title: values.title, body: values.body },
+      gl: values.translations.gl ?? { title: "", body: "" },
+      en: values.translations.en ?? { title: "", body: "" },
+    };
+    const isFilled = (language: AnnouncementLanguage) =>
+      Boolean(content[language].title.trim() && content[language].body.trim());
+    const source = (["es", "gl", "en"] as const).find(isFilled);
+    const targets = (["es", "gl", "en"] as const).filter((language) => !isFilled(language));
+    if (!source || targets.length === 0) return;
+    setTranslating(true);
+    setError(null);
+    try {
+      const translations = await translateAnnouncement({
+        title: content[source].title,
+        body: content[source].body,
+        sourceLanguage: source,
+        targetLanguages: targets,
+      });
+      setValues((current) => ({
+        ...current,
+        title: translations.es?.title ?? current.title,
+        body: translations.es?.body ?? current.body,
+        translations: { ...current.translations, ...translations },
+      }));
+    } catch {
+      setError(t("couldNotTranslate"));
+    } finally {
+      setTranslating(false);
+    }
+  }
 
   function setTargetingMode(mode: TargetingMode) {
     setTargetingModeState(mode);
@@ -257,8 +329,10 @@ export function AnnouncementFormModal({
                   translations: { ...current.translations, es: { title, body: current.body } },
                 }))
               }
+              onSubmitEditing={() => bodyRefs.current.es?.focus()}
               placeholder={t("announcementTitleLabel")}
               placeholderTextColor={colors.tertiaryLabel}
+              returnKeyType="next"
               style={{ color: colors.label, fontSize: 16, padding: 16 }}
               value={values.title}
             />
@@ -266,6 +340,9 @@ export function AnnouncementFormModal({
 
           <Section title={`${t("announcementBodyLabel")} · ${t("spanishTag")}`}>
             <TextInput
+              ref={(r) => {
+                bodyRefs.current.es = r;
+              }}
               accessibilityLabel={t("announcementBodyLabel")}
               multiline
               onChangeText={(body) =>
@@ -305,7 +382,9 @@ export function AnnouncementFormModal({
                       },
                     }))
                   }
+                  onSubmitEditing={() => bodyRefs.current[language]?.focus()}
                   placeholderTextColor={colors.tertiaryLabel}
+                  returnKeyType="next"
                   style={{ color: colors.label, fontSize: 16, padding: 16 }}
                   value={values.translations[language]?.title ?? ""}
                 />
@@ -314,6 +393,9 @@ export function AnnouncementFormModal({
                 title={`${t("announcementBodyLabel")} · ${t(language === "gl" ? "galicianTag" : "englishTag")}`}
               >
                 <TextInput
+                  ref={(r) => {
+                    bodyRefs.current[language] = r;
+                  }}
                   accessibilityLabel={t("announcementBodyLabel")}
                   multiline
                   onChangeText={(body) =>
@@ -339,6 +421,38 @@ export function AnnouncementFormModal({
               </Section>
             </View>
           ))}
+
+          {translateAvailable ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t("translateAutomatically")}
+              accessibilityState={{ busy: translating }}
+              disabled={translating}
+              onPress={() => void autoTranslate()}
+              style={({ pressed }) => ({
+                alignItems: "center",
+                alignSelf: "center",
+                backgroundColor: colors.elevatedSurface,
+                borderCurve: "continuous",
+                borderRadius: 10,
+                flexDirection: "row",
+                gap: 8,
+                opacity: translating ? 0.6 : pressed ? 0.7 : 1,
+                paddingHorizontal: 16,
+                paddingVertical: 10,
+              })}
+            >
+              <SymbolView
+                name="character.book.closed"
+                tintColor={colors.accent}
+                size={16}
+                accessible={false}
+              />
+              <Text style={{ color: colors.accent, fontSize: 15, fontWeight: "600" }}>
+                {translating ? t("translatingInProgress") : t("translateAutomatically")}
+              </Text>
+            </Pressable>
+          ) : null}
 
           <Section title={t("announcementScreenPlacementLabel")}>
             <MenuView

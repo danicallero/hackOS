@@ -35,6 +35,7 @@ const ANDROID_SYMBOL_NAMES = {
   "calendar.badge.clock": "event_upcoming",
   "calendar.badge.exclamationmark": "event_busy",
   "camera.fill": "camera_alt",
+  "character.book.closed": "translate",
   checkmark: "check",
   "checkmark.circle.fill": "check_circle",
   "checkmark.seal": "verified",

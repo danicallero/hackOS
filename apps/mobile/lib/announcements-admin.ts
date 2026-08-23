@@ -1,8 +1,13 @@
 import { apiFetch } from "./api";
 
-/** Sponsor/participant/mentor (H59 vocabulary, reused by H50 announcement targeting). */
-export type AnnouncementAudience = "sponsor" | "participant" | "mentor";
-export const ANNOUNCEMENT_AUDIENCES: AnnouncementAudience[] = ["sponsor", "participant", "mentor"];
+/** Sponsor/participant/mentor (H59 vocabulary) plus staff — anyone holding at least one capability — for H50 announcement targeting. */
+export type AnnouncementAudience = "sponsor" | "participant" | "mentor" | "staff";
+export const ANNOUNCEMENT_AUDIENCES: AnnouncementAudience[] = [
+  "sponsor",
+  "participant",
+  "mentor",
+  "staff",
+];
 
 export type AnnouncementChannel = "in_app" | "email" | "push";
 export const ANNOUNCEMENT_CHANNELS: AnnouncementChannel[] = ["in_app", "email", "push"];
@@ -99,4 +104,29 @@ export async function fetchAnnouncementRecipientCandidates(
     `/api/announcements/recipient-candidates?q=${encodeURIComponent(q)}&limit=${limit}`,
   );
   return response.users;
+}
+
+/** Whether the deployment has a translation provider configured — hide/disable the action when false. */
+export async function fetchTranslateAvailability(): Promise<boolean> {
+  const response = await apiFetch<{ available: boolean }>(
+    "/api/announcements/translate-availability",
+  );
+  return response.available;
+}
+
+export async function translateAnnouncement(input: {
+  title: string;
+  body: string;
+  sourceLanguage: AnnouncementLanguage;
+  targetLanguages: AnnouncementLanguage[];
+}): Promise<AnnouncementTranslations> {
+  const response = await apiFetch<{ translations: AnnouncementTranslations }>(
+    "/api/announcements/translate",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+  return response.translations;
 }
