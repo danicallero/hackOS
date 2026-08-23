@@ -8,7 +8,7 @@
 
 import { CheckIcon, ChevronsUpDownIcon, PlusIcon } from "lucide-react";
 import { Popover as PopoverPrimitive } from "radix-ui";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -49,6 +49,7 @@ export function UniversityPicker({
   disabled?: boolean;
   inDialog?: boolean;
   className?: string;
+  /** Shows the "add <query>" option for authenticated users when no exact match exists. */
   allowPropose?: boolean;
   id?: string;
   "aria-labelledby"?: string;
@@ -59,23 +60,38 @@ export function UniversityPicker({
   const { t } = useLocale();
   const { ref: anchorRef, portalProps, contentProps } = useDialogPortal(inDialog);
   const { status } = useSessionContext();
+  const listboxId = useId();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [options, setOptions] = useState<University[]>([]);
-  const [loading, setLoading] = useState(false);
+  // Starts true: a search always kicks off on mount.
+  const [loading, setLoading] = useState(true);
   const [searchError, setSearchError] = useState(false);
   const [searchAttempt, setSearchAttempt] = useState(0);
   const [proposing, setProposing] = useState(false);
-  // Remember the label for the currently-selected id so it renders even when
-  // that id isn't in the latest search page (e.g. a reloaded draft).
-  const [selectedLabel, setSelectedLabel] = useState<string | null>(null);
+  // The id/name pair last resolved via the by-id lookup below (a preset value
+  // not present in the current search page, e.g. a reloaded draft) — kept
+  // alongside its id so a stale label can't outlive a `value` change.
+  const [resolvedLabel, setResolvedLabel] = useState<{ id: string; name: string } | null>(null);
+
+  // "loading"/"searchError" reset here, on the actions that start a new
+  // search, rather than at the top of the effect below — that effect only
+  // fires the debounced request itself.
+  function handleQueryChange(next: string) {
+    setQuery(next);
+    setLoading(true);
+    setSearchError(false);
+  }
+  function retrySearch() {
+    setSearchAttempt((attempt) => attempt + 1);
+    setLoading(true);
+    setSearchError(false);
+  }
 
   // Debounced search against the public directory.
   // biome-ignore lint/correctness/useExhaustiveDependencies: searchAttempt intentionally retries the unchanged query.
   useEffect(() => {
     let active = true;
-    setLoading(true);
-    setSearchError(false);
     const handle = setTimeout(async () => {
       try {
         const { universities } = await api.get<{ universities: University[] }>(
@@ -98,35 +114,32 @@ export function UniversityPicker({
     };
   }, [query, searchAttempt]);
 
-  // Resolve the label for a preset value on mount (draft reload).
-  const resolvedFor = useRef<string | null>(null);
+  const knownLabel = value ? (options.find((o) => String(o.id) === value)?.name ?? null) : null;
+
+  // Resolves the label for a preset value not in the current search page
+  // (draft reload). `knownLabel`/the `resolvedLabel.id === value` check below
+  // mean a `value` change clears the stale label without this effect having
+  // to do it itself.
   useEffect(() => {
-    if (!value) {
-      setSelectedLabel(null);
-      resolvedFor.current = null;
-      return;
-    }
-    const known = options.find((o) => String(o.id) === value);
-    if (known) {
-      setSelectedLabel(known.name);
-      resolvedFor.current = value;
-    } else if (resolvedFor.current !== value) {
-      resolvedFor.current = value;
-      api
-        .get<{ universities: University[] }>("/api/public/universities", {
-          query: { ids: value },
-        })
-        .then(({ universities }) => {
-          const match = universities.find((o) => String(o.id) === value);
-          if (match) setSelectedLabel(match.name);
-        })
-        .catch(() => {});
-    }
-  }, [value, options]);
+    if (!value || knownLabel || resolvedLabel?.id === value) return;
+    let active = true;
+    api
+      .get<{ universities: University[] }>("/api/public/universities", {
+        query: { ids: value },
+      })
+      .then(({ universities }) => {
+        const match = universities.find((o) => String(o.id) === value);
+        if (active && match) setResolvedLabel({ id: value, name: match.name });
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [value, knownLabel, resolvedLabel]);
 
   function select(u: University) {
     onChange(String(u.id));
-    setSelectedLabel(u.name);
+    setResolvedLabel({ id: String(u.id), name: u.name });
     setOpen(false);
   }
 
@@ -163,7 +176,10 @@ export function UniversityPicker({
     query.trim().length > 1 &&
     !exactMatch &&
     !loading;
-  const label = value ? (selectedLabel ?? t("universityNumberFallback", { id: value })) : null;
+  const asyncLabel = resolvedLabel?.id === value ? resolvedLabel.name : null;
+  const label = value
+    ? (knownLabel ?? asyncLabel ?? t("universityNumberFallback", { id: value }))
+    : null;
 
   const content = (
     <PopoverPrimitive.Content
@@ -171,13 +187,14 @@ export function UniversityPicker({
       sideOffset={4}
       collisionPadding={8}
       {...contentProps}
-      className="bg-popover text-popover-foreground z-50 flex max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] flex-col rounded-md border shadow-md outline-hidden"
+      id={listboxId}
+      className="bg-popover text-popover-foreground z-50 flex max-h-(--radix-popover-content-available-height) w-(--radix-popover-trigger-width) flex-col rounded-md border shadow-md outline-hidden"
     >
       <Command shouldFilter={false}>
         <CommandInput
           placeholder={t("searchUniversitiesShortPlaceholder")}
           value={query}
-          onValueChange={setQuery}
+          onValueChange={handleQueryChange}
         />
         <CommandList aria-busy={loading || undefined} className="max-h-64 min-h-0 flex-1">
           {loading ? (
@@ -190,12 +207,7 @@ export function UniversityPicker({
               className="text-destructive flex flex-col items-center gap-2 px-2 py-6 text-center text-sm"
             >
               {t("couldNotLoadUniversities")}
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => setSearchAttempt((attempt) => attempt + 1)}
-              >
+              <Button type="button" size="sm" variant="outline" onClick={retrySearch}>
                 {t("retry")}
               </Button>
             </div>
@@ -234,6 +246,7 @@ export function UniversityPicker({
           variant="outline"
           disabled={disabled}
           role="combobox"
+          aria-controls={listboxId}
           aria-expanded={open}
           aria-haspopup="listbox"
           aria-labelledby={ariaLabelledBy}
