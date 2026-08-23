@@ -291,7 +291,7 @@ export function MessagesTab() {
                         {details.map((d) => (
                           <div key={d.key} className="contents">
                             <dt className="text-muted-foreground">{d.key}</dt>
-                            <dd className="min-w-0 break-words">{d.value}</dd>
+                            <dd className="min-w-0 wrap-break-word">{d.value}</dd>
                           </div>
                         ))}
                       </dl>
@@ -385,6 +385,14 @@ export function PreferencesTab() {
   const queuedRemovalCategories = useRef(new Set<string>());
   const processingRemovals = useRef(false);
 
+  // Track "now" as ticking state to avoid Date.now() calls during render.
+  // Updated every 30s since this only filters for "still upcoming" items, not per-second precision.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(id);
+  }, []);
+
   const load = useCallback(async () => {
     try {
       const [prefsRes, scheduleRes] = await Promise.all([
@@ -401,7 +409,9 @@ export function PreferencesTab() {
   }, [t]);
 
   useEffect(() => {
-    void load();
+    // Fetching notification preferences from the API is a legitimate external-system sync on mount.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load(); // NOSONAR: data-fetch-on-mount pattern; external API sync is intentional
   }, [load]);
 
   async function toggle(category: string, channel: NotificationChannel, enabled: boolean) {
@@ -524,9 +534,7 @@ export function PreferencesTab() {
     category.startsWith("schedule:type:"),
   );
 
-  const upcomingItems = scheduleItems.filter(
-    (item) => new Date(item.endsAt).getTime() > Date.now(),
-  );
+  const upcomingItems = scheduleItems.filter((item) => new Date(item.endsAt).getTime() > now);
   const addableActivities = upcomingItems.filter(
     (item) => !individualReminders.includes(`schedule:${item.id}`),
   );
@@ -656,7 +664,7 @@ export function PreferencesTab() {
                       className="flex items-start justify-between gap-3 px-4 py-2 text-sm"
                     >
                       <div className="min-w-0 flex-1">
-                        <span className="block break-words text-pretty">{label}</span>
+                        <span className="block wrap-break-word text-pretty">{label}</span>
                         {removalState === "failed" && (
                           <span className="text-destructive block text-xs" role="alert">
                             {t("couldNotRemoveReminder")}
