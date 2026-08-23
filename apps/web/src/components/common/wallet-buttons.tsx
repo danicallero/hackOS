@@ -72,7 +72,6 @@ export function WalletButtons({ purpose, accessToken }: WalletButtonsProps) {
     <div className="flex flex-wrap items-center gap-3">
       <a href={appleHref} className="inline-flex w-fit">
         {/* biome-ignore lint/performance/noImgElement: official Apple badge, must not be re-processed by next/image */}
-        {/* eslint-disable-next-line @next/next/no-img-element -- official Apple badge, must not be re-processed by next/image */}
         <img src={appleBadgeSrc} alt={t("addToAppleWallet")} className="h-12 w-auto" />
       </a>
 

@@ -12,7 +12,9 @@ export function StatusBadge({
   children,
   className,
 }: {
+  /** Meaning-to-color mapping; defaults to "neutral". */
   tone?: Tone;
+  /** Leading colored dot; defaults to shown. */
   dot?: boolean;
   children: React.ReactNode;
   className?: string;
