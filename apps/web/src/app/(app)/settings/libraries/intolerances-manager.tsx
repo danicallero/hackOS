@@ -220,7 +220,6 @@ export function IntolerancesManager() {
         empty={{
           icon: UtensilsCrossedIcon,
           title: t("noIntolerancesYetTitle"),
-          description: t("addFirstEntryDietaryDesc"),
         }}
         rowActions={(row) => (
           <DropdownMenu>

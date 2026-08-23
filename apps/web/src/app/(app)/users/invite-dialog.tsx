@@ -68,7 +68,7 @@ export function InviteUserDialog() {
         groupIds: groupIds.map(Number),
       });
       setCreated(invite);
-      toast.success(t("inviteCreatedDesc"));
+      toast.success(t("inviteSentMsg"));
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("couldNotCreateInvite"));
     } finally {

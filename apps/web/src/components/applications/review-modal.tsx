@@ -398,7 +398,7 @@ export function ReviewModal({
       size="xl"
       icon={FileTextIcon}
       title={response.name ?? response.email}
-      description={response.email}
+      description={response.name ? response.email : undefined}
     >
       <div className="max-h-[65vh] space-y-6 overflow-y-auto pr-1">
         <div className="flex flex-wrap items-center gap-2">

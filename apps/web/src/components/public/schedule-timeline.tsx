@@ -130,13 +130,7 @@ export function ScheduleTimeline({
   }, []);
 
   if (!ordered.length) {
-    return (
-      <EmptyState
-        icon={CalendarDaysIcon}
-        title={t("schedulePending")}
-        description={t("noUpcomingSchedule")}
-      />
-    );
+    return <EmptyState icon={CalendarDaysIcon} title={t("schedulePending")} />;
   }
 
   const dateFormatter = new Intl.DateTimeFormat(LOCALE_CODES[language], {

@@ -147,7 +147,6 @@ function SignUpInner() {
     <Card>
       <CardHeader>
         <CardTitle>{t("createYourAccount")}</CardTitle>
-        <CardDescription>{t("signUpDescription")}</CardDescription>
       </CardHeader>
       <CardContent>
         <Form {...form}>

@@ -1,12 +1,10 @@
 "use client";
 
-import { ArrowLeftIcon } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Brand } from "@/components/common/brand";
 import { LanguageSelect } from "@/components/common/language-select";
 import { ThemeToggle } from "@/components/common/theme-toggle";
-import { Button } from "@/components/ui/button";
 import { useLocale } from "@/lib/i18n";
 
 export function LegalPage({
@@ -31,12 +29,6 @@ export function LegalPage({
           </Link>
           <div className="flex items-center gap-1">
             <LanguageSelect />
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/" aria-label={t("backHome")}>
-                <ArrowLeftIcon className="size-4" aria-hidden="true" />
-                <span className="hidden sm:inline">{t("backHome")}</span>
-              </Link>
-            </Button>
             <ThemeToggle />
           </div>
         </div>
@@ -44,7 +36,6 @@ export function LegalPage({
 
       <main className="mx-auto max-w-3xl px-5 py-12 sm:px-8 sm:py-16">
         <header className="border-b pb-8">
-          <p className="text-muted-foreground text-sm">{t("legalInformation")}</p>
           <h1 className="mt-2 text-balance text-3xl font-semibold sm:text-4xl">{title}</h1>
           <p className="text-muted-foreground mt-4 max-w-2xl text-pretty text-base leading-7">
             {description}

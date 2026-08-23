@@ -205,7 +205,6 @@ export function UniversitiesManager() {
         empty={{
           icon: GraduationCapIcon,
           title: search.trim() ? t("noMatchesTitle") : t("noUniversitiesYetTitle"),
-          description: search.trim() ? t("noUniversityMatchDesc") : t("addFirstOrProposeDesc"),
         }}
         rowActions={(row) => (
           <DropdownMenu>
@@ -231,7 +230,7 @@ export function UniversitiesManager() {
         onOpenChange={(o) => !o && setEditing(undefined)}
         icon={GraduationCapIcon}
         title={editing ? t("renameUniversityTitle") : t("newUniversityTitle")}
-        description={editing ? t("updateInstitutionNameDesc") : t("addInstitutionDesc")}
+        description={editing ? t("updateInstitutionNameDesc") : undefined}
         footer={
           <>
             <Button type="button" variant="outline" onClick={() => setEditing(undefined)}>

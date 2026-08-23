@@ -33,7 +33,6 @@ vi.mock("@/lib/i18n", () => ({
         tableResultCount: "{count} results",
         sortBy: "Sort by {column}",
         noFilteredResults: "No results",
-        tryDifferentSearch: "Try another search or clear the filters.",
         clearFilters: "Clear filters",
         nothingToShow: "Nothing to show",
         tablePagination: "Table pagination",

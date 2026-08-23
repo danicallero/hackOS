@@ -366,7 +366,6 @@ export function ActiveInvitationsModal() {
       }
       icon={MailIcon}
       title={t("invitationManagement")}
-      description={t("invitationManagementDesc")}
       size="xl"
     >
       <DataTable
@@ -439,7 +438,6 @@ export function ActiveInvitationsModal() {
             <h3 id="enterprise-invite-links-heading" className="text-balance font-medium">
               {t("enterpriseInviteLinks")}
             </h3>
-            <p className="text-muted-foreground text-sm">{t("allEnterpriseInviteLinksDesc")}</p>
           </div>
           <Button
             type="button"
@@ -571,7 +569,6 @@ export function ActiveInvitationsModal() {
           ) : filteredMobileLinks.length === 0 ? (
             <EmptyState
               title={t("noFilteredResults")}
-              description={t("tryDifferentSearch")}
               action={
                 <Button
                   type="button"

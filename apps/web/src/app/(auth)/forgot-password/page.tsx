@@ -115,7 +115,6 @@ function ForgotPasswordForm() {
         </Form>
       </CardContent>
       <div className="text-muted-foreground px-6 pb-6 text-center text-sm">
-        {t("rememberedIt")}{" "}
         <Link href="/login" className="text-foreground underline underline-offset-4">
           {t("signIn")}
         </Link>

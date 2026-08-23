@@ -274,7 +274,6 @@ export default function ApplicationsPage() {
         }}
         icon={ClipboardListIcon}
         title={t("newApplicationForm")}
-        description={t("newApplicationFormDesc")}
         footer={
           <>
             <Button type="button" variant="outline" onClick={() => setCreating(false)}>
@@ -443,7 +442,6 @@ export default function ApplicationsPage() {
                     <FormControl>
                       <Input type="number" min={1} {...field} />
                     </FormControl>
-                    <FormDescription>{t("hoursToConfirmDesc")}</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}

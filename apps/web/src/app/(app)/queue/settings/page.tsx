@@ -16,7 +16,6 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { AccessDenied } from "@/components/common/access-denied";
 import { DateTimeInput } from "@/components/common/datetime-input";
-import { PageHeader } from "@/components/common/page-header";
 import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
 import { SubmitButton } from "@/components/common/submit-button";
@@ -155,7 +154,6 @@ export default function JudgingWindowSettingsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={t("judgingWindowTitle")} />
       {!loaded ? null : (
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">

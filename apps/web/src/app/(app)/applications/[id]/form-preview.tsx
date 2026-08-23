@@ -122,14 +122,7 @@ export function AnswerPreviewControl({
   const fieldId = `preview-${f.key}`;
   const customPlaceholder = f.placeholder ? pickText(f.placeholder, locale) : "";
   if (f.kind === "textarea") {
-    return (
-      <Textarea
-        id={fieldId}
-        disabled
-        rows={2}
-        placeholder={customPlaceholder || t("applicantsAnswerPlaceholder")}
-      />
-    );
+    return <Textarea id={fieldId} disabled rows={2} placeholder={customPlaceholder || undefined} />;
   }
   if (f.kind === "checkbox") {
     return (
@@ -168,7 +161,7 @@ export function AnswerPreviewControl({
           ? t("fieldKindFile")
           : f.kind === "university"
             ? t("universityPickerPlaceholder")
-            : t("applicantsAnswerPlaceholder"))
+            : undefined)
       }
     />
   );

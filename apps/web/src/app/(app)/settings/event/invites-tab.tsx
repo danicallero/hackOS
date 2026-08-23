@@ -98,7 +98,6 @@ export function InvitesTab({
         <SectionCard
           icon={icon}
           title={t("invitesSectionTitle")}
-          description={t("invitesSectionDesc")}
           state={<SaveStatus state={saveState} />}
           footer={<SubmitButton pending={formState.isSubmitting}>{t("saveChanges")}</SubmitButton>}
         >

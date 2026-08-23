@@ -1,6 +1,5 @@
 "use client";
 
-import { TagIcon } from "lucide-react";
 import { MultiSelect, type MultiSelectOption } from "@/components/common/multi-select";
 import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -28,10 +27,6 @@ export function DevpostTagsField({
   const { t } = useLocale();
   return (
     <div className={cn("space-y-2", className)}>
-      <div className="flex items-center gap-1.5">
-        <TagIcon className="text-muted-foreground size-4" />
-        <span className="text-sm font-medium">{t("devpostTags")}</span>
-      </div>
       <MultiSelect
         options={options}
         value={value}
@@ -40,6 +35,7 @@ export function DevpostTagsField({
         searchPlaceholder={t("searchImportedPrizes")}
         emptyText={emptyText ?? t("noImportedPrizes")}
         disabled={disabled}
+        aria-label={t("devpostTags")}
       />
     </div>
   );

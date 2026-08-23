@@ -88,13 +88,7 @@ export function AuditLogSection({ userId }: { userId: number }) {
     );
   }
   if (state === "error") {
-    return (
-      <EmptyState
-        icon={FileTextIcon}
-        title={t("couldNotLoadAuditLog")}
-        description={t("auditLogUnavailableNow")}
-      />
-    );
+    return <EmptyState icon={FileTextIcon} title={t("couldNotLoadAuditLog")} />;
   }
 
   const columns: Column<AuditRow>[] = [

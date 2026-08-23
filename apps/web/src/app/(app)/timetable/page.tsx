@@ -10,13 +10,7 @@ export default function TimetablePage() {
   return (
     <div className="space-y-8">
       <PublicScheduleView
-        header={(event) => (
-          <PageHeader
-            context={event?.name ?? "hackOS"}
-            title={t("schedule")}
-            description={t("publicScheduleDescription")}
-          />
-        )}
+        header={(event) => <PageHeader context={event?.name ?? "hackOS"} title={t("schedule")} />}
       />
     </div>
   );

@@ -346,7 +346,7 @@ export default function SchedulePage() {
 
   return (
     <div className="space-y-6" data-wide>
-      <PageHeader title={t("manageSchedule")} description={t("manageScheduleDescription")} />
+      <PageHeader title={t("manageSchedule")} />
 
       <Card className="gap-0 overflow-hidden py-0">
         <div className="flex flex-wrap items-center gap-2 p-4">
