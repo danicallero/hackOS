@@ -14,7 +14,7 @@ import {
   SendIcon,
   SkipForwardIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { Button } from "@/components/ui/button";
 import {
@@ -47,6 +47,14 @@ export function QueueStatsCard({
   pace: RoomPace | null;
 }) {
   const { t } = useLocale();
+  // Track current time to calculate ETA; update every 30s since it's an estimate.
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   const total = progress
     ? progress.waiting +
       progress.called +
@@ -59,7 +67,7 @@ export function QueueStatsCard({
   const estFinishLabel =
     pace && pace.pendingCount > 0
       ? new Date(
-          Date.now() + (pace.pendingCount / pace.roomCount) * pace.effectiveMinutesPerTeam * 60_000,
+          now + (pace.pendingCount / pace.roomCount) * pace.effectiveMinutesPerTeam * 60_000,
         ).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
       : "—";
 

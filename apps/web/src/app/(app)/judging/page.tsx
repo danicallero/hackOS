@@ -153,6 +153,7 @@ export default function QueuePage() {
   }, [canUse, t]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Fetching judging rooms is API sync.
     void loadRooms();
   }, [loadRooms]);
 
@@ -204,6 +205,7 @@ export default function QueuePage() {
   useEffect(() => {
     const term = search.trim();
     if (!effectiveChallengeId || !term) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Clear search on empty query.
       setSearchResults([]);
       setSearching(false);
       return;
@@ -253,7 +255,7 @@ export default function QueuePage() {
             WMs, tablet/mobile) instead of overflowing the card. No fixed track
             widths — flex-basis + min-width + flex-wrap handle the reflow. */}
         <div className="flex flex-wrap items-end gap-3">
-          <div className="min-w-[11rem] flex-1 space-y-2">
+          <div className="min-w-44 flex-1 space-y-2">
             <Label htmlFor="queue-room">{t("roomLabel")}</Label>
             <Select
               value={activeRoomId ? String(activeRoomId) : ""}
@@ -278,7 +280,7 @@ export default function QueuePage() {
 
           {/* A room judges exactly one challenge — informational, read-only.
               Change it from the room admin surface, not here. */}
-          <div className="min-w-[11rem] flex-[1.2] space-y-2">
+          <div className="min-w-44 flex-[1.2] space-y-2">
             <p className="text-sm font-medium">{t("challengeLabel")}</p>
             <div className="border-input bg-muted/40 text-muted-foreground flex h-9 w-full min-w-0 items-center gap-2 rounded-md border px-3 text-sm">
               <LockIcon className="size-3.5 shrink-0" />
@@ -378,7 +380,7 @@ export default function QueuePage() {
       )}
 
       {roomsLoading || roomView.loading ? (
-        <div className="flex min-h-[360px] flex-1 items-center justify-center">
+        <div className="flex min-h-90 flex-1 items-center justify-center">
           <Spinner />
         </div>
       ) : !view ? (

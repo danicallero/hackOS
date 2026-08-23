@@ -113,6 +113,7 @@ export function ReviewForm({
   useEffect(() => {
     if (!entry) return;
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Data-fetch-on-mount.
     setLoading(true);
     setSaveError(null);
     void Promise.all([

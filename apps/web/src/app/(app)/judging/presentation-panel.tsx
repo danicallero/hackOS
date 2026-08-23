@@ -11,7 +11,7 @@ import {
   SendIcon,
   UsersIcon,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { QueueStatusBadge } from "@/components/common/queue-status-badge";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -302,16 +302,24 @@ export function PresentationTimer({
   totalMinutes: number | null;
 }) {
   const { t } = useLocale();
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(() => Date.now());
 
-  // The total is frozen per presentation so a mid-presentation pace refetch
-  // can't shift it; the rule itself lives (and is tested) in
-  // judging-workspace.ts.
-  const frozen = useRef<{ key: string | null; minutes: number | null }>({
-    key: null,
-    minutes: null,
-  });
-  frozen.current = freezeTotalMinutes(frozen.current, startedAt, totalMinutes);
+  // H39: the total is frozen per presentation so a mid-presentation pace refetch
+  // can't shift it; the rule itself lives (and is tested) in judging-workspace.ts.
+  // freezeTotalMinutes also adopts totalMinutes if it arrives after startedAt
+  // (pace can load late), so both inputs — not just startedAt — must be
+  // watched. Using the "adjusting state during render" pattern to derive the
+  // frozen value synchronously without violating React purity constraints.
+  const [prevInputs, setPrevInputs] = useState({ startedAt, totalMinutes });
+  const [frozenState, setFrozenState] = useState<{ key: string | null; minutes: number | null }>(
+    () => freezeTotalMinutes({ key: null, minutes: null }, startedAt, totalMinutes),
+  );
+
+  if (prevInputs.startedAt !== startedAt || prevInputs.totalMinutes !== totalMinutes) {
+    setPrevInputs({ startedAt, totalMinutes });
+    setFrozenState(freezeTotalMinutes(frozenState, startedAt, totalMinutes));
+  }
+
   // Pure arithmetic (elapsed/remaining/progress/tone) lives in
   // judging-workspace.ts so the threshold boundaries are unit-testable; only
   // the per-presentation freeze above and the ticking clock stay here.
@@ -320,7 +328,7 @@ export function PresentationTimer({
     totalSeconds,
     progressValue,
     tone: timerTone,
-  } = presentationTimerState(startedAt, frozen.current.minutes, now);
+  } = presentationTimerState(startedAt, frozenState.minutes, now);
   const cueText =
     timerTone === "danger"
       ? t("timeLimitExceeded")
@@ -351,8 +359,8 @@ export function PresentationTimer({
         value={progressValue}
         className={cn(
           "h-1.5 flex-1",
-          timerTone === "warning" && "[&_[data-slot=progress-indicator]]:bg-warning",
-          timerTone === "danger" && "[&_[data-slot=progress-indicator]]:bg-destructive",
+          timerTone === "warning" && "**:data-[slot=progress-indicator]:bg-warning",
+          timerTone === "danger" && "**:data-[slot=progress-indicator]:bg-destructive",
         )}
       />
       <span
