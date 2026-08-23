@@ -58,6 +58,7 @@ export function RoomQueueCard({
   useEffect(() => {
     const term = query.trim();
     if (!challengeId || !term) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- debounced search: resetting state on empty input/challenge is intentional
       setResults([]);
       setSearching(false);
       return;

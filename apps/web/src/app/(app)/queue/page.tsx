@@ -4,7 +4,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
 import { ArrowRightIcon, Building2Icon, TicketIcon } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AccessDenied } from "@/components/common/access-denied";
 import { EmptyState } from "@/components/common/empty-state";
@@ -41,13 +41,15 @@ export default function QueueOperationsPage() {
   const [roomAssignments, setRoomAssignments] = useState<Record<number, RoomAssignments | null>>(
     {},
   );
-  const [arrivalHints, setArrivalHints] = useState(false);
-  const arrivalHintsRef = useRef(false);
+  const [arrivalHints, setArrivalHints] = useState(
+    () => window.localStorage.getItem("queue-ops-arrival-hints") === "1",
+  );
+  const arrivalHintsRef = useRef(arrivalHints);
+
+  // Keep ref in sync with state for use in event handlers
   useEffect(() => {
-    const stored = window.localStorage.getItem("queue-ops-arrival-hints") === "1";
-    setArrivalHints(stored);
-    arrivalHintsRef.current = stored;
-  }, []);
+    arrivalHintsRef.current = arrivalHints;
+  }, [arrivalHints]);
   const toggleArrivalHints = useCallback((checked: boolean) => {
     setArrivalHints(checked);
     arrivalHintsRef.current = checked;
@@ -90,7 +92,7 @@ export default function QueueOperationsPage() {
     { enabled: canUse, onEvent: announceTeamEnter },
   );
 
-  const rooms = roomViews.data ?? [];
+  const rooms = useMemo(() => roomViews.data ?? [], [roomViews.data]);
 
   const loadAdminData = useCallback(async () => {
     if (!canAdmin) {
@@ -110,6 +112,7 @@ export default function QueueOperationsPage() {
   }, [canAdmin, rooms, t]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- data-fetch pattern: loadAdminData wraps setState for assignment queries
     void loadAdminData();
   }, [loadAdminData]);
 
