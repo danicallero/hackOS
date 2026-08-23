@@ -573,9 +573,8 @@ export default function SchedulePage() {
             if (!open) setEditingItem(null);
           }}
           title={t("editScheduleItem")}
-          initial={scheduleItemToForm(editingItem)}
-          initialTranslations={scheduleItemToTranslations(editingItem)}
-          primaryLanguage={editingItem.primaryLanguage}
+          initial={scheduleItemToForm(editingItem, language)}
+          initialTranslations={scheduleItemToTranslations(editingItem, language)}
           scheduleId={editingItem.id}
           onSubmit={async (values) => {
             const updated = await logisticsApi.updateSchedule(
@@ -599,7 +598,7 @@ export default function SchedulePage() {
             if (!open) setDuplicatingItem(null);
           }}
           title={t("duplicateScheduleItem")}
-          initial={scheduleDuplicateForm(duplicatingItem)}
+          initial={scheduleDuplicateForm(duplicatingItem, language)}
           onSubmit={async (values, pendingOwners) => {
             const created = await logisticsApi.createSchedule(cleanScheduleForm(values));
             await Promise.all(

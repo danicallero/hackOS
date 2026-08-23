@@ -154,15 +154,27 @@ announcements' single blob: `schedule.title_i18n` / `schedule.description_i18n`,
 keyed by locale, so a title and description can be filled independently.
 `schedule.primary_language` records which language `title`/`description` were
 authored in — the canonical columns are that language's mirror, not a fixed
-English lock. **There's no language picker in either client**: `primary_language`
-is set once at creation from the author's own account language
-(`users.language`, via `getUserLanguage`) and never changes after — staff just
-type the title/description, in whatever language actually comes out. Every
-translate call passes `source: "auto"` down to the provider (`translateFields`
-in `translate/index.ts`; Google's v2 API auto-detects when `source` is
-omitted, LibreTranslate accepts the literal `"auto"`), so what actually gets
-translated is whatever was typed, not an assumption pinned to the account
-language.
+English lock. **There's no language picker in either client**: the main
+Title/Description field always resolves into the *viewer's own* account
+language, not a fixed "primary" — editing an item authored in another
+language shows/edits that viewer's translation (blank if none exists yet),
+never a foreign-language value under a mismatched label
+(`scheduleItemToForm`/`scheduleItemToTranslations` on both frontends).
+Saving from the full edit form re-anchors `primary_language` to the editor's
+own account language server-side (`reanchorPrimaryLanguage` in
+`updateScheduleItem`): the *previous* primary language's canonical text is
+preserved as a normal translation entry rather than lost, and the new
+canonical text (in the editor's own language) is dropped from the i18n map so
+it isn't duplicated in both places — mirrored onto the linked `activities`
+row the same way. This only fires when the request actually includes `title`
+(the full edit form always does; a partial patch — reschedule, audience
+toggle, drag-to-a-new-day — never touches language anchoring). `createScheduleItem`
+sets `primary_language` the same way, from the author's own account language
+at creation (`getUserLanguage`). Every translate call passes `source: "auto"`
+down to the provider (`translateFields` in `translate/index.ts`; Google's v2
+API auto-detects when `source` is omitted, LibreTranslate accepts the literal
+`"auto"`), so what actually gets translated is whatever was typed, not an
+assumption pinned to the account language.
 
 Translation is content-scoped, not id-scoped: `POST /api/schedule/translate`
 (`translateScheduleContent`) takes a title/description directly and returns
@@ -193,10 +205,15 @@ that fallback client-side; every viewer-facing schedule read (web
 screen) resolves through it before handing items to their renderers, so those
 renderers keep reading plain `item.title`/`item.description` unchanged.
 `ScheduleFormModal` (both frontends) labels Title/Description with the
-resolved primary language (no control to change it) plus a translations panel
-— auto-translate (only the still-blank locales) or hand-edit — staged locally
-in create mode and persisted right after the item is created, immediately in
-edit mode.
+viewer's own account language (no control to change it) plus a translations
+panel — collapsed by default, an auto-translate action stays visible either
+way — covering the other two locales (only the still-blank ones are
+requested; a locale with translated text is never silently overwritten) or
+hand-edit. Staged locally in create mode and persisted right after the item
+is created; in edit mode it's pre-populated from the item's existing
+translations plus its previous primary-language text (now just another
+locale from this viewer's perspective), and persisted alongside the
+re-anchoring save.
 
 Known gap: the mobile scan-station UI (`components/activities-screen.tsx`,
 `activity-scanner-screen.tsx`) reads `ScannerActivity` from the offline SQLite

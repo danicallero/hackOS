@@ -306,9 +306,8 @@ export default function ScheduleDetailScreen() {
           onClose={() => {
             setEditing(false);
           }}
-          initial={scheduleItemToForm(adminItem)}
-          initialTranslations={scheduleItemToTranslations(adminItem)}
-          primaryLanguage={adminItem.primaryLanguage}
+          initial={scheduleItemToForm(adminItem, language)}
+          initialTranslations={scheduleItemToTranslations(adminItem, language)}
           scheduleId={adminItem.id}
           initialOwners={adminItem.owners}
           onSubmit={saveEdit}

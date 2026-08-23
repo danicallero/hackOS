@@ -229,3 +229,79 @@ describe("PUT /api/schedule/:id/translations (manual save)", () => {
     expect(rows[0].name_i18n).toEqual({ en: "Manual item (EN)" });
   });
 });
+
+describe("editing re-anchors primary_language to the editor's account language", () => {
+  it("moves the old primary's text into the i18n map and mirrors onto the linked activity", async () => {
+    const spanishAuthor = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    await pool.query(`UPDATE users SET language = 'es' WHERE id = $1`, [spanishAuthor]);
+    const englishEditor = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    await pool.query(`UPDATE users SET language = 'en' WHERE id = $1`, [englishEditor]);
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/schedule",
+      headers: asUser(spanishAuthor),
+      payload: {
+        title: "Ceremonia de apertura",
+        description: "Bienvenida al hackathon",
+        startsAt: new Date(Date.now() + 3_600_000).toISOString(),
+        endsAt: new Date(Date.now() + 7_200_000).toISOString(),
+        visibility: "hidden",
+        audiences: [],
+      },
+    });
+    const id = created.json().id;
+    expect(created.json().primaryLanguage).toBe("es");
+
+    const edited = await app.inject({
+      method: "PATCH",
+      url: `/api/schedule/${id}`,
+      headers: asUser(englishEditor),
+      payload: { title: "Opening ceremony", description: "Welcome to the hackathon" },
+    });
+    expect(edited.statusCode).toBe(200);
+    const body = edited.json();
+    expect(body.primaryLanguage).toBe("en");
+    expect(body.title).toBe("Opening ceremony");
+    expect(body.titleI18n).toEqual({ es: "Ceremonia de apertura" });
+    expect(body.descriptionI18n).toEqual({ es: "Bienvenida al hackathon" });
+
+    const { rows } = await pool.query(
+      `SELECT primary_language, name_i18n FROM activities WHERE schedule_id = $1`,
+      [id],
+    );
+    expect(rows[0].primary_language).toBe("en");
+    expect(rows[0].name_i18n).toEqual({ es: "Ceremonia de apertura" });
+  });
+
+  it("does not re-anchor on a partial edit that never touches title", async () => {
+    const spanishAuthor = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    await pool.query(`UPDATE users SET language = 'es' WHERE id = $1`, [spanishAuthor]);
+    const englishEditor = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    await pool.query(`UPDATE users SET language = 'en' WHERE id = $1`, [englishEditor]);
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/schedule",
+      headers: asUser(spanishAuthor),
+      payload: {
+        title: "Ceremonia de apertura",
+        startsAt: new Date(Date.now() + 3_600_000).toISOString(),
+        endsAt: new Date(Date.now() + 7_200_000).toISOString(),
+        visibility: "hidden",
+        audiences: [],
+      },
+    });
+    const id = created.json().id;
+
+    const edited = await app.inject({
+      method: "PATCH",
+      url: `/api/schedule/${id}`,
+      headers: asUser(englishEditor),
+      payload: { location: "Main hall" },
+    });
+    expect(edited.statusCode).toBe(200);
+    expect(edited.json().primaryLanguage).toBe("es");
+    expect(edited.json().title).toBe("Ceremonia de apertura");
+  });
+});

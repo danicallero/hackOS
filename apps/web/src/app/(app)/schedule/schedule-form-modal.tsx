@@ -64,10 +64,28 @@ export const EMPTY_SCHEDULE_FORM: ScheduleInput = {
   notes: "",
 };
 
-export function scheduleItemToForm(item: PublicScheduleItem): ScheduleInput {
+/**
+ * H50 extension: `title`/`description` always resolve into the *viewer's*
+ * own language, not the item's stored primary — editing an item authored in
+ * another language shows/edits that viewer's translation (blank if none
+ * exists yet), never a foreign-language value under a mismatched label.
+ * Saving re-anchors primary_language to the editor's language server-side
+ * (see updateScheduleItem's reanchorPrimaryLanguage).
+ */
+export function scheduleItemToForm(
+  item: PublicScheduleItem,
+  accountLanguage: Language,
+): ScheduleInput {
+  const resolved =
+    item.primaryLanguage === accountLanguage
+      ? { title: item.title, description: item.description }
+      : {
+          title: item.titleI18n?.[accountLanguage] ?? "",
+          description: item.descriptionI18n?.[accountLanguage] ?? "",
+        };
   return {
-    title: item.title,
-    description: item.description ?? "",
+    title: resolved.title,
+    description: resolved.description ?? "",
     location: item.location ?? "",
     type: item.type ?? "activity",
     requiresScan: item.requiresScan ?? false,
@@ -81,10 +99,18 @@ export function scheduleItemToForm(item: PublicScheduleItem): ScheduleInput {
   };
 }
 
-/** The two non-primary locales' hand-edited/machine-translated title+description (H50 extension). */
-export function scheduleItemToTranslations(item: PublicScheduleItem): ScheduleTranslations {
+/** The non-viewer locales' hand-edited/machine-translated title+description, including the item's original primary language if it isn't the viewer's own (H50 extension). */
+export function scheduleItemToTranslations(
+  item: PublicScheduleItem,
+  accountLanguage: Language,
+): ScheduleTranslations {
   const translations: ScheduleTranslations = {};
   for (const language of LANGUAGES) {
+    if (language === accountLanguage) continue;
+    if (language === item.primaryLanguage) {
+      translations[language] = { title: item.title, description: item.description };
+      continue;
+    }
     const title = item.titleI18n?.[language];
     const description = item.descriptionI18n?.[language];
     if (title !== undefined || description !== undefined) {
@@ -94,10 +120,14 @@ export function scheduleItemToTranslations(item: PublicScheduleItem): ScheduleTr
   return translations;
 }
 
-export function scheduleDuplicateForm(item: PublicScheduleItem): ScheduleInput {
+export function scheduleDuplicateForm(
+  item: PublicScheduleItem,
+  accountLanguage: Language,
+): ScheduleInput {
+  const form = scheduleItemToForm(item, accountLanguage);
   return {
-    ...scheduleItemToForm(item),
-    title: `${item.title} (copy)`,
+    ...form,
+    title: form.title ? `${form.title} (copy)` : form.title,
     // A duplicated item should not unexpectedly appear on the public agenda.
     visibility: "hidden",
     publishAt: null,
@@ -127,7 +157,6 @@ export function ScheduleFormModal({
   title,
   initial,
   initialTranslations,
-  primaryLanguage: primaryLanguageProp,
   onSubmit,
   scheduleId,
 }: {
@@ -135,16 +164,14 @@ export function ScheduleFormModal({
   onOpenChange: (open: boolean) => void;
   title: string;
   initial: ScheduleInput;
-  /** Present only when editing an existing item — same reason as scheduleId below. */
-  initialTranslations?: ScheduleTranslations;
   /**
-   * The language `title`/`description` are authored in — never a picker
-   * (see the module doc comment in lib/schedule for why): editing an
-   * existing item shows its already-anchored language; creating one falls
-   * back to the current viewer's own account language, since that's what
-   * the server will anchor it to.
+   * Present only when editing an existing item — same reason as scheduleId
+   * below. Already resolved into the *viewer's* language by
+   * scheduleItemToTranslations (H50 extension): editing an item authored in
+   * another language, this includes that original language as a normal
+   * translation entry.
    */
-  primaryLanguage?: Language;
+  initialTranslations?: ScheduleTranslations;
   /**
    * `pendingOwners` is only populated in create mode (no `scheduleId` yet)
    * — the caller is responsible for assigning them to the newly created item
@@ -157,7 +184,6 @@ export function ScheduleFormModal({
   scheduleId?: number;
 }) {
   const { t, language: accountLanguage } = useLocale();
-  const primaryLanguage = primaryLanguageProp ?? accountLanguage;
   const [values, setValues] = useState(initial);
   const [pending, setPending] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -194,7 +220,7 @@ export function ScheduleFormModal({
     };
   }, []);
 
-  const targetLanguages = LANGUAGES.filter((language) => language !== primaryLanguage);
+  const targetLanguages = LANGUAGES.filter((language) => language !== accountLanguage);
   // Automatic translation only ever fills a blank locale — once one has
   // translated text, redoing it means clearing it by hand first (mirrors
   // announcements' "only fill languages that are still empty" rule).
@@ -269,7 +295,7 @@ export function ScheduleFormModal({
       <div className="space-y-5">
         <Field
           id="schedule-title"
-          label={`${t("titleLabel")} · ${languageTag(primaryLanguage, t)}`}
+          label={`${t("titleLabel")} · ${languageTag(accountLanguage, t)}`}
         >
           <Input
             id="schedule-title"
@@ -281,7 +307,7 @@ export function ScheduleFormModal({
 
         <Field
           id="schedule-description"
-          label={`${t("descriptionLabel")} · ${languageTag(primaryLanguage, t)}`}
+          label={`${t("descriptionLabel")} · ${languageTag(accountLanguage, t)}`}
         >
           <Textarea
             id="schedule-description"

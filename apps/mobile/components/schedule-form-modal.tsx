@@ -79,10 +79,28 @@ function emptyForm(): ScheduleInput {
   };
 }
 
-export function scheduleItemToForm(item: AdminScheduleItem): ScheduleInput {
+/**
+ * H50 extension: `title`/`description` always resolve into the *viewer's*
+ * own language, not the item's stored primary — editing an item authored in
+ * another language shows/edits that viewer's translation (blank if none
+ * exists yet), never a foreign-language value under a mismatched label.
+ * Saving re-anchors primary_language to the editor's language server-side
+ * (see the API's updateScheduleItem/reanchorPrimaryLanguage).
+ */
+export function scheduleItemToForm(
+  item: AdminScheduleItem,
+  accountLanguage: Language,
+): ScheduleInput {
+  const resolved =
+    item.primaryLanguage === accountLanguage
+      ? { title: item.title, description: item.description }
+      : {
+          title: item.titleI18n[accountLanguage] ?? "",
+          description: item.descriptionI18n[accountLanguage] ?? null,
+        };
   return {
-    title: item.title,
-    description: item.description,
+    title: resolved.title,
+    description: resolved.description,
     location: item.location,
     type: item.type,
     requiresScan: item.requiresScan,
@@ -96,10 +114,18 @@ export function scheduleItemToForm(item: AdminScheduleItem): ScheduleInput {
   };
 }
 
-/** The two non-primary locales' hand-edited/machine-translated title+description (H50 extension). */
-export function scheduleItemToTranslations(item: AdminScheduleItem): ScheduleTranslations {
+/** The non-viewer locales' hand-edited/machine-translated title+description, including the item's original primary language if it isn't the viewer's own (H50 extension). */
+export function scheduleItemToTranslations(
+  item: AdminScheduleItem,
+  accountLanguage: Language,
+): ScheduleTranslations {
   const translations: ScheduleTranslations = {};
   for (const language of LANGUAGES) {
+    if (language === accountLanguage) continue;
+    if (language === item.primaryLanguage) {
+      translations[language] = { title: item.title, description: item.description };
+      continue;
+    }
     const title = item.titleI18n[language];
     const description = item.descriptionI18n[language];
     if (title !== undefined || description !== undefined) {
@@ -118,7 +144,6 @@ export function ScheduleFormModal({
   onClose,
   initial,
   initialTranslations,
-  primaryLanguage: primaryLanguageProp,
   scheduleId,
   initialOwners,
   onSubmit,
@@ -127,16 +152,13 @@ export function ScheduleFormModal({
   onClose: () => void;
   /** Present when editing; omit for create. */
   initial?: ScheduleInput;
-  /** Present only when editing — same reason as scheduleId below. */
-  initialTranslations?: ScheduleTranslations;
   /**
-   * The language `title`/`description` are authored in — never a picker
-   * (see lib/schedule's doc comment for why): editing an existing item shows
-   * its already-anchored language; creating one falls back to the current
-   * viewer's own account language, since that's what the server will anchor
-   * it to.
+   * Present only when editing — same reason as scheduleId below. Already
+   * resolved into the *viewer's* language by scheduleItemToTranslations
+   * (H50 extension): editing an item authored in another language, this
+   * includes that original language as a normal translation entry.
    */
-  primaryLanguage?: Language;
+  initialTranslations?: ScheduleTranslations;
   scheduleId?: number;
   initialOwners?: ScheduleOwner[];
   onSubmit: (
@@ -145,7 +167,6 @@ export function ScheduleFormModal({
   ) => Promise<{ id: number }>;
 }) {
   const { t, language: accountLanguage } = useLocale();
-  const primaryLanguage = primaryLanguageProp ?? accountLanguage;
   const insets = useSafeAreaInsets();
   // Android has no page-sheet presentation: the modal is full-screen, so its
   // chrome has to clear the status bar itself.
@@ -191,7 +212,7 @@ export function ScheduleFormModal({
     };
   }, [visible]);
 
-  const targetLanguages = LANGUAGES.filter((language) => language !== primaryLanguage);
+  const targetLanguages = LANGUAGES.filter((language) => language !== accountLanguage);
   // Automatic translation only ever fills a blank locale — once one has
   // translated text, redoing it means clearing it by hand first (mirrors
   // announcements' "only fill languages that are still empty" rule).
@@ -274,7 +295,7 @@ export function ScheduleFormModal({
             </Text>
           </View>
 
-          <Section title={`${t("scheduleTitleLabel")} · ${languageTag(primaryLanguage, t)}`}>
+          <Section title={`${t("scheduleTitleLabel")} · ${languageTag(accountLanguage, t)}`}>
             <TextInput
               accessibilityLabel={t("scheduleTitleLabel")}
               onChangeText={(title) => setValues((current) => ({ ...current, title }))}
@@ -285,7 +306,7 @@ export function ScheduleFormModal({
             />
           </Section>
 
-          <Section title={`${t("scheduleDescriptionLabel")} · ${languageTag(primaryLanguage, t)}`}>
+          <Section title={`${t("scheduleDescriptionLabel")} · ${languageTag(accountLanguage, t)}`}>
             <TextInput
               accessibilityLabel={t("scheduleDescriptionLabel")}
               multiline

@@ -526,6 +526,7 @@ function AdminScheduleFormLoader({
     pendingOwners: ({ userId: number } | { freeTextName: string })[],
   ) => Promise<{ id: number }>;
 }) {
+  const { language } = useLocale();
   const [loaded, setLoaded] = useState<Awaited<ReturnType<typeof fetchAdminSchedule>> | null>(null);
 
   useEffect(() => {
@@ -550,9 +551,8 @@ function AdminScheduleFormLoader({
     <ScheduleFormModal
       visible
       onClose={onClose}
-      initial={scheduleItemToForm(adminItem)}
-      initialTranslations={scheduleItemToTranslations(adminItem)}
-      primaryLanguage={adminItem.primaryLanguage}
+      initial={scheduleItemToForm(adminItem, language)}
+      initialTranslations={scheduleItemToTranslations(adminItem, language)}
       scheduleId={adminItem.id}
       initialOwners={adminItem.owners}
       onSubmit={onSubmit}

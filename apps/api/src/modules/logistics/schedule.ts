@@ -322,7 +322,43 @@ async function autoTranslateOnCreate(actorId: number | null, item: ReturnType<ty
   }
 }
 
+/**
+ * Re-anchors primary_language to the editor's own account language whenever
+ * they submit a title (the full edit form always resolves/edits `title` in
+ * the *viewer's* language now — see docs/notifications.md). The previous
+ * primary language's canonical text is preserved as a regular translation
+ * entry rather than lost; whatever text is about to become canonical is
+ * dropped from the i18n map so it isn't duplicated in both places. A no-op
+ * when the editor's language already matches, or when `patch.title` is
+ * absent (a partial edit — reschedule, audience toggle — never touches
+ * language anchoring).
+ */
+function reanchorPrimaryLanguage(
+  current: Record<string, unknown>,
+  actorLanguage: Language | null,
+  patchHasTitle: boolean,
+): {
+  primaryLanguage: Language;
+  titleI18n: Record<string, string>;
+  descriptionI18n: Record<string, string | null>;
+} {
+  const oldPrimary = current.primary_language as Language;
+  const titleI18n = { ...((current.title_i18n as Record<string, string> | null) ?? {}) };
+  const descriptionI18n = {
+    ...((current.description_i18n as Record<string, string | null> | null) ?? {}),
+  };
+  if (!patchHasTitle || actorLanguage === null || actorLanguage === oldPrimary) {
+    return { primaryLanguage: oldPrimary, titleI18n, descriptionI18n };
+  }
+  titleI18n[oldPrimary] = current.title as string;
+  descriptionI18n[oldPrimary] = (current.description as string | null) ?? null;
+  delete titleI18n[actorLanguage];
+  delete descriptionI18n[actorLanguage];
+  return { primaryLanguage: actorLanguage, titleI18n, descriptionI18n };
+}
+
 export async function updateScheduleItem(actorId: number | null, id: number, patch: SchedulePatch) {
+  const actorLanguage = actorId == null ? null : await getUserLanguage(actorId);
   const item = await withTransaction(async (client) => {
     const current = await client.query(
       `SELECT ${SCHEDULE_COLUMNS}
@@ -351,6 +387,11 @@ export async function updateScheduleItem(actorId: number | null, id: number, pat
         nextAudiences,
       ),
     );
+    const {
+      primaryLanguage: nextPrimaryLanguage,
+      titleI18n: nextTitleI18n,
+      descriptionI18n: nextDescriptionI18n,
+    } = reanchorPrimaryLanguage(current.rows[0], actorLanguage, patch.title !== undefined);
 
     const { rows } = await client.query(
       `UPDATE schedule
@@ -365,7 +406,10 @@ export async function updateScheduleItem(actorId: number | null, id: number, pat
               publish_at = $10,
               audiences = $11,
               contact_note = $12,
-              notes = $13
+              notes = $13,
+              primary_language = $14,
+              title_i18n = $15,
+              description_i18n = $16
         WHERE id = $1
         RETURNING ${SCHEDULE_COLUMNS}`,
       [
@@ -382,6 +426,9 @@ export async function updateScheduleItem(actorId: number | null, id: number, pat
         nextAudiences,
         patch.contactNote === undefined ? current.rows[0].contact_note : patch.contactNote,
         patch.notes === undefined ? current.rows[0].notes : patch.notes,
+        nextPrimaryLanguage,
+        nextTitleI18n,
+        nextDescriptionI18n,
       ],
     );
     const after = serialize(rows[0]);
@@ -390,9 +437,21 @@ export async function updateScheduleItem(actorId: number | null, id: number, pat
           SET name = $2,
               description = $3,
               category = $4,
-              requires_scan = $5
+              requires_scan = $5,
+              primary_language = $6,
+              name_i18n = $7,
+              description_i18n = $8
         WHERE schedule_id = $1`,
-      [id, after.title, after.description, toActivityCategory(after.type), after.requiresScan],
+      [
+        id,
+        after.title,
+        after.description,
+        toActivityCategory(after.type),
+        after.requiresScan,
+        after.primaryLanguage,
+        after.titleI18n,
+        after.descriptionI18n,
+      ],
     );
     await audit(client, {
       actorId,
