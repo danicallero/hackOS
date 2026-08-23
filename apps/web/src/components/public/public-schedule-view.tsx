@@ -7,7 +7,7 @@ import type { PublicEvent } from "@/components/public/public-types";
 import { ScheduleTimeline } from "@/components/public/schedule-timeline";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
-import { logisticsApi, type PublicScheduleItem } from "@/lib/logistics";
+import { logisticsApi, type PublicScheduleItem, resolveScheduleText } from "@/lib/logistics";
 
 /**
  * The public schedule combines the event and activity reads required by H47.
@@ -25,7 +25,7 @@ export function PublicScheduleView({
 }: {
   header?: (event: PublicEvent | null) => React.ReactNode;
 }) {
-  const { t } = useLocale();
+  const { t, language } = useLocale();
   const [event, setEvent] = useState<PublicEvent | null>(null);
   const [items, setItems] = useState<PublicScheduleItem[] | null>(null);
   const [eventLoading, setEventLoading] = useState(true);
@@ -49,13 +49,17 @@ export function PublicScheduleView({
     setScheduleLoading(true);
     setScheduleError(null);
     try {
-      setItems((await logisticsApi.publicSchedule()).items);
+      const { items } = await logisticsApi.publicSchedule();
+      // Resolve each item's title/description into the viewer's language here
+      // (H50 extension) so ScheduleTimeline and everything downstream can
+      // keep reading plain item.title/item.description unchanged.
+      setItems(items.map((item) => ({ ...item, ...resolveScheduleText(item, language) })));
     } catch (error) {
       setScheduleError(error instanceof ApiError ? error.message : t("couldNotLoadSchedule"));
     } finally {
       setScheduleLoading(false);
     }
-  }, [t]);
+  }, [t, language]);
 
   useEffect(() => {
     void Promise.all([loadEvent(), loadSchedule()]);

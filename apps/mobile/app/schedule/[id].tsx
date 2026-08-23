@@ -7,7 +7,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassView } from "@/components/glass-view";
 import { EmptyState } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
-import { ScheduleFormModal, scheduleItemToForm } from "@/components/schedule-form-modal";
+import {
+  ScheduleFormModal,
+  scheduleItemToForm,
+  scheduleItemToTranslations,
+} from "@/components/schedule-form-modal";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
@@ -17,6 +21,7 @@ import {
   collapseBlankLines,
   fetchAdminSchedule,
   fetchPublicSchedule,
+  resolveScheduleText,
   type ScheduleAudience,
   type ScheduleInput,
   type ScheduleOwner,
@@ -70,18 +75,22 @@ export default function ScheduleDetailScreen() {
     };
   }, [canManage, id]);
 
-  const item = data?.find((candidate) => String(candidate.id) === id) ?? null;
+  const rawItem = data?.find((candidate) => String(candidate.id) === id) ?? null;
+  // H50 extension: resolve into the viewer's language here so the rest of
+  // this screen keeps reading plain item.title/item.description unchanged.
+  const item = rawItem ? { ...rawItem, ...resolveScheduleText(rawItem, language) } : null;
   const reminderOn = item && notifications.ready ? notifications.isEntrySubscribed(item) : null;
 
   async function saveEdit(
     values: ScheduleInput,
     _pendingOwners: ({ userId: number } | { freeTextName: string })[],
   ) {
-    if (!item) return;
+    if (!item) throw new Error("No schedule item to edit");
     const updated = await updateScheduleItem(item.id, values);
     setAdminItem((current) => (current ? { ...updated, owners: current.owners } : updated));
     setEditing(false);
     await load();
+    return updated;
   }
   const detailItem = adminItem ?? item;
   const staffItem = adminItem ?? (item?.notes !== undefined ? item : null);
@@ -297,7 +306,8 @@ export default function ScheduleDetailScreen() {
           onClose={() => {
             setEditing(false);
           }}
-          initial={scheduleItemToForm(adminItem)}
+          initial={scheduleItemToForm(adminItem, language)}
+          initialTranslations={scheduleItemToTranslations(adminItem, language)}
           scheduleId={adminItem.id}
           initialOwners={adminItem.owners}
           onSubmit={saveEdit}

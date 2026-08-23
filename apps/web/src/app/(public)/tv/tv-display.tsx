@@ -14,7 +14,7 @@ import { useEventSource } from "@/hooks/use-event-source";
 import { useFitToViewport } from "@/hooks/use-fit-to-viewport";
 import { api } from "@/lib/api";
 import { type Translate, useLocale } from "@/lib/i18n";
-import { logisticsApi, type PublicScheduleItem } from "@/lib/logistics";
+import { logisticsApi, type PublicScheduleItem, resolveScheduleText } from "@/lib/logistics";
 import { getAllRoomViews, type QueueEntry, type RoomView } from "@/lib/queue";
 import {
   bestSponsorColumns,
@@ -649,7 +649,7 @@ function useRotatedState(state: TvState): { mode: TvState["mode"]; payload: unkn
 }
 
 export function TvDisplay() {
-  const { t } = useLocale();
+  const { t, language } = useLocale();
   const [data, setData] = useState<TvData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const requestId = useRef(0);
@@ -678,7 +678,13 @@ export function TvDisplay() {
         state,
         event,
         rooms,
-        schedule: schedule.items,
+        // H50 extension: resolve each item's title/description into the TV's
+        // configured language here so ScheduleBlock keeps reading plain
+        // item.title/item.description unchanged.
+        schedule: schedule.items.map((item) => ({
+          ...item,
+          ...resolveScheduleText(item, language),
+        })),
         sponsors: sponsorResult.items,
         announcements: announcementResult.items,
         venue,
@@ -689,7 +695,7 @@ export function TvDisplay() {
         setError(t("tvReconnecting"));
       }
     }
-  }, [t]);
+  }, [t, language]);
   useEffect(() => {
     void load();
   }, [load]);

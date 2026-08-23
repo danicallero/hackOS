@@ -35,6 +35,30 @@ export interface ScannerActivity {
   category: string;
   requiresScan: boolean;
   startsAt: string | null;
+  /** H50 extension: mirrors the linked schedule item's translations — see resolveActivityText. */
+  primaryLanguage: "es" | "gl" | "en";
+  nameI18n: Partial<Record<"es" | "gl" | "en", string>>;
+  descriptionI18n: Partial<Record<"es" | "gl" | "en", string | null>>;
+}
+
+/**
+ * Resolves what a viewer sees for a scannable activity's name (H50 extension,
+ * mirrors lib/schedule.ts's resolveScheduleText): their preferred language if
+ * translated, else English, else the item's primary (authored) language —
+ * never blank, since primaryLanguage's canonical `name` is always filled.
+ */
+export function resolveActivityText(
+  item: Pick<ScannerActivity, "name" | "primaryLanguage" | "nameI18n">,
+  language: "es" | "gl" | "en",
+): string {
+  if (language === item.primaryLanguage) return item.name;
+  const translated = item.nameI18n[language];
+  if (translated) return translated;
+  if (language !== "en") {
+    const english = item.nameI18n.en;
+    if (english) return english;
+  }
+  return item.name;
 }
 
 export interface ScannerActivityState {

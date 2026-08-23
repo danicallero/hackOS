@@ -12,6 +12,10 @@ export interface ActivityAggregate {
   distinctPeople: number;
   /** count - distinctPeople (repeat servings / re-scans). */
   repeats: number;
+  /** Mirrored from the linked schedule item (H50 extension) — resolve on the client with a fallback of English, then this. */
+  primaryLanguage: string;
+  nameI18n: Record<string, string>;
+  descriptionI18n: Record<string, string | null>;
 }
 
 /**
@@ -26,14 +30,14 @@ async function aggregateActivities(
   params: unknown[] = [],
 ): Promise<ActivityAggregate[]> {
   const { rows } = await pool.query(
-    `SELECT a.id, a.name, a.category,
+    `SELECT a.id, a.name, a.category, a.primary_language, a.name_i18n, a.description_i18n,
             count(al.id)::int AS count,
             count(DISTINCT al.user_id)::int AS distinct_people
        FROM activities a
        LEFT JOIN activity_logs al ON al.activity_id = a.id
        LEFT JOIN schedule s ON s.id = a.schedule_id
       WHERE ${where}
-      GROUP BY a.id, a.name, a.category, s.starts_at
+      GROUP BY a.id, a.name, a.category, a.primary_language, a.name_i18n, a.description_i18n, s.starts_at
       ORDER BY s.starts_at ASC NULLS LAST, a.name ASC, a.id ASC`,
     params,
   );
@@ -42,6 +46,9 @@ async function aggregateActivities(
       id: number;
       name: string;
       category: string;
+      primary_language: string | null;
+      name_i18n: Record<string, string> | null;
+      description_i18n: Record<string, string | null> | null;
       count: number;
       distinct_people: number;
     }) => ({
@@ -51,6 +58,9 @@ async function aggregateActivities(
       count: r.count,
       distinctPeople: r.distinct_people,
       repeats: r.count - r.distinct_people,
+      primaryLanguage: r.primary_language ?? "es",
+      nameI18n: r.name_i18n ?? {},
+      descriptionI18n: r.description_i18n ?? {},
     }),
   );
 }

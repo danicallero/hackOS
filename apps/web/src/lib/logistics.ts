@@ -1,4 +1,5 @@
 import { api } from "@/lib/api";
+import type { Language } from "@/lib/types";
 
 export interface PersonCard {
   userId: number;
@@ -256,6 +257,10 @@ export interface PublicScheduleItem {
   notes?: string | null;
   /** Only present on the audience-aware feed, when the caller shares a non-public audience. */
   owners?: ScheduleOwner[];
+  /** Language `title`/`description` are authored in — every viewer resolves their own display text: preferred language, else English, else this. */
+  primaryLanguage: Language;
+  titleI18n: Partial<Record<Language, string>>;
+  descriptionI18n: Partial<Record<Language, string | null>>;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -286,6 +291,34 @@ export interface ScheduleInput {
   audiences?: ScheduleAudience[];
   contactNote?: string | null;
   notes?: string | null;
+}
+
+export type ScheduleTranslation = { title?: string; description?: string | null };
+export type ScheduleTranslations = Partial<Record<Language, ScheduleTranslation>>;
+
+/**
+ * Resolves what a viewer sees for a schedule item's title/description (H50
+ * extension): their preferred language if translated, else English, else the
+ * item's primary (authored) language — never blank, since primaryLanguage's
+ * canonical `title`/`description` is always filled.
+ */
+export function resolveScheduleText(
+  item: PublicScheduleItem,
+  language: Language,
+): { title: string; description: string | null } {
+  const canonical = { title: item.title, description: item.description };
+  if (language === item.primaryLanguage) return canonical;
+  const translated = {
+    title: item.titleI18n?.[language],
+    description: item.descriptionI18n?.[language],
+  };
+  if (translated.title)
+    return { title: translated.title, description: translated.description ?? null };
+  if (language !== "en") {
+    const english = { title: item.titleI18n?.en, description: item.descriptionI18n?.en };
+    if (english.title) return { title: english.title, description: english.description ?? null };
+  }
+  return canonical;
 }
 
 export function idempotencyHeaders(prefix: string): Record<string, string> {
@@ -363,6 +396,15 @@ export const logisticsApi = {
   updateSchedule: (id: number, body: Partial<ScheduleInput>) =>
     api.patch<PublicScheduleItem>(`/api/schedule/${id}`, { ...body }),
   deleteSchedule: (id: number) => api.delete<{ deleted: true }>(`/api/schedule/${id}`),
+  scheduleTranslateAvailability: () =>
+    api.get<{ available: boolean }>("/api/schedule/translate-availability"),
+  translateScheduleContent: (body: {
+    title: string;
+    description?: string | null;
+    targetLanguages: Language[];
+  }) => api.post<ScheduleTranslations>("/api/schedule/translate", body),
+  saveScheduleTranslations: (id: number, translations: ScheduleTranslations) =>
+    api.put<PublicScheduleItem>(`/api/schedule/${id}/translations`, { translations }),
   setScheduleVisibility: (ids: number[], visibility: "shown" | "hidden") =>
     api.post<{ ids: number[]; visibility: "shown" | "hidden"; updated: number }>(
       "/api/schedule/visibility",

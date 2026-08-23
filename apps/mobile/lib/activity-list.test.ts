@@ -7,6 +7,9 @@ function activity(overrides: Partial<ScannerActivity> & { id: number }): Scanner
     category: "activity",
     requiresScan: true,
     startsAt: null,
+    primaryLanguage: "es",
+    nameI18n: {},
+    descriptionI18n: {},
     ...overrides,
   };
 }

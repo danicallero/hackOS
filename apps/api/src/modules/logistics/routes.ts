@@ -15,6 +15,7 @@ import {
   routeAccessOption as routeAccess,
 } from "../../lib/route-policy.js";
 import { subscribe } from "../../lib/sse.js";
+import { isTranslationAvailable } from "../notifications/translate/index.js";
 import {
   checkIn,
   checkInUser,
@@ -54,8 +55,10 @@ import {
   listScheduleOwnerCandidates,
   listScheduleOwners,
   removeScheduleOwner,
+  saveScheduleTranslations,
   setScheduleBulkPublishAt,
   setScheduleVisibility,
+  translateScheduleContent,
   updateScheduleItem,
 } from "./schedule.js";
 import {
@@ -68,6 +71,7 @@ import {
   appleRegistrationsQuery,
   checkInBody,
   checkInUserBody,
+  languageSchema,
   lookupBody,
   lookupUserBody,
   mealScanBatchBody,
@@ -90,6 +94,8 @@ import {
   scheduleOwnerCandidatesQuery,
   scheduleOwnerParams,
   schedulePatchBody,
+  scheduleTranslateBody,
+  scheduleTranslationsBody,
   scheduleVisibilityBody,
   staffScanRankingResponse,
   staffScanStatsResponse,
@@ -153,6 +159,9 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       .optional(),
     notes: z.string().nullable().optional(),
     visibility: z.enum(["shown", "hidden"]).optional(),
+    primaryLanguage: languageSchema,
+    titleI18n: z.partialRecord(languageSchema, z.string()),
+    descriptionI18n: z.partialRecord(languageSchema, z.string().nullable()),
   });
 
   const accredit = requireCapability(CAPABILITIES.ACCREDIT_SCAN);
@@ -707,6 +716,56 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
         contactNote: req.body.contactNote,
         notes: req.body.notes,
       }),
+  );
+
+  typed.get(
+    "/api/schedule/translate-availability",
+    {
+      ...routeAccess(access.scheduleManage),
+      preHandler: scheduleManage,
+      schema: {
+        summary: "Whether automatic translation is configured",
+        description:
+          "Lets the schedule editor hide/disable the auto-translate action when no provider is configured, instead of offering an action that will fail (H50 extension — modules/notifications/translate/).",
+      },
+    },
+    async () => ({ available: isTranslationAvailable() }),
+  );
+
+  typed.post(
+    "/api/schedule/translate",
+    {
+      ...routeAccess(access.scheduleManage),
+      preHandler: scheduleManage,
+      schema: {
+        body: scheduleTranslateBody,
+        summary: "Auto-translate schedule content",
+        description:
+          "Machine-translates a title+description into each of targetLanguages via the configured provider, auto-detecting the source language — content-scoped (no id) so both the create and edit forms can call it before the item is saved. Doesn't persist; the caller saves the result via PUT /api/schedule/:id/translations. Only request targets that are actually still blank — this never overwrites a locale that already has translated text (H50 extension).",
+      },
+    },
+    async (req) =>
+      translateScheduleContent(
+        { title: req.body.title, description: req.body.description },
+        req.body.targetLanguages,
+      ),
+  );
+
+  typed.put(
+    "/api/schedule/:id/translations",
+    {
+      ...routeAccess(access.scheduleManage),
+      preHandler: scheduleManage,
+      schema: {
+        params: scheduleIdParam,
+        body: scheduleTranslationsBody,
+        summary: "Manually edit a schedule item's translations",
+        description:
+          "Saves hand-edited title/description text for one or more locales, merged in independently — editing English doesn't touch a machine-translated Galician entry (H50 extension).",
+      },
+    },
+    async (req) =>
+      saveScheduleTranslations(actor(req.userId), req.params.id, req.body.translations),
   );
 
   typed.delete(

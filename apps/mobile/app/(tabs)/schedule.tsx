@@ -19,7 +19,11 @@ import {
   type AudienceFilterValue,
   ScheduleFilterButton,
 } from "@/components/schedule-filter-button";
-import { ScheduleFormModal, scheduleItemToForm } from "@/components/schedule-form-modal";
+import {
+  ScheduleFormModal,
+  scheduleItemToForm,
+  scheduleItemToTranslations,
+} from "@/components/schedule-form-modal";
 import { ScheduleNotificationsSheet } from "@/components/schedule-notifications-sheet";
 import { ScheduleSwipeRow } from "@/components/schedule-swipe-row";
 import { StaleDataBanner } from "@/components/stale-data-banner";
@@ -33,6 +37,7 @@ import {
   deleteScheduleItem,
   fetchAdminSchedule,
   fetchPublicSchedule,
+  resolveScheduleText,
   type ScheduleInput,
   type ScheduleItem,
   scheduleTypeLabel,
@@ -81,7 +86,13 @@ export default function ScheduleScreen() {
   const canManage = has(me?.capabilities ?? [], CAPABILITIES.SCHEDULE_MANAGE);
 
   const { data, loading, error, staleSince, load } = useCachedApi("schedule", fetchPublicSchedule);
-  const items = data ?? [];
+  // H50 extension: resolve each item's title/description into the viewer's
+  // language here so every downstream renderer keeps reading plain
+  // item.title/item.description unchanged.
+  const items = useMemo(
+    () => (data ?? []).map((item) => ({ ...item, ...resolveScheduleText(item, language) })),
+    [data, language],
+  );
   const notifications = useScheduleNotifications(items);
 
   const [selectedKinds, setSelectedKinds] = useState<string[]>([]);
@@ -294,14 +305,19 @@ export default function ScheduleScreen() {
     values: ScheduleInput,
     pendingOwners: ({ userId: number } | { freeTextName: string })[],
   ) {
+    let result: { id: number };
     if (formTarget === "create") {
       const created = await createScheduleItem(values);
       for (const input of pendingOwners) await addScheduleOwner(created.id, input);
+      result = created;
     } else if (formTarget) {
-      await updateScheduleItem(formTarget.id, values);
+      result = await updateScheduleItem(formTarget.id, values);
+    } else {
+      throw new Error("No schedule form target");
     }
     setFormTarget(null);
     await load();
+    return result;
   }
 
   return (
@@ -508,8 +524,9 @@ function AdminScheduleFormLoader({
   onSubmit: (
     values: ScheduleInput,
     pendingOwners: ({ userId: number } | { freeTextName: string })[],
-  ) => Promise<void>;
+  ) => Promise<{ id: number }>;
 }) {
+  const { language } = useLocale();
   const [loaded, setLoaded] = useState<Awaited<ReturnType<typeof fetchAdminSchedule>> | null>(null);
 
   useEffect(() => {
@@ -534,7 +551,8 @@ function AdminScheduleFormLoader({
     <ScheduleFormModal
       visible
       onClose={onClose}
-      initial={scheduleItemToForm(adminItem)}
+      initial={scheduleItemToForm(adminItem, language)}
+      initialTranslations={scheduleItemToTranslations(adminItem, language)}
       scheduleId={adminItem.id}
       initialOwners={adminItem.owners}
       onSubmit={onSubmit}

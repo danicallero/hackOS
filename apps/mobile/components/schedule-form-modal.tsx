@@ -4,6 +4,7 @@ import {
   type ActivityKind,
   isMealActivityKind,
 } from "@hackos/shared/activity-kinds";
+import type { Language } from "@hackos/shared/locale";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -25,14 +26,24 @@ import {
   type AdminScheduleItem,
   addScheduleOwner,
   fetchScheduleOwnerCandidates,
+  fetchScheduleTranslateAvailability,
   removeScheduleOwner,
   SCHEDULE_AUDIENCES,
   type ScheduleAudience,
   type ScheduleInput,
   type ScheduleOwner,
+  type ScheduleTranslations,
+  saveScheduleTranslations,
   scheduleTypeLabel,
+  translateScheduleContent,
 } from "@/lib/schedule";
 import { colors } from "@/theme/colors";
+
+const LANGUAGES: Language[] = ["es", "gl", "en"];
+
+function languageTag(language: Language, t: ReturnType<typeof useLocale>["t"]): string {
+  return t(language === "es" ? "spanishTag" : language === "gl" ? "galicianTag" : "englishTag");
+}
 
 function audienceLabel(audience: ScheduleAudience, t: ReturnType<typeof useLocale>["t"]): string {
   switch (audience) {
@@ -68,10 +79,28 @@ function emptyForm(): ScheduleInput {
   };
 }
 
-export function scheduleItemToForm(item: AdminScheduleItem): ScheduleInput {
+/**
+ * H50 extension: `title`/`description` always resolve into the *viewer's*
+ * own language, not the item's stored primary — editing an item authored in
+ * another language shows/edits that viewer's translation (blank if none
+ * exists yet), never a foreign-language value under a mismatched label.
+ * Saving re-anchors primary_language to the editor's language server-side
+ * (see the API's updateScheduleItem/reanchorPrimaryLanguage).
+ */
+export function scheduleItemToForm(
+  item: AdminScheduleItem,
+  accountLanguage: Language,
+): ScheduleInput {
+  const resolved =
+    item.primaryLanguage === accountLanguage
+      ? { title: item.title, description: item.description }
+      : {
+          title: item.titleI18n[accountLanguage] ?? "",
+          description: item.descriptionI18n[accountLanguage] ?? null,
+        };
   return {
-    title: item.title,
-    description: item.description,
+    title: resolved.title,
+    description: resolved.description,
     location: item.location,
     type: item.type,
     requiresScan: item.requiresScan,
@@ -85,6 +114,27 @@ export function scheduleItemToForm(item: AdminScheduleItem): ScheduleInput {
   };
 }
 
+/** The non-viewer locales' hand-edited/machine-translated title+description, including the item's original primary language if it isn't the viewer's own (H50 extension). */
+export function scheduleItemToTranslations(
+  item: AdminScheduleItem,
+  accountLanguage: Language,
+): ScheduleTranslations {
+  const translations: ScheduleTranslations = {};
+  for (const language of LANGUAGES) {
+    if (language === accountLanguage) continue;
+    if (language === item.primaryLanguage) {
+      translations[language] = { title: item.title, description: item.description };
+      continue;
+    }
+    const title = item.titleI18n[language];
+    const description = item.descriptionI18n[language];
+    if (title !== undefined || description !== undefined) {
+      translations[language] = { title, description };
+    }
+  }
+  return translations;
+}
+
 /**
  * Admin create/edit form (H59 3c) — same field set and validation as the
  * web app's ScheduleFormModal, not a reduced mobile form.
@@ -93,6 +143,7 @@ export function ScheduleFormModal({
   visible,
   onClose,
   initial,
+  initialTranslations,
   scheduleId,
   initialOwners,
   onSubmit,
@@ -101,14 +152,21 @@ export function ScheduleFormModal({
   onClose: () => void;
   /** Present when editing; omit for create. */
   initial?: ScheduleInput;
+  /**
+   * Present only when editing — same reason as scheduleId below. Already
+   * resolved into the *viewer's* language by scheduleItemToTranslations
+   * (H50 extension): editing an item authored in another language, this
+   * includes that original language as a normal translation entry.
+   */
+  initialTranslations?: ScheduleTranslations;
   scheduleId?: number;
   initialOwners?: ScheduleOwner[];
   onSubmit: (
     values: ScheduleInput,
     pendingOwners: ({ userId: number } | { freeTextName: string })[],
-  ) => Promise<void>;
+  ) => Promise<{ id: number }>;
 }) {
-  const { t } = useLocale();
+  const { t, language: accountLanguage } = useLocale();
   const insets = useSafeAreaInsets();
   // Android has no page-sheet presentation: the modal is full-screen, so its
   // chrome has to clear the status bar itself.
@@ -118,6 +176,12 @@ export function ScheduleFormModal({
   const [scheduledPublish, setScheduledPublish] = useState(Boolean(initial?.publishAt));
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // H50 extension: staged locally so translations can be filled in before
+  // the item even exists — persisted right after create/update below.
+  const [translations, setTranslations] = useState<ScheduleTranslations>(initialTranslations ?? {});
+  const [translateAvailable, setTranslateAvailable] = useState(false);
+  const [translating, setTranslating] = useState(false);
+  const [translationsOpen, setTranslationsOpen] = useState(false);
   // An item with no audience tag is staff-only, full stop — visibility/publishAt
   // describe when a *tagged* audience gets to see an item, so they're meaningless
   // (and the API silently forces them back to hidden/null) without one (H59 follow-up).
@@ -128,8 +192,49 @@ export function ScheduleFormModal({
     setValues(initial ?? emptyForm());
     setOwners(initialOwners ?? []);
     setScheduledPublish(Boolean(initial?.publishAt));
+    setTranslations(initialTranslations ?? {});
+    setTranslationsOpen(false);
     setError(null);
-  }, [visible, initial, initialOwners]);
+  }, [visible, initial, initialOwners, initialTranslations]);
+
+  useEffect(() => {
+    if (!visible) return;
+    let cancelled = false;
+    void fetchScheduleTranslateAvailability()
+      .then((available) => {
+        if (!cancelled) setTranslateAvailable(available);
+      })
+      .catch(() => {
+        if (!cancelled) setTranslateAvailable(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [visible]);
+
+  const targetLanguages = LANGUAGES.filter((language) => language !== accountLanguage);
+  // Automatic translation only ever fills a blank locale — once one has
+  // translated text, redoing it means clearing it by hand first (mirrors
+  // announcements' "only fill languages that are still empty" rule).
+  const blankTargetLanguages = targetLanguages.filter((language) => !translations[language]?.title);
+
+  async function autoTranslate() {
+    if (blankTargetLanguages.length === 0) return;
+    setTranslating(true);
+    setError(null);
+    try {
+      const result = await translateScheduleContent({
+        title: values.title,
+        description: values.description,
+        targetLanguages: blankTargetLanguages,
+      });
+      setTranslations((current) => ({ ...current, ...result }));
+    } catch {
+      setError(t("couldNotTranslate"));
+    } finally {
+      setTranslating(false);
+    }
+  }
 
   async function save() {
     if (!values.title.trim()) {
@@ -139,7 +244,7 @@ export function ScheduleFormModal({
     setPending(true);
     setError(null);
     try {
-      await onSubmit(
+      const result = await onSubmit(
         {
           ...values,
           title: values.title.trim(),
@@ -151,6 +256,9 @@ export function ScheduleFormModal({
             : { freeTextName: owner.freeTextName as string },
         ),
       );
+      if (Object.keys(translations).length > 0) {
+        await saveScheduleTranslations(result.id, translations);
+      }
     } catch {
       setError(t("scheduleSaveError"));
     } finally {
@@ -187,7 +295,7 @@ export function ScheduleFormModal({
             </Text>
           </View>
 
-          <Section title={t("scheduleTitleLabel")}>
+          <Section title={`${t("scheduleTitleLabel")} · ${languageTag(accountLanguage, t)}`}>
             <TextInput
               accessibilityLabel={t("scheduleTitleLabel")}
               onChangeText={(title) => setValues((current) => ({ ...current, title }))}
@@ -195,6 +303,27 @@ export function ScheduleFormModal({
               placeholderTextColor={colors.tertiaryLabel}
               style={{ color: colors.label, fontSize: 16, padding: 16 }}
               value={values.title}
+            />
+          </Section>
+
+          <Section title={`${t("scheduleDescriptionLabel")} · ${languageTag(accountLanguage, t)}`}>
+            <TextInput
+              accessibilityLabel={t("scheduleDescriptionLabel")}
+              multiline
+              onChangeText={(description) =>
+                setValues((current) => ({ ...current, description: description || null }))
+              }
+              placeholder={t("scheduleDescriptionLabel")}
+              placeholderTextColor={colors.tertiaryLabel}
+              style={{
+                color: colors.label,
+                fontSize: 16,
+                lineHeight: 22,
+                minHeight: 90,
+                padding: 16,
+                textAlignVertical: "top",
+              }}
+              value={values.description ?? ""}
             />
           </Section>
 
@@ -237,26 +366,115 @@ export function ScheduleFormModal({
             </MenuView>
           </Section>
 
-          <Section title={t("scheduleDescriptionLabel")}>
-            <TextInput
-              accessibilityLabel={t("scheduleDescriptionLabel")}
-              multiline
-              onChangeText={(description) =>
-                setValues((current) => ({ ...current, description: description || null }))
-              }
-              placeholder={t("scheduleDescriptionLabel")}
-              placeholderTextColor={colors.tertiaryLabel}
-              style={{
-                color: colors.label,
-                fontSize: 16,
-                lineHeight: 22,
-                minHeight: 90,
-                padding: 16,
-                textAlignVertical: "top",
-              }}
-              value={values.description ?? ""}
-            />
-          </Section>
+          <View style={{ gap: 8 }}>
+            <View style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t("translationsAndSettings")}
+                accessibilityState={{ expanded: translationsOpen }}
+                onPress={() => setTranslationsOpen((open) => !open)}
+                hitSlop={8}
+                style={({ pressed }) => ({
+                  alignItems: "center",
+                  flex: 1,
+                  flexDirection: "row",
+                  gap: 6,
+                  opacity: pressed ? 0.6 : 1,
+                  paddingVertical: 8,
+                })}
+              >
+                <SymbolView
+                  name="chevron.right"
+                  tintColor={colors.secondaryLabel}
+                  size={13}
+                  weight="semibold"
+                  style={{ transform: [{ rotate: translationsOpen ? "90deg" : "0deg" }] }}
+                />
+                <Text style={{ color: colors.secondaryLabel, fontSize: 13, fontWeight: "600" }}>
+                  {t("translationsAndSettings")}
+                </Text>
+              </Pressable>
+              {translateAvailable ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t("translateAutomatically")}
+                  accessibilityState={{
+                    busy: translating,
+                    disabled: blankTargetLanguages.length === 0,
+                  }}
+                  disabled={translating || blankTargetLanguages.length === 0}
+                  onPress={() => void autoTranslate()}
+                  style={({ pressed }) => ({
+                    alignItems: "center",
+                    backgroundColor: colors.elevatedSurface,
+                    borderCurve: "continuous",
+                    borderRadius: 10,
+                    flexDirection: "row",
+                    gap: 8,
+                    opacity:
+                      translating || blankTargetLanguages.length === 0 ? 0.5 : pressed ? 0.7 : 1,
+                    paddingHorizontal: 16,
+                    paddingVertical: 10,
+                  })}
+                >
+                  <SymbolView
+                    name="character.book.closed"
+                    tintColor={colors.accent}
+                    size={16}
+                    accessible={false}
+                  />
+                  <Text style={{ color: colors.accent, fontSize: 15, fontWeight: "600" }}>
+                    {translating ? t("translatingInProgress") : t("translateAutomatically")}
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
+
+            {translationsOpen
+              ? targetLanguages.map((language) => (
+                  <View key={language} style={{ gap: 8 }}>
+                    <Section title={`${t("scheduleTitleLabel")} · ${languageTag(language, t)}`}>
+                      <TextInput
+                        accessibilityLabel={t("scheduleTitleLabel")}
+                        onChangeText={(title) =>
+                          setTranslations((current) => ({
+                            ...current,
+                            [language]: { ...current[language], title },
+                          }))
+                        }
+                        placeholderTextColor={colors.tertiaryLabel}
+                        style={{ color: colors.label, fontSize: 16, padding: 16 }}
+                        value={translations[language]?.title ?? ""}
+                      />
+                    </Section>
+                    <Section
+                      title={`${t("scheduleDescriptionLabel")} · ${languageTag(language, t)}`}
+                    >
+                      <TextInput
+                        accessibilityLabel={t("scheduleDescriptionLabel")}
+                        multiline
+                        onChangeText={(description) =>
+                          setTranslations((current) => ({
+                            ...current,
+                            [language]: { ...current[language], description },
+                          }))
+                        }
+                        placeholderTextColor={colors.tertiaryLabel}
+                        style={{
+                          color: colors.label,
+                          fontSize: 16,
+                          lineHeight: 22,
+                          minHeight: 70,
+                          padding: 16,
+                          textAlignVertical: "top",
+                        }}
+                        value={translations[language]?.description ?? ""}
+                      />
+                    </Section>
+                  </View>
+                ))
+              : null}
+          </View>
 
           <Section title={t("scheduleLocationLabel")}>
             <TextInput

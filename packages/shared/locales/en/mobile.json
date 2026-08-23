@@ -334,6 +334,7 @@
   "scheduleDeleteConfirmMessage": "This can't be undone.",
   "scheduleSaveError": "Couldn't save the activity. Check your connection and try again.",
   "scheduleDeleteError": "Couldn't delete the activity. Check your connection and try again.",
+  "translationsAndSettings": "Translations and technical settings",
   "scheduleTitleLabel": "Title",
   "scheduleDescriptionLabel": "Description",
   "scheduleLocationLabel": "Location",

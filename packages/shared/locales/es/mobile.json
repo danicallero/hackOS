@@ -334,6 +334,7 @@
   "scheduleDeleteConfirmMessage": "Esta acción no se puede deshacer.",
   "scheduleSaveError": "No se pudo guardar la actividad. Revisa la conexión e inténtalo de nuevo.",
   "scheduleDeleteError": "No se pudo eliminar la actividad. Revisa la conexión e inténtalo de nuevo.",
+  "translationsAndSettings": "Traducciones y ajustes técnicos",
   "scheduleTitleLabel": "Título",
   "scheduleDescriptionLabel": "Descripción",
   "scheduleLocationLabel": "Ubicación",

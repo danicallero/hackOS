@@ -1,5 +1,6 @@
 import { MEAL_ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
 import { pool } from "../../db/pool.js";
+import type { Language } from "../notifications/translate/index.js";
 
 /**
  * H22-H26 scanner seed/sync payload. Native scanners keep this deliberately
@@ -84,7 +85,8 @@ export async function scannerSnapshot() {
         ORDER BY u.id`,
     ),
     pool.query(
-      `SELECT a.id, a.name, a.category, a.requires_scan, s.starts_at
+      `SELECT a.id, a.name, a.category, a.requires_scan, s.starts_at,
+              a.primary_language, a.name_i18n, a.description_i18n
          FROM activities a
          LEFT JOIN schedule s ON s.id = a.schedule_id
         WHERE a.category = ANY($1::text[]) OR a.requires_scan = true
@@ -130,6 +132,11 @@ export async function scannerSnapshot() {
       category: row.category as string,
       requiresScan: Boolean(row.requires_scan),
       startsAt: row.starts_at instanceof Date ? row.starts_at.toISOString() : null,
+      // H50 extension: mirrors the linked schedule item's translations (H25/H26
+      // scanner stations), same fields as schedule's own snapshot read.
+      primaryLanguage: (row.primary_language as Language | null) ?? "es",
+      nameI18n: (row.name_i18n as Record<string, string> | null) ?? {},
+      descriptionI18n: (row.description_i18n as Record<string, string | null> | null) ?? {},
     })),
     activityStates: statesResult.rows.map((row) => ({
       userId: row.user_id as number,

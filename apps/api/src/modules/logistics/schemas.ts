@@ -157,6 +157,9 @@ const scannerPersonCard = z.object({
   lastPresenceAt: z.string().datetime().nullable(),
 });
 
+/** H50 extension: shared es/gl/en set every translatable entity uses. */
+export const languageSchema = z.enum(["es", "gl", "en"]);
+
 export const scannerSnapshotResponse = z.object({
   generatedAt: z.string().datetime(),
   people: z.array(scannerPersonCard),
@@ -167,6 +170,10 @@ export const scannerSnapshotResponse = z.object({
       category: z.string(),
       requiresScan: z.boolean(),
       startsAt: z.string().datetime().nullable(),
+      // H50 extension: mirrors the linked schedule item's translations.
+      primaryLanguage: languageSchema,
+      nameI18n: z.partialRecord(languageSchema, z.string()),
+      descriptionI18n: z.partialRecord(languageSchema, z.string().nullable()),
     }),
   ),
   activityStates: z.array(
@@ -260,11 +267,11 @@ export const scheduleBody = z.object({
 
 /**
  * `.partial()` alone is NOT enough here: it makes a key optional but keeps its
- * `.default(...)`, so an absent `visibility`/`audiences` would still arrive as
- * "hidden"/[] and quietly hide an item — and strip its audience tags — on any
+ * `.default(...)`, so an absent `visibility`/`audiences` would still arrive
+ * as "hidden"/[] and quietly hide an item — strip its audience tags — on any
  * unrelated PATCH (an inline time or location edit). A patch must carry only
- * what the caller actually sent, so both fields are re-declared without their
- * create-time defaults (H59).
+ * what the caller actually sent, so both fields are re-declared without
+ * their create-time defaults (H59).
  */
 export const schedulePatchBody = scheduleBody
   .omit({ visibility: true, audiences: true })
@@ -273,6 +280,29 @@ export const schedulePatchBody = scheduleBody
     visibility: z.enum(["shown", "hidden"]).optional(),
     audiences: z.array(scheduleAudience).max(3).optional(),
   });
+
+/**
+ * H50 extension: machine-translate arbitrary title+description content into
+ * targetLanguages via the configured provider — content-scoped rather than
+ * id-scoped, so both the create and edit forms can call it (translateFields
+ * always auto-detects the source; see translate/index.ts).
+ */
+export const scheduleTranslateBody = z.object({
+  title: z.string().min(1).max(300),
+  description: z.string().max(4000).nullable().optional(),
+  targetLanguages: z.array(languageSchema).min(1),
+});
+
+/** H50 extension: manually save/redo one or more locales' title/description without touching others. */
+export const scheduleTranslationsBody = z.object({
+  translations: z.partialRecord(
+    languageSchema,
+    z.object({
+      title: z.string().min(1).max(300).optional(),
+      description: z.string().max(4000).nullable().optional(),
+    }),
+  ),
+});
 
 export const scheduleVisibilityBody = z.object({
   ids: z.array(z.coerce.number().int().positive()).min(1).max(200),

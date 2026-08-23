@@ -37,6 +37,9 @@ function item(overrides: Partial<PublicScheduleItem> = {}): PublicScheduleItem {
     // (draft/scheduled/public); the staff-only branch (no audience tag) gets
     // its own case below.
     audiences: ["participant"],
+    primaryLanguage: "es",
+    titleI18n: {},
+    descriptionI18n: {},
     ...overrides,
   };
 }

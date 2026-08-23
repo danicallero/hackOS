@@ -129,20 +129,111 @@ both frontends detect the first non-empty language as the source and only
 fill languages that are still empty, never overwriting a manual edit.
 
 The provider is fully optional and isolated behind
-`modules/notifications/translate/`: `translateAnnouncementContent()` /
+`modules/notifications/translate/`: `translateFields()` /
 `isTranslationAvailable()` in `translate/index.ts` are the only functions
 anything else calls, dispatching on `TRANSLATE_PROVIDER` to either the
 Google Cloud Translation v2 adapter (`translate/google.ts`,
 `GOOGLE_TRANSLATE_API_KEY`) or a self-hosted LibreTranslate adapter
 (`translate/libretranslate.ts`, `LIBRETRANSLATE_URL` +
 `LIBRETRANSLATE_API_KEY`, see `docs/env-vars.md`) — mirroring the
-`MAIL_PROVIDER` adapter split in `channels/email-adapters/`. `GET
-/api/announcements/translate-availability`
+`MAIL_PROVIDER` adapter split in `channels/email-adapters/`. `translateFields`
+is field-shape-agnostic (announcements pass `{title, body}`, schedule passes
+`{title, description}`) so a third translatable entity needs no provider
+change. `GET /api/announcements/translate-availability`
 lets both frontends hide/disable the action when unset instead of offering
 one that will 503; every translation surface keeps working with manual-only
 entry regardless of whether a provider is configured. Exercised in tests via
 a stubbed `global.fetch`, never a live network call (same convention as the
 Resend email adapter).
+
+### Schedule item translation (H50 extension)
+
+Schedule items (`logistics/schedule.ts`) get the same treatment, but with the
+challenges (H44) per-field `_i18n` jsonb-column convention instead of
+announcements' single blob: `schedule.title_i18n` / `schedule.description_i18n`,
+keyed by locale, so a title and description can be filled independently.
+`schedule.primary_language` records which language `title`/`description` were
+authored in — the canonical columns are that language's mirror, not a fixed
+English lock. **There's no language picker in either client**: the main
+Title/Description field always resolves into the *viewer's own* account
+language, not a fixed "primary" — editing an item authored in another
+language shows/edits that viewer's translation (blank if none exists yet),
+never a foreign-language value under a mismatched label
+(`scheduleItemToForm`/`scheduleItemToTranslations` on both frontends).
+Saving from the full edit form re-anchors `primary_language` to the editor's
+own account language server-side (`reanchorPrimaryLanguage` in
+`updateScheduleItem`): the *previous* primary language's canonical text is
+preserved as a normal translation entry rather than lost, and the new
+canonical text (in the editor's own language) is dropped from the i18n map so
+it isn't duplicated in both places — mirrored onto the linked `activities`
+row the same way. This only fires when the request actually includes `title`
+(the full edit form always does; a partial patch — reschedule, audience
+toggle, drag-to-a-new-day — never touches language anchoring). `createScheduleItem`
+sets `primary_language` the same way, from the author's own account language
+at creation (`getUserLanguage`). Every translate call passes `source: "auto"`
+down to the provider (`translateFields` in `translate/index.ts`; Google's v2
+API auto-detects when `source` is omitted, LibreTranslate accepts the literal
+`"auto"`), so what actually gets translated is whatever was typed, not an
+assumption pinned to the account language.
+
+Translation is content-scoped, not id-scoped: `POST /api/schedule/translate`
+(`translateScheduleContent`) takes a title/description directly and returns
+translations without touching the database, so both the create and edit forms
+can call it before the item is even saved. Automatic translation only ever
+fills a **blank** locale — callers are responsible for excluding any locale
+that already has translated text (mirrors announcements' "only fill languages
+that are still empty" rule); to redo one, clear it by hand first. Creating a
+schedule item (`createScheduleItem`) also auto-translates in the background
+right after insert whenever a provider is configured — this is what makes the
+manage table's quick "New item" row (title-only, no UI for translations of
+its own) come out translated with no extra client-side wiring. `PUT
+/api/schedule/:id/translations` (`saveScheduleTranslations`) persists
+whatever it's given unconditionally (manual edits are trusted input, not
+subject to the blank-only rule) and mirrors the result onto the item's linked
+`activities` row (`name_i18n`/`description_i18n`) — the same mirroring
+`updateScheduleItem` already does for the canonical title/description, so the
+H25/H26 scanner station and activity tracker see translated labels too, with
+no separate translate action of their own.
+
+Every schedule read (`listSchedule`, `listScheduleForAudiences`) returns
+`primaryLanguage` + `titleI18n`/`descriptionI18n` so every viewer — not just
+an editor — can resolve their own display text: preferred language, else
+English, else `primaryLanguage`'s canonical text. `resolveScheduleText`
+(`apps/web/src/lib/logistics.ts`, `apps/mobile/lib/schedule.ts`) implements
+that fallback client-side; every viewer-facing schedule read (web
+`/timetable`, `/horario`, the TV display; mobile's Schedule tab and detail
+screen) resolves through it before handing items to their renderers, so those
+renderers keep reading plain `item.title`/`item.description` unchanged.
+`ScheduleFormModal` (both frontends) labels Title/Description with the
+viewer's own account language (no control to change it) plus a translations
+panel — collapsed by default, an auto-translate action stays visible either
+way — covering the other two locales (only the still-blank ones are
+requested; a locale with translated text is never silently overwritten) or
+hand-edit. Staged locally in create mode and persisted right after the item
+is created; in edit mode it's pre-populated from the item's existing
+translations plus its previous primary-language text (now just another
+locale from this viewer's perspective), and persisted alongside the
+re-anchoring save.
+
+The mobile scan-station UI (`components/activities-screen.tsx`,
+`activity-scanner-screen.tsx`) doesn't read `scannableActivities()` — it reads
+`ScannerActivity` from the offline SQLite sync snapshot
+(`scanner-sync.ts`/`scannerSnapshot()`), a separate pipeline built for
+disconnected operation. That snapshot carries the same three fields
+(`primaryLanguage`/`nameI18n`/`descriptionI18n`, mirrored from the linked
+schedule item same as everywhere else) so those screens show translated
+activity names too. On the wire this is JSON like anywhere else; on-device
+the roster lives in encrypted SQLite (`scanner-db.native.ts`), where the two
+jsonb maps are stored as `TEXT` columns (`JSON.stringify`/`JSON.parse` at the
+read/write boundary — SQLite has no native map type) — `addScannerActivityI18nColumns`
+widens a pre-existing `scanner_activities` table with `ALTER TABLE` the first
+time a device that synced before this change reopens its roster db (the table
+is otherwise `CREATE TABLE IF NOT EXISTS`, a no-op against an already-existing
+table, and rows are always replace-all on every sync, but the *schema* itself
+only ever gets created once). Both screens resolve the viewer's display text
+through `resolveActivityText` (`lib/scanner-types.ts`, mirroring
+`resolveScheduleText`'s fallback: preferred language, else English, else
+`primaryLanguage`'s canonical `name`) before rendering.
 
 ## Web admin UI
 

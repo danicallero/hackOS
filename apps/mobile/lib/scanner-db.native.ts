@@ -50,6 +50,23 @@ interface PersonPayload {
   lastPresenceAt: string | null;
 }
 
+/**
+ * One-time upgrade path for a roster db opened before H50's translation
+ * columns existed: `CREATE TABLE IF NOT EXISTS` is a no-op on an
+ * already-existing table, so a device that synced before this change keeps
+ * its old 5-column `scanner_activities` shape until explicitly widened here.
+ * Safe to call on every open — checked against `PRAGMA table_info` first.
+ */
+async function addScannerActivityI18nColumns(db: SQLite.SQLiteDatabase): Promise<void> {
+  const columns = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(scanner_activities)`);
+  if (columns.some((c) => c.name === "primary_language")) return;
+  await db.execAsync(`
+    ALTER TABLE scanner_activities ADD COLUMN primary_language TEXT NOT NULL DEFAULT 'es';
+    ALTER TABLE scanner_activities ADD COLUMN name_i18n TEXT NOT NULL DEFAULT '{}';
+    ALTER TABLE scanner_activities ADD COLUMN description_i18n TEXT NOT NULL DEFAULT '{}';
+  `);
+}
+
 async function rosterDb(): Promise<SQLite.SQLiteDatabase> {
   if (!rosterDatabase) {
     rosterDatabase = SQLite.openDatabaseAsync(
@@ -83,6 +100,7 @@ async function rosterDb(): Promise<SQLite.SQLiteDatabase> {
         );
         CREATE TABLE IF NOT EXISTS scanner_metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
       `);
+      await addScannerActivityI18nColumns(opened);
       return opened;
     });
   }
@@ -258,10 +276,13 @@ export async function applyScannerSnapshot(snapshot: ScannerSnapshot): Promise<v
       statements.push(`INSERT INTO revoked_badges (badge_id) VALUES (${sqlLiteral(revoked)});`);
     }
     for (const activity of snapshot.activities) {
-      statements.push(`INSERT INTO scanner_activities (id, name, category, requires_scan, starts_at)
+      statements.push(`INSERT INTO scanner_activities
+        (id, name, category, requires_scan, starts_at, primary_language, name_i18n, description_i18n)
         VALUES (${sqlLiteral(activity.id)}, ${sqlLiteral(activity.name)},
                 ${sqlLiteral(activity.category)}, ${sqlLiteral(activity.requiresScan)},
-                ${sqlLiteral(activity.startsAt)});`);
+                ${sqlLiteral(activity.startsAt)}, ${sqlLiteral(activity.primaryLanguage)},
+                ${sqlLiteral(JSON.stringify(activity.nameI18n))},
+                ${sqlLiteral(JSON.stringify(activity.descriptionI18n))});`);
     }
     for (const state of snapshot.activityStates) {
       statements.push(`INSERT INTO scanner_activity_states
@@ -414,6 +435,9 @@ export async function listScannerActivities(): Promise<ScannerActivity[]> {
     category: string;
     requires_scan: number;
     starts_at: string | null;
+    primary_language: ScannerActivity["primaryLanguage"];
+    name_i18n: string;
+    description_i18n: string;
   }>(`SELECT * FROM scanner_activities ORDER BY starts_at IS NULL, starts_at, name, id`);
   return rows.map((row) => ({
     id: row.id,
@@ -421,6 +445,9 @@ export async function listScannerActivities(): Promise<ScannerActivity[]> {
     category: row.category,
     requiresScan: row.requires_scan === 1,
     startsAt: row.starts_at,
+    primaryLanguage: row.primary_language,
+    nameI18n: JSON.parse(row.name_i18n),
+    descriptionI18n: JSON.parse(row.description_i18n),
   }));
 }
 
