@@ -183,7 +183,14 @@ export function ManageAnnouncementsView({
                     onEdit={editable ? () => onFormOpenChange(item.id) : undefined}
                     onDelete={() => confirmDelete(item)}
                   >
-                    <View style={{ gap: 6, paddingHorizontal: 16, paddingVertical: 14 }}>
+                    <View
+                      style={{
+                        backgroundColor: colors.surface,
+                        gap: 6,
+                        paddingHorizontal: 16,
+                        paddingVertical: 14,
+                      }}
+                    >
                       <View style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
                         <Text
                           selectable
