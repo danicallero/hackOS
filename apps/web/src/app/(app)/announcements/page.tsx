@@ -232,15 +232,17 @@ export default function AnnouncementsPage() {
         pageSize={15}
         rowActions={(a) => (
           <div className="flex justify-end gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={t("editAnnouncement")}
-              onClick={() => openEdit(a)}
-            >
-              <span className="sr-only">{t("editAnnouncement")}</span>
-              <PencilIcon className="size-4" aria-hidden="true" />
-            </Button>
+            {announcementStatus(a) === "scheduled" && (
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={t("editAnnouncement")}
+                onClick={() => openEdit(a)}
+              >
+                <span className="sr-only">{t("editAnnouncement")}</span>
+                <PencilIcon className="size-4" aria-hidden="true" />
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon"
