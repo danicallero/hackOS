@@ -146,7 +146,9 @@ export default function MyQueuePage() {
 
   useEventSource("/api/queue/me/stream", { events: CALL_EVENTS, onEvent: onStreamEvent });
 
-  const list = entries ?? [];
+  // Memoize list so downstream useMemo hooks have a stable reference even when
+  // entries is null or undefined (each render would otherwise create a new array).
+  const list = useMemo(() => entries ?? [], [entries]);
   const called = useMemo(() => list.filter((e) => e.status === "called"), [list]);
   const heading = useMemo(
     () => list.filter((e) => e.status === "waiting" && precalled.has(e.entryId)),
