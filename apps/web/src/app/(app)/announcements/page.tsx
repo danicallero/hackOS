@@ -112,6 +112,7 @@ export default function AnnouncementsPage() {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (canManage) void load();
     else setLoading(false);
   }, [canManage, load, liveRefresh]);
@@ -289,6 +290,7 @@ export default function AnnouncementsPage() {
       )}
 
       <AnnouncementFormModal
+        key="create"
         open={createOpen}
         onOpenChange={setCreateOpen}
         title={t("newAnnouncement")}
@@ -304,6 +306,7 @@ export default function AnnouncementsPage() {
 
       {editingItem && (
         <AnnouncementFormModal
+          key={editingItem.id}
           open={Boolean(editingItem)}
           onOpenChange={(open) => {
             if (!open) setEditingItem(null);
