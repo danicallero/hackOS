@@ -39,10 +39,11 @@ export function PresenceScreen() {
           gap: 22,
           paddingBottom: 40,
           paddingHorizontal: CONTENT_PADDING,
-          // On iOS, not `insets.top + BUTTON_ROW_HEIGHT`: this screen sits
-          // under the same route group's invisible native nav bar as the
-          // profile screen, and `automatic` above already pushes content
-          // below its real height — adding `insets.top` again double-counts it.
+          // On iOS, not `insets.top + BUTTON_ROW_HEIGHT`: this screen is a
+          // flat sibling of the profile screen in the same shared Stack
+          // (`(tabs)/scan/_layout.tsx`), with its own invisible native nav
+          // bar, and `automatic` above already pushes content below its
+          // real height — adding `insets.top` again double-counts it.
           paddingTop:
             process.env.EXPO_OS === "ios"
               ? BUTTON_ROW_HEIGHT

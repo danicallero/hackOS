@@ -156,7 +156,7 @@ export function GeneralScannerScreen() {
         onValue={(value) => void resolve(value)}
       />
       <ScannerToolbarActions
-        top={insets.top + (usesTopTabBar ? 72 : 12)}
+        top={insets.top + 4}
         groups={groups}
         onToggle={toggleGroup}
         onClear={clearGroups}
@@ -165,12 +165,16 @@ export function GeneralScannerScreen() {
       />
       <View
         pointerEvents="box-none"
-        style={{
-          left: 0,
-          position: "absolute",
-          right: 0,
-          top: insets.top + (usesTopTabBar ? 72 : 12),
-        }}
+        style={
+          usesTopTabBar
+            ? // The native tab bar's real on-screen width doesn't line up
+              // with any fixed breakpoint we can compute here (it's driven
+              // by the OS's own layout, not `width`), so a pill sharing
+              // that row risks landing underneath it at some window size —
+              // this row is always clear, regardless of resolution.
+              { left: 0, position: "absolute", right: 0, top: insets.top + 150 }
+            : { left: 0, position: "absolute", right: 0, top: insets.top + 4 }
+        }
       >
         <ScannerQueueStatus
           queue={sync.queue}
@@ -180,6 +184,7 @@ export function GeneralScannerScreen() {
           onRetryOne={(id) => void sync.retryOne(id)}
           onDelete={(id) => void sync.discardScan(id)}
           clockSkewMs={sync.clockSkewMs}
+          fillWidth={false}
         />
       </View>
       <View
@@ -188,7 +193,7 @@ export function GeneralScannerScreen() {
           left: 0,
           position: "absolute",
           right: 0,
-          top: insets.top + (usesTopTabBar ? 116 : 56),
+          top: insets.top + 56,
         }}
       >
         <ScannerGroupStatistics stats={stats} />

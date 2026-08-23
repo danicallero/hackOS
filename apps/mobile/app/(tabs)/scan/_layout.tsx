@@ -38,7 +38,31 @@ export default function ScannerLayout() {
           },
         }}
       />
-      <Stack.Screen name="person" options={{ headerShown: false }} />
+      {/* Kept as direct children of this Stack (not a nested one) so their
+          transparent native bar merges into NativeTabs' own shared row on
+          iPad, the same way `index` above does — see
+          `(tabs)/others/_layout.tsx` for the fuller explanation of why a
+          second Stack here would create a visible double bar. */}
+      <Stack.Screen
+        name="person/[id]"
+        options={{
+          headerShown: process.env.EXPO_OS === "ios",
+          headerTransparent: true,
+          headerShadowVisible: false,
+          headerTitle: "",
+          headerBackVisible: false,
+        }}
+      />
+      <Stack.Screen
+        name="person/presence/[id]"
+        options={{
+          headerShown: process.env.EXPO_OS === "ios",
+          headerTransparent: true,
+          headerShadowVisible: false,
+          headerTitle: "",
+          headerBackVisible: false,
+        }}
+      />
     </Stack>
   );
 }
