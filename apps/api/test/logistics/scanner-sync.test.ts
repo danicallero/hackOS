@@ -94,7 +94,15 @@ describe("H22-H26 native scanner snapshot", () => {
       }),
     );
     expect(body.activities).toContainEqual(
-      expect.objectContaining({ id: mealId, name: "Dinner", category: "meal" }),
+      expect.objectContaining({
+        id: mealId,
+        name: "Dinner",
+        category: "meal",
+        // H50 extension: mirrors the linked schedule item's translations.
+        primaryLanguage: "es",
+        nameI18n: {},
+        descriptionI18n: {},
+      }),
     );
     expect(body.activityStates).toContainEqual({
       userId,

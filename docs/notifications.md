@@ -215,13 +215,25 @@ translations plus its previous primary-language text (now just another
 locale from this viewer's perspective), and persisted alongside the
 re-anchoring save.
 
-Known gap: the mobile scan-station UI (`components/activities-screen.tsx`,
-`activity-scanner-screen.tsx`) reads `ScannerActivity` from the offline SQLite
-sync snapshot (`scanner-sync.ts`/`scannerSnapshot()`), a separate pipeline
-from `scannableActivities()` above — the snapshot schema doesn't carry
-`primaryLanguage`/`nameI18n`/`descriptionI18n` yet, so those two screens don't
-show translated activity names even though the underlying `activities` row
-does. Wiring that through the offline sync schema is unstarted follow-up.
+The mobile scan-station UI (`components/activities-screen.tsx`,
+`activity-scanner-screen.tsx`) doesn't read `scannableActivities()` — it reads
+`ScannerActivity` from the offline SQLite sync snapshot
+(`scanner-sync.ts`/`scannerSnapshot()`), a separate pipeline built for
+disconnected operation. That snapshot carries the same three fields
+(`primaryLanguage`/`nameI18n`/`descriptionI18n`, mirrored from the linked
+schedule item same as everywhere else) so those screens show translated
+activity names too. On the wire this is JSON like anywhere else; on-device
+the roster lives in encrypted SQLite (`scanner-db.native.ts`), where the two
+jsonb maps are stored as `TEXT` columns (`JSON.stringify`/`JSON.parse` at the
+read/write boundary — SQLite has no native map type) — `addScannerActivityI18nColumns`
+widens a pre-existing `scanner_activities` table with `ALTER TABLE` the first
+time a device that synced before this change reopens its roster db (the table
+is otherwise `CREATE TABLE IF NOT EXISTS`, a no-op against an already-existing
+table, and rows are always replace-all on every sync, but the *schema* itself
+only ever gets created once). Both screens resolve the viewer's display text
+through `resolveActivityText` (`lib/scanner-types.ts`, mirroring
+`resolveScheduleText`'s fallback: preferred language, else English, else
+`primaryLanguage`'s canonical `name`) before rendering.
 
 ## Web admin UI
 

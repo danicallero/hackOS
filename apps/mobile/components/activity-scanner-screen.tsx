@@ -30,7 +30,7 @@ import {
   listScannerActivities,
   pendingScans,
 } from "@/lib/scanner-db";
-import type { ScannerActivity, ScannerPerson } from "@/lib/scanner-types";
+import { resolveActivityText, type ScannerActivity, type ScannerPerson } from "@/lib/scanner-types";
 import { useScannerSync } from "@/lib/use-scanner";
 import { colors } from "@/theme/colors";
 
@@ -237,7 +237,7 @@ export function ActivityScannerScreen() {
           numberOfLines={1}
           style={{ color: "white", fontSize: 16, fontWeight: "700", textAlign: "center" }}
         >
-          {activity?.name ?? t("scannerActivity")}
+          {activity ? resolveActivityText(activity, language) : t("scannerActivity")}
         </Text>
       </GlassView>
       <View

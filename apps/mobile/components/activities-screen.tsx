@@ -14,7 +14,7 @@ import {
 } from "@/lib/activity-list";
 import { useLocale } from "@/lib/i18n";
 import { listScannerActivities } from "@/lib/scanner-db";
-import type { ScannerActivity } from "@/lib/scanner-types";
+import { resolveActivityText, type ScannerActivity } from "@/lib/scanner-types";
 import { activityKindSymbol, scheduleTypeLabel } from "@/lib/schedule";
 import { useScannerSync } from "@/lib/use-scanner";
 import { colors } from "@/theme/colors";
@@ -242,7 +242,7 @@ function ActivityRow({
   t,
 }: {
   item: ScannerActivity;
-  language: string;
+  language: ScannerActivity["primaryLanguage"];
   /** "now" on the activity currently running, "next" on the one about to start. */
   marker: "now" | "next" | null;
   onPress: () => void;
@@ -294,7 +294,7 @@ function ActivityRow({
           numberOfLines={1}
           style={{ color: colors.label, fontSize: 17, fontWeight: "700" }}
         >
-          {item.name}
+          {resolveActivityText(item, language)}
         </Text>
         {startsAt || marker ? (
           <View style={{ alignItems: "center", flexDirection: "row", gap: 6 }}>

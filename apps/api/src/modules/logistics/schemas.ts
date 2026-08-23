@@ -157,6 +157,9 @@ const scannerPersonCard = z.object({
   lastPresenceAt: z.string().datetime().nullable(),
 });
 
+/** H50 extension: shared es/gl/en set every translatable entity uses. */
+export const languageSchema = z.enum(["es", "gl", "en"]);
+
 export const scannerSnapshotResponse = z.object({
   generatedAt: z.string().datetime(),
   people: z.array(scannerPersonCard),
@@ -167,6 +170,10 @@ export const scannerSnapshotResponse = z.object({
       category: z.string(),
       requiresScan: z.boolean(),
       startsAt: z.string().datetime().nullable(),
+      // H50 extension: mirrors the linked schedule item's translations.
+      primaryLanguage: languageSchema,
+      nameI18n: z.partialRecord(languageSchema, z.string()),
+      descriptionI18n: z.partialRecord(languageSchema, z.string().nullable()),
     }),
   ),
   activityStates: z.array(
@@ -235,9 +242,6 @@ export const scheduleIdParam = z.object({ id: z.coerce.number().int().positive()
  * distinct from "what participants see" for anonymous visitors.
  */
 export const scheduleAudience = z.enum(["sponsor", "participant", "mentor"]);
-
-/** H50 extension: shared es/gl/en set every translatable entity uses. */
-export const languageSchema = z.enum(["es", "gl", "en"]);
 
 export const scheduleBody = z.object({
   title: z.string().min(1).max(300),

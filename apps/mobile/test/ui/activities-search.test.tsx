@@ -66,10 +66,33 @@ import { renderMobile } from "./render";
 const NOW = Date.parse("2026-08-22T12:00:00.000Z");
 const hours = (offset: number) => new Date(NOW + offset * 3600_000).toISOString();
 
+const I18N_DEFAULTS = { primaryLanguage: "es", nameI18n: {}, descriptionI18n: {} } as const;
+
 const ACTIVITIES: ScannerActivity[] = [
-  { id: 1, name: "Cena Sábado", category: "meal", requiresScan: true, startsAt: hours(-0.25) },
-  { id: 2, name: "Charla Grafana", category: "talk", requiresScan: true, startsAt: hours(2) },
-  { id: 3, name: "Comida Domingo", category: "meal", requiresScan: true, startsAt: hours(20) },
+  {
+    id: 1,
+    name: "Cena Sábado",
+    category: "meal",
+    requiresScan: true,
+    startsAt: hours(-0.25),
+    ...I18N_DEFAULTS,
+  },
+  {
+    id: 2,
+    name: "Charla Grafana",
+    category: "talk",
+    requiresScan: true,
+    startsAt: hours(2),
+    ...I18N_DEFAULTS,
+  },
+  {
+    id: 3,
+    name: "Comida Domingo",
+    category: "meal",
+    requiresScan: true,
+    startsAt: hours(20),
+    ...I18N_DEFAULTS,
+  },
 ];
 
 /** Drives the native `headerSearchBarOptions` search bar the screen installs. */
