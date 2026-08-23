@@ -204,8 +204,6 @@
   "walletConfirmSpotDeadline": "Confirm before {date}.",
   "walletDownloadPkpass": "Download .pkpass",
   "walletDownloadPkpassHint": "For wallet apps that can import a .pkpass file directly.",
-  "walletPassAlreadyAddedTitle": "Already in Apple Wallet",
-  "walletPassAlreadyAddedBody": "This pass is already in Apple Wallet. It updates automatically when its details change, so you don't need to add it again.",
   "notificationsMandatoryHint": "Queue-call notices are always sent — they aren't optional.",
   "notificationsMessages": "Messages",
   "notificationsPreferences": "Preferences",

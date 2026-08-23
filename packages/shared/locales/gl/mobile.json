@@ -204,8 +204,6 @@
   "walletConfirmSpotDeadline": "Confirma antes do {date}.",
   "walletDownloadPkpass": "Descargar .pkpass",
   "walletDownloadPkpassHint": "Para apps de carteira que poden importar un ficheiro .pkpass directamente.",
-  "walletPassAlreadyAddedTitle": "Xa está en Apple Wallet",
-  "walletPassAlreadyAddedBody": "Este pase xa está en Apple Wallet. Actualízase automaticamente cando cambia algún dato, así que non necesitas engadilo de novo.",
   "notificationsMandatoryHint": "Os avisos de quenda de cola sempre se envían — non son opcionais.",
   "notificationsMessages": "Mensaxes",
   "notificationsPreferences": "Preferencias",
