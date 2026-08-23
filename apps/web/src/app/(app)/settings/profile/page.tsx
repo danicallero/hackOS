@@ -97,6 +97,9 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
     resolver: zodResolver(schema),
     defaultValues: valuesFromMe(me),
   });
+  // H7: name and logistics data (shirt size, dietary info) are locked once
+  // an application is accepted — staff can still fix them via the user detail page.
+  const locked = me.profileLocked;
 
   async function onSubmit(values: Values) {
     try {
@@ -129,6 +132,7 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
           <SectionCard
             icon={UserIcon}
             title={t("personalDetails")}
+            description={locked ? t("profileLockedNotice") : undefined}
             footer={
               <SubmitButton pending={form.formState.isSubmitting}>{t("saveChanges")}</SubmitButton>
             }
@@ -140,7 +144,7 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
                 <FormItem>
                   <FormLabel>{t("firstName")}</FormLabel>
                   <FormControl>
-                    <Input autoComplete="given-name" {...field} />
+                    <Input autoComplete="given-name" disabled={locked} {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -153,7 +157,7 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
                 <FormItem>
                   <FormLabel>{t("lastName")}</FormLabel>
                   <FormControl>
-                    <Input autoComplete="family-name" {...field} />
+                    <Input autoComplete="family-name" disabled={locked} {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -189,7 +193,7 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>{t("shirtSize")}</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value} disabled={locked}>
                     <FormControl>
                       <SelectTrigger className="w-full">
                         <SelectValue placeholder={t("notSet")} />
@@ -222,6 +226,7 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
                       placeholder={t("selectIntolerances")}
                       searchPlaceholder={t("searchIntolerances")}
                       emptyText={t("noIntolerances")}
+                      disabled={locked}
                     />
                   </FormControl>
                   <FormMessage />
@@ -235,7 +240,12 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
                 <FormItem>
                   <FormLabel>{t("otherDietaryNotes")}</FormLabel>
                   <FormControl>
-                    <Textarea rows={3} placeholder={t("cateringNotes")} {...field} />
+                    <Textarea
+                      rows={3}
+                      placeholder={t("cateringNotes")}
+                      disabled={locked}
+                      {...field}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

@@ -823,7 +823,7 @@ describe("staff user routes (H7)", () => {
     void other;
   });
 
-  it("M1.5: locks own name/surname once an application is accepted; staff can still fix it", async () => {
+  it("H7: locks own name/surname/shirt size/dietary info once an application is accepted; staff can still fix it", async () => {
     const a = await getApp();
     const { pool } = await import("../../src/db/pool.js");
     const user = await createUser({ name: "Ada" });
@@ -852,7 +852,7 @@ describe("staff user routes (H7)", () => {
       ).statusCode,
     ).toBe(200);
 
-    // Once accepted, self-edits of name/surname are locked (409 name_locked)…
+    // Once accepted, self-edits of name/surname are locked (409 profile_locked)…
     await pool.query(`UPDATE application_responses SET status = 'accepted' WHERE user_id = $1`, [
       user,
     ]);
@@ -863,9 +863,27 @@ describe("staff user routes (H7)", () => {
       payload: { surname: "Byron" },
     });
     expect(locked.statusCode).toBe(409);
-    expect(locked.json().error.details.code).toBe("name_locked");
+    expect(locked.json().error.details.code).toBe("profile_locked");
 
-    // …but non-name fields still work, and staff can still change the name.
+    // …and so are shirt size and dietary info.
+    const lockedShirt = await a.inject({
+      method: "PATCH",
+      url: "/api/me",
+      headers: asUser(user),
+      payload: { shirtSize: "M" },
+    });
+    expect(lockedShirt.statusCode).toBe(409);
+    expect(lockedShirt.json().error.details.code).toBe("profile_locked");
+    const lockedDietary = await a.inject({
+      method: "PATCH",
+      url: "/api/me",
+      headers: asUser(user),
+      payload: { foodIntoleranceNotes: "no nuts" },
+    });
+    expect(lockedDietary.statusCode).toBe(409);
+    expect(lockedDietary.json().error.details.code).toBe("profile_locked");
+
+    // …but non-locked fields still work, and staff can still change locked ones.
     expect(
       (
         await a.inject({
@@ -882,7 +900,7 @@ describe("staff user routes (H7)", () => {
           method: "PATCH",
           url: `/api/users/${user}`,
           headers: asUser(editor),
-          payload: { surname: "Byron" },
+          payload: { surname: "Byron", shirtSize: "M" },
         })
       ).statusCode,
     ).toBe(200);

@@ -33,6 +33,8 @@ export interface Me {
   hasQueueItems: boolean;
   /** H19 self-creation is currently open to this caller — keeps My project visible without a project yet. */
   canCreateProject: boolean;
+  /** H7: once an application is accepted, name/shirt-size/dietary fields are no longer self-editable. */
+  profileLocked: boolean;
 }
 
 export type Language = "en" | "es" | "gl";

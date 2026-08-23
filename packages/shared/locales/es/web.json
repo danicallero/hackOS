@@ -83,6 +83,7 @@
   "couldNotSendResetEmail": "No se ha podido enviar el correo. Inténtalo de nuevo.",
   "atLeastEight": "Al menos 8 caracteres",
   "personalDetails": "Datos personales",
+  "profileLockedNotice": "Bloqueado tras la aceptación. Contacta con el staff para cambiarlo.",
   "firstName": "Nombre",
   "lastName": "Apellidos",
   "shirtSize": "Talla de camiseta",

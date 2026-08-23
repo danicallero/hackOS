@@ -83,6 +83,7 @@
   "couldNotSendResetEmail": "We couldn't send the reset email. Try again.",
   "atLeastEight": "At least 8 characters",
   "personalDetails": "Personal details",
+  "profileLockedNotice": "Locked after acceptance. Contact staff to change these.",
   "firstName": "First name",
   "lastName": "Last name",
   "shirtSize": "Shirt size",

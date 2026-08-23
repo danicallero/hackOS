@@ -181,6 +181,21 @@ async function fetchUser(userId: number): Promise<UserRow> {
   return rows[0] as UserRow;
 }
 
+// H7: once any application has been accepted, a participant can no longer
+// self-edit identity/logistics fields (name, shirt size, dietary info) —
+// they're on the badge/certificate and drive shirt orders/catering headcounts
+// already committed to. Staff can still fix these via PATCH /api/users/:id.
+async function hasAcceptedApplication(userId: number): Promise<boolean> {
+  const { rows } = await pool.query(
+    `SELECT 1 FROM application_responses
+       WHERE user_id = $1
+         AND status IN ('accepted_internal', 'accepted', 'confirmed')
+       LIMIT 1`,
+    [userId],
+  );
+  return rows.length > 0;
+}
+
 /** Applies a validated patch inside a transaction, auditing when actor != target. */
 async function applyUserPatch(
   targetId: number,
@@ -297,6 +312,10 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             // self-creation is currently open to this caller — otherwise
             // hiding it would remove their only entry point to create one.
             canCreateProject: z.boolean(),
+            // H7: once an application is accepted, name/shirt-size/dietary
+            // fields are no longer self-editable — the web/mobile settings
+            // form greys them out and points the participant at staff.
+            profileLocked: z.boolean(),
           }),
         },
       },
@@ -312,6 +331,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         hasProject,
         hasQueueItems,
         canCreateProject,
+        profileLocked,
       ] = await Promise.all([
         computeDerivedRole(pool, userId),
         getEffectiveCapabilities(userId),
@@ -320,6 +340,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         hasMyProject(userId),
         hasMyQueueItems(userId),
         canCreateMyProject(userId),
+        hasAcceptedApplication(userId),
       ]);
       const mobileAccess = await hasMobileAccess(pool, userId, role);
       return {
@@ -332,6 +353,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         hasProject,
         hasQueueItems,
         canCreateProject,
+        profileLocked,
       };
     },
   );
@@ -348,31 +370,47 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const userId = req.userId as number;
-      // M1.5: once any application has been accepted, the participant can no
-      // longer CHANGE their own legal name (it's on their badge/certificate).
-      // We compare against the stored values so an unchanged name/surname
-      // (the settings form always submits them) doesn't block edits to other
-      // fields like shirt size or dietary info. Staff can still fix names via
-      // PATCH /api/users/:id. Locked statuses: internally accepted, sent, confirmed.
-      if (req.body.name !== undefined || req.body.surname !== undefined) {
-        const { rows: cur } = await pool.query(`SELECT name, surname FROM users WHERE id = $1`, [
-          userId,
-        ]);
+      // M1.5/H7: once any application has been accepted, the participant can
+      // no longer CHANGE their own legal name (it's on their badge/certificate)
+      // or their logistics data (shirt size, dietary info — already committed
+      // to shirt orders/catering headcounts). We compare against the stored
+      // values so an unchanged field (the settings form always submits them
+      // all) doesn't block edits to fields that remain open, like language.
+      // Staff can still fix these via PATCH /api/users/:id.
+      const wantsIdentityChange = req.body.name !== undefined || req.body.surname !== undefined;
+      const wantsLogisticsChange =
+        req.body.shirtSize !== undefined ||
+        req.body.foodIntolerances !== undefined ||
+        req.body.foodIntoleranceNotes !== undefined;
+      if (wantsIdentityChange || wantsLogisticsChange) {
+        const { rows: cur } = await pool.query(
+          `SELECT name, surname, shirt_size, food_intolerances, food_intolerance_notes
+             FROM users WHERE id = $1`,
+          [userId],
+        );
         const changingName = req.body.name !== undefined && req.body.name !== cur[0]?.name;
         const changingSurname =
           req.body.surname !== undefined && req.body.surname !== cur[0]?.surname;
-        if (changingName || changingSurname) {
-          const { rows } = await pool.query(
-            `SELECT 1 FROM application_responses
-               WHERE user_id = $1
-                 AND status IN ('accepted_internal', 'accepted', 'confirmed')
-               LIMIT 1`,
-            [userId],
-          );
-          if (rows.length > 0) {
+        const changingShirtSize =
+          req.body.shirtSize !== undefined && req.body.shirtSize !== cur[0]?.shirt_size;
+        const changingIntolerances =
+          req.body.foodIntolerances !== undefined &&
+          JSON.stringify([...req.body.foodIntolerances].sort()) !==
+            JSON.stringify([...(cur[0]?.food_intolerances ?? [])].sort());
+        const changingNotes =
+          req.body.foodIntoleranceNotes !== undefined &&
+          req.body.foodIntoleranceNotes !== cur[0]?.food_intolerance_notes;
+        if (
+          changingName ||
+          changingSurname ||
+          changingShirtSize ||
+          changingIntolerances ||
+          changingNotes
+        ) {
+          if (await hasAcceptedApplication(userId)) {
             throw new ConflictError(
-              "Your name is locked because an application has been accepted — ask staff to change it.",
-              { code: "name_locked" },
+              "Your profile is locked because an application has been accepted — ask staff to change your name, shirt size, or dietary info.",
+              { code: "profile_locked" },
             );
           }
         }
