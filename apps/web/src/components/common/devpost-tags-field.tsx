@@ -17,11 +17,14 @@ export function DevpostTagsField({
   className,
   emptyText,
 }: {
+  /** Selected prize tag keys. */
   value: string[];
   onChange: (value: string[]) => void;
+  /** Imported prize keys the caller resolved for this challenge's event. */
   options: MultiSelectOption[];
   disabled?: boolean;
   className?: string;
+  /** Overrides the default "no imported prizes" copy shown when `options` is empty. */
   emptyText?: string;
 }) {
   const { t } = useLocale();

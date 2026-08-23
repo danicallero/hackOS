@@ -1,11 +1,10 @@
 "use client";
 
 // One control for a single application-template field, shared by the applicant
-// form (my-applications) and staff response editing (applications). Renders by
-// field.kind and owns the type contracts the API's validateResponses enforces:
-// number for "number"/"university", string for text/file, string[] for
-// multiselect, boolean for checkbox. The university id is kept numeric here so
-// callers never have to remember the string↔number dance.
+// form (my-applications) and staff response editing (applications). Owns the
+// type contracts the API's validateResponses enforces: number for
+// "number"/"university", string for text/file, string[] for multiselect,
+// boolean for checkbox.
 
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { FileLink } from "@/components/common/file-link";

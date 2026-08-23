@@ -3,22 +3,20 @@
 import type { Capability } from "@hackos/shared/capabilities";
 import { useSessionContext } from "@/lib/session";
 
-/**
- * Renders children only if the current user holds the required capability
- * (H8). Pure UI convenience — the API still enforces every guarded route, so
- * this is about hiding controls the user can't use, never about security.
- *
- * Pass `any` to require ANY of several capabilities (mirrors the API's
- * requireAnyCapability).
- */
+/** Renders children only if the user holds the required capability — UI
+ *  convenience only, the API still enforces the check. Pass `any` to require
+ *  any of several capabilities (mirrors the API's `requireAnyCapability`). */
 export function CapabilityGate({
   capability,
   any,
   fallback = null,
   children,
 }: {
+  /** Single capability required; mutually exclusive with `any`. */
   capability?: Capability;
+  /** Any-of set of capabilities; mutually exclusive with `capability`. */
   any?: Capability[];
+  /** Rendered when the check fails. Defaults to nothing. */
   fallback?: React.ReactNode;
   children: React.ReactNode;
 }) {

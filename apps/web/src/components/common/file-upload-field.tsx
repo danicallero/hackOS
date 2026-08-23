@@ -29,12 +29,16 @@ export function FileUploadField({
   "aria-describedby": ariaDescribedBy,
   "aria-invalid": ariaInvalid,
 }: {
+  /** Owning application; the upload route stores the file under this id. */
   applicationId: number;
+  /** Template field key the upload is attached to, used in the upload route path. */
   fieldKey: string;
   /** The stored object URL, or "" when nothing is uploaded yet. */
   value: string;
   onChange: (url: string) => void;
+  /** File extensions accepted (e.g. [".pdf", ".png"]); unset allows any type. */
   allowedTypes?: string[];
+  /** Max upload size in MB; defaults to 10. */
   maxSizeMb?: number;
   disabled?: boolean;
   id?: string;
