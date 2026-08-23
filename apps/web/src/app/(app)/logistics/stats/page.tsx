@@ -139,6 +139,7 @@ export default function LogisticsStatsPage() {
 
   useEffect(() => {
     if (!canStats || !canApplications) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setBeforeLoading(true);
     api
       .get<{ applications: ApplicationOption[] }>("/api/applications")
@@ -166,6 +167,7 @@ export default function LogisticsStatsPage() {
   }, [applicationId, t]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadBefore();
   }, [loadBefore]);
 
@@ -183,6 +185,7 @@ export default function LogisticsStatsPage() {
   }, [canStats, t]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadAfter();
   }, [loadAfter]);
 
@@ -491,6 +494,7 @@ function StaffRankingSection() {
   }, [t]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
 

@@ -126,10 +126,12 @@ function AccreditationPanel({ onAccredited }: { onAccredited: () => void }) {
     [t],
   );
 
+  // Sync URL query param (userId) to card state by fetching from the API.
   useEffect(() => {
     const raw = searchParams.get("userId");
     if (!raw) return;
     const id = Number(raw);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (Number.isFinite(id)) void openCard(id);
   }, [searchParams, openCard]);
 
