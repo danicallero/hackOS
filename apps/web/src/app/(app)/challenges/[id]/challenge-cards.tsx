@@ -162,6 +162,7 @@ export function EditCard({
 
   useEffect(() => {
     reset(toFormValues(challenge));
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Resync local edit state from the freshly reloaded challenge after a save.
     setSaveError(false);
     setPrizes(asPrizes(challenge.prizes));
     setQuestions(asQuestions(challenge.judging_panel_criteria));

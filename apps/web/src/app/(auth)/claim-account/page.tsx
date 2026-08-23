@@ -105,6 +105,7 @@ function ClaimInner() {
 
   useEffect(() => {
     if (!token) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- No token to look up; same external-system-sync effect as the fetches below.
       setLookup("error");
       return;
     }
