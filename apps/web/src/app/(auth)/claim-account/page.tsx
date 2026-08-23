@@ -5,7 +5,7 @@ import { CheckCircle2Icon } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { MultiSelect } from "@/components/common/multi-select";
 import { PasswordInput } from "@/components/common/password-input";
@@ -101,8 +101,11 @@ function ClaimInner() {
     },
   });
 
+  const language = useWatch({ control: form.control, name: "language" });
+
   useEffect(() => {
     if (!token) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- No token to look up; same external-system-sync effect as the fetches below.
       setLookup("error");
       return;
     }
@@ -205,7 +208,7 @@ function ClaimInner() {
 
   const intoleranceOptions = intolerances.map((i) => ({
     value: String(i.id),
-    label: pickText(i.label, form.watch("language") as Language),
+    label: pickText(i.label, language as Language),
   }));
 
   return (

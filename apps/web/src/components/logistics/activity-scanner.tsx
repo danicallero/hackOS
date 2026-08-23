@@ -12,7 +12,7 @@ import {
   TriangleAlertIcon,
   UsersIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/common/empty-state";
 import { EntityCombobox } from "@/components/common/entity-combobox";
@@ -62,7 +62,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
   const [result, setResult] = useState<ActivityScanResult | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [offline, setOffline] = useState<OfflineScan[]>([]);
+  const [offline, setOffline] = useState<OfflineScan[]>(() => (isMeal ? loadOfflineQueue() : []));
   const [transactionState, setTransactionState] = useState<
     "ready" | "saved" | "confirmed" | "attention"
   >("ready");
@@ -101,10 +101,6 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
     setFindResults(null);
     setFindError("");
   };
-
-  useEffect(() => {
-    if (isMeal) setOffline(loadOfflineQueue());
-  }, [isMeal]);
 
   const persistOffline = (next: OfflineScan[]) => {
     setOffline(next);

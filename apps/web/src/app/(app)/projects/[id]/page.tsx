@@ -120,6 +120,7 @@ export default function ProjectDetailPage() {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Fetching project/challenge data from API (external-system sync)
     void load();
   }, [load, liveRefresh]);
 
@@ -145,7 +146,7 @@ export default function ProjectDetailPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[320px] items-center justify-center">
+      <div className="flex min-h-80 items-center justify-center">
         <Spinner />
       </div>
     );

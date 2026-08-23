@@ -11,7 +11,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { GavelIcon } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 import { AccessDenied } from "@/components/common/access-denied";
@@ -118,7 +118,7 @@ export default function JudgingWindowSettingsPage() {
     resolver: zodResolver(schema),
     defaultValues: { judgingStartsAt: "", judgingEndsAt: "" },
   });
-  const { reset, formState, watch } = form;
+  const { reset, formState } = form;
 
   useEffect(() => {
     getQueueSettings()
@@ -146,7 +146,7 @@ export default function JudgingWindowSettingsPage() {
     }
   }
 
-  const values = watch();
+  const values = useWatch({ control: form.control });
 
   if (!canManage) {
     return <AccessDenied ask={t("judgingWindowDeniedDesc")} />;
@@ -192,7 +192,10 @@ export default function JudgingWindowSettingsPage() {
                   </FormItem>
                 )}
               />
-              <PacePreview startsAt={values.judgingStartsAt} endsAt={values.judgingEndsAt} />
+              <PacePreview
+                startsAt={values.judgingStartsAt ?? ""}
+                endsAt={values.judgingEndsAt ?? ""}
+              />
             </SectionCard>
           </form>
         </Form>

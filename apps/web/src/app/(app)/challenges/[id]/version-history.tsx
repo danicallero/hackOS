@@ -103,6 +103,8 @@ export function VersionHistory({ challengeId }: { challengeId: number }) {
   }, [challengeId, t]);
 
   useEffect(() => {
+    // fetching version history from the API on mount is a legitimate external-system sync
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);
 

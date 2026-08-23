@@ -193,6 +193,7 @@ export default function MyApplicationDetailPage() {
   }, [id, me, t]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Fetching application data from API (external-system sync)
     load();
   }, [load]);
 
@@ -231,7 +232,11 @@ export default function MyApplicationDetailPage() {
   // A form is only present here when its window is open, so a draft/new response
   // is editable exactly when we have the template and nothing past 'draft'.
   const editable = !!form && !formError && !responseError && (!response || status === "draft");
-  editableRef.current = editable;
+  // editableRef mirrors the editable state so the live-refresh effect can read it
+  // without adding editable to its dependency array (which would cause thrashing).
+  useEffect(() => {
+    editableRef.current = editable;
+  }, [editable]);
   // Accepted + decision sent (the API only unmasks to 'accepted' once sent) means
   // the applicant now holds a confirmation window (H15).
   const canConfirm = status === "accepted" && !responseError;

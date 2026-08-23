@@ -222,6 +222,7 @@ export default function EnterprisesPage() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
     if (canManage) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       void load();
       return;
     }
@@ -247,7 +248,7 @@ export default function EnterprisesPage() {
     return () => {
       alive = false;
     };
-  }, [canManage, load, me?.role, router, liveRefresh, sponsorRetryNonce, t]);
+  }, [canManage, load, me?.isSponsorRep, me?.role, router, liveRefresh, sponsorRetryNonce, t]);
 
   if (!canManage && me?.isSponsorRep && loading) {
     return (

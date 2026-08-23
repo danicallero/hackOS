@@ -150,6 +150,7 @@ export function ChallengesSummaryCard({
   }, [canManage, enterprise.name, isOwnEnterprise]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
 
@@ -230,6 +231,7 @@ export function MembersCard({ enterpriseId }: { enterpriseId: number }) {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadMembers();
   }, [loadMembers, liveRefresh]);
 

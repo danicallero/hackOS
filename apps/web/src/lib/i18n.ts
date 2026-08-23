@@ -101,16 +101,22 @@ declare global {
 
 export function LocaleProvider({ children }: { children: React.ReactNode }) {
   const me = useMe();
-  const [language, setLanguage] = useState<Language>("es");
+  // Boot language: detected from SSR-injected window.__hackosInitialLanguage, overridden
+  // later if the user's persisted preference loads (me?.language). Ref tracks what
+  // the page was born with; state holds the effective language.
   const bootLanguage = useRef<Language | null>(null);
 
-  useLayoutEffect(() => {
+  const [language, setLanguage] = useState<Language>(() => {
     const initialLanguage = isLanguage(window.__hackosInitialLanguage)
       ? window.__hackosInitialLanguage
       : "es";
-    bootLanguage.current = initialLanguage;
-    setLanguage(initialLanguage);
-  }, []);
+    return initialLanguage;
+  });
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: bootLanguage holds the initial value only; intentionally not re-captured when language changes.
+  useLayoutEffect(() => {
+    bootLanguage.current = language;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useLayoutEffect(() => {
     document.documentElement.lang = language;
@@ -118,6 +124,8 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
   }, [language]);
 
   useEffect(() => {
+    // Safe: syncing language state to async user preference loaded after mount.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (isLanguage(me?.language)) setLanguage(me.language);
   }, [me?.language]);
   useEffect(() => {

@@ -263,6 +263,7 @@ export function ProjectChallengeAdder({
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Auto-select first challenge once async-loaded prop available
     if (!challengeId && challenges[0]) setChallengeId(String(challenges[0].id));
   }, [challengeId, challenges]);
 

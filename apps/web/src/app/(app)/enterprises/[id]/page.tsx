@@ -21,7 +21,6 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
-import { toDatetimeLocal } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import { useUrlTab } from "@/lib/url-tab";
@@ -32,6 +31,7 @@ const optionalPositiveInt = z
   .string()
   .refine((v) => v === "" || (/^\d+$/.test(v) && Number(v) > 0), "Must be a positive number");
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const editSchema = z.object({
   name: z.string().min(1, "Required").max(200),
   website: optionalUrl,
@@ -43,21 +43,6 @@ const editSchema = z.object({
   visibility: z.enum(["visible", "hidden"]),
   availableFrom: z.string(),
 });
-type EditValues = z.infer<typeof editSchema>;
-
-function _toFormValues(e: Enterprise): EditValues {
-  return {
-    name: e.name,
-    website: e.website ?? "",
-    logoUrl: e.logo_url ?? "",
-    logoNegativeUrl: e.logo_negative_url === e.logo_url ? "" : (e.logo_negative_url ?? ""),
-    description: e.description ?? "",
-    tierId: e.tier_id != null ? String(e.tier_id) : "",
-    displayPriority: e.display_priority != null ? String(e.display_priority) : "",
-    visibility: e.visibility,
-    availableFrom: toDatetimeLocal(e.available_from),
-  };
-}
 
 import { ChallengesSummaryCard, EditCard, LogoCard, MembersCard } from "./enterprise-cards";
 import { InviteLinksCard } from "./invite-links-card";
@@ -97,8 +82,10 @@ export default function EnterpriseDetailPage() {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
-    if (Number.isFinite(id)) void load();
-    else setStatus("error");
+    if (Number.isFinite(id)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      void load();
+    } else setStatus("error");
   }, [id, load, liveRefresh]);
 
   if (status === "loading") {

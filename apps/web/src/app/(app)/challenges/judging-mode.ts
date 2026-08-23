@@ -57,6 +57,8 @@ export function useChallengeRoomStatus(challengeId: number, enabled: boolean): C
   }, [challengeId, enabled]);
 
   useEffect(() => {
+    // fetching room assignments from the API on mount is a legitimate external-system sync
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
 

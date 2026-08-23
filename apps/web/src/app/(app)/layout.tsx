@@ -22,7 +22,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <SidebarInset className="min-w-0">
           <header className="bg-background/80 sticky top-0 z-10 flex h-14 shrink-0 items-center gap-2 border-b px-4 backdrop-blur sm:px-6">
             <NotificationSidebarTrigger className="-ml-1" />
-            <Separator orientation="vertical" className="mr-1 !h-4" />
+            <Separator orientation="vertical" className="mr-1 h-4!" />
             <HeaderTitle />
             <div className="ml-auto flex items-center gap-1">
               <LanguageSelect />
@@ -34,7 +34,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:py-8">
             {/* Pages opt into a wider column with data-wide (e.g. the judging
                 panel's two-column operator layout). */}
-            <div className="mx-auto w-full max-w-6xl has-[[data-wide]]:max-w-none">{children}</div>
+            <div className="mx-auto w-full max-w-6xl has-data-wide:max-w-none">{children}</div>
           </main>
         </SidebarInset>
       </SidebarProvider>

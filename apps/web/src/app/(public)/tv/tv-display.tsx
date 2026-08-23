@@ -564,7 +564,7 @@ function WifiView({
                   <p className="text-muted-foreground text-[1.25em] font-medium tracking-[0.18em] uppercase">
                     {t("networkLabel")}
                   </p>
-                  <p className="mt-[0.15em] text-[4.5em] leading-[1.05] font-semibold tracking-[-0.01em] break-words">
+                  <p className="mt-[0.15em] text-[4.5em] leading-[1.05] font-semibold tracking-[-0.01em] wrap-break-word">
                     {ssid}
                   </p>
                 </div>
@@ -573,7 +573,7 @@ function WifiView({
                     <p className="text-muted-foreground text-[1.25em] font-medium tracking-[0.18em] uppercase">
                       {t("password")}
                     </p>
-                    <p className="bg-muted mt-[0.35em] inline-block rounded-[0.4em] px-[0.5em] py-[0.2em] font-mono text-[3.25em] leading-[1.25] font-semibold tracking-[0.02em] break-all">
+                    <p className="bg-muted mt-[0.35em] inline-block rounded-[0.4em] px-[0.5em] py-[0.2em] font-mono text-[3.25em] leading-tight font-semibold tracking-[0.02em] break-all">
                       {password}
                     </p>
                   </div>
@@ -637,9 +637,13 @@ function useRotatedState(state: TvState): { mode: TvState["mode"]; payload: unkn
   const [index, setIndex] = useState(() => rotationIndexAt(items, Date.now() - startedAt));
 
   const slotKey = `${state.slot?.id ?? "none"}:${items.length}`;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: slotKey stands in for the slot identity; `items` is a fresh array each render.
+  /* Live carousel: rotation must not restart on every render when backend sends
+     fresh items array. slotKey includes items.length (slot identity), but not
+     the full items array since it's a fresh reference each render.
+     biome-ignore lint/correctness/useExhaustiveDependencies: items is fresh each render */
   useEffect(() => {
     if (items.length <= 1) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIndex(0);
       return;
     }
@@ -652,7 +656,7 @@ function useRotatedState(state: TvState): { mode: TvState["mode"]; payload: unkn
     };
     tick();
     return () => clearTimeout(timeout);
-  }, [slotKey, startedAt]);
+  }, [slotKey, startedAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const active = items[index];
   if (items.length <= 1 || !active) return { mode: state.mode, payload: state.payload };
@@ -719,6 +723,7 @@ export function TvDisplay() {
     }
   }, [t, language]);
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
 

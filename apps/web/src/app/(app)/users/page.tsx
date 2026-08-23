@@ -300,8 +300,12 @@ export default function UsersPage() {
   const [presentIds, setPresentIds] = useState<Set<number> | null>(null);
 
   // Restore the saved column choice on mount (after hydration to avoid a
-  // server/client mismatch), then persist any change back to localStorage.
+  // server/client mismatch — a lazy useState initializer would read
+  // localStorage during the client's first render, which is the render
+  // hydration diffs against the server-rendered DEFAULT_COLUMNS markup),
+  // then persist any change back to localStorage.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setVisibleColumns(loadStoredColumns());
     setColumnsHydrated(true);
   }, []);
@@ -324,6 +328,7 @@ export default function UsersPage() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
     if (!showPresence) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPresentIds(null);
       return;
     }
@@ -344,6 +349,7 @@ export default function UsersPage() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setLoadError(null);
     const handle = setTimeout(() => {

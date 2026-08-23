@@ -7,7 +7,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ExternalLinkIcon, type LucideIcon, MapPinIcon, WifiIcon } from "lucide-react";
 import { useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 import { PasswordInput } from "@/components/common/password-input";
@@ -114,7 +114,8 @@ export function VenueTab({
       wifiPassword: "",
     },
   });
-  const { reset, formState, watch } = form;
+  const { reset, formState, control } = form;
+  const values = useWatch({ control });
   const [saveState, setSaveState] = useCategorySaveState(formState.isDirty, onDirtyChange);
 
   useEffect(() => {
@@ -176,13 +177,10 @@ export function VenueTab({
   if (status !== "ready" || !config) {
     return <EventConfigLoadState icon={icon} title={t("venueSectionTitle")} />;
   }
-  const values = watch();
-  const previewLat = values.venueLatitude.trim()
-    ? parseCoordinate(values.venueLatitude, "lat")
-    : null;
-  const previewLon = values.venueLongitude.trim()
-    ? parseCoordinate(values.venueLongitude, "lon")
-    : null;
+  const venueLatitude = values.venueLatitude ?? "";
+  const venueLongitude = values.venueLongitude ?? "";
+  const previewLat = venueLatitude.trim() ? parseCoordinate(venueLatitude, "lat") : null;
+  const previewLon = venueLongitude.trim() ? parseCoordinate(venueLongitude, "lon") : null;
 
   return (
     <Form {...form}>
@@ -249,7 +247,7 @@ export function VenueTab({
             />
           </div>
           <p className="text-muted-foreground text-sm">{t("coordsFormatsHint")}</p>
-          <VenuePreview name={values.venueName.trim()} lat={previewLat} lon={previewLon} />
+          <VenuePreview name={(values.venueName ?? "").trim()} lat={previewLat} lon={previewLon} />
         </SectionCard>
         <SectionCard
           className="mt-6"

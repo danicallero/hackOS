@@ -52,8 +52,7 @@ function buildModes(
   ];
 }
 
-const EXPIRY_OPTIONS = ["none", "15", "30", "60"] as const;
-type ExpiryOption = (typeof EXPIRY_OPTIONS)[number];
+type ExpiryOption = "none" | "15" | "30" | "60";
 
 const EXPIRABLE_MODES: TvControlMode[] = ["wifi"];
 
@@ -99,6 +98,7 @@ export default function TvControlPage() {
   }, [t]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (canControl) void load();
   }, [canControl, load]);
 
@@ -278,7 +278,7 @@ export default function TvControlPage() {
             {MODES.map((item) => (
               <label
                 key={item.value}
-                className="has-[:checked]:border-primary has-[:checked]:bg-muted flex cursor-pointer gap-3 rounded-lg border p-4"
+                className="has-checked:border-primary has-checked:bg-muted flex cursor-pointer gap-3 rounded-lg border p-4"
               >
                 <input
                   className="mt-1"

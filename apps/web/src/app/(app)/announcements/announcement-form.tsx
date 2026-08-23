@@ -100,6 +100,11 @@ export function announcementToForm(a: Announcement): AnnouncementInput {
   };
 }
 
+/**
+ * Form modal for creating or editing announcements.
+ * Handles trilingual content, scheduling, channel delivery, and audience targeting.
+ * Must be used with a `key` prop that changes when the entity changes (create vs. edit with different IDs) to reset form state on remount.
+ */
 export function AnnouncementFormModal({
   open,
   onOpenChange,
@@ -136,14 +141,7 @@ export function AnnouncementFormModal({
   const [translating, setTranslating] = useState(false);
   const [translationsOpen, setTranslationsOpen] = useState(false);
 
-  useEffect(() => {
-    setValues(initial);
-    setRecipients(initialRecipients ?? []);
-    setTargetingModeState(targetingModeOf(initial));
-    setTranslationsOpen(false);
-    setContentError(null);
-  }, [initial, initialRecipients]);
-
+  // Check translation provider availability on mount (only once per session, not per entity)
   useEffect(() => {
     let cancelled = false;
     notificationsApi

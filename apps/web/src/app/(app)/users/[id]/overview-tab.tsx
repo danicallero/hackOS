@@ -41,6 +41,7 @@ import { isLanguage, LANGS, languageName, pickText, useLocale } from "@/lib/i18n
 import { useCan } from "@/lib/session";
 import type { Intolerance, Language, UserDetail } from "@/lib/types";
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const editSchema = z.object({
   name: z.string().min(1, "Required").max(200),
   surname: z.string().min(1, "Required").max(200),

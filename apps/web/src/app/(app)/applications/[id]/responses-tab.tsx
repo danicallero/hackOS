@@ -158,13 +158,15 @@ export function ResponsesTab({
   // Deep-link: `?response=<id>` (used by the profile Application tab) opens that
   // specific response's review modal directly — the same view as clicking a row
   // — instead of leaving the staff on the general responses list.
-  const [pendingResponseId, setPendingResponseId] = useState<number | null>(null);
-  useEffect(() => {
-    const p = new URLSearchParams(window.location.search).get("response");
-    if (p && /^\d+$/.test(p)) setPendingResponseId(Number(p));
-  }, []);
+  const [pendingResponseId, setPendingResponseId] = useState<number | null>(() => {
+    const p = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "").get(
+      "response",
+    );
+    return p && /^\d+$/.test(p) ? Number(p) : null;
+  });
   useEffect(() => {
     if (pendingResponseId != null && rows.some((r) => r.id === pendingResponseId)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- wait for rows to load, then select the pending id from URL deep-link
       setSelectedId(pendingResponseId);
       setPendingResponseId(null);
     }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 const MARQUEE_PAUSE_MS = 1600;
@@ -62,17 +62,19 @@ export function MarqueeText({ text, className }: { text: string; className?: str
   const containerRef = useRef<HTMLSpanElement>(null);
   const textRef = useRef<HTMLSpanElement>(null);
   const animationRef = useRef<Animation | null>(null);
-  const registrationKey = useRef<symbol | null>(null);
-  if (!registrationKey.current) registrationKey.current = Symbol("marquee");
+  // Use state instead of ref to avoid render-time assignment: the coordinator
+  // registration key must be available synchronously and never change.
+  const registrationKey = useState(() => Symbol("marquee"))[0];
 
   // `text` isn't read in the effect body, but a same-size container swapping
   // to different-length content (e.g. a new presenting team) must still
-  // retrigger measurement.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: see above
+  // retrigger measurement. `registrationKey` is a stable state-initialized
+  // symbol that never changes, listed only so exhaustive-deps is satisfied.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: text isn't read in the body but must still retrigger measurement on content change.
   useLayoutEffect(() => {
     const container = containerRef.current;
     const el = textRef.current;
-    const key = registrationKey.current;
+    const key = registrationKey;
     if (!container || !el || !key) return;
 
     let ownOverflow = 0;
@@ -135,7 +137,7 @@ export function MarqueeText({ text, className }: { text: string; className?: str
       unsubscribe();
       marqueeCoordinator.remove(key);
     };
-  }, [text]);
+  }, [text, registrationKey]);
 
   return (
     // `overflow-hidden` clips vertically as well as horizontally: with a tight

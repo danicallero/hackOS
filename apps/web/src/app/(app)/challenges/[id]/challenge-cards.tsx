@@ -12,7 +12,7 @@ import {
   TrophyIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 import { AlertModal } from "@/components/common/alert-modal";
@@ -162,6 +162,7 @@ export function EditCard({
 
   useEffect(() => {
     reset(toFormValues(challenge));
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Resync local edit state from the freshly reloaded challenge after a save.
     setSaveError(false);
     setPrizes(asPrizes(challenge.prizes));
     setQuestions(asQuestions(challenge.judging_panel_criteria));
@@ -229,8 +230,8 @@ export function EditCard({
   }
 
   const generalDisabled = !canAdmin && challenge.visibility === "visible";
-  const watchedVisibility = form.watch("visibility");
-  const watchedAvailableFrom = form.watch("availableFrom");
+  const watchedVisibility = useWatch({ control: form.control, name: "visibility" });
+  const watchedAvailableFrom = useWatch({ control: form.control, name: "availableFrom" });
   const hasUnsavedChanges =
     form.formState.isDirty ||
     JSON.stringify(titleI18n) !==
@@ -743,6 +744,8 @@ function WinnersCard({ challengeId }: { challengeId: number }) {
   }, [challengeId, t]);
 
   useEffect(() => {
+    // fetching winners data from the API on mount is a legitimate external-system sync
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
 

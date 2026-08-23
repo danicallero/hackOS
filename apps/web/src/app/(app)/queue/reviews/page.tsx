@@ -68,6 +68,7 @@ export default function ReviewsOverviewPage() {
   }, [roomFilter, challengeFilter, statusFilter, t]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- data-fetch pattern: load wraps setState for reviews queries
     void load();
   }, [load]);
 

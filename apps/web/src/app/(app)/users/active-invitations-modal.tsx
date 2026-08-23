@@ -98,6 +98,7 @@ export function ActiveInvitationsModal() {
   }, [t]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (open) void load();
   }, [open, load]);
 

@@ -133,6 +133,7 @@ export default function ApplicationDetailPage() {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetching the application form by id from the API on mount is a legitimate external-system sync
     if (Number.isFinite(id)) void loadForm();
     else setState("error");
   }, [id, loadForm, liveRefresh]);

@@ -21,6 +21,8 @@ export function EventTimer({ endsAt, className }: { endsAt: string | null; class
   const [left, setLeft] = useState(() => remaining(endsAt));
 
   useEffect(() => {
+    // Re-sync immediately when endsAt changes to avoid stale display before next tick.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLeft(remaining(endsAt));
     const interval = window.setInterval(() => setLeft(remaining(endsAt)), 1000);
     return () => window.clearInterval(interval);

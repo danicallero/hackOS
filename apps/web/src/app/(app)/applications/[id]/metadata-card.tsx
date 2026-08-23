@@ -37,19 +37,20 @@ import { useLocale } from "@/lib/i18n";
 import type { SaveState } from "@/lib/save-state";
 import { APPLICATION_TYPES, type ApplicationForm, fromLocalInput, toLocalInput } from "../lib";
 
-const metaSchema = z.object({
-  name: z.string().min(1, "Required").max(200),
-  type: z.enum(APPLICATION_TYPES),
-  description: z.string(),
-  active: z.boolean(),
-  open_at: z.string(),
-  close_at: z.string(),
-  capacity: z.string(),
-  confirmation_window_hours: z.string(),
-  ask_shirt_size: z.boolean(),
-  ask_food_intolerances: z.boolean(),
-});
-type MetaValues = z.infer<typeof metaSchema>;
+// Runtime validator is built inside the component with useMemo so its error
+// message can be localized via t("required"). Type is defined separately.
+type MetaValues = {
+  name: string;
+  type: (typeof APPLICATION_TYPES)[number];
+  description: string;
+  active: boolean;
+  open_at: string;
+  close_at: string;
+  capacity: string;
+  confirmation_window_hours: string;
+  ask_shirt_size: boolean;
+  ask_food_intolerances: boolean;
+};
 
 export function MetadataCard({
   form,

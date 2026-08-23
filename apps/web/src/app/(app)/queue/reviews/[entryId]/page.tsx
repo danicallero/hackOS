@@ -73,10 +73,11 @@ export default function ReviewDetailPage() {
   }, [entryId, t]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- data-fetch pattern: load wraps setState for review detail queries
     void load();
   }, [load]);
 
-  const panel = detail?.challenge.criteria ?? [];
+  const panel = useMemo(() => detail?.challenge.criteria ?? [], [detail?.challenge.criteria]);
   const requiredUnansweredCount = useMemo(
     () => requiredUnanswered(panel, answers),
     [panel, answers],
@@ -116,7 +117,7 @@ export default function ReviewDetailPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[320px] items-center justify-center">
+      <div className="flex min-h-80 items-center justify-center">
         <Spinner />
       </div>
     );

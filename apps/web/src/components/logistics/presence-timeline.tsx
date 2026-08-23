@@ -7,6 +7,7 @@ import {
   TimerOffIcon,
   WrenchIcon,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { LOCALE_CODES, useLocale } from "@/lib/i18n";
@@ -189,7 +190,7 @@ function PresenceTimelineRow({
             ) : (
               <DoorOpenIcon className="text-primary mt-0.5 size-4 shrink-0" aria-hidden="true" />
             )}
-            <span className="min-w-0 break-words text-pretty">{title}</span>
+            <span className="min-w-0 wrap-break-word text-pretty">{title}</span>
           </p>
           <p className="text-muted-foreground mt-1 text-xs tabular-nums">
             {dateTime.format(new Date(signal.occurredAt))}
@@ -202,7 +203,7 @@ function PresenceTimelineRow({
             <p className="text-muted-foreground mt-1 text-xs">{t("presenceRecordedBySystem")}</p>
           )}
           {signal.notes && (
-            <p className="text-muted-foreground text-pretty mt-2 break-words text-sm">
+            <p className="text-muted-foreground text-pretty mt-2 wrap-break-word text-sm">
               {signal.notes}
             </p>
           )}
@@ -267,6 +268,13 @@ function WindowMeter({
   gapLabel: string;
 }) {
   const { t } = useLocale();
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
   const total = Date.parse(window.deadline) - Date.parse(window.start);
   const secured = window.securedUntil
     ? Date.parse(window.securedUntil) - Date.parse(window.start)
@@ -274,7 +282,7 @@ function WindowMeter({
   const securedPercent = total > 0 ? Math.min(100, Math.max(0, (secured / total) * 100)) : 0;
   const provisional =
     window.status === "provisional"
-      ? Math.min(Date.now(), Date.parse(window.deadline)) - Date.parse(window.start)
+      ? Math.min(now, Date.parse(window.deadline)) - Date.parse(window.start)
       : 0;
   const provisionalPercent =
     total > 0 ? Math.min(100, Math.max(0, (provisional / total) * 100)) : 0;

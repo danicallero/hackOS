@@ -90,6 +90,7 @@ export function PresenceSection({ userId, refreshKey }: { userId: number; refres
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey is a ping-only nonce from the profile event stream.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load, refreshKey]);
 

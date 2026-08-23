@@ -47,6 +47,7 @@ export function AuditLogSection({ userId }: { userId: number }) {
 
   useEffect(() => {
     if (!canAudit) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setState("forbidden");
       return;
     }

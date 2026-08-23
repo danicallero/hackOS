@@ -146,6 +146,7 @@ export default function ProjectsPage() {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetching from API is a legitimate external-system sync
     void load();
   }, [load, liveRefresh]);
 

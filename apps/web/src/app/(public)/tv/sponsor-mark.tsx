@@ -30,7 +30,7 @@ export function SponsorMark({
 
   if (!sponsor.logoUrl || failed) {
     return (
-      <span className="text-center text-[1.1em] font-semibold break-words hyphens-auto">
+      <span className="text-center text-[1.1em] font-semibold wrap-break-word hyphens-auto">
         {sponsor.name}
       </span>
     );
