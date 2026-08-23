@@ -82,7 +82,6 @@ export function WalletButtons({ purpose, accessToken }: WalletButtonsProps) {
         onClick={() => void openGoogleWallet()}
       >
         {/* biome-ignore lint/performance/noImgElement: official Google button, must not be re-processed by next/image */}
-        {/* eslint-disable-next-line @next/next/no-img-element -- official Google button, must not be re-processed by next/image */}
         <img src={googleButtonSrc} alt={t("addToGoogleWallet")} className="h-12 w-auto" />
       </button>
     </div>
