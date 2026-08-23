@@ -10,8 +10,7 @@ import { logisticsApi } from "@/lib/logistics";
 /**
  * Apple only ships this badge for "es" and "en_US/en_GB" locales; "gl" falls
  * back to the Spanish artwork since there's no Galician variant and the two
- * languages share readers. Per Apple's Add to Apple Wallet guidelines, this
- * must be the unmodified official artwork (no recoloring, no custom button).
+ * languages share readers.
  */
 const APPLE_WALLET_BADGE_BY_LOCALE: Record<string, string> = {
   es: "/wallet-badges/apple-wallet-badge-es.svg",
@@ -20,10 +19,7 @@ const APPLE_WALLET_BADGE_BY_LOCALE: Record<string, string> = {
 };
 
 /**
- * Same fallback logic as the Apple badge above, using Google's official
- * es-ES/en-US "primary" button artwork. Per Google's Add to Google Wallet
- * brand guidelines, this must be the unmodified official asset (no
- * recoloring, no custom button, no free-scaling of the aspect ratio).
+ * Same fallback logic as the Apple badge above.
  */
 const GOOGLE_WALLET_BUTTON_BY_LOCALE: Record<string, string> = {
   es: "/wallet-badges/google-wallet-button-es.svg",
@@ -38,15 +34,14 @@ interface WalletButtonsProps {
   /**
    * Scoped wallet token from the acceptance-email confirm (issue #369). When
    * present the buttons hit the session-less /api/wallet/scoped/* routes and
-   * send no cookies, so the pass is the token holder's — not whoever happens
+   * send no cookies, so the pass is the token holder's, not whoever happens
    * to be signed in on this browser. Omit it for the signed-in wallet page.
    */
   accessToken?: string;
 }
 
 /**
- * The pair of official "Add to Wallet" buttons (H28), shared by the signed-in
- * wallet page and the public confirmation landing page.
+ * The pair of official "Add to Wallet" buttons.
  */
 export function WalletButtons({ purpose, accessToken }: WalletButtonsProps) {
   const { t, language } = useLocale();
@@ -75,22 +70,12 @@ export function WalletButtons({ purpose, accessToken }: WalletButtonsProps) {
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      {/*
-        Apple's Add to Apple Wallet guidelines require the unmodified
-        official badge artwork (no custom button, no recoloring), kept
-        secondary to the surrounding content.
-      */}
       <a href={appleHref} className="inline-flex w-fit">
         {/* eslint-disable-next-line @next/next/no-img-element -- official Apple badge, must not be re-processed by next/image */}
         {/* biome-ignore lint/performance/noImgElement: official Apple badge, must not be re-processed by next/image */}
         <img src={appleBadgeSrc} alt={t("addToAppleWallet")} className="h-12 w-auto" />
       </a>
 
-      {/*
-        Google's Add to Google Wallet brand guidelines require the
-        unmodified official button asset (min 48dp tall, no recoloring, no
-        custom button) and that it call a real Google Wallet save flow.
-      */}
       <button
         type="button"
         className="inline-flex w-fit rounded-md disabled:cursor-not-allowed disabled:opacity-50"
@@ -106,9 +91,8 @@ export function WalletButtons({ purpose, accessToken }: WalletButtonsProps) {
 }
 
 /**
- * Deliberately not the shared api client: that one always sends the session
- * cookie, and the whole point of the scoped token is that the request carries
- * no session at all (issue #369).
+ * Not the shared api client. We don't want the session cookie.
+ * (issue #369)
  */
 async function scopedGoogleSaveUrl(
   purpose: WalletPurpose,
