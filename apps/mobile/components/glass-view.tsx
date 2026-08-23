@@ -15,6 +15,16 @@ export function glassFallbackSurface(colorScheme: GlassColorScheme, systemScheme
 }
 
 /**
+ * True only where the native Liquid Glass material actually renders (iOS 26+,
+ * macOS equivalent) — the same gate `GlassView` uses internally. Screens that
+ * need a genuinely different layout on non-glass platforms (rather than just
+ * `GlassView`'s automatic opaque-surface fallback) branch on this directly.
+ */
+export function isRealLiquidGlassAvailable(): boolean {
+  return (Platform.OS === "ios" || Platform.OS === "macos") && isLiquidGlassAvailable();
+}
+
+/**
  * `expo-glass-effect` ships iOS-only native code — on Android its `GlassView`
  * falls back to a bare, background-less `View`, so every floating "glass"
  * control this app relies on (scanner chrome, floating back/action buttons,

@@ -1,24 +1,25 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { useNavigation, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Stack from "expo-router/stack";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  type ColorValue,
   type GestureResponderEvent,
   Platform,
   Pressable,
   RefreshControl,
   SectionList,
   Text,
+  TextInput,
   useColorScheme,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { EmptyState, StatusPill } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
-import {
-  type AudienceFilterValue,
-  ScheduleFilterButton,
-} from "@/components/schedule-filter-button";
+import { type AudienceFilterValue, ScheduleFilterPanel } from "@/components/schedule-filter-button";
 import {
   ScheduleFormModal,
   scheduleItemToForm,
@@ -62,11 +63,27 @@ interface ScheduleSection {
 }
 
 const SECTION_HEADER_HEIGHT = 34;
+// Size + placement of the floating "add" button — the list's own bottom
+// padding reserves this much space so its last card never renders behind it.
+const FAB_SIZE = 52;
+const FAB_MARGIN = 24;
+// Extra clearance above the safe-area inset, so the FAB reads as clearly
+// floating above the tab bar rather than sitting right at its edge.
+const FAB_BOTTOM_OFFSET = 20;
 
 function audienceMatches(item: ScheduleItem, selected: AudienceFilterValue[]): boolean {
   if (selected.length === 0) return true;
   if (item.audiences.length === 0) return selected.includes("staff");
   return item.audiences.some((audience) => selected.includes(audience));
+}
+
+/** `query` is already trimmed and lowercased by the caller. */
+function scheduleItemMatchesQuery(item: ScheduleItem, query: string): boolean {
+  return (
+    item.title.toLowerCase().includes(query) ||
+    (item.description?.toLowerCase().includes(query) ?? false) ||
+    (item.location?.toLowerCase().includes(query) ?? false)
+  );
 }
 
 /** Participant schedule backed by the same public read model used on web. */
@@ -82,9 +99,7 @@ export default function ScheduleScreen() {
   const scrollRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollAnimated = useRef(false);
   const navigation = useNavigation();
-  const androidTopInset = useAndroidTopInset();
   const insets = useSafeAreaInsets();
-  const headerTopInset = process.env.EXPO_OS === "ios" ? insets.top : androidTopInset;
   const canManage = has(me?.capabilities ?? [], CAPABILITIES.SCHEDULE_MANAGE);
 
   const { data, loading, error, staleSince, load, setData } = useCachedApi(
@@ -102,8 +117,69 @@ export default function ScheduleScreen() {
 
   const [selectedKinds, setSelectedKinds] = useState<string[]>([]);
   const [selectedAudiences, setSelectedAudiences] = useState<AudienceFilterValue[]>([]);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [legacySearchOpen, setLegacySearchOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [formTarget, setFormTarget] = useState<"create" | ScheduleItem | null>(null);
+
+  const filterActive = selectedKinds.length > 0 || selectedAudiences.length > 0;
+  // Real Liquid Glass (iOS 26+) gets the fully native header below: a real
+  // grouped UIBarButtonItem pair plus the system's own integrated search
+  // field. Everywhere else (Android, iOS <26) `GlassView` itself already
+  // falls back to an opaque non-glass surface, but a *native* header can't
+  // express our custom multi-touch-zone pill or the animated search
+  // expand — so those platforms get the original hand-rolled header instead,
+  // rendered inline in the screen body with `headerShown: false`.
+  const glassAvailable = isRealLiquidGlassAvailable();
+  const androidTopInset = useAndroidTopInset();
+  const legacyTopInset = process.env.EXPO_OS === "ios" ? insets.top : androidTopInset;
+  // Fixed, not measured: on the glass path the bell/filter buttons are real
+  // native UIBarButtonItems (Stack.Toolbar.Button below), not a JS view, so
+  // there's no ref to measureInWindow — the header's own height is a known
+  // 44pt compact bar, so anchoring just below it is reliable without one.
+  const filterAnchor = glassAvailable
+    ? { top: insets.top + 52, right: 16 }
+    : { top: legacyTopInset + 60, right: 16 };
+
+  // Native header (compact title + Apple's own integrated search button,
+  // which handles its own expand animation, keyboard, and Cancel affordance)
+  // — avoids re-implementing that transition and the clipping issues a
+  // custom absolutely-positioned dropdown hit inside it (see
+  // ScheduleFilterPanel). Not a large title: the title stays inline with the
+  // toolbar/search row (matching the old hand-rolled header), and — since
+  // this isn't a large title — tapping search collapses it away and
+  // expanding Cancel restores it, same as before. Opaque, not transparent:
+  // this `SectionList`'s sticky section headers stick at scroll-view-local
+  // y=0, not below the title bar, so a transparent header let the sticky
+  // date render behind/through it instead of under an opaque bar.
+  useLayoutEffect(() => {
+    if (!glassAvailable) {
+      navigation.setOptions({ headerShown: false });
+      return;
+    }
+    navigation.setOptions({
+      title: t("tabSchedule"),
+      headerShown: true,
+      headerLargeTitle: false,
+      headerTransparent: false,
+      headerShadowVisible: false,
+      // Opaque (not transparent — see above), but painted the same color as
+      // the screen body so the bar reads as part of the page instead of a
+      // visually distinct nav bar.
+      headerStyle: { backgroundColor: colors.background },
+      headerTitleAlign: "left",
+      headerTitleStyle: { color: colors.label, fontSize: 28, fontWeight: "800" },
+      headerSearchBarOptions: {
+        placeholder: t("scheduleSearchPlaceholder"),
+        autoCapitalize: "none",
+        hideWhenScrolling: true,
+        placement: "integratedButton",
+        onChangeText: (event: { nativeEvent: { text: string } }) =>
+          setSearchQuery(event.nativeEvent.text),
+      },
+    });
+  }, [navigation, t, glassAvailable]);
 
   useEffect(() => {
     void load();
@@ -124,14 +200,17 @@ export default function ScheduleScreen() {
     [items],
   );
 
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+
   const filteredItems = useMemo(
     () =>
       items.filter(
         (item) =>
           (selectedKinds.length === 0 || (item.type && selectedKinds.includes(item.type))) &&
-          audienceMatches(item, selectedAudiences),
+          audienceMatches(item, selectedAudiences) &&
+          (normalizedQuery === "" || scheduleItemMatchesQuery(item, normalizedQuery)),
       ),
-    [items, selectedKinds, selectedAudiences],
+    [items, selectedKinds, selectedAudiences, normalizedQuery],
   );
 
   const todayKey = useMemo(() => new Date(now).toLocaleDateString("en-CA"), [now]);
@@ -330,57 +409,75 @@ export default function ScheduleScreen() {
 
   return (
     <View style={{ backgroundColor: colors.background, flex: 1 }}>
-      <View
-        style={{
-          gap: 8,
-          paddingHorizontal: 16,
-          paddingTop: headerTopInset,
-          // Above the list so the filter dropdown isn't clipped by the
-          // SectionList's scroll container — it used to live inside
-          // ListHeaderComponent, which clips absolutely-positioned overflow.
-          zIndex: 10,
-        }}
-      >
-        <View
+      {glassAvailable ? (
+        // Native toolbar buttons, not a hand-rolled glass pill — adjacent
+        // Stack.Toolbar.Buttons get grouped into one native Liquid Glass
+        // capsule (with Apple's own divider) by the OS, so there's no
+        // separator view or shadow style to get wrong here.
+        <Stack.Toolbar placement="right">
+          <Stack.Toolbar.Button
+            icon="bell.badge"
+            accessibilityLabel={t("scheduleNotificationsTitle")}
+            onPress={() => setSettingsOpen(true)}
+          />
+          <Stack.Toolbar.Button
+            icon={
+              filterActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease"
+            }
+            accessibilityLabel={t("scheduleFilter")}
+            selected={filterOpen}
+            tintColor={filterActive ? colors.accent : undefined}
+            onPress={() => setFilterOpen((current) => !current)}
+          />
+        </Stack.Toolbar>
+      ) : (
+        <LegacyScheduleHeader
+          topInset={legacyTopInset}
+          title={t("tabSchedule")}
+          searchOpen={legacySearchOpen}
+          searchQuery={searchQuery}
+          onSearchQueryChange={setSearchQuery}
+          onOpenSearch={() => setLegacySearchOpen(true)}
+          onCloseSearch={() => {
+            setLegacySearchOpen(false);
+            setSearchQuery("");
+          }}
+          notificationsLabel={t("scheduleNotificationsTitle")}
+          onNotificationsPress={() => setSettingsOpen(true)}
+          filterLabel={t("scheduleFilter")}
+          filterOpen={filterOpen}
+          filterActive={filterActive}
+          onToggleFilter={() => setFilterOpen((current) => !current)}
+          searchLabel={t("scheduleSearch")}
+          searchPlaceholder={t("scheduleSearchPlaceholder")}
+          cancelLabel={t("cancel")}
+        />
+      )}
+      {canManage ? (
+        <GlassView
+          colorScheme="auto"
+          glassEffectStyle="regular"
+          isInteractive
           style={{
-            alignItems: "center",
-            flexDirection: "row",
-            justifyContent: "space-between",
-            paddingBottom: 4,
-            paddingTop: 8,
+            borderRadius: 26,
+            bottom: FAB_BOTTOM_OFFSET + insets.bottom,
+            height: FAB_SIZE,
+            position: "absolute",
+            right: FAB_MARGIN,
+            width: FAB_SIZE,
+            zIndex: 10,
           }}
         >
-          <Text style={{ color: colors.label, fontSize: 34, fontWeight: "800" }}>
-            {t("tabSchedule")}
-          </Text>
-          <View style={{ flexDirection: "row", gap: 8 }}>
-            <ScheduleFilterButton
-              kinds={kinds}
-              selectedKinds={selectedKinds}
-              onToggleKind={toggleKind}
-              showAudience={canManage}
-              selectedAudiences={selectedAudiences}
-              onToggleAudience={toggleAudience}
-              onClear={() => {
-                setSelectedKinds([]);
-                setSelectedAudiences([]);
-              }}
-            />
-            {canManage ? (
-              <HeaderGlassButton
-                icon="plus"
-                accessibilityLabel={t("scheduleAdd")}
-                onPress={() => setFormTarget("create")}
-              />
-            ) : null}
-            <HeaderGlassButton
-              icon="bell.badge"
-              accessibilityLabel={t("scheduleNotificationsTitle")}
-              onPress={() => setSettingsOpen(true)}
-            />
-          </View>
-        </View>
-      </View>
+          <Pressable
+            accessibilityLabel={t("scheduleAdd")}
+            accessibilityRole="button"
+            onPress={() => setFormTarget("create")}
+            style={{ alignItems: "center", flex: 1, justifyContent: "center" }}
+          >
+            <SymbolView name="plus" tintColor={colors.label} size={20} weight="semibold" />
+          </Pressable>
+        </GlassView>
+      ) : null}
       <SectionList
         ref={listRef}
         sections={sections}
@@ -388,7 +485,13 @@ export default function ScheduleScreen() {
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={{
           flexGrow: 1,
-          paddingBottom: insets.bottom + 24,
+          // Exactly clears the FAB (its own offset + height + a small gap) —
+          // was previously adding `insets.bottom` a second time on top of an
+          // already-inset-aware FAB offset, which let the list scroll well
+          // past the last card into empty space.
+          paddingBottom: canManage
+            ? FAB_BOTTOM_OFFSET + insets.bottom + FAB_SIZE + 16
+            : insets.bottom + 24,
         }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         stickySectionHeadersEnabled
@@ -420,7 +523,7 @@ export default function ScheduleScreen() {
             <EmptyState
               icon="calendar.badge.clock"
               title={t("scheduleEmptyTitle")}
-              description={t("scheduleEmpty")}
+              description={normalizedQuery ? t("scheduleSearchEmpty") : t("scheduleEmpty")}
             />
           )
         }
@@ -519,6 +622,22 @@ export default function ScheduleScreen() {
         onToggleEntry={(item) => void notifications.toggleEntry(item)}
         savingKey={notifications.savingKey}
       />
+
+      <ScheduleFilterPanel
+        open={filterOpen}
+        anchor={filterAnchor}
+        onClose={() => setFilterOpen(false)}
+        kinds={kinds}
+        selectedKinds={selectedKinds}
+        onToggleKind={toggleKind}
+        showAudience={canManage}
+        selectedAudiences={selectedAudiences}
+        onToggleAudience={toggleAudience}
+        onClear={() => {
+          setSelectedKinds([]);
+          setSelectedAudiences([]);
+        }}
+      />
     </View>
   );
 }
@@ -577,34 +696,191 @@ function AdminScheduleFormLoader({
   );
 }
 
-function HeaderGlassButton({
+/**
+ * Header for platforms without real Liquid Glass (Android, iOS <26): the
+ * original hand-rolled title + bell/filter pill + search button, rendered
+ * inline in the screen body with the native header hidden. `GlassView`
+ * already renders these as opaque round buttons on its own on these
+ * platforms — this is only about the *layout* a native header can't
+ * express (a shared multi-touch-zone pill, an in-place expanding search
+ * field), not about re-implementing glass styling.
+ */
+function LegacyScheduleHeader({
+  topInset,
+  title,
+  searchOpen,
+  searchQuery,
+  onSearchQueryChange,
+  onOpenSearch,
+  onCloseSearch,
+  notificationsLabel,
+  onNotificationsPress,
+  filterLabel,
+  filterOpen,
+  filterActive,
+  onToggleFilter,
+  searchLabel,
+  searchPlaceholder,
+  cancelLabel,
+}: {
+  topInset: number;
+  title: string;
+  searchOpen: boolean;
+  searchQuery: string;
+  onSearchQueryChange: (text: string) => void;
+  onOpenSearch: () => void;
+  onCloseSearch: () => void;
+  notificationsLabel: string;
+  onNotificationsPress: () => void;
+  filterLabel: string;
+  filterOpen: boolean;
+  filterActive: boolean;
+  onToggleFilter: () => void;
+  searchLabel: string;
+  searchPlaceholder: string;
+  cancelLabel: string;
+}) {
+  return (
+    <View style={{ gap: 8, paddingHorizontal: 16, paddingTop: topInset, zIndex: 10 }}>
+      {searchOpen ? (
+        <View
+          style={{
+            alignItems: "center",
+            flexDirection: "row",
+            gap: 8,
+            paddingTop: 8,
+            paddingBottom: 4,
+          }}
+        >
+          <GlassView
+            colorScheme="auto"
+            glassEffectStyle="regular"
+            style={{ borderRadius: 12, flex: 1, height: 40, overflow: "hidden" }}
+          >
+            <View
+              style={{
+                alignItems: "center",
+                flex: 1,
+                flexDirection: "row",
+                gap: 6,
+                paddingHorizontal: 12,
+              }}
+            >
+              <SymbolView name="magnifyingglass" tintColor={colors.tertiaryLabel} size={16} />
+              <TextInput
+                autoFocus
+                accessibilityLabel={searchLabel}
+                onChangeText={onSearchQueryChange}
+                placeholder={searchPlaceholder}
+                placeholderTextColor={colors.tertiaryLabel}
+                returnKeyType="search"
+                style={{ color: colors.label, flex: 1, fontSize: 16 }}
+                value={searchQuery}
+              />
+            </View>
+          </GlassView>
+          <Pressable
+            accessibilityLabel={cancelLabel}
+            accessibilityRole="button"
+            onPress={onCloseSearch}
+          >
+            <Text style={{ color: colors.accent, fontSize: 16, fontWeight: "600" }}>
+              {cancelLabel}
+            </Text>
+          </Pressable>
+        </View>
+      ) : (
+        <View
+          style={{
+            alignItems: "center",
+            flexDirection: "row",
+            justifyContent: "space-between",
+            paddingTop: 8,
+            paddingBottom: 4,
+          }}
+        >
+          <Text style={{ color: colors.label, fontSize: 28, fontWeight: "800" }}>{title}</Text>
+          <View style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
+            <GlassView
+              colorScheme="auto"
+              glassEffectStyle="regular"
+              isInteractive
+              style={{ alignItems: "center", borderRadius: 22, flexDirection: "row", height: 44 }}
+            >
+              <LegacyHeaderIconButton
+                icon="bell.badge"
+                accessibilityLabel={notificationsLabel}
+                onPress={onNotificationsPress}
+              />
+              <View
+                style={{ backgroundColor: colors.separator, height: 20, opacity: 0.6, width: 1 }}
+              />
+              <LegacyHeaderIconButton
+                icon={
+                  filterActive
+                    ? "line.3.horizontal.decrease.circle.fill"
+                    : "line.3.horizontal.decrease"
+                }
+                accessibilityLabel={filterLabel}
+                tintColor={filterActive ? colors.accent : colors.label}
+                accessibilityState={{ expanded: filterOpen, selected: filterActive }}
+                onPress={onToggleFilter}
+              />
+            </GlassView>
+            <GlassView
+              colorScheme="auto"
+              glassEffectStyle="regular"
+              isInteractive
+              style={{ borderRadius: 22, height: 44, width: 44 }}
+            >
+              <LegacyHeaderIconButton
+                icon="magnifyingglass"
+                accessibilityLabel={searchLabel}
+                onPress={onOpenSearch}
+              />
+            </GlassView>
+          </View>
+        </View>
+      )}
+    </View>
+  );
+}
+
+function LegacyHeaderIconButton({
   icon,
   accessibilityLabel,
+  accessibilityState,
+  tintColor,
   onPress,
 }: {
-  icon: "plus" | "bell.badge";
+  icon:
+    | "bell.badge"
+    | "line.3.horizontal.decrease.circle.fill"
+    | "line.3.horizontal.decrease"
+    | "magnifyingglass";
   accessibilityLabel: string;
+  accessibilityState?: { expanded?: boolean; selected?: boolean };
+  tintColor?: ColorValue;
   onPress: () => void;
 }) {
   return (
     <Pressable
       accessibilityLabel={accessibilityLabel}
       accessibilityRole="button"
+      accessibilityState={accessibilityState}
       onPress={() => {
         void haptic("light");
         onPress();
       }}
       style={({ pressed }) => ({
         alignItems: "center",
-        backgroundColor: colors.surface,
-        borderRadius: 22,
         height: 44,
         justifyContent: "center",
         opacity: pressed ? 0.6 : 1,
         width: 44,
       })}
     >
-      <SymbolView name={icon} tintColor={colors.label} size={19} weight="semibold" />
+      <SymbolView name={icon} tintColor={tintColor ?? colors.label} size={19} weight="semibold" />
     </Pressable>
   );
 }
@@ -647,7 +923,7 @@ export function isScheduleCardTruncated(item: Pick<ScheduleItem, "title" | "desc
 const START_TIME_FLAG_RADIUS = 5;
 const START_TIME_FLAG_PADDING_H = 6;
 const START_TIME_FLAG_PADDING_V = 3;
-const START_TIME_FLAG_GAP = 6;
+const _START_TIME_FLAG_GAP = 6;
 
 /** The badge marking the currently-active item's start time. */
 function StartTimeFlag({ time }: { time: string }) {

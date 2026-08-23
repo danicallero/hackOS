@@ -313,13 +313,30 @@ route below. No migration needed.
   (`hitSlop` — a 44pt touch box stretched the row and pulled the bell off the
   title, H374) and toggles the H59 per-category notification model
   **straight from the list** via `lib/use-schedule-notifications.ts`;
-  filled/accent means on, outline/grey off. A header row (title + glass Filter/Add/Settings buttons, matching the
-  scanner screen's glass style) provides a kind filter for everyone plus an
-  audience filter for `schedule:manage` holders
-  (`components/schedule-filter-button.tsx`), the create form (Add, admin
-  only), and the category settings sheet
-  (`components/schedule-notifications-sheet.tsx`, on/off/partial per kind).
-  Admin rows are swipeable to reveal edit/delete
+  filled/accent means on, outline/grey off. The header branches on
+  `isRealLiquidGlassAvailable()` (`components/glass-view.tsx`): on iOS 26+ it's
+  a real native header (`app/(tabs)/schedule/_layout.tsx` gives this tab its
+  own Stack so `navigation.setOptions` can drive one) with a compact left-
+  aligned title, `Stack.Toolbar.Button` pair for notifications/filter — real
+  adjacent `UIBarButtonItem`s the OS groups into one Liquid Glass capsule on
+  its own, no manual divider or shadow to get wrong — and Apple's own
+  integrated search button (`headerSearchBarOptions`, which owns its
+  expand/collapse animation and Cancel affordance). Everywhere else (iOS
+  <26, Android) `LegacyScheduleHeader` renders the original hand-rolled
+  header in the screen body instead: a title row with a glass bell+filter
+  pill (`components/schedule-filter-button.tsx`'s `ScheduleFilterTrigger`)
+  and a separate glass search button that swaps the row for an inline text
+  field with a Cancel button. `ScheduleFilterPanel` (also in
+  schedule-filter-button.tsx) is the dropdown for both paths, rendered as a
+  `Modal` so it isn't clipped by either header's bounds — kind filter open to
+  everyone, audience filter only to `schedule:manage` holders. **Known gap**:
+  on the non-glass fallback the tab bar renders transparent under this
+  screen and its own content isn't contained above it (same symptom on
+  Alerts, unaffected by anything here); root cause still open, see PR
+  history for what's been ruled out. The Add button (admin only) is a
+  floating glass FAB pinned bottom-right, mirroring the edit FAB on
+  `app/schedule/[id].tsx` and the scanner screen's torch button, rather than
+  living in the header row. Admin rows are swipeable to reveal edit/delete
   (`components/schedule-swipe-row.tsx`); both the swipe's edit action and the
   Add button open `components/schedule-form-modal.tsx`, which mirrors the web
   admin's `ScheduleFormModal` field-for-field (including the
