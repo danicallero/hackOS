@@ -26,6 +26,7 @@ vi.mock("@/hooks/use-fit-to-viewport", () => ({
   }),
 }));
 vi.mock("@/lib/tv", () => ({
+  DEFAULT_ROTATION_SECONDS: 30,
   getTvState: () => pending,
   getTvVenueConfig: () => pending,
   msUntilNextRotation: () => Number.POSITIVE_INFINITY,
@@ -90,6 +91,51 @@ describe("TV announcement layers", () => {
   it("selects the first active notice of each placement in feed order", () => {
     expect(activeAnnouncement(announcements, "fullscreen")?.title).toBe("Urgent");
     expect(activeAnnouncement(announcements, "embedded")?.title).toBe("Integrated");
+  });
+
+  it("rotates between multiple notices sharing a placement by wall-clock time", () => {
+    const rotationMs = 30_000;
+    const shared = [
+      {
+        id: 10,
+        title: "First",
+        body: "",
+        publishAt: null,
+        expiresAt: null,
+        screenPlacement: "fullscreen" as const,
+      },
+      {
+        id: 11,
+        title: "Second",
+        body: "",
+        publishAt: null,
+        expiresAt: null,
+        screenPlacement: "fullscreen" as const,
+      },
+      {
+        id: 12,
+        title: "Third",
+        body: "",
+        publishAt: null,
+        expiresAt: null,
+        screenPlacement: "fullscreen" as const,
+      },
+    ];
+    const cycleMs = rotationMs * shared.length;
+    const base = Math.floor(Date.now() / cycleMs) * cycleMs;
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(base);
+      expect(activeAnnouncement(shared, "fullscreen")?.title).toBe("First");
+      vi.setSystemTime(base + rotationMs);
+      expect(activeAnnouncement(shared, "fullscreen")?.title).toBe("Second");
+      vi.setSystemTime(base + rotationMs * 2);
+      expect(activeAnnouncement(shared, "fullscreen")?.title).toBe("Third");
+      vi.setSystemTime(base + rotationMs * 3);
+      expect(activeAnnouncement(shared, "fullscreen")?.title).toBe("First");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("ignores legacy notices without an explicit screen placement", () => {

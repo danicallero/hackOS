@@ -11,7 +11,14 @@ import { PasswordInput } from "@/components/common/password-input";
 import { Spinner } from "@/components/common/spinner";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Form,
   FormControl,
@@ -34,13 +41,19 @@ import { safeReturnPath, withReturnPath } from "@/lib/return-path";
 import { useSessionContext } from "@/lib/session";
 
 function signupSchema(t: Translate) {
-  return z.object({
-    name: z.string().min(1, t("required")),
-    surname: z.string().min(1, t("required")),
-    email: z.string().email(t("validEmail")),
-    password: z.string().min(8, t("atLeastEight")),
-    language: z.enum(["en", "es", "gl"]),
-  });
+  return z
+    .object({
+      name: z.string().min(1, t("required")),
+      surname: z.string().min(1, t("required")),
+      email: z.string().email(t("validEmail")),
+      password: z.string().min(8, t("atLeastEight")),
+      confirmPassword: z.string(),
+      language: z.enum(["en", "es", "gl"]),
+    })
+    .refine((values) => values.password === values.confirmPassword, {
+      message: t("passwordsDontMatch"),
+      path: ["confirmPassword"],
+    });
 }
 
 type Values = z.infer<ReturnType<typeof signupSchema>>;
@@ -78,7 +91,14 @@ function SignUpInner() {
   const schema = useMemo(() => signupSchema(t), [t]);
   const form = useForm<Values>({
     resolver: zodResolver(schema),
-    defaultValues: { name: "", surname: "", email: "", password: "", language },
+    defaultValues: {
+      name: "",
+      surname: "",
+      email: "",
+      password: "",
+      confirmPassword: "",
+      language,
+    },
   });
 
   // Already signed in: no reason to show the sign-up form again.
@@ -207,6 +227,19 @@ function SignUpInner() {
             />
             <FormField
               control={form.control}
+              name="confirmPassword"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("confirmPassword")}</FormLabel>
+                  <FormControl>
+                    <PasswordInput autoComplete="new-password" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
               name="language"
               render={({ field }) => (
                 <FormItem>
@@ -251,7 +284,7 @@ function SignUpInner() {
           </form>
         </Form>
       </CardContent>
-      <div className="text-muted-foreground px-6 pb-6 text-center text-sm">
+      <CardFooter className="text-muted-foreground justify-center border-t text-center text-sm">
         {t("alreadyHaveAccount")}{" "}
         <Link
           href={withReturnPath("/login", next || null)}
@@ -259,7 +292,7 @@ function SignUpInner() {
         >
           {t("signIn")}
         </Link>
-      </div>
+      </CardFooter>
     </Card>
   );
 }

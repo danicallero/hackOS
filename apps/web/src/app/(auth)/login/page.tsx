@@ -11,7 +11,7 @@ import { PasswordInput } from "@/components/common/password-input";
 import { Spinner } from "@/components/common/spinner";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Form,
   FormControl,
@@ -163,7 +163,7 @@ function LoginInner() {
           </form>
         </Form>
       </CardContent>
-      <div className="text-muted-foreground px-6 pb-6 text-center text-sm">
+      <CardFooter className="text-muted-foreground justify-center border-t text-center text-sm">
         {t("newToHackos")}{" "}
         <Link
           href={withReturnPath("/signup", rawNext)}
@@ -171,7 +171,7 @@ function LoginInner() {
         >
           {t("createAccount")}
         </Link>
-      </div>
+      </CardFooter>
     </Card>
   );
 }
