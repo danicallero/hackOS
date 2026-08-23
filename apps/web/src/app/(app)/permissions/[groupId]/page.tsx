@@ -159,6 +159,7 @@ export default function PermissionGroupDetailPage() {
 
   useEffect(() => {
     if (!Number.isFinite(groupId)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(false);
       setNotFound(true);
       return;
@@ -281,13 +282,15 @@ export default function PermissionGroupDetailPage() {
   const groupName = (id: number) =>
     allGroups.find((g) => g.id === id)?.name ?? t("groupNumberFallback", { id });
 
-  // Kept current every render so the live-refresh effect above always reads
-  // the latest dirty state without needing it in its dependency array.
-  dirtyRef.current =
-    (group
-      ? caps.length !== group.capabilities.length ||
-        caps.some((c) => !group.capabilities.includes(c))
-      : false) || form.formState.isDirty;
+  // Track dirty state so the live-refresh effect can check it without adding
+  // a dependency (keeping the effect stable across re-renders).
+  useEffect(() => {
+    dirtyRef.current =
+      (group
+        ? caps.length !== group.capabilities.length ||
+          caps.some((c) => !group.capabilities.includes(c))
+        : false) || form.formState.isDirty;
+  }, [group, caps, form.formState.isDirty]);
 
   if (loading && !group) {
     return (
