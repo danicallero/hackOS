@@ -25,7 +25,10 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  config.TRANSLATE_PROVIDER = "google";
   config.GOOGLE_TRANSLATE_API_KEY = undefined;
+  config.LIBRETRANSLATE_URL = undefined;
+  config.LIBRETRANSLATE_API_KEY = undefined;
   vi.unstubAllGlobals();
 });
 
@@ -131,6 +134,45 @@ describe("POST /api/announcements/translate", () => {
     });
     // Source language is skipped, never sent to the provider (it's already what it is).
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("translates via a self-hosted LibreTranslate instance when TRANSLATE_PROVIDER=libretranslate", async () => {
+    const adminId = await createUserWithCapabilities([CAPABILITIES.ANNOUNCEMENTS_MANAGE]);
+    config.TRANSLATE_PROVIDER = "libretranslate";
+    config.LIBRETRANSLATE_URL = "https://translate.example.org";
+    config.LIBRETRANSLATE_API_KEY = "test-key";
+
+    const fetchMock = vi.fn(async (url: string, init?: { body?: string }) => {
+      expect(url).toBe("https://translate.example.org/translate");
+      const body = JSON.parse((init?.body as string) ?? "{}") as {
+        target: string;
+        q: string[];
+        api_key?: string;
+      };
+      expect(body.api_key).toBe("test-key");
+      const suffix = body.target.toUpperCase();
+      return new Response(
+        JSON.stringify({ translatedText: body.q.map((text) => `${text} [${suffix}]`) }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/announcements/translate",
+      headers: asUser(adminId),
+      payload: {
+        title: "Dinner is ready",
+        body: "Head to the canteen",
+        sourceLanguage: "es",
+        targetLanguages: ["gl"],
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({
+      translations: { gl: { title: "Dinner is ready [GL]", body: "Head to the canteen [GL]" } },
+    });
   });
 
   it("bubbles up a clean error when the provider itself fails", async () => {

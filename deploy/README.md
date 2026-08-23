@@ -118,7 +118,7 @@ sensible defaults, so you can usually skip them entirely.
 | minio | `MINIO_IMAGE`, `MINIO_MC_IMAGE`, `MINIO_BROWSER`, `MINIO_MEM_LIMIT` | Pinned image tags; console on/off; memory cap. |
 | api | `API_MEM_LIMIT` | Memory cap (default `512m`). |
 | api | `MOBILE_APP_SCHEME` | Expo app's custom URL scheme, trusted for Better Auth's `expo()` plugin (default `hackos`, H4/H55). Only needed if `apps/mobile`'s scheme is renamed. |
-| api | `GOOGLE_TRANSLATE_API_KEY` 🔒 | Optional; enables H50 announcement auto-translate. Unset means manual-only translation entry everywhere — see `docs/env-vars.md`. |
+| api | `TRANSLATE_PROVIDER`, `GOOGLE_TRANSLATE_API_KEY` 🔒 / `LIBRETRANSLATE_URL` + `LIBRETRANSLATE_API_KEY` 🔒 | Optional; enables H50 announcement auto-translate via Google Translate or a self-hosted LibreTranslate instance. Unset/misconfigured means manual-only translation entry everywhere — see `docs/env-vars.md`. |
 | worker | `WORKER_MEM_LIMIT` | Memory cap (default `512m`). |
 
 > **The split in one line:** shared secrets + anything two services touch →

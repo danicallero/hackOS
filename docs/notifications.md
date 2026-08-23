@@ -131,11 +131,13 @@ fill languages that are still empty, never overwriting a manual edit.
 The provider is fully optional and isolated behind
 `modules/notifications/translate/`: `translateAnnouncementContent()` /
 `isTranslationAvailable()` in `translate/index.ts` are the only functions
-anything else calls; the Google Cloud Translation v2 implementation lives
-entirely in `translate/google.ts` (`GOOGLE_TRANSLATE_API_KEY`, see
-`docs/env-vars.md`), so swapping providers later is a one-file change plus a
-new env var — mirroring the `MAIL_PROVIDER` adapter split in
-`channels/email-adapters/`. `GET /api/announcements/translate-availability`
+anything else calls, dispatching on `TRANSLATE_PROVIDER` to either the
+Google Cloud Translation v2 adapter (`translate/google.ts`,
+`GOOGLE_TRANSLATE_API_KEY`) or a self-hosted LibreTranslate adapter
+(`translate/libretranslate.ts`, `LIBRETRANSLATE_URL` +
+`LIBRETRANSLATE_API_KEY`, see `docs/env-vars.md`) — mirroring the
+`MAIL_PROVIDER` adapter split in `channels/email-adapters/`. `GET
+/api/announcements/translate-availability`
 lets both frontends hide/disable the action when unset instead of offering
 one that will 503; every translation surface keeps working with manual-only
 entry regardless of whether a provider is configured. Exercised in tests via

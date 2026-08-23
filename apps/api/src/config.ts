@@ -146,12 +146,14 @@ const envSchema = z.object({
   /**
    * Optional automatic translation for announcement content (H50). Entirely
    * optional — every translation surface (API and both frontends) must keep
-   * working with manual-only entry when this is unset; see
-   * modules/notifications/translate/ for the isolated provider boundary this
-   * is designed to be swapped behind later (mirrors the MAIL_PROVIDER
-   * adapter split in email-adapters/).
+   * working with manual-only entry when neither provider is configured; see
+   * modules/notifications/translate/ for the isolated provider boundary,
+   * mirroring the MAIL_PROVIDER adapter split in email-adapters/.
    */
+  TRANSLATE_PROVIDER: z.enum(["google", "libretranslate"]).default("google"),
   GOOGLE_TRANSLATE_API_KEY: z.string().optional(),
+  LIBRETRANSLATE_URL: z.string().optional(),
+  LIBRETRANSLATE_API_KEY: z.string().optional(),
 });
 
 const parsed = envSchema
