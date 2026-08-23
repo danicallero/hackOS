@@ -73,9 +73,10 @@ route below. No migration needed.
   shared `notify()` helper with a real `queue.precall` template (it previously
   inserted a templateless, push-only outbox row directly — the pre-alert had
   no rendered subject/body and never reached in_app/email).
-- Every other endpoint the app calls already existed and is unchanged:
+- The app also calls these existing endpoints:
   `GET /api/me` (capabilities + language + badgeId), `GET /api/public/activities`
-  (schedule), `GET /api/queue/me` (H38 status), `GET /api/me/ticket` +
+  (schedule), `GET /api/queue/me` (H38 status), `GET /api/me/ticket` (including
+  the active account-specific Apple Wallet serial number for each purpose) +
   `GET /api/me/wallet/apple/:purpose.pkpass` + `GET /api/me/wallet/google/:purpose`
   (H28), `GET`/`PUT /api/me/notification-preferences` (H51).
 - `GET /api/scanner/snapshot` — capability-guarded, replace-all seed for the
@@ -250,7 +251,13 @@ route below. No migration needed.
   roster), plus a confirmed "Clear cache" action. Clearing never touches the
   offline scan queue — the only record of not-yet-synced scans — or the auth
   session; see "Scanner cache encryption & isolation" below. `wallet.tsx`
-  renders ticket/badge QR codes. The Apple Wallet action is the system
+  renders ticket/badge QR codes. After an eligible session is restored, a
+  best-effort startup warmup stores the `/api/me/ticket` payload under an
+  account-scoped cache key; the screen still refreshes online and falls back to
+  that payload with a stale-data banner when the connection fails. When an existing Apple pass is opened, the app
+  passes both the shared pass type identifier and the selected account/purpose's
+  serial number to PassKit, so another account's pass with the same type
+  identifier cannot be selected at random. The Apple Wallet action is the system
   `PKAddPassButton` control (`@premieroctet/react-native-wallet`'s
   `RNWalletView`, iOS only) — per Apple's Add to Apple Wallet guidelines, the
   button must be the system control, not custom artwork — wired to

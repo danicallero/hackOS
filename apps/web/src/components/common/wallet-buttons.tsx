@@ -80,15 +80,11 @@ export function WalletButtons({ purpose, accessToken }: WalletButtonsProps) {
         official badge artwork (no custom button, no recoloring), kept
         secondary to the surrounding content.
       */}
-      <button
-        type="button"
-        className="inline-flex w-fit"
-        onClick={() => window.open(appleHref, "_blank", "noopener,noreferrer")}
-      >
+      <a href={appleHref} className="inline-flex w-fit">
         {/* eslint-disable-next-line @next/next/no-img-element -- official Apple badge, must not be re-processed by next/image */}
         {/* biome-ignore lint/performance/noImgElement: official Apple badge, must not be re-processed by next/image */}
         <img src={appleBadgeSrc} alt={t("addToAppleWallet")} className="h-12 w-auto" />
-      </button>
+      </a>
 
       {/*
         Google's Add to Google Wallet brand guidelines require the

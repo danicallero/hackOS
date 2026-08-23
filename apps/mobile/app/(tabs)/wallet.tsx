@@ -21,21 +21,13 @@ import { useMeContext } from "@/lib/me-context";
 import { subscribeToServerEvent } from "@/lib/server-events";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
-import { supportsAppleWalletButton, supportsAppleWalletFileHandoff } from "@/lib/wallet-platform";
+import { type WalletTicketPayload, walletCacheKey } from "@/lib/wallet-cache";
+import {
+  resolveAppleWalletPass,
+  supportsAppleWalletButton,
+  supportsAppleWalletFileHandoff,
+} from "@/lib/wallet-platform";
 import { colors } from "@/theme/colors";
-
-interface TicketPayload {
-  userId: number;
-  ticketToken: string | null;
-  badgeId: string | null;
-  applePassTypeIdentifier: string;
-  acceptedSpots: Array<{
-    responseId: number;
-    applicationName: string;
-    applicationType: string;
-    expiresAt: string | null;
-  }>;
-}
 
 /** Ticket and badge read model shared with web, with native Wallet handoff. */
 export default function WalletScreen() {
@@ -50,14 +42,14 @@ export default function WalletScreen() {
   const actionRetry = useRef<{ action: () => Promise<void>; key: string } | null>(null);
   const confirmationKeys = useRef(new Map<number, string>());
 
-  const fetchTicket = useCallback(() => apiFetch<TicketPayload>("/api/me/ticket"), []);
+  const fetchTicket = useCallback(() => apiFetch<WalletTicketPayload>("/api/me/ticket"), []);
   const {
     data: ticket,
     loading,
     error,
     staleSince,
     load,
-  } = useCachedApi(`user:${me?.id ?? "unknown"}:wallet`, fetchTicket);
+  } = useCachedApi(me ? walletCacheKey(me.id) : "user:unknown:wallet", fetchTicket);
 
   useEffect(() => {
     void load();
@@ -85,11 +77,17 @@ export default function WalletScreen() {
     } catch (cause) {
       const code = (cause as { code?: string } | null)?.code;
       if (code === "PASS_ALREADY_EXISTS") {
-        try {
-          await WalletManager.viewInWallet(ticket!.applePassTypeIdentifier);
-        } catch {
-          // The pass is already visible in Wallet; nothing more to do.
-        }
+        const latestTicket = ticket!.applePassSerialNumbers[purpose]
+          ? ticket!
+          : await fetchTicket();
+        const pass = resolveAppleWalletPass(
+          latestTicket.applePassTypeIdentifier,
+          latestTicket.applePassSerialNumbers,
+          purpose,
+        );
+        if (!pass) throw new Error("The account's Apple Wallet pass could not be identified");
+        const opened = await WalletManager.viewInWallet(pass.cardIdentifier, pass.serialNumber);
+        if (!opened) throw new Error("The account's Apple Wallet pass could not be opened");
         return;
       }
       if (code === "USER_CANCELLED") return;

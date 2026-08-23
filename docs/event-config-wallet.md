@@ -172,4 +172,6 @@ around that rule:
 `WalletButtons` (`apps/web/src/components/common/wallet-buttons.tsx`) is shared
 by this page and the signed-in wallet page; passing `accessToken` switches it to
 the scoped routes and to `credentials: "omit"` fetches, so the request carries
-no cookie at all.
+no cookie at all. The Apple Wallet badge is a same-tab link: the browser must
+hand the `.pkpass` response to Wallet without creating a blank tab that the
+holder has to close manually.

@@ -18,6 +18,7 @@ import { setupNotificationListeners } from "@/lib/notifications-setup";
 import { registerForPushNotifications } from "@/lib/push";
 import { startPersonalEventStream } from "@/lib/server-events";
 import { isOperator } from "@/lib/tabs";
+import { warmWalletCache } from "@/lib/wallet-cache";
 import { colors } from "@/theme/colors";
 
 export {
@@ -64,6 +65,7 @@ function RootLayoutSession() {
     <MeProvider authenticated={Boolean(session)}>
       <LanguageSync />
       <PushRegistration authenticated={Boolean(session)} />
+      <WalletCacheWarmup authenticated={Boolean(session)} />
       <NotificationListeners />
       <MobileAccessGate authenticated={Boolean(session)} />
       <PersonalEventStream authenticated={Boolean(session)} />
@@ -127,6 +129,18 @@ function PushRegistration({ authenticated }: { authenticated: boolean }) {
       });
     }
   }, [authenticated, me]);
+  return null;
+}
+
+/** Persist participant ticket details before a later connection outage (H28). */
+function WalletCacheWarmup({ authenticated }: { authenticated: boolean }) {
+  const { me } = useMeContext();
+
+  useEffect(() => {
+    if (!authenticated || !me?.mobileAccess) return;
+    void warmWalletCache(me.id);
+  }, [authenticated, me?.id, me?.mobileAccess]);
+
   return null;
 }
 

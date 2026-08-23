@@ -180,6 +180,14 @@ describe("H28 Apple Wallet PassKit", () => {
     const serial = pass.rows[0].serial_number;
     const token = pass.rows[0].authentication_token;
 
+    const ticket = await app.inject({
+      method: "GET",
+      url: "/api/me/ticket",
+      headers: asUser(uid),
+    });
+    expect(ticket.statusCode).toBe(200);
+    expect(ticket.json().applePassSerialNumbers).toEqual({ ticket: serial, badge: null });
+
     const native = await app.inject({
       method: "GET",
       url: `/api/wallet/apple/v1/passes/${PASS_TYPE_IDENTIFIER}/${serial}`,

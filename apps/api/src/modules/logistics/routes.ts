@@ -99,6 +99,7 @@ import {
   scheduleVisibilityBody,
   staffScanRankingResponse,
   staffScanStatsResponse,
+  ticketResponse,
   timeLogIdParam,
   timeLogPatchBody,
   userIdParam,
@@ -882,13 +883,29 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
 
   typed.get(
     "/api/me/ticket",
-    { ...routeAccess(access.authenticated), preHandler: requireAuth },
+    {
+      ...routeAccess(access.authenticated),
+      preHandler: requireAuth,
+      schema: {
+        summary: "View my ticket and badge",
+        description:
+          "Returns the current user's ticket/badge QR values and accepted spots. It also returns the active Apple Wallet serial number for each purpose so the mobile app can open this account's pass when another account's pass uses the same pass type identifier (H28).",
+        response: { 200: ticketResponse },
+      },
+    },
     async (req) => ticketQrPayload(actor(req.userId)),
   );
 
   typed.get(
     "/api/users/:userId/ticket",
-    { ...routeAccess(access.ticketRead), preHandler: ticketRead, schema: { params: userIdParam } },
+    {
+      ...routeAccess(access.ticketRead),
+      preHandler: ticketRead,
+      schema: {
+        params: userIdParam,
+        response: { 200: ticketResponse },
+      },
+    },
     async (req) => ticketQrPayload(req.params.userId),
   );
 
