@@ -43,28 +43,26 @@ export function PageHeader({
   return (
     <header
       className={cn(
-        "flex flex-col gap-[var(--space-within-section)] sm:flex-row sm:items-start sm:justify-between",
+        "flex flex-col gap-(--space-within-section) sm:flex-row sm:items-start sm:justify-between",
         className,
       )}
     >
-      <div className="flex min-w-0 items-start gap-[var(--space-related)]">
+      <div className="flex min-w-0 items-start gap-(--space-related)">
         {leading && <div className="shrink-0">{leading}</div>}
         <div className="min-w-0 space-y-1">
           {context && <div className="type-meta">{context}</div>}
-          <div className="flex flex-wrap items-center gap-[var(--space-related)]">
+          <div className="flex flex-wrap items-center gap-(--space-related)">
             <h1 className="type-page-title text-balance">{title}</h1>
             {state && <div className="shrink-0">{state}</div>}
           </div>
-          {meta && (
-            <div className="flex flex-wrap items-center gap-[var(--space-related)]">{meta}</div>
-          )}
+          {meta && <div className="flex flex-wrap items-center gap-(--space-related)">{meta}</div>}
           {description && (
             <p className="text-muted-foreground text-pretty text-sm">{description}</p>
           )}
         </div>
       </div>
       {actionContent && (
-        <div className="flex flex-wrap items-center gap-[var(--space-related)] sm:shrink-0 sm:justify-end">
+        <div className="flex flex-wrap items-center gap-(--space-related) sm:shrink-0 sm:justify-end">
           {actionContent}
         </div>
       )}

@@ -23,6 +23,8 @@ export function QueueStatusBadge({
   status,
   className,
 }: {
+  /** Accepts a raw string too, so an unrecognized/legacy value renders as
+   *  itself in a neutral badge instead of throwing. */
   status: QueueStatus | string;
   className?: string;
 }) {

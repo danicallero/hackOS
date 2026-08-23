@@ -14,7 +14,9 @@ export function EmptyState({
 }: {
   icon?: LucideIcon;
   title: string;
+  /** Secondary line under the title, e.g. why the state is empty. */
   description?: string;
+  /** Call to action shown below the text, e.g. a "Create" button. */
   action?: React.ReactNode;
   className?: string;
 }) {

@@ -50,7 +50,9 @@ export function StatCard({
           </span>
         )}
       </div>
-      {hint && <p className="text-muted-foreground mt-1 break-words text-pretty text-xs">{hint}</p>}
+      {hint && (
+        <p className="text-muted-foreground mt-1 wrap-break-word text-pretty text-xs">{hint}</p>
+      )}
       {footer && <div className="mt-3">{footer}</div>}
     </Card>
   );

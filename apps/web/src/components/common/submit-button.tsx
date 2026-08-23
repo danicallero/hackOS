@@ -12,7 +12,10 @@ export function SubmitButton({
   children,
   disabled,
   ...props
-}: ButtonProps & { pending?: boolean }) {
+}: ButtonProps & {
+  /** Shows the spinner and disables the button (in addition to `disabled`). */
+  pending?: boolean;
+}) {
   return (
     <Button type="submit" disabled={pending || disabled} {...props}>
       {pending && <Spinner />}

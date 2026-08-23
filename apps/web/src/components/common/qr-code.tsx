@@ -5,12 +5,15 @@ import { Button } from "@/components/ui/button";
 import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
+/** QR code card with the encoded value shown as text and a copy button. */
 export function QrCode({
   value,
   label,
   className,
 }: {
+  /** Encoded content; renders a "not available" placeholder card when null/undefined. */
   value: string | null | undefined;
+  /** Caption under the code and title on the SVG, e.g. the ticket/badge id. */
   label: string;
   className?: string;
 }) {
