@@ -3,7 +3,29 @@ jest.mock("expo-device", () => ({
 }));
 
 import { DeviceType } from "expo-device";
-import { supportsAppleWalletButton, supportsAppleWalletFileHandoff } from "./wallet-platform";
+import {
+  resolveAppleWalletPass,
+  supportsAppleWalletButton,
+  supportsAppleWalletFileHandoff,
+} from "./wallet-platform";
+
+describe("resolveAppleWalletPass", () => {
+  it("selects the serial for the currently selected pass purpose", () => {
+    expect(
+      resolveAppleWalletPass(
+        "pass.hackos",
+        { ticket: "ticket-account-a", badge: "badge-account-a" },
+        "badge",
+      ),
+    ).toEqual({ cardIdentifier: "pass.hackos", serialNumber: "badge-account-a" });
+  });
+
+  it("does not fall back to the shared identifier when the account pass is unknown", () => {
+    expect(
+      resolveAppleWalletPass("pass.hackos", { ticket: null, badge: null }, "ticket"),
+    ).toBeNull();
+  });
+});
 
 describe("supportsAppleWalletButton", () => {
   it("allows the native PassKit button on iOS phones", () => {

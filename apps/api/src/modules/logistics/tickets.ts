@@ -23,16 +23,17 @@ export async function issueTicket(client: pg.PoolClient, userId: number): Promis
 }
 
 export async function ticketQrPayload(userId: number) {
-  const [{ rows }, { rows: acceptedRows }, eventAccess] = await Promise.all([
-    pool.query(
-      `SELECT u.id, u.badge_id, t.token
+  const [{ rows }, { rows: acceptedRows }, { rows: applePassRows }, eventAccess] =
+    await Promise.all([
+      pool.query(
+        `SELECT u.id, u.badge_id, t.token
        FROM users u
        LEFT JOIN tickets t ON t.user_id = u.id
       WHERE u.id = $1`,
-      [userId],
-    ),
-    pool.query(
-      `SELECT r.id AS response_id, a.name AS application_name, a.type AS application_type,
+        [userId],
+      ),
+      pool.query(
+        `SELECT r.id AS response_id, a.name AS application_name, a.type AS application_type,
               evt.expires_at
          FROM application_responses r
          JOIN applications a ON a.id = r.application_id
@@ -41,10 +42,16 @@ export async function ticketQrPayload(userId: number) {
           AND r.status = 'accepted'
           AND r.decision_sent_at IS NOT NULL
         ORDER BY r.id DESC`,
-      [userId],
-    ),
-    hasEventAccess(pool, userId),
-  ]);
+        [userId],
+      ),
+      pool.query(
+        `SELECT purpose, serial_number
+         FROM wallet_passes
+        WHERE user_id = $1 AND platform = 'apple' AND status <> 'voided'`,
+        [userId],
+      ),
+      hasEventAccess(pool, userId),
+    ]);
   const row = rows[0];
   if (!row) throw new NotFoundError("User not found");
   return {
@@ -55,6 +62,17 @@ export async function ticketQrPayload(userId: number) {
     ticketToken: eventAccess ? ((row.token as string | null) ?? null) : null,
     badgeId: (row.badge_id as string | null) ?? null,
     applePassTypeIdentifier: PASS_TYPE_IDENTIFIER,
+    // H28: the pass type identifier is shared by every attendee. The serial
+    // number is the account-specific identity Wallet needs when more than one
+    // hackOS pass is installed on the device.
+    applePassSerialNumbers: {
+      ticket:
+        (applePassRows.find((pass: { purpose: string }) => pass.purpose === "ticket")
+          ?.serial_number as string | undefined) ?? null,
+      badge:
+        (applePassRows.find((pass: { purpose: string }) => pass.purpose === "badge")
+          ?.serial_number as string | undefined) ?? null,
+    },
     acceptedSpots: acceptedRows.map((accepted) => ({
       responseId: accepted.response_id as number,
       applicationName: accepted.application_name as string,
