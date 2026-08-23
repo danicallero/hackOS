@@ -45,6 +45,8 @@ export function ChallengeResultsPanel({ challengeId }: { challengeId: number }) 
 
   useEffect(() => {
     let cancelled = false;
+    // Data-fetch on mount/dependency change pattern.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoadingProgress(true);
     getChallengeProgress(challengeId)
       .then((data) => {
@@ -64,6 +66,8 @@ export function ChallengeResultsPanel({ challengeId }: { challengeId: number }) 
   useEffect(() => {
     const q = query.trim();
     if (!q) {
+      // Reset search results when query is cleared.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setResults([]);
       setSearching(false);
       return;
@@ -184,6 +188,8 @@ export function AssignmentsEditor({
 
   useEffect(() => {
     const nextChallengeId = assignments?.challenges[0]?.challenge_id ?? challengeFallback;
+    // Auto-derive selected challenge from async-loaded assignments data.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setChallengeId(nextChallengeId ? String(nextChallengeId) : "");
   }, [assignments?.challenges, challengeFallback]);
 

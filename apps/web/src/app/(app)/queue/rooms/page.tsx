@@ -153,11 +153,13 @@ export default function QueueRoomsPage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
 
   useEffect(() => {
     if (!selectedRoomId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadRoomDetails(selectedRoomId);
   }, [loadRoomDetails, selectedRoomId]);
 
@@ -166,7 +168,10 @@ export default function QueueRoomsPage() {
   // modal is open, since `load` recomputing `selectedRoom` would reseed
   // `roomDraft` (name/slug/location) and discard an in-progress edit.
   const editingRef = useRef(false);
-  editingRef.current = modalMode === "edit";
+  useEffect(() => {
+    editingRef.current = modalMode === "edit";
+  }, [modalMode]);
+
   const liveRefresh = useAutoRefresh("/api/queue/stream", [
     EVENTS.QUEUE_ENTRY_CHANGED,
     EVENTS.QUEUE_ROOM_CHANGED,
@@ -180,11 +185,16 @@ export default function QueueRoomsPage() {
     }
     if (editingRef.current) return;
     void load();
-    if (selectedRoomId) void loadRoomDetails(selectedRoomId);
+    if (selectedRoomId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      void loadRoomDetails(selectedRoomId);
+    }
   }, [liveRefresh, load, loadRoomDetails, selectedRoomId]);
 
   useEffect(() => {
     if (!selectedRoom) return;
+    // Sync editable draft form to the currently-selected room; resets any unsaved edits when selection changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setRoomDraft({
       name: selectedRoom.name,
       slug: selectedRoom.slug,
