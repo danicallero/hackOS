@@ -142,6 +142,16 @@ const envSchema = z.object({
   GOOGLE_WALLET_ISSUER_ID: z.string().optional(),
   GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL: z.string().optional(),
   GOOGLE_WALLET_PRIVATE_KEY_PEM: z.string().optional(),
+
+  /**
+   * Optional automatic translation for announcement content (H50). Entirely
+   * optional — every translation surface (API and both frontends) must keep
+   * working with manual-only entry when this is unset; see
+   * modules/notifications/translate/ for the isolated provider boundary this
+   * is designed to be swapped behind later (mirrors the MAIL_PROVIDER
+   * adapter split in email-adapters/).
+   */
+  GOOGLE_TRANSLATE_API_KEY: z.string().optional(),
 });
 
 const parsed = envSchema

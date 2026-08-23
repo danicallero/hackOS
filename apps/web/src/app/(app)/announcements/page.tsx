@@ -14,7 +14,6 @@ import {
   PlusIcon,
   Trash2Icon,
 } from "lucide-react";
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AccessDenied } from "@/components/common/access-denied";
@@ -23,15 +22,21 @@ import { ContextualError } from "@/components/common/contextual-error";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { PageHeader } from "@/components/common/page-header";
 import { StatusBadge } from "@/components/common/status-badge";
+import type { UserOption } from "@/components/common/user-picker";
 import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError } from "@/lib/api";
 import { formatScheduledDateTime } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
-import type { Announcement } from "@/lib/notifications";
+import type { Announcement, AnnouncementInput } from "@/lib/notifications";
 import { notificationsApi } from "@/lib/notifications";
 import { useCan } from "@/lib/session";
 import type { Tone } from "@/lib/tones";
+import {
+  AnnouncementFormModal,
+  announcementToForm,
+  EMPTY_ANNOUNCEMENT_FORM,
+} from "./announcement-form";
 
 type AnnouncementStatus = "scheduled" | "live" | "expired";
 
@@ -83,6 +88,8 @@ export default function AnnouncementsPage() {
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState<Announcement | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<Announcement | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -108,6 +115,15 @@ export default function AnnouncementsPage() {
     if (canManage) void load();
     else setLoading(false);
   }, [canManage, load, liveRefresh]);
+
+  async function openEdit(item: Announcement) {
+    try {
+      const full = await notificationsApi.getAnnouncement(item.id);
+      setEditingItem(full);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadAnnouncements"));
+    }
+  }
 
   async function remove(item: Announcement) {
     setBusy(true);
@@ -198,11 +214,9 @@ export default function AnnouncementsPage() {
       <PageHeader
         title={t("announcements")}
         actions={
-          <Button asChild>
-            <Link href="/announcements/new">
-              <PlusIcon className="size-4" />
-              {t("newAnnouncement")}
-            </Link>
+          <Button onClick={() => setCreateOpen(true)}>
+            <PlusIcon className="size-4" />
+            {t("newAnnouncement")}
           </Button>
         }
       />
@@ -218,11 +232,14 @@ export default function AnnouncementsPage() {
         pageSize={15}
         rowActions={(a) => (
           <div className="flex justify-end gap-1">
-            <Button asChild variant="ghost" size="icon">
-              <Link href={`/announcements/${a.id}`} aria-label={t("editAnnouncement")}>
-                <span className="sr-only">{t("editAnnouncement")}</span>
-                <PencilIcon className="size-4" aria-hidden="true" />
-              </Link>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={t("editAnnouncement")}
+              onClick={() => openEdit(a)}
+            >
+              <span className="sr-only">{t("editAnnouncement")}</span>
+              <PencilIcon className="size-4" aria-hidden="true" />
             </Button>
             <Button
               variant="ghost"
@@ -267,6 +284,39 @@ export default function AnnouncementsPage() {
             <p className="text-muted-foreground text-sm">{t("cantBeUndone")}</p>
           </div>
         </AlertModal>
+      )}
+
+      <AnnouncementFormModal
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        title={t("newAnnouncement")}
+        initial={EMPTY_ANNOUNCEMENT_FORM}
+        submitLabel={t("publishAnnouncement")}
+        onSubmit={async (values: AnnouncementInput) => {
+          await notificationsApi.createAnnouncement(values);
+          toast.success(t("announcementCreated"));
+          setCreateOpen(false);
+          await load();
+        }}
+      />
+
+      {editingItem && (
+        <AnnouncementFormModal
+          open={Boolean(editingItem)}
+          onOpenChange={(open) => {
+            if (!open) setEditingItem(null);
+          }}
+          title={t("editAnnouncement")}
+          initial={announcementToForm(editingItem)}
+          initialRecipients={(editingItem.recipients ?? []) as UserOption[]}
+          submitLabel={t("saveChanges")}
+          onSubmit={async (values: AnnouncementInput) => {
+            await notificationsApi.updateAnnouncement(editingItem.id, values);
+            toast.success(t("announcementUpdated"));
+            setEditingItem(null);
+            await load();
+          }}
+        />
       )}
     </div>
   );

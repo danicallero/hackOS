@@ -15,6 +15,8 @@ import {
   deleteAnnouncement,
   fanOutIfVisibleNow,
   getAnnouncement,
+  getAnnouncementRecipients,
+  listAnnouncementRecipientCandidates,
   listAnnouncementsAdmin,
   listAnnouncementsPublic,
   markAnnouncementRead,
@@ -23,8 +25,11 @@ import {
 import {
   announcementBodySchema,
   announcementIdParamsSchema,
+  announcementRecipientCandidatesQuerySchema,
+  announcementTranslateBodySchema,
   announcementUpdateBodySchema,
 } from "../schemas.js";
+import { isTranslationAvailable, translateAnnouncementContent } from "../translate/index.js";
 
 /**
  * H50 announcements: CRUD behind ANNOUNCEMENTS_MANAGE, a public visibility-windowed
@@ -79,6 +84,60 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
   );
 
   typedApp.get(
+    "/api/announcements/recipient-candidates",
+    {
+      ...routeAccess(manage),
+      preHandler: requireCapability(CAPABILITIES.ANNOUNCEMENTS_MANAGE),
+      schema: {
+        summary: "Search announcement recipient candidates",
+        description:
+          "Minimal account identity fields for an ANNOUNCEMENTS_MANAGE holder picking specific recipients — deliberately not gated by the broader USERS_READ.",
+        querystring: announcementRecipientCandidatesQuerySchema,
+      },
+    },
+    async (req) => ({
+      users: await listAnnouncementRecipientCandidates(pool, req.query.q, req.query.limit),
+    }),
+  );
+
+  typedApp.get(
+    "/api/announcements/translate-availability",
+    {
+      ...routeAccess(manage),
+      preHandler: requireCapability(CAPABILITIES.ANNOUNCEMENTS_MANAGE),
+      schema: {
+        summary: "Whether automatic translation is configured",
+        description:
+          "Lets both frontends hide/disable the auto-translate action when no provider is configured, instead of offering an action that will fail (see modules/notifications/translate/).",
+      },
+    },
+    async () => ({ available: isTranslationAvailable() }),
+  );
+
+  typedApp.post(
+    "/api/announcements/translate",
+    {
+      ...routeAccess(manage),
+      preHandler: requireCapability(CAPABILITIES.ANNOUNCEMENTS_MANAGE),
+      schema: {
+        summary: "Auto-translate announcement content",
+        description:
+          "Machine-translates a title+body from sourceLanguage into each of targetLanguages via the configured provider (modules/notifications/translate/). Returns 503 when no provider is configured — always optional, manual translation entry keeps working either way.",
+        body: announcementTranslateBodySchema,
+      },
+    },
+    async (req) => {
+      const { title, body, sourceLanguage, targetLanguages } = req.body;
+      const translations = await translateAnnouncementContent(
+        { title, body },
+        sourceLanguage,
+        targetLanguages,
+      );
+      return { translations };
+    },
+  );
+
+  typedApp.get(
     "/api/announcements/:id",
     {
       ...routeAccess(manage),
@@ -86,12 +145,14 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Get announcement details",
         description:
-          "Fetches a single H50 announcement including its full translations, delivery settings and publication window.",
+          "Fetches a single H50 announcement including its full translations, delivery settings, audience/recipient targeting and publication window.",
         params: announcementIdParamsSchema,
       },
     },
     async (req) => {
-      return getAnnouncement(pool, req.params.id);
+      const announcement = await getAnnouncement(pool, req.params.id);
+      const recipients = await getAnnouncementRecipients(pool, announcement.id);
+      return { ...announcement, recipients };
     },
   );
 
@@ -103,7 +164,7 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Create announcement",
         description:
-          "Creates an auditable announcement with optional es/gl/en translations, a single publication window and a screen placement. notifyUsers sends inbox, email and push only through each recipient's enabled announcement preferences.",
+          "Creates an auditable announcement with optional es/gl/en translations, a screen placement, and delivery settings. notifyUsers fans out through the chosen channels (candidates only — each still filtered by the recipient's own H51 preferences), addressed either to everyone (default), an audience of sponsor/participant/mentor tags, or an explicit recipient list — audience tags and an explicit recipient list are mutually exclusive, and a screen-placed announcement can't target specific recipients. A notify-only announcement (screenPlacement 'none') fires once at publishAt and can't have an expiresAt; screen-placed announcements keep the publishAt/expiresAt visibility window unchanged.",
         body: announcementBodySchema,
       },
     },
@@ -118,6 +179,9 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
           screenPlacement: body.screenPlacement,
           publishAt: body.publishAt ?? null,
           expiresAt: body.expiresAt ?? null,
+          audiences: body.audiences,
+          channels: body.channels,
+          recipientUserIds: body.recipientUserIds,
         });
         await audit(client, {
           actorId: req.userId as number,
@@ -143,7 +207,7 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Update announcement",
         description:
-          "Updates an auditable announcement's translations, delivery opt-in, screen placement or publication window. A notification fan-out occurs at most once when notifyUsers is enabled and the announcement becomes visible.",
+          "Updates an auditable announcement's translations, delivery opt-in, channels, audience/recipient targeting, screen placement or publication window (see the create route for the targeting/channel/window rules, which apply identically here). A notification fan-out occurs at most once when notifyUsers is enabled and the announcement becomes visible.",
         params: announcementIdParamsSchema,
         body: announcementUpdateBodySchema,
       },
@@ -160,6 +224,9 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
           screenPlacement: body.screenPlacement,
           publishAt: body.publishAt,
           expiresAt: body.expiresAt,
+          audiences: body.audiences,
+          channels: body.channels,
+          recipientUserIds: body.recipientUserIds,
         });
         await audit(client, {
           actorId: req.userId as number,

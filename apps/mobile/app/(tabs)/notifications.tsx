@@ -24,6 +24,7 @@ import Animated, {
   useSharedValue,
 } from "react-native-reanimated";
 import Svg, { Circle } from "react-native-svg";
+import { ManageAnnouncementsView } from "@/components/announcement-manage-view";
 import { GlassView } from "@/components/glass-view";
 import { EmptyState, Section, Separator } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
@@ -40,6 +41,7 @@ import {
   subscribeToNotificationChanges,
 } from "@/lib/notification-events";
 import { subscribeToServerEvent } from "@/lib/server-events";
+import { has } from "@/lib/tabs";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { colors } from "@/theme/colors";
@@ -90,20 +92,18 @@ const LOAD_MORE_THRESHOLD = 130;
 const LOAD_MORE_BANDS = 12;
 const LOAD_MORE_END_DISTANCE = 24;
 
-/** The segmented control + unread-filter bell, memoized so toggling the bell doesn't also re-render the hidden Preferences tree it's shared with. */
+/** The segmented control plus an optional trailing action, memoized so toggling the bell doesn't also re-render whichever hidden tab it's shared with. */
 const NotificationsHeader = memo(function NotificationsHeader({
+  values,
   selectedIndex,
   onChangeIndex,
-  active,
-  checked,
-  onToggle,
+  trailing,
   t,
 }: {
+  values: string[];
   selectedIndex: number;
   onChangeIndex: (index: number) => void;
-  active: boolean;
-  checked: boolean;
-  onToggle: () => void;
+  trailing?: ReactNode;
   t: ReturnType<typeof useLocale>["t"];
 }) {
   return (
@@ -111,95 +111,173 @@ const NotificationsHeader = memo(function NotificationsHeader({
       <View style={{ flex: 1 }}>
         <SegmentedControl
           label={t("tabNotifications")}
-          values={[t("notificationsMessages"), t("notificationsPreferences")]}
+          values={values}
           selectedIndex={selectedIndex}
           onChange={onChangeIndex}
         />
       </View>
-      <GlassView
-        glassEffectStyle="regular"
-        isInteractive={active}
-        tintColor={active && checked ? (colors.accent as string) : undefined}
-        style={{ borderRadius: 18, height: 36, opacity: active ? 1 : 0.4, width: 36 }}
-      >
-        <Pressable
-          accessibilityLabel={t("notificationsUnreadOnly")}
-          accessibilityRole="switch"
-          accessibilityState={{ checked, disabled: !active }}
-          disabled={!active}
-          hitSlop={6}
-          onPress={onToggle}
-          style={({ pressed }) => ({
-            alignItems: "center",
-            flex: 1,
-            justifyContent: "center",
-            opacity: pressed ? 0.6 : 1,
-          })}
-        >
-          <SymbolView
-            name="bell.badge.fill"
-            tintColor={active && checked ? "white" : colors.secondaryLabel}
-            size={17}
-            accessible={false}
-          />
-        </Pressable>
-      </GlassView>
+      {trailing}
     </View>
   );
 });
 
-/** Full in-app inbox and notification preferences, matching the web participant view. */
+function UnreadBellButton({
+  active,
+  checked,
+  onToggle,
+  t,
+}: {
+  active: boolean;
+  checked: boolean;
+  onToggle: () => void;
+  t: ReturnType<typeof useLocale>["t"];
+}) {
+  return (
+    <GlassView
+      glassEffectStyle="regular"
+      isInteractive={active}
+      tintColor={active && checked ? (colors.accent as string) : undefined}
+      style={{ borderRadius: 18, height: 36, opacity: active ? 1 : 0.4, width: 36 }}
+    >
+      <Pressable
+        accessibilityLabel={t("notificationsUnreadOnly")}
+        accessibilityRole="switch"
+        accessibilityState={{ checked, disabled: !active }}
+        disabled={!active}
+        hitSlop={6}
+        onPress={onToggle}
+        style={({ pressed }) => ({
+          alignItems: "center",
+          flex: 1,
+          justifyContent: "center",
+          opacity: pressed ? 0.6 : 1,
+        })}
+      >
+        <SymbolView
+          name="bell.badge.fill"
+          tintColor={active && checked ? "white" : colors.secondaryLabel}
+          size={17}
+          accessible={false}
+        />
+      </Pressable>
+    </GlassView>
+  );
+}
+
+function AddAnnouncementButton({
+  onPress,
+  t,
+}: {
+  onPress: () => void;
+  t: ReturnType<typeof useLocale>["t"];
+}) {
+  return (
+    <GlassView
+      glassEffectStyle="regular"
+      isInteractive
+      style={{ borderRadius: 18, height: 36, width: 36 }}
+    >
+      <Pressable
+        accessibilityLabel={t("announcementAdd")}
+        accessibilityRole="button"
+        hitSlop={6}
+        onPress={() => {
+          void haptic("light");
+          onPress();
+        }}
+        style={({ pressed }) => ({
+          alignItems: "center",
+          flex: 1,
+          justifyContent: "center",
+          opacity: pressed ? 0.6 : 1,
+        })}
+      >
+        <SymbolView
+          name="plus"
+          tintColor={colors.label}
+          size={17}
+          weight="semibold"
+          accessible={false}
+        />
+      </Pressable>
+    </GlassView>
+  );
+}
+
+/** Full in-app inbox, notification preferences, and (ANNOUNCEMENTS_MANAGE only) announcement management, matching the web participant/admin views. */
 export default function NotificationsScreen() {
   useColorScheme();
   const { t } = useLocale();
+  const { me } = useMeContext();
+  const canManageAnnouncements = has(me?.capabilities ?? [], CAPABILITIES.ANNOUNCEMENTS_MANAGE);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [unreadOnly, setUnreadOnly] = useState(false);
+  const [announcementForm, setAnnouncementForm] = useState<"create" | number | null>(null);
   const androidTopInset = useAndroidTopInset();
   const onMessages = selectedIndex === 0;
+  const onManage = canManageAnnouncements && selectedIndex === 2;
+
+  const headerValues = canManageAnnouncements
+    ? [t("notificationsMessages"), t("notificationsPreferences"), t("notificationsManage")]
+    : [t("notificationsMessages"), t("notificationsPreferences")];
 
   const toggleUnread = useCallback(() => {
     void haptic("selection");
     setUnreadOnly((current) => !current);
   }, []);
 
-  // Two separate header elements (not one shared node) so toggling the bell
-  // — which only matters on the Messages tab — doesn't also re-render the
-  // Preferences tree it would otherwise be passed into: the Preferences
-  // copy's props never change value across that toggle, so the memoized
-  // header bails out and Preferences stays fully idle while the bell flips.
+  // A separate header element per tab (not one shared node) so a change that
+  // only matters on one tab — the unread bell on Messages, the Add button on
+  // Manage — doesn't also re-render the other hidden trees it would
+  // otherwise be passed into: each copy's props are stable unless its own
+  // tab's state actually changed, so the memoized header bails out and the
+  // other tabs stay fully idle.
   const messagesHeader = useMemo(
     () => (
       <NotificationsHeader
+        values={headerValues}
         selectedIndex={selectedIndex}
         onChangeIndex={setSelectedIndex}
-        active={onMessages}
-        checked={unreadOnly}
-        onToggle={toggleUnread}
+        trailing={
+          <UnreadBellButton
+            active={onMessages}
+            checked={unreadOnly}
+            onToggle={toggleUnread}
+            t={t}
+          />
+        }
         t={t}
       />
     ),
-    [selectedIndex, onMessages, unreadOnly, toggleUnread, t],
+    [headerValues, selectedIndex, onMessages, unreadOnly, toggleUnread, t],
   );
   const preferencesHeader = useMemo(
     () => (
       <NotificationsHeader
+        values={headerValues}
         selectedIndex={selectedIndex}
         onChangeIndex={setSelectedIndex}
-        active={false}
-        checked={false}
-        onToggle={toggleUnread}
         t={t}
       />
     ),
-    [selectedIndex, toggleUnread, t],
+    [headerValues, selectedIndex, t],
+  );
+  const manageHeader = useMemo(
+    () => (
+      <NotificationsHeader
+        values={headerValues}
+        selectedIndex={selectedIndex}
+        onChangeIndex={setSelectedIndex}
+        trailing={<AddAnnouncementButton onPress={() => setAnnouncementForm("create")} t={t} />}
+        t={t}
+      />
+    ),
+    [headerValues, selectedIndex, t],
   );
 
-  // Both tabs stay mounted (toggled with `display`, not conditional
-  // rendering) so switching back to a tab that already loaded its data
-  // shows it instantly instead of remounting into a fresh loading state.
-  // Both view components are memoized, and each header element is stable
-  // unless its own props actually changed, so toggling the bell (which only
-  // matters on Messages) never re-renders the hidden Preferences tree.
+  // All tabs stay mounted (toggled with `display`, not conditional
+  // rendering) so switching back to one that already loaded its data shows
+  // it instantly instead of remounting into a fresh loading state.
   return (
     <>
       <View style={{ display: onMessages ? "flex" : "none", flex: 1 }}>
@@ -209,9 +287,19 @@ export default function NotificationsScreen() {
           unreadOnly={unreadOnly}
         />
       </View>
-      <View style={{ display: onMessages ? "none" : "flex", flex: 1 }}>
+      <View style={{ display: !onMessages && !onManage ? "flex" : "none", flex: 1 }}>
         <PreferencesView tabSwitcher={preferencesHeader} androidTopInset={androidTopInset} />
       </View>
+      {canManageAnnouncements ? (
+        <View style={{ display: onManage ? "flex" : "none", flex: 1 }}>
+          <ManageAnnouncementsView
+            tabSwitcher={manageHeader}
+            androidTopInset={androidTopInset}
+            formOpen={announcementForm}
+            onFormOpenChange={setAnnouncementForm}
+          />
+        </View>
+      ) : null}
     </>
   );
 }

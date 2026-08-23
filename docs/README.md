@@ -55,6 +55,11 @@ Architecture & modules:
   `event_config` singleton (identity, doors-open vs hacking window, venue) and
   how the Wallet pass renders from it (field visibility, captions, back fields),
   plus the session-less scoped-token path from the acceptance email.
+- [Notifications & announcements](./notifications.md) — the announcement
+  model (screen placement vs. delivery vs. targeting), the notify-only vs.
+  screen-window distinction, audience/recipient targeting and per-announcement
+  channel candidates, and the generic notify/outbox/dispatch pipeline (H50,
+  H51, H52, H53) every other module plugs into.
 - [Schedule categories (activity kinds)](./schedule-categories.md) — the one
   registry every schedule/activity category comes from, how to add or retire
   one, and the four guardrails (typed label keys, the web icon map, the mobile
