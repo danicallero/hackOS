@@ -107,6 +107,7 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
   const bootLanguage = useRef<Language | null>(null);
 
   const [language, setLanguage] = useState<Language>(() => {
+    if (typeof window === "undefined") return "es";
     const initialLanguage = isLanguage(window.__hackosInitialLanguage)
       ? window.__hackosInitialLanguage
       : "es";
