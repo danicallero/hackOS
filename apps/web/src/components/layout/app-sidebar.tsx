@@ -208,16 +208,13 @@ export function AppSidebar() {
   const pathname = usePathname();
   const isVisible = useVisible();
   const unreadCount = useUnreadCount();
-  const [lastWorkspace, setLastWorkspace] = useState<string | null>(null);
+  const [lastWorkspace, setLastWorkspace] = useState(() => readLastWorkspace());
   const [openWorkspace, setOpenWorkspace] = useState<string | null>(null);
   const activeWorkspaceId = workspaceForPath(pathname)?.id ?? null;
 
   useEffect(() => {
-    setLastWorkspace(readLastWorkspace());
-  }, []);
-
-  useEffect(() => {
     if (!activeWorkspaceId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setOpenWorkspace(activeWorkspaceId);
     setLastWorkspace(activeWorkspaceId);
     writeLastWorkspace(activeWorkspaceId);
@@ -234,7 +231,7 @@ export function AppSidebar() {
               asChild
               size="lg"
               tooltip="hackOS"
-              className="gap-2.5 group-data-[collapsible=icon]:!p-1.5"
+              className="gap-2.5 group-data-[collapsible=icon]:p-1.5!"
             >
               <Link href="/timetable">
                 <span className="bg-primary text-primary-foreground grid size-8 shrink-0 place-items-center rounded-md text-sm font-bold">

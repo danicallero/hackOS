@@ -36,8 +36,11 @@ export function useEventSource(
 ): { connected: boolean } {
   const [connected, setConnected] = useState(false);
   // Keep the latest callback without forcing a resubscribe every render.
+  // Assigned in useEffect to comply with react-hooks/rules-of-hooks.
   const onEventRef = useRef(onEvent);
-  onEventRef.current = onEvent;
+  useEffect(() => {
+    onEventRef.current = onEvent;
+  }, [onEvent]);
 
   const eventsKey = events ? events.join(",") : "";
 
@@ -110,7 +113,9 @@ export function useLiveQuery<T>(
   const [loading, setLoading] = useState(true);
 
   const fetcherRef = useRef(fetcher);
-  fetcherRef.current = fetcher;
+  useEffect(() => {
+    fetcherRef.current = fetcher;
+  }, [fetcher]);
 
   const refetch = useCallback(() => {
     let cancelled = false;
@@ -134,6 +139,7 @@ export function useLiveQuery<T>(
   // biome-ignore lint/correctness/useExhaustiveDependencies: queryKeyValue intentionally refetches when caller scope changes.
   useEffect(() => {
     if (!enabled) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset loading on refetch; no lazier pattern for this state reset
     setLoading(true);
     const cancel = refetch();
     return cancel;
@@ -141,7 +147,9 @@ export function useLiveQuery<T>(
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onMatchingEventRef = useRef(onMatchingEvent);
-  onMatchingEventRef.current = onMatchingEvent;
+  useEffect(() => {
+    onMatchingEventRef.current = onMatchingEvent;
+  }, [onMatchingEvent]);
   const onEvent = useCallback(
     (event: SseEnvelope) => {
       onMatchingEventRef.current?.(event);

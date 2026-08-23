@@ -102,7 +102,8 @@ export function ScheduleTimeline({
   showResponsible?: boolean;
 }) {
   const { language, t } = useLocale();
-  const now = Date.now();
+  // Track now as state to avoid impure Date.now() during render; updates every second to keep timeline current.
+  const [now, setNow] = useState(() => Date.now());
   const focusRef = useRef<HTMLElement | null>(null);
   const agendaFocusRef = useRef<HTMLElement | null>(null);
   const [selectedItem, setSelectedItem] = useState<PublicScheduleItem | null>(null);
@@ -118,6 +119,11 @@ export function ScheduleTimeline({
     }
     return [...grouped.entries()];
   }, [ordered, timezone]);
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     // Both views are rendered and one is hidden by a media query, so scroll
@@ -224,7 +230,7 @@ export function ScheduleTimeline({
                       >
                         <div className="flex min-w-0 items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <h3 className="break-words text-pretty text-sm font-medium">
+                            <h3 className="wrap-break-word text-pretty text-sm font-medium">
                               {item.title}
                             </h3>
                             <p className="text-muted-foreground mt-0.5 flex flex-wrap gap-x-3 text-xs tabular-nums">
@@ -234,7 +240,7 @@ export function ScheduleTimeline({
                                 {timeFormatter.format(new Date(ends))}
                               </span>
                               {item.location && (
-                                <span className="inline-flex min-w-0 items-start gap-1 break-words text-pretty">
+                                <span className="inline-flex min-w-0 items-start gap-1 wrap-break-word text-pretty">
                                   <MapPinIcon className="size-3 shrink-0" aria-hidden="true" />
                                   {item.location}
                                 </span>

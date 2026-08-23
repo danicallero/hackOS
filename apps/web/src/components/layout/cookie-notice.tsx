@@ -3,7 +3,7 @@
 import { X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useLocale } from "@/lib/i18n";
 
@@ -11,11 +11,9 @@ const STORAGE_KEY = "hackos.cookie-notice.dismissed";
 
 export function CookieNotice() {
   const { t } = useLocale();
-  const [isVisible, setIsVisible] = useState(false);
-
-  useEffect(() => {
-    setIsVisible(window.localStorage.getItem(STORAGE_KEY) !== "true");
-  }, []);
+  const [isVisible, setIsVisible] = useState(
+    () => typeof window !== "undefined" && window.localStorage.getItem(STORAGE_KEY) !== "true",
+  );
 
   function dismiss() {
     window.localStorage.setItem(STORAGE_KEY, "true");
@@ -29,7 +27,7 @@ export function CookieNotice() {
   return (
     <aside
       aria-labelledby="cookie-notice-title"
-      className="bg-card text-card-foreground fixed z-50 w-[calc(100vw-2rem)] max-w-[36rem] overflow-hidden rounded-surface border shadow-xl"
+      className="bg-card text-card-foreground fixed z-50 w-[calc(100vw-2rem)] max-w-xl overflow-hidden rounded-surface border shadow-xl"
       style={{
         bottom: "max(1rem, env(safe-area-inset-bottom))",
         right: "max(1rem, env(safe-area-inset-right))",
