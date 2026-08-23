@@ -74,7 +74,7 @@ export function MarqueeText({ text, className }: { text: string; className?: str
   useLayoutEffect(() => {
     const container = containerRef.current;
     const el = textRef.current;
-    const key = registrationKey.current;
+    const key = registrationKey;
     if (!container || !el || !key) return;
 
     let ownOverflow = 0;
