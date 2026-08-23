@@ -7,7 +7,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ExternalLinkIcon, type LucideIcon, MapPinIcon, WifiIcon } from "lucide-react";
 import { useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 import { PasswordInput } from "@/components/common/password-input";
@@ -114,7 +114,8 @@ export function VenueTab({
       wifiPassword: "",
     },
   });
-  const { reset, formState, watch } = form;
+  const { reset, formState, control } = form;
+  const values = useWatch({ control });
   const [saveState, setSaveState] = useCategorySaveState(formState.isDirty, onDirtyChange);
 
   useEffect(() => {
@@ -176,7 +177,6 @@ export function VenueTab({
   if (status !== "ready" || !config) {
     return <EventConfigLoadState icon={icon} title={t("venueSectionTitle")} />;
   }
-  const values = watch();
   const previewLat = values.venueLatitude.trim()
     ? parseCoordinate(values.venueLatitude, "lat")
     : null;

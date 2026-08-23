@@ -14,7 +14,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { LucideIcon } from "lucide-react";
 import { useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 import { DateTimeInput } from "@/components/common/datetime-input";
@@ -126,7 +126,8 @@ export function EventTab({
       showStartCountdown: false,
     },
   });
-  const { reset, formState, watch } = form;
+  const { reset, formState, control } = form;
+  const values = useWatch({ control });
   const [saveState, setSaveState] = useCategorySaveState(formState.isDirty, onDirtyChange);
 
   useEffect(() => {
@@ -160,7 +161,6 @@ export function EventTab({
     return <EventConfigLoadState icon={icon} title={t("eventTitle")} />;
   }
   const timezone = config.timezone;
-  const values = watch();
 
   return (
     <Form {...form}>

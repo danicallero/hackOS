@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { PasswordInput } from "@/components/common/password-input";
 import { Spinner } from "@/components/common/spinner";
@@ -63,6 +63,8 @@ function LoginInner() {
     defaultValues: { email: "", password: "" },
   });
 
+  const emailValue = useWatch({ control: form.control, name: "email" });
+
   // Already signed in: bounce straight to the destination instead of showing
   // the form again — /login isn't admin-only, any signed-in user lands here.
   useEffect(() => {
@@ -91,7 +93,6 @@ function LoginInner() {
     // (including ?next). A second push here can race a pending sign-out route.
   }
 
-  const emailValue = form.watch("email");
   const forgotHref = withReturnPath(
     emailValue ? `/forgot-password?email=${encodeURIComponent(emailValue)}` : "/forgot-password",
     rawNext,
