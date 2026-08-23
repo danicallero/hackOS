@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
@@ -133,16 +134,24 @@ export default function TabLayout() {
   if (meLoading && !me) return null;
   if (!me?.mobileAccess) return null;
 
+  const glassAvailable = isRealLiquidGlassAvailable();
+
   return (
     <View style={{ flex: 1 }}>
       {/*
-        No blurEffect/tabBarBackgroundColor override here: per
-        react-native-screens' own docs, both stop affecting the tab bar
-        starting from iOS 26 — the bar's translucent/opaque appearance on
-        26+ is entirely OS-controlled, with no supported override in the
-        version of react-native-screens this app currently depends on.
+        `backgroundColor` is only set below the Liquid Glass floor: per
+        react-native-screens' own docs, it (and blurEffect) stop affecting
+        the tab bar starting from iOS 26 — that appearance is entirely
+        OS-controlled there, with no supported override. Below iOS 26 (and
+        on Android) it still works, and it's needed there: those platforms'
+        tab bar renders transparent by default without a screen behind it
+        that reserves the bar's own space, so content bled through it.
       */}
-      <NativeTabs tintColor={colors.accent} minimizeBehavior="onScrollDown">
+      <NativeTabs
+        tintColor={colors.accent}
+        minimizeBehavior="onScrollDown"
+        backgroundColor={glassAvailable ? undefined : colors.surface}
+      >
         <NativeTabs.Trigger name="schedule">
           <NativeTabs.Trigger.Icon sf="calendar" md="calendar_month" />
           <NativeTabs.Trigger.Label>{t("tabSchedule")}</NativeTabs.Trigger.Label>

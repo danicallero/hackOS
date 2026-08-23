@@ -12,10 +12,12 @@ jest.mock("expo-router", () => ({
   }),
   useRouter: () => ({ push: mockPush }),
 }));
-jest.mock("expo-router/stack", () => ({
-  __esModule: true,
-  default: { Screen: () => null },
-}));
+jest.mock("expo-router/stack", () => {
+  const Toolbar = Object.assign(({ children }: { children?: unknown }) => children ?? null, {
+    Button: () => null,
+  });
+  return { __esModule: true, default: { Screen: () => null, Toolbar } };
+});
 
 jest.mock("@/lib/api", () => ({
   ApiError: class ApiError extends Error {},

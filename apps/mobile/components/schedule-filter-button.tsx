@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { Pressable, Text, useWindowDimensions, View } from "react-native";
+import { Modal, Pressable, Text, View } from "react-native";
 import { GlassView } from "@/components/glass-view";
 import { SymbolView } from "@/components/symbol";
 import { haptic } from "@/lib/haptics";
@@ -27,11 +26,71 @@ function audienceFilterLabel(audience: AudienceFilterValue, t: ReturnType<typeof
 }
 
 /**
- * Glass filter button (H59 3b) — kind multi-select for everyone, plus an
- * audience multi-select only shown to callers with SCHEDULE_MANAGE. Both
- * dimensions AND together; reuses the scanner screen's glass dropdown look.
+ * Icon-only trigger (H59 3b), meant to sit as one of the touch zones inside a
+ * shared glass pill (schedule.tsx combines it with the notifications bell) —
+ * open/close state is controlled by the caller so the dropdown panel below
+ * can be positioned outside that pill instead of clipped inside it.
  */
-export function ScheduleFilterButton({
+export function ScheduleFilterTrigger({
+  open,
+  onToggle,
+  active,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  active: boolean;
+}) {
+  const { t } = useLocale();
+  const icon = active ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease";
+
+  return (
+    <Pressable
+      accessibilityLabel={t("scheduleFilter")}
+      accessibilityRole="button"
+      accessibilityState={{ expanded: open, selected: active }}
+      onPress={() => {
+        void haptic("light");
+        onToggle();
+      }}
+      style={({ pressed }) => ({
+        alignItems: "center",
+        height: 44,
+        justifyContent: "center",
+        opacity: pressed ? 0.6 : 1,
+        width: 44,
+      })}
+    >
+      <SymbolView
+        name={icon}
+        tintColor={active ? colors.accent : colors.label}
+        size={19}
+        weight="semibold"
+      />
+    </Pressable>
+  );
+}
+
+/** Screen coordinates of the trigger, captured via `measureInWindow` — see {@link ScheduleFilterPanel}. */
+export interface ScheduleFilterAnchor {
+  top: number;
+  right: number;
+}
+
+/**
+ * Backdrop + dropdown content for {@link ScheduleFilterTrigger}, rendered in
+ * a `Modal` rather than as an absolutely-positioned sibling: the trigger now
+ * sits inside a native header (`headerRight`) or a Liquid Glass pill, both of
+ * which clip overflowing content to their own bounds, so a plain in-tree
+ * absolute View would get cut off. A Modal always draws in its own native
+ * layer regardless of where it's triggered from. `anchor` is the trigger's
+ * on-screen frame (from `measureInWindow`) so the panel still opens right
+ * under it. Kind multi-select is open to everyone; audience multi-select is
+ * shown only to callers with SCHEDULE_MANAGE. Both dimensions AND together.
+ */
+export function ScheduleFilterPanel({
+  open,
+  anchor,
+  onClose,
   kinds,
   selectedKinds,
   onToggleKind,
@@ -40,6 +99,9 @@ export function ScheduleFilterButton({
   onToggleAudience,
   onClear,
 }: {
+  open: boolean;
+  anchor: ScheduleFilterAnchor | null;
+  onClose: () => void;
   kinds: string[];
   selectedKinds: string[];
   onToggleKind: (kind: string) => void;
@@ -49,63 +111,23 @@ export function ScheduleFilterButton({
   onClear: () => void;
 }) {
   const { t } = useLocale();
-  const { height: windowHeight } = useWindowDimensions();
-  const [open, setOpen] = useState(false);
   const active = selectedKinds.length > 0 || selectedAudiences.length > 0;
-  const icon = active ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease";
+
+  if (!open || !anchor) return null;
 
   return (
-    <>
-      {open ? (
-        <Pressable
-          accessibilityLabel={t("close")}
-          accessibilityRole="button"
-          onPress={() => setOpen(false)}
-          // Sized to the whole window, not just this button's own row — the
-          // header row it lives in has a fixed natural height, so a backdrop
-          // that only matched that height couldn't catch a tap anywhere over
-          // the list below it.
-          style={{
-            height: windowHeight,
-            left: 0,
-            position: "absolute",
-            right: 0,
-            top: 0,
-          }}
-        />
-      ) : null}
+    <Modal transparent visible animationType="fade" onRequestClose={onClose}>
       <Pressable
-        accessibilityLabel={t("scheduleFilter")}
+        accessibilityLabel={t("close")}
         accessibilityRole="button"
-        accessibilityState={{ expanded: open, selected: active }}
-        onPress={() => {
-          void haptic("light");
-          setOpen((current) => !current);
-        }}
-        style={({ pressed }) => ({
-          alignItems: "center",
-          backgroundColor: colors.surface,
-          borderRadius: 22,
-          height: 44,
-          justifyContent: "center",
-          opacity: pressed ? 0.6 : 1,
-          width: 44,
-          zIndex: FILTER_PANEL_Z_INDEX + 1,
-        })}
+        onPress={onClose}
+        style={{ flex: 1 }}
       >
-        <SymbolView
-          name={icon}
-          tintColor={active ? colors.accent : colors.label}
-          size={19}
-          weight="semibold"
-        />
-      </Pressable>
-      {open ? (
         <View
           style={{
             position: "absolute",
-            right: 0,
-            top: 52,
+            right: anchor.right,
+            top: anchor.top,
             width: 240,
             zIndex: FILTER_PANEL_Z_INDEX + 1,
           }}
@@ -162,15 +184,21 @@ export function ScheduleFilterButton({
                   paddingVertical: 12,
                 }}
               >
-                <Text style={{ color: colors.accent, fontSize: 15, fontWeight: "600" }}>
+                <Text
+                  style={{
+                    color: colors.accent,
+                    fontSize: 15,
+                    fontWeight: "600",
+                  }}
+                >
                   {t("scheduleFilterClear")}
                 </Text>
               </Pressable>
             ) : null}
           </GlassView>
         </View>
-      ) : null}
-    </>
+      </Pressable>
+    </Modal>
   );
 }
 
