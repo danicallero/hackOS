@@ -1,6 +1,6 @@
 "use client";
 
-import { MegaphoneIcon, XIcon } from "lucide-react";
+import { ChevronDownIcon, MegaphoneIcon, XIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { DateTimeInput } from "@/components/common/datetime-input";
@@ -10,6 +10,7 @@ import { SubmitButton } from "@/components/common/submit-button";
 import { type UserOption, UserPicker } from "@/components/common/user-picker";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -31,6 +32,7 @@ import type {
   NotificationChannel,
 } from "@/lib/notifications";
 import { notificationsApi } from "@/lib/notifications";
+import { cn } from "@/lib/utils";
 
 const AUDIENCES: AnnouncementAudience[] = ["sponsor", "participant", "mentor", "staff"];
 const CHANNELS: NotificationChannel[] = ["in_app", "email", "push"];
@@ -132,11 +134,13 @@ export function AnnouncementFormModal({
   // only) on a deployment with no translation provider at all.
   const [translateAvailable, setTranslateAvailable] = useState(false);
   const [translating, setTranslating] = useState(false);
+  const [translationsOpen, setTranslationsOpen] = useState(false);
 
   useEffect(() => {
     setValues(initial);
     setRecipients(initialRecipients ?? []);
     setTargetingModeState(targetingModeOf(initial));
+    setTranslationsOpen(false);
     setContentError(null);
   }, [initial, initialRecipients]);
 
@@ -274,26 +278,46 @@ export function AnnouncementFormModal({
       document.getElementById("announcement-expires-at")?.focus();
       return;
     }
-    const missingContent = (["es", "gl", "en"] as const).find(
-      (language) =>
-        !values.translations[language].title.trim() || !values.translations[language].body.trim(),
-    );
-    if (missingContent) {
+    const languages = ["es", "gl", "en"] as const;
+    const completeLanguages = languages.filter((language) => {
+      const translation = values.translations[language];
+      return Boolean(translation.title.trim() && translation.body.trim());
+    });
+    const incompleteLanguage = languages.find((language) => {
+      const translation = values.translations[language];
+      const hasContent = Boolean(translation.title.trim() || translation.body.trim());
+      const isComplete = Boolean(translation.title.trim() && translation.body.trim());
+      return hasContent && !isComplete;
+    });
+    if (completeLanguages.length === 0 || incompleteLanguage) {
       setContentError(t("announcementTranslationsRequired"));
+      const firstInvalidLanguage = incompleteLanguage ?? languages[0];
+      const titleId =
+        firstInvalidLanguage === "es"
+          ? "announcement-title"
+          : `announcement-title-${firstInvalidLanguage}`;
+      const bodyId =
+        firstInvalidLanguage === "es"
+          ? "announcement-body"
+          : `announcement-body-${firstInvalidLanguage}`;
       document
-        .getElementById(
-          !values.translations[missingContent].title.trim()
-            ? `announcement-title-${missingContent}`
-            : `announcement-body-${missingContent}`,
-        )
+        .getElementById(!values.translations[firstInvalidLanguage].title.trim() ? titleId : bodyId)
         ?.focus();
       return;
     }
+    const translations = Object.fromEntries(
+      completeLanguages.map((language) => [language, values.translations[language]]),
+    ) as AnnouncementInput["translations"];
+    const primaryLanguage = completeLanguages[0];
+    const primary = values.translations[primaryLanguage];
     setContentError(null);
     setPending(true);
     try {
       await onSubmit({
         ...values,
+        title: primary.title.trim(),
+        body: primary.body.trim(),
+        translations,
         publishAt,
         expiresAt: values.screenPlacement === "none" ? null : expiresAt,
       });
@@ -348,9 +372,23 @@ export function AnnouncementFormModal({
                 aria-describedby={contentError ? "announcement-content-error" : undefined}
               />
             </Field>
-            <fieldset className="space-y-3 rounded-lg border p-4">
-              <legend className="flex w-full items-center justify-between gap-3 px-1 text-sm font-medium">
-                {t("translationsAndSettings")}
+            <Collapsible open={translationsOpen} onOpenChange={setTranslationsOpen}>
+              <div className="flex w-full items-center justify-between gap-3 rounded-lg border px-4 py-3">
+                <CollapsibleTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex min-h-10 items-center gap-2 text-sm font-medium"
+                    aria-label={t("translationsAndSettings")}
+                  >
+                    <ChevronDownIcon
+                      className={cn(
+                        "size-4 transition-transform",
+                        translationsOpen && "rotate-180",
+                      )}
+                    />
+                    {t("translationsAndSettings")}
+                  </button>
+                </CollapsibleTrigger>
                 {translateAvailable ? (
                   <Button
                     type="button"
@@ -362,61 +400,63 @@ export function AnnouncementFormModal({
                     {translating ? t("translatingInProgress") : t("translateAutomatically")}
                   </Button>
                 ) : null}
-              </legend>
-              <div className="grid gap-4 md:grid-cols-2">
-                {(["gl", "en"] as const).map((language) => (
-                  <div key={language} className="grid gap-3">
-                    <Field
-                      id={`announcement-title-${language}`}
-                      label={`${t("titleLabel")} · ${t(language === "gl" ? "galicianTag" : "englishTag")}`}
-                    >
-                      <Input
-                        id={`announcement-title-${language}`}
-                        value={values.translations[language].title}
-                        aria-invalid={Boolean(contentError)}
-                        aria-describedby={contentError ? "announcement-content-error" : undefined}
-                        onChange={(event) =>
-                          setValues((v) => ({
-                            ...v,
-                            translations: {
-                              ...v.translations,
-                              [language]: {
-                                title: event.target.value,
-                                body: v.translations[language].body,
-                              },
-                            },
-                          }))
-                        }
-                      />
-                    </Field>
-                    <Field
-                      id={`announcement-body-${language}`}
-                      label={`${t("messageLabel")} · ${t(language === "gl" ? "galicianTag" : "englishTag")}`}
-                    >
-                      <Textarea
-                        id={`announcement-body-${language}`}
-                        rows={3}
-                        value={values.translations[language].body}
-                        aria-invalid={Boolean(contentError)}
-                        aria-describedby={contentError ? "announcement-content-error" : undefined}
-                        onChange={(event) =>
-                          setValues((v) => ({
-                            ...v,
-                            translations: {
-                              ...v.translations,
-                              [language]: {
-                                title: v.translations[language].title,
-                                body: event.target.value,
-                              },
-                            },
-                          }))
-                        }
-                      />
-                    </Field>
-                  </div>
-                ))}
               </div>
-            </fieldset>
+              <CollapsibleContent className="rounded-b-lg border border-t-0 px-4 pt-3 pb-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  {(["gl", "en"] as const).map((language) => (
+                    <div key={language} className="grid gap-3">
+                      <Field
+                        id={`announcement-title-${language}`}
+                        label={`${t("titleLabel")} · ${t(language === "gl" ? "galicianTag" : "englishTag")}`}
+                      >
+                        <Input
+                          id={`announcement-title-${language}`}
+                          value={values.translations[language].title}
+                          aria-invalid={Boolean(contentError)}
+                          aria-describedby={contentError ? "announcement-content-error" : undefined}
+                          onChange={(event) =>
+                            setValues((v) => ({
+                              ...v,
+                              translations: {
+                                ...v.translations,
+                                [language]: {
+                                  title: event.target.value,
+                                  body: v.translations[language].body,
+                                },
+                              },
+                            }))
+                          }
+                        />
+                      </Field>
+                      <Field
+                        id={`announcement-body-${language}`}
+                        label={`${t("messageLabel")} · ${t(language === "gl" ? "galicianTag" : "englishTag")}`}
+                      >
+                        <Textarea
+                          id={`announcement-body-${language}`}
+                          rows={3}
+                          value={values.translations[language].body}
+                          aria-invalid={Boolean(contentError)}
+                          aria-describedby={contentError ? "announcement-content-error" : undefined}
+                          onChange={(event) =>
+                            setValues((v) => ({
+                              ...v,
+                              translations: {
+                                ...v.translations,
+                                [language]: {
+                                  title: v.translations[language].title,
+                                  body: event.target.value,
+                                },
+                              },
+                            }))
+                          }
+                        />
+                      </Field>
+                    </div>
+                  ))}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
             {contentError && (
               <p id="announcement-content-error" className="text-destructive text-sm" role="alert">
                 {contentError}

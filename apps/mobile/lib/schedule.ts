@@ -78,6 +78,17 @@ export interface ScheduleInput {
 export type ScheduleTranslation = { title?: string; description?: string | null };
 export type ScheduleTranslations = Partial<Record<Language, ScheduleTranslation>>;
 
+/** Replace one item in the in-memory/offline schedule snapshot after a save. */
+export function upsertScheduleItem(
+  current: ScheduleItem[] | null,
+  updated: ScheduleItem,
+): ScheduleItem[] {
+  if (!current) return [updated];
+  const index = current.findIndex((item) => item.id === updated.id);
+  if (index === -1) return [...current, updated];
+  return current.map((item, itemIndex) => (itemIndex === index ? updated : item));
+}
+
 /**
  * Resolves what a viewer sees for a schedule item's title/description (H50
  * extension): their preferred language if translated, else English, else the
@@ -88,19 +99,26 @@ export function resolveScheduleText(
   item: ScheduleItem,
   language: Language,
 ): { title: string; description: string | null } {
-  const canonical = { title: item.title, description: item.description };
-  if (language === item.primaryLanguage) return canonical;
-  const translated = {
-    title: item.titleI18n?.[language],
-    description: item.descriptionI18n?.[language],
+  const firstText = (...values: (string | null | undefined)[]) =>
+    values.find((value) => typeof value === "string" && value.trim().length > 0) ?? null;
+  const fallbackLanguage =
+    language === item.primaryLanguage || language === "en" ? undefined : "en";
+  return {
+    // Resolve title and description independently. A translated title must
+    // not hide an available description (or vice versa) when translations
+    // were entered one field at a time (H50).
+    title:
+      firstText(
+        language === item.primaryLanguage ? undefined : item.titleI18n?.[language],
+        fallbackLanguage ? item.titleI18n?.[fallbackLanguage] : undefined,
+        item.title,
+      ) ?? item.title,
+    description: firstText(
+      language === item.primaryLanguage ? undefined : item.descriptionI18n?.[language],
+      fallbackLanguage ? item.descriptionI18n?.[fallbackLanguage] : undefined,
+      item.description,
+    ),
   };
-  if (translated.title)
-    return { title: translated.title, description: translated.description ?? null };
-  if (language !== "en") {
-    const english = { title: item.titleI18n?.en, description: item.descriptionI18n?.en };
-    if (english.title) return { title: english.title, description: english.description ?? null };
-  }
-  return canonical;
 }
 
 /** H50 extension: whether automatic translation is configured for this deployment. */

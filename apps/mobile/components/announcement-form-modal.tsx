@@ -168,6 +168,7 @@ export function AnnouncementFormModal({
   // only) with no translation provider set up at all.
   const [translateAvailable, setTranslateAvailable] = useState(false);
   const [translating, setTranslating] = useState(false);
+  const [translationsOpen, setTranslationsOpen] = useState(false);
 
   const canTargetSpecific = values.screenPlacement === "none";
 
@@ -179,6 +180,7 @@ export function AnnouncementFormModal({
     setTargetingModeState(targetingModeOf(next));
     setScheduledSend(Boolean(next.publishAt));
     setScheduledExpiry(Boolean(next.expiresAt));
+    setTranslationsOpen(false);
     setError(null);
   }, [visible, initial, initialRecipients]);
 
@@ -261,16 +263,28 @@ export function AnnouncementFormModal({
   }
 
   async function save() {
-    if (!values.title.trim() || !values.body.trim()) {
-      setError(t("announcementSaveError"));
+    const languages = ["es", "gl", "en"] as const;
+    const completeLanguages = languages.filter((language) => {
+      const translation = values.translations[language];
+      return Boolean(translation?.title.trim() && translation.body.trim());
+    });
+    const incompleteLanguage = languages.find((language) => {
+      const translation = values.translations[language];
+      const hasContent = Boolean(translation?.title.trim() || translation?.body.trim());
+      const isComplete = Boolean(translation?.title.trim() && translation.body.trim());
+      return hasContent && !isComplete;
+    });
+    if (completeLanguages.length === 0 || incompleteLanguage) {
+      setError(t("announcementTranslationsRequired"));
       return;
     }
-    const missingTranslation = (["es", "gl", "en"] as const).find(
-      (language) =>
-        !values.translations[language]?.title.trim() || !values.translations[language]?.body.trim(),
-    );
-    if (missingTranslation) {
-      setError(t("announcementTranslationsRequired"));
+    const translations = Object.fromEntries(
+      completeLanguages.map((language) => [language, values.translations[language]]),
+    ) as AnnouncementInput["translations"];
+    const primaryLanguage = completeLanguages[0];
+    const primary = values.translations[primaryLanguage];
+    if (!primary) {
+      setError(t("announcementSaveError"));
       return;
     }
     setPending(true);
@@ -278,8 +292,9 @@ export function AnnouncementFormModal({
     try {
       await onSubmit({
         ...values,
-        title: values.title.trim(),
-        body: values.body.trim(),
+        title: primary.title.trim(),
+        body: primary.body.trim(),
+        translations,
         publishAt: scheduledSend ? values.publishAt : null,
         expiresAt: values.screenPlacement !== "none" && scheduledExpiry ? values.expiresAt : null,
       });
@@ -366,93 +381,130 @@ export function AnnouncementFormModal({
             />
           </Section>
 
-          {(["gl", "en"] as const).map((language) => (
-            <View key={language} style={{ gap: 8 }}>
-              <Section
-                title={`${t("announcementTitleLabel")} · ${t(language === "gl" ? "galicianTag" : "englishTag")}`}
+          <View style={{ gap: 8 }}>
+            <View style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t("translationsAndSettings")}
+                accessibilityState={{ expanded: translationsOpen }}
+                hitSlop={8}
+                onPress={() => setTranslationsOpen((open) => !open)}
+                style={({ pressed }) => ({
+                  alignItems: "center",
+                  flex: 1,
+                  flexDirection: "row",
+                  gap: 6,
+                  opacity: pressed ? 0.6 : 1,
+                  paddingVertical: 8,
+                })}
               >
-                <TextInput
-                  accessibilityLabel={t("announcementTitleLabel")}
-                  onChangeText={(title) =>
-                    setValues((current) => ({
-                      ...current,
-                      translations: {
-                        ...current.translations,
-                        [language]: { title, body: current.translations[language]?.body ?? "" },
-                      },
-                    }))
-                  }
-                  onSubmitEditing={() => bodyRefs.current[language]?.focus()}
-                  placeholderTextColor={colors.tertiaryLabel}
-                  returnKeyType="next"
-                  style={{ color: colors.label, fontSize: 16, padding: 16 }}
-                  value={values.translations[language]?.title ?? ""}
+                <SymbolView
+                  name="chevron.right"
+                  tintColor={colors.secondaryLabel}
+                  size={13}
+                  weight="semibold"
+                  style={{ transform: [{ rotate: translationsOpen ? "90deg" : "0deg" }] }}
                 />
-              </Section>
-              <Section
-                title={`${t("announcementBodyLabel")} · ${t(language === "gl" ? "galicianTag" : "englishTag")}`}
-              >
-                <TextInput
-                  ref={(r) => {
-                    bodyRefs.current[language] = r;
-                  }}
-                  accessibilityLabel={t("announcementBodyLabel")}
-                  multiline
-                  onChangeText={(body) =>
-                    setValues((current) => ({
-                      ...current,
-                      translations: {
-                        ...current.translations,
-                        [language]: { title: current.translations[language]?.title ?? "", body },
-                      },
-                    }))
-                  }
-                  placeholderTextColor={colors.tertiaryLabel}
-                  style={{
-                    color: colors.label,
-                    fontSize: 16,
-                    lineHeight: 22,
-                    minHeight: 70,
-                    padding: 16,
-                    textAlignVertical: "top",
-                  }}
-                  value={values.translations[language]?.body ?? ""}
-                />
-              </Section>
+                <Text style={{ color: colors.secondaryLabel, fontSize: 13, fontWeight: "600" }}>
+                  {t("translationsAndSettings")}
+                </Text>
+              </Pressable>
+              {translateAvailable ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t("translateAutomatically")}
+                  accessibilityState={{ busy: translating }}
+                  disabled={translating}
+                  onPress={() => void autoTranslate()}
+                  style={({ pressed }) => ({
+                    alignItems: "center",
+                    backgroundColor: colors.elevatedSurface,
+                    borderCurve: "continuous",
+                    borderRadius: 10,
+                    flexDirection: "row",
+                    gap: 8,
+                    minHeight: 44,
+                    opacity: translating ? 0.6 : pressed ? 0.7 : 1,
+                    paddingHorizontal: 16,
+                  })}
+                >
+                  <SymbolView
+                    name="character.book.closed"
+                    tintColor={colors.accent}
+                    size={16}
+                    accessible={false}
+                  />
+                  <Text style={{ color: colors.accent, fontSize: 15, fontWeight: "600" }}>
+                    {translating ? t("translatingInProgress") : t("translateAutomatically")}
+                  </Text>
+                </Pressable>
+              ) : null}
             </View>
-          ))}
 
-          {translateAvailable ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t("translateAutomatically")}
-              accessibilityState={{ busy: translating }}
-              disabled={translating}
-              onPress={() => void autoTranslate()}
-              style={({ pressed }) => ({
-                alignItems: "center",
-                alignSelf: "center",
-                backgroundColor: colors.elevatedSurface,
-                borderCurve: "continuous",
-                borderRadius: 10,
-                flexDirection: "row",
-                gap: 8,
-                opacity: translating ? 0.6 : pressed ? 0.7 : 1,
-                paddingHorizontal: 16,
-                paddingVertical: 10,
-              })}
-            >
-              <SymbolView
-                name="character.book.closed"
-                tintColor={colors.accent}
-                size={16}
-                accessible={false}
-              />
-              <Text style={{ color: colors.accent, fontSize: 15, fontWeight: "600" }}>
-                {translating ? t("translatingInProgress") : t("translateAutomatically")}
-              </Text>
-            </Pressable>
-          ) : null}
+            {translationsOpen
+              ? (["gl", "en"] as const).map((language) => (
+                  <View key={language} style={{ gap: 8 }}>
+                    <Section
+                      title={`${t("announcementTitleLabel")} · ${t(language === "gl" ? "galicianTag" : "englishTag")}`}
+                    >
+                      <TextInput
+                        accessibilityLabel={t("announcementTitleLabel")}
+                        onChangeText={(title) =>
+                          setValues((current) => ({
+                            ...current,
+                            translations: {
+                              ...current.translations,
+                              [language]: {
+                                title,
+                                body: current.translations[language]?.body ?? "",
+                              },
+                            },
+                          }))
+                        }
+                        onSubmitEditing={() => bodyRefs.current[language]?.focus()}
+                        placeholderTextColor={colors.tertiaryLabel}
+                        returnKeyType="next"
+                        style={{ color: colors.label, fontSize: 16, padding: 16 }}
+                        value={values.translations[language]?.title ?? ""}
+                      />
+                    </Section>
+                    <Section
+                      title={`${t("announcementBodyLabel")} · ${t(language === "gl" ? "galicianTag" : "englishTag")}`}
+                    >
+                      <TextInput
+                        ref={(r) => {
+                          bodyRefs.current[language] = r;
+                        }}
+                        accessibilityLabel={t("announcementBodyLabel")}
+                        multiline
+                        onChangeText={(body) =>
+                          setValues((current) => ({
+                            ...current,
+                            translations: {
+                              ...current.translations,
+                              [language]: {
+                                title: current.translations[language]?.title ?? "",
+                                body,
+                              },
+                            },
+                          }))
+                        }
+                        placeholderTextColor={colors.tertiaryLabel}
+                        style={{
+                          color: colors.label,
+                          fontSize: 16,
+                          lineHeight: 22,
+                          minHeight: 70,
+                          padding: 16,
+                          textAlignVertical: "top",
+                        }}
+                        value={values.translations[language]?.body ?? ""}
+                      />
+                    </Section>
+                  </View>
+                ))
+              : null}
+          </View>
 
           <Section title={t("announcementScreenPlacementLabel")}>
             <MenuView

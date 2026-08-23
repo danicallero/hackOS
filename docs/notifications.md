@@ -125,8 +125,12 @@ mandatory (non-optional) category (H51).
 `translations` (`title`/`body` per `es | gl | en`) can be filled by hand, or
 staff can write the content in whichever of the three languages comes
 naturally and hit "Translate automatically" to machine-translate the rest —
-both frontends detect the first non-empty language as the source and only
+both frontends detect the first complete language as the source and only
 fill languages that are still empty, never overwriting a manual edit.
+Saving only requires one complete language; when the other languages are blank,
+that language becomes the canonical fallback and is delivered to recipients
+whose language has no translation. Partial language entries still need both
+title and body before saving.
 
 The provider is fully optional and isolated behind
 `modules/notifications/translate/`: `translateFields()` /

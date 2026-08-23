@@ -221,7 +221,7 @@
   "announcementDeleteConfirmMessage": "Esta acción non se pode desfacer.",
   "announcementSaveError": "Non se puido gardar o aviso. Comproba a túa conexión e téntao de novo.",
   "announcementDeleteError": "Non se puido eliminar o aviso. Comproba a túa conexión e téntao de novo.",
-  "announcementTranslationsRequired": "Completa o título e a mensaxe en castelán, galego e inglés.",
+  "announcementTranslationsRequired": "Completa o título e a mensaxe en polo menos un idioma.",
   "announcementTitleLabel": "Título",
   "announcementBodyLabel": "Mensaxe",
   "announcementScreenPlacementLabel": "Amosar en pantallas",

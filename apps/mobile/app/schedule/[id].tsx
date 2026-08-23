@@ -28,6 +28,7 @@ import {
   scheduleDurationLabel,
   scheduleTypeLabel,
   updateScheduleItem,
+  upsertScheduleItem,
 } from "@/lib/schedule";
 import { has } from "@/lib/tabs";
 import { useCachedApi } from "@/lib/use-cached-api";
@@ -49,7 +50,10 @@ export default function ScheduleDetailScreen() {
   const { me } = useMeContext();
   const insets = useSafeAreaInsets();
   const canManage = has(me?.capabilities ?? [], CAPABILITIES.SCHEDULE_MANAGE);
-  const { data, loading, error, staleSince, load } = useCachedApi("schedule", fetchPublicSchedule);
+  const { data, loading, error, staleSince, load, setData } = useCachedApi(
+    "schedule",
+    fetchPublicSchedule,
+  );
   const notifications = useScheduleNotifications(data ?? []);
   const [editing, setEditing] = useState(false);
   const [adminItem, setAdminItem] = useState<AdminScheduleItem | null>(null);
@@ -84,15 +88,21 @@ export default function ScheduleDetailScreen() {
   async function saveEdit(
     values: ScheduleInput,
     _pendingOwners: ({ userId: number } | { freeTextName: string })[],
-  ) {
+  ): Promise<AdminScheduleItem> {
     if (!item) throw new Error("No schedule item to edit");
-    const updated = await updateScheduleItem(item.id, values);
-    setAdminItem((current) => (current ? { ...updated, owners: current.owners } : updated));
-    setEditing(false);
-    await load();
-    return updated;
+    return updateScheduleItem(item.id, values);
   }
-  const detailItem = adminItem ?? item;
+
+  function finishEditSave(updated: AdminScheduleItem) {
+    setAdminItem((current) => ({ ...updated, owners: current?.owners ?? [] }));
+    setData((current) => upsertScheduleItem(current, updated));
+    setEditing(false);
+  }
+  // The admin endpoint returns the canonical columns too. Resolve its
+  // translated fields before using it for the staff detail view (H50).
+  const detailItem = adminItem
+    ? { ...adminItem, ...resolveScheduleText(adminItem, language) }
+    : item;
   const staffItem = adminItem ?? (item?.notes !== undefined ? item : null);
   const startsAt = detailItem ? new Date(detailItem.startsAt) : null;
   const endsAt = detailItem ? new Date(detailItem.endsAt) : null;
@@ -310,6 +320,7 @@ export default function ScheduleDetailScreen() {
           initialTranslations={scheduleItemToTranslations(adminItem, language)}
           scheduleId={adminItem.id}
           initialOwners={adminItem.owners}
+          onSaved={finishEditSave}
           onSubmit={saveEdit}
         />
       ) : null}

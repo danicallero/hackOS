@@ -221,7 +221,7 @@
   "announcementDeleteConfirmMessage": "Esta acción no se puede deshacer.",
   "announcementSaveError": "No se pudo guardar el aviso. Comprueba tu conexión e inténtalo de nuevo.",
   "announcementDeleteError": "No se pudo eliminar el aviso. Comprueba tu conexión e inténtalo de nuevo.",
-  "announcementTranslationsRequired": "Completa el título y el mensaje en castellano, gallego e inglés.",
+  "announcementTranslationsRequired": "Completa el título y el mensaje en al menos un idioma.",
   "announcementTitleLabel": "Título",
   "announcementBodyLabel": "Mensaje",
   "announcementScreenPlacementLabel": "Mostrar en pantallas",

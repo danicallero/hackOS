@@ -221,7 +221,7 @@
   "announcementDeleteConfirmMessage": "This can't be undone.",
   "announcementSaveError": "Couldn't save the announcement. Check your connection and try again.",
   "announcementDeleteError": "Couldn't delete the announcement. Check your connection and try again.",
-  "announcementTranslationsRequired": "Complete the title and message in Spanish, Galician, and English.",
+  "announcementTranslationsRequired": "Complete the title and message in at least one language.",
   "announcementTitleLabel": "Title",
   "announcementBodyLabel": "Message",
   "announcementScreenPlacementLabel": "Show on screens",

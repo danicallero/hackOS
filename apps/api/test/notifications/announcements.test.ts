@@ -158,6 +158,40 @@ describe("announcement CRUD (H50)", () => {
     expect(galicianPayloadRows[0].payload).toMatchObject({ subject: "gl", body: "corpo gl" });
   });
 
+  it("accepts one complete language and delivers it as the fallback", async () => {
+    const adminId = await createUserWithCapabilities([CAPABILITIES.ANNOUNCEMENTS_MANAGE]);
+    const recipientId = await createUser();
+    await pool.query(`UPDATE users SET language = 'en' WHERE id = $1`, [recipientId]);
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/announcements",
+      headers: asUser(adminId),
+      payload: {
+        title: "unused canonical title",
+        body: "unused canonical body",
+        notifyUsers: true,
+        recipientUserIds: [recipientId],
+        translations: {
+          gl: { title: "Aviso galego", body: "Mensaxe galega" },
+        },
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(res.json()).toMatchObject({
+      title: "Aviso galego",
+      body: "Mensaxe galega",
+      translations: { gl: { title: "Aviso galego", body: "Mensaxe galega" } },
+    });
+
+    const { rows } = await pool.query(
+      `SELECT payload FROM notification_outbox WHERE user_id = $1 AND channel = 'in_app'`,
+      [recipientId],
+    );
+    expect(rows[0].payload).toMatchObject({ subject: "Aviso galego", body: "Mensaxe galega" });
+  });
+
   it("update and delete are audited", async () => {
     const adminId = await createUserWithCapabilities([CAPABILITIES.ANNOUNCEMENTS_MANAGE]);
     const created = (
