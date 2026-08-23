@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Collapsible as CollapsiblePrimitive } from "radix-ui";
 import { useEffect, useState } from "react";
+import { BrandMark } from "@/components/common/brand";
 import { Badge } from "@/components/ui/badge";
 import {
   Sidebar,
@@ -224,7 +225,7 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="h-14 justify-center border-b px-3">
+      <SidebarHeader className="h-14 justify-center border-b px-2">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
@@ -234,10 +235,8 @@ export function AppSidebar() {
               className="gap-2.5 group-data-[collapsible=icon]:p-1.5!"
             >
               <Link href="/timetable">
-                <span className="bg-primary text-primary-foreground grid size-8 shrink-0 place-items-center rounded-md text-sm font-bold">
-                  h
-                </span>
-                <span className="text-base font-semibold tracking-tight group-data-[collapsible=icon]:hidden">
+                <BrandMark className="size-8 shrink-0 group-data-[collapsible=icon]:size-5" />
+                <span className="text-lg font-semibold tracking-tight group-data-[collapsible=icon]:hidden">
                   hackOS
                 </span>
               </Link>

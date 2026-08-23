@@ -30,7 +30,7 @@ export function Brand({
  * Fetched from the single source file (public/icons/brand-mark.svg) and
  * recolored to currentColor so it matches the surrounding text.
  */
-function BrandMark({ className }: { className?: string }) {
+export function BrandMark({ className }: { className?: string }) {
   const [markup, setMarkup] = useState<string | null>(null);
 
   useEffect(() => {
