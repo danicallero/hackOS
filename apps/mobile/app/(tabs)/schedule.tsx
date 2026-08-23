@@ -32,6 +32,7 @@ import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import {
+  type AdminScheduleItem,
   addScheduleOwner,
   createScheduleItem,
   deleteScheduleItem,
@@ -42,6 +43,7 @@ import {
   type ScheduleItem,
   scheduleTypeLabel,
   updateScheduleItem,
+  upsertScheduleItem,
 } from "@/lib/schedule";
 import { has } from "@/lib/tabs";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
@@ -85,7 +87,10 @@ export default function ScheduleScreen() {
   const headerTopInset = process.env.EXPO_OS === "ios" ? insets.top : androidTopInset;
   const canManage = has(me?.capabilities ?? [], CAPABILITIES.SCHEDULE_MANAGE);
 
-  const { data, loading, error, staleSince, load } = useCachedApi("schedule", fetchPublicSchedule);
+  const { data, loading, error, staleSince, load, setData } = useCachedApi(
+    "schedule",
+    fetchPublicSchedule,
+  );
   // H50 extension: resolve each item's title/description into the viewer's
   // language here so every downstream renderer keeps reading plain
   // item.title/item.description unchanged.
@@ -304,8 +309,8 @@ export default function ScheduleScreen() {
   async function submitForm(
     values: ScheduleInput,
     pendingOwners: ({ userId: number } | { freeTextName: string })[],
-  ) {
-    let result: { id: number };
+  ): Promise<AdminScheduleItem> {
+    let result: AdminScheduleItem;
     if (formTarget === "create") {
       const created = await createScheduleItem(values);
       for (const input of pendingOwners) await addScheduleOwner(created.id, input);
@@ -315,9 +320,12 @@ export default function ScheduleScreen() {
     } else {
       throw new Error("No schedule form target");
     }
-    setFormTarget(null);
-    await load();
     return result;
+  }
+
+  function finishFormSave(updated: AdminScheduleItem) {
+    setData((current) => upsertScheduleItem(current, updated));
+    setFormTarget(null);
   }
 
   return (
@@ -483,11 +491,17 @@ export default function ScheduleScreen() {
       />
 
       {formTarget === "create" ? (
-        <ScheduleFormModal visible onClose={() => setFormTarget(null)} onSubmit={submitForm} />
+        <ScheduleFormModal
+          visible
+          onClose={() => setFormTarget(null)}
+          onSaved={finishFormSave}
+          onSubmit={submitForm}
+        />
       ) : formTarget ? (
         <AdminScheduleFormLoader
           target={formTarget}
           onClose={() => setFormTarget(null)}
+          onSaved={finishFormSave}
           onSubmit={submitForm}
         />
       ) : null}
@@ -518,13 +532,15 @@ function AdminScheduleFormLoader({
   target,
   onClose,
   onSubmit,
+  onSaved,
 }: {
   target: "create" | ScheduleItem | null;
   onClose: () => void;
   onSubmit: (
     values: ScheduleInput,
     pendingOwners: ({ userId: number } | { freeTextName: string })[],
-  ) => Promise<{ id: number }>;
+  ) => Promise<AdminScheduleItem>;
+  onSaved: (item: AdminScheduleItem) => void | Promise<void>;
 }) {
   const { language } = useLocale();
   const [loaded, setLoaded] = useState<Awaited<ReturnType<typeof fetchAdminSchedule>> | null>(null);
@@ -555,6 +571,7 @@ function AdminScheduleFormLoader({
       initialTranslations={scheduleItemToTranslations(adminItem, language)}
       scheduleId={adminItem.id}
       initialOwners={adminItem.owners}
+      onSaved={onSaved}
       onSubmit={onSubmit}
     />
   );

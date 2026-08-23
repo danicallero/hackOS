@@ -306,19 +306,26 @@ export function resolveScheduleText(
   item: PublicScheduleItem,
   language: Language,
 ): { title: string; description: string | null } {
-  const canonical = { title: item.title, description: item.description };
-  if (language === item.primaryLanguage) return canonical;
-  const translated = {
-    title: item.titleI18n?.[language],
-    description: item.descriptionI18n?.[language],
+  const firstText = (...values: (string | null | undefined)[]) =>
+    values.find((value) => typeof value === "string" && value.trim().length > 0) ?? null;
+  const fallbackLanguage =
+    language === item.primaryLanguage || language === "en" ? undefined : "en";
+  return {
+    // Resolve title and description independently. A translated title must
+    // not hide an available description (or vice versa) when translations
+    // were entered one field at a time (H50).
+    title:
+      firstText(
+        language === item.primaryLanguage ? undefined : item.titleI18n?.[language],
+        fallbackLanguage ? item.titleI18n?.[fallbackLanguage] : undefined,
+        item.title,
+      ) ?? item.title,
+    description: firstText(
+      language === item.primaryLanguage ? undefined : item.descriptionI18n?.[language],
+      fallbackLanguage ? item.descriptionI18n?.[fallbackLanguage] : undefined,
+      item.description,
+    ),
   };
-  if (translated.title)
-    return { title: translated.title, description: translated.description ?? null };
-  if (language !== "en") {
-    const english = { title: item.titleI18n?.en, description: item.descriptionI18n?.en };
-    if (english.title) return { title: english.title, description: english.description ?? null };
-  }
-  return canonical;
 }
 
 export function idempotencyHeaders(prefix: string): Record<string, string> {

@@ -907,7 +907,7 @@
   "announcementPlacementNone": "No mostrar",
   "announcementPlacementEmbedded": "Integrado",
   "announcementPlacementFullscreen": "Pantalla completa",
-  "announcementTranslationsRequired": "Completa el título y el mensaje en castellano, gallego e inglés.",
+  "announcementTranslationsRequired": "Completa el título y el mensaje en al menos un idioma.",
   "translateAutomatically": "Traducir automáticamente",
   "translatingInProgress": "Traduciendo…",
   "couldNotTranslate": "No se pudo traducir automáticamente. Puedes completarlo a mano.",
