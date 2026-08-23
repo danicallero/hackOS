@@ -562,6 +562,7 @@ export default function SchedulePage() {
           toast.success(t("scheduleItemCreated"));
           setCreateOpen(false);
           load();
+          return created;
         }}
       />
 
@@ -574,14 +575,19 @@ export default function SchedulePage() {
           title={t("editScheduleItem")}
           initial={scheduleItemToForm(editingItem)}
           initialTranslations={scheduleItemToTranslations(editingItem)}
+          primaryLanguage={editingItem.primaryLanguage}
           scheduleId={editingItem.id}
           onSubmit={async (values) => {
-            await logisticsApi.updateSchedule(editingItem.id, cleanScheduleForm(values));
+            const updated = await logisticsApi.updateSchedule(
+              editingItem.id,
+              cleanScheduleForm(values),
+            );
             toast.success(t("scheduleItemUpdated"));
             setEditingItem(null);
             // A full edit can move the item to a different day/audience, so
             // a full reload (not a local patch) keeps grouping/filtering correct.
             load();
+            return updated;
           }}
         />
       )}
@@ -604,6 +610,7 @@ export default function SchedulePage() {
             toast.success(t("scheduleItemDuplicated"));
             setDuplicatingItem(null);
             load();
+            return created;
           }}
         />
       )}

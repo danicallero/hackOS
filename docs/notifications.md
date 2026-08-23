@@ -151,31 +151,52 @@ Resend email adapter).
 Schedule items (`logistics/schedule.ts`) get the same treatment, but with the
 challenges (H44) per-field `_i18n` jsonb-column convention instead of
 announcements' single blob: `schedule.title_i18n` / `schedule.description_i18n`,
-keyed by locale, so a title and description can be redone independently.
+keyed by locale, so a title and description can be filled independently.
 `schedule.primary_language` records which language `title`/`description` were
 authored in — the canonical columns are that language's mirror, not a fixed
-English lock. `POST /api/schedule/:id/translate` (`translateScheduleItem`)
-machine-translates from `primaryLanguage` into the requested targets and
-persists via `saveScheduleTranslations`, which also mirrors the result onto
-the item's linked `activities` row (`name_i18n`/`description_i18n`,
-`primary_language`) — the same mirroring `updateScheduleItem` already does
-for the canonical title/description, so the H25/H26 scanner station and
-activity tracker see translated labels too, with no separate translate action
-of their own. `PUT /api/schedule/:id/translations` saves hand-edited text for
-one or more locales without disturbing the others. Every schedule read
-(`listSchedule`, `listScheduleForAudiences`) returns `primaryLanguage` +
-`titleI18n`/`descriptionI18n` so every viewer — not just an editor — can
-resolve their own display text: preferred language, else English, else
-`primaryLanguage`'s canonical text. `resolveScheduleText` (`apps/web/src/lib/logistics.ts`,
-`apps/mobile/lib/schedule.ts`) implements that fallback client-side; every
-viewer-facing schedule read (web `/timetable`, `/horario`, the TV display;
-mobile's Schedule tab and detail screen) resolves through it before handing
-items to their renderers, so those renderers keep reading plain
-`item.title`/`item.description` unchanged. `ScheduleFormModal` (both
-frontends) gets a primary-language picker next to Title/Description plus a
-translations panel (auto-translate, redo, or hand-edit) that only appears
-once the item has a real id — translation always targets the item's
-currently-saved primary content.
+English lock. **There's no language picker in either client**: `primary_language`
+is set once at creation from the author's own account language
+(`users.language`, via `getUserLanguage`) and never changes after — staff just
+type the title/description, in whatever language actually comes out. Every
+translate call passes `source: "auto"` down to the provider (`translateFields`
+in `translate/index.ts`; Google's v2 API auto-detects when `source` is
+omitted, LibreTranslate accepts the literal `"auto"`), so what actually gets
+translated is whatever was typed, not an assumption pinned to the account
+language.
+
+Translation is content-scoped, not id-scoped: `POST /api/schedule/translate`
+(`translateScheduleContent`) takes a title/description directly and returns
+translations without touching the database, so both the create and edit forms
+can call it before the item is even saved. Automatic translation only ever
+fills a **blank** locale — callers are responsible for excluding any locale
+that already has translated text (mirrors announcements' "only fill languages
+that are still empty" rule); to redo one, clear it by hand first. Creating a
+schedule item (`createScheduleItem`) also auto-translates in the background
+right after insert whenever a provider is configured — this is what makes the
+manage table's quick "New item" row (title-only, no UI for translations of
+its own) come out translated with no extra client-side wiring. `PUT
+/api/schedule/:id/translations` (`saveScheduleTranslations`) persists
+whatever it's given unconditionally (manual edits are trusted input, not
+subject to the blank-only rule) and mirrors the result onto the item's linked
+`activities` row (`name_i18n`/`description_i18n`) — the same mirroring
+`updateScheduleItem` already does for the canonical title/description, so the
+H25/H26 scanner station and activity tracker see translated labels too, with
+no separate translate action of their own.
+
+Every schedule read (`listSchedule`, `listScheduleForAudiences`) returns
+`primaryLanguage` + `titleI18n`/`descriptionI18n` so every viewer — not just
+an editor — can resolve their own display text: preferred language, else
+English, else `primaryLanguage`'s canonical text. `resolveScheduleText`
+(`apps/web/src/lib/logistics.ts`, `apps/mobile/lib/schedule.ts`) implements
+that fallback client-side; every viewer-facing schedule read (web
+`/timetable`, `/horario`, the TV display; mobile's Schedule tab and detail
+screen) resolves through it before handing items to their renderers, so those
+renderers keep reading plain `item.title`/`item.description` unchanged.
+`ScheduleFormModal` (both frontends) labels Title/Description with the
+resolved primary language (no control to change it) plus a translations panel
+— auto-translate (only the still-blank locales) or hand-edit — staged locally
+in create mode and persisted right after the item is created, immediately in
+edit mode.
 
 Known gap: the mobile scan-station UI (`components/activities-screen.tsx`,
 `activity-scanner-screen.tsx`) reads `ScannerActivity` from the offline SQLite

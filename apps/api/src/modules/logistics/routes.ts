@@ -58,7 +58,7 @@ import {
   saveScheduleTranslations,
   setScheduleBulkPublishAt,
   setScheduleVisibility,
-  translateScheduleItem,
+  translateScheduleContent,
   updateScheduleItem,
 } from "./schedule.js";
 import {
@@ -690,7 +690,6 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
           audiences: req.body.audiences,
           contactNote: req.body.contactNote ?? null,
           notes: req.body.notes ?? null,
-          primaryLanguage: req.body.primaryLanguage,
         }),
       ),
   );
@@ -716,7 +715,6 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
         audiences: req.body.audiences,
         contactNote: req.body.contactNote,
         notes: req.body.notes,
-        primaryLanguage: req.body.primaryLanguage,
       }),
   );
 
@@ -735,20 +733,22 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   );
 
   typed.post(
-    "/api/schedule/:id/translate",
+    "/api/schedule/translate",
     {
       ...routeAccess(access.scheduleManage),
       preHandler: scheduleManage,
       schema: {
-        params: scheduleIdParam,
         body: scheduleTranslateBody,
-        summary: "Auto-translate a schedule item",
+        summary: "Auto-translate schedule content",
         description:
-          "Machine-translates this item's title+description from its primary language into each of targetLanguages via the configured provider, and persists the result — safe to call again to redo a translation (H50 extension).",
+          "Machine-translates a title+description into each of targetLanguages via the configured provider, auto-detecting the source language — content-scoped (no id) so both the create and edit forms can call it before the item is saved. Doesn't persist; the caller saves the result via PUT /api/schedule/:id/translations. Only request targets that are actually still blank — this never overwrites a locale that already has translated text (H50 extension).",
       },
     },
     async (req) =>
-      translateScheduleItem(actor(req.userId), req.params.id, req.body.targetLanguages),
+      translateScheduleContent(
+        { title: req.body.title, description: req.body.description },
+        req.body.targetLanguages,
+      ),
   );
 
   typed.put(

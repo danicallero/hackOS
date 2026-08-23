@@ -62,7 +62,6 @@ export const EMPTY_SCHEDULE_FORM: ScheduleInput = {
   audiences: [],
   contactNote: "",
   notes: "",
-  primaryLanguage: "es",
 };
 
 export function scheduleItemToForm(item: PublicScheduleItem): ScheduleInput {
@@ -79,7 +78,6 @@ export function scheduleItemToForm(item: PublicScheduleItem): ScheduleInput {
     audiences: item.audiences ?? [],
     contactNote: item.contactNote ?? "",
     notes: item.notes ?? "",
-    primaryLanguage: item.primaryLanguage ?? "es",
   };
 }
 
@@ -120,7 +118,6 @@ export function cleanScheduleForm(form: ScheduleInput): ScheduleInput {
     audiences: form.audiences ?? [],
     contactNote: form.contactNote?.trim() || null,
     notes: form.notes?.trim() || null,
-    primaryLanguage: form.primaryLanguage,
   };
 }
 
@@ -130,6 +127,7 @@ export function ScheduleFormModal({
   title,
   initial,
   initialTranslations,
+  primaryLanguage: primaryLanguageProp,
   onSubmit,
   scheduleId,
 }: {
@@ -140,32 +138,97 @@ export function ScheduleFormModal({
   /** Present only when editing an existing item — same reason as scheduleId below. */
   initialTranslations?: ScheduleTranslations;
   /**
+   * The language `title`/`description` are authored in — never a picker
+   * (see the module doc comment in lib/schedule for why): editing an
+   * existing item shows its already-anchored language; creating one falls
+   * back to the current viewer's own account language, since that's what
+   * the server will anchor it to.
+   */
+  primaryLanguage?: Language;
+  /**
    * `pendingOwners` is only populated in create mode (no `scheduleId` yet)
    * — the caller is responsible for assigning them to the newly created item
    * (H59: the responsible-person picker needs to work before the row exists).
+   * The resolved id lets the modal persist any staged translations right
+   * after creation.
    */
-  onSubmit: (values: ScheduleInput, pendingOwners: PendingOwner[]) => Promise<void>;
+  onSubmit: (values: ScheduleInput, pendingOwners: PendingOwner[]) => Promise<{ id: number }>;
   /** Present only when editing an existing item — owner assignment needs a real id. */
   scheduleId?: number;
 }) {
-  const { t } = useLocale();
+  const { t, language: accountLanguage } = useLocale();
+  const primaryLanguage = primaryLanguageProp ?? accountLanguage;
   const [values, setValues] = useState(initial);
   const [pending, setPending] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [scheduledPublish, setScheduledPublish] = useState(Boolean(initial.publishAt));
   const [pendingOwners, setPendingOwners] = useState<PendingOwner[]>([]);
+  // H50 extension: staged locally so translations can be filled in before
+  // the item even exists — persisted right after create/update below.
+  const [translations, setTranslations] = useState<ScheduleTranslations>(initialTranslations ?? {});
+  const [translateAvailable, setTranslateAvailable] = useState(false);
+  const [translating, setTranslating] = useState(false);
 
   useEffect(() => {
     setValues(initial);
     setAdvancedOpen(false);
     setScheduledPublish(Boolean(initial.publishAt));
     setPendingOwners([]);
-  }, [initial]);
+    setTranslations(initialTranslations ?? {});
+  }, [initial, initialTranslations]);
+
+  useEffect(() => {
+    let cancelled = false;
+    logisticsApi
+      .scheduleTranslateAvailability()
+      .then((result) => {
+        if (!cancelled) setTranslateAvailable(result.available);
+      })
+      .catch(() => {
+        if (!cancelled) setTranslateAvailable(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const targetLanguages = LANGUAGES.filter((language) => language !== primaryLanguage);
+  // Automatic translation only ever fills a blank locale — once one has
+  // translated text, redoing it means clearing it by hand first (mirrors
+  // announcements' "only fill languages that are still empty" rule).
+  const blankTargetLanguages = targetLanguages.filter((language) => !translations[language]?.title);
+
+  async function autoTranslate() {
+    if (blankTargetLanguages.length === 0) return;
+    setTranslating(true);
+    try {
+      const result = await logisticsApi.translateScheduleContent({
+        title: values.title,
+        description: values.description,
+        targetLanguages: blankTargetLanguages,
+      });
+      setTranslations((prev) => ({ ...prev, ...result }));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotTranslate"));
+    } finally {
+      setTranslating(false);
+    }
+  }
+
+  function setTranslationField(language: Language, field: "title" | "description", value: string) {
+    setTranslations((prev) => ({
+      ...prev,
+      [language]: { ...prev[language as keyof ScheduleTranslations], [field]: value },
+    }));
+  }
 
   async function submit() {
     setPending(true);
     try {
-      await onSubmit(values, pendingOwners);
+      const result = await onSubmit(values, pendingOwners);
+      if (Object.keys(translations).length > 0) {
+        await logisticsApi.saveScheduleTranslations(result.id, translations);
+      }
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
     } finally {
@@ -202,38 +265,17 @@ export function ScheduleFormModal({
   return (
     <Modal open={open} onOpenChange={onOpenChange} title={title} icon={CalendarDaysIcon} size="xl">
       <div className="space-y-5">
-        <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-          <Field
+        <Field
+          id="schedule-title"
+          label={`${t("titleLabel")} · ${languageTag(primaryLanguage, t)}`}
+        >
+          <Input
             id="schedule-title"
-            label={`${t("titleLabel")} · ${languageTag(values.primaryLanguage, t)}`}
-          >
-            <Input
-              id="schedule-title"
-              value={values.title}
-              onChange={(e) => setValues((v) => ({ ...v, title: e.target.value }))}
-              placeholder={t("openingCeremonyPlaceholder")}
-            />
-          </Field>
-          <Field id="schedule-primary-language" label={t("primaryLanguageLabel")}>
-            <Select
-              value={values.primaryLanguage}
-              onValueChange={(primaryLanguage) =>
-                setValues((v) => ({ ...v, primaryLanguage: primaryLanguage as Language }))
-              }
-            >
-              <SelectTrigger id="schedule-primary-language" className="w-full sm:w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {LANGUAGES.map((language) => (
-                  <SelectItem key={language} value={language}>
-                    {languageTag(language, t)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-        </div>
+            value={values.title}
+            onChange={(e) => setValues((v) => ({ ...v, title: e.target.value }))}
+            placeholder={t("openingCeremonyPlaceholder")}
+          />
+        </Field>
 
         <Field id="schedule-type" label={t("colType")}>
           <Select
@@ -348,7 +390,7 @@ export function ScheduleFormModal({
 
         <Field
           id="schedule-description"
-          label={`${t("descriptionLabel")} · ${languageTag(values.primaryLanguage, t)}`}
+          label={`${t("descriptionLabel")} · ${languageTag(primaryLanguage, t)}`}
         >
           <Textarea
             id="schedule-description"
@@ -358,15 +400,49 @@ export function ScheduleFormModal({
           />
         </Field>
 
-        {scheduleId ? (
-          <TranslationsField
-            scheduleId={scheduleId}
-            primaryLanguage={values.primaryLanguage}
-            initial={initialTranslations ?? {}}
-          />
-        ) : (
-          <p className="text-muted-foreground text-sm">{t("scheduleTranslateAfterSaveHint")}</p>
-        )}
+        <fieldset className="space-y-3 rounded-lg border p-4">
+          <legend className="flex w-full items-center justify-between gap-3 px-1 text-sm font-medium">
+            {t("translationsAndSettings")}
+            {translateAvailable ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={translating || blankTargetLanguages.length === 0}
+                onClick={() => void autoTranslate()}
+              >
+                {translating ? t("translatingInProgress") : t("translateAutomatically")}
+              </Button>
+            ) : null}
+          </legend>
+          <div className="grid gap-4 md:grid-cols-2">
+            {targetLanguages.map((language) => (
+              <div key={language} className="grid gap-3">
+                <Field
+                  id={`schedule-title-${language}`}
+                  label={`${t("titleLabel")} · ${languageTag(language, t)}`}
+                >
+                  <Input
+                    id={`schedule-title-${language}`}
+                    value={translations[language]?.title ?? ""}
+                    onChange={(e) => setTranslationField(language, "title", e.target.value)}
+                  />
+                </Field>
+                <Field
+                  id={`schedule-description-${language}`}
+                  label={`${t("descriptionLabel")} · ${languageTag(language, t)}`}
+                >
+                  <Textarea
+                    id={`schedule-description-${language}`}
+                    rows={3}
+                    value={translations[language]?.description ?? ""}
+                    onChange={(e) => setTranslationField(language, "description", e.target.value)}
+                  />
+                </Field>
+              </div>
+            ))}
+          </div>
+        </fieldset>
 
         <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
           <CollapsibleTrigger asChild>
@@ -736,134 +812,5 @@ function OwnersField({ scheduleId }: { scheduleId: number }) {
         )}
       </div>
     </SectionCard>
-  );
-}
-
-/**
- * H50 extension: machine-translate or hand-edit this item's title+description
- * into the two non-primary locales, mirroring AnnouncementFormModal's
- * translations fieldset. Self-contained (like OwnersField) — it persists via
- * its own API calls rather than folding into the main form's Save button, so
- * it only shows up once the item has a real id (translation always targets
- * the item's currently-saved primary content).
- */
-function TranslationsField({
-  scheduleId,
-  primaryLanguage,
-  initial,
-}: {
-  scheduleId: number;
-  primaryLanguage: Language;
-  initial: ScheduleTranslations;
-}) {
-  const { t } = useLocale();
-  const [translations, setTranslations] = useState<ScheduleTranslations>(initial);
-  const [translateAvailable, setTranslateAvailable] = useState(false);
-  const [translating, setTranslating] = useState(false);
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    setTranslations(initial);
-  }, [initial]);
-
-  useEffect(() => {
-    let cancelled = false;
-    logisticsApi
-      .scheduleTranslateAvailability()
-      .then((result) => {
-        if (!cancelled) setTranslateAvailable(result.available);
-      })
-      .catch(() => {
-        if (!cancelled) setTranslateAvailable(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const targetLanguages = LANGUAGES.filter((language) => language !== primaryLanguage);
-
-  async function autoTranslate() {
-    setTranslating(true);
-    try {
-      const updated = await logisticsApi.translateSchedule(scheduleId, targetLanguages);
-      setTranslations(scheduleItemToTranslations(updated));
-      toast.success(t("translationsSaved"));
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotTranslate"));
-    } finally {
-      setTranslating(false);
-    }
-  }
-
-  async function save() {
-    setSaving(true);
-    try {
-      const updated = await logisticsApi.saveScheduleTranslations(scheduleId, translations);
-      setTranslations(scheduleItemToTranslations(updated));
-      toast.success(t("translationsSaved"));
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function setField(language: Language, field: "title" | "description", value: string) {
-    setTranslations((prev) => ({
-      ...prev,
-      [language]: { ...prev[language as keyof ScheduleTranslations], [field]: value },
-    }));
-  }
-
-  return (
-    <fieldset className="space-y-3 rounded-lg border p-4">
-      <legend className="flex w-full items-center justify-between gap-3 px-1 text-sm font-medium">
-        {t("translationsAndSettings")}
-        <div className="flex gap-2">
-          {translateAvailable ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={translating}
-              onClick={() => void autoTranslate()}
-            >
-              {translating ? t("translatingInProgress") : t("translateAutomatically")}
-            </Button>
-          ) : null}
-          <SubmitButton pending={saving} onClick={save} size="sm">
-            {t("save")}
-          </SubmitButton>
-        </div>
-      </legend>
-      <div className="grid gap-4 md:grid-cols-2">
-        {targetLanguages.map((language) => (
-          <div key={language} className="grid gap-3">
-            <Field
-              id={`schedule-title-${language}`}
-              label={`${t("titleLabel")} · ${languageTag(language, t)}`}
-            >
-              <Input
-                id={`schedule-title-${language}`}
-                value={translations[language]?.title ?? ""}
-                onChange={(e) => setField(language, "title", e.target.value)}
-              />
-            </Field>
-            <Field
-              id={`schedule-description-${language}`}
-              label={`${t("descriptionLabel")} · ${languageTag(language, t)}`}
-            >
-              <Textarea
-                id={`schedule-description-${language}`}
-                rows={3}
-                value={translations[language]?.description ?? ""}
-                onChange={(e) => setField(language, "description", e.target.value)}
-              />
-            </Field>
-          </div>
-        ))}
-      </div>
-    </fieldset>
   );
 }

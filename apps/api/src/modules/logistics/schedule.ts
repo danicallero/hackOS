@@ -7,21 +7,32 @@ import { getEffectiveCapabilities } from "../../lib/capabilities.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
 import { computeMembershipFlags, mentorOrParticipantType } from "../identity/role.js";
+import { normalizeLanguage } from "../notifications/templates.js";
 import type { Language } from "../notifications/translate/index.js";
-import { translateFields } from "../notifications/translate/index.js";
+import { isTranslationAvailable, translateFields } from "../notifications/translate/index.js";
 
 const SCHEDULE_COLUMNS =
   "id, title, description, location, type, requires_scan, starts_at, ends_at, visibility, publish_at, reminded_at, audiences, contact_note, notes, primary_language, title_i18n, description_i18n, created_at, updated_at";
 
+const ALL_LANGUAGES: Language[] = ["es", "gl", "en"];
+
 /**
  * Extends H50's translate-on-demand mechanism (announcements) to schedule
- * items (and, mirrored, their linked activity — see toActivityTranslations
+ * items (and, mirrored, their linked activity — see the `activities`
+ * mirroring in createScheduleItem/updateScheduleItem/saveScheduleTranslations
  * below): `title`/`description` stay the canonical mirror of whatever
- * language the item was authored in (`primaryLanguage`), machine-translated
- * on demand into the other two locales and re-translatable at any time.
+ * language the item was authored in. That language (`primaryLanguage`) is
+ * never chosen by hand — it's set once at creation from the author's own
+ * account language (`users.language`) and never changes after, so there's no
+ * picker in either client; staff just type the title/description, in
+ * whatever language actually comes out (translation always auto-detects the
+ * source rather than trusting this field — see translateScheduleContent).
  * Per-field `_i18n` jsonb columns (title_i18n/description_i18n), matching
  * the challenges (H44) convention rather than announcements' single blob, so
- * title and description can be redone independently.
+ * title and description can be filled independently. Once a locale has
+ * translated text, automatic translation never overwrites it again (mirrors
+ * announcements' "only fill languages that are still empty" rule) — to redo
+ * one, blank it out by hand first, then translate again.
  */
 export type ScheduleTranslation = { title?: string; description?: string | null };
 export type ScheduleTranslations = Partial<Record<Language, ScheduleTranslation>>;
@@ -57,8 +68,6 @@ export interface ScheduleInput {
   audiences?: ScheduleAudience[];
   contactNote?: string | null;
   notes?: string | null;
-  /** Language `title`/`description` are authored in. Defaults to "es". */
-  primaryLanguage?: Language;
 }
 
 export interface SchedulePatch {
@@ -74,12 +83,6 @@ export interface SchedulePatch {
   audiences?: ScheduleAudience[];
   contactNote?: string | null;
   notes?: string | null;
-  /**
-   * Changing the primary language re-anchors what `title`/`description` mean
-   * but deliberately does NOT clear title_i18n/description_i18n — stale
-   * entries for the old primary just become redo candidates.
-   */
-  primaryLanguage?: Language;
 }
 
 function serialize(row: Record<string, unknown>) {
@@ -137,6 +140,12 @@ function clearSpentPublishAt<T extends { visibility: "shown" | "hidden"; publish
 ): T {
   if (next.visibility !== "hidden" || next.publishAt === null) return next;
   return next.publishAt.getTime() <= now.getTime() ? { ...next, publishAt: null } : next;
+}
+
+/** The account's own UI language (`users.language`), defaulted like every other language lookup in the codebase (templates.ts's normalizeLanguage). */
+async function getUserLanguage(userId: number): Promise<Language> {
+  const { rows } = await pool.query(`SELECT language FROM users WHERE id = $1`, [userId]);
+  return normalizeLanguage((rows[0] as { language?: string } | undefined)?.language);
 }
 
 function assertWindow(startsAt: Date, endsAt: Date) {
@@ -242,6 +251,9 @@ export async function createScheduleItem(actorId: number | null, input: Schedule
     { visibility: input.visibility, publishAt: input.publishAt ?? null },
     audiences,
   );
+  // The author's own account language, not a picker — see the module doc
+  // comment above ScheduleTranslation.
+  const primaryLanguage = actorId == null ? "es" : await getUserLanguage(actorId);
   const item = await withTransaction(async (client) => {
     const { rows } = await client.query(
       `INSERT INTO schedule
@@ -261,7 +273,7 @@ export async function createScheduleItem(actorId: number | null, input: Schedule
         audiences,
         input.contactNote ?? null,
         input.notes ?? null,
-        input.primaryLanguage ?? "es",
+        primaryLanguage,
       ],
     );
     const item = serialize(rows[0]);
@@ -287,7 +299,27 @@ export async function createScheduleItem(actorId: number | null, input: Schedule
     return item;
   });
   await emitScheduleChanged({ action: "create", item });
-  return item;
+  return autoTranslateOnCreate(actorId, item);
+}
+
+/**
+ * Best-effort auto-translate a freshly created item's title/description into
+ * every non-primary UI locale — this is what makes translation happen
+ * automatically for the manage table's quick "New item" row, which has no UI
+ * of its own for translations. Every locale on a new item starts blank, so
+ * this can never clobber anything; a provider hiccup (or none configured)
+ * just leaves the item exactly as created, no error surfaced.
+ */
+async function autoTranslateOnCreate(actorId: number | null, item: ReturnType<typeof serialize>) {
+  if (!isTranslationAvailable() || !item.title.trim()) return item;
+  try {
+    return await translateScheduleContent(
+      { title: item.title, description: item.description },
+      ALL_LANGUAGES.filter((language) => language !== item.primaryLanguage),
+    ).then((translations) => saveScheduleTranslations(actorId, item.id, translations));
+  } catch {
+    return item;
+  }
 }
 
 export async function updateScheduleItem(actorId: number | null, id: number, patch: SchedulePatch) {
@@ -320,8 +352,6 @@ export async function updateScheduleItem(actorId: number | null, id: number, pat
       ),
     );
 
-    const nextPrimaryLanguage =
-      patch.primaryLanguage ?? (current.rows[0].primary_language as Language);
     const { rows } = await client.query(
       `UPDATE schedule
           SET title = $2,
@@ -335,8 +365,7 @@ export async function updateScheduleItem(actorId: number | null, id: number, pat
               publish_at = $10,
               audiences = $11,
               contact_note = $12,
-              notes = $13,
-              primary_language = $14
+              notes = $13
         WHERE id = $1
         RETURNING ${SCHEDULE_COLUMNS}`,
       [
@@ -353,7 +382,6 @@ export async function updateScheduleItem(actorId: number | null, id: number, pat
         nextAudiences,
         patch.contactNote === undefined ? current.rows[0].contact_note : patch.contactNote,
         patch.notes === undefined ? current.rows[0].notes : patch.notes,
-        nextPrimaryLanguage,
       ],
     );
     const after = serialize(rows[0]);
@@ -362,17 +390,9 @@ export async function updateScheduleItem(actorId: number | null, id: number, pat
           SET name = $2,
               description = $3,
               category = $4,
-              requires_scan = $5,
-              primary_language = $6
+              requires_scan = $5
         WHERE schedule_id = $1`,
-      [
-        id,
-        after.title,
-        after.description,
-        toActivityCategory(after.type),
-        after.requiresScan,
-        after.primaryLanguage,
-      ],
+      [id, after.title, after.description, toActivityCategory(after.type), after.requiresScan],
     );
     await audit(client, {
       actorId,
@@ -470,23 +490,25 @@ export async function saveScheduleTranslations(
 }
 
 /**
- * Machine-translates this item's title+description from its primary
- * language into `targets` via the configured provider (H50's translate/
- * module) and persists the result — this is the "redo translations" action,
- * safe to call again at any time to overwrite stale machine translations
- * (a manually-edited locale is only overwritten if it's requested again).
+ * Machine-translates arbitrary title+description content into `targets` via
+ * the configured provider (H50's translate/ module), auto-detecting the
+ * source language rather than trusting any stored/assumed one — staff can
+ * type the primary content in whatever language actually comes naturally,
+ * not just their account's. Pure: doesn't touch the database or require an
+ * existing schedule item, so both the create and edit forms can call it
+ * before (or instead of) saving. Callers are responsible for only requesting
+ * targets that are actually still blank — this never "redoes" a locale that
+ * already has translated text (mirrors announcements' "only fill languages
+ * that are still empty" rule); saveScheduleTranslations persists whatever
+ * comes back (or a hand-typed edit) unconditionally.
  */
-export async function translateScheduleItem(
-  actorId: number | null,
-  id: number,
+export async function translateScheduleContent(
+  content: { title: string; description?: string | null },
   targets: Language[],
-) {
-  const { rows } = await pool.query(`SELECT ${SCHEDULE_COLUMNS} FROM schedule WHERE id = $1`, [id]);
-  if (!rows[0]) throw new NotFoundError("Schedule item not found", { id });
-  const item = serialize(rows[0]);
+): Promise<ScheduleTranslations> {
   const translated = await translateFields(
-    { title: item.title, description: item.description ?? "" },
-    item.primaryLanguage,
+    { title: content.title, description: content.description ?? "" },
+    "auto",
     targets,
   );
   const translations: ScheduleTranslations = {};
@@ -496,7 +518,7 @@ export async function translateScheduleItem(
   ][]) {
     translations[lang] = { title: fields.title, description: fields.description || null };
   }
-  return saveScheduleTranslations(actorId, id, translations);
+  return translations;
 }
 
 export async function setScheduleVisibility(

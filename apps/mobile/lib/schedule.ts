@@ -73,7 +73,6 @@ export interface ScheduleInput {
   audiences: ScheduleAudience[];
   contactNote: string | null;
   notes: string | null;
-  primaryLanguage: Language;
 }
 
 export type ScheduleTranslation = { title?: string; description?: string | null };
@@ -110,15 +109,21 @@ export async function fetchScheduleTranslateAvailability(): Promise<boolean> {
   return response.available;
 }
 
-/** Machine-translates a schedule item's title+description from its primary language — safe to call again to redo a translation. */
-export async function translateScheduleItem(
-  id: number,
-  targetLanguages: Language[],
-): Promise<AdminScheduleItem> {
-  return apiFetch<AdminScheduleItem>(`/api/schedule/${id}/translate`, {
+/**
+ * Machine-translates arbitrary title+description content into
+ * targetLanguages, auto-detecting the source language — content-scoped (no
+ * id), so both the create and edit forms can call it before the item is
+ * saved. Doesn't persist; save the result via saveScheduleTranslations.
+ */
+export async function translateScheduleContent(body: {
+  title: string;
+  description?: string | null;
+  targetLanguages: Language[];
+}): Promise<ScheduleTranslations> {
+  return apiFetch<ScheduleTranslations>("/api/schedule/translate", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ targetLanguages }),
+    body: JSON.stringify(body),
   });
 }
 

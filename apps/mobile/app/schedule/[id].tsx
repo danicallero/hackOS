@@ -85,11 +85,12 @@ export default function ScheduleDetailScreen() {
     values: ScheduleInput,
     _pendingOwners: ({ userId: number } | { freeTextName: string })[],
   ) {
-    if (!item) return;
+    if (!item) throw new Error("No schedule item to edit");
     const updated = await updateScheduleItem(item.id, values);
     setAdminItem((current) => (current ? { ...updated, owners: current.owners } : updated));
     setEditing(false);
     await load();
+    return updated;
   }
   const detailItem = adminItem ?? item;
   const staffItem = adminItem ?? (item?.notes !== undefined ? item : null);
@@ -307,6 +308,7 @@ export default function ScheduleDetailScreen() {
           }}
           initial={scheduleItemToForm(adminItem)}
           initialTranslations={scheduleItemToTranslations(adminItem)}
+          primaryLanguage={adminItem.primaryLanguage}
           scheduleId={adminItem.id}
           initialOwners={adminItem.owners}
           onSubmit={saveEdit}

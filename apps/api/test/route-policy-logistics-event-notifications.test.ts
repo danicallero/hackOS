@@ -65,7 +65,7 @@ describe("logistics, event and notifications route policy ledger", () => {
     });
     expect(declared).toContainEqual({
       method: "POST",
-      url: "/api/schedule/:id/translate",
+      url: "/api/schedule/translate",
       policy: { kind: "capability", capability: "schedule:manage" },
     });
     expect(declared).toContainEqual({

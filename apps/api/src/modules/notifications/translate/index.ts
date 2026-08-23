@@ -31,15 +31,18 @@ const LANGUAGE_CODES: Record<Language, string> = { es: "es", gl: "gl", en: "en" 
  * Translates an arbitrary set of named text fields (e.g. `{title, body}` for
  * an announcement, `{title, description}` for a schedule item) from `source`
  * into every language in `targets`, keeping field identity so the caller
- * gets back the same shape per target locale. Throws ServiceUnavailableError
- * up front if the configured provider is missing its credentials — callers
- * (the route) turn that into a clean 503 rather than a raw provider error,
- * and every frontend treats that predictably (hide/disable the action,
- * never block manual entry).
+ * gets back the same shape per target locale. `source` is normally `"auto"`
+ * — every caller lets the provider detect what was actually typed rather
+ * than trusting a stored/assumed language, so staff can type primary content
+ * in whatever language comes naturally, not just their account's. Throws
+ * ServiceUnavailableError up front if the configured provider is missing its
+ * credentials — callers (the route) turn that into a clean 503 rather than a
+ * raw provider error, and every frontend treats that predictably
+ * (hide/disable the action, never block manual entry).
  */
 export async function translateFields<K extends string>(
   fields: Record<K, string>,
-  source: Language,
+  source: Language | "auto",
   targets: Language[],
 ): Promise<Partial<Record<Language, Record<K, string>>>> {
   if (!isTranslationAvailable()) {
@@ -51,7 +54,7 @@ export async function translateFields<K extends string>(
     if (target === source) continue;
     const texts = keys.map((key) => fields[key]);
     const targetCode = LANGUAGE_CODES[target];
-    const sourceCode = LANGUAGE_CODES[source];
+    const sourceCode = source === "auto" ? "auto" : LANGUAGE_CODES[source];
     const translated =
       config.TRANSLATE_PROVIDER === "libretranslate"
         ? await translateViaLibreTranslate(
@@ -81,11 +84,20 @@ export async function translateFields<K extends string>(
   return result;
 }
 
-/** Thin `translateFields` wrapper kept for the announcements route/tests' existing {title, body} shape. */
+/**
+ * Thin `translateFields` wrapper kept for the announcements route/tests'
+ * existing {title, body} shape. `source` is accepted for backward
+ * compatibility (it decides which targets the caller already excluded as
+ * "the one already filled in") but the provider itself always auto-detects.
+ */
 export async function translateAnnouncementContent(
   content: AnnouncementTranslation,
   source: Language,
   targets: Language[],
 ): Promise<Partial<Record<Language, AnnouncementTranslation>>> {
-  return translateFields(content, source, targets);
+  return translateFields(
+    content,
+    "auto",
+    targets.filter((target) => target !== source),
+  );
 }

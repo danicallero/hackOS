@@ -305,14 +305,19 @@ export default function ScheduleScreen() {
     values: ScheduleInput,
     pendingOwners: ({ userId: number } | { freeTextName: string })[],
   ) {
+    let result: { id: number };
     if (formTarget === "create") {
       const created = await createScheduleItem(values);
       for (const input of pendingOwners) await addScheduleOwner(created.id, input);
+      result = created;
     } else if (formTarget) {
-      await updateScheduleItem(formTarget.id, values);
+      result = await updateScheduleItem(formTarget.id, values);
+    } else {
+      throw new Error("No schedule form target");
     }
     setFormTarget(null);
     await load();
+    return result;
   }
 
   return (
@@ -519,7 +524,7 @@ function AdminScheduleFormLoader({
   onSubmit: (
     values: ScheduleInput,
     pendingOwners: ({ userId: number } | { freeTextName: string })[],
-  ) => Promise<void>;
+  ) => Promise<{ id: number }>;
 }) {
   const [loaded, setLoaded] = useState<Awaited<ReturnType<typeof fetchAdminSchedule>> | null>(null);
 
@@ -547,6 +552,7 @@ function AdminScheduleFormLoader({
       onClose={onClose}
       initial={scheduleItemToForm(adminItem)}
       initialTranslations={scheduleItemToTranslations(adminItem)}
+      primaryLanguage={adminItem.primaryLanguage}
       scheduleId={adminItem.id}
       initialOwners={adminItem.owners}
       onSubmit={onSubmit}

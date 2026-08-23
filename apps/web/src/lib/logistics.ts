@@ -291,7 +291,6 @@ export interface ScheduleInput {
   audiences?: ScheduleAudience[];
   contactNote?: string | null;
   notes?: string | null;
-  primaryLanguage: Language;
 }
 
 export type ScheduleTranslation = { title?: string; description?: string | null };
@@ -399,8 +398,11 @@ export const logisticsApi = {
   deleteSchedule: (id: number) => api.delete<{ deleted: true }>(`/api/schedule/${id}`),
   scheduleTranslateAvailability: () =>
     api.get<{ available: boolean }>("/api/schedule/translate-availability"),
-  translateSchedule: (id: number, targetLanguages: Language[]) =>
-    api.post<PublicScheduleItem>(`/api/schedule/${id}/translate`, { targetLanguages }),
+  translateScheduleContent: (body: {
+    title: string;
+    description?: string | null;
+    targetLanguages: Language[];
+  }) => api.post<ScheduleTranslations>("/api/schedule/translate", body),
   saveScheduleTranslations: (id: number, translations: ScheduleTranslations) =>
     api.put<PublicScheduleItem>(`/api/schedule/${id}/translations`, { translations }),
   setScheduleVisibility: (ids: number[], visibility: "shown" | "hidden") =>
