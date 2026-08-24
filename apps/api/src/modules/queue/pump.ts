@@ -15,11 +15,8 @@ import { callNextForRoom } from "./service.js";
  * in the first place (queue_entries only exist for challenges an admin
  * explicitly enqueued).
  *
- * The single auto-fill gate is `room_queue_state.is_paused` — the same flag
- * the H35 Pause/Resume operator lever writes and callNextForRoom checks.
- * Newly created rooms initialise this state as paused, so their queue cannot
- * fill until a judge/operator explicitly resumes the room. `rooms.status`
- * remains a display/lifecycle field only.
+ * H29/H35 (#544): automatic work is derived from the active room state and
+ * judging schedule. Manual queue actions remain available outside the window.
  */
 export const QUEUE_PUMP_QUEUE_NAME = "queue-pump";
 
@@ -35,17 +32,24 @@ export const QUEUE_PUMP_QUEUE_NAME = "queue-pump";
  */
 export async function topUpRoom(roomId: number): Promise<void> {
   const { rows } = await pool.query(
-    `SELECT 1 FROM room_queue_state WHERE room_id = $1 AND is_paused = false`,
+    `SELECT 1
+       FROM room_queue_state rqs
+       JOIN rooms r ON r.id = rqs.room_id
+       JOIN queue_settings qs ON qs.id = 1
+      WHERE rqs.room_id = $1
+        AND rqs.is_paused = false
+        AND (qs.schedule_start_at IS NULL OR qs.schedule_start_at <= now())
+        AND (qs.schedule_end_at IS NULL OR qs.schedule_end_at > now())`,
     [roomId],
   );
-  if (rows.length === 0) return; // paused (or unknown room): never auto-fill
+  if (rows.length === 0) return; // inactive, paused, unknown, or outside judging window
 
   // callNextForRoom is the atomic, race-safe unit — looping here just drains
   // the room's slack until full or nobody eligible.
   for (let i = 0; i < 50; i++) {
     let entry: Awaited<ReturnType<typeof callNextForRoom>>;
     try {
-      entry = await callNextForRoom(null, roomId, { force: false });
+      entry = await callNextForRoom(null, roomId, { force: false, automatic: true });
     } catch (err) {
       if (err instanceof ConflictError) break; // full or paused mid-loop
       // A fire-and-forget refill can start just before its room is removed.
@@ -78,7 +82,13 @@ export async function scheduleTopUp(roomId: number): Promise<void> {
 
 export async function pumpTick(): Promise<void> {
   const { rows: rooms } = await pool.query(
-    `SELECT room_id AS id FROM room_queue_state WHERE is_paused = false`,
+    `SELECT rqs.room_id AS id
+       FROM room_queue_state rqs
+       JOIN rooms r ON r.id = rqs.room_id
+       JOIN queue_settings qs ON qs.id = 1
+      WHERE rqs.is_paused = false
+        AND (qs.schedule_start_at IS NULL OR qs.schedule_start_at <= now())
+        AND (qs.schedule_end_at IS NULL OR qs.schedule_end_at > now())`,
   );
 
   for (const room of rooms as { id: number }[]) {
@@ -91,12 +101,24 @@ export async function pumpTick(): Promise<void> {
 /** H38 pre-aviso: notify once per call cycle when ETA <= queue_settings.pre_call_notification_eta_minutes. */
 async function emitPreCallWarnings(): Promise<void> {
   const settings = (
-    await pool.query(`SELECT pre_call_notification_eta_minutes FROM queue_settings WHERE id = 1`)
+    await pool.query(
+      `SELECT pre_call_notification_eta_minutes,
+              (schedule_start_at IS NULL OR schedule_start_at <= now())
+              AND (schedule_end_at IS NULL OR schedule_end_at > now()) AS window_open
+         FROM queue_settings WHERE id = 1`,
+    )
   ).rows[0];
+  if (!settings?.window_open) return;
   const threshold = settings?.pre_call_notification_eta_minutes ?? 10;
 
   const { rows: challengeIds } = await pool.query(
-    `SELECT DISTINCT challenge_id FROM queue_entries WHERE status = 'waiting'`,
+    `SELECT DISTINCT qe.challenge_id
+       FROM queue_entries qe
+       JOIN queue_group_challenges qgc ON qgc.challenge_id = qe.challenge_id
+       JOIN room_queue_groups rqg ON rqg.queue_group_id = qgc.queue_group_id
+       JOIN rooms r ON r.id = rqg.room_id
+       JOIN room_queue_state rqs ON rqs.room_id = r.id AND rqs.is_paused = false
+      WHERE qe.status = 'waiting'`,
   );
 
   for (const { challenge_id: challengeId } of challengeIds as { challenge_id: number }[]) {

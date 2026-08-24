@@ -1,5 +1,8 @@
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
+import type { Job } from "bullmq";
 import type { Queryable } from "../../db/pool.js";
+import { pool } from "../../db/pool.js";
+import { getQueue, registerWorker } from "../../lib/queues.js";
 import { broadcast } from "../../lib/sse.js";
 import { notify, QUEUE_STAFF_CATEGORY } from "../notifications/service.js";
 import { roomChallengeIds } from "./groups.js";
@@ -172,10 +175,29 @@ export async function notifyTeamPreCall(
  * authenticated read model instead of receiving another team's queue data.
  */
 export async function notifyChallengeQueueChanged(
-  client: Queryable,
+  _client: Queryable,
   challengeId: number,
 ): Promise<void> {
-  const { rows } = await client.query(
+  await getQueue(QUEUE_PARTICIPANT_INVALIDATIONS).add(
+    "challenge-changed",
+    { challengeId },
+    {
+      // H38 (#544): one delayed job per challenge is the debounce window.
+      // Repeated transitions during a burst reuse this job instead of making
+      // every participant refetch once per transition.
+      jobId: `challenge-${challengeId}`,
+      delay: 250,
+      removeOnComplete: true,
+      removeOnFail: true,
+    },
+  );
+}
+
+export const QUEUE_PARTICIPANT_INVALIDATIONS = "queue-participant-invalidations";
+
+/** H38 (#544): worker-side fan-out, deliberately outside queue transition requests. */
+export async function publishChallengeQueueInvalidation(challengeId: number): Promise<void> {
+  const { rows } = await pool.query(
     `SELECT DISTINCT members.user_id
        FROM queue_entries qe
        JOIN (${REPO_MEMBER_RELATION_SQL}) members ON members.repo_id = qe.repo_id
@@ -190,6 +212,10 @@ export async function notifyChallengeQueueChanged(
     ),
   );
 }
+
+registerWorker(QUEUE_PARTICIPANT_INVALIDATIONS, async (job: Job<{ challengeId: number }>) => {
+  await publishChallengeQueueInvalidation(job.data.challengeId);
+});
 
 /**
  * H46: free-text message from staff / a sponsor rep to one team, sent over the

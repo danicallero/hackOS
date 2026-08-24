@@ -102,7 +102,7 @@ function assertFrom(entry: QueueEntryRow, allowed: string[], action: string): vo
 export async function callNextForRoom(
   actorId: number | null,
   roomId: number,
-  opts: { force?: boolean } = {},
+  opts: { force?: boolean; automatic?: boolean } = {},
 ): Promise<QueueEntryRow | null> {
   return withTransaction(async (client) => {
     const stateRes = await client.query(
@@ -115,7 +115,18 @@ export async function callNextForRoom(
     const room = roomRes.rows[0];
     if (!room) throw new NotFoundError("Room not found", { roomId });
 
-    if (state.is_paused) throw new ConflictError("Room is paused", { roomId });
+    if (opts.automatic) {
+      const { rows: settingsRows } = await client.query(
+        `SELECT (schedule_start_at IS NULL OR schedule_start_at <= now())
+                AND (schedule_end_at IS NULL OR schedule_end_at > now()) AS window_open
+           FROM queue_settings WHERE id = 1`,
+      );
+      // H29/H35 (#544): re-check under the room-state lock so a pump that
+      // raced a pause/window boundary cannot call a team after the gate shut.
+      if (state.is_paused || !settingsRows[0]?.window_open) return null;
+    } else if (state.is_paused) {
+      throw new ConflictError("Room is paused", { roomId });
+    }
 
     if (!opts.force) {
       const { rows: countRows } = await client.query(
