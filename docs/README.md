@@ -57,6 +57,10 @@ Architecture & modules:
   invariants (a group never spans enterprises; every challenge has exactly one
   group), the 1:1 backfill, and the admin merge that turns several of an
   enterprise's challenges into one shared judging queue with one form.
+- [Queue operator console](./queue-operator.md) — the live arrival board for
+  queue operators: shared-queue deduplication, local team search, room
+  destinations, capability-gated actions, and the integration boundary with
+  queue configuration.
 - [Event config & the Apple Wallet pass](./event-config-wallet.md) — the
   `event_config` singleton (identity, doors-open vs hacking window, venue) and
   how the Wallet pass renders from it (field visibility, captions, back fields),
