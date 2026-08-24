@@ -84,7 +84,17 @@ export function PublicScheduleView({
           )}
         </div>
       ) : (
-        event && items && <ScheduleTimeline items={items} timezone={event.timezone} />
+        event &&
+        items && (
+          // showResponsible is safe unconditionally: the API only ever
+          // includes contactNote/owners for callers entitled to see them
+          // (staff, or a sponsor rep on their own sponsor-tagged items) —
+          // this page reuses that same /api/public/activities payload for
+          // both /timetable and /horario, so a sponsor rep landing here
+          // (the "schedule" nav item has no sponsor gate) still sees the
+          // contact info the API already sent, matching sponsor-faq.
+          <ScheduleTimeline items={items} timezone={event.timezone} showResponsible />
+        )
       )}
     </>
   );
