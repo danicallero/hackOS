@@ -14,6 +14,83 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: detect changed areas
+    runs-on: ubuntu-latest
+    outputs:
+      api: ${{ steps.filter.outputs.api }}
+      web: ${{ steps.filter.outputs.web }}
+      mobile: ${{ steps.filter.outputs.mobile }}
+      typecheck: ${{ steps.filter.outputs.typecheck }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Classify changed paths
+        id: filter
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          changed_files="$RUNNER_TEMP/hackos-changed-files.txt"
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            git diff --name-only "$BASE_SHA" "$SHA" > "$changed_files"
+          elif [[ "$BEFORE_SHA" =~ ^0+$ ]]; then
+            git diff-tree --root --no-commit-id --name-only -r "$SHA" > "$changed_files"
+          else
+            git diff --name-only "$BEFORE_SHA" "$SHA" > "$changed_files"
+          fi
+
+          echo "Changed paths:"
+          sed -n '1,120p' "$changed_files"
+
+          has_change() {
+            grep -Eq "$1" "$changed_files"
+          }
+
+          api=false
+          web=false
+          mobile=false
+
+          # Shared packages, dependency/toolchain changes, and workflow changes
+          # can affect every workspace and therefore run every quality gate.
+          if has_change '^(packages/|\.github/|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|\.node-version$|biome\.json$|tsconfig[^/]*\.json$)'; then
+            api=true
+            web=true
+            mobile=true
+          fi
+
+          if has_change '^(apps/api/|docker-compose\.yml$)'; then
+            api=true
+          fi
+
+          if has_change '^apps/web/'; then
+            web=true
+          fi
+
+          if has_change '^(apps/mobile/|e2e/mobile/)'; then
+            mobile=true
+          fi
+
+          typecheck=false
+          if [[ "$api" == true || "$web" == true || "$mobile" == true ]]; then
+            typecheck=true
+          fi
+
+          {
+            echo "api=$api"
+            echo "web=$web"
+            echo "mobile=$mobile"
+            echo "typecheck=$typecheck"
+          } >> "$GITHUB_OUTPUT"
+
   lint:
     name: lint
     runs-on: ubuntu-latest
@@ -40,6 +117,8 @@ jobs:
 
   typecheck:
     name: typecheck
+    needs: changes
+    if: needs.changes.outputs.typecheck == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -59,11 +138,22 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Type-check API, web and mobile
-        run: pnpm typecheck
+      - name: Type-check API
+        if: needs.changes.outputs.api == 'true'
+        run: pnpm --filter @hackos/api typecheck
+
+      - name: Type-check web
+        if: needs.changes.outputs.web == 'true'
+        run: pnpm --filter @hackos/web typecheck
+
+      - name: Type-check mobile
+        if: needs.changes.outputs.mobile == 'true'
+        run: pnpm --filter @hackos/mobile typecheck
 
   api-test:
     name: API integration tests
+    needs: changes
+    if: needs.changes.outputs.api == 'true'
     runs-on: ubuntu-latest
     env:
       CI: true
@@ -128,6 +218,8 @@ jobs:
 
   web-test:
     name: web unit tests
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
     env:
       CI: true
@@ -154,6 +246,8 @@ jobs:
 
   mobile-test:
     name: mobile unit tests
+    needs: changes
+    if: needs.changes.outputs.mobile == 'true'
     runs-on: ubuntu-latest
     env:
       CI: true

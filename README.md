@@ -172,10 +172,12 @@ API tests use real Postgres and Valkey. The test harness resets and migrates
 tests deterministic.
 
 Pull requests and pushes to `main` run the same checks in GitHub Actions. Lint,
-the aggregate `pnpm typecheck`, and the API, web and mobile unit suites are
-separate required checks. The API job provides fresh Postgres, Valkey and
-Mailpit service containers with readiness healthchecks; local API runs still
-use `pnpm infra:up` and the commands above.
+the selective `typecheck` check, and the API, web and mobile unit suites are
+separate required checks. Workspace checks run only when their area changes;
+shared packages, dependency/toolchain changes, and workflow changes run all
+affected gates. The API job provides fresh Postgres, Valkey and Mailpit service
+containers with readiness healthchecks; local API runs still use
+`pnpm infra:up` and the commands above.
 
 ## Repository guide
 
