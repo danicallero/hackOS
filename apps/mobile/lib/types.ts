@@ -17,7 +17,7 @@ export interface Me {
   universityId: number | null;
   notes: string | null;
   createdAt: string;
-  role: "admin" | "judge" | "sponsor" | "staff" | "mentor" | "participant" | "unassigned";
+  role: "admin" | "sponsor" | "judge" | "staff" | "mentor" | "participant" | "unassigned";
   mobileAccess: boolean;
   capabilities: string[];
 }

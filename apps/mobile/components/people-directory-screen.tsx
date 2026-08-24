@@ -212,8 +212,8 @@ const ROLE_FILTERS: Array<{
   labelKey:
     | "roleAll"
     | "roleAdmin"
-    | "roleJudge"
     | "roleSponsor"
+    | "roleJudge"
     | "roleStaff"
     | "roleMentor"
     | "roleParticipants";
@@ -226,8 +226,8 @@ const ROLE_FILTERS: Array<{
 }> = [
   { value: "all", labelKey: "roleAll", icon: "person.2" },
   { value: "admin", labelKey: "roleAdmin", icon: "person.crop.circle.badge.checkmark" },
-  { value: "judge", labelKey: "roleJudge", icon: "checkmark.seal" },
   { value: "sponsor", labelKey: "roleSponsor", icon: "briefcase" },
+  { value: "judge", labelKey: "roleJudge", icon: "checkmark.seal" },
   { value: "staff", labelKey: "roleStaff", icon: "person.crop.circle.badge.checkmark" },
   { value: "mentor", labelKey: "roleMentor", icon: "person.2" },
   { value: "participant", labelKey: "roleParticipants", icon: "person" },
@@ -334,8 +334,8 @@ function roleLabel(role: ScannerPerson["role"], t: ReturnType<typeof useLocale>[
   return (
     {
       admin: t("roleAdmin"),
-      judge: t("roleJudge"),
       sponsor: t("roleSponsor"),
+      judge: t("roleJudge"),
       staff: t("roleStaff"),
       mentor: t("roleMentor"),
       participant: t("roleParticipant"),

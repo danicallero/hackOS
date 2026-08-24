@@ -14,7 +14,7 @@ export type ScanKind =
 export interface ScannerPerson {
   userId: number;
   email: string;
-  role: "admin" | "judge" | "sponsor" | "staff" | "mentor" | "participant" | "unassigned";
+  role: "admin" | "sponsor" | "judge" | "staff" | "mentor" | "participant" | "unassigned";
   ticketToken: string | null;
   badgeId: string | null;
   revokedBadgeIds: string[];
