@@ -293,8 +293,7 @@ export function MembersCard({ enterpriseId }: { enterpriseId: number }) {
               minQueryLength={2}
             />
             <Button
-              size="sm"
-              variant="outline"
+              size="lg"
               disabled={busy || !selectedUserId}
               onClick={() => add(Number(selectedUserId))}
             >
