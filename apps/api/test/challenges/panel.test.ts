@@ -181,12 +181,49 @@ describe("judging panel builder (H44)", () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it("locks the panel once judging has started, but still allows other edits", async () => {
+  /**
+   * The panel freezes on the first *evaluation*, not on the judging
+   * schedule and not on a queue existing: organisers fix questions in the
+   * last minutes before the first team walks in, and nothing is at risk
+   * until an answer has been given.
+   */
+  it("stays editable after judging opens, while nobody has been evaluated", async () => {
     const a = await getApp();
     const admin = await createUserWithCapabilities([CAPABILITIES.QUEUE_ADMIN]);
     const owner = await createUser();
     const challengeId = await seedChallenge(owner);
     await startJudging();
+
+    const res = await a.inject({
+      method: "PATCH",
+      url: `/api/challenges/${challengeId}`,
+      headers: asUser(admin),
+      payload: { judgingPanelCriteria: samplePanel() },
+    });
+    expect(res.statusCode).toBe(200);
+
+    const preview = await a.inject({
+      method: "GET",
+      url: `/api/challenges/${challengeId}/panel/preview`,
+      headers: asUser(admin),
+    });
+    expect(preview.json().locked).toBe(false);
+  });
+
+  it("locks the panel once a team has been evaluated, but still allows other edits", async () => {
+    const { pool } = await import("../../src/db/pool.js");
+    const a = await getApp();
+    const admin = await createUserWithCapabilities([CAPABILITIES.QUEUE_ADMIN]);
+    const owner = await createUser();
+    const challengeId = await seedChallenge(owner);
+
+    // One team through to the end: that is what freezes the questions.
+    const repo = await pool.query(`INSERT INTO repos (name) VALUES ('Judged team') RETURNING id`);
+    await pool.query(
+      `INSERT INTO queue_entries (challenge_id, repo_id, status, completed_at)
+       VALUES ($1, $2, 'completed', now())`,
+      [challengeId, repo.rows[0].id],
+    );
 
     const locked = await a.inject({
       method: "PATCH",

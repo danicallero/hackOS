@@ -3,6 +3,7 @@ import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import { challengePanelLocked } from "../queue/evaluation-lock.js";
 import type { ChallengeAccess } from "./access.js";
 import {
   CHALLENGE_GENERAL_FIELDS,
@@ -82,9 +83,15 @@ export async function judgingStartsAt(): Promise<Date | null> {
   return raw ? new Date(raw) : null;
 }
 
-export async function panelIsLocked(): Promise<boolean> {
-  const startsAt = await judgingStartsAt();
-  return startsAt !== null && Date.now() >= startsAt.getTime();
+/**
+ * A judging panel is editable until its queue produces its **first
+ * evaluation** — not from the scheduled start of judging, and not once a
+ * queue merely exists. Organisers fix questions in the last minutes before
+ * the first team walks in, and nothing is at risk until an answer has been
+ * given. See `queue/evaluation-lock.ts`.
+ */
+export function panelIsLocked(challengeId: number): Promise<boolean> {
+  return challengePanelLocked(challengeId);
 }
 
 export async function getChallenge(challengeId: number) {
@@ -387,8 +394,8 @@ export async function updateChallenge(
   patch: UpdateChallengeBody,
   access: ChallengeAccess = "owner",
 ) {
-  if (patch.judgingPanelCriteria !== undefined && (await panelIsLocked())) {
-    throw new ConflictError("Judging panel is locked: judging has already started", {
+  if (patch.judgingPanelCriteria !== undefined && (await panelIsLocked(challengeId))) {
+    throw new ConflictError("Judging panel is locked: a team has already been evaluated", {
       code: "panel_locked",
     });
   }
@@ -570,7 +577,7 @@ export async function previewPanel(challengeId: number) {
     challengeId,
     title: challenge.title,
     questions,
-    locked: startsAt !== null && Date.now() >= startsAt.getTime(),
+    locked: await panelIsLocked(challengeId),
     judgingStartsAt: startsAt ? startsAt.toISOString() : null,
   };
 }

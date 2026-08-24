@@ -159,17 +159,67 @@ describe("merging challenges into a shared queue", () => {
     ).rejects.toMatchObject({ code: "23514" });
   });
 
-  it("refuses once judging has started", async () => {
+  it("still merges while teams are queued and being called", async () => {
     const { pool } = await import("../../src/db/pool.js");
     const { enterpriseId, challengeIds } = await createEnterpriseChallenges(2);
     const { repoId } = await createRepoWithTeam();
     const entryId = await enqueueRepo(challengeIds[0]!, repoId, 1);
     await pool.query(`UPDATE queue_entries SET status = 'called' WHERE id = $1`, [entryId]);
 
+    // A queue that exists, and is being called from, is still configurable —
+    // organisers merge in the last minutes before the first team is judged.
+    const res = await merge(enterpriseId, challengeIds, "Still in time");
+    expect(res.statusCode).toBe(201);
+    expect(await queueGroupOf(challengeIds[0]!)).toBe(await queueGroupOf(challengeIds[1]!));
+  });
+
+  it("refuses once a team has been evaluated", async () => {
+    const { pool } = await import("../../src/db/pool.js");
+    const { enterpriseId, challengeIds } = await createEnterpriseChallenges(2);
+    const { repoId } = await createRepoWithTeam();
+    const entryId = await enqueueRepo(challengeIds[0]!, repoId, 1);
+    await pool.query(
+      `UPDATE queue_entries SET status = 'completed', completed_at = now() WHERE id = $1`,
+      [entryId],
+    );
+
     const res = await merge(enterpriseId, challengeIds, "Too late");
     expect(res.statusCode).toBe(409);
     // Nothing moved.
     expect(await queueGroupOf(challengeIds[0]!)).not.toBe(await queueGroupOf(challengeIds[1]!));
+  });
+
+  it("refuses to edit a merged form once a team has been evaluated", async () => {
+    const { pool } = await import("../../src/db/pool.js");
+    const { enterpriseId, challengeIds } = await createEnterpriseChallenges(2, [
+      [scale("innovation", "Innovation")],
+      [scale("demo", "Demo quality")],
+    ]);
+    const groupId = (await merge(enterpriseId, challengeIds, "Shared")).json().id;
+
+    const { repoId } = await createRepoWithTeam();
+    const entryId = await enqueueRepo(challengeIds[0]!, repoId, 1);
+    await pool.query(
+      `UPDATE queue_entries SET status = 'completed', completed_at = now() WHERE id = $1`,
+      [entryId],
+    );
+
+    const criteria = await app.inject({
+      method: "PATCH",
+      url: `/api/queue/groups/${groupId}`,
+      headers: asUser(adminId),
+      payload: { criteria: [scale("innovation", "Innovation")] },
+    });
+    expect(criteria.statusCode).toBe(409);
+
+    // Renaming stays available — a name cannot invalidate an answer.
+    const rename = await app.inject({
+      method: "PATCH",
+      url: `/api/queue/groups/${groupId}`,
+      headers: asUser(adminId),
+      payload: { displayName: "Renamed late" },
+    });
+    expect(rename.statusCode).toBe(200);
   });
 
   it("needs at least two challenges", async () => {

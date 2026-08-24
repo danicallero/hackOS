@@ -10,9 +10,11 @@ import {
 } from "../sponsors/access.js";
 import { actor } from "./actor.js";
 import {
+  assignableRooms,
   listEnterpriseQueueGroups,
   mergeQueueGroups,
   previewMergedPanel,
+  setQueueGroupRooms,
   splitQueueGroup,
   updateQueueGroup,
 } from "./group-merge.js";
@@ -23,6 +25,7 @@ import {
   mergeQueueGroupsBody,
   previewMergeBody,
   queueGroupIdParam,
+  queueGroupRoomsBody,
   updateQueueGroupBody,
 } from "./schemas.js";
 
@@ -155,6 +158,55 @@ export function registerQueueGroupRoutes(app: FastifyInstance): void {
       }
       await assertCanManageEnterpriseJudging(req, enterpriseId);
       return queueGroupQueue(req.params.queueGroupId);
+    },
+  );
+
+  typed.get(
+    "/api/enterprises/:id/assignable-rooms",
+    {
+      preHandler: requireEnterpriseJudgeManager(enterpriseParam),
+      config: { routeAccessPolicy: enterprisePolicy },
+      schema: {
+        params: enterpriseIdParam,
+        summary: "List rooms this enterprise can route a queue to",
+        description:
+          "Rooms already serving one of the enterprise's queues, plus every room serving nothing yet, each with the queue it currently serves. Rooms held by another enterprise are excluded: moving a room between enterprises is a venue decision made on the rooms screen, not from a queue.",
+      },
+    },
+    async (req) => ({ rooms: await assignableRooms(req.params.id) }),
+  );
+
+  typed.put(
+    "/api/queue/groups/:queueGroupId/rooms",
+    {
+      preHandler: idempotencyGuard,
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "queue-group-manage",
+          resource: { source: "params", field: "queueGroupId" },
+        },
+      },
+      schema: {
+        params: queueGroupIdParam,
+        body: queueGroupRoomsBody,
+        summary: "Set which rooms serve this queue",
+        description:
+          "Replaces the queue's whole room set: rooms named here start serving it, rooms it held and are not named stop serving anything. A room serves one queue at a time, so naming a room takes it from another queue of the same enterprise; a room serving a different enterprise is refused. This is how a sponsor routes their own queues — an enterprise with two rooms can put both, one, or neither behind a given queue.",
+      },
+    },
+    async (req) => {
+      const enterpriseId = await queueGroupEnterpriseId(pool, req.params.queueGroupId);
+      if (enterpriseId == null) {
+        throw new NotFoundError("Queue group not found", { queueGroupId: req.params.queueGroupId });
+      }
+      await assertCanManageEnterpriseJudging(req, enterpriseId);
+      return setQueueGroupRooms({
+        queueGroupId: req.params.queueGroupId,
+        roomIds: req.body.roomIds,
+        actorId: actor(req.userId),
+        request: auditRequest(req),
+      });
     },
   );
 

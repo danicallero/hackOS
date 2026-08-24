@@ -50,6 +50,11 @@ export const updateQueueGroupBody = z
   .refine((body) => body.displayName !== undefined || body.criteria !== undefined, {
     message: "Nothing to update",
   });
+/** Exactly which rooms serve a queue — the whole set, not a delta. */
+export const queueGroupRoomsBody = z.object({
+  roomIds: z.array(z.coerce.number().int().positive()),
+});
+
 export const roomQueueStateBody = z.object({
   maxInWaitingArea: z.coerce.number().int().min(1).optional(),
   desiredMinutesPerTeam: z.coerce.number().int().min(1).optional(),
@@ -77,6 +82,12 @@ export const requeueBody = z.object({
   position: z.enum(["top", "bottom"]),
   reason: z.string().optional(),
 });
+/** Move a team to an explicit place in its queue (1-based, clamped). */
+export const moveToPositionBody = z.object({
+  position: z.coerce.number().int().min(1),
+  reason: z.string().optional(),
+});
+
 export const manualCallBody = z.object({
   targetStatus: z.enum(["called", "in_room"]),
   roomId: z.coerce.number().int().positive(),

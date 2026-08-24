@@ -538,6 +538,45 @@ export async function markNoShow(
   }).then(broadcastEntry);
 }
 
+const MOVE_TO_POSITION_FROM = ["waiting", "called"];
+
+/**
+ * Put a waiting/called team at an explicit place in its queue_group's queue.
+ * The rank is 1-based and clamped into range, and the whole group is
+ * renumbered around it, so the number the operator typed is the number every
+ * surface then shows (see `ordering.ts`).
+ */
+export async function moveToPosition(
+  entryId: number,
+  actorId: number,
+  rank: number,
+  reason?: string,
+): Promise<QueueEntryRow> {
+  return withTransaction(async (client) => {
+    const entry = await lockEntry(client, entryId);
+    assertFrom(entry, MOVE_TO_POSITION_FROM, "move_to_position");
+    const position = await placeEntry(client, entry.challenge_id, entryId, { rank });
+    const res = await client.query(
+      `UPDATE queue_entries
+          SET status = 'waiting', position = $1, assigned_room_id = NULL, called_at = NULL,
+              presentation_started_at = NULL
+        WHERE id = $2
+        RETURNING *`,
+      [position, entryId],
+    );
+    await writeQueueHistory(client, {
+      entryId,
+      actorId,
+      previousStatus: entry.status,
+      newStatus: "waiting",
+      action: "move_to_position",
+      reason,
+      metadata: { position, requestedRank: rank },
+    });
+    return res.rows[0];
+  }).then(broadcastEntry);
+}
+
 const SKIP_FROM = ["waiting", "called"];
 
 /** Staff sends a team to the end of the queue at their own request — no ladder penalty. */

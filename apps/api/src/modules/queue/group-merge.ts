@@ -5,6 +5,7 @@ import { audit } from "../../lib/audit.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
 import { challengePanels, mergeJudgingPanels } from "./criteria-merge.js";
+import { anyEvaluationStarted } from "./evaluation-lock.js";
 import { compactQueueGroupPositions } from "./ordering.js";
 
 /**
@@ -19,10 +20,11 @@ import { compactQueueGroupPositions } from "./ordering.js";
  * - A group only ever holds challenges of its own enterprise. Enforced in the
  *   database (0410's `queue_group_enterprise_guard`); re-checked here so the
  *   caller gets a business error instead of a constraint violation.
- * - Merging is refused once judging has started for any challenge involved.
- *   Positions get renumbered into one key space and the judging form is
- *   replaced, neither of which is safe under a queue that is already being
- *   called from.
+ * - Merging is refused once any team involved has been **evaluated** — not
+ *   merely once a queue exists or is being called from. Positions get
+ *   renumbered into one key space and the judging form is replaced, neither
+ *   of which is safe once an answer has been given, and both of which
+ *   organisers legitimately do minutes before the first team walks in.
  * - Rooms follow their challenges: a room serving a group that is merged away
  *   is repointed at the target group rather than silently unassigned (the FK
  *   is `ON DELETE CASCADE`).
@@ -44,8 +46,13 @@ export interface QueueGroupSummary {
   teams: number;
   /** Merged criteria are only meaningful — and only editable — for N>1. */
   shared: boolean;
-  /** Whether any member challenge has left the waiting state. */
-  judgingStarted: boolean;
+  /**
+   * Whether any team in this queue has been evaluated. Merging, splitting and
+   * editing the merged judging form are refused from that moment — and only
+   * from that moment: a queue that exists, or is being called from, is still
+   * configurable.
+   */
+  evaluationStarted: boolean;
 }
 
 const GROUP_SUMMARY_SQL = `
@@ -67,8 +74,9 @@ const GROUP_SUMMARY_SQL = `
          EXISTS (SELECT 1
                    FROM queue_group_challenges qgc
                    JOIN queue_entries qe ON qe.challenge_id = qgc.challenge_id
+                   LEFT JOIN attempt_review ar ON ar.attempt_id = qe.id
                   WHERE qgc.queue_group_id = qg.id
-                    AND qe.status <> 'waiting') AS judging_started
+                    AND (qe.status = 'completed' OR ar.status = 'submitted')) AS evaluation_started
     FROM queue_groups qg
     JOIN enterprises e ON e.id = qg.enterprise_id`;
 
@@ -81,7 +89,7 @@ function toSummary(row: {
   challenges: Array<{ id: number; title: string }>;
   rooms: Array<{ id: number; name: string }>;
   teams: number;
-  judging_started: boolean;
+  evaluation_started: boolean;
 }): QueueGroupSummary {
   return {
     id: Number(row.id),
@@ -95,7 +103,7 @@ function toSummary(row: {
       : null,
     teams: Number(row.teams ?? 0),
     shared: (row.challenges ?? []).length > 1,
-    judgingStarted: Boolean(row.judging_started),
+    evaluationStarted: Boolean(row.evaluation_started),
   };
 }
 
@@ -186,16 +194,6 @@ async function assertEnterpriseChallenges(
   return rows as Array<{ id: number; queue_group_id: number }>;
 }
 
-/** True once any of these challenges has an entry past `waiting`. */
-async function judgingStarted(client: Queryable, challengeIds: number[]): Promise<boolean> {
-  const { rows } = await client.query(
-    `SELECT 1 FROM queue_entries
-      WHERE challenge_id = ANY($1::int[]) AND status <> 'waiting' LIMIT 1`,
-    [challengeIds],
-  );
-  return rows.length > 0;
-}
-
 export interface MergeQueueGroupsInput {
   enterpriseId: number;
   challengeIds: number[];
@@ -226,8 +224,10 @@ export async function mergeQueueGroups(
   const result = await withTransaction(async (client) => {
     await lockEnterpriseGroups(client, enterpriseId);
     const challenges = await assertEnterpriseChallenges(client, enterpriseId, unique);
-    if (await judgingStarted(client, unique)) {
-      throw new ConflictError("Cannot merge queues once judging has started", { challengeIds });
+    if (await anyEvaluationStarted(client, unique)) {
+      throw new ConflictError("Cannot merge queues once a team has been evaluated", {
+        challengeIds,
+      });
     }
 
     // Target = the group of the lowest challenge id. Arbitrary but stable, so
@@ -343,8 +343,10 @@ export async function splitQueueGroup(input: {
     if (memberIds.length < 2) {
       throw new BadRequestError("Queue group is not shared", { queueGroupId });
     }
-    if (await judgingStarted(client, memberIds)) {
-      throw new ConflictError("Cannot split a queue once judging has started", { queueGroupId });
+    if (await anyEvaluationStarted(client, memberIds)) {
+      throw new ConflictError("Cannot split a queue once a team has been evaluated", {
+        queueGroupId,
+      });
     }
 
     // The lowest challenge id keeps the existing group; the rest each get a
@@ -425,6 +427,14 @@ export async function updateQueueGroup(input: {
     if (!shared) {
       throw new BadRequestError("Queue group is not shared", { queueGroupId });
     }
+    // The name is safe to change at any time; the questions are not, once
+    // somebody has answered them.
+    if (criteria !== undefined && before.evaluation_started) {
+      throw new ConflictError("Judging form is locked: a team has already been evaluated", {
+        queueGroupId,
+        code: "panel_locked",
+      });
+    }
 
     await client.query(
       `UPDATE queue_groups
@@ -451,6 +461,121 @@ export async function updateQueueGroup(input: {
 
   await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ROOM_CHANGED, { queueGroupId });
   return summary;
+}
+
+/**
+ * Set exactly which rooms serve a queue, in one call.
+ *
+ * The room -> queue link is `UNIQUE(room_id)`: a room serves one queue at a
+ * time. So this claims the named rooms for this queue (taking any of them
+ * away from another queue of the SAME enterprise) and releases the ones it no
+ * longer holds. Rooms belonging to another enterprise's queue are refused —
+ * moving a room between enterprises stays an admin action on the rooms
+ * screen, because it is a decision about the venue, not about a queue.
+ *
+ * This is what lets a sponsor route their own queues without touching the
+ * rooms admin: an enterprise with two rooms assigned to it can put both, one,
+ * or neither behind a given queue.
+ */
+export async function setQueueGroupRooms(input: {
+  queueGroupId: number;
+  roomIds: number[];
+  actorId: number;
+  request?: { ip?: string; userAgent?: string };
+}): Promise<QueueGroupSummary> {
+  const { queueGroupId, actorId } = input;
+  const roomIds = [...new Set(input.roomIds)];
+
+  const summary = await withTransaction(async (client) => {
+    const before = (await client.query(`${GROUP_SUMMARY_SQL} WHERE qg.id = $1`, [queueGroupId]))
+      .rows[0];
+    if (!before) throw new NotFoundError("Queue group not found", { queueGroupId });
+    const enterpriseId = Number(before.enterprise_id);
+
+    if (roomIds.length) {
+      // Lock the rooms in id order so two enterprises claiming the same room
+      // serialise rather than deadlock.
+      await client.query(`SELECT id FROM rooms WHERE id = ANY($1::int[]) ORDER BY id FOR UPDATE`, [
+        roomIds,
+      ]);
+      const { rows: found } = await client.query(`SELECT id FROM rooms WHERE id = ANY($1::int[])`, [
+        roomIds,
+      ]);
+      if (found.length !== roomIds.length) {
+        const known = new Set(found.map((row: { id: number }) => Number(row.id)));
+        throw new NotFoundError("Room not found", {
+          roomIds: roomIds.filter((id) => !known.has(id)),
+        });
+      }
+      const { rows: foreign } = await client.query(
+        `SELECT rqg.room_id
+           FROM room_queue_groups rqg
+           JOIN queue_groups qg ON qg.id = rqg.queue_group_id
+          WHERE rqg.room_id = ANY($1::int[])
+            AND qg.enterprise_id <> $2`,
+        [roomIds, enterpriseId],
+      );
+      if (foreign.length) {
+        throw new ConflictError("Room serves another enterprise", {
+          roomIds: foreign.map((row: { room_id: number }) => Number(row.room_id)),
+        });
+      }
+    }
+
+    await client.query(
+      `DELETE FROM room_queue_groups
+        WHERE queue_group_id = $1 AND NOT (room_id = ANY($2::int[]))`,
+      [queueGroupId, roomIds],
+    );
+    if (roomIds.length) {
+      await client.query(
+        `INSERT INTO room_queue_groups (room_id, queue_group_id, assigned_by)
+         SELECT unnest($2::int[]), $1, $3
+         ON CONFLICT (room_id) DO UPDATE
+           SET queue_group_id = EXCLUDED.queue_group_id,
+               assigned_by = EXCLUDED.assigned_by,
+               assigned_at = now()`,
+        [queueGroupId, roomIds, actorId],
+      );
+    }
+
+    const after = (await client.query(`${GROUP_SUMMARY_SQL} WHERE qg.id = $1`, [queueGroupId]))
+      .rows[0];
+    await audit(client, {
+      actorId,
+      entityType: "queue_group",
+      entityId: queueGroupId,
+      action: "queue_group.set_rooms",
+      before: { rooms: before.rooms },
+      after: { rooms: after.rooms },
+      ip: input.request?.ip,
+      userAgent: input.request?.userAgent,
+    });
+    return toSummary(after);
+  });
+
+  await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ROOM_CHANGED, { queueGroupId });
+  return summary;
+}
+
+/** Every room this enterprise may route a queue to: its own, plus unassigned. */
+export async function assignableRooms(
+  enterpriseId: number,
+): Promise<Array<{ id: number; name: string; queueGroupId: number | null }>> {
+  const { rows } = await pool.query(
+    `SELECT r.id, r.name, rqg.queue_group_id
+       FROM rooms r
+       LEFT JOIN room_queue_groups rqg ON rqg.room_id = r.id
+       LEFT JOIN queue_groups qg ON qg.id = rqg.queue_group_id
+      WHERE rqg.room_id IS NULL OR qg.enterprise_id = $1
+      ORDER BY r.name ASC`,
+    [enterpriseId],
+  );
+  return rows.map((row: { id: number; name: string; queue_group_id: number | null }) => ({
+    id: Number(row.id),
+    name: row.name,
+    queueGroupId: row.queue_group_id === null ? null : Number(row.queue_group_id),
+  }));
 }
 
 /** Preview of what merging `challengeIds` would produce, without writing. */
