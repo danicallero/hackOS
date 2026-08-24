@@ -5,6 +5,7 @@ import { audit } from "../../lib/audit.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
 import { notify, QUEUE_STAFF_CATEGORY } from "../notifications/service.js";
+import { anyEvaluationStarted } from "./evaluation-lock.js";
 import { challengeQueueGroupId, roomChallengeIds } from "./groups.js";
 import { isRepoBlockedByBusyMember } from "./guard.js";
 import { writeQueueHistory } from "./history.js";
@@ -16,11 +17,9 @@ import {
 } from "./notify.js";
 import {
   compactQueueGroupPositions,
-  groupMinPosition,
-  nextBottomPosition,
-  nextTopPosition,
+  placeEntriesOnTop,
+  placeEntry,
   type RequeuePosition,
-  resolveRequeuePosition,
 } from "./ordering.js";
 import type { QueueEntryRow } from "./types.js";
 
@@ -31,12 +30,39 @@ import type { QueueEntryRow } from "./types.js";
  */
 const PG_UNIQUE_VIOLATION = "23505";
 
+/**
+ * Lock an entry for a state transition, together with every other active
+ * entry of its queue_group, **in a single id-ordered statement**.
+ *
+ * The group has to come along because a transition renumbers the group's
+ * positions (see `ordering.ts`). Locking the entry first and the group second
+ * deadlocks: two operators moving two teams in one queue each hold the other's
+ * row and then wait for the rest. One statement, ordered by `id`, gives every
+ * transaction the same acquisition order, so they queue up instead.
+ *
+ * The entry itself is included by `qe.id = $1` even when its status is not
+ * active (`in_room`, `presenting`, a completed row being re-entered).
+ */
 async function lockEntry(client: pg.PoolClient, entryId: number): Promise<QueueEntryRow> {
-  const { rows } = await client.query(`SELECT * FROM queue_entries WHERE id = $1 FOR UPDATE`, [
-    entryId,
-  ]);
-  if (rows.length === 0) throw new NotFoundError("Queue entry not found", { entryId });
-  return rows[0];
+  const { rows } = await client.query(
+    `SELECT qe.*
+       FROM queue_entries qe
+      WHERE qe.id = $1
+         OR (qe.status IN ('waiting', 'called')
+             AND qe.challenge_id IN (
+               SELECT sibling.challenge_id
+                 FROM queue_group_challenges self
+                 JOIN queue_group_challenges sibling
+                   ON sibling.queue_group_id = self.queue_group_id
+                WHERE self.challenge_id = (SELECT challenge_id FROM queue_entries WHERE id = $1)
+             ))
+      ORDER BY qe.id
+      FOR UPDATE`,
+    [entryId],
+  );
+  const entry = rows.find((row: QueueEntryRow) => Number(row.id) === entryId);
+  if (!entry) throw new NotFoundError("Queue entry not found", { entryId });
+  return entry;
 }
 
 async function broadcastEntry(entry: QueueEntryRow): Promise<QueueEntryRow> {
@@ -295,6 +321,42 @@ export async function notifyEnter(entryId: number, actorId: number): Promise<Que
   return entry;
 }
 
+/** H29: remind a team already in the waiting room to come to this room and wait. */
+export async function remindWaitingRoom(entryId: number, actorId: number): Promise<QueueEntryRow> {
+  return withTransaction(async (client) => {
+    const entry = await lockEntry(client, entryId);
+    assertFrom(entry, ["called"], "remind_waiting_room");
+    if (entry.assigned_room_id == null) {
+      throw new ConflictError("Called team has no waiting room", { entryId });
+    }
+
+    const { rows: roomRows } = await client.query(
+      `SELECT name, location FROM rooms WHERE id = $1`,
+      [entry.assigned_room_id],
+    );
+    const room = roomRows[0] as { name: string; location: string | null } | undefined;
+    if (!room)
+      throw new NotFoundError("Waiting room not found", { roomId: entry.assigned_room_id });
+
+    await writeQueueHistory(client, {
+      entryId,
+      actorId,
+      previousStatus: entry.status,
+      newStatus: entry.status,
+      action: "remind_waiting_room",
+    });
+    await notifyTeamCalled(client, {
+      entryId,
+      challengeId: entry.challenge_id,
+      repoId: entry.repo_id,
+      roomId: entry.assigned_room_id,
+      roomName: room.name,
+      roomLocation: room.location,
+    });
+    return entry;
+  });
+}
+
 // ── H32: bring_in / start / complete ────────────────────────────────────────
 
 export async function bringIn(entryId: number, actorId: number): Promise<QueueEntryRow> {
@@ -381,7 +443,7 @@ export async function sendBackToWaiting(
   return withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
     assertFrom(entry, ["in_room", "presenting"], "send_back_to_waiting");
-    const position = await resolveRequeuePosition(client, entry.challenge_id, "top");
+    const position = await placeEntry(client, entry.challenge_id, entryId, "top");
     const res = await client.query(
       `UPDATE queue_entries
           SET status = 'called', position = $1, called_at = now(), presentation_started_at = NULL
@@ -411,8 +473,9 @@ export async function requeue(
 ): Promise<QueueEntryRow> {
   return withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
+    await assertEntryCanMove(client, entry);
     assertFrom(entry, ["called"], "requeue");
-    const pos = await resolveRequeuePosition(client, entry.challenge_id, position);
+    const pos = await placeEntry(client, entry.challenge_id, entryId, position);
     const res = await client.query(
       `UPDATE queue_entries
           SET status = 'waiting', position = $1, assigned_room_id = NULL, called_at = NULL
@@ -445,7 +508,7 @@ export async function reEnter(
   return withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
     assertFrom(entry, RE_ENTER_FROM, "re_enter");
-    const pos = await resolveRequeuePosition(client, entry.challenge_id, position);
+    const pos = await placeEntry(client, entry.challenge_id, entryId, position);
     const res = await client.query(
       `UPDATE queue_entries
           SET status = 'waiting', position = $1, assigned_room_id = NULL, called_at = NULL,
@@ -490,7 +553,7 @@ export async function markNoShow(
   return withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
     assertFrom(entry, NO_SHOW_FROM, "no_show");
-    const position = await nextBottomPosition(client, entry.challenge_id);
+    const position = await placeEntry(client, entry.challenge_id, entryId, "bottom");
     const res = await client.query(
       `UPDATE queue_entries
           SET status = 'waiting', position = $1, assigned_room_id = NULL, called_at = NULL,
@@ -512,6 +575,46 @@ export async function markNoShow(
   }).then(broadcastEntry);
 }
 
+const MOVE_TO_POSITION_FROM = ["waiting", "called"];
+
+/**
+ * Put a waiting/called team at an explicit place in its queue_group's queue.
+ * The rank is 1-based and clamped into range, and the whole group is
+ * renumbered around it, so the number the operator typed is the number every
+ * surface then shows (see `ordering.ts`).
+ */
+export async function moveToPosition(
+  entryId: number,
+  actorId: number,
+  rank: number,
+  reason?: string,
+): Promise<QueueEntryRow> {
+  return withTransaction(async (client) => {
+    const entry = await lockEntry(client, entryId);
+    await assertEntryCanMove(client, entry);
+    assertFrom(entry, MOVE_TO_POSITION_FROM, "move_to_position");
+    const position = await placeEntry(client, entry.challenge_id, entryId, { rank });
+    const res = await client.query(
+      `UPDATE queue_entries
+          SET status = 'waiting', position = $1, assigned_room_id = NULL, called_at = NULL,
+              presentation_started_at = NULL
+        WHERE id = $2
+        RETURNING *`,
+      [position, entryId],
+    );
+    await writeQueueHistory(client, {
+      entryId,
+      actorId,
+      previousStatus: entry.status,
+      newStatus: "waiting",
+      action: "move_to_position",
+      reason,
+      metadata: { position, requestedRank: rank },
+    });
+    return res.rows[0];
+  }).then(broadcastEntry);
+}
+
 const SKIP_FROM = ["waiting", "called"];
 
 /** Staff sends a team to the end of the queue at their own request — no ladder penalty. */
@@ -522,8 +625,9 @@ export async function skipToEnd(
 ): Promise<QueueEntryRow> {
   return withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
+    await assertEntryCanMove(client, entry);
     assertFrom(entry, SKIP_FROM, "skip");
-    const position = await nextBottomPosition(client, entry.challenge_id);
+    const position = await placeEntry(client, entry.challenge_id, entryId, "bottom");
     const res = await client.query(
       `UPDATE queue_entries
           SET status = 'waiting', position = $1, assigned_room_id = NULL, called_at = NULL,
@@ -547,24 +651,49 @@ export async function skipToEnd(
 
 const MOVE_TOP_FROM = ["waiting", "called"];
 
-/** Statuses in which a team is actively occupying a room's waiting area / floor. */
-const BUSY_IN_ROOM_STATUSES = ["called", "in_room", "presenting"];
+/** Statuses in which a team is actively being evaluated, not merely waiting at the door. */
+const EVALUATING_STATUSES = ["in_room", "presenting"];
 
 /**
- * H58: is this repo currently active (called/in_room/presenting) in some room?
+ * H58: is this repo currently being evaluated in some room?
  * Returns that room's name so callers can surface `Busy in <room>` instead of
  * silently yanking the team out of its current room.
  */
-async function repoBusyRoomName(client: pg.PoolClient, repoId: number): Promise<string | null> {
+async function repoBusyRoomName(
+  client: pg.PoolClient,
+  repoId: number,
+  excludeEntryId?: number | null,
+): Promise<string | null> {
   const { rows } = await client.query(
     `SELECT r.name
        FROM queue_entries qe
        JOIN rooms r ON r.id = qe.assigned_room_id
       WHERE qe.repo_id = $1 AND qe.status = ANY($2)
+        AND ($3::int IS NULL OR qe.id <> $3::int)
       LIMIT 1`,
-    [repoId, BUSY_IN_ROOM_STATUSES],
+    [repoId, EVALUATING_STATUSES, excludeEntryId ?? null],
   );
   return rows[0]?.name ?? null;
+}
+
+/**
+ * Reordering is safe only while this entry is not being evaluated and none
+ * of the team's members is active in another room. A called entry may still
+ * be moved out of its own waiting room; the current entry is therefore
+ * excluded from the shared-member guard.
+ */
+async function assertEntryCanMove(client: pg.PoolClient, entry: QueueEntryRow): Promise<void> {
+  const blocked = await isRepoBlockedByBusyMember(client, entry.repo_id, {
+    roomId: entry.assigned_room_id,
+    excludeEntryId: entry.id,
+    statuses: EVALUATING_STATUSES,
+  });
+  if (!blocked) return;
+  const busyRoom = await repoBusyRoomName(client, entry.repo_id, entry.id);
+  throw new ConflictError(
+    busyRoom ? `Busy in ${busyRoom}` : "Team has a member busy in another room (H30)",
+    { entryId: entry.id, repoId: entry.repo_id, ...(busyRoom ? { roomName: busyRoom } : {}) },
+  );
 }
 
 /**
@@ -572,10 +701,10 @@ async function repoBusyRoomName(client: pg.PoolClient, repoId: number): Promise<
  * search. "Adding" a team only ever moves the existing entry (never creates a
  * second one).
  *
- * H58: a team that is active in a room's waiting area (called/in_room/
- * presenting) must NOT be extracted from it by the search "Top" action —
- * doing so bypasses the validation the "add to waiting room" path enforces.
- * Block with an explicit `Busy in <room>` error and leave the state untouched.
+ * H58: a team being evaluated, or a team with a member active in another room,
+ * must NOT be extracted from its current judging flow by the search "Top"
+ * action. A called team may still be moved out of its own waiting room; that
+ * is the operator's explicit top-priority action.
  */
 export async function moveToTop(
   entryId: number,
@@ -584,16 +713,9 @@ export async function moveToTop(
 ): Promise<QueueEntryRow> {
   return withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
-    const busyRoom = await repoBusyRoomName(client, entry.repo_id);
-    if (busyRoom) {
-      throw new ConflictError(`Busy in ${busyRoom}`, {
-        entryId,
-        repoId: entry.repo_id,
-        roomName: busyRoom,
-      });
-    }
+    await assertEntryCanMove(client, entry);
     assertFrom(entry, MOVE_TOP_FROM, "move_to_top");
-    const position = await nextTopPosition(client, entry.challenge_id);
+    const position = await placeEntry(client, entry.challenge_id, entryId, "top");
     const res = await client.query(
       `UPDATE queue_entries
           SET status = 'waiting', position = $1, assigned_room_id = NULL, called_at = NULL,
@@ -745,6 +867,9 @@ export async function manualCall(
     if (entry.status === targetStatus) {
       throw new ConflictError(`Entry is already ${targetStatus}`, { entryId });
     }
+    if (targetStatus === "called" && entry.status !== "waiting") {
+      throw new ConflictError("Only a waiting team can be sent to a waiting room", { entryId });
+    }
     if (
       await isRepoBlockedByBusyMember(client, entry.repo_id, {
         roomId,
@@ -820,6 +945,113 @@ export async function manualCall(
 
 // ── enqueue (admin) ──────────────────────────────────────────────────────────
 
+type QueueGenerationOutcome = {
+  entry: QueueEntryRow;
+  inserted: boolean;
+  revived: boolean;
+};
+
+/**
+ * Add one repo to one challenge without changing the order of any existing
+ * team. A queue reset is the only operation allowed to revive a cancelled
+ * entry; an ordinary cancellation or disqualification remains respected on a
+ * later regeneration.
+ */
+async function enqueueQueueRepo(
+  client: pg.PoolClient,
+  actorId: number,
+  repoId: number,
+  challengeId: number,
+): Promise<QueueGenerationOutcome | null> {
+  const existing = await client.query(
+    `SELECT * FROM queue_entries WHERE repo_id = $1 AND challenge_id = $2 FOR UPDATE`,
+    [repoId, challengeId],
+  );
+  if (existing.rows[0]) {
+    const entry = existing.rows[0] as QueueEntryRow;
+    if (entry.status !== "cancelled") return null;
+    const lastAction = await client.query(
+      `SELECT action FROM queue_history WHERE queue_entry_id = $1 ORDER BY id DESC LIMIT 1`,
+      [entry.id],
+    );
+    if (lastAction.rows[0]?.action !== "queue_clear") return null;
+
+    const revived = await client.query(
+      `UPDATE queue_entries
+          SET status = 'waiting', assigned_room_id = NULL,
+              called_at = NULL, presentation_started_at = NULL, completed_at = NULL,
+              precalled_at = NULL
+        WHERE id = $1
+        RETURNING *`,
+      [entry.id],
+    );
+    const position = await placeEntry(client, challengeId, entry.id, "bottom");
+    const positioned = await client.query(`SELECT * FROM queue_entries WHERE id = $1`, [entry.id]);
+    await writeQueueHistory(client, {
+      entryId: entry.id,
+      actorId,
+      previousStatus: entry.status,
+      newStatus: "waiting",
+      action: "queue_regenerate",
+      metadata: { position: "bottom", regeneratedPosition: position },
+    });
+    await audit(client, {
+      actorId,
+      entityType: "queue_entry",
+      entityId: entry.id,
+      action: "queue_regenerate",
+      before: { status: entry.status },
+      after: { status: "waiting", position },
+      source: "admin",
+    });
+    return { entry: positioned.rows[0] ?? revived.rows[0], inserted: false, revived: true };
+  }
+
+  const inserted = await client.query(
+    `INSERT INTO queue_entries (challenge_id, repo_id, status)
+     VALUES ($1, $2, 'waiting')
+     RETURNING *`,
+    [challengeId, repoId],
+  );
+  const entry = inserted.rows[0] as QueueEntryRow;
+  const position = await placeEntry(client, challengeId, entry.id, "bottom");
+  const positioned = await client.query(`SELECT * FROM queue_entries WHERE id = $1`, [entry.id]);
+  await writeQueueHistory(client, {
+    entryId: entry.id,
+    actorId,
+    previousStatus: "none",
+    newStatus: "waiting",
+    action: "enqueue",
+    metadata: { position: "bottom", generatedPosition: position },
+  });
+  await audit(client, {
+    actorId,
+    entityType: "queue_entry",
+    entityId: entry.id,
+    action: "enqueue",
+    after: { challengeId, repoId, status: "waiting", position },
+    source: "admin",
+  });
+  return { entry: positioned.rows[0] ?? entry, inserted: true, revived: false };
+}
+
+async function challengePrizeRepoIds(
+  client: pg.PoolClient,
+  challengeId: number,
+): Promise<number[]> {
+  const challenge = await client.query(`SELECT devpost_tags FROM challenges WHERE id = $1`, [
+    challengeId,
+  ]);
+  if (challenge.rowCount === 0) throw new NotFoundError("Challenge not found", { challengeId });
+  const tags: string[] = challenge.rows[0].devpost_tags ?? [];
+  if (tags.length === 0) return [];
+  const { rows } = await client.query(
+    `SELECT DISTINCT repo_id FROM repo_devpost_prizes WHERE prize = ANY($1)`,
+    [tags],
+  );
+  return rows.map((row: { repo_id: number }) => Number(row.repo_id));
+}
+
 export async function enqueueChallenge(
   challengeId: number,
   actorId: number,
@@ -828,46 +1060,15 @@ export async function enqueueChallenge(
   const result = await withTransaction(async (client) => {
     let ids = repoIds;
     if (!ids || ids.length === 0) {
-      const challengeRes = await client.query(`SELECT devpost_tags FROM challenges WHERE id = $1`, [
-        challengeId,
-      ]);
-      if (challengeRes.rowCount === 0)
-        throw new NotFoundError("Challenge not found", { challengeId });
-      const tags: string[] = challengeRes.rows[0].devpost_tags ?? [];
-      if (tags.length === 0) {
-        return { inserted: [] as { entry: QueueEntryRow }[], alreadyQueued: [] as number[] };
-      }
-      const { rows } = await client.query(
-        `SELECT DISTINCT repo_id FROM repo_devpost_prizes WHERE prize = ANY($1)`,
-        [tags],
-      );
-      ids = rows.map((r: { repo_id: number }) => r.repo_id);
+      ids = await challengePrizeRepoIds(client, challengeId);
     }
 
     const inserted: { entry: QueueEntryRow }[] = [];
     const alreadyQueued: number[] = [];
     for (const repoId of ids) {
-      const position = await nextBottomPosition(client, challengeId);
-      const res = await client.query(
-        `INSERT INTO queue_entries (challenge_id, repo_id, status, position)
-         VALUES ($1, $2, 'waiting', $3)
-         ON CONFLICT (challenge_id, repo_id) DO NOTHING
-         RETURNING *`,
-        [challengeId, repoId, position],
-      );
-      if (res.rowCount) {
-        const entry: QueueEntryRow = res.rows[0];
-        await writeQueueHistory(client, {
-          entryId: entry.id,
-          actorId,
-          previousStatus: "none",
-          newStatus: "waiting",
-          action: "enqueue",
-        });
-        inserted.push({ entry });
-      } else {
-        alreadyQueued.push(repoId);
-      }
+      const outcome = await enqueueQueueRepo(client, actorId, repoId, challengeId);
+      if (outcome) inserted.push({ entry: outcome.entry });
+      else alreadyQueued.push(repoId);
     }
     return { inserted, alreadyQueued };
   });
@@ -876,6 +1077,150 @@ export async function enqueueChallenge(
     await broadcastEntry(entry);
   }
   return { inserted: result.inserted.map((i) => i.entry.id), alreadyQueued: result.alreadyQueued };
+}
+
+/**
+ * Generate one queue from its member challenges. Repeated calls only append
+ * newly eligible projects (and entries previously cleared by this queue's own
+ * reset); existing waiting, called, and evaluated teams keep their positions.
+ */
+export async function enqueueQueueGroup(
+  queueGroupId: number,
+  actorId: number,
+): Promise<{
+  challenges: Array<{
+    challengeId: number;
+    inserted: number;
+    revived: number;
+    alreadyQueued: number;
+  }>;
+  inserted: number;
+  revived: number;
+  alreadyQueued: number;
+}> {
+  const result = await withTransaction(async (client) => {
+    const group = await client.query(`SELECT id FROM queue_groups WHERE id = $1 FOR UPDATE`, [
+      queueGroupId,
+    ]);
+    if (group.rowCount === 0) {
+      throw new NotFoundError("Queue group not found", { queueGroupId });
+    }
+    const { rows: challenges } = await client.query(
+      `SELECT c.id FROM queue_group_challenges qgc
+        JOIN challenges c ON c.id = qgc.challenge_id
+       WHERE qgc.queue_group_id = $1 ORDER BY c.id`,
+      [queueGroupId],
+    );
+    const changed: QueueEntryRow[] = [];
+    const perChallenge: Array<{
+      challengeId: number;
+      inserted: number;
+      revived: number;
+      alreadyQueued: number;
+    }> = [];
+    for (const challenge of challenges as Array<{ id: number }>) {
+      const challengeId = Number(challenge.id);
+      const repoIds = await challengePrizeRepoIds(client, challengeId);
+      let inserted = 0;
+      let revived = 0;
+      let alreadyQueued = 0;
+      for (const repoId of repoIds) {
+        const outcome = await enqueueQueueRepo(client, actorId, repoId, challengeId);
+        if (!outcome) {
+          alreadyQueued += 1;
+          continue;
+        }
+        changed.push(outcome.entry);
+        if (outcome.revived) revived += 1;
+        else inserted += 1;
+      }
+      perChallenge.push({ challengeId, inserted, revived, alreadyQueued });
+    }
+    return { changed, perChallenge };
+  });
+
+  for (const entry of result.changed) await broadcastEntry(entry);
+  return {
+    challenges: result.perChallenge,
+    inserted: result.perChallenge.reduce((sum, row) => sum + row.inserted, 0),
+    revived: result.perChallenge.reduce((sum, row) => sum + row.revived, 0),
+    alreadyQueued: result.perChallenge.reduce((sum, row) => sum + row.alreadyQueued, 0),
+  };
+}
+
+/** Clear a queue before its first evaluation, preserving its group/configuration. */
+export async function clearQueueGroup(
+  queueGroupId: number,
+  actorId: number,
+): Promise<{ cleared: number }> {
+  const result = await withTransaction(async (client) => {
+    const group = await client.query(`SELECT id FROM queue_groups WHERE id = $1 FOR UPDATE`, [
+      queueGroupId,
+    ]);
+    if (group.rowCount === 0) {
+      throw new NotFoundError("Queue group not found", { queueGroupId });
+    }
+    const { rows: challenges } = await client.query(
+      `SELECT challenge_id FROM queue_group_challenges WHERE queue_group_id = $1 ORDER BY challenge_id`,
+      [queueGroupId],
+    );
+    const challengeIds = challenges.map((row: { challenge_id: number }) =>
+      Number(row.challenge_id),
+    );
+    if (await anyEvaluationStarted(client, challengeIds)) {
+      throw new ConflictError("Cannot clear a queue once a team has been evaluated", {
+        queueGroupId,
+      });
+    }
+
+    const entries = await client.query(
+      `SELECT * FROM queue_entries
+        WHERE challenge_id = ANY($1::int[]) AND status IN ('waiting', 'called', 'in_room', 'presenting')
+        ORDER BY id FOR UPDATE`,
+      [challengeIds],
+    );
+    const activeInRoom = (entries.rows as QueueEntryRow[]).find((entry) =>
+      ["in_room", "presenting"].includes(entry.status),
+    );
+    if (activeInRoom) {
+      throw new ConflictError("Cannot clear a queue while a team is in a room", {
+        queueGroupId,
+        entryId: activeInRoom.id,
+      });
+    }
+
+    const cleared: QueueEntryRow[] = [];
+    for (const entry of entries.rows as QueueEntryRow[]) {
+      const updated = await client.query(
+        `UPDATE queue_entries
+            SET status = 'cancelled', assigned_room_id = NULL,
+                called_at = NULL, precalled_at = NULL
+          WHERE id = $1 RETURNING *`,
+        [entry.id],
+      );
+      await writeQueueHistory(client, {
+        entryId: entry.id,
+        actorId,
+        previousStatus: entry.status,
+        newStatus: "cancelled",
+        action: "queue_clear",
+      });
+      cleared.push(updated.rows[0]);
+    }
+    if (challengeIds[0] !== undefined) await compactQueueGroupPositions(client, challengeIds[0]);
+    await audit(client, {
+      actorId,
+      entityType: "queue_group",
+      entityId: queueGroupId,
+      action: "queue_group.clear",
+      after: { cleared: cleared.length },
+      source: "admin",
+    });
+    return cleared;
+  });
+
+  for (const entry of result) await broadcastEntry(entry);
+  return { cleared: result.length };
 }
 
 // ── H35: pause / resume a room ───────────────────────────────────────────────
@@ -922,15 +1267,19 @@ export async function pauseRoom(roomId: number, actorId: number): Promise<void> 
     for (const entries of byGroup.values()) {
       const first = entries[0];
       if (!first) continue;
-      const base = (await groupMinPosition(client, first.challenge_id)) - entries.length;
-      // entries[] is sorted longest-called first; base + i keeps that order,
-      // so the longest-called team gets the topmost (lowest) position.
-      for (const [i, entry] of entries.entries()) {
+      // entries[] is sorted longest-called first, so putting them on top in
+      // that order gives the longest-called team position 1.
+      await placeEntriesOnTop(
+        client,
+        first.challenge_id,
+        entries.map((entry) => entry.id),
+      );
+      for (const entry of entries) {
         await client.query(
           `UPDATE queue_entries
-              SET status = 'waiting', position = $1, assigned_room_id = NULL, called_at = NULL
-            WHERE id = $2`,
-          [base + i, entry.id],
+              SET status = 'waiting', assigned_room_id = NULL, called_at = NULL
+            WHERE id = $1`,
+          [entry.id],
         );
         await writeQueueHistory(client, {
           entryId: entry.id,

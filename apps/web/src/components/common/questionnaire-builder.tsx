@@ -37,6 +37,7 @@ import {
   TypeIcon,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { i18nWithEnglishFallback, type Prize } from "@/app/(app)/challenges/shared";
 import { DragHandle, SortableItem } from "@/components/common/drag-handle";
 import { Button } from "@/components/ui/button";
 import {
@@ -60,7 +61,6 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { type Translate, useLocale } from "@/lib/i18n";
-import { i18nWithEnglishFallback, type Prize } from "./shared";
 
 /** Fixed locale order for translation inputs — English is always the primary
  *  column throughout this builder (see MultilingualInput below). */
@@ -219,9 +219,11 @@ export function PrizeBuilder({
 export function JudgingPanelBuilder({
   value,
   onChange,
+  disabled = false,
 }: {
   value: Question[];
   onChange: (value: Question[]) => void;
+  disabled?: boolean;
 }) {
   const { t } = useLocale();
   const questionTypes = useMemo(() => buildQuestionTypes(t), [t]);
@@ -277,7 +279,7 @@ export function JudgingPanelBuilder({
   const addField = (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button type="button" variant="outline" size="sm">
+        <Button type="button" variant="outline" size="sm" disabled={disabled}>
           <PlusIcon className="size-4" />
           {t("addField")}
         </Button>
@@ -319,7 +321,10 @@ export function JudgingPanelBuilder({
                   index={index}
                   count={value.length}
                   questionTypes={questionTypes}
-                  dragHandle={<DragHandle {...drag} label={t("dragToReorder")} />}
+                  dragHandle={
+                    <DragHandle {...drag} label={t("dragToReorder")} disabled={disabled} />
+                  }
+                  disabled={disabled}
                   active={activeIndex === index}
                   onActivate={() => setActiveIndex(index)}
                   onChange={(next) => update(index, next)}
@@ -349,6 +354,7 @@ function JudgingQuestionRow({
   onMove,
   onDuplicate,
   onRemove,
+  disabled,
 }: {
   question: Question;
   index: number;
@@ -361,18 +367,23 @@ function JudgingQuestionRow({
   onMove: (dir: -1 | 1) => void;
   onDuplicate: () => void;
   onRemove: () => void;
+  disabled: boolean;
 }) {
   const { t } = useLocale();
 
   const topRow = (
     <div className="flex items-center gap-1">
       {dragHandle}
-      <IconButton label={t("moveFieldUp")} disabled={index === 0} onClick={() => onMove(-1)}>
+      <IconButton
+        label={t("moveFieldUp")}
+        disabled={disabled || index === 0}
+        onClick={() => onMove(-1)}
+      >
         <ArrowUpIcon className="size-3.5" />
       </IconButton>
       <IconButton
         label={t("moveFieldDown")}
-        disabled={index === count - 1}
+        disabled={disabled || index === count - 1}
         onClick={() => onMove(1)}
       >
         <ArrowDownIcon className="size-3.5" />
@@ -384,7 +395,7 @@ function JudgingQuestionRow({
     return (
       <Surface padding="compact" className="hover:border-primary/40 space-y-3 transition-colors">
         {topRow}
-        <button type="button" onClick={onActivate} className="w-full text-left">
+        <button type="button" onClick={onActivate} disabled={disabled} className="w-full text-left">
           <div className="flex items-center gap-2">
             <QuestionIcon kind={question.kind} />
             <div>
@@ -419,11 +430,13 @@ function JudgingQuestionRow({
           placeholder={t("labelField")}
           value={question.label.en}
           onChange={(e) => setLabel("en", e.target.value)}
+          disabled={disabled}
           className="text-base font-medium"
         />
         <Select
           value={question.kind}
           onValueChange={(kind) => onChange(retargetQuestion(question, kind as BuilderKind, t))}
+          disabled={disabled}
         >
           <SelectTrigger aria-label={t("colType")} className="w-full">
             <SelectValue />
@@ -446,10 +459,16 @@ function JudgingQuestionRow({
         placeholder={`${t("descriptionLabel")}${t("optionalSuffix")}`}
         value={question.description?.en ?? ""}
         onChange={(e) => setDescription("en", e.target.value)}
+        disabled={disabled}
         className="text-sm"
       />
 
-      <QuestionSettings question={question} onChange={onChange} idPrefix={`question-${index}`} />
+      <QuestionSettings
+        question={question}
+        onChange={onChange}
+        idPrefix={`question-${index}`}
+        disabled={disabled}
+      />
 
       <details className="rounded-lg border p-4">
         <summary className="cursor-pointer text-sm font-medium">
@@ -466,6 +485,7 @@ function JudgingQuestionRow({
                   id={`question-${index}-label-${loc}`}
                   value={question.label[loc]}
                   onChange={(e) => setLabel(loc, e.target.value)}
+                  disabled={disabled}
                 />
               </div>
             ))}
@@ -480,6 +500,7 @@ function JudgingQuestionRow({
                   id={`question-${index}-description-${loc}`}
                   value={question.description?.[loc] ?? ""}
                   onChange={(e) => setDescription(loc, e.target.value)}
+                  disabled={disabled}
                 />
               </div>
             ))}
@@ -490,6 +511,7 @@ function JudgingQuestionRow({
               value={question.key}
               placeholder={t("fieldKeyPlaceholder")}
               onChange={(e) => onChange({ ...question, key: slug(e.target.value) })}
+              disabled={disabled}
             />
           </Field>
         </div>
@@ -498,7 +520,14 @@ function JudgingQuestionRow({
       <Separator />
 
       <div className="flex flex-wrap items-center gap-1">
-        <Button type="button" variant="ghost" size="icon" className="size-8" onClick={onDuplicate}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-8"
+          onClick={onDuplicate}
+          disabled={disabled}
+        >
           <CopyIcon className="size-4" />
           <span className="sr-only">{t("duplicateQuestion")}</span>
         </Button>
@@ -508,6 +537,7 @@ function JudgingQuestionRow({
           size="icon"
           className="text-destructive size-8"
           onClick={onRemove}
+          disabled={disabled}
         >
           <Trash2Icon className="size-4" />
           <span className="sr-only">{t("removeField")}</span>
@@ -517,6 +547,7 @@ function JudgingQuestionRow({
           checked={question.required}
           onCheckedChange={(required) => onChange({ ...question, required })}
           id={`required-${index}`}
+          disabled={disabled}
         />
         <Label htmlFor={`required-${index}`} className="text-sm">
           {t("requiredCheckboxLabel")}
@@ -530,10 +561,12 @@ function QuestionSettings({
   question,
   onChange,
   idPrefix,
+  disabled,
 }: {
   question: Question;
   onChange: (question: Question) => void;
   idPrefix: string;
+  disabled: boolean;
 }) {
   const { t } = useLocale();
   if (question.kind === "scale") {
@@ -552,6 +585,7 @@ function QuestionSettings({
             value={question.min ?? ""}
             placeholder={t("noLimitPlaceholder")}
             inputMode={question.kind === "integer" ? "numeric" : "decimal"}
+            disabled={disabled}
             onChange={(event) => onChange(numberPatch(question, "min", event.target.value))}
           />
         </Field>
@@ -561,6 +595,7 @@ function QuestionSettings({
             value={question.max ?? ""}
             placeholder={t("noLimitPlaceholder")}
             inputMode={question.kind === "integer" ? "numeric" : "decimal"}
+            disabled={disabled}
             onChange={(event) => onChange(numberPatch(question, "max", event.target.value))}
           />
         </Field>
@@ -574,6 +609,7 @@ function QuestionSettings({
           id={`${idPrefix}-max-length`}
           value={question.maxLength}
           inputMode="numeric"
+          disabled={disabled}
           onChange={(event) =>
             onChange({ ...question, maxLength: Math.max(1, Number(event.target.value) || 1) })
           }
@@ -582,7 +618,7 @@ function QuestionSettings({
     );
   }
   if (question.kind === "single_choice" || question.kind === "multi_choice") {
-    return <OptionsBuilder question={question} onChange={onChange} />;
+    return <OptionsBuilder question={question} onChange={onChange} disabled={disabled} />;
   }
   return null;
 }
@@ -590,9 +626,11 @@ function QuestionSettings({
 function OptionsBuilder({
   question,
   onChange,
+  disabled,
 }: {
   question: Extract<Question, { kind: "single_choice" | "multi_choice" }>;
   onChange: (question: Question) => void;
+  disabled: boolean;
 }) {
   const { t } = useLocale();
   const [openTranslations, setOpenTranslations] = useState<Record<number, boolean>>({});
@@ -611,6 +649,7 @@ function OptionsBuilder({
           type="button"
           variant="outline"
           size="sm"
+          disabled={disabled}
           onClick={() =>
             onChange({
               ...question,
@@ -642,12 +681,14 @@ function OptionsBuilder({
                   type="button"
                   variant="ghost"
                   size="sm"
+                  disabled={disabled}
                   onClick={() => setOpenTranslations((state) => ({ ...state, [index]: !open }))}
                 >
                   {open ? t("hideTranslations") : t("addTranslations")}
                 </Button>
                 <IconButton
                   label={t("removeOptionAria", { index: index + 1 })}
+                  disabled={disabled}
                   onClick={() =>
                     onChange({
                       ...question,
@@ -665,12 +706,14 @@ function OptionsBuilder({
                 hint={t("valueHint")}
                 value={option.value}
                 ariaLabel={t("optionAriaValue", { index: index + 1 })}
+                disabled={disabled}
                 onChange={(next) => updateOption(index, { value: slug(next) })}
               />
               <TaggedControl
                 tag={t("englishTag")}
                 value={option.label.en}
                 ariaLabel={t("optionAriaLabel", { index: index + 1 })}
+                disabled={disabled}
                 onChange={(next) => updateOption(index, { label: { ...option.label, en: next } })}
               />
             </div>
@@ -680,12 +723,14 @@ function OptionsBuilder({
                   tag={t("spanishTag")}
                   placeholder={t("defaultsToEnglishPlaceholder")}
                   value={option.label.es}
+                  disabled={disabled}
                   onChange={(next) => updateOption(index, { label: { ...option.label, es: next } })}
                 />
                 <TaggedControl
                   tag={t("galicianTag")}
                   placeholder={t("defaultsToEnglishPlaceholder")}
                   value={option.label.gl}
+                  disabled={disabled}
                   onChange={(next) => updateOption(index, { label: { ...option.label, gl: next } })}
                 />
               </div>
@@ -771,6 +816,7 @@ function TaggedControl({
   onChange,
   textarea,
   ariaLabel,
+  disabled,
 }: {
   tag: string;
   hint?: string;
@@ -779,6 +825,7 @@ function TaggedControl({
   onChange: (value: string) => void;
   textarea?: boolean;
   ariaLabel?: string;
+  disabled?: boolean;
 }) {
   const Control = textarea ? Textarea : Input;
   return (
@@ -791,6 +838,7 @@ function TaggedControl({
         value={value}
         placeholder={placeholder}
         aria-label={ariaLabel ?? tag}
+        disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
       />
     </div>

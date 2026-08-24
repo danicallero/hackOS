@@ -1,3 +1,4 @@
+import { questionnaireSchema } from "@hackos/shared/questions";
 import { z } from "zod";
 
 export const idParam = z.object({ id: z.coerce.number().int().positive() });
@@ -25,6 +26,35 @@ export const updateRoomBody = z.object({
 export const assignQueueGroupBody = z.object({
   queueGroupId: z.coerce.number().int().positive(),
 });
+
+// ── shared judging queues (H46) ──────────────────────────────────────────────
+export const queueGroupIdParam = z.object({
+  queueGroupId: z.coerce.number().int().positive(),
+});
+export const enterpriseQueueGroupParam = z.object({
+  id: z.coerce.number().int().positive(),
+  queueGroupId: z.coerce.number().int().positive(),
+});
+export const previewMergeBody = z.object({
+  challengeIds: z.array(z.coerce.number().int().positive()).min(1),
+});
+export const mergeQueueGroupsBody = z.object({
+  challengeIds: z.array(z.coerce.number().int().positive()).min(2),
+  displayName: z.string().min(1).max(120),
+});
+export const updateQueueGroupBody = z
+  .object({
+    displayName: z.string().min(1).max(120).optional(),
+    criteria: questionnaireSchema.optional(),
+  })
+  .refine((body) => body.displayName !== undefined || body.criteria !== undefined, {
+    message: "Nothing to update",
+  });
+/** Exactly which rooms serve a queue — the whole set, not a delta. */
+export const queueGroupRoomsBody = z.object({
+  roomIds: z.array(z.coerce.number().int().positive()),
+});
+
 export const roomQueueStateBody = z.object({
   maxInWaitingArea: z.coerce.number().int().min(1).optional(),
   desiredMinutesPerTeam: z.coerce.number().int().min(1).optional(),
@@ -52,6 +82,12 @@ export const requeueBody = z.object({
   position: z.enum(["top", "bottom"]),
   reason: z.string().optional(),
 });
+/** Move a team to an explicit place in its queue (1-based, clamped). */
+export const moveToPositionBody = z.object({
+  position: z.coerce.number().int().min(1),
+  reason: z.string().optional(),
+});
+
 export const manualCallBody = z.object({
   targetStatus: z.enum(["called", "in_room"]),
   roomId: z.coerce.number().int().positive(),

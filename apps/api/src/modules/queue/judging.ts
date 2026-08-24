@@ -4,6 +4,7 @@ import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
+import { resolveChallengePanel } from "./criteria-merge.js";
 import { writeQueueHistory } from "./history.js";
 import { REPO_MEMBER_RELATION_SQL } from "./membership.js";
 import { notifyChallengeQueueChanged } from "./notify.js";
@@ -27,12 +28,11 @@ async function loadCriteria(
   client: Queryable,
   challengeId: number,
 ): Promise<{ typed: Question[] | null; keys: Set<string> | null }> {
-  const { rows } = await client.query(
-    `SELECT judging_panel_criteria FROM challenges WHERE id = $1`,
-    [challengeId],
-  );
-  const criteria = rows[0]?.judging_panel_criteria;
-  if (!Array.isArray(criteria)) return { typed: null, keys: null }; // no panel yet — lenient
+  // H46: a merged queue group has ONE judging form for all its challenges, so
+  // the entry is validated against the group's panel when there is one. Every
+  // 1:1 group falls back to the challenge's own — unchanged behaviour.
+  const criteria = await resolveChallengePanel(client, challengeId);
+  if (criteria.length === 0) return { typed: null, keys: null }; // no panel yet — lenient
   const isTyped =
     criteria.length > 0 &&
     criteria.every(
@@ -304,6 +304,7 @@ export async function searchChallengeQueue(challengeId: number, q: string) {
            JOIN (${REPO_MEMBER_RELATION_SQL}) s2 ON s2.user_id = s1.user_id
            JOIN queue_entries bqe ON bqe.repo_id = s2.repo_id
                                   AND bqe.status IN ('called', 'in_room', 'presenting')
+                                  AND bqe.id <> qe.id
            JOIN rooms br ON br.id = bqe.assigned_room_id
            JOIN repos brepo ON brepo.id = bqe.repo_id
           WHERE s1.repo_id = qe.repo_id

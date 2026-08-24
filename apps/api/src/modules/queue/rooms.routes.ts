@@ -15,6 +15,7 @@ import {
   requireRoomJudgeOrCapability,
   requireRoomListAccess,
 } from "./contextual-access.js";
+import { listManageableQueueGroups } from "./group-merge.js";
 import { queueGroupEnterpriseId, roomEnterpriseId } from "./groups.js";
 import { scheduleTopUp } from "./pump.js";
 import {
@@ -164,9 +165,9 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
     {
       config: { routeAccessPolicy: { kind: "authenticated" } },
       schema: {
-        summary: "List assignable queue groups",
+        summary: "List manageable judging queues",
         description:
-          "Queue groups a room can be assigned to, with the enterprise that owns each and the challenges it covers. The list is the caller's own assignment scope: global queue/sponsor administrators see every group, a sponsor representative sees only their own enterprises', and anyone else sees none.",
+          "Every judging queue the caller may manage, with the owning enterprise's name and branding, the challenges feeding it, the rooms serving it, its merged judging form, and whether judging has already started for it. The list is the caller's own scope: global queue/sponsor administrators see every queue on the platform, a sponsor representative sees only their own enterprises', and anyone else sees none. Backs both the room-assignment picker and the all-queues management view.",
       },
     },
     async (req) => {
@@ -174,25 +175,7 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
       const admin =
         (await userHasCapability(userId, CAPABILITIES.QUEUE_ADMIN, req)) ||
         (await userHasCapability(userId, CAPABILITIES.SPONSORS_MANAGE, req));
-      const { rows } = await pool.query(
-        `SELECT qg.id, qg.display_name, qg.enterprise_id, e.name AS enterprise_name,
-                COALESCE(
-                  (SELECT jsonb_agg(jsonb_build_object('id', c.id, 'title', c.title)
-                                    ORDER BY c.id ASC)
-                     FROM queue_group_challenges qgc
-                     JOIN challenges c ON c.id = qgc.challenge_id
-                    WHERE qgc.queue_group_id = qg.id),
-                  '[]'::jsonb
-                ) AS challenges
-           FROM queue_groups qg
-           JOIN enterprises e ON e.id = qg.enterprise_id
-          WHERE $1::boolean
-             OR EXISTS (SELECT 1 FROM sponsors s
-                         WHERE s.enterprise_id = qg.enterprise_id AND s.user_id = $2)
-          ORDER BY e.name ASC, qg.display_name ASC, qg.id ASC`,
-        [admin, userId],
-      );
-      return { groups: rows };
+      return { groups: await listManageableQueueGroups(userId, admin) };
     },
   );
 

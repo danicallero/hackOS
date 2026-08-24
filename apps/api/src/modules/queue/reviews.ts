@@ -5,6 +5,8 @@ import { audit } from "../../lib/audit.js";
 import { userHasCapability } from "../../lib/capabilities.js";
 import { toCsv } from "../../lib/csv.js";
 import { ForbiddenError, NotFoundError, UnauthorizedError } from "../../lib/errors.js";
+import { RESOLVED_PANEL_SQL } from "./criteria-merge.js";
+import { QUEUE_GROUP_LABEL_JOIN, QUEUE_GROUP_LABEL_SQL } from "./groups.js";
 import { notifyTeamMessage } from "./notify.js";
 
 /**
@@ -108,13 +110,15 @@ export async function listReviews(
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
   const { rows } = await pool.query(
-    `SELECT qe.id AS entry_id, qe.challenge_id, c.title AS challenge_title, c.judging_panel_criteria,
+    `SELECT qe.id AS entry_id, qe.challenge_id, ${QUEUE_GROUP_LABEL_SQL} AS challenge_title,
+            ${RESOLVED_PANEL_SQL} AS judging_panel_criteria,
             qe.repo_id, r.name AS repo_name,
             qe.assigned_room_id, room.name AS room_name,
             ar.status, ar.scores, ar.updated_at,
             COALESCE(judges.names, '{}') AS judges
        FROM queue_entries qe
        JOIN challenges c ON c.id = qe.challenge_id
+       ${QUEUE_GROUP_LABEL_JOIN}
        JOIN repos r ON r.id = qe.repo_id
        LEFT JOIN rooms room ON room.id = qe.assigned_room_id
        LEFT JOIN attempt_review ar ON ar.attempt_id = qe.id
@@ -125,7 +129,7 @@ export async function listReviews(
           WHERE v.attempt_id = qe.id
        ) judges ON true
        ${where}
-      ORDER BY c.title, r.name`,
+      ORDER BY challenge_title, r.name`,
     params,
   );
 
@@ -224,12 +228,14 @@ export async function getReviewDetail(scope: ReviewScope, entryId: number): Prom
 
   const { rows } = await pool.query(
     `SELECT qe.id AS entry_id, qe.status, qe.called_at, qe.presentation_started_at, qe.completed_at,
-            c.id AS challenge_id, c.title AS challenge_title, c.judging_panel_criteria,
+            c.id AS challenge_id, ${QUEUE_GROUP_LABEL_SQL} AS challenge_title,
+            ${RESOLVED_PANEL_SQL} AS judging_panel_criteria,
             r.id AS repo_id, r.name AS repo_name, r.description, r.github_url, r.devpost_url, r.demo_url,
             room.id AS room_id, room.name AS room_name, room.location AS room_location,
             ar.status AS review_status, ar.scores, ar.notes, ar.updated_at
        FROM queue_entries qe
        JOIN challenges c ON c.id = qe.challenge_id
+       ${QUEUE_GROUP_LABEL_JOIN}
        JOIN repos r ON r.id = qe.repo_id
        LEFT JOIN rooms room ON room.id = qe.assigned_room_id
        LEFT JOIN attempt_review ar ON ar.attempt_id = qe.id

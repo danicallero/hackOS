@@ -49,6 +49,7 @@ import {
   getRoomPace,
   getRoomView,
   listRooms,
+  moveQueueEntryToPosition,
   pauseRoom,
   type QueueEntry,
   type QueueSearchResult,
@@ -421,6 +422,19 @@ export default function QueuePage() {
                   label,
                 )
               }
+              onMoveToPosition={(entry, position) =>
+                mutate(
+                  `move-position-${entry.id}`,
+                  () =>
+                    moveQueueEntryToPosition(
+                      entry.id,
+                      position,
+                      "Judging panel: moved team to position",
+                      crypto.randomUUID(),
+                    ),
+                  t("queueTeamMoved"),
+                )
+              }
               onAddTop={(entry) =>
                 mutate(
                   `move-top-${entry.id}`,
@@ -495,6 +509,7 @@ export default function QueuePage() {
             <ReviewForm
               entry={selectedReviewEntry ?? active}
               challenge={activeChallenge}
+              panel={view.challenge?.judging_panel_criteria ?? null}
               roomId={activeRoomId}
               canJudge={
                 canJudge && (active?.status === "presenting" || selectedReviewEntry != null)

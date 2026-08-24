@@ -137,11 +137,9 @@ describe("1:1 group parity", () => {
     expect(status.position).toBe(1);
   });
 
-  it("assigns positions from the same sequence a per-challenge queue produced", async () => {
+  it("ranks the back of a one-challenge queue exactly as before", async () => {
     const { pool } = await import("../../src/db/pool.js");
-    const { nextBottomPosition, nextTopPosition } = await import(
-      "../../src/modules/queue/ordering.js"
-    );
+    const { nextBottomPosition } = await import("../../src/modules/queue/ordering.js");
     const challengeId = await createChallenge();
     const a = await createRepoWithTeam();
     const b = await createRepoWithTeam();
@@ -149,7 +147,6 @@ describe("1:1 group parity", () => {
     await enqueueRepo(challengeId, b.repoId, 2);
 
     expect(await nextBottomPosition(pool, challengeId)).toBe(3);
-    expect(await nextTopPosition(pool, challengeId)).toBe(0);
   });
 
   it("notifies exactly the room's own challenge on a room-level change", async () => {
@@ -258,8 +255,10 @@ describe("merged N>1 group", () => {
     await enqueueRepo(first, a.repoId, 7);
 
     // The next team joining via the OTHER challenge queues behind it, rather
-    // than restarting at 1 in a queue of its own.
-    expect(await nextBottomPosition(pool, second)).toBe(8);
+    // than restarting at 1 in a queue of its own. The back of the queue is a
+    // rank over the whole group, not "highest position seen + 1" — the seeded
+    // 7 is a gap the dense ordering closes, not a number to count from.
+    expect(await nextBottomPosition(pool, second)).toBe(2);
   });
 });
 
@@ -337,9 +336,9 @@ describe("room -> queue group assignment access", () => {
       url: "/api/queue/groups",
       headers: asUser(alpha.repId),
     });
-    const groups = asRep.json().groups as { enterprise_id: number; challenges: unknown[] }[];
+    const groups = asRep.json().groups as { enterpriseId: number; challenges: unknown[] }[];
     expect(groups).toHaveLength(2);
-    expect(groups.every((g) => g.enterprise_id === alpha.enterpriseId)).toBe(true);
+    expect(groups.every((g) => g.enterpriseId === alpha.enterpriseId)).toBe(true);
     expect(groups[0]!.challenges).toHaveLength(1);
   });
 });

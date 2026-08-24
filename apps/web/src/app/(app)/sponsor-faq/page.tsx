@@ -19,6 +19,7 @@ import { AccessDenied } from "@/components/common/access-denied";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
+import { MultilingualInput } from "@/components/common/questionnaire-builder";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { SubmitButton } from "@/components/common/submit-button";
@@ -43,7 +44,6 @@ import { ApiError, api } from "@/lib/api";
 import { type I18nText, useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem } from "@/lib/logistics";
 import { useCan, useMe } from "@/lib/session";
-import { MultilingualInput } from "../challenges/builders";
 import { EMPTY_I18N, textForDisplay } from "../challenges/shared";
 
 type FaqItemKind = "qa" | "text";

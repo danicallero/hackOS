@@ -34,8 +34,13 @@ const H30_REPO_LOCK_NAMESPACE = 815_031;
 export async function isRepoBlockedByBusyMember(
   client: Queryable,
   repoId: number,
-  opts: { roomId?: number | null; excludeEntryId?: number | null } = {},
+  opts: {
+    roomId?: number | null;
+    excludeEntryId?: number | null;
+    statuses?: readonly string[];
+  } = {},
 ): Promise<boolean> {
+  const statuses = opts.statuses ?? ["called", "in_room", "presenting"];
   await client.query(`SELECT pg_advisory_xact_lock($1::int, $2::int)`, [
     H30_REPO_LOCK_NAMESPACE,
     repoId,
@@ -56,7 +61,7 @@ export async function isRepoBlockedByBusyMember(
        FROM repo_members candidate
        JOIN repo_members active ON active.user_id = candidate.user_id
        JOIN queue_entries qe ON qe.repo_id = active.repo_id
-                              AND qe.status IN ('called', 'in_room', 'presenting')
+                              AND qe.status = ANY($4::queue_status[])
       WHERE candidate.repo_id = $1
         AND ($2::int IS NULL OR qe.assigned_room_id IS DISTINCT FROM $2::int)
         AND ($3::int IS NULL OR qe.id <> $3::int)
@@ -64,11 +69,11 @@ export async function isRepoBlockedByBusyMember(
      SELECT 1
        FROM queue_entries qe
       WHERE qe.repo_id = $1
-        AND qe.status IN ('called', 'in_room', 'presenting')
+        AND qe.status = ANY($4::queue_status[])
         AND ($2::int IS NULL OR qe.assigned_room_id IS DISTINCT FROM $2::int)
         AND ($3::int IS NULL OR qe.id <> $3::int)
       LIMIT 1`,
-    [repoId, opts.roomId ?? null, opts.excludeEntryId ?? null],
+    [repoId, opts.roomId ?? null, opts.excludeEntryId ?? null, statuses],
   );
   return rows.length > 0;
 }

@@ -2,7 +2,7 @@
 
 // Queue admin surface for rooms and assignments (H46).
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -156,77 +156,48 @@ export function ChallengeResultsPanel({ challengeId }: { challengeId: number }) 
   );
 }
 
-/** The enterprises owning at least one assignable queue group, de-duplicated. */
-export function assignableEnterprises(
-  queueGroups: QueueGroup[],
-): Array<{ id: number; name: string }> {
-  const seen = new Map<number, string>();
-  for (const group of queueGroups) {
-    if (!seen.has(group.enterprise_id)) seen.set(group.enterprise_id, group.enterprise_name);
-  }
-  return [...seen].map(([id, name]) => ({ id, name }));
-}
-
 /**
  * Room -> queue group assignment plus the judges that follow from it. The
  * roster itself lives on the enterprise (Enterprises -> Judges), so it is
  * listed here read-only — a room no longer has judges of its own.
- *
- * Assignment is two-step, because an enterprise — not a queue group — is what
- * owns a room: pick the enterprise, then pick which of *its* groups the room
- * serves. Both steps resolve against the same `room_queue_groups` link (a
- * group belongs to exactly one enterprise, so the enterprise is derived, never
- * stored twice); the second step is a presentation detail, not new state. An
- * enterprise with a single group — every enterprise today, and the common
- * single-challenge case forever — is auto-filled and shows no group picker.
  */
 export function AssignmentsEditor({
   roomId,
   assignments,
+  queueGroupFallback,
   queueGroups,
   onSetQueueGroup,
+  onClearQueueGroup,
   canSetQueueGroup,
 }: {
   roomId: number;
   assignments: RoomAssignments | null;
+  queueGroupFallback: number;
   queueGroups: QueueGroup[];
   onSetQueueGroup: (queueGroupId: number) => Promise<void>;
+  /** Leaves the room serving nothing — an enterprise routes its queue to the
+   *  rooms it actually wants, not to every room assigned to it. */
+  onClearQueueGroup: (queueGroupId: number) => Promise<void>;
   canSetQueueGroup: boolean;
 }) {
   const { t } = useLocale();
   const assigned = assignments?.queueGroup ?? null;
-  const [enterpriseId, setEnterpriseId] = useState("");
   const [queueGroupId, setQueueGroupId] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
 
   useEffect(() => {
-    // Auto-derive both steps from async-loaded assignments data. An unassigned
-    // room starts empty rather than pre-pointing at some other enterprise.
+    const next = assignments?.queueGroup?.id ?? queueGroupFallback;
+    // Auto-derive the selected queue group from async-loaded assignments data.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setEnterpriseId(assigned ? String(assigned.enterprise_id) : "");
-    setQueueGroupId(assigned ? String(assigned.id) : "");
-  }, [assigned]);
-
-  const enterprises = useMemo(() => assignableEnterprises(queueGroups), [queueGroups]);
-  const enterpriseGroups = useMemo(
-    () => queueGroups.filter((group) => String(group.enterprise_id) === enterpriseId),
-    [queueGroups, enterpriseId],
-  );
-  const soleGroup = enterpriseGroups.length === 1 ? enterpriseGroups[0] : null;
-  const targetGroupId = soleGroup ? soleGroup.id : Number(queueGroupId) || 0;
-
-  function selectEnterprise(nextEnterpriseId: string) {
-    setEnterpriseId(nextEnterpriseId);
-    const groups = queueGroups.filter((group) => String(group.enterprise_id) === nextEnterpriseId);
-    setQueueGroupId(groups.length === 1 ? String(groups[0].id) : "");
-  }
+    setQueueGroupId(next ? String(next) : "");
+  }, [assignments?.queueGroup, queueGroupFallback]);
 
   const judges = assignments?.judges ?? [];
 
   return (
     <div className="space-y-5">
       <div className="space-y-2">
-        <Label htmlFor={canSetQueueGroup ? `room-enterprise-${roomId}` : undefined}>
+        <Label htmlFor={canSetQueueGroup ? `queue-group-${roomId}` : undefined}>
           {t("roomQueueGroupLabel")}
         </Label>
         {assigned ? (
@@ -238,56 +209,59 @@ export function AssignmentsEditor({
         )}
         {canSetQueueGroup && (
           <div className="flex flex-col gap-2 sm:flex-row">
-            <Select value={enterpriseId || undefined} onValueChange={selectEnterprise}>
-              <SelectTrigger id={`room-enterprise-${roomId}`} className="w-full min-w-0 sm:flex-1">
-                <SelectValue placeholder={t("selectEnterprisePlaceholder")} />
+            <Select value={queueGroupId || undefined} onValueChange={setQueueGroupId}>
+              <SelectTrigger id={`queue-group-${roomId}`} className="w-full min-w-0 sm:flex-1">
+                <SelectValue placeholder={t("selectQueueGroupPlaceholder")} />
               </SelectTrigger>
               <SelectContent>
-                {enterprises.map((enterprise) => (
-                  <SelectItem key={enterprise.id} value={String(enterprise.id)}>
-                    {enterprise.name}
+                {queueGroups.map((group) => (
+                  <SelectItem key={group.id} value={String(group.id)}>
+                    {group.enterpriseName} · {group.displayName}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            {enterpriseGroups.length > 1 && (
-              <Select value={queueGroupId || undefined} onValueChange={setQueueGroupId}>
-                <SelectTrigger
-                  id={`queue-group-${roomId}`}
-                  aria-label={t("selectQueueGroupPlaceholder")}
-                  className="w-full min-w-0 sm:flex-1"
-                >
-                  <SelectValue placeholder={t("selectQueueGroupPlaceholder")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {enterpriseGroups.map((group) => (
-                    <SelectItem key={group.id} value={String(group.id)}>
-                      {group.display_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
             <Button
-              size="lg"
               className="shrink-0"
-              disabled={busy || !targetGroupId}
+              disabled={busy !== null || !queueGroupId}
               onClick={async () => {
-                setBusy(true);
+                setBusy("queueGroup");
                 try {
-                  await onSetQueueGroup(targetGroupId);
+                  await onSetQueueGroup(Number(queueGroupId));
                   toast.success(t("queueGroupAssigned"));
                 } catch (err) {
                   toast.error(
                     err instanceof ApiError ? err.message : t("couldNotAssignQueueGroup"),
                   );
                 } finally {
-                  setBusy(false);
+                  setBusy(null);
                 }
               }}
             >
               {t("setQueueGroup")}
             </Button>
+            {assigned && (
+              <Button
+                variant="outline"
+                className="shrink-0"
+                disabled={busy !== null}
+                onClick={async () => {
+                  setBusy("clearQueueGroup");
+                  try {
+                    await onClearQueueGroup(assigned.id);
+                    toast.success(t("queueGroupCleared"));
+                  } catch (err) {
+                    toast.error(
+                      err instanceof ApiError ? err.message : t("couldNotAssignQueueGroup"),
+                    );
+                  } finally {
+                    setBusy(null);
+                  }
+                }}
+              >
+                {t("clearQueueGroup")}
+              </Button>
+            )}
           </div>
         )}
       </div>

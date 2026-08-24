@@ -39,6 +39,7 @@ import {
   type QueueGroup,
   type Room,
   type RoomAssignments,
+  removeRoomQueueGroup,
   updateRoom,
 } from "@/lib/queue";
 import { useSessionContext } from "@/lib/session";
@@ -78,6 +79,8 @@ export default function QueueRoomsPage() {
     [rooms, selectedRoomId],
   );
   const selectedRoomAssignments = selectedRoom ? (assignments[selectedRoom.id] ?? null) : null;
+
+  const queueGroupFallback = queueGroups[0]?.id ?? 0;
 
   const load = useCallback(async () => {
     if (!canManageRooms) {
@@ -496,9 +499,14 @@ export default function QueueRoomsPage() {
               <AssignmentsEditor
                 roomId={selectedRoom.id}
                 assignments={selectedRoomAssignments}
+                queueGroupFallback={queueGroupFallback}
                 queueGroups={queueGroups}
                 onSetQueueGroup={async (queueGroupId) => {
                   await assignRoomQueueGroup(selectedRoom.id, queueGroupId);
+                  await loadRoomDetails(selectedRoom.id);
+                }}
+                onClearQueueGroup={async (queueGroupId) => {
+                  await removeRoomQueueGroup(selectedRoom.id, queueGroupId);
                   await loadRoomDetails(selectedRoom.id);
                 }}
                 canSetQueueGroup={queueGroups.length > 0}

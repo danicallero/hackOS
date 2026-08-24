@@ -13,6 +13,7 @@ import {
   callNextBody,
   entryIdParam,
   manualCallBody,
+  moveToPositionBody,
   reasonBody,
   requeueBody,
   requiredReasonBody,
@@ -26,9 +27,11 @@ import {
   disqualify,
   manualCall,
   markNoShow,
+  moveToPosition,
   moveToTop,
   notifyEnter,
   reEnter,
+  remindWaitingRoom,
   requeue,
   sendBackToWaiting,
   skipToEnd,
@@ -119,6 +122,23 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
       schema: { params: entryIdParam },
     },
     async (req) => notifyEnter(req.params.entryId, actor(req.userId)),
+  );
+
+  // H29: remind a called team to come to the waiting room again; no status transition.
+  typed.post(
+    "/api/queue/entries/:entryId/remind-waiting",
+    {
+      preHandler: [judgeOrOperate, idempotencyGuard],
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "queue-entry-operate",
+          resource: { source: "params", field: "entryId" },
+        },
+      },
+      schema: { params: entryIdParam },
+    },
+    async (req) => remindWaitingRoom(req.params.entryId, actor(req.userId)),
   );
 
   // H32: bring in (no clock) then start (clock running).
@@ -270,12 +290,44 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
       ),
   );
 
+  // Drag-free reordering: put a team at an explicit place in its queue.
+  typed.post(
+    "/api/queue/entries/:entryId/move-to",
+    {
+      preHandler: [judgeOrOperate, idempotencyGuard],
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "queue-entry-operate",
+          resource: { source: "params", field: "entryId" },
+        },
+      },
+      schema: {
+        params: entryIdParam,
+        body: moveToPositionBody,
+        summary: "Move a team to a place in its queue",
+        description:
+          "Puts the team at the given 1-based place in the queue its challenge feeds, renumbering the rest around it; the queue keeps a gapless 1..N ordering, so the number given here is the position every surface then shows. Out-of-range values are clamped to the ends rather than rejected. The team returns to `waiting` and leaves any waiting area it was called into.",
+      },
+    },
+    async (req) =>
+      transitionAndTopUp(req.params.entryId, () =>
+        moveToPosition(req.params.entryId, actor(req.userId), req.body.position, req.body.reason),
+      ),
+  );
+
   // Voluntary "send me to the end" — no ladder penalty (plan/07 §4).
   typed.post(
     "/api/queue/entries/:entryId/skip",
     {
-      preHandler: [operate, idempotencyGuard],
-      config: { routeAccessPolicy: { kind: "capability", capability: CAPABILITIES.QUEUE_OPERATE } },
+      preHandler: [judgeOrOperate, idempotencyGuard],
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "queue-entry-operate",
+          resource: { source: "params", field: "entryId" },
+        },
+      },
       schema: { params: entryIdParam, body: reasonBody },
     },
     async (req) => skipToEnd(req.params.entryId, actor(req.userId), req.body.reason),
