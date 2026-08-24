@@ -61,29 +61,38 @@ async function judgesChallenge(userId: number, challengeId: number): Promise<boo
 
 /**
  * Room actions resolve to the enterprise the room currently judges for
- * (room -> its assigned challenge -> that challenge's author enterprise).
- * A room with no assigned challenge grants nobody contextual access.
+ * (room -> its queue_group -> that group's enterprise). A room with no
+ * queue_group assigned grants nobody contextual access.
  */
 async function judgesRoomEnterprise(userId: number, roomId: number): Promise<boolean> {
   const { rowCount } = await pool.query(
     `SELECT 1
-       FROM room_challenges rc
-       JOIN challenges c ON c.id = rc.challenge_id
-       JOIN sponsors author ON author.id = c.author
-       JOIN enterprise_judges ej ON ej.enterprise_id = author.enterprise_id
-      WHERE rc.room_id = $2 AND ej.user_id = $1
+       FROM room_queue_groups rqg
+       JOIN queue_groups qg ON qg.id = rqg.queue_group_id
+       JOIN enterprise_judges ej ON ej.enterprise_id = qg.enterprise_id
+      WHERE rqg.room_id = $2 AND ej.user_id = $1
       LIMIT 1`,
     [userId, roomId],
   );
   return rowCount !== 0;
 }
 
-async function roomChallengeId(roomId: number): Promise<number | null> {
-  const { rows } = await pool.query(
-    `SELECT challenge_id FROM room_challenges WHERE room_id = $1 LIMIT 1`,
-    [roomId],
+/**
+ * The sponsor-rep counterpart of {@link judgesRoomEnterprise}. Ownership is
+ * resolved against the room's queue_group's enterprise rather than a single
+ * challenge, since a room can serve a group spanning several challenges.
+ */
+async function ownsRoomEnterprise(userId: number, roomId: number): Promise<boolean> {
+  const { rowCount } = await pool.query(
+    `SELECT 1
+       FROM room_queue_groups rqg
+       JOIN queue_groups qg ON qg.id = rqg.queue_group_id
+       JOIN sponsors mine ON mine.enterprise_id = qg.enterprise_id
+      WHERE rqg.room_id = $2 AND mine.user_id = $1
+      LIMIT 1`,
+    [userId, roomId],
   );
-  return rows[0] ? Number(rows[0].challenge_id) : null;
+  return rowCount !== 0;
 }
 
 async function entryChallengeId(entryId: number): Promise<number | null> {
@@ -134,10 +143,9 @@ export function requireRoomAccessOrCapability(
     if (await hasAnyCapability(req, userId, capabilities)) return;
     const roomId = numberParam(req, "roomId");
     if (await judgesRoomEnterprise(userId, roomId)) return;
-    const challengeId = await roomChallengeId(roomId);
     // H46 ownership remains a read-only sponsor scope; a roster judge reaches
     // every room their enterprise currently judges in.
-    if (challengeId != null && (await ownsChallenge(userId, challengeId))) return;
+    if (await ownsRoomEnterprise(userId, roomId)) return;
     denied("room", { roomId, capabilities });
   };
 }
@@ -147,8 +155,7 @@ export const requireRoomAssignmentsAccess: preHandlerHookHandler = async (req) =
   const userId = await requireUser(req);
   if (await userHasCapability(userId, CAPABILITIES.QUEUE_ADMIN, req)) return;
   const roomId = numberParam(req, "roomId");
-  const challengeId = await roomChallengeId(roomId);
-  if (challengeId != null && (await ownsChallenge(userId, challengeId))) return;
+  if (await ownsRoomEnterprise(userId, roomId)) return;
   denied("room assignments", { roomId });
 };
 
@@ -204,16 +211,18 @@ export async function accessibleRoomIds(req: FastifyRequest): Promise<number[] |
   ) {
     return null;
   }
+  // Every room linked to a queue_group whose enterprise this user judges for
+  // or reps — the room's enterprise is now read straight off the group, with
+  // no challenge hop.
   const { rows } = await pool.query(
-    `SELECT DISTINCT rc.room_id
-       FROM room_challenges rc
-       LEFT JOIN challenges c ON c.id = rc.challenge_id
-       LEFT JOIN sponsors author ON author.id = c.author
+    `SELECT DISTINCT rqg.room_id
+       FROM room_queue_groups rqg
+       JOIN queue_groups qg ON qg.id = rqg.queue_group_id
        LEFT JOIN enterprise_judges ej
-              ON ej.enterprise_id = author.enterprise_id AND ej.user_id = $1
-       LEFT JOIN sponsors mine ON mine.enterprise_id = author.enterprise_id
+              ON ej.enterprise_id = qg.enterprise_id AND ej.user_id = $1
+       LEFT JOIN sponsors mine ON mine.enterprise_id = qg.enterprise_id
       WHERE ej.user_id = $1 OR mine.user_id = $1
-      ORDER BY rc.room_id ASC`,
+      ORDER BY rqg.room_id ASC`,
     [userId],
   );
   return rows.map((row: { room_id: number }) => row.room_id);

@@ -15,7 +15,7 @@ import { assertSecondaryEmailAvailable } from "../identity/routes/secondary-emai
 import { notify } from "../notifications/service.js";
 import { writeQueueHistory } from "../queue/history.js";
 import { notifyChallengeQueueChanged } from "../queue/notify.js";
-import { compactChallengePositions, nextBottomPosition } from "../queue/ordering.js";
+import { compactQueueGroupPositions, nextBottomPosition } from "../queue/ordering.js";
 import { type RepositoryAccessScope, repositoryIdsForScope } from "./access.js";
 import { buildImportPlan, type ImportPlan, type PlannedRepo } from "./plan.js";
 import { reconcileDevpostParticipantsForUser } from "./reconciliation.js";
@@ -1296,7 +1296,7 @@ export async function removeRepoChallenge(actorId: number, repoId: number, chall
       challengeId,
       reason: "Removed from challenge",
     });
-    await compactChallengePositions(client, challengeId);
+    await compactQueueGroupPositions(client, challengeId);
     return { repoId, challengeId, entry: updatedEntry, removed: true };
   });
   await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ENTRY_CHANGED, result.entry);
@@ -1388,7 +1388,7 @@ export async function bulkRemoveRepoChallenge(
       });
       updatedEntries.push(updatedEntry as Record<string, unknown> & { challenge_id: number });
     }
-    if (removable.length > 0) await compactChallengePositions(client, challengeId);
+    if (removable.length > 0) await compactQueueGroupPositions(client, challengeId);
 
     await audit(client, {
       actorId,

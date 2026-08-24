@@ -6,6 +6,7 @@ import { requireCapability } from "../../lib/capabilities.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { actor } from "./actor.js";
 import { requireEntryJudgeOrCapability } from "./contextual-access.js";
+import { CHALLENGE_ROOM_IDS_SQL } from "./groups.js";
 import { scheduleTopUp } from "./pump.js";
 import { entryHistory } from "./reads.js";
 import {
@@ -63,10 +64,11 @@ async function moveToTopAndTopUp(
   run: () => Promise<QueueEntryRow>,
 ): Promise<QueueEntryRow> {
   const entry = await run();
-  const { rows } = await pool.query(
-    `SELECT room_id FROM room_challenges WHERE challenge_id = $1 ORDER BY room_id ASC`,
-    [entry.challenge_id],
-  );
+  // H46: every room serving this challenge's queue_group has a slot that a
+  // top-of-queue move could fill.
+  const { rows } = await pool.query(`${CHALLENGE_ROOM_IDS_SQL} ORDER BY rqg.room_id ASC`, [
+    entry.challenge_id,
+  ]);
   await Promise.all(rows.map((row: { room_id: number }) => scheduleTopUp(row.room_id)));
   return entry;
 }

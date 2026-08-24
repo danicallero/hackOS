@@ -120,7 +120,7 @@ Judges are **enterprise-scoped**, not room-scoped: `enterprise_judges`
 (`enterprise_id`, `user_id`) is the roster, and a judge on it reaches every
 challenge that enterprise authored and every room currently serving one of
 those challenges. Contextual queue guards resolve the chain
-`room → room_challenges → challenges.author → sponsors.enterprise_id →
+`room → room_queue_groups → queue_groups.enterprise_id →
 enterprise_judges` rather than looking a judge up per room. The roster itself
 is managed on the enterprise (`/api/enterprises/:id/judges`, sponsors module);
 the queue module has no room-scoped judge routes.
