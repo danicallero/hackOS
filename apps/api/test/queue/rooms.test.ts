@@ -3,7 +3,13 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
 import { asUser, buildTestApp, createUserWithCapabilities, truncateAll } from "../helpers.js";
-import { createChallenge, createRepoWithTeam, queueGroupOf } from "./fixtures.js";
+import {
+  assignChallengeToRoom,
+  createChallenge,
+  createEnterpriseChallenges,
+  createRepoWithTeam,
+  queueGroupOf,
+} from "./fixtures.js";
 
 /** Rooms & assignment admin, settings, enqueue (H29 admin surface, QUEUE_ADMIN). */
 
@@ -77,12 +83,8 @@ describe("rooms CRUD + assignments (QUEUE_ADMIN)", () => {
     const roomId = created.json().id;
     const challengeId = await createChallenge();
     const { repoId } = await createRepoWithTeam();
+    await assignChallengeToRoom(roomId, challengeId);
     const { pool } = await import("../../src/db/pool.js");
-    await pool.query(
-      `INSERT INTO room_queue_groups (room_id, queue_group_id)
-       SELECT $1, queue_group_id FROM queue_group_challenges WHERE challenge_id = $2`,
-      [roomId, challengeId],
-    );
     const { rows: entries } = await pool.query(
       `INSERT INTO queue_entries (challenge_id, repo_id, status, position)
        VALUES ($1, $2, 'waiting', 1) RETURNING id`,
@@ -139,7 +141,7 @@ describe("rooms CRUD + assignments (QUEUE_ADMIN)", () => {
     expect(state.json().desired_minutes_per_team).toBe(15);
   });
 
-  it("assigns and unassigns a queue group to a room", async () => {
+  it("assigning a room to an enterprise auto-serves its one queue, unassigning clears both", async () => {
     const created = await app.inject({
       method: "POST",
       url: "/api/queue/rooms",
@@ -149,31 +151,41 @@ describe("rooms CRUD + assignments (QUEUE_ADMIN)", () => {
     const roomId = created.json().id;
     const challengeId = await createChallenge();
     const queueGroupId = await queueGroupOf(challengeId);
+    const { pool } = await import("../../src/db/pool.js");
+    const enterpriseId = (
+      await pool.query(`SELECT enterprise_id FROM queue_groups WHERE id = $1`, [queueGroupId])
+    ).rows[0].enterprise_id;
 
     const assign = await app.inject({
       method: "POST",
-      url: `/api/queue/rooms/${roomId}/queue-group`,
+      url: `/api/queue/rooms/${roomId}/enterprise`,
       headers: asUser(adminId),
-      payload: { queueGroupId },
+      payload: { enterpriseId },
     });
     expect(assign.statusCode).toBe(201);
+    expect(assign.json()).toMatchObject({ roomId, enterpriseId, queueGroupId });
 
-    const { pool } = await import("../../src/db/pool.js");
+    expect(
+      (await pool.query(`SELECT * FROM room_enterprises WHERE room_id = $1`, [roomId])).rows,
+    ).toHaveLength(1);
     expect(
       (await pool.query(`SELECT * FROM room_queue_groups WHERE room_id = $1`, [roomId])).rows,
     ).toHaveLength(1);
 
     await app.inject({
       method: "DELETE",
-      url: `/api/queue/rooms/${roomId}/queue-group/${queueGroupId}`,
+      url: `/api/queue/rooms/${roomId}/enterprise`,
       headers: asUser(adminId),
     });
+    expect(
+      (await pool.query(`SELECT * FROM room_enterprises WHERE room_id = $1`, [roomId])).rows,
+    ).toHaveLength(0);
     expect(
       (await pool.query(`SELECT * FROM room_queue_groups WHERE room_id = $1`, [roomId])).rows,
     ).toHaveLength(0);
   });
 
-  it("replaces a room's queue group instead of accumulating many", async () => {
+  it("replaces a room's enterprise instead of accumulating many, resolving the new one's queue", async () => {
     const created = await app.inject({
       method: "POST",
       url: "/api/queue/rooms",
@@ -183,24 +195,34 @@ describe("rooms CRUD + assignments (QUEUE_ADMIN)", () => {
     const roomId = created.json().id;
     const firstChallengeId = await createChallenge();
     const secondChallengeId = await createChallenge();
+    const { pool } = await import("../../src/db/pool.js");
+    const enterpriseOf = async (challengeId: number) => {
+      const groupId = await queueGroupOf(challengeId);
+      return (await pool.query(`SELECT enterprise_id FROM queue_groups WHERE id = $1`, [groupId]))
+        .rows[0].enterprise_id;
+    };
 
     await app.inject({
       method: "POST",
-      url: `/api/queue/rooms/${roomId}/queue-group`,
+      url: `/api/queue/rooms/${roomId}/enterprise`,
       headers: asUser(adminId),
-      payload: { queueGroupId: await queueGroupOf(firstChallengeId) },
+      payload: { enterpriseId: await enterpriseOf(firstChallengeId) },
     });
 
+    const secondEnterpriseId = await enterpriseOf(secondChallengeId);
     const secondGroupId = await queueGroupOf(secondChallengeId);
     const replace = await app.inject({
       method: "POST",
-      url: `/api/queue/rooms/${roomId}/queue-group`,
+      url: `/api/queue/rooms/${roomId}/enterprise`,
       headers: asUser(adminId),
-      payload: { queueGroupId: secondGroupId },
+      payload: { enterpriseId: secondEnterpriseId },
     });
     expect(replace.statusCode).toBe(201);
 
-    const { pool } = await import("../../src/db/pool.js");
+    expect(
+      (await pool.query(`SELECT enterprise_id FROM room_enterprises WHERE room_id = $1`, [roomId]))
+        .rows,
+    ).toEqual([{ enterprise_id: secondEnterpriseId }]);
     expect(
       (
         await pool.query(`SELECT queue_group_id FROM room_queue_groups WHERE room_id = $1`, [
@@ -208,6 +230,37 @@ describe("rooms CRUD + assignments (QUEUE_ADMIN)", () => {
         ])
       ).rows,
     ).toEqual([{ queue_group_id: secondGroupId }]);
+  });
+
+  it("does not auto-serve a queue when the enterprise runs zero or several", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/queue/rooms",
+      headers: asUser(adminId),
+      payload: { name: "Sala ambigua", slug: "sala-ambigua" },
+    });
+    const roomId = created.json().id;
+    const { enterpriseId: multiEnterpriseId } = await createEnterpriseChallenges(2);
+
+    const assign = await app.inject({
+      method: "POST",
+      url: `/api/queue/rooms/${roomId}/enterprise`,
+      headers: asUser(adminId),
+      payload: { enterpriseId: multiEnterpriseId },
+    });
+    expect(assign.statusCode).toBe(201);
+    expect(assign.json().queueGroupId).toBeNull();
+
+    const { pool } = await import("../../src/db/pool.js");
+    expect(
+      (await pool.query(`SELECT * FROM room_queue_groups WHERE room_id = $1`, [roomId])).rows,
+    ).toHaveLength(0);
+    // The room is still pooled into the enterprise — Judging queues resolves
+    // which of its several queues the room actually serves, if any.
+    expect(
+      (await pool.query(`SELECT enterprise_id FROM room_enterprises WHERE room_id = $1`, [roomId]))
+        .rows,
+    ).toEqual([{ enterprise_id: multiEnterpriseId }]);
   });
 });
 

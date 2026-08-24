@@ -212,6 +212,10 @@ describe("enterprise judge roster", () => {
       `INSERT INTO rooms (name, slug) VALUES ('Sala roster', 'sala-roster') RETURNING id`,
     );
     const roomId = Number(room.rows[0].id);
+    await pool.query(`INSERT INTO room_enterprises (room_id, enterprise_id) VALUES ($1, $2)`, [
+      roomId,
+      enterpriseId,
+    ]);
     await pool.query(
       `INSERT INTO room_queue_groups (room_id, queue_group_id)
        SELECT $1, queue_group_id FROM queue_group_challenges WHERE challenge_id = $2`,

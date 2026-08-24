@@ -261,8 +261,10 @@ export const WORKSPACES: Workspace[] = [
         title: "rooms",
         href: "/queue/rooms",
         icon: Building2Icon,
+        // Admin-only (H46, 0413): a sponsor rep routes their queues to their
+        // pooled rooms from Judging queues, but never assigns a room to an
+        // enterprise in the first place.
         anyCapability: [CAPABILITIES.QUEUE_ADMIN],
-        sponsorVisible: true,
       },
       {
         title: "reviewsOverview",

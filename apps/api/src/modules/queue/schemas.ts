@@ -6,10 +6,6 @@ export const roomIdParam = z.object({ roomId: z.coerce.number().int().positive()
 export const repoIdParam = z.object({ repoId: z.coerce.number().int().positive() });
 export const challengeIdParam = z.object({ challengeId: z.coerce.number().int().positive() });
 export const entryIdParam = z.object({ entryId: z.coerce.number().int().positive() });
-export const roomQueueGroupParam = z.object({
-  roomId: z.coerce.number().int().positive(),
-  queueGroupId: z.coerce.number().int().positive(),
-});
 export const createRoomBody = z.object({
   name: z.string().min(1),
   slug: z.string().min(1),
@@ -23,8 +19,8 @@ export const updateRoomBody = z.object({
   status: z.enum(["active", "paused"]).optional(),
 });
 
-export const assignQueueGroupBody = z.object({
-  queueGroupId: z.coerce.number().int().positive(),
+export const assignRoomEnterpriseBody = z.object({
+  enterpriseId: z.coerce.number().int().positive(),
 });
 
 // ── shared judging queues (H46) ──────────────────────────────────────────────

@@ -527,17 +527,21 @@ export async function setQueueGroupRooms(input: {
           roomIds: roomIds.filter((id) => !known.has(id)),
         });
       }
-      const { rows: foreign } = await client.query(
-        `SELECT rqg.room_id
-           FROM room_queue_groups rqg
-           JOIN queue_groups qg ON qg.id = rqg.queue_group_id
-          WHERE rqg.room_id = ANY($1::int[])
-            AND qg.enterprise_id <> $2`,
+      // A queue may only be served by rooms already in this enterprise's
+      // pool (room_enterprises) — never a room pooled elsewhere, and never
+      // one with no pool at all (an admin has to give it to the enterprise
+      // first, from the Rooms admin page).
+      const { rows: outsidePool } = await client.query(
+        `SELECT r.id AS room_id
+           FROM rooms r
+           LEFT JOIN room_enterprises re ON re.room_id = r.id
+          WHERE r.id = ANY($1::int[])
+            AND re.enterprise_id IS DISTINCT FROM $2`,
         [roomIds, enterpriseId],
       );
-      if (foreign.length) {
-        throw new ConflictError("Room serves another enterprise", {
-          roomIds: foreign.map((row: { room_id: number }) => Number(row.room_id)),
+      if (outsidePool.length) {
+        throw new ConflictError("Room is not in this enterprise's room pool", {
+          roomIds: outsidePool.map((row: { room_id: number }) => Number(row.room_id)),
         });
       }
     }
@@ -578,16 +582,19 @@ export async function setQueueGroupRooms(input: {
   return summary;
 }
 
-/** Every room this enterprise may route a queue to: its own, plus unassigned. */
+/**
+ * Every room this enterprise may route a queue to: its room pool
+ * (room_enterprises), not "unassigned rooms" — a room has to be given to the
+ * enterprise from the Rooms admin page before any of its queues can use it.
+ */
 export async function assignableRooms(
   enterpriseId: number,
 ): Promise<Array<{ id: number; name: string; queueGroupId: number | null }>> {
   const { rows } = await pool.query(
     `SELECT r.id, r.name, rqg.queue_group_id
        FROM rooms r
+       JOIN room_enterprises re ON re.room_id = r.id AND re.enterprise_id = $1
        LEFT JOIN room_queue_groups rqg ON rqg.room_id = r.id
-       LEFT JOIN queue_groups qg ON qg.id = rqg.queue_group_id
-      WHERE rqg.room_id IS NULL OR qg.enterprise_id = $1
       ORDER BY r.name ASC`,
     [enterpriseId],
   );

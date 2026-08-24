@@ -15,16 +15,14 @@ import {
   requireRoomListAccess,
 } from "./contextual-access.js";
 import { listManageableQueueGroups } from "./group-merge.js";
-import { queueGroupEnterpriseId } from "./groups.js";
 import { scheduleTopUp } from "./pump.js";
 import {
-  assignQueueGroupBody,
+  assignRoomEnterpriseBody,
   challengeIdParam,
   createRoomBody,
   enqueueChallengeBody,
   queueSettingsBody,
   roomIdParam,
-  roomQueueGroupParam,
   roomQueueStateBody,
   updateRoomBody,
 } from "./schemas.js";
@@ -178,98 +176,157 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
     },
   );
 
+  // ── room -> enterprise pool assignment (H46) ────────────────────────────
+  // A room belongs to an enterprise's room pool; which of that enterprise's
+  // queues (if it runs more than one) the room actually serves is a separate,
+  // queue-scoped decision made from that queue's own page (Judging queues ->
+  // a queue -> Rooms), reachable by admins and the enterprise's own reps.
+  // Global-admin only: assigning a room to a company is a venue-planning
+  // call, not a judging-configuration one.
   typed.post(
-    "/api/queue/rooms/:roomId/queue-group",
+    "/api/queue/rooms/:roomId/enterprise",
     {
       preHandler: [requireCapability(CAPABILITIES.QUEUE_ADMIN), idempotencyGuard],
       config: { routeAccessPolicy: { kind: "capability", capability: CAPABILITIES.QUEUE_ADMIN } },
       schema: {
         params: roomIdParam,
-        body: assignQueueGroupBody,
-        summary: "Assign a room to a queue group",
+        body: assignRoomEnterpriseBody,
+        summary: "Assign a room to an enterprise's room pool",
         description:
-          "Points the room at the enterprise queue group it serves, replacing any previous assignment (a room serves one group at a time). The room's enterprise, callable challenges and judges all follow from the group. Global-admin only — sponsor representatives manage their queue group's challenges and judges, but not which rooms serve it.",
+          "Puts the room in the enterprise's room pool, replacing any previous enterprise (a room belongs to one enterprise at a time). If the enterprise runs exactly one queue, the room is also wired to serve it automatically; if it runs none or several, no queue is auto-assigned — that is decided per-queue from Judging queues instead. Global-admin only.",
       },
     },
     async (req, reply) => {
       const { roomId } = req.params;
-      const { queueGroupId } = req.body;
-      const enterpriseId = await queueGroupEnterpriseId(pool, queueGroupId);
-      if (enterpriseId == null) {
-        throw new NotFoundError("Queue group not found", { queueGroupId });
-      }
+      const { enterpriseId } = req.body;
+      const enterprise = (
+        await pool.query(`SELECT id FROM enterprises WHERE id = $1`, [enterpriseId])
+      ).rows[0];
+      if (!enterprise) throw new NotFoundError("Enterprise not found", { enterpriseId });
 
-      await withTransaction(async (client) => {
+      const result = await withTransaction(async (client) => {
         const room = (await client.query(`SELECT id FROM rooms WHERE id = $1 FOR UPDATE`, [roomId]))
           .rows[0];
         if (!room) throw new NotFoundError("Room not found", { roomId });
-        const before = (
-          await client.query(`SELECT * FROM room_queue_groups WHERE room_id = $1 FOR UPDATE`, [
+
+        const beforePool = (
+          await client.query(`SELECT * FROM room_enterprises WHERE room_id = $1 FOR UPDATE`, [
             roomId,
           ])
         ).rows[0];
-
         await client.query(
-          `INSERT INTO room_queue_groups (room_id, queue_group_id, assigned_by)
+          `INSERT INTO room_enterprises (room_id, enterprise_id, assigned_by)
            VALUES ($1, $2, $3)
            ON CONFLICT (room_id) DO UPDATE
-             SET queue_group_id = EXCLUDED.queue_group_id,
+             SET enterprise_id = EXCLUDED.enterprise_id,
                  assigned_by = EXCLUDED.assigned_by,
                  assigned_at = now()`,
-          [roomId, queueGroupId, req.userId],
+          [roomId, enterpriseId, req.userId],
         );
         await audit(client, {
           actorId: req.userId,
           entityType: "room",
           entityId: roomId,
-          action: "assign_queue_group",
-          before,
-          after: { roomId, queueGroupId, enterpriseId },
+          action: "assign_enterprise",
+          before: beforePool,
+          after: { roomId, enterpriseId },
           ...auditRequest(req),
         });
+
+        // Auto-resolve the serving queue only when it is unambiguous.
+        const groups = (
+          await client.query(`SELECT id FROM queue_groups WHERE enterprise_id = $1 ORDER BY id`, [
+            enterpriseId,
+          ])
+        ).rows;
+        const beforeServing = (
+          await client.query(`SELECT * FROM room_queue_groups WHERE room_id = $1 FOR UPDATE`, [
+            roomId,
+          ])
+        ).rows[0];
+        const queueGroupId = groups.length === 1 ? Number(groups[0].id) : null;
+
+        if (queueGroupId != null) {
+          await client.query(
+            `INSERT INTO room_queue_groups (room_id, queue_group_id, assigned_by)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (room_id) DO UPDATE
+               SET queue_group_id = EXCLUDED.queue_group_id,
+                   assigned_by = EXCLUDED.assigned_by,
+                   assigned_at = now()`,
+            [roomId, queueGroupId, req.userId],
+          );
+        } else if (beforeServing) {
+          // Ambiguous (0 or >1 queues) — clear a stale serving link rather
+          // than leave the room pointed at a queue outside its new pool.
+          await client.query(`DELETE FROM room_queue_groups WHERE room_id = $1`, [roomId]);
+        }
+        if (Number(beforeServing?.queue_group_id) !== queueGroupId) {
+          await audit(client, {
+            actorId: req.userId,
+            entityType: "room",
+            entityId: roomId,
+            action: queueGroupId != null ? "assign_queue_group" : "remove_queue_group",
+            before: beforeServing,
+            after: queueGroupId != null ? { roomId, queueGroupId, enterpriseId } : undefined,
+            ...auditRequest(req),
+          });
+        }
+        return { roomId, enterpriseId, queueGroupId };
       });
-      // The room's callable set just changed; fill its waiting area from the
-      // group it now serves rather than waiting for the next tick.
-      await scheduleTopUp(roomId);
+      // The room's callable set may have just changed; fill its waiting area
+      // from the group it now serves rather than waiting for the next tick.
+      if (result.queueGroupId != null) await scheduleTopUp(roomId);
       reply.code(201);
-      return { roomId, queueGroupId, enterpriseId };
+      return result;
     },
   );
 
   typed.delete(
-    "/api/queue/rooms/:roomId/queue-group/:queueGroupId",
+    "/api/queue/rooms/:roomId/enterprise",
     {
       preHandler: requireCapability(CAPABILITIES.QUEUE_ADMIN),
       config: { routeAccessPolicy: { kind: "capability", capability: CAPABILITIES.QUEUE_ADMIN } },
       schema: {
-        params: roomQueueGroupParam,
-        summary: "Unassign a room from its queue group",
+        params: roomIdParam,
+        summary: "Remove a room from its enterprise's room pool",
         description:
-          "Leaves the room serving nothing: it stops being callable for the group's challenges and grants no contextual access. Same permissions as assigning it.",
+          "Takes the room out of its enterprise's pool and, if it was serving a queue, stops it from serving that too — a room outside an enterprise's pool cannot be pointed at one of its queues. Same permissions as assigning it.",
       },
     },
     async (req) => {
-      const { roomId, queueGroupId } = req.params;
-      const enterpriseId = await queueGroupEnterpriseId(pool, queueGroupId);
-      if (enterpriseId == null) {
-        throw new NotFoundError("Queue group not found", { queueGroupId });
-      }
-
+      const { roomId } = req.params;
       await withTransaction(async (client) => {
-        const before = (
-          await client.query(
-            `DELETE FROM room_queue_groups WHERE room_id = $1 AND queue_group_id = $2 RETURNING *`,
-            [roomId, queueGroupId],
-          )
+        const beforePool = (
+          await client.query(`SELECT * FROM room_enterprises WHERE room_id = $1 FOR UPDATE`, [
+            roomId,
+          ])
         ).rows[0];
+        const beforeServing = (
+          await client.query(`SELECT * FROM room_queue_groups WHERE room_id = $1 FOR UPDATE`, [
+            roomId,
+          ])
+        ).rows[0];
+        await client.query(`DELETE FROM room_queue_groups WHERE room_id = $1`, [roomId]);
+        await client.query(`DELETE FROM room_enterprises WHERE room_id = $1`, [roomId]);
         await audit(client, {
           actorId: req.userId,
           entityType: "room",
           entityId: roomId,
-          action: "remove_queue_group",
-          before,
+          action: "remove_enterprise",
+          before: beforePool,
           ...auditRequest(req),
         });
+        if (beforeServing) {
+          await audit(client, {
+            actorId: req.userId,
+            entityType: "room",
+            entityId: roomId,
+            action: "remove_queue_group",
+            before: beforeServing,
+            ...auditRequest(req),
+          });
+        }
       });
       return { ok: true };
     },

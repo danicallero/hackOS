@@ -2,7 +2,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { requireAuth, requireCapability } from "../../lib/capabilities.js";
+import { requireAnyCapability, requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { BadRequestError, ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
 import { routeAccessOption as access } from "../../lib/route-policy.js";
 import { putObject } from "../../lib/storage.js";
@@ -79,11 +79,15 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
   r.get(
     "/api/enterprises",
     {
-      ...access({ kind: "capability", capability: CAPABILITIES.SPONSORS_MANAGE }),
-      preHandler: manage,
+      ...access({
+        kind: "capability",
+        anyOf: [CAPABILITIES.SPONSORS_MANAGE, CAPABILITIES.QUEUE_ADMIN],
+      }),
+      preHandler: requireAnyCapability(CAPABILITIES.SPONSORS_MANAGE, CAPABILITIES.QUEUE_ADMIN),
       schema: {
         summary: "List enterprises",
-        description: "Lists all sponsor enterprises for global sponsor administrators (H43).",
+        description:
+          "Lists all sponsor enterprises, for global sponsor administrators and the Rooms admin page's enterprise picker (H43, H46).",
       },
     },
     async () => ({

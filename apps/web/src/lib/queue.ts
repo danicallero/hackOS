@@ -6,6 +6,7 @@
 import type { Question } from "@hackos/shared/questions";
 import type { TranslatedText } from "@/app/(app)/challenges/shared";
 import { api } from "./api";
+import type { EnterpriseSummary } from "./types";
 
 /** Physical stages a team moves through (plan §5; queue_entries.status). */
 export type QueueStatus =
@@ -189,9 +190,23 @@ export interface RoomQueueGroupAssignment {
   assigned_by_email: string | null;
 }
 
+/** The enterprise a room's pool belongs to; null when the room is unassigned. */
+export interface RoomEnterpriseAssignment {
+  enterprise_id: number;
+  enterprise_name: string;
+  assigned_at: string;
+  assigned_by: number | null;
+  assigned_by_name: string | null;
+  assigned_by_surname: string | null;
+  assigned_by_email: string | null;
+}
+
 export interface RoomAssignments {
   roomId: number;
   room: Room;
+  /** Which enterprise's room pool the room belongs to (H46, 0413). */
+  enterprise: RoomEnterpriseAssignment | null;
+  /** Which of that enterprise's queues the room currently serves, if any. */
   queueGroup: RoomQueueGroupAssignment | null;
   /** Every challenge the room judges, via its queue group. */
   challenges: RoomChallengeAssignment[];
@@ -414,10 +429,21 @@ export const updateQueueSettings = (body: {
 /** Every queue the caller may manage, across enterprises. */
 export const listQueueGroups = () =>
   api.get<{ groups: QueueGroup[] }>("/api/queue/groups").then((r) => r.groups);
-export const assignRoomQueueGroup = (roomId: number, queueGroupId: number) =>
-  api.post(`/api/queue/rooms/${roomId}/queue-group`, { queueGroupId });
-export const removeRoomQueueGroup = (roomId: number, queueGroupId: number) =>
-  api.delete(`/api/queue/rooms/${roomId}/queue-group/${queueGroupId}`);
+/** Every enterprise, for the Rooms admin page's enterprise picker (H46). */
+export const listEnterprises = () =>
+  api.get<{ enterprises: EnterpriseSummary[] }>("/api/enterprises").then((r) => r.enterprises);
+export const assignRoomEnterprise = (
+  roomId: number,
+  enterpriseId: number,
+  idempotencyKey?: string,
+) =>
+  api.post<{ roomId: number; enterpriseId: number; queueGroupId: number | null }>(
+    `/api/queue/rooms/${roomId}/enterprise`,
+    { enterpriseId },
+    idem(idempotencyKey),
+  );
+export const removeRoomEnterprise = (roomId: number) =>
+  api.delete(`/api/queue/rooms/${roomId}/enterprise`);
 export const enqueueAllChallengeQueues = (idempotencyKey?: string) =>
   api.post<{
     challenges: Array<{ challengeId: number; inserted: number; alreadyQueued: number }>;

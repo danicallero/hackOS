@@ -18,6 +18,7 @@ import {
   createRoom,
   enqueueRepo,
   mergeChallengesIntoOneGroup,
+  poolRoomToEnterprise,
   queueGroupOf,
 } from "./fixtures.js";
 
@@ -262,60 +263,60 @@ describe("merged N>1 group", () => {
   });
 });
 
-describe("room -> queue group assignment access", () => {
+describe("room -> enterprise pool assignment access (0413)", () => {
   it("is admin-only: refuses even the owning enterprise's rep", async () => {
     const { enterpriseId, repId, challengeIds } = await createEnterpriseChallenges(1);
     const groupId = await queueGroupOf(challengeIds[0]!);
     const roomId = await createRoom();
 
     // A sponsor rep manages their own queue group's challenges and judges,
-    // but not which rooms serve it — that stays an admin call (H46).
+    // but not which rooms are pooled into their enterprise — that stays an
+    // admin call (H46).
     const asRep = await app.inject({
       method: "POST",
-      url: `/api/queue/rooms/${roomId}/queue-group`,
+      url: `/api/queue/rooms/${roomId}/enterprise`,
       headers: asUser(repId),
-      payload: { queueGroupId: groupId },
+      payload: { enterpriseId },
     });
     expect(asRep.statusCode).toBe(403);
 
     const asAdmin = await app.inject({
       method: "POST",
-      url: `/api/queue/rooms/${roomId}/queue-group`,
+      url: `/api/queue/rooms/${roomId}/enterprise`,
       headers: asUser(adminId),
-      payload: { queueGroupId: groupId },
+      payload: { enterpriseId },
     });
     expect(asAdmin.statusCode).toBe(201);
-    expect(asAdmin.json().enterpriseId).toBe(enterpriseId);
+    expect(asAdmin.json()).toEqual({ roomId, enterpriseId, queueGroupId: groupId });
   });
 
   it("unassignment is admin-only too", async () => {
-    const { repId, challengeIds } = await createEnterpriseChallenges(1);
-    const groupId = await queueGroupOf(challengeIds[0]!);
+    const { enterpriseId, repId } = await createEnterpriseChallenges(1);
     const roomId = await createRoom();
-    await assignQueueGroupToRoom(roomId, groupId);
+    await poolRoomToEnterprise(roomId, enterpriseId);
 
     const asRep = await app.inject({
       method: "DELETE",
-      url: `/api/queue/rooms/${roomId}/queue-group/${groupId}`,
+      url: `/api/queue/rooms/${roomId}/enterprise`,
       headers: asUser(repId),
     });
     expect(asRep.statusCode).toBe(403);
 
     const asAdmin = await app.inject({
       method: "DELETE",
-      url: `/api/queue/rooms/${roomId}/queue-group/${groupId}`,
+      url: `/api/queue/rooms/${roomId}/enterprise`,
       headers: asUser(adminId),
     });
     expect(asAdmin.statusCode).toBe(200);
   });
 
-  it("404s on an unknown queue group", async () => {
+  it("404s on an unknown enterprise", async () => {
     const roomId = await createRoom();
     const res = await app.inject({
       method: "POST",
-      url: `/api/queue/rooms/${roomId}/queue-group`,
+      url: `/api/queue/rooms/${roomId}/enterprise`,
       headers: asUser(adminId),
-      payload: { queueGroupId: 999_999 },
+      payload: { enterpriseId: 999_999 },
     });
     expect(res.statusCode).toBe(404);
   });

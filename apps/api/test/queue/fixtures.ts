@@ -96,9 +96,21 @@ export async function createRoom(
 /**
  * Point a room at the queue group the challenge feeds — the room->challenge
  * link now goes through `room_queue_groups`. Every challenge has exactly one
- * group (0410), so this remains "assign this challenge to this room".
+ * group (0410), so this remains "assign this challenge to this room". Also
+ * pools the room into the challenge's enterprise (`room_enterprises`, 0413):
+ * a room may only serve a queue_group belonging to the enterprise it is
+ * pooled into, enforced by `room_queue_groups_enterprise_guard`.
  */
 export async function assignChallengeToRoom(roomId: number, challengeId: number): Promise<void> {
+  await pool.query(
+    `INSERT INTO room_enterprises (room_id, enterprise_id)
+     SELECT $1, qg.enterprise_id
+       FROM queue_group_challenges qgc
+       JOIN queue_groups qg ON qg.id = qgc.queue_group_id
+      WHERE qgc.challenge_id = $2
+     ON CONFLICT (room_id) DO UPDATE SET enterprise_id = EXCLUDED.enterprise_id`,
+    [roomId, challengeId],
+  );
   await pool.query(
     `INSERT INTO room_queue_groups (room_id, queue_group_id)
      SELECT $1, qgc.queue_group_id FROM queue_group_challenges qgc WHERE qgc.challenge_id = $2
@@ -116,12 +128,38 @@ export async function queueGroupOf(challengeId: number): Promise<number> {
   return Number(rows[0].queue_group_id);
 }
 
-/** Assign a room directly to a queue group (for merged, N>1 group tests). */
-export async function assignQueueGroupToRoom(roomId: number, queueGroupId: number): Promise<void> {
+/**
+ * Assign a room directly to a queue group (for merged, N>1 group tests).
+ * Pools the room into the group's enterprise first (0413's guard requires
+ * it) unless `skipPooling` is set, for tests that specifically exercise the
+ * guard by pooling the room elsewhere first.
+ */
+export async function assignQueueGroupToRoom(
+  roomId: number,
+  queueGroupId: number,
+  options: { skipPooling?: boolean } = {},
+): Promise<void> {
+  if (!options.skipPooling) {
+    await pool.query(
+      `INSERT INTO room_enterprises (room_id, enterprise_id)
+       SELECT $1, qg.enterprise_id FROM queue_groups qg WHERE qg.id = $2
+       ON CONFLICT (room_id) DO UPDATE SET enterprise_id = EXCLUDED.enterprise_id`,
+      [roomId, queueGroupId],
+    );
+  }
   await pool.query(
     `INSERT INTO room_queue_groups (room_id, queue_group_id) VALUES ($1, $2)
      ON CONFLICT (room_id) DO UPDATE SET queue_group_id = EXCLUDED.queue_group_id`,
     [roomId, queueGroupId],
+  );
+}
+
+/** Pool a room into an enterprise (`room_enterprises`, 0413) without touching its serving queue. */
+export async function poolRoomToEnterprise(roomId: number, enterpriseId: number): Promise<void> {
+  await pool.query(
+    `INSERT INTO room_enterprises (room_id, enterprise_id) VALUES ($1, $2)
+     ON CONFLICT (room_id) DO UPDATE SET enterprise_id = EXCLUDED.enterprise_id`,
+    [roomId, enterpriseId],
   );
 }
 

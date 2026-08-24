@@ -30,19 +30,19 @@ import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import {
-  assignRoomQueueGroup,
+  assignRoomEnterprise,
   createRoom,
   deleteRoom,
   getRoomAssignments,
-  listQueueGroups,
+  listEnterprises,
   listRooms,
-  type QueueGroup,
   type Room,
   type RoomAssignments,
-  removeRoomQueueGroup,
+  removeRoomEnterprise,
   updateRoom,
 } from "@/lib/queue";
 import { useSessionContext } from "@/lib/session";
+import type { EnterpriseSummary } from "@/lib/types";
 import { AssignmentsEditor } from "./room-panels";
 
 type RoomEditor = {
@@ -64,7 +64,7 @@ export default function QueueRoomsPage() {
   const canAdmin = can(CAPABILITIES.QUEUE_ADMIN);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [assignments, setAssignments] = useState<Record<number, RoomAssignments | null>>({});
-  const [queueGroups, setQueueGroups] = useState<QueueGroup[]>([]);
+  const [enterprises, setEnterprises] = useState<EnterpriseSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedRoomId, setSelectedRoomId] = useState<number | null>(null);
@@ -89,9 +89,9 @@ export default function QueueRoomsPage() {
     setLoading(true);
     setLoadError(null);
     try {
-      const [roomRows, groupRows] = await Promise.all([listRooms(), listQueueGroups()]);
+      const [roomRows, enterpriseRows] = await Promise.all([listRooms(), listEnterprises()]);
       setRooms(roomRows);
-      setQueueGroups(groupRows);
+      setEnterprises(enterpriseRows);
       setCreateDraft((draft) => (draft.name ? draft : { ...emptyRoomEditor() }));
     } catch (err) {
       const message = err instanceof ApiError ? err.message : t("couldNotLoadRoomAdminData");
@@ -489,16 +489,15 @@ export default function QueueRoomsPage() {
               <AssignmentsEditor
                 roomId={selectedRoom.id}
                 assignments={selectedRoomAssignments}
-                queueGroups={queueGroups}
-                onSetQueueGroup={async (queueGroupId) => {
-                  await assignRoomQueueGroup(selectedRoom.id, queueGroupId);
+                enterprises={enterprises}
+                onSetEnterprise={async (enterpriseId) => {
+                  await assignRoomEnterprise(selectedRoom.id, enterpriseId, crypto.randomUUID());
                   await loadRoomDetails(selectedRoom.id);
                 }}
-                onClearQueueGroup={async (queueGroupId) => {
-                  await removeRoomQueueGroup(selectedRoom.id, queueGroupId);
+                onClearEnterprise={async () => {
+                  await removeRoomEnterprise(selectedRoom.id);
                   await loadRoomDetails(selectedRoom.id);
                 }}
-                canSetQueueGroup={queueGroups.length > 0}
               />
             </SectionCard>
           </div>

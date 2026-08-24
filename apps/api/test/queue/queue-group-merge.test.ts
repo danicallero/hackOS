@@ -10,6 +10,7 @@ import {
   truncateAll,
 } from "../helpers.js";
 import {
+  assignQueueGroupToRoom,
   createEnterpriseChallenges,
   createRepoWithTeam,
   createRoom,
@@ -142,14 +143,8 @@ describe("merging challenges into a shared queue", () => {
     const [first, second] = challengeIds as [number, number];
     const roomA = await createRoom();
     const roomB = await createRoom();
-    await pool.query(`INSERT INTO room_queue_groups (room_id, queue_group_id) VALUES ($1, $2)`, [
-      roomA,
-      await queueGroupOf(first),
-    ]);
-    await pool.query(`INSERT INTO room_queue_groups (room_id, queue_group_id) VALUES ($1, $2)`, [
-      roomB,
-      await queueGroupOf(second),
-    ]);
+    await assignQueueGroupToRoom(roomA, await queueGroupOf(first));
+    await assignQueueGroupToRoom(roomB, await queueGroupOf(second));
 
     const body = (await merge(enterpriseId, challengeIds, "Shared")).json();
     expect(body.rooms.map((r: { id: number }) => r.id).sort()).toEqual([roomA, roomB].sort());
@@ -334,14 +329,10 @@ describe("the all-queues listing", () => {
   });
 
   it("names the rooms serving each queue", async () => {
-    const { pool } = await import("../../src/db/pool.js");
     const { enterpriseId, challengeIds } = await createEnterpriseChallenges(2);
     const roomId = await createRoom({ name: "Sala A" });
     const body = (await merge(enterpriseId, challengeIds, "Shared")).json();
-    await pool.query(`INSERT INTO room_queue_groups (room_id, queue_group_id) VALUES ($1, $2)`, [
-      roomId,
-      body.id,
-    ]);
+    await assignQueueGroupToRoom(roomId, body.id);
 
     const res = await app.inject({
       method: "GET",
@@ -369,10 +360,7 @@ describe("reading a queue in order", () => {
     await enqueueRepo(first, waiting.repoId, 3);
 
     const group = (await merge(enterpriseId, challengeIds, "Shared")).json();
-    await pool.query(`INSERT INTO room_queue_groups (room_id, queue_group_id) VALUES ($1, $2)`, [
-      roomId,
-      group.id,
-    ]);
+    await assignQueueGroupToRoom(roomId, group.id);
     await pool.query(
       `UPDATE queue_entries SET status = 'presenting', assigned_room_id = $2 WHERE id = $1`,
       [presentingEntry, roomId],
@@ -570,10 +558,7 @@ describe("display name", () => {
     const { enterpriseId, challengeIds } = await createEnterpriseChallenges(2);
     const [first] = challengeIds as [number, number];
     const roomId = await createRoom();
-    await pool.query(`INSERT INTO room_queue_groups (room_id, queue_group_id) VALUES ($1, $2)`, [
-      roomId,
-      await queueGroupOf(first),
-    ]);
+    await assignQueueGroupToRoom(roomId, await queueGroupOf(first));
 
     await pool.query(`UPDATE challenges SET title = 'Renamed' WHERE id = $1`, [first]);
     expect((await roomView(roomId)).challenge?.title).toBe("Renamed");
@@ -760,11 +745,7 @@ describe("concurrency and idempotency", () => {
     await enqueueRepo(second, shared.repoId, 1);
 
     const body = (await merge(enterpriseId, challengeIds, "Shared")).json();
-    await pool.query(
-      `INSERT INTO room_queue_groups (room_id, queue_group_id) VALUES ($1, $2)
-       ON CONFLICT (room_id) DO UPDATE SET queue_group_id = EXCLUDED.queue_group_id`,
-      [roomId, body.id],
-    );
+    await assignQueueGroupToRoom(roomId, body.id);
 
     expect((await callNextForRoom(adminId, roomId))?.repo_id).toBe(shared.repoId);
     // The team's other entry is not a second call.
