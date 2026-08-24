@@ -12,6 +12,8 @@
 export const SSE_TOPICS = {
   /** everything queue/judging: entry transitions, room state (H29-H35, H41) */
   QUEUE: "queue",
+  /** collaborative review changes for one queue entry (H36) */
+  QUEUE_REVIEW_PREFIX: "queue-review:",
   /** TV mode switches (H42) */
   TV: "tv",
   /** schedule + announcements changes (H47, H50) */
@@ -20,12 +22,20 @@ export const SSE_TOPICS = {
   PUBLIC_TV: "public-tv",
   /** payload-free public invalidations caused by public-content changes */
   PUBLIC_CONTENT: "public-content",
-  /** every successful write, for keeping independent browser windows in sync */
-  GLOBAL: "global",
+  /** application and response changes (H11-H15) */
+  APPLICATIONS: "applications",
+  /** projects, repositories and imports (H16-H21) */
+  PROJECTS: "projects",
+  /** identity, invitations and permission graph changes (H7-H10) */
+  IDENTITY: "identity",
+  /** authenticated sponsor, enterprise and challenge changes (H43-H46) */
+  SPONSORS: "sponsors",
   /** accreditation, presence, meals and wallet updates (H22-H28) */
   LOGISTICS: "logistics",
   /** staff export/deletion request workflow admin dashboard (H54) */
   EXPORTS: "exports",
+  /** audit log changes (H53) */
+  AUDIT: "audit",
   /** per-user channel, suffixed with the user id: `user:42` (H31, H38) */
   USER_PREFIX: "user:",
 } as const;
@@ -44,13 +54,17 @@ export interface SseEnvelope<T = unknown> {
 export const EVENTS = {
   QUEUE_ENTRY_CHANGED: "queue.entry.status_changed", // any queue_entries transition
   QUEUE_ROOM_CHANGED: "queue.room.state_changed", // pause/resume/settings
+  QUEUE_REVIEW_CHANGED: "queue.review.changed", // H36 collaborative review save
   QUEUE_NOTIFY_ENTER: "queue.entry.notify_enter", // H31
   QUEUE_TEAM_CALLED: "queue.entry.team_called", // H29/H38, operator-facing echo of a "called" transition
   TV_MODE_CHANGED: "tv.mode.changed", // H42, also fired when a timetable slot takes over
   TV_SCHEDULE_CHANGED: "tv.schedule.changed", // H42: the tv_slots timetable was edited
-  CONTENT_SCHEDULE_CHANGED: "content.schedule.changed", // H47
-  CONTENT_ANNOUNCEMENT: "content.announcement", // H50
-  DATA_CHANGED: "data.changed", // successful mutation anywhere in the API
+  CONTENT_SCHEDULE_CHANGED: "content.schedule.changed", // H47 operational content event
+  CONTENT_ANNOUNCEMENT: "content.announcement", // H50 operational content event
+  /** Payload-free invalidation used only on public mirror topics. */
+  DATA_CHANGED: "data.changed",
+  /** Payload-free refresh signal on a domain-scoped authenticated topic. */
+  DOMAIN_CHANGED: "domain.changed",
   LOGISTICS_ACCREDITED: "logistics.accreditation.checked_in", // H22
   LOGISTICS_BADGE_ROTATED: "logistics.badge.rotated", // H23/H28
   LOGISTICS_PRESENCE_SCAN: "logistics.presence.scan", // H24

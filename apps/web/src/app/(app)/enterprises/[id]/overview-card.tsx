@@ -57,7 +57,7 @@ export function EnterpriseOverviewCard({
   const [memberCount, setMemberCount] = useState<number | null>(canManage ? null : 0);
   const [memberError, setMemberError] = useState(false);
   const isOwnEnterprise = !canManage && Boolean(me?.isSponsorRep);
-  const liveRefresh = useAutoRefresh("/api/events/stream", [EVENTS.DATA_CHANGED]);
+  const liveRefresh = useAutoRefresh("/api/events/stream?topic=sponsors", [EVENTS.DOMAIN_CHANGED]);
 
   const loadChallenges = useCallback(async () => {
     if (!canManage && !isOwnEnterprise) {

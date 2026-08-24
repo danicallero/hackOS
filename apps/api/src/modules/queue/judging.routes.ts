@@ -1,8 +1,10 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { SSE_TOPICS } from "@hackos/shared/events";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { requireCapability } from "../../lib/capabilities.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
+import { subscribe } from "../../lib/sse.js";
 import { actor } from "./actor.js";
 import {
   requireChallengeExport,
@@ -67,6 +69,28 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
       schema: { params: entryIdParam },
     },
     async (req) => getAttemptReview(req.params.entryId),
+  );
+
+  typed.get(
+    "/api/queue/entries/:entryId/stream",
+    {
+      preHandler: judgePanel,
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "queue-entry-judge",
+          resource: { source: "params", field: "entryId" },
+        },
+      },
+      schema: {
+        params: entryIdParam,
+        summary: "Collaborative judging stream for one queue entry",
+        description:
+          "Authenticated, entry-scoped SSE invalidations for collaborative judging. The client refetches the review and active judge sessions; no review payload crosses the stream.",
+      },
+    },
+    async (req, reply) =>
+      subscribe(`${SSE_TOPICS.QUEUE_REVIEW_PREFIX}${req.params.entryId}`, reply),
   );
 
   // H36: field-level last-write-wins collaborative save; every save versioned.

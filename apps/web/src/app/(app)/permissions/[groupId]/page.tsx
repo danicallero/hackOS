@@ -172,7 +172,7 @@ export default function PermissionGroupDetailPage() {
   // details edit in progress, since `load` -> `applyGroup` would silently
   // discard it (reset `caps` and the details form to the server's values).
   const dirtyRef = useRef(false);
-  const liveRefresh = useAutoRefresh("/api/events/stream", [EVENTS.DATA_CHANGED]);
+  const liveRefresh = useAutoRefresh("/api/events/stream?topic=identity", [EVENTS.DOMAIN_CHANGED]);
   const isFirstLiveRefresh = useRef(true);
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {

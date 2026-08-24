@@ -95,6 +95,23 @@ describe("queue contextual isolation", () => {
         })
       ).statusCode,
     ).toBe(403);
+    const assignedReviewStream = await app.inject({
+      method: "GET",
+      url: `/api/queue/entries/${entryA}/stream`,
+      headers: asUser(judge),
+      payloadAsStream: true,
+    });
+    expect(assignedReviewStream.statusCode).toBe(200);
+    assignedReviewStream.stream().destroy();
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/queue/entries/${entryB}/stream`,
+          headers: asUser(judge),
+        })
+      ).statusCode,
+    ).toBe(403);
     expect(
       (
         await app.inject({
@@ -195,13 +212,41 @@ describe("queue contextual isolation", () => {
   it("rejects anonymous and unprivileged operational streams but permits authorized operators", async () => {
     const ordinary = await createUser();
     const operator = await createUserWithCapabilities([CAPABILITIES.QUEUE_OPERATE]);
+    const auditReader = await createUserWithCapabilities([CAPABILITIES.AUDIT_READ]);
+    const logisticsReader = await createUserWithCapabilities([CAPABILITIES.LOGISTICS_STATS]);
 
     expect((await app.inject({ method: "GET", url: "/api/queue/stream" })).statusCode).toBe(401);
     expect(
       (await app.inject({ method: "GET", url: "/api/queue/stream", headers: asUser(ordinary) }))
         .statusCode,
     ).toBe(403);
-    expect((await app.inject({ method: "GET", url: "/api/events/stream" })).statusCode).toBe(401);
+    expect(
+      (await app.inject({ method: "GET", url: "/api/events/stream?topic=applications" }))
+        .statusCode,
+    ).toBe(401);
+    expect((await app.inject({ method: "GET", url: "/api/events/stream" })).statusCode).toBe(400);
+    expect(
+      (await app.inject({ method: "GET", url: "/api/events/stream?topic=not-a-domain" }))
+        .statusCode,
+    ).toBe(400);
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: "/api/events/stream?topic=audit",
+          headers: asUser(ordinary),
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: "/api/events/stream?topic=logistics",
+          headers: asUser(ordinary),
+        })
+      ).statusCode,
+    ).toBe(403);
 
     const queueStream = await app.inject({
       method: "GET",
@@ -214,12 +259,26 @@ describe("queue contextual isolation", () => {
 
     const eventsStream = await app.inject({
       method: "GET",
-      url: "/api/events/stream",
+      url: "/api/events/stream?topic=applications",
       headers: asUser(ordinary),
       payloadAsStream: true,
     });
     expect(eventsStream.statusCode).toBe(200);
     eventsStream.stream().destroy();
+
+    for (const [user, topic] of [
+      [auditReader, "audit"],
+      [logisticsReader, "logistics"],
+    ] as const) {
+      const stream = await app.inject({
+        method: "GET",
+        url: `/api/events/stream?topic=${topic}`,
+        headers: asUser(user),
+        payloadAsStream: true,
+      });
+      expect(stream.statusCode).toBe(200);
+      stream.stream().destroy();
+    }
   });
 
   it("returns a sanitized public TV snapshot and keeps public invalidation streams anonymous", async () => {

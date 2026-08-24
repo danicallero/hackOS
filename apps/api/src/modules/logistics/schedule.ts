@@ -171,7 +171,6 @@ function assertScanRequiresParticipantAudience(
 
 export async function emitScheduleChanged(data: unknown) {
   await broadcast(SSE_TOPICS.CONTENT, EVENTS.CONTENT_SCHEDULE_CHANGED, data);
-  await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.CONTENT_SCHEDULE_CHANGED, data);
 }
 
 /**

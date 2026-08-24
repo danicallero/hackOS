@@ -1,7 +1,6 @@
 import type { OutgoingHttpHeaders } from "node:http";
 import { EVENTS, SSE_TOPICS, type SseEnvelope } from "@hackos/shared/events";
 import type { FastifyReply } from "fastify";
-import { invalidateReadCache } from "./read-cache.js";
 import { valkey, valkeySub } from "./valkey.js";
 
 /**
@@ -27,7 +26,7 @@ export interface PublicInvalidation {
 
 /**
  * The only domain-to-public mirrors. Keep this mapping narrow: public screens
- * must not observe unrelated logistics, identity, export, or global activity.
+ * must not observe unrelated logistics, identity, export, or private activity.
  */
 export function publicInvalidationFor(topic: string): PublicInvalidation | null {
   if (topic === SSE_TOPICS.QUEUE || topic === SSE_TOPICS.TV) {
@@ -103,17 +102,10 @@ export async function broadcast<T>(
     };
     await valkey.publish(`${CHANNEL_PREFIX}${topic}`, formatSse(envelope));
     // Public walls see only their relevant, payload-free invalidation. This is
-    // intentionally separate from authenticated global refresh notifications.
+    // intentionally separate from authenticated domain refresh notifications.
     const publicInvalidation = publicInvalidationFor(topic);
     if (publicInvalidation) {
       await broadcast(publicInvalidation.topic, publicInvalidation.type, publicInvalidation.data);
-    }
-    // Worker-originated changes do not have an HTTP response, so mirror domain
-    // events into the authenticated global refresh stream. Public invalidation
-    // topics are terminal: they neither recurse into global nor into each other.
-    if (topic !== SSE_TOPICS.GLOBAL && !isPublicInvalidationTopic(topic)) {
-      await invalidateReadCache();
-      await broadcast(SSE_TOPICS.GLOBAL, EVENTS.DATA_CHANGED, { at: envelope.at });
     }
     return envelope;
   } catch (err) {

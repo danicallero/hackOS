@@ -115,7 +115,7 @@ export default function PermissionsPage() {
 
   // Soft, in-place refresh instead of a hard reload when another admin
   // creates/edits a permission group elsewhere.
-  const liveRefresh = useAutoRefresh("/api/events/stream", [EVENTS.DATA_CHANGED]);
+  const liveRefresh = useAutoRefresh("/api/events/stream?topic=identity", [EVENTS.DOMAIN_CHANGED]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {

@@ -130,13 +130,15 @@ explicitly authenticated. Anything not in this allowlist must be
 `authenticated`, `capability`, `contextual`, or `token`; there is no implicit
 public default.
 
-`GET /api/events/stream` requires authentication. `GET /api/queue/stream`
-becomes an authenticated operational stream with the appropriate queue/judging
+`GET /api/events/stream` requires authentication plus a required domain topic.
+It carries only payload-free `domain.changed` signals for the owning read
+model; it is not a global refresh stream. `GET /api/queue/stream` remains an
+authenticated operational stream with the appropriate queue/judging
 authorization. Public TV clients move to the TV stream, which broadcasts only
-payload-free queue/content change invalidations; clients refetch their public,
-sanitized TV projection after an invalidation. No operational queue payload,
-room-control detail, account identifier, or private project data may cross the
-public stream.
+payload-free queue/content/public-sponsor change invalidations; clients refetch
+their public, sanitized TV projection after an invalidation. No operational queue
+payload, room-control detail, account identifier, or private project data may
+cross the public stream.
 
 ## Authorization resolution
 

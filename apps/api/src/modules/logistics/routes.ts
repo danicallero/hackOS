@@ -238,9 +238,8 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   );
 
   // Lightweight per-role counts for the scanner home screen's stats tiles
-  // (Confirmed/Accredited/Inside) — a plain GET, so it rides the app-wide
-  // read cache instead of the operator pulling/recomputing from the full
-  // roster snapshot on every refresh.
+  // (Confirmed/Accredited/Inside) — a direct read model so the operator does
+  // not pull and recompute from the full roster snapshot on every refresh.
   typed.get(
     "/api/scanner/role-stats",
     {

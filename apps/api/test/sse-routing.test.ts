@@ -1,6 +1,7 @@
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { broadcast, publicInvalidationFor } from "../src/lib/sse.js";
+import { mutationDomainForPath, publicContentMutationForPath } from "../src/lib/sse-routing.js";
 import { valkey } from "../src/lib/valkey.js";
 
 afterAll(async () => {
@@ -19,7 +20,7 @@ describe("public SSE invalidation routing", () => {
     }
   });
 
-  it("maps content only to public-content and never mirrors public/global/unrelated domains", () => {
+  it("maps content changes only to public-content", () => {
     expect(publicInvalidationFor(SSE_TOPICS.CONTENT)).toEqual({
       topic: SSE_TOPICS.PUBLIC_CONTENT,
       type: EVENTS.DATA_CHANGED,
@@ -28,12 +29,52 @@ describe("public SSE invalidation routing", () => {
     for (const source of [
       SSE_TOPICS.LOGISTICS,
       SSE_TOPICS.EXPORTS,
-      SSE_TOPICS.GLOBAL,
+      SSE_TOPICS.APPLICATIONS,
+      SSE_TOPICS.PROJECTS,
+      SSE_TOPICS.IDENTITY,
+      SSE_TOPICS.SPONSORS,
+      SSE_TOPICS.AUDIT,
       SSE_TOPICS.PUBLIC_TV,
       SSE_TOPICS.PUBLIC_CONTENT,
     ]) {
       expect(publicInvalidationFor(source)).toBeNull();
     }
+  });
+});
+
+describe("domain mutation routing", () => {
+  it("keeps application and project changes on separate refresh topics", () => {
+    expect(mutationDomainForPath("/api/applications/12?tab=responses")).toBe(
+      SSE_TOPICS.APPLICATIONS,
+    );
+    expect(mutationDomainForPath("/api/responses/batch/decide")).toBe(SSE_TOPICS.APPLICATIONS);
+    expect(mutationDomainForPath("/api/projects/4")).toBe(SSE_TOPICS.PROJECTS);
+    expect(mutationDomainForPath("/api/me/projects/4/invites")).toBe(SSE_TOPICS.PROJECTS);
+    expect(mutationDomainForPath("/api/challenges/3/repos/bulk-add")).toBe(SSE_TOPICS.PROJECTS);
+  });
+
+  it("routes identity, sponsor and catalogue writes without treating reads as mutations", () => {
+    expect(mutationDomainForPath("/api/permission-groups/2/members")).toBe(SSE_TOPICS.IDENTITY);
+    expect(mutationDomainForPath("/api/enterprises/4/judges/9")).toBe(SSE_TOPICS.SPONSORS);
+    expect(mutationDomainForPath("/api/invites/enterprise-links/4/withdraw")).toBe(
+      SSE_TOPICS.SPONSORS,
+    );
+    expect(mutationDomainForPath("/api/challenges/3/publish")).toBe(SSE_TOPICS.SPONSORS);
+    expect(mutationDomainForPath("/api/food-intolerances/2")).toBe(SSE_TOPICS.LOGISTICS);
+    expect(mutationDomainForPath("/api/applications")).toBe(SSE_TOPICS.APPLICATIONS);
+    expect(mutationDomainForPath("/api/applicationship/2")).toBeNull();
+    expect(mutationDomainForPath("/api/unknown/write")).toBeNull();
+  });
+
+  it("keeps public-content mirrors narrower than the authenticated sponsor domain", () => {
+    expect(publicContentMutationForPath("/api/enterprises/4")).toBe(true);
+    expect(publicContentMutationForPath("/api/enterprises/visibility")).toBe(true);
+    expect(publicContentMutationForPath("/api/enterprises/4/logo")).toBe(true);
+    expect(publicContentMutationForPath("/api/enterprises/4/judges/9")).toBe(false);
+    expect(publicContentMutationForPath("/api/invites/enterprise-links/4/withdraw")).toBe(false);
+    expect(publicContentMutationForPath("/api/challenges/3/publish")).toBe(true);
+    expect(publicContentMutationForPath("/api/challenges/3/winners/1")).toBe(false);
+    expect(publicContentMutationForPath("/api/event")).toBe(false);
   });
 });
 

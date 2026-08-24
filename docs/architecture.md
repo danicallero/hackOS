@@ -121,13 +121,13 @@ is the source of truth for each.
   and nowhere else. Password-protected.
 - **State:** the `pgdata` volume — one of only two stateful pieces. Back this up.
 
-### valkey — queues, realtime, cache (ephemeral)
+### valkey — queues and realtime (ephemeral)
 - **Stack:** `valkey/valkey:8-alpine` (Redis-compatible), `requirepass`,
   **persistence off** (`--save "" --appendonly no`).
 - **Role:** three jobs, all ephemeral — (1) BullMQ queue backend for the worker
-  ticks; (2) the SSE fan-out bus (§5); (3) the sequence counters + read-cache
-  invalidation channel. Losing Valkey loses only in-flight/transient state; the
-  source of truth is always Postgres, so it recovers by re-ticking.
+  ticks; (2) the SSE fan-out bus (§5); (3) the per-topic sequence counters.
+  Losing Valkey loses only in-flight/transient state; the source of truth is
+  always Postgres, so it recovers by re-ticking and clients refetching.
 - **Networks:** `instance` only, no host ports, reachable at `valkey:6379`.
 
 ### minio — object storage
@@ -208,7 +208,7 @@ truth; everything else is derivable or ephemeral.**
 | Store | Owns | Durable? | If it's lost |
 |---|---|---|---|
 | **Postgres** | All domain state, the notification outbox (the *real* queue), audit log, sessions | Yes — back it up | Total loss; restore from snapshot |
-| **Valkey** | BullMQ scheduling, SSE pub/sub + seq counters, read-cache invalidation | No (by design) | Transient; ticks re-run, clients refetch |
+| **Valkey** | BullMQ scheduling, SSE pub/sub + per-topic sequence counters | No (by design) | Transient; ticks re-run, clients refetch |
 | **MinIO** | Uploaded files + public logos | Yes — back it up | Files gone; DB rows dangle until re-upload |
 
 This is why the worker subsystem doesn't use BullMQ's own retry/DLQ: durability
@@ -241,9 +241,12 @@ sequenceDiagram
 `broadcast()` (`src/lib/sse.ts`) `PUBLISH`es to `sse:<topic>`; every instance
 `PSUBSCRIBE`s `sse:*` and relays to its *local* connections. Envelope ids are
 monotonic per-topic Valkey `INCR` counters, so a client can detect gaps after a
-reconnect and refetch full state (the recovery contract). Worker-originated
-changes have no HTTP response, so every domain event is also mirrored into a
-global "data changed" stream that nudges clients to refetch. **The API tier is
+reconnect and refetch full state (the recovery contract). CRUD writes emit a
+payload-free `domain.changed` event only on their owning topic (`applications`,
+`projects`, `identity`, `sponsors`, `logistics`, or `audit`). Operational queue,
+TV, content, export, and per-user events keep their narrower contracts. There
+is no global refresh stream and no read-cache invalidation hook: reads come
+from Postgres, while SSE is only a scoped freshness signal. **The API tier is
 therefore stateless** — any instance can serve any SSE client.
 
 Mobile push is a different path entirely: the outbox dispatcher (worker) sends
@@ -296,8 +299,9 @@ bottleneck that keeps correctness simple. Headroom, in order of reach-for:
 1. Bigger box / more memory (the partial indexes keep the hot claim query cheap).
 2. A connection pooler (PgBouncer) once api+worker replica count pushes the
    connection count up.
-3. Read replicas — but the app already absorbs read load with the SSE-driven
-   read-cache, so this is rarely the first lever.
+3. Read replicas once the operational read models need them; the SSE-driven
+   refresh signals still keep those reads targeted, but do not pretend to be a
+   correctness cache.
 4. Partition/prune `notification_outbox` (and audit) for a very large event.
 
 **Valkey / MinIO.** Valkey is single-node and ephemeral — a hackathon never
@@ -328,6 +332,7 @@ it with naive writable replicas.
 |---|---|
 | **Raw SQL, no ORM** | Full control over the concurrency primitives the domain needs (`FOR UPDATE`, `SKIP LOCKED`, advisory locks); the "exactly one winner per transition" invariant is explicit, not hidden behind an ORM. |
 | **Durability in Postgres, BullMQ as a clock** | Keeps the single source of truth authoritative; Valkey stays disposable. Retryable work survives a Valkey wipe. |
+| **No global read cache; scoped SSE refresh** (H41-H55, issue #533) | A versioned cache invalidated by every write collapses under event load and is not a correctness boundary. Postgres reads stay authoritative; domain topics wake only related screens, while public mirrors remain payload-free. |
 | **Permissions by capability, never role** (H8) | Routes guard on `requireCapability(CAPABILITIES.X)`; the mobile app derives its tabs the same way, so a permission change applies without a reinstall (H55). |
 | **One image, three commands** | One build, one version, zero enqueue/drain drift. |
 | **Datastores off all public networks** | The perimeter is a network boundary, not per-service firewalls — nothing routes to `postgres`/`valkey`/`minio` from outside. |

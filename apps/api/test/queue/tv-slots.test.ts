@@ -234,11 +234,6 @@ describe("tv venue config (H42)", () => {
          wifi_password = EXCLUDED.wifi_password`,
     );
 
-    // Seeding by raw SQL bypasses the write path that would normally evict
-    // the GET read cache, so the first response above would otherwise stick.
-    const { invalidateReadCache } = await import("../../src/lib/read-cache.js");
-    await invalidateReadCache();
-
     const after = await app.inject({ method: "GET", url: "/api/tv/config" });
     expect(after.json()).toEqual({ wifi: { ssid: "hackos-guest", password: "s3cr3t" } });
 

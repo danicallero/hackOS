@@ -44,10 +44,6 @@ async function enableSelfCreation(): Promise<void> {
     `INSERT INTO event_config (id, participants_can_create_projects) VALUES (1, true)
      ON CONFLICT (id) DO UPDATE SET participants_can_create_projects = true`,
   );
-  // Direct SQL bypasses the API, so the GET read cache must be dropped by
-  // hand (a real PUT /api/event invalidates it via the onResponse hook).
-  const { invalidateReadCache } = await import("../../src/lib/read-cache.js");
-  await invalidateReadCache();
 }
 
 async function makeVisible(challengeId: number): Promise<void> {

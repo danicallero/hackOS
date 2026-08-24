@@ -310,11 +310,15 @@ scanner replay its offline queue after reconnecting without double-scanning.
 connected clients, so TVs and operator panels stay live across a
 horizontally-scaled API tier. Event names live in
 [`packages/shared/src/events.ts`](../packages/shared/src/events.ts), never as
-inline strings. Public/TV/content streams receive only a narrow,
-payload-free "something changed" mirror of the relevant domain event and
-refetch their own sanitized projection — they never see the operational
-payload. See `architecture.md` §5 for the fan-out diagram and
-`background-workers.md`'s "Queue and public-screen streams" section for
+inline strings. CRUD mutations emit payload-free `domain.changed` signals on
+their owning authenticated domain topic (`applications`, `projects`,
+`identity`, `sponsors`, `logistics`, or `audit`); there is no global refresh
+topic and the API deliberately has no cross-write read cache. Consumers refetch
+Postgres-backed read models after their own topic fires. Public/TV/content
+streams receive only a narrow, payload-free "something changed" mirror of the
+relevant domain event and refetch their own sanitized projection — they never
+see the operational payload. See `architecture.md` §5 for the fan-out diagram
+and `background-workers.md`'s "Queue and public-screen streams" section for
 exactly which stream sees what.
 
 ### Background work

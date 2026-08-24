@@ -136,10 +136,14 @@ idempotent ticks.
 `GET /api/queue/stream` is an authenticated operational channel: only global
 `queue:operate`, `queue:admin`, or `judge:panel` holders can subscribe because
 its events carry room-control and team details. `GET /api/events/stream` is
-also authenticated; public `/api/tv/stream` subscribes only to `public-tv`
-(mirrors `queue` and `tv`) and `/api/content/stream` only to `public-content`
-(mirrors `content`). Both mirrors use an empty `data.changed` envelope, never
-the source payload, and neither sees unrelated global/logistics/export writes.
+authenticated only when a domain topic is supplied (`applications`, `projects`,
+`identity`, `sponsors`, `logistics`, or `audit`); it carries payload-free
+`domain.changed` signals and never acts as a global refresh channel. Public
+`/api/tv/stream` subscribes only to `public-tv` (mirrors `queue` and `tv`) and
+`/api/content/stream` only to `public-content` (mirrors `content` and explicit
+public sponsor/challenge changes). Both mirrors use an empty `data.changed`
+envelope, never the source payload, and neither sees private roster, identity,
+logistics or export writes.
 A public screen refetches `/api/tv/mode`, `/api/tv/rooms`, or its public content
 projection after its relevant invalidation; it never receives operational queue,
 account, project-link, or content-management payloads over SSE.

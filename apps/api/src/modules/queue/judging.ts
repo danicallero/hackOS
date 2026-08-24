@@ -83,7 +83,7 @@ export async function upsertAttemptReview(
    */
   opts: { audit?: boolean } = {},
 ) {
-  const { review, completedEntry } = await withTransaction(async (client) => {
+  const { review, completedEntry, changed } = await withTransaction(async (client) => {
     // A submitted review is the first-evaluation boundary for queue-group
     // structure and criteria. Take the group lock before the entry lock, the
     // same order used by merge/split/update, so neither side can pass its
@@ -178,7 +178,8 @@ export async function upsertAttemptReview(
         );
     }
 
-    if (changedFields.length === 0) return { review: current, completedEntry: null }; // no-op save
+    if (changedFields.length === 0)
+      return { review: current, completedEntry: null, changed: false }; // no-op save
 
     const { rows: updatedRows } = await client.query(
       `UPDATE attempt_review SET scores = $1, notes = $2, status = $3 WHERE attempt_id = $4 RETURNING *`,
@@ -226,9 +227,14 @@ export async function upsertAttemptReview(
       }
     }
 
-    return { review: updatedRows[0], completedEntry };
+    return { review: updatedRows[0], completedEntry, changed: true };
   });
 
+  if (changed) {
+    await broadcast(`${SSE_TOPICS.QUEUE_REVIEW_PREFIX}${entryId}`, EVENTS.QUEUE_REVIEW_CHANGED, {
+      entryId,
+    });
+  }
   // One queue transition -> one broadcast (plan/07 invariant 5). The judging
   // panel's live query drops the completed team from the room on this event.
   if (completedEntry) {
@@ -261,7 +267,12 @@ export async function joinJudgingSession(entryId: number, judgeId: number, roomI
      RETURNING *`,
     [judgeId, entryId, roomId ?? null],
   );
-  if (rows.length > 0) return rows[0];
+  if (rows.length > 0) {
+    await broadcast(`${SSE_TOPICS.QUEUE_REVIEW_PREFIX}${entryId}`, EVENTS.QUEUE_REVIEW_CHANGED, {
+      entryId,
+    });
+    return rows[0];
+  }
   const existing = await pool.query(
     `SELECT * FROM judging_session WHERE judge_id = $1 AND queue_entry_id = $2 AND ended_at IS NULL`,
     [judgeId, entryId],
@@ -276,6 +287,11 @@ export async function leaveJudgingSession(entryId: number, judgeId: number) {
       RETURNING *`,
     [judgeId, entryId],
   );
+  if (rows[0]) {
+    await broadcast(`${SSE_TOPICS.QUEUE_REVIEW_PREFIX}${entryId}`, EVENTS.QUEUE_REVIEW_CHANGED, {
+      entryId,
+    });
+  }
   return rows[0] ?? null;
 }
 

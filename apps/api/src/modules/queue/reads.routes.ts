@@ -2,7 +2,14 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { SSE_TOPICS } from "@hackos/shared/events";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import { requireAnyCapability, requireAuth, requireCapability } from "../../lib/capabilities.js";
+import { z } from "zod";
+import {
+  requireAnyCapability,
+  requireAuth,
+  requireCapability,
+  userHasCapability,
+} from "../../lib/capabilities.js";
+import { ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
 import { subscribe } from "../../lib/sse.js";
 import {
   requireChallengeJudgeOrCapability,
@@ -35,6 +42,48 @@ const tvControlPolicy = {
   kind: "capability" as const,
   capability: CAPABILITIES.TV_CONTROL,
 };
+
+const scopedRefreshTopic = z.enum([
+  SSE_TOPICS.APPLICATIONS,
+  SSE_TOPICS.PROJECTS,
+  SSE_TOPICS.IDENTITY,
+  SSE_TOPICS.SPONSORS,
+  SSE_TOPICS.LOGISTICS,
+  SSE_TOPICS.AUDIT,
+]);
+const scopedRefreshQuery = z.object({ topic: scopedRefreshTopic });
+
+const logisticsRefreshCapabilities = [
+  CAPABILITIES.ACCREDIT_SCAN,
+  CAPABILITIES.PRESENCE_SCAN,
+  CAPABILITIES.ACTIVITY_SCAN,
+  CAPABILITIES.LOGISTICS_STATS,
+  CAPABILITIES.INTOLERANCES_MANAGE,
+  CAPABILITIES.SCHEDULE_MANAGE,
+] as const;
+
+async function requireScopedRefreshAccess(
+  userId: number | null,
+  topic: z.infer<typeof scopedRefreshTopic>,
+  request: Parameters<typeof userHasCapability>[2],
+): Promise<void> {
+  if (userId == null) throw new UnauthorizedError();
+  if (topic === SSE_TOPICS.AUDIT) {
+    if (!(await userHasCapability(userId, CAPABILITIES.AUDIT_READ, request))) {
+      throw new ForbiddenError(`Missing capability: ${CAPABILITIES.AUDIT_READ}`, {
+        capability: CAPABILITIES.AUDIT_READ,
+      });
+    }
+    return;
+  }
+  if (topic !== SSE_TOPICS.LOGISTICS) return;
+  for (const capability of logisticsRefreshCapabilities) {
+    if (await userHasCapability(userId, capability, request)) return;
+  }
+  throw new ForbiddenError("Missing logistics read capability", {
+    capabilities: logisticsRefreshCapabilities,
+  });
+}
 
 /** Read APIs (H38-H42): scoped queue data, TV snapshots and SSE isolation. */
 export function registerReadsRoutes(app: FastifyInstance): void {
@@ -209,15 +258,16 @@ export function registerReadsRoutes(app: FastifyInstance): void {
   typed.get(
     "/api/events/stream",
     {
-      preHandler: requireAuth,
+      preHandler: async (req) => requireScopedRefreshAccess(req.userId, req.query.topic, req),
       config: { routeAccessPolicy: { kind: "authenticated" } },
       schema: {
-        summary: "Authenticated global invalidation stream",
+        querystring: scopedRefreshQuery,
+        summary: "Authenticated domain refresh stream",
         description:
-          "Authenticated, payload-free refresh stream for signed-in clients. It does not authorize any operational resource or disclose mutation payloads.",
+          "Payload-free, domain-scoped refresh stream for signed-in clients. The topic is required; sensitive audit and logistics streams retain their capability boundary, while domain events disclose no mutation payload.",
       },
     },
-    async (_req, reply) => subscribe("global", reply),
+    async (req, reply) => subscribe(req.query.topic, reply),
   );
 
   typed.get(
