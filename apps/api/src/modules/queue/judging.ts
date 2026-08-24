@@ -5,6 +5,7 @@ import { audit } from "../../lib/audit.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
 import { resolveChallengePanel } from "./criteria-merge.js";
+import { lockQueueGroupForEntry } from "./evaluation-lock.js";
 import { writeQueueHistory } from "./history.js";
 import { REPO_MEMBER_RELATION_SQL } from "./membership.js";
 import { notifyChallengeQueueChanged } from "./notify.js";
@@ -83,6 +84,12 @@ export async function upsertAttemptReview(
   opts: { audit?: boolean } = {},
 ) {
   const { review, completedEntry } = await withTransaction(async (client) => {
+    // A submitted review is the first-evaluation boundary for queue-group
+    // structure and criteria. Take the group lock before the entry lock, the
+    // same order used by merge/split/update, so neither side can pass its
+    // evaluation check while the other commits (H46, plan/07 §2).
+    if (patch.submit) await lockQueueGroupForEntry(client, entryId);
+
     // Lock the entry row: a submit may complete the presentation (below), so
     // its status must be stable for the duration of the transaction.
     const entryRes = await client.query(

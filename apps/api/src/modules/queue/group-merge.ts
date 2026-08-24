@@ -5,7 +5,11 @@ import { audit } from "../../lib/audit.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
 import { challengePanels, mergeJudgingPanels } from "./criteria-merge.js";
-import { anyEvaluationStarted } from "./evaluation-lock.js";
+import {
+  anyEvaluationStarted,
+  lockEvaluationEntriesForChallenges,
+  lockEvaluationEntriesForGroup,
+} from "./evaluation-lock.js";
 import { compactQueueGroupPositions } from "./ordering.js";
 
 /**
@@ -159,9 +163,9 @@ export async function getQueueGroup(queueGroupId: number): Promise<QueueGroupSum
  * between an enterprise's groups and renumber positions across them, so two
  * concurrent calls on the same enterprise have to serialise; taking the locks
  * in id order means two calls touching overlapping groups can never deadlock.
- * `queue_entries` is deliberately NOT locked here — the merge is refused
- * outright while anything is out of the waiting state, so `call_next` cannot
- * be racing it for a row.
+ * Evaluation-sensitive operations then lock queue entries in id order before
+ * checking whether the first evaluation exists. Review submission takes the
+ * same group-then-entry order, so neither side can act on a stale check.
  */
 async function lockEnterpriseGroups(client: Queryable, enterpriseId: number): Promise<void> {
   await client.query(
@@ -233,6 +237,7 @@ export async function mergeQueueGroups(
   const result = await withTransaction(async (client) => {
     await lockEnterpriseGroups(client, enterpriseId);
     const challenges = await assertEnterpriseChallenges(client, enterpriseId, unique);
+    await lockEvaluationEntriesForChallenges(client, unique);
     if (await anyEvaluationStarted(client, unique)) {
       throw new ConflictError("Cannot merge queues once a team has been evaluated", {
         challengeIds,
@@ -352,6 +357,7 @@ export async function splitQueueGroup(input: {
     if (memberIds.length < 2) {
       throw new BadRequestError("Queue group is not shared", { queueGroupId });
     }
+    await lockEvaluationEntriesForChallenges(client, memberIds);
     if (await anyEvaluationStarted(client, memberIds)) {
       throw new ConflictError("Cannot split a queue once a team has been evaluated", {
         queueGroupId,
@@ -428,9 +434,14 @@ export async function updateQueueGroup(input: {
   const { queueGroupId, displayName, criteria, actorId } = input;
 
   const summary = await withTransaction(async (client) => {
-    const before = (
-      await client.query(`${GROUP_SUMMARY_SQL} WHERE qg.id = $1 FOR UPDATE OF qg`, [queueGroupId])
-    ).rows[0];
+    const locked = await client.query(`SELECT id FROM queue_groups WHERE id = $1 FOR UPDATE`, [
+      queueGroupId,
+    ]);
+    if (!locked.rowCount) throw new NotFoundError("Queue group not found", { queueGroupId });
+    if (criteria !== undefined) await lockEvaluationEntriesForGroup(client, queueGroupId);
+
+    const before = (await client.query(`${GROUP_SUMMARY_SQL} WHERE qg.id = $1`, [queueGroupId]))
+      .rows[0];
     if (!before) throw new NotFoundError("Queue group not found", { queueGroupId });
     const shared = (before.challenges as unknown[]).length > 1;
     if (!shared) {

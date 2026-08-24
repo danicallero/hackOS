@@ -180,11 +180,12 @@ The merge itself, in one transaction:
 2. **Refuses a group spanning enterprises.** The database already refuses it
    (0410's constraint trigger); the service check exists so the caller gets a
    400 instead of a `23514`.
-3. **Refuses once judging has started** — any member challenge with a
-   `queue_entries` row past `waiting` gives a 409. Both renumbering positions
-   and replacing the judging form are unsafe under a queue already being
-   called from, and this is also why the merge never needs to lock
-   `queue_entries` against `call_next`.
+3. **Locks affected queue entries, then refuses once judging has started** — a
+   submitted `attempt_review` or a `completed` entry gives a 409. Merely being
+   called or presenting does not freeze configuration. Review submission and
+   manual completion take the same queue-group-then-entry lock order, so a
+   structural edit cannot pass a stale check while the first evaluation is
+   committing.
 4. **Moves the memberships** onto the group of the lowest challenge id
    (arbitrary but stable, so a retry lands on the same group).
 5. **Hands the absorbed groups' rooms over** before deleting them. The

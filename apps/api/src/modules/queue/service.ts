@@ -5,7 +5,7 @@ import { audit } from "../../lib/audit.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
 import { notify, QUEUE_STAFF_CATEGORY } from "../notifications/service.js";
-import { anyEvaluationStarted } from "./evaluation-lock.js";
+import { anyEvaluationStarted, lockQueueGroupForEntry } from "./evaluation-lock.js";
 import { challengeQueueGroupId, roomChallengeIds } from "./groups.js";
 import { isRepoBlockedByBusyMember } from "./guard.js";
 import { writeQueueHistory } from "./history.js";
@@ -415,6 +415,9 @@ export async function completePresentation(
   actorId: number,
 ): Promise<QueueEntryRow> {
   return withTransaction(async (client) => {
+    // Manual completion is also an evaluation boundary. Match structural
+    // queue edits' group-then-entry lock order before setting `completed`.
+    await lockQueueGroupForEntry(client, entryId);
     const entry = await lockEntry(client, entryId);
     assertFrom(entry, ["presenting"], "complete");
     const res = await client.query(

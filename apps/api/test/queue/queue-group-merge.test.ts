@@ -55,6 +55,25 @@ const scale = (key: string, text: string) => ({
   max: 10,
 });
 
+async function waitForBlockedQuery(fragment: string): Promise<void> {
+  const { pool } = await import("../../src/db/pool.js");
+  const deadline = Date.now() + 2_000;
+  while (Date.now() < deadline) {
+    const { rows } = await pool.query(
+      `SELECT count(*)::int AS n
+         FROM pg_stat_activity
+        WHERE datname = current_database()
+          AND pid <> pg_backend_pid()
+          AND wait_event_type = 'Lock'
+          AND query LIKE $1`,
+      [`%${fragment}%`],
+    );
+    if (rows[0].n > 0) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`Timed out waiting for blocked query: ${fragment}`);
+}
+
 async function merge(
   enterpriseId: number,
   challengeIds: number[],
@@ -612,6 +631,57 @@ describe("splitting back apart", () => {
 });
 
 describe("concurrency and idempotency", () => {
+  it("serialises a form edit behind the first submitted evaluation", async () => {
+    const { pool } = await import("../../src/db/pool.js");
+    const { upsertAttemptReview } = await import("../../src/modules/queue/judging.js");
+    const { updateQueueGroup } = await import("../../src/modules/queue/group-merge.js");
+    const { enterpriseId, challengeIds } = await createEnterpriseChallenges(2, [
+      [scale("innovation", "Innovation")],
+      [scale("demo", "Demo quality")],
+    ]);
+    const groupId = (await merge(enterpriseId, challengeIds, "Shared")).json().id;
+    const { repoId } = await createRepoWithTeam();
+    const entryId = await enqueueRepo(challengeIds[0]!, repoId, 1);
+
+    // Hold the entry so submission can take the queue-group lock and pause.
+    // A concurrent form edit must then wait for that group lock, observe the
+    // committed submission, and fail instead of replacing its score keys.
+    const blocker = await pool.connect();
+    await blocker.query("BEGIN");
+    await blocker.query(`SELECT id FROM queue_entries WHERE id = $1 FOR UPDATE`, [entryId]);
+
+    const submitting = upsertAttemptReview(entryId, adminId, {
+      scores: { innovation: 8, demo: 7 },
+      submit: true,
+    });
+    await waitForBlockedQuery("SELECT id, challenge_id, status FROM queue_entries");
+
+    const editing = updateQueueGroup({
+      queueGroupId: groupId,
+      criteria: [scale("replacement", "Replacement")],
+      actorId: adminId,
+    });
+
+    try {
+      await waitForBlockedQuery("SELECT id FROM queue_groups WHERE id");
+    } finally {
+      await blocker.query("COMMIT");
+      blocker.release();
+    }
+
+    expect((await submitting).status).toBe("submitted");
+    await expect(editing).rejects.toThrow(/form is locked/i);
+
+    const { rows } = await pool.query(
+      `SELECT judging_panel_criteria FROM queue_groups WHERE id = $1`,
+      [groupId],
+    );
+    expect(rows[0].judging_panel_criteria.map((q: { key: string }) => q.key)).toEqual([
+      "innovation",
+      "demo",
+    ]);
+  });
+
   it("survives two admins merging the same challenges at once", async () => {
     const { pool } = await import("../../src/db/pool.js");
     const { enterpriseId, challengeIds } = await createEnterpriseChallenges(3);
