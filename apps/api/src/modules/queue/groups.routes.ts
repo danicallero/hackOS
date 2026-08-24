@@ -81,10 +81,10 @@ export function registerQueueGroupRoutes(app: FastifyInstance): void {
         body: previewMergeBody,
         summary: "Preview a merged judging form",
         description:
-          "The judging form merging these challenges would produce, without writing anything: the de-duplicated union of their questions, how many duplicates were folded away, and any question key renamed because two different questions claimed it. Feeds the review step shown before the merge is confirmed.",
+          "The judging form merging this enterprise's challenges would produce, without writing anything: the de-duplicated union of their questions, how many duplicates were folded away, and any question key renamed because two different questions claimed it. Challenges outside the authorized enterprise are refused. Feeds the review step shown before the merge is confirmed.",
       },
     },
-    async (req) => previewMergedPanel(req.body.challengeIds),
+    async (req) => previewMergedPanel(req.params.id, req.body.challengeIds),
   );
 
   typed.post(

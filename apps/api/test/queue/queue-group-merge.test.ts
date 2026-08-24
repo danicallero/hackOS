@@ -464,6 +464,24 @@ describe("judging-form merge", () => {
     expect(await queueGroupOf(challengeIds[0]!)).not.toBe(await queueGroupOf(challengeIds[1]!));
   });
 
+  it("does not preview another enterprise's private judging criteria", async () => {
+    const mine = await createEnterpriseChallenges(1, [[scale("mine", "Mine")]]);
+    const foreign = await createEnterpriseChallenges(1, [
+      [scale("foreign-secret", "Foreign private criterion")],
+    ]);
+
+    const preview = await app.inject({
+      method: "POST",
+      url: `/api/enterprises/${mine.enterpriseId}/queue-groups/preview-merge`,
+      headers: asUser(mine.repId),
+      payload: { challengeIds: [mine.challengeIds[0]!, foreign.challengeIds[0]!] },
+    });
+
+    expect(preview.statusCode).toBe(400);
+    expect(preview.body).not.toContain("Foreign private criterion");
+    expect(preview.body).not.toContain("foreign-secret");
+  });
+
   it("scores every team in the group against the one merged form", async () => {
     const { upsertAttemptReview } = await import("../../src/modules/queue/judging.js");
     const { enterpriseId, challengeIds } = await createEnterpriseChallenges(2, [

@@ -181,7 +181,8 @@ async function assertEnterpriseChallenges(
        FROM challenges c
        JOIN sponsors s ON s.id = c.author
        LEFT JOIN queue_group_challenges qgc ON qgc.challenge_id = c.id
-      WHERE c.id = ANY($1::int[])`,
+      WHERE c.id = ANY($1::int[])
+      FOR SHARE OF c, s`,
     [challengeIds],
   );
   const found = new Set(rows.map((row: { id: number }) => Number(row.id)));
@@ -587,11 +588,14 @@ export async function assignableRooms(
 }
 
 /** Preview of what merging `challengeIds` would produce, without writing. */
-export async function previewMergedPanel(challengeIds: number[]) {
-  const merged = mergeJudgingPanels(await challengePanels(pool, challengeIds));
-  return {
-    questions: merged.questions,
-    duplicatesDropped: merged.duplicatesDropped,
-    renamedKeys: merged.renamedKeys,
-  };
+export async function previewMergedPanel(enterpriseId: number, challengeIds: number[]) {
+  return withTransaction(async (client) => {
+    await assertEnterpriseChallenges(client, enterpriseId, challengeIds);
+    const merged = mergeJudgingPanels(await challengePanels(client, challengeIds));
+    return {
+      questions: merged.questions,
+      duplicatesDropped: merged.duplicatesDropped,
+      renamedKeys: merged.renamedKeys,
+    };
+  });
 }
