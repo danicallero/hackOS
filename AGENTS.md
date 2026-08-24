@@ -48,4 +48,10 @@ post screenshots of the changed states in a PR comment — reviewers must be abl
 to see the change without building it. Recipe and gotchas:
 [`docs/ui-testing.md`](./docs/ui-testing.md) § Screenshots on UI PRs.
 
+## Opening a PR
+
+Use [`.github/PULL_REQUEST_TEMPLATE.md`](./.github/PULL_REQUEST_TEMPLATE.md)
+as the PR body — fill in every section (delete Screenshots/Migration only if
+truly not applicable), don't replace it with a free-form summary.
+
 
