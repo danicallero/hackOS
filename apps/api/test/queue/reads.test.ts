@@ -149,6 +149,25 @@ describe("room view (H41)", () => {
 });
 
 describe("participant view (H38)", () => {
+  it("returns an empty queue for a participant whose repo has no active queue entries", async () => {
+    const me = await createUser();
+    await createRepoWithTeam([me]);
+
+    const res = await app.inject({ method: "GET", url: "/api/queue/me", headers: asUser(me) });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([]);
+  });
+
+  it("returns an empty queue for a participant who is not linked to any repo", async () => {
+    const me = await createUser();
+
+    const res = await app.inject({ method: "GET", url: "/api/queue/me", headers: asUser(me) });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([]);
+  });
+
   it("shows status, position and ETA for each challenge of my repos", async () => {
     const me = await createUser();
     const challengeId = await createChallenge();
