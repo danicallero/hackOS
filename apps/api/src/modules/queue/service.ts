@@ -16,11 +16,10 @@ import {
 } from "./notify.js";
 import {
   compactQueueGroupPositions,
-  groupMinPosition,
   nextBottomPosition,
-  nextTopPosition,
+  placeEntriesOnTop,
+  placeEntry,
   type RequeuePosition,
-  resolveRequeuePosition,
 } from "./ordering.js";
 import type { QueueEntryRow } from "./types.js";
 
@@ -31,12 +30,39 @@ import type { QueueEntryRow } from "./types.js";
  */
 const PG_UNIQUE_VIOLATION = "23505";
 
+/**
+ * Lock an entry for a state transition, together with every other active
+ * entry of its queue_group, **in a single id-ordered statement**.
+ *
+ * The group has to come along because a transition renumbers the group's
+ * positions (see `ordering.ts`). Locking the entry first and the group second
+ * deadlocks: two operators moving two teams in one queue each hold the other's
+ * row and then wait for the rest. One statement, ordered by `id`, gives every
+ * transaction the same acquisition order, so they queue up instead.
+ *
+ * The entry itself is included by `qe.id = $1` even when its status is not
+ * active (`in_room`, `presenting`, a completed row being re-entered).
+ */
 async function lockEntry(client: pg.PoolClient, entryId: number): Promise<QueueEntryRow> {
-  const { rows } = await client.query(`SELECT * FROM queue_entries WHERE id = $1 FOR UPDATE`, [
-    entryId,
-  ]);
-  if (rows.length === 0) throw new NotFoundError("Queue entry not found", { entryId });
-  return rows[0];
+  const { rows } = await client.query(
+    `SELECT qe.*
+       FROM queue_entries qe
+      WHERE qe.id = $1
+         OR (qe.status IN ('waiting', 'called')
+             AND qe.challenge_id IN (
+               SELECT sibling.challenge_id
+                 FROM queue_group_challenges self
+                 JOIN queue_group_challenges sibling
+                   ON sibling.queue_group_id = self.queue_group_id
+                WHERE self.challenge_id = (SELECT challenge_id FROM queue_entries WHERE id = $1)
+             ))
+      ORDER BY qe.id
+      FOR UPDATE`,
+    [entryId],
+  );
+  const entry = rows.find((row: QueueEntryRow) => Number(row.id) === entryId);
+  if (!entry) throw new NotFoundError("Queue entry not found", { entryId });
+  return entry;
 }
 
 async function broadcastEntry(entry: QueueEntryRow): Promise<QueueEntryRow> {
@@ -381,7 +407,7 @@ export async function sendBackToWaiting(
   return withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
     assertFrom(entry, ["in_room", "presenting"], "send_back_to_waiting");
-    const position = await resolveRequeuePosition(client, entry.challenge_id, "top");
+    const position = await placeEntry(client, entry.challenge_id, entryId, "top");
     const res = await client.query(
       `UPDATE queue_entries
           SET status = 'called', position = $1, called_at = now(), presentation_started_at = NULL
@@ -412,7 +438,7 @@ export async function requeue(
   return withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
     assertFrom(entry, ["called"], "requeue");
-    const pos = await resolveRequeuePosition(client, entry.challenge_id, position);
+    const pos = await placeEntry(client, entry.challenge_id, entryId, position);
     const res = await client.query(
       `UPDATE queue_entries
           SET status = 'waiting', position = $1, assigned_room_id = NULL, called_at = NULL
@@ -445,7 +471,7 @@ export async function reEnter(
   return withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
     assertFrom(entry, RE_ENTER_FROM, "re_enter");
-    const pos = await resolveRequeuePosition(client, entry.challenge_id, position);
+    const pos = await placeEntry(client, entry.challenge_id, entryId, position);
     const res = await client.query(
       `UPDATE queue_entries
           SET status = 'waiting', position = $1, assigned_room_id = NULL, called_at = NULL,
@@ -490,7 +516,7 @@ export async function markNoShow(
   return withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
     assertFrom(entry, NO_SHOW_FROM, "no_show");
-    const position = await nextBottomPosition(client, entry.challenge_id);
+    const position = await placeEntry(client, entry.challenge_id, entryId, "bottom");
     const res = await client.query(
       `UPDATE queue_entries
           SET status = 'waiting', position = $1, assigned_room_id = NULL, called_at = NULL,
@@ -523,7 +549,7 @@ export async function skipToEnd(
   return withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
     assertFrom(entry, SKIP_FROM, "skip");
-    const position = await nextBottomPosition(client, entry.challenge_id);
+    const position = await placeEntry(client, entry.challenge_id, entryId, "bottom");
     const res = await client.query(
       `UPDATE queue_entries
           SET status = 'waiting', position = $1, assigned_room_id = NULL, called_at = NULL,
@@ -593,7 +619,7 @@ export async function moveToTop(
       });
     }
     assertFrom(entry, MOVE_TOP_FROM, "move_to_top");
-    const position = await nextTopPosition(client, entry.challenge_id);
+    const position = await placeEntry(client, entry.challenge_id, entryId, "top");
     const res = await client.query(
       `UPDATE queue_entries
           SET status = 'waiting', position = $1, assigned_room_id = NULL, called_at = NULL,
@@ -922,15 +948,19 @@ export async function pauseRoom(roomId: number, actorId: number): Promise<void> 
     for (const entries of byGroup.values()) {
       const first = entries[0];
       if (!first) continue;
-      const base = (await groupMinPosition(client, first.challenge_id)) - entries.length;
-      // entries[] is sorted longest-called first; base + i keeps that order,
-      // so the longest-called team gets the topmost (lowest) position.
-      for (const [i, entry] of entries.entries()) {
+      // entries[] is sorted longest-called first, so putting them on top in
+      // that order gives the longest-called team position 1.
+      await placeEntriesOnTop(
+        client,
+        first.challenge_id,
+        entries.map((entry) => entry.id),
+      );
+      for (const entry of entries) {
         await client.query(
           `UPDATE queue_entries
-              SET status = 'waiting', position = $1, assigned_room_id = NULL, called_at = NULL
-            WHERE id = $2`,
-          [base + i, entry.id],
+              SET status = 'waiting', assigned_room_id = NULL, called_at = NULL
+            WHERE id = $1`,
+          [entry.id],
         );
         await writeQueueHistory(client, {
           entryId: entry.id,
