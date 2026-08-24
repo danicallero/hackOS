@@ -31,6 +31,34 @@ export async function createChallenge(
   return rows[0].id;
 }
 
+/**
+ * Several challenges authored by ONE enterprise — the only shape a shared
+ * queue group can legally take (0410's cross-enterprise guard).
+ */
+export async function createEnterpriseChallenges(
+  count: number,
+): Promise<{ enterpriseId: number; repId: number; challengeIds: number[] }> {
+  const repId = await createUser();
+  const enterprise = await pool.query(`INSERT INTO enterprises (name) VALUES ($1) RETURNING id`, [
+    `ent-${crypto.randomUUID()}`,
+  ]);
+  const enterpriseId = Number(enterprise.rows[0].id);
+  const sponsor = await pool.query(
+    `INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2) RETURNING id`,
+    [enterpriseId, repId],
+  );
+  const challengeIds: number[] = [];
+  for (let i = 0; i < count; i++) {
+    const { rows } = await pool.query(
+      `INSERT INTO challenges (author, title, devpost_tags)
+       VALUES ($1, $2, '[]'::jsonb) RETURNING id`,
+      [sponsor.rows[0].id, `Challenge ${i + 1} ${crypto.randomUUID().slice(0, 8)}`],
+    );
+    challengeIds.push(Number(rows[0].id));
+  }
+  return { enterpriseId, repId, challengeIds };
+}
+
 export async function createRoom(
   overrides: Partial<{
     name: string;

@@ -14,11 +14,24 @@ function room(overrides: Partial<RoomAssignments> = {}): RoomAssignments {
       created_at: "2026-01-01T00:00:00.000Z",
       updated_at: "2026-01-01T00:00:00.000Z",
     },
+    queueGroup: {
+      id: 9,
+      display_name: "Challenge",
+      enterprise_id: 3,
+      enterprise_name: "ACME",
+      assigned_at: "2026-01-01T00:00:00.000Z",
+      assigned_by: null,
+      assigned_by_name: null,
+      assigned_by_surname: null,
+      assigned_by_email: null,
+    },
     challenges: [
       {
         challenge_id: 42,
         title: "Challenge",
         visibility: "hidden",
+        queue_group_id: 9,
+        queue_group_name: "Challenge",
         assigned_at: "2026-01-01T00:00:00.000Z",
         assigned_by: null,
         assigned_by_name: null,
@@ -51,9 +64,8 @@ describe("roomsMissingJudges", () => {
     const withJudge = room({
       judges: [
         {
-          challenge_id: 42,
+          queue_group_id: 9,
           enterprise_id: 3,
-          title: "Challenge",
           user_id: 7,
           name: "Ada",
           surname: "Lovelace",

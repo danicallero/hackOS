@@ -125,10 +125,11 @@ module's `schemas.ts`; **read the module before wiring** to get field names righ
 - Rooms admin: `GET/POST /api/queue/rooms`, `GET/PATCH/DELETE /api/queue/rooms/:roomId`
 - `POST /api/queue/rooms/:roomId/call-next` (H29/H30), `/pause` (H35), `/resume`,
   `GET /api/queue/rooms/:roomId/state`
-- Room↔challenge: `GET/POST /api/queue/rooms/:roomId/challenges`,
-  `DELETE /api/queue/rooms/:roomId/challenges/:challengeId`
-- Judge assignment: `GET/POST /api/queue/rooms/:roomId/judges`,
-  `DELETE /api/queue/rooms/:roomId/judges/:challengeId/:userId` (H46)
+- Room↔queue group: `GET /api/queue/groups`,
+  `POST /api/queue/rooms/:roomId/queue-group`,
+  `DELETE /api/queue/rooms/:roomId/queue-group/:queueGroupId` (H46)
+- Judge roster: enterprise-scoped, `/api/enterprises/:id/judges` (H46) — the
+  queue module has no room-scoped judge routes
 - `POST /api/queue/challenges/:challengeId/enqueue` (generate/append queue, H21)
 - Entry transitions (all POST, most `idempotencyGuard`):
   `/notify-enter`(H31) `/bring-in`(H32) `/start`(H32) `/complete`

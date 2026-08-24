@@ -1,4 +1,4 @@
-import { pool, type Queryable } from "../../db/pool.js";
+import type { Queryable } from "../../db/pool.js";
 
 /**
  * Queue-group routing helpers (H46). A room is linked to one `queue_groups`
@@ -90,21 +90,4 @@ export async function roomEnterpriseId(client: Queryable, roomId: number): Promi
     [roomId],
   );
   return rows[0] ? Number(rows[0].enterprise_id) : null;
-}
-
-/**
- * The single challenge a room serves, for the read surfaces that still label
- * a room with one challenge (the judging panel's read-only header, the pace
- * ceiling). Picks the lowest challenge id in the group, which is the room's
- * only challenge for every group that exists today.
- *
- * N>1 revisit: once the merge UI ships, a shared-group room has no single
- * challenge, and these surfaces should show `queue_groups.display_name` and
- * the group's aggregate limits instead of one member challenge's.
- */
-export async function roomPrimaryChallengeId(roomId: number): Promise<number | null> {
-  const { rows } = await pool.query(`${ROOM_CHALLENGE_IDS_SQL} ORDER BY qgc.challenge_id ASC`, [
-    roomId,
-  ]);
-  return rows[0] ? Number(rows[0].challenge_id) : null;
 }

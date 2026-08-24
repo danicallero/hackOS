@@ -114,10 +114,25 @@ export async function callNextForRoom(
     // ladder (more failed calls = lower priority, never eliminated), then
     // queue position. SKIP LOCKED: a candidate mid-transition in a parallel
     // call_next is simply not considered — the loser never blocks.
+    //
+    // H46 "call once" (§8 Q1): a repo already called, in a room, or judged for
+    // ANOTHER of this group's challenges is done with the group — one panel,
+    // one session, one call. Its remaining sibling entries drop out of the
+    // candidate set rather than being called a second time. The NOT EXISTS can
+    // never match for a 1:1 group (a repo has at most one entry per challenge,
+    // so the only sibling is the row itself), so today's candidate list and
+    // ordering are unchanged.
     const { rows: candidates } = await client.query(
-      `SELECT * FROM queue_entries
-        WHERE challenge_id = ANY($1) AND status = 'waiting'
-        ORDER BY priority DESC, call_count ASC, position ASC NULLS LAST, id ASC
+      `SELECT * FROM queue_entries qe
+        WHERE qe.challenge_id = ANY($1) AND qe.status = 'waiting'
+          AND NOT EXISTS (
+            SELECT 1 FROM queue_entries sib
+             WHERE sib.repo_id = qe.repo_id
+               AND sib.challenge_id = ANY($1)
+               AND sib.id <> qe.id
+               AND sib.status IN ('called', 'in_room', 'presenting', 'completed')
+          )
+        ORDER BY qe.priority DESC, qe.call_count ASC, qe.position ASC NULLS LAST, qe.id ASC
         LIMIT 50
         FOR UPDATE SKIP LOCKED`,
       [challengeIds],

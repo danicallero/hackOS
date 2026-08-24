@@ -162,25 +162,11 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
   typed.get(
     "/api/queue/groups",
     {
-      preHandler: requireAnyCapability(
-        CAPABILITIES.QUEUE_ADMIN,
-        CAPABILITIES.SPONSORS_MANAGE,
-        CAPABILITIES.SPONSOR_PORTAL,
-      ),
-      config: {
-        routeAccessPolicy: {
-          kind: "capability",
-          anyOf: [
-            CAPABILITIES.QUEUE_ADMIN,
-            CAPABILITIES.SPONSORS_MANAGE,
-            CAPABILITIES.SPONSOR_PORTAL,
-          ],
-        },
-      },
+      config: { routeAccessPolicy: { kind: "authenticated" } },
       schema: {
         summary: "List assignable queue groups",
         description:
-          "Queue groups a room can be assigned to, with the enterprise that owns each and the challenges it covers. Global queue/sponsor administrators see every group; a sponsor representative sees only their own enterprises'.",
+          "Queue groups a room can be assigned to, with the enterprise that owns each and the challenges it covers. The list is the caller's own assignment scope: global queue/sponsor administrators see every group, a sponsor representative sees only their own enterprises', and anyone else sees none.",
       },
     },
     async (req) => {

@@ -115,6 +115,17 @@ async function waitingQueueView(challengeIds: number[]) {
                   AND o.status = 'waiting') AS queued_challenge_ids
          FROM queue_entries qe JOIN repos r ON r.id = qe.repo_id
         WHERE qe.challenge_id = ANY($1) AND qe.status = 'waiting'
+          -- Same filter callNextForRoom applies: a team already called or
+          -- judged for another of the group's challenges is done with the
+          -- group, so it is no longer a waiting line item. Never matches for
+          -- a 1:1 group.
+          AND NOT EXISTS (
+            SELECT 1 FROM queue_entries sib
+             WHERE sib.repo_id = qe.repo_id
+               AND sib.challenge_id = ANY($1)
+               AND sib.id <> qe.id
+               AND sib.status IN ('called', 'in_room', 'presenting', 'completed')
+          )
         ORDER BY qe.repo_id, qe.position ASC NULLS LAST, qe.id ASC
      ) merged
       ORDER BY merged.position ASC NULLS LAST, merged.id ASC`,

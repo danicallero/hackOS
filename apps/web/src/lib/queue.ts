@@ -134,6 +134,8 @@ export interface RoomChallengeAssignment {
   challenge_id: number;
   title: string;
   visibility: string;
+  queue_group_id: number;
+  queue_group_name: string;
   assigned_at: string;
   assigned_by: number | null;
   assigned_by_name: string | null;
@@ -146,9 +148,8 @@ export interface RoomChallengeAssignment {
  * challenge (`/api/enterprises/:id/judges`), not on the room itself.
  */
 export interface RoomJudgeAssignment {
-  challenge_id: number;
+  queue_group_id: number;
   enterprise_id: number;
-  title: string;
   user_id: number;
   name: string | null;
   surname: string | null;
@@ -160,11 +161,35 @@ export interface RoomJudgeAssignment {
   assigned_by_email: string | null;
 }
 
+/** The queue group a room serves; null when the room is unassigned. */
+export interface RoomQueueGroupAssignment {
+  id: number;
+  display_name: string;
+  enterprise_id: number;
+  enterprise_name: string;
+  assigned_at: string;
+  assigned_by: number | null;
+  assigned_by_name: string | null;
+  assigned_by_surname: string | null;
+  assigned_by_email: string | null;
+}
+
 export interface RoomAssignments {
   roomId: number;
   room: Room;
+  queueGroup: RoomQueueGroupAssignment | null;
+  /** Every challenge the room judges, via its queue group. */
   challenges: RoomChallengeAssignment[];
   judges: RoomJudgeAssignment[];
+}
+
+/** GET /api/queue/groups — the groups the caller may assign a room to. */
+export interface QueueGroup {
+  id: number;
+  display_name: string;
+  enterprise_id: number;
+  enterprise_name: string;
+  challenges: Array<{ id: number; title: string }>;
 }
 
 /** GET /api/queue/me — participant view (H38). */
@@ -186,7 +211,7 @@ export interface MyQueueEntry {
   calledAt: string | null;
   /** The concrete room the entry was called to; null while still waiting. */
   room: MyQueueRoom | null;
-  /** Every room currently judging this challenge (multi-room challenges share one queue). */
+  /** Every room serving this challenge's queue group — the full set a waiting team can be called to. */
   rooms: MyQueueRoom[];
 }
 
@@ -246,10 +271,12 @@ export const updateQueueSettings = (body: {
   preCallNotificationEtaMinutes?: number;
   requeuePromptDefault?: QueueSettings["requeue_prompt_default"];
 }) => api.patch<QueueSettings>("/api/queue/settings", body);
-export const assignRoomChallenge = (roomId: number, challengeId: number) =>
-  api.post(`/api/queue/rooms/${roomId}/challenges`, { challengeId });
-export const removeRoomChallenge = (roomId: number, challengeId: number) =>
-  api.delete(`/api/queue/rooms/${roomId}/challenges/${challengeId}`);
+export const listQueueGroups = () =>
+  api.get<{ groups: QueueGroup[] }>("/api/queue/groups").then((r) => r.groups);
+export const assignRoomQueueGroup = (roomId: number, queueGroupId: number) =>
+  api.post(`/api/queue/rooms/${roomId}/queue-group`, { queueGroupId });
+export const removeRoomQueueGroup = (roomId: number, queueGroupId: number) =>
+  api.delete(`/api/queue/rooms/${roomId}/queue-group/${queueGroupId}`);
 export const enqueueAllChallengeQueues = (idempotencyKey?: string) =>
   api.post<{
     challenges: Array<{ challengeId: number; inserted: number; alreadyQueued: number }>;
