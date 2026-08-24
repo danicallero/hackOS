@@ -140,6 +140,21 @@ assign. Permission is the same grant as the enterprise judge roster
 of the group's enterprise) — and reassigning a room away from another
 enterprise's group requires the grant on *both* enterprises.
 
+The admin screen (`queue/rooms/room-panels.tsx`, `AssignmentsEditor`) presents
+this as **two steps**, because an enterprise — not a queue group — is what owns
+a room: pick the enterprise, then pick which of *its* groups the room serves.
+The second step is presentation only. `GET /api/queue/groups` already returns
+`enterprise_id`/`enterprise_name` per group, so the enterprise step is the flat
+list grouped by owner; nothing new is stored. There is deliberately no
+`room_enterprises` table and no "enterprise set, group pending" state —
+`room_queue_groups.queue_group_id` is `NOT NULL`, and a group belongs to
+exactly one enterprise, so the enterprise stays derived rather than duplicated.
+
+An enterprise with exactly one group — every enterprise today, and the common
+single-challenge case permanently — has its group auto-filled and **shows no
+group picker at all**. The picker appears only once an enterprise owns more
+than one group, which cannot happen until the merge UI ships.
+
 ## Not yet done
 
 - Nothing can create a shared (N>1) group: the merge UI, the group

@@ -79,8 +79,6 @@ export default function QueueRoomsPage() {
   );
   const selectedRoomAssignments = selectedRoom ? (assignments[selectedRoom.id] ?? null) : null;
 
-  const queueGroupFallback = queueGroups[0]?.id ?? 0;
-
   const load = useCallback(async () => {
     if (!canManageRooms) {
       setLoading(false);
@@ -498,7 +496,6 @@ export default function QueueRoomsPage() {
               <AssignmentsEditor
                 roomId={selectedRoom.id}
                 assignments={selectedRoomAssignments}
-                queueGroupFallback={queueGroupFallback}
                 queueGroups={queueGroups}
                 onSetQueueGroup={async (queueGroupId) => {
                   await assignRoomQueueGroup(selectedRoom.id, queueGroupId);
