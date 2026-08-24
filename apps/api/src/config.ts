@@ -74,15 +74,24 @@ const envSchema = z.object({
    */
   MAIL_LAYOUT_BRAND_NAME: z.string().min(1).default("hackOS"),
   MAIL_LAYOUT_HEADER_TEXT: z.string().min(1).default("hackOS"),
-  MAIL_LAYOUT_HEADER_SUBTEXT: z.string().default("Hackathon management platform"),
-  MAIL_LAYOUT_ACCENT_COLOR: z.string().regex(hexColor).default("#4f46e5"),
-  MAIL_LAYOUT_BG_COLOR: z.string().regex(hexColor).default("#eef1f5"),
+  MAIL_LAYOUT_HEADER_SUBTEXT: z.string().default(""),
+  /**
+   * Browser-reachable PNG/JPEG logo shown in the header instead of
+   * MAIL_LAYOUT_HEADER_TEXT (SVG is unsafe in most email clients). Unset
+   * defaults to the hackOS brand mark served from WEB_URL; set to "" to
+   * fall back to the plain-text header instead.
+   */
+  MAIL_LAYOUT_LOGO_URL: z.string().optional(),
+  // Defaults mirror apps/web's shadcn "zinc" tokens (apps/web/src/app/globals.css) so
+  // transactional email reads as the same product, not a differently-branded surface.
+  MAIL_LAYOUT_ACCENT_COLOR: z.string().regex(hexColor).default("#18181b"),
+  MAIL_LAYOUT_BG_COLOR: z.string().regex(hexColor).default("#f4f4f5"),
   MAIL_LAYOUT_CARD_COLOR: z.string().regex(hexColor).default("#ffffff"),
-  MAIL_LAYOUT_CARD_BORDER_COLOR: z.string().regex(hexColor).default("#dde3ee"),
-  MAIL_LAYOUT_TEXT_COLOR: z.string().regex(hexColor).default("#1f2430"),
-  MAIL_LAYOUT_MUTED_TEXT_COLOR: z.string().regex(hexColor).default("#667085"),
-  MAIL_LAYOUT_FOOTER_BG_COLOR: z.string().regex(hexColor).default("#f7f9fc"),
-  MAIL_LAYOUT_CARD_RADIUS: z.coerce.number().int().min(0).max(32).default(14),
+  MAIL_LAYOUT_CARD_BORDER_COLOR: z.string().regex(hexColor).default("#e4e4e7"),
+  MAIL_LAYOUT_TEXT_COLOR: z.string().regex(hexColor).default("#18181b"),
+  MAIL_LAYOUT_MUTED_TEXT_COLOR: z.string().regex(hexColor).default("#71717a"),
+  MAIL_LAYOUT_FOOTER_BG_COLOR: z.string().regex(hexColor).default("#fafafa"),
+  MAIL_LAYOUT_CARD_RADIUS: z.coerce.number().int().min(0).max(32).default(8),
   MAIL_LAYOUT_MAX_WIDTH: z.coerce.number().int().min(360).max(720).default(560),
   MAIL_FOOTER_TEXT: z.string().min(1).default("hackOS — this is an automated message."),
 
