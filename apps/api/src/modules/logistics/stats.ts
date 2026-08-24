@@ -101,7 +101,7 @@ export async function accreditationCountsByRole() {
                   JOIN group_capabilities gc ON gc.group_id = eg.group_id
                   WHERE eg.user_id = u.id AND gc.capability = '*'
                 ) THEN 'staff'
-                WHEN EXISTS (SELECT 1 FROM room_judges rj WHERE rj.user_id = u.id) THEN 'judge'
+                WHEN EXISTS (SELECT 1 FROM enterprise_judges ej WHERE ej.user_id = u.id) THEN 'judge'
                 WHEN EXISTS (SELECT 1 FROM sponsors s WHERE s.user_id = u.id) THEN 'sponsor'
                 WHEN EXISTS (
                   SELECT 1 FROM effective_groups eg
@@ -210,7 +210,7 @@ export async function scannerRoleStats(): Promise<
        SELECT u.id, u.badge_id,
               CASE
                 WHEN COALESCE(uc.is_admin, false) THEN 'admin'
-                WHEN EXISTS (SELECT 1 FROM room_judges rj WHERE rj.user_id = u.id) THEN 'judge'
+                WHEN EXISTS (SELECT 1 FROM enterprise_judges ej WHERE ej.user_id = u.id) THEN 'judge'
                 WHEN EXISTS (SELECT 1 FROM sponsors s WHERE s.user_id = u.id) THEN 'sponsor'
                 WHEN COALESCE(uc.has_capability, false) THEN 'staff'
                 WHEN EXISTS (SELECT 1 FROM manual_attendee_roles mar WHERE mar.user_id = u.id AND mar.role = 'mentor') THEN 'mentor'

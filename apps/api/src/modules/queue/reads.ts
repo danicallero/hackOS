@@ -258,15 +258,21 @@ export async function roomAssignments(roomId: number) {
     [roomId],
   );
 
+  // Judges are rostered per enterprise, not per room: whoever judges for the
+  // enterprise that authored the room's challenge judges in this room. Read-only
+  // here — the roster is managed on the enterprise (`/api/enterprises/:id/judges`).
   const judgeAssignments = await pool.query(
-    `SELECT rj.challenge_id, c.title, rj.user_id, u.name, u.surname, u.email,
-            rj.assigned_at, rj.assigned_by,
+    `SELECT rc.challenge_id, c.title, ej.user_id, u.name, u.surname, u.email,
+            ej.added_at AS assigned_at, ej.added_by AS assigned_by,
+            author.enterprise_id,
             a.name AS assigned_by_name, a.surname AS assigned_by_surname, a.email AS assigned_by_email
-       FROM room_judges rj
-       JOIN challenges c ON c.id = rj.challenge_id
-       JOIN users u ON u.id = rj.user_id
-       LEFT JOIN users a ON a.id = rj.assigned_by
-      WHERE rj.room_id = $1
+       FROM room_challenges rc
+       JOIN challenges c ON c.id = rc.challenge_id
+       JOIN sponsors author ON author.id = c.author
+       JOIN enterprise_judges ej ON ej.enterprise_id = author.enterprise_id
+       JOIN users u ON u.id = ej.user_id
+       LEFT JOIN users a ON a.id = ej.added_by
+      WHERE rc.room_id = $1
       ORDER BY c.title ASC, u.name ASC NULLS LAST, u.surname ASC NULLS LAST, u.email ASC`,
     [roomId],
   );
