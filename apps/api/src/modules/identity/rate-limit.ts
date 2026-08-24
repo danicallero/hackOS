@@ -1,3 +1,4 @@
+import { consumeRateLimit, type RateLimitResult } from "../../lib/rate-limit.js";
 import { valkey } from "../../lib/valkey.js";
 
 /**
@@ -5,7 +6,7 @@ import { valkey } from "../../lib/valkey.js";
  * enforced in Valkey (not the DB) so it's cheap and shared across API
  * instances. Two independent gates:
  *  - a 60s cooldown key (SET ... EX 60) that must NOT already exist
- *  - an hourly counter (INCR + EXPIRE on first increment) capped at 3
+ *  - an hourly counter (`lib/rate-limit.ts`'s shared primitive), capped at 3
  * Whichever gate is hit first reports how long until the caller may retry.
  */
 
@@ -13,28 +14,23 @@ const COOLDOWN_SECONDS = 60;
 const WINDOW_SECONDS = 3600;
 const MAX_PER_WINDOW = 3;
 
-export interface RateLimitResult {
-  allowed: boolean;
-  retryAfterSeconds?: number;
-}
+export type { RateLimitResult };
 
 export async function checkResendVerificationRateLimit(email: string): Promise<RateLimitResult> {
   const normalized = email.trim().toLowerCase();
   const cooldownKey = `identity:verify-resend:cooldown:${normalized}`;
-  const countKey = `identity:verify-resend:count:${normalized}`;
 
   const cooldownTtl = await valkey.ttl(cooldownKey);
   if (cooldownTtl > 0) {
     return { allowed: false, retryAfterSeconds: cooldownTtl };
   }
 
-  const count = await valkey.incr(countKey);
-  if (count === 1) {
-    await valkey.expire(countKey, WINDOW_SECONDS);
-  }
-  if (count > MAX_PER_WINDOW) {
-    const windowTtl = await valkey.ttl(countKey);
-    return { allowed: false, retryAfterSeconds: windowTtl > 0 ? windowTtl : WINDOW_SECONDS };
+  const result = await consumeRateLimit("verify-resend", normalized, {
+    windowSeconds: WINDOW_SECONDS,
+    max: MAX_PER_WINDOW,
+  });
+  if (!result.allowed) {
+    return result;
   }
 
   await valkey.set(cooldownKey, "1", "EX", COOLDOWN_SECONDS);

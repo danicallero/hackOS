@@ -78,6 +78,11 @@ async function betterAuthPassthrough(
     if (value === undefined) continue;
     headers.set(key, Array.isArray(value) ? value.join(", ") : String(value));
   }
+  // H538: overwrite whatever x-forwarded-for the client sent with Fastify's
+  // own trust-aware resolution (`request.ip`, honoring `config.trustProxy`)
+  // so Better Auth's rate limiter (auth.ts) can't be spoofed by a client
+  // forging that header when the API isn't actually behind a proxy.
+  headers.set("x-forwarded-for", request.ip);
 
   const init: RequestInit = { method: request.method, headers };
   const hasBody = !["GET", "HEAD"].includes(request.method) && Buffer.isBuffer(request.body);
@@ -92,6 +97,13 @@ async function betterAuthPassthrough(
     // everything else (set-cookie, content-type, etc.)
     if (key.toLowerCase() === "content-length") return;
     reply.header(key, value);
+    // H538: Better Auth's own rate-limiter (auth.ts's `rateLimit` option)
+    // rejects with its own `X-Retry-After` header, bypassing our error
+    // handler's `retry-after` (app.ts) entirely — normalize it to the same
+    // header every other rate limit in this app uses (and the one CORS
+    // actually exposes cross-origin, see app.ts's `exposedHeaders`), so
+    // clients handle 429s from any endpoint the same way.
+    if (key.toLowerCase() === "x-retry-after") reply.header("retry-after", value);
   });
 
   const buf = Buffer.from(await response.arrayBuffer());
