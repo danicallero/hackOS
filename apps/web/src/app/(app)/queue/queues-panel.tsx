@@ -23,9 +23,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AlertModal } from "@/components/common/alert-modal";
 import { EmptyState } from "@/components/common/empty-state";
+import { JudgingPanelBuilder, normalizeQuestions } from "@/components/common/questionnaire-builder";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
-import { StatusBadge } from "@/components/common/status-badge";
+import { SponsorLogo } from "@/components/common/sponsor-logo";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -42,22 +44,20 @@ import {
   splitQueueGroup,
   updateQueueGroup,
 } from "@/lib/queue";
-import { textForDisplay } from "../challenges/shared";
+import { initials } from "../enterprises/shared";
 
 type Stage = "idle" | "pick" | "review";
 
 interface EnterpriseQueues {
   enterpriseId: number;
   enterpriseName: string;
+  logoUrl: string | null;
+  logoNegativeUrl: string | null;
   queues: QueueGroup[];
   challenges: Array<{ id: number; title: string }>;
   shared: QueueGroup | null;
   /** Some team here has been evaluated: the configuration is frozen. */
   locked: boolean;
-}
-
-function questionLabel(question: Question): string {
-  return textForDisplay(question.label) || question.key;
 }
 
 function byEnterprise(groups: QueueGroup[]): EnterpriseQueues[] {
@@ -68,6 +68,8 @@ function byEnterprise(groups: QueueGroup[]): EnterpriseQueues[] {
       entry = {
         enterpriseId: queue.enterpriseId,
         enterpriseName: queue.enterpriseName,
+        logoUrl: queue.enterpriseLogoUrl,
+        logoNegativeUrl: queue.enterpriseLogoNegativeUrl,
         queues: [],
         challenges: [],
         shared: null,
@@ -141,7 +143,7 @@ function EnterpriseQueuesCard({
   const [picked, setPicked] = useState<number[]>([]);
   const [name, setName] = useState("");
   const [preview, setPreview] = useState<MergedPanelPreview | null>(null);
-  const [dropped, setDropped] = useState<string[]>([]);
+  const [reviewQuestions, setReviewQuestions] = useState<Question[]>([]);
   const [busy, setBusy] = useState(false);
 
   const { enterpriseId, challenges, shared, locked } = enterprise;
@@ -152,7 +154,7 @@ function EnterpriseQueuesCard({
     setPicked(challenges.map((challenge) => challenge.id));
     setName(t("sharedQueueDefaultName", { enterprise: enterprise.enterpriseName }));
     setPreview(null);
-    setDropped([]);
+    setReviewQuestions([]);
     setStage("pick");
   };
 
@@ -170,8 +172,9 @@ function EnterpriseQueuesCard({
 
   const toReview = () =>
     guard(async () => {
-      setPreview(await previewQueueGroupMerge(enterpriseId, picked));
-      setDropped([]);
+      const nextPreview = await previewQueueGroupMerge(enterpriseId, picked);
+      setPreview(nextPreview);
+      setReviewQuestions(nextPreview.questions);
       setStage("review");
     });
 
@@ -182,9 +185,9 @@ function EnterpriseQueuesCard({
         challengeIds: picked,
         displayName: name.trim(),
       });
-      const kept = preview.questions.filter((question) => !dropped.includes(question.key));
-      if (kept.length !== preview.questions.length) {
-        await updateQueueGroup(merged.id, { criteria: kept });
+      const normalized = normalizeQuestions(reviewQuestions);
+      if (JSON.stringify(normalized) !== JSON.stringify(preview.questions)) {
+        await updateQueueGroup(merged.id, { criteria: normalized });
       }
       setStage("idle");
       toast.success(t("sharedQueueCreated"));
@@ -192,7 +195,25 @@ function EnterpriseQueuesCard({
 
   return (
     <SectionCard
-      title={enterprise.enterpriseName}
+      title={
+        <span className="flex items-center gap-3">
+          <Avatar size="sm">
+            {enterprise.logoUrl ? (
+              <SponsorLogo
+                logoUrl={enterprise.logoUrl}
+                logoNegativeUrl={enterprise.logoNegativeUrl}
+                alt={enterprise.enterpriseName}
+                className="size-full rounded-md object-contain"
+              />
+            ) : (
+              <AvatarFallback className="rounded-md">
+                {initials(enterprise.enterpriseName)}
+              </AvatarFallback>
+            )}
+          </Avatar>
+          <span>{enterprise.enterpriseName}</span>
+        </span>
+      }
       icon={LayersIcon}
       // The one rule this screen cannot undo, and the only reason a switch
       // here is ever disabled.
@@ -242,20 +263,14 @@ function EnterpriseQueuesCard({
                   <p className="text-muted-foreground truncate text-xs">
                     {queue.challenges.map((challenge) => challenge.title).join(" · ")}
                   </p>
+                  <p className="text-muted-foreground truncate text-xs tabular-nums">
+                    {t("queueSummary", {
+                      challenges: queue.challenges.length,
+                      rooms: queue.rooms.length,
+                      teams: queue.teams,
+                    })}
+                  </p>
                 </div>
-                {queue.shared && (
-                  <StatusBadge tone="info" className="shrink-0">
-                    {t("sharedQueueBadge", { count: queue.challenges.length })}
-                  </StatusBadge>
-                )}
-                <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
-                  {t("queueTeamCount", { count: queue.teams })}
-                </span>
-                <span className="text-muted-foreground w-40 shrink-0 truncate text-right text-xs">
-                  {queue.rooms.length
-                    ? queue.rooms.map((room) => room.name).join(", ")
-                    : t("noRoomServingQueue")}
-                </span>
               </Link>
             </li>
           ))}
@@ -315,43 +330,18 @@ function EnterpriseQueuesCard({
       {stage === "review" && preview && (
         <div className="space-y-4">
           <Label>{t("mergedJudgingForm")}</Label>
-          {preview.questions.length === 0 ? (
-            <p className="text-muted-foreground text-sm">{t("noJudgingQuestions")}</p>
-          ) : (
-            <ul className="divide-border divide-y">
-              {preview.questions.map((question) => {
-                const removed = dropped.includes(question.key);
-                return (
-                  <li key={question.key} className="flex items-center gap-3 py-2.5">
-                    <div className="min-w-0 flex-1">
-                      <p
-                        className={`truncate text-sm ${removed ? "text-muted-foreground line-through" : ""}`}
-                      >
-                        {questionLabel(question)}
-                      </p>
-                      {preview.renamedKeys.some((renamed) => renamed.to === question.key) && (
-                        <p className="text-muted-foreground truncate text-xs">
-                          {t("questionKeyRenamed", { key: question.key })}
-                        </p>
-                      )}
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={busy}
-                      onClick={() =>
-                        setDropped((current) =>
-                          removed
-                            ? current.filter((key) => key !== question.key)
-                            : [...current, question.key],
-                        )
-                      }
-                    >
-                      {removed ? t("restore") : t("remove")}
-                    </Button>
-                  </li>
-                );
-              })}
+          <JudgingPanelBuilder
+            value={reviewQuestions}
+            onChange={setReviewQuestions}
+            disabled={busy}
+          />
+          {preview.renamedKeys.length > 0 && (
+            <ul className="text-muted-foreground space-y-1 text-xs">
+              {preview.renamedKeys.map((renamed) => (
+                <li key={`${renamed.from}-${renamed.to}`}>
+                  {t("questionKeyRenamed", { key: renamed.to })}
+                </li>
+              ))}
             </ul>
           )}
           <div className="flex justify-end gap-2">

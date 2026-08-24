@@ -167,7 +167,7 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
       schema: {
         summary: "List manageable judging queues",
         description:
-          "Every judging queue the caller may manage, with the enterprise that owns it, the challenges feeding it, the rooms serving it, its merged judging form, and whether judging has already started for it. The list is the caller's own scope: global queue/sponsor administrators see every queue on the platform, a sponsor representative sees only their own enterprises', and anyone else sees none. Backs both the room-assignment picker and the all-queues management view.",
+          "Every judging queue the caller may manage, with the owning enterprise's name and branding, the challenges feeding it, the rooms serving it, its merged judging form, and whether judging has already started for it. The list is the caller's own scope: global queue/sponsor administrators see every queue on the platform, a sponsor representative sees only their own enterprises', and anyone else sees none. Backs both the room-assignment picker and the all-queues management view.",
       },
     },
     async (req) => {

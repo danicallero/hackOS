@@ -210,6 +210,8 @@ export interface QueueGroup {
   id: number;
   enterpriseId: number;
   enterpriseName: string;
+  enterpriseLogoUrl: string | null;
+  enterpriseLogoNegativeUrl: string | null;
   displayName: string;
   challenges: Array<{ id: number; title: string }>;
   rooms: Array<{ id: number; name: string }>;
@@ -224,6 +226,12 @@ export interface QueueGroup {
    * configurable.
    */
   evaluationStarted: boolean;
+}
+
+export interface AssignableRoom {
+  id: number;
+  name: string;
+  queueGroupId: number | null;
 }
 
 /**
@@ -295,6 +303,25 @@ export const updateQueueGroup = (
   queueGroupId: number,
   body: { displayName?: string; criteria?: Question[] },
 ) => api.patch<QueueGroup>(`/api/queue/groups/${queueGroupId}`, body);
+
+export const getAssignableRooms = (enterpriseId: number) =>
+  api
+    .get<{ rooms: AssignableRoom[] }>(`/api/enterprises/${enterpriseId}/assignable-rooms`)
+    .then((response) => response.rooms);
+
+export const setQueueGroupRooms = (queueGroupId: number, roomIds: number[]) =>
+  api.put<QueueGroup>(
+    `/api/queue/groups/${queueGroupId}/rooms`,
+    { roomIds },
+    { headers: { "Idempotency-Key": crypto.randomUUID() } },
+  );
+
+export const moveQueueEntry = (entryId: number, position: number) =>
+  api.post(
+    `/api/queue/entries/${entryId}/move-to`,
+    { position },
+    { headers: { "Idempotency-Key": crypto.randomUUID() } },
+  );
 
 /** GET /api/queue/me — participant view (H38). */
 export interface MyQueueRoom {

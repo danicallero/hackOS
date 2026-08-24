@@ -18,7 +18,7 @@ export function SectionCard({
   bodyClassName,
   children,
 }: {
-  title: string;
+  title: React.ReactNode;
   /** Exceptional policy/risk copy only — see the header's own writing rules. */
   description?: string;
   icon?: LucideIcon;

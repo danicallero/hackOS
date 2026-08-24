@@ -17,10 +17,12 @@ export function DragHandle({
   attributes,
   listeners,
   label,
+  disabled,
 }: {
   attributes: ReturnType<typeof useSortable>["attributes"];
   listeners: ReturnType<typeof useSortable>["listeners"];
   label: string;
+  disabled?: boolean;
 }) {
   return (
     <button
@@ -28,6 +30,7 @@ export function DragHandle({
       className="text-muted-foreground hover:bg-muted hover:text-foreground -ml-1.5 flex size-8 shrink-0 cursor-grab touch-none items-center justify-center rounded-md active:cursor-grabbing"
       {...attributes}
       {...listeners}
+      disabled={disabled}
     >
       <GripVerticalIcon className="size-4" />
       <span className="sr-only">{label}</span>
