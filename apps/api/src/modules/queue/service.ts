@@ -5,6 +5,7 @@ import { audit } from "../../lib/audit.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
 import { notify, QUEUE_STAFF_CATEGORY } from "../notifications/service.js";
+import { challengeQueueGroupId, roomChallengeIds } from "./groups.js";
 import { isRepoBlockedByBusyMember } from "./guard.js";
 import { writeQueueHistory } from "./history.js";
 import {
@@ -14,7 +15,8 @@ import {
   repoMemberIds,
 } from "./notify.js";
 import {
-  compactChallengePositions,
+  compactQueueGroupPositions,
+  groupMinPosition,
   nextBottomPosition,
   nextTopPosition,
   type RequeuePosition,
@@ -102,11 +104,10 @@ export async function callNextForRoom(
       }
     }
 
-    const { rows: challengeRows } = await client.query(
-      `SELECT challenge_id FROM room_challenges WHERE room_id = $1`,
-      [roomId],
-    );
-    const challengeIds = challengeRows.map((r: { challenge_id: number }) => r.challenge_id);
+    // H46: the room's callable set is every challenge in the queue_group it
+    // serves — one challenge today, 1..N once groups are merged. call_next
+    // already selected across a list, so widening the list is all this needs.
+    const challengeIds = await roomChallengeIds(client, roomId);
     if (challengeIds.length === 0) return null;
 
     // Ordering (H34 ladder): explicit priority first, then the no-show
@@ -122,7 +123,16 @@ export async function callNextForRoom(
       [challengeIds],
     );
 
+    // H46 "call once": within one queue_group a repo is a single line item,
+    // however many of the group's challenges it applied to. `candidates` is
+    // already in queue order, so the first row per repo is the one the merged
+    // view shows and the only one callable; its siblings are passed over.
+    // No-op for every group today (1:1 groups can only yield one row per repo).
+    const seenRepoIds = new Set<number>();
+
     for (const candidate of candidates as QueueEntryRow[]) {
+      if (seenRepoIds.has(candidate.repo_id)) continue;
+      seenRepoIds.add(candidate.repo_id);
       if (
         await isRepoBlockedByBusyMember(client, candidate.repo_id, {
           roomId,
@@ -701,7 +711,7 @@ export async function removeRepoFromChallenge(
       after: { status: nextStatus },
       reason,
     });
-    await compactChallengePositions(client, entry.challenge_id);
+    await compactQueueGroupPositions(client, entry.challenge_id);
     return res.rows[0];
   }).then(broadcastEntry);
 }
@@ -880,21 +890,26 @@ export async function pauseRoom(roomId: number, actorId: number): Promise<void> 
       [roomId],
     );
 
-    // Group by challenge — "top" is relative to each challenge's own shared queue.
-    const byChallenge = new Map<number, QueueEntryRow[]>();
+    // Group by queue_group — "top" is relative to the group's shared queue,
+    // which is the ordering key space positions live in (ordering.ts). One
+    // group per challenge today, so this partitions exactly as it used to.
+    const byGroup = new Map<number, QueueEntryRow[]>();
     for (const e of calledEntries as QueueEntryRow[]) {
-      const list = byChallenge.get(e.challenge_id) ?? [];
+      const groupId = await challengeQueueGroupId(client, e.challenge_id);
+      // A challenge with no group row cannot exist (0410's trigger), but a
+      // negative synthetic key keeps such a row in its own partition rather
+      // than silently merging every ungrouped entry together.
+      const key = groupId ?? -e.challenge_id;
+      const list = byGroup.get(key) ?? [];
       list.push(e);
-      byChallenge.set(e.challenge_id, list);
+      byGroup.set(key, list);
     }
-    for (const [challengeId, entries] of byChallenge) {
-      const { rows: minRow } = await client.query(
-        `SELECT COALESCE(MIN(position), 0) AS min FROM queue_entries WHERE challenge_id = $1`,
-        [challengeId],
-      );
+    for (const entries of byGroup.values()) {
+      const first = entries[0];
+      if (!first) continue;
+      const base = (await groupMinPosition(client, first.challenge_id)) - entries.length;
       // entries[] is sorted longest-called first; base + i keeps that order,
       // so the longest-called team gets the topmost (lowest) position.
-      const base = Number(minRow[0].min) - entries.length;
       for (const [i, entry] of entries.entries()) {
         await client.query(
           `UPDATE queue_entries

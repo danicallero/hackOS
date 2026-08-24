@@ -5,9 +5,9 @@ export const roomIdParam = z.object({ roomId: z.coerce.number().int().positive()
 export const repoIdParam = z.object({ repoId: z.coerce.number().int().positive() });
 export const challengeIdParam = z.object({ challengeId: z.coerce.number().int().positive() });
 export const entryIdParam = z.object({ entryId: z.coerce.number().int().positive() });
-export const roomChallengeParam = z.object({
+export const roomQueueGroupParam = z.object({
   roomId: z.coerce.number().int().positive(),
-  challengeId: z.coerce.number().int().positive(),
+  queueGroupId: z.coerce.number().int().positive(),
 });
 export const createRoomBody = z.object({
   name: z.string().min(1),
@@ -22,7 +22,9 @@ export const updateRoomBody = z.object({
   status: z.enum(["active", "paused"]).optional(),
 });
 
-export const assignChallengeBody = z.object({ challengeId: z.coerce.number().int().positive() });
+export const assignQueueGroupBody = z.object({
+  queueGroupId: z.coerce.number().int().positive(),
+});
 export const roomQueueStateBody = z.object({
   maxInWaitingArea: z.coerce.number().int().min(1).optional(),
   desiredMinutesPerTeam: z.coerce.number().int().min(1).optional(),

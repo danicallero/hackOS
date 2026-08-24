@@ -550,10 +550,11 @@ describe("GET /api/me/projects (participant self-view)", () => {
       `INSERT INTO rooms (name, slug) VALUES ('Beans room', 'beans-room') RETURNING id`,
     );
     const roomId = room.rows[0].id;
-    await pool.query(`INSERT INTO room_challenges (room_id, challenge_id) VALUES ($1, $2)`, [
-      roomId,
-      challengeId,
-    ]);
+    await pool.query(
+      `INSERT INTO room_queue_groups (room_id, queue_group_id)
+       SELECT $1, queue_group_id FROM queue_group_challenges WHERE challenge_id = $2`,
+      [roomId, challengeId],
+    );
     await pool.query(
       `INSERT INTO queue_entries (challenge_id, repo_id, status, position)
        VALUES ($1, $2, 'waiting', 1)`,

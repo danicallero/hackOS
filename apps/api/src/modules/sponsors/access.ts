@@ -62,17 +62,30 @@ export function requireEnterpriseJudgeManager(
   locator: ContextualResourceLocator,
 ): preHandlerHookHandler {
   return async (request) => {
-    if (request.userId == null) throw new UnauthorizedError();
     const enterpriseId = enterpriseIdFrom(request, locator);
     const { rowCount } = await pool.query(`SELECT 1 FROM enterprises WHERE id = $1`, [
       enterpriseId,
     ]);
     if (rowCount === 0) throw new NotFoundError("Enterprise not found", { enterpriseId });
-    if (await userHasCapability(request.userId, CAPABILITIES.QUEUE_ADMIN, request)) return;
-    if (await userHasCapability(request.userId, CAPABILITIES.SPONSORS_MANAGE, request)) return;
-    if (await ownsEnterprise(request.userId, enterpriseId)) return;
-    throw new ForbiddenError("Not allowed to manage this enterprise's judges", { enterpriseId });
+    await assertCanManageEnterpriseJudging(request, enterpriseId);
   };
+}
+
+/**
+ * The grant behind {@link requireEnterpriseJudgeManager}, callable directly by
+ * routes whose enterprise is derived from the row being written (a room's
+ * queue_group) rather than named in params or body. Same rule, one place:
+ * global queue/sponsor administrators, or the enterprise's own reps.
+ */
+export async function assertCanManageEnterpriseJudging(
+  request: FastifyRequest,
+  enterpriseId: number,
+): Promise<void> {
+  if (request.userId == null) throw new UnauthorizedError();
+  if (await userHasCapability(request.userId, CAPABILITIES.QUEUE_ADMIN, request)) return;
+  if (await userHasCapability(request.userId, CAPABILITIES.SPONSORS_MANAGE, request)) return;
+  if (await ownsEnterprise(request.userId, enterpriseId)) return;
+  throw new ForbiddenError("Not allowed to manage this enterprise's judging", { enterpriseId });
 }
 
 /** Shared H43/H44 enterprise resolver used by sponsor and challenge routes. */

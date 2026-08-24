@@ -59,11 +59,57 @@ export async function createRoom(
   return roomId;
 }
 
+/**
+ * Point a room at the queue group the challenge feeds — the room->challenge
+ * link now goes through `room_queue_groups`. Every challenge has exactly one
+ * group (0410), so this remains "assign this challenge to this room".
+ */
 export async function assignChallengeToRoom(roomId: number, challengeId: number): Promise<void> {
   await pool.query(
-    `INSERT INTO room_challenges (room_id, challenge_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+    `INSERT INTO room_queue_groups (room_id, queue_group_id)
+     SELECT $1, qgc.queue_group_id FROM queue_group_challenges qgc WHERE qgc.challenge_id = $2
+     ON CONFLICT DO NOTHING`,
     [roomId, challengeId],
   );
+}
+
+/** The queue group a challenge feeds — its own 1:1 group unless merged. */
+export async function queueGroupOf(challengeId: number): Promise<number> {
+  const { rows } = await pool.query(
+    `SELECT queue_group_id FROM queue_group_challenges WHERE challenge_id = $1`,
+    [challengeId],
+  );
+  return Number(rows[0].queue_group_id);
+}
+
+/** Assign a room directly to a queue group (for merged, N>1 group tests). */
+export async function assignQueueGroupToRoom(roomId: number, queueGroupId: number): Promise<void> {
+  await pool.query(
+    `INSERT INTO room_queue_groups (room_id, queue_group_id) VALUES ($1, $2)
+     ON CONFLICT (room_id) DO UPDATE SET queue_group_id = EXCLUDED.queue_group_id`,
+    [roomId, queueGroupId],
+  );
+}
+
+/**
+ * Merge `challengeIds` into the queue group of the first one, simulating the
+ * admin merge UI that does not exist yet — the only way to build an N>1 group
+ * today. Returns that group's id.
+ */
+export async function mergeChallengesIntoOneGroup(challengeIds: number[]): Promise<number> {
+  const [primary, ...rest] = challengeIds;
+  const { rows } = await pool.query(
+    `SELECT queue_group_id FROM queue_group_challenges WHERE challenge_id = $1`,
+    [primary],
+  );
+  const groupId = Number(rows[0].queue_group_id);
+  for (const challengeId of rest) {
+    await pool.query(
+      `UPDATE queue_group_challenges SET queue_group_id = $1 WHERE challenge_id = $2`,
+      [groupId, challengeId],
+    );
+  }
+  return groupId;
 }
 
 /**

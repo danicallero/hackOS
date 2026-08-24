@@ -2,6 +2,7 @@ import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import type { Queryable } from "../../db/pool.js";
 import { broadcast } from "../../lib/sse.js";
 import { notify, QUEUE_STAFF_CATEGORY } from "../notifications/service.js";
+import { roomChallengeIds } from "./groups.js";
 import { REPO_MEMBER_RELATION_SQL } from "./membership.js";
 
 /**
@@ -245,13 +246,8 @@ export async function notifyTeamMessage(
 
 /** Notify participants whose queues are affected by a room-level change. */
 export async function notifyRoomQueueChanged(client: Queryable, roomId: number): Promise<void> {
-  const { rows } = await client.query(
-    `SELECT challenge_id FROM room_challenges WHERE room_id = $1`,
-    [roomId],
-  );
-  await Promise.all(
-    rows.map((row: { challenge_id: number }) =>
-      notifyChallengeQueueChanged(client, row.challenge_id),
-    ),
-  );
+  // H46: a room serves a queue_group, so a room-level change affects every
+  // challenge feeding that group — one today, 1..N once groups are merged.
+  const challengeIds = await roomChallengeIds(client, roomId);
+  await Promise.all(challengeIds.map((id) => notifyChallengeQueueChanged(client, id)));
 }

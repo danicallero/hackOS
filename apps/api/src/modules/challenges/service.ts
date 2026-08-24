@@ -486,11 +486,15 @@ export async function updateChallenge(
 
     if (patch.maxInWaitingArea !== undefined) {
       await client.query(
+        // H46: every room serving this challenge — reached through the
+        // queue_group the challenge feeds, so a shared group's rooms are all
+        // covered too (§8 Q4: capacity stays per-room, never pooled).
         `UPDATE room_queue_state rqs
             SET max_in_waiting_area = $2
-           FROM room_challenges rc
-          WHERE rc.room_id = rqs.room_id
-            AND rc.challenge_id = $1`,
+           FROM room_queue_groups rqg
+           JOIN queue_group_challenges qgc ON qgc.queue_group_id = rqg.queue_group_id
+          WHERE rqg.room_id = rqs.room_id
+            AND qgc.challenge_id = $1`,
         [challengeId, patch.maxInWaitingArea],
       );
     }
