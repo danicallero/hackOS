@@ -103,6 +103,14 @@ the dead-letter queue.
 - The claim query uses **`FOR UPDATE SKIP LOCKED`**, so even if multiple API/
   worker instances tick at once, a row locked by one drain is invisible to the
   others — no double-send, safe horizontal scaling.
+- Each tick claims up to `NOTIFICATION_OUTBOX_BATCH_SIZE` rows (default `100`,
+  see `docs/env-vars.md`), but claims, dispatches, and commits **one row per
+  transaction** (`claimAndDispatchOne` in `dispatcher.ts`) rather than
+  batching the whole tick into one transaction. That bounds the
+  duplicate-send window on a mid-tick crash to at most the single row that
+  was in flight, independent of batch size — see
+  `docs/big-event-readiness.md` for why that makes 100 safe as a permanent
+  default.
 - State-machine ticks (expirer, pump) run their mutations inside
   `withTransaction` + `SELECT … FOR UPDATE`, honouring the "exactly one winner
   per transition" invariant (`plan/07`).

@@ -14,8 +14,10 @@ import {
 } from "fastify-type-provider-zod";
 import { config } from "./config.js";
 import { pool } from "./db/pool.js";
+import { dbTimeoutsTotal, isTimeoutError } from "./lib/db-errors.js";
 import { AppError } from "./lib/errors.js";
 import { idempotencyOnSend } from "./lib/idempotency.js";
+import { register } from "./lib/metrics.js";
 import { openApiSecurityForPolicy, registerRoutePolicyInfrastructure } from "./lib/route-policy.js";
 import { broadcast } from "./lib/sse.js";
 import { mutationDomainForPath, publicContentMutationForPath } from "./lib/sse-routing.js";
@@ -50,7 +52,7 @@ function logSoftFailure(req: FastifyRequest, err: unknown, message: string): voi
 }
 
 function docsTagFor(url: string): keyof typeof TAG_DESCRIPTIONS {
-  if (url === "/healthz") return "foundation";
+  if (url === "/healthz" || url === "/metrics") return "foundation";
   if (url.startsWith("/api/public/")) return "public";
   if (url.startsWith("/api/auth/")) return "auth";
   if (
@@ -362,6 +364,7 @@ export async function buildApp(): Promise<App> {
         },
       });
     }
+    if (isTimeoutError(err)) dbTimeoutsTotal.inc();
     req.log.error(err);
     return reply.code(500).send({
       error: { code: "internal", message: "Internal server error" },
@@ -384,6 +387,25 @@ export async function buildApp(): Promise<App> {
       await pool.query("SELECT 1");
       await valkey.ping();
       return { status: "ok" };
+    },
+  );
+
+  app.get(
+    "/metrics",
+    {
+      config: {
+        routeAccessPolicy: { kind: "public", anonymousCategory: "metrics" },
+      },
+      schema: {
+        description:
+          "Prometheus scrape endpoint (H540): pg pool saturation/wait, query " +
+          "timeouts, SSE connection counts/disconnects/rejections, and Node " +
+          "process defaults.",
+      },
+    },
+    async (_req, reply) => {
+      reply.header("content-type", register.contentType);
+      return register.metrics();
     },
   );
 

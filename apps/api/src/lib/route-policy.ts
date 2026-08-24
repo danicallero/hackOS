@@ -8,6 +8,7 @@ import type { FastifyInstance, FastifyRequest, RouteOptions } from "fastify";
  */
 export type AnonymousAccessCategory =
   | "health"
+  | "metrics"
   | "public-content"
   | "public-announcement"
   | "public-tv"
@@ -77,7 +78,7 @@ declare module "fastify" {
 }
 
 function isApplicationRoute(route: RouteOptions): boolean {
-  return route.url === "/healthz" || route.url.startsWith("/api/");
+  return route.url === "/healthz" || route.url === "/metrics" || route.url.startsWith("/api/");
 }
 
 function validatePolicy(policy: RouteAccessPolicy, route: RouteOptions): void {
@@ -88,6 +89,7 @@ function validatePolicy(policy: RouteAccessPolicy, route: RouteOptions): void {
     if (
       ![
         "health",
+        "metrics",
         "public-content",
         "public-announcement",
         "public-tv",

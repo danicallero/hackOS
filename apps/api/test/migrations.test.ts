@@ -25,13 +25,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (!adminClient) return;
-  await adminClient.query(
-    `SELECT pg_terminate_backend(pid)
-     FROM pg_stat_activity
-     WHERE datname = $1 AND pid <> pg_backend_pid()`,
-    [databaseName],
-  );
-  await adminClient.query(`DROP DATABASE "${databaseName}"`);
+  await adminClient.query(`DROP DATABASE "${databaseName}" WITH (FORCE)`);
   await adminClient.end();
 });
 
