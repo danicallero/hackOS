@@ -676,9 +676,4 @@ export default function SchedulePage() {
   );
 }
 
-/**
- * Opens when a row is dropped on the "new date" dropzone (H59 drag-to-
- * reschedule) — day sections aren't stored objects, just a groupBy of
- * startsAt, so "create a new day" just means picking a date nothing is
- * grouped under yet, via the same date input the create/edit form uses.
- */
+/** New-date drops use the same date picker as schedule creation (H59). */

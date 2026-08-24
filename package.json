@@ -12,6 +12,7 @@
     "dev:api": "pnpm --filter @hackos/api dev",
     "dev:web": "pnpm --filter @hackos/web dev",
     "build": "pnpm -r build",
+    "typecheck": "pnpm --filter @hackos/api typecheck && pnpm --filter @hackos/web typecheck && pnpm --filter @hackos/mobile typecheck",
     "test": "pnpm -r test",
     "test:ui": "pnpm test:ui:browser && pnpm --filter @hackos/mobile test:ui",
     "test:ui:browser": "playwright test --config=e2e/browser/playwright.config.ts",
