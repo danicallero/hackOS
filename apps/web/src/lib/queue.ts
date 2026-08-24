@@ -217,8 +217,13 @@ export interface QueueGroup {
   /** Distinct teams queued for it — a team in two of its challenges is one. */
   teams: number;
   shared: boolean;
-  /** Merging and splitting are refused from here on. */
-  judgingStarted: boolean;
+  /**
+   * Whether any team in this queue has been evaluated. Merging, splitting and
+   * editing the merged judging form are refused from that moment — and only
+   * from that moment: a queue that exists, or is being called from, is still
+   * configurable.
+   */
+  evaluationStarted: boolean;
 }
 
 /**

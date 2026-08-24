@@ -52,7 +52,7 @@ interface EnterpriseQueues {
   queues: QueueGroup[];
   challenges: Array<{ id: number; title: string }>;
   shared: QueueGroup | null;
-  /** Merging and splitting are both refused from here on. */
+  /** Some team here has been evaluated: the configuration is frozen. */
   locked: boolean;
 }
 
@@ -78,7 +78,7 @@ function byEnterprise(groups: QueueGroup[]): EnterpriseQueues[] {
     entry.queues.push(queue);
     entry.challenges.push(...queue.challenges);
     if (queue.shared) entry.shared = queue;
-    if (queue.judgingStarted) entry.locked = true;
+    if (queue.evaluationStarted) entry.locked = true;
   }
   return [...map.values()];
 }
