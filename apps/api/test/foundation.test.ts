@@ -40,6 +40,15 @@ describe("foundation", () => {
     expect(res.json()).toEqual({ status: "ok" });
   });
 
+  it("metrics serves the Prometheus registry, unauthenticated (H540)", async () => {
+    app = await buildTestApp();
+    const res = await app.inject({ method: "GET", url: "/metrics" });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-type"]).toMatch(/^text\/plain/);
+    expect(res.body).toContain("hackos_db_pool_total");
+    expect(res.body).toContain("hackos_sse_local_connections");
+  });
+
   it("serves Swagger docs for the API", async () => {
     app = await buildTestApp();
 

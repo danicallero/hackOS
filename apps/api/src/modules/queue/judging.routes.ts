@@ -90,7 +90,7 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
       },
     },
     async (req, reply) =>
-      subscribe(`${SSE_TOPICS.QUEUE_REVIEW_PREFIX}${req.params.entryId}`, reply),
+      subscribe(`${SSE_TOPICS.QUEUE_REVIEW_PREFIX}${req.params.entryId}`, req, reply),
   );
 
   // H36: field-level last-write-wins collaborative save; every save versioned.

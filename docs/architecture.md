@@ -249,6 +249,17 @@ is no global refresh stream and no read-cache invalidation hook: reads come
 from Postgres, while SSE is only a scoped freshness signal. **The API tier is
 therefore stateless** — any instance can serve any SSE client.
 
+**Backpressure and connection budgets (H540).** A write to a slow client's
+socket can report its kernel buffer is full (`write() === false`); rather than
+buffer unboundedly, `sse.ts` waits up to `SSE_WRITE_TIMEOUT_MS` for the
+socket to drain, then disconnects — the client's own auto-reconnect + refetch
+is the recovery path, so a bounded queue would only delay the same outcome.
+`subscribe()` also enforces global/per-topic/per-client connection budgets
+(`SSE_MAX_CONNECTIONS_*`), rejecting with `429` before the response is
+hijacked. All of it is scraped at `/metrics` (`hackos_sse_local_connections`,
+`hackos_sse_disconnects_total`, `hackos_sse_rejections_total`). See
+`docs/env-vars.md`.
+
 Mobile push is a different path entirely: the outbox dispatcher (worker) sends
 to Expo, which routes to APNs/FCM — see the notifications module and
 [`mobile.md`](./mobile.md).
@@ -295,7 +306,21 @@ not replica count, bounds latency for the periodic drains — tune `every: N` if
 5 s notification lag is too much before adding replicas.)
 
 **Postgres is the real ceiling.** It's a single primary — the deliberate
-bottleneck that keeps correctness simple. Headroom, in order of reach-for:
+bottleneck that keeps correctness simple. Pool size and timeouts are
+env-configurable per process (`DB_POOL_MAX`, `DB_*_TIMEOUT_MS`; H540 — see
+`docs/env-vars.md`), and every replica of api/worker holds its own pool, so
+the budget to respect before scaling replicas is:
+
+```
+(api replicas × DB_POOL_MAX) + (worker replicas × DB_POOL_MAX) < Postgres max_connections
+```
+
+with headroom left for `migrate`'s one-shot connections and admin/superuser
+use (Postgres defaults `max_connections` to 100). `/metrics` exposes pool
+saturation (`hackos_db_pool_total/idle/waiting`), acquire-wait latency
+(`hackos_db_pool_wait_seconds`), and aborted queries
+(`hackos_db_query_timeouts_total`) to watch before that budget is exceeded.
+Headroom, in order of reach-for:
 1. Bigger box / more memory (the partial indexes keep the hot claim query cheap).
 2. A connection pooler (PgBouncer) once api+worker replica count pushes the
    connection count up.
