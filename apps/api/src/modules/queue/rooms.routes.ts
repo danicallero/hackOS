@@ -6,7 +6,6 @@ import { audit } from "../../lib/audit.js";
 import { requireCapability, userHasCapability } from "../../lib/capabilities.js";
 import { NotFoundError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
-import { assertCanManageEnterpriseJudging } from "../sponsors/access.js";
 import { requireAnyCapability } from "./access.js";
 import { actor } from "./actor.js";
 import {
@@ -16,7 +15,7 @@ import {
   requireRoomListAccess,
 } from "./contextual-access.js";
 import { listManageableQueueGroups } from "./group-merge.js";
-import { queueGroupEnterpriseId, roomEnterpriseId } from "./groups.js";
+import { queueGroupEnterpriseId } from "./groups.js";
 import { scheduleTopUp } from "./pump.js";
 import {
   assignQueueGroupBody,
@@ -182,20 +181,14 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
   typed.post(
     "/api/queue/rooms/:roomId/queue-group",
     {
-      preHandler: idempotencyGuard,
-      config: {
-        routeAccessPolicy: {
-          kind: "contextual",
-          policy: "room-queue-group-assignment",
-          resource: { source: "params", field: "roomId" },
-        },
-      },
+      preHandler: [requireCapability(CAPABILITIES.QUEUE_ADMIN), idempotencyGuard],
+      config: { routeAccessPolicy: { kind: "capability", capability: CAPABILITIES.QUEUE_ADMIN } },
       schema: {
         params: roomIdParam,
         body: assignQueueGroupBody,
         summary: "Assign a room to a queue group",
         description:
-          "Points the room at the queue group it serves, replacing any previous assignment (a room serves one group at a time). The room's enterprise, callable challenges and judges all follow from the group. Allowed for global queue/sponsor administrators and for representatives of the group's enterprise.",
+          "Points the room at the enterprise queue group it serves, replacing any previous assignment (a room serves one group at a time). The room's enterprise, callable challenges and judges all follow from the group. Global-admin only — sponsor representatives manage their queue group's challenges and judges, but not which rooms serve it.",
       },
     },
     async (req, reply) => {
@@ -204,13 +197,6 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
       const enterpriseId = await queueGroupEnterpriseId(pool, queueGroupId);
       if (enterpriseId == null) {
         throw new NotFoundError("Queue group not found", { queueGroupId });
-      }
-      // Both ends must be manageable by the caller: the group they are
-      // pointing at, and the group the room is being taken away from.
-      await assertCanManageEnterpriseJudging(req, enterpriseId);
-      const currentEnterpriseId = await roomEnterpriseId(pool, roomId);
-      if (currentEnterpriseId != null && currentEnterpriseId !== enterpriseId) {
-        await assertCanManageEnterpriseJudging(req, currentEnterpriseId);
       }
 
       await withTransaction(async (client) => {
@@ -253,13 +239,8 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
   typed.delete(
     "/api/queue/rooms/:roomId/queue-group/:queueGroupId",
     {
-      config: {
-        routeAccessPolicy: {
-          kind: "contextual",
-          policy: "room-queue-group-assignment",
-          resource: { source: "params", field: "roomId" },
-        },
-      },
+      preHandler: requireCapability(CAPABILITIES.QUEUE_ADMIN),
+      config: { routeAccessPolicy: { kind: "capability", capability: CAPABILITIES.QUEUE_ADMIN } },
       schema: {
         params: roomQueueGroupParam,
         summary: "Unassign a room from its queue group",
@@ -273,7 +254,6 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
       if (enterpriseId == null) {
         throw new NotFoundError("Queue group not found", { queueGroupId });
       }
-      await assertCanManageEnterpriseJudging(req, enterpriseId);
 
       await withTransaction(async (client) => {
         const before = (

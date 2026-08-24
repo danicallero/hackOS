@@ -4,10 +4,7 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Spinner } from "@/components/common/spinner";
-import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -18,148 +15,14 @@ import {
 } from "@/components/ui/select";
 import { ApiError } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
-import {
-  type ChallengeProgress,
-  getChallengeProgress,
-  type QueueGroup,
-  type QueueSearchResult,
-  type RoomAssignments,
-  searchTeams,
-} from "@/lib/queue";
+import type { QueueGroup, RoomAssignments } from "@/lib/queue";
 
 /**
- * Read-only progress + search for the room's assigned challenge (H46):
- * the sponsor-ownership fallback on `requireChallengeJudgeOrCapability`
- * lets a sponsor rep call these same endpoints the judging workspace uses,
- * without granting them any queue-operating capability.
- */
-export function ChallengeResultsPanel({ challengeId }: { challengeId: number }) {
-  const { t } = useLocale();
-  const [progress, setProgress] = useState<ChallengeProgress | null>(null);
-  const [loadingProgress, setLoadingProgress] = useState(true);
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<QueueSearchResult[]>([]);
-  const [searching, setSearching] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    // Data-fetch on mount/dependency change pattern.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setLoadingProgress(true);
-    getChallengeProgress(challengeId)
-      .then((data) => {
-        if (!cancelled) setProgress(data);
-      })
-      .catch((err) => {
-        toast.error(err instanceof ApiError ? err.message : t("couldNotLoadChallengeProgress"));
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingProgress(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [challengeId, t]);
-
-  useEffect(() => {
-    const q = query.trim();
-    if (!q) {
-      // Reset search results when query is cleared.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setResults([]);
-      setSearching(false);
-      return;
-    }
-    let cancelled = false;
-    setSearching(true);
-    const timer = setTimeout(() => {
-      searchTeams(challengeId, q)
-        .then((hits) => {
-          if (!cancelled) setResults(hits);
-        })
-        .catch((err) => {
-          if (!cancelled) toast.error(err instanceof ApiError ? err.message : t("searchFailed"));
-        })
-        .finally(() => {
-          if (!cancelled) setSearching(false);
-        });
-    }, 300);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [challengeId, query, t]);
-
-  const total = progress
-    ? progress.waiting +
-      progress.called +
-      progress.inProgress +
-      progress.evaluated +
-      progress.disqualified +
-      progress.other
-    : 0;
-
-  return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <p className="text-muted-foreground text-xs font-semibold uppercase">
-            {t("queueStatsEvaluated")}
-          </p>
-          <p className="mt-0.5 text-lg font-semibold tabular-nums">
-            {loadingProgress ? "…" : progress ? `${progress.evaluated} / ${total}` : "—"}
-          </p>
-        </div>
-        <div>
-          <p className="text-muted-foreground text-xs font-semibold uppercase">
-            {t("queueStatsAvgTime")}
-          </p>
-          <p className="mt-0.5 text-lg font-semibold tabular-nums">
-            {progress?.avgEvaluationMinutes != null
-              ? t("queueStatsMinutes", { count: Math.round(progress.avgEvaluationMinutes) })
-              : "—"}
-          </p>
-        </div>
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor={`challenge-search-${challengeId}`}>{t("searchTeamsAria")}</Label>
-        <Input
-          id={`challenge-search-${challengeId}`}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={t("searchProjectPlaceholder")}
-        />
-        {query.trim() && (
-          <ul className="divide-y rounded-md border">
-            {searching ? (
-              <li className="flex justify-center px-3 py-3">
-                <Spinner />
-              </li>
-            ) : results.length ? (
-              results.map((entry) => (
-                <li key={entry.id} className="flex items-center justify-between gap-3 px-3 py-2">
-                  <span className="min-w-0 truncate text-sm font-medium">
-                    {entry.repo_name ?? `#${entry.repo_id}`}
-                  </span>
-                  <StatusBadge tone={entry.has_review ? "success" : "warning"}>
-                    {entry.status}
-                  </StatusBadge>
-                </li>
-              ))
-            ) : (
-              <li className="px-3 py-2 text-muted-foreground text-sm">{t("noTeamsFound")}</li>
-            )}
-          </ul>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/**
- * Room -> queue group assignment plus the judges that follow from it. The
- * roster itself lives on the enterprise (Enterprises -> Judges), so it is
- * listed here read-only — a room no longer has judges of its own.
+ * Room -> enterprise queue group assignment. Admin-only (H46): which
+ * enterprise a room serves, its challenge(s) and its judges are all set from
+ * the enterprise's own workspace (Enterprises -> Judges, and the judging
+ * queues tab), not from here — a sponsor rep manages that content but never
+ * which rooms carry it.
  */
 export function AssignmentsEditor({
   roomId,
@@ -191,8 +54,6 @@ export function AssignmentsEditor({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setQueueGroupId(next ? String(next) : "");
   }, [assignments?.queueGroup, queueGroupFallback]);
-
-  const judges = assignments?.judges ?? [];
 
   return (
     <div className="space-y-5">
@@ -263,30 +124,6 @@ export function AssignmentsEditor({
               </Button>
             )}
           </div>
-        )}
-      </div>
-
-      <div className="space-y-2">
-        <p className="text-sm font-medium">{t("judgesCount", { count: judges.length })}</p>
-        {judges.length ? (
-          <ul className="divide-y rounded-md border">
-            {judges.map((assignment) => {
-              const fullName = [assignment.name, assignment.surname]
-                .filter(Boolean)
-                .join(" ")
-                .trim();
-              return (
-                <li key={assignment.user_id} className="px-3 py-2">
-                  <p className="truncate text-sm font-medium">{fullName || assignment.email}</p>
-                  {fullName && (
-                    <p className="text-muted-foreground truncate text-xs">{assignment.email}</p>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <p className="text-muted-foreground text-sm">{t("noJudgesAssigned")}</p>
         )}
       </div>
     </div>

@@ -43,8 +43,7 @@ import {
   updateRoom,
 } from "@/lib/queue";
 import { useSessionContext } from "@/lib/session";
-import { canAccessSponsorWorkspace } from "../../challenges/shared";
-import { AssignmentsEditor, ChallengeResultsPanel } from "./room-panels";
+import { AssignmentsEditor } from "./room-panels";
 
 type RoomEditor = {
   name: string;
@@ -58,9 +57,11 @@ function emptyRoomEditor(): RoomEditor {
 
 export default function QueueRoomsPage() {
   const { t } = useLocale();
-  const { can, me } = useSessionContext();
+  const { can } = useSessionContext();
+  // Admin-only (H46): a sponsor rep manages their queue group's challenges
+  // and judges from the enterprise workspace, but never which rooms serve
+  // it or a room's own settings.
   const canAdmin = can(CAPABILITIES.QUEUE_ADMIN);
-  const canManageRooms = canAccessSponsorWorkspace(canAdmin, Boolean(me?.isSponsorRep));
   const [rooms, setRooms] = useState<Room[]>([]);
   const [assignments, setAssignments] = useState<Record<number, RoomAssignments | null>>({});
   const [queueGroups, setQueueGroups] = useState<QueueGroup[]>([]);
@@ -83,7 +84,7 @@ export default function QueueRoomsPage() {
   const queueGroupFallback = queueGroups[0]?.id ?? 0;
 
   const load = useCallback(async () => {
-    if (!canManageRooms) {
+    if (!canAdmin) {
       setLoading(false);
       return;
     }
@@ -101,7 +102,7 @@ export default function QueueRoomsPage() {
     } finally {
       setLoading(false);
     }
-  }, [canManageRooms, t]);
+  }, [canAdmin, t]);
 
   const loadRoomDetails = useCallback(
     async (roomId: number) => {
@@ -237,7 +238,7 @@ export default function QueueRoomsPage() {
     },
   ];
 
-  if (!canManageRooms) {
+  if (!canAdmin) {
     return <AccessDenied ask={t("roomAdminDeniedDesc")} />;
   }
 
@@ -290,12 +291,10 @@ export default function QueueRoomsPage() {
       <PageHeader
         title={t("rooms")}
         actions={
-          canAdmin && (
-            <Button onClick={openCreateModal}>
-              <PlusIcon className="size-4" />
-              {t("createRoom")}
-            </Button>
-          )
+          <Button onClick={openCreateModal}>
+            <PlusIcon className="size-4" />
+            {t("createRoom")}
+          </Button>
         }
       />
 
@@ -372,7 +371,7 @@ export default function QueueRoomsPage() {
                 {t("createRoom")}
               </Button>
             </>
-          ) : canAdmin ? (
+          ) : (
             <div className="flex w-full flex-wrap items-center justify-between gap-2">
               <AlertModal
                 title={t("deleteRoomConfirmTitle")}
@@ -417,10 +416,6 @@ export default function QueueRoomsPage() {
                 </Button>
               </div>
             </div>
-          ) : (
-            <Button variant="outline" onClick={closeModal}>
-              {t("close")}
-            </Button>
           )
         }
       >
@@ -466,7 +461,6 @@ export default function QueueRoomsPage() {
                 <Input
                   id={`room-${selectedRoom.id}-name`}
                   value={roomDraft.name}
-                  disabled={!canAdmin}
                   onChange={(e) =>
                     setRoomDraft((current) => ({ ...current, name: e.target.value }))
                   }
@@ -477,7 +471,6 @@ export default function QueueRoomsPage() {
                 <Input
                   id={`room-${selectedRoom.id}-slug`}
                   value={roomDraft.slug}
-                  disabled={!canAdmin}
                   onChange={(e) =>
                     setRoomDraft((current) => ({ ...current, slug: e.target.value }))
                   }
@@ -488,7 +481,6 @@ export default function QueueRoomsPage() {
                 <Input
                   id={`room-${selectedRoom.id}-location`}
                   value={roomDraft.location}
-                  disabled={!canAdmin}
                   onChange={(e) =>
                     setRoomDraft((current) => ({ ...current, location: e.target.value }))
                   }
@@ -512,13 +504,6 @@ export default function QueueRoomsPage() {
                 canSetQueueGroup={queueGroups.length > 0}
               />
             </SectionCard>
-            {selectedRoomAssignments?.challenges[0] && (
-              <SectionCard title={t("challengeProgressTitle")}>
-                <ChallengeResultsPanel
-                  challengeId={selectedRoomAssignments.challenges[0].challenge_id}
-                />
-              </SectionCard>
-            )}
           </div>
         )}
       </Modal>

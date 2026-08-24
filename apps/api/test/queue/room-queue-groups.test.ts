@@ -263,50 +263,50 @@ describe("merged N>1 group", () => {
 });
 
 describe("room -> queue group assignment access", () => {
-  it("lets the owning enterprise's rep assign, and refuses an unrelated sponsor", async () => {
+  it("is admin-only: refuses even the owning enterprise's rep", async () => {
     const { enterpriseId, repId, challengeIds } = await createEnterpriseChallenges(1);
     const groupId = await queueGroupOf(challengeIds[0]!);
     const roomId = await createRoom();
-    const outsider = await createUser();
 
-    const mine = await app.inject({
+    // A sponsor rep manages their own queue group's challenges and judges,
+    // but not which rooms serve it — that stays an admin call (H46).
+    const asRep = await app.inject({
       method: "POST",
       url: `/api/queue/rooms/${roomId}/queue-group`,
       headers: asUser(repId),
       payload: { queueGroupId: groupId },
     });
-    expect(mine.statusCode).toBe(201);
-    expect(mine.json().enterpriseId).toBe(enterpriseId);
+    expect(asRep.statusCode).toBe(403);
 
-    const theirs = await app.inject({
-      method: "POST",
-      url: `/api/queue/rooms/${roomId}/queue-group`,
-      headers: asUser(outsider),
-      payload: { queueGroupId: groupId },
-    });
-    expect(theirs.statusCode).toBe(403);
-  });
-
-  it("refuses to hand a room from one enterprise to another without rights on both", async () => {
-    const alpha = await createEnterpriseChallenges(1);
-    const beta = await createEnterpriseChallenges(1);
-    const roomId = await createRoom();
-
-    await app.inject({
+    const asAdmin = await app.inject({
       method: "POST",
       url: `/api/queue/rooms/${roomId}/queue-group`,
       headers: asUser(adminId),
-      payload: { queueGroupId: await queueGroupOf(alpha.challengeIds[0]!) },
+      payload: { queueGroupId: groupId },
     });
+    expect(asAdmin.statusCode).toBe(201);
+    expect(asAdmin.json().enterpriseId).toBe(enterpriseId);
+  });
 
-    // Beta's rep may manage beta's group, but not take alpha's room away.
-    const steal = await app.inject({
-      method: "POST",
-      url: `/api/queue/rooms/${roomId}/queue-group`,
-      headers: asUser(beta.repId),
-      payload: { queueGroupId: await queueGroupOf(beta.challengeIds[0]!) },
+  it("unassignment is admin-only too", async () => {
+    const { repId, challengeIds } = await createEnterpriseChallenges(1);
+    const groupId = await queueGroupOf(challengeIds[0]!);
+    const roomId = await createRoom();
+    await assignQueueGroupToRoom(roomId, groupId);
+
+    const asRep = await app.inject({
+      method: "DELETE",
+      url: `/api/queue/rooms/${roomId}/queue-group/${groupId}`,
+      headers: asUser(repId),
     });
-    expect(steal.statusCode).toBe(403);
+    expect(asRep.statusCode).toBe(403);
+
+    const asAdmin = await app.inject({
+      method: "DELETE",
+      url: `/api/queue/rooms/${roomId}/queue-group/${groupId}`,
+      headers: asUser(adminId),
+    });
+    expect(asAdmin.statusCode).toBe(200);
   });
 
   it("404s on an unknown queue group", async () => {
