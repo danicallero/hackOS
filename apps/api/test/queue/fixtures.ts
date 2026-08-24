@@ -66,6 +66,24 @@ export async function assignChallengeToRoom(roomId: number, challengeId: number)
   );
 }
 
+/**
+ * Put `userId` on the judge roster of the enterprise that authored
+ * `challengeId` — the only way a judge is granted judging access now that
+ * `enterprise_judges` replaced `room_judges`.
+ */
+export async function addChallengeJudge(challengeId: number, userId: number): Promise<number> {
+  const { rows } = await pool.query(
+    `INSERT INTO enterprise_judges (enterprise_id, user_id)
+     SELECT author.enterprise_id, $2
+       FROM challenges c JOIN sponsors author ON author.id = c.author
+      WHERE c.id = $1
+     ON CONFLICT (enterprise_id, user_id) DO NOTHING
+     RETURNING enterprise_id`,
+    [challengeId, userId],
+  );
+  return rows[0]?.enterprise_id;
+}
+
 /** Repo + submissions rows for each member (creates users when not given). */
 export async function createRepoWithTeam(
   memberIds?: number[],

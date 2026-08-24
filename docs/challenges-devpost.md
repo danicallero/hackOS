@@ -304,13 +304,13 @@ global capability or the exact relationship receive `403`.
 
 - `projects:read` (and the administrator wildcard) is global. Sponsor
   representatives otherwise see only repositories attached to challenges of
-  their own enterprise, and assigned judges see only repositories attached to
-  their assigned challenge. A repository identifier is checked against that
-  derived scope, so a foreign repository probe fails closed.
+  their own enterprise, and roster judges see only repositories attached to
+  the challenges of an enterprise they judge for. A repository identifier is
+  checked against that derived scope, so a foreign repository probe fails closed.
 - `sponsors:manage` and `queue:admin` remain global for their challenge
   operations. A sponsor row grants access only to its enterprise's challenges;
-  a `room_judges(user_id, challenge_id)` relationship grants only that exact
-  challenge's read/panel view, never edit access.
+  an `enterprise_judges(enterprise_id, user_id)` row grants read/panel access
+  to that enterprise's challenges only, never edit access.
 - Enterprise profile routes resolve `:id` before authorizing. A representative
   can edit only their linked enterprise and its owner-editable fields; an
   unrelated enterprise id is forbidden. Nested project/challenge operations

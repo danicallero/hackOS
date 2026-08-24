@@ -10,6 +10,7 @@ import {
   truncateAll,
 } from "../helpers.js";
 import {
+  addChallengeJudge,
   assignChallengeToRoom,
   createChallenge,
   createRepoWithTeam,
@@ -52,11 +53,7 @@ describe("queue contextual isolation", () => {
     const roomB = await createRoom();
     await assignChallengeToRoom(roomA, challengeA);
     await assignChallengeToRoom(roomB, challengeB);
-    const { pool } = await import("../../src/db/pool.js");
-    await pool.query(
-      `INSERT INTO room_judges (room_id, challenge_id, user_id) VALUES ($1, $2, $3)`,
-      [roomA, challengeA, judge],
-    );
+    await addChallengeJudge(challengeA, judge);
     const { repoId: repoA } = await createRepoWithTeam();
     const { repoId: repoB } = await createRepoWithTeam();
     const entryA = await enqueueRepo(challengeA, repoA, 1);
@@ -107,34 +104,42 @@ describe("queue contextual isolation", () => {
         })
       ).statusCode,
     ).toBe(200);
+    // The grant is the enterprise roster, not the room: rostering the same
+    // person on challenge B's enterprise — and nothing room-scoped — is what
+    // opens room B to them.
+    const enterpriseB = await addChallengeJudge(challengeB, judge);
+    expect(enterpriseB).toBeDefined();
     expect(
       (
         await app.inject({
-          method: "POST",
-          url: `/api/queue/rooms/${roomA}/judges`,
-          headers: asUser(wildcard),
-          payload: { challengeId: challengeB, userId: judge },
+          method: "GET",
+          url: `/api/queue/rooms/${roomB}/view`,
+          headers: asUser(judge),
         })
       ).statusCode,
-    ).toBe(403);
+    ).toBe(200);
   });
 
-  it("does not widen a judge assignment to another room sharing the same challenge", async () => {
+  it("reaches every room serving the judge's own enterprise, never another enterprise's room", async () => {
+    // The roster is enterprise-scoped: a judge is no longer pinned to one
+    // room, so two rooms serving the same challenge are both theirs — while
+    // a room serving a different enterprise's challenge stays closed.
     const judge = await createUser();
     const challengeId = await createChallenge();
+    const foreignChallengeId = await createChallenge();
     const assignedRoomId = await createRoom({ name: "Assigned room" });
+    const siblingRoomId = await createRoom({ name: "Sibling room" });
     const foreignRoomId = await createRoom({ name: "Foreign room" });
     await assignChallengeToRoom(assignedRoomId, challengeId);
-    await assignChallengeToRoom(foreignRoomId, challengeId);
-    const { pool } = await import("../../src/db/pool.js");
-    await pool.query(
-      `INSERT INTO room_judges (room_id, challenge_id, user_id) VALUES ($1, $2, $3)`,
-      [assignedRoomId, challengeId, judge],
-    );
+    await assignChallengeToRoom(siblingRoomId, challengeId);
+    await assignChallengeToRoom(foreignRoomId, foreignChallengeId);
+    await addChallengeJudge(challengeId, judge);
 
     for (const url of [
       `/api/queue/rooms/${assignedRoomId}/view`,
       `/api/queue/rooms/${assignedRoomId}/pace`,
+      `/api/queue/rooms/${siblingRoomId}/view`,
+      `/api/queue/rooms/${siblingRoomId}/pace`,
     ]) {
       expect((await app.inject({ method: "GET", url, headers: asUser(judge) })).statusCode).toBe(
         200,

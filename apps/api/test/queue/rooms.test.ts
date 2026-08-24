@@ -144,7 +144,7 @@ describe("rooms CRUD + assignments (QUEUE_ADMIN)", () => {
     expect(state.json().desired_minutes_per_team).toBe(15);
   });
 
-  it("assigns and unassigns challenges and judges to a room", async () => {
+  it("assigns and unassigns challenges to a room", async () => {
     const created = await app.inject({
       method: "POST",
       url: "/api/queue/rooms",
@@ -153,7 +153,6 @@ describe("rooms CRUD + assignments (QUEUE_ADMIN)", () => {
     });
     const roomId = created.json().id;
     const challengeId = await createChallenge();
-    const judgeUser = await createUser();
 
     const assign = await app.inject({
       method: "POST",
@@ -163,27 +162,11 @@ describe("rooms CRUD + assignments (QUEUE_ADMIN)", () => {
     });
     expect(assign.statusCode).toBe(201);
 
-    const assignJudge = await app.inject({
-      method: "POST",
-      url: `/api/queue/rooms/${roomId}/judges`,
-      headers: asUser(adminId),
-      payload: { challengeId, userId: judgeUser },
-    });
-    expect(assignJudge.statusCode).toBe(201);
-
     const { pool } = await import("../../src/db/pool.js");
     expect(
       (await pool.query(`SELECT * FROM room_challenges WHERE room_id = $1`, [roomId])).rows,
     ).toHaveLength(1);
-    expect(
-      (await pool.query(`SELECT * FROM room_judges WHERE room_id = $1`, [roomId])).rows,
-    ).toHaveLength(1);
 
-    await app.inject({
-      method: "DELETE",
-      url: `/api/queue/rooms/${roomId}/judges/${challengeId}/${judgeUser}`,
-      headers: asUser(adminId),
-    });
     await app.inject({
       method: "DELETE",
       url: `/api/queue/rooms/${roomId}/challenges/${challengeId}`,
@@ -191,9 +174,6 @@ describe("rooms CRUD + assignments (QUEUE_ADMIN)", () => {
     });
     expect(
       (await pool.query(`SELECT * FROM room_challenges WHERE room_id = $1`, [roomId])).rows,
-    ).toHaveLength(0);
-    expect(
-      (await pool.query(`SELECT * FROM room_judges WHERE room_id = $1`, [roomId])).rows,
     ).toHaveLength(0);
   });
 
@@ -207,19 +187,12 @@ describe("rooms CRUD + assignments (QUEUE_ADMIN)", () => {
     const roomId = created.json().id;
     const firstChallengeId = await createChallenge();
     const secondChallengeId = await createChallenge();
-    const judgeUser = await createUser();
 
     await app.inject({
       method: "POST",
       url: `/api/queue/rooms/${roomId}/challenges`,
       headers: asUser(adminId),
       payload: { challengeId: firstChallengeId },
-    });
-    await app.inject({
-      method: "POST",
-      url: `/api/queue/rooms/${roomId}/judges`,
-      headers: asUser(adminId),
-      payload: { challengeId: firstChallengeId, userId: judgeUser },
     });
 
     const replace = await app.inject({
@@ -235,100 +208,6 @@ describe("rooms CRUD + assignments (QUEUE_ADMIN)", () => {
       (await pool.query(`SELECT challenge_id FROM room_challenges WHERE room_id = $1`, [roomId]))
         .rows,
     ).toEqual([{ challenge_id: secondChallengeId }]);
-    expect(
-      (await pool.query(`SELECT * FROM room_judges WHERE room_id = $1`, [roomId])).rows,
-    ).toHaveLength(0);
-  });
-
-  it("lets owning sponsor reps manage judges for their challenge room and audits it", async () => {
-    const sponsorUser = await createUser();
-    const otherSponsorUser = await createUser();
-    const judgeUser = await createUser();
-    const { pool } = await import("../../src/db/pool.js");
-    const enterprise = await pool.query(`INSERT INTO enterprises (name) VALUES ($1) RETURNING id`, [
-      "SponsorCo",
-    ]);
-    const otherEnterprise = await pool.query(
-      `INSERT INTO enterprises (name) VALUES ($1) RETURNING id`,
-      ["OtherCo"],
-    );
-    const sponsor = await pool.query(
-      `INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2) RETURNING id`,
-      [enterprise.rows[0].id, sponsorUser],
-    );
-    await pool.query(`INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2)`, [
-      otherEnterprise.rows[0].id,
-      otherSponsorUser,
-    ]);
-    const challenge = await pool.query(
-      `INSERT INTO challenges (author, title) VALUES ($1, $2) RETURNING id`,
-      [sponsor.rows[0].id, "Sponsor challenge"],
-    );
-    const challengeId = challenge.rows[0].id;
-    const room = await app.inject({
-      method: "POST",
-      url: "/api/queue/rooms",
-      headers: asUser(adminId),
-      payload: { name: "Sala sponsor", slug: "sala-sponsor" },
-    });
-    const roomId = room.json().id;
-    await app.inject({
-      method: "POST",
-      url: `/api/queue/rooms/${roomId}/challenges`,
-      headers: asUser(adminId),
-      payload: { challengeId },
-    });
-
-    const forbidden = await app.inject({
-      method: "POST",
-      url: `/api/queue/rooms/${roomId}/judges`,
-      headers: asUser(otherSponsorUser),
-      payload: { challengeId, userId: judgeUser },
-    });
-    expect(forbidden.statusCode).toBe(403);
-
-    const assign = await app.inject({
-      method: "POST",
-      url: `/api/queue/rooms/${roomId}/judges`,
-      headers: asUser(sponsorUser),
-      payload: { challengeId, userId: judgeUser },
-    });
-    expect(assign.statusCode).toBe(201);
-
-    const remove = await app.inject({
-      method: "DELETE",
-      url: `/api/queue/rooms/${roomId}/judges/${challengeId}/${judgeUser}`,
-      headers: asUser(sponsorUser),
-    });
-    expect(remove.statusCode).toBe(200);
-
-    const audits = await pool.query(
-      `SELECT action, actor_id FROM audit_log
-        WHERE entity_type = 'room_judge'
-        ORDER BY id ASC`,
-    );
-    expect(audits.rows).toMatchObject([
-      { action: "assign", actor_id: sponsorUser },
-      { action: "remove", actor_id: sponsorUser },
-    ]);
-  });
-
-  it("H436: QUEUE_ADMIN can browse judge candidates for a room with no challenge assigned yet", async () => {
-    const room = await app.inject({
-      method: "POST",
-      url: "/api/queue/rooms",
-      headers: asUser(adminId),
-      payload: { name: "Sala sin reto", slug: "sala-sin-reto" },
-    });
-    const roomId = room.json().id;
-
-    const candidates = await app.inject({
-      method: "GET",
-      url: `/api/queue/rooms/${roomId}/judge-candidates`,
-      headers: asUser(adminId),
-    });
-    expect(candidates.statusCode).toBe(200);
-    expect(Array.isArray(candidates.json().users)).toBe(true);
   });
 });
 

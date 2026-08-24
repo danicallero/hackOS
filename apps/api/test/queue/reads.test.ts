@@ -70,7 +70,7 @@ describe("challenge progress (H40)", () => {
     expect(body.disqualified).toBe(1);
   });
 
-  it("lets a sponsor rep view progress for their own challenge without room_judges/capabilities, but not others' (H46)", async () => {
+  it("lets a sponsor rep view progress for their own challenge without a judge roster row/capabilities, but not others' (H46)", async () => {
     const { pool } = await import("../../src/db/pool.js");
     const owner = await createUser();
     const enterprise = await pool.query(`INSERT INTO enterprises (name) VALUES ($1) RETURNING id`, [

@@ -23,7 +23,8 @@ Web: `apps/web/src/lib/nav.ts` (data) + `apps/web/src/components/layout/app-side
 ## Principle
 
 Every navigation decision is a function of **effective capabilities and
-association facts** (is this account a room judge? a linked sponsor rep?),
+association facts** (is this account on an enterprise judge roster? a
+linked sponsor rep?),
 never of the illustrative `role` string (`apps/api/src/modules/identity/role.ts`
 computes a single-priority `role` for *display* only — admin > judge > sponsor
 > staff > participant — and explicitly says it must never gate a permission
@@ -31,7 +32,7 @@ check). A multi-capability account keeps every relevant destination
 simultaneously; nothing is hidden to make room for something else, and there
 is no role switcher.
 
-`GET /api/me` also returns `isRoomJudge` and `isSponsorRep` booleans
+`GET /api/me` also returns `isEnterpriseJudge` and `isSponsorRep` booleans
 (`apps/api/src/modules/identity/role.ts#computeMembershipFlags`) precisely so
 navigation can check both facts independently — the single `role` field
 collapses a sponsor rep who also judges to `"judge"`, which would hide their
@@ -186,19 +187,19 @@ capability.
 
 ## Association-aware domain pages
 
-Several domain pages gate access on association facts (`isRoomJudge`,
-`isSponsorRep`) in addition to capabilities, because a room judge or sponsor
+Several domain pages gate access on association facts (`isEnterpriseJudge`,
+`isSponsorRep`) in addition to capabilities, because a judge or sponsor
 rep can be granted access to a domain without holding the matching
 capability directly — the backend already authorizes them through the
-association (`room_judges`, sponsor-rep links), so the frontend gate must
+association (`enterprise_judges`, sponsor-rep links), so the frontend gate must
 check the same fact or it strands them on a client-side "no access" screen
 despite a working API.
 
 - `apps/web/src/app/(app)/judging/page.tsx` — `canUse`/`canJudge`
   (`apps/web/src/lib/judging-workspace.ts#workspaceAccess`) fold in
-  `isRoomJudge` alongside `judge:panel`/`queue:operate`/`queue:admin`.
+  `isEnterpriseJudge` alongside `judge:panel`/`queue:operate`/`queue:admin`.
 - `apps/web/src/app/(app)/projects/page.tsx` — `canView` folds in
-  `isRoomJudge` for judges (rather than `judge:panel` alone) and
+  `isEnterpriseJudge` for judges (rather than `judge:panel` alone) and
   `isSponsorRep` for sponsors (rather than `me?.role === "sponsor"`, which
   collapses to `"judge"` for a sponsor rep who also judges — see
   [Principle](#principle)). `GET /api/repos`
