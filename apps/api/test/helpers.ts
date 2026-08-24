@@ -13,6 +13,12 @@ export async function truncateAll(): Promise<void> {
   if (rows.length === 0) return;
   const tables = rows.map((r: { tablename: string }) => `"${r.tablename}"`).join(", ");
   await pool.query(`TRUNCATE ${tables} RESTART IDENTITY CASCADE`);
+  // The GET read cache keys on the URL, and RESTART IDENTITY hands the next
+  // test the same ids — so without this a cached body from the previous test
+  // replays for a completely different row. Invalidated here rather than in
+  // each suite because every direct-SQL seed has the problem.
+  const { invalidateReadCache } = await import("../src/lib/read-cache.js");
+  await invalidateReadCache();
 }
 
 /** Insert a bare user row; returns its id. */

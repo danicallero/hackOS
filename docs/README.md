@@ -51,6 +51,16 @@ Architecture & modules:
   map that shows which module work runs in the request and which is handed off.
 - [Challenges & Devpost projects](./challenges-devpost.md) — the `challenges`
   and `projects` modules and the Devpost intake pipeline.
+- [Queue groups (H46)](./queue-groups.md) — the enterprise-scoped grouping
+  layer between challenges and the rooms/queues that judge them: why
+  `queue_entries.challenge_id` stays untouched, the two database-enforced
+  invariants (a group never spans enterprises; every challenge has exactly one
+  group), the 1:1 backfill, and the admin merge that turns several of an
+  enterprise's challenges into one shared judging queue with one form.
+- [Queue operator console](./queue-operator.md) — the live arrival board for
+  queue operators: shared-queue deduplication, local team search, room
+  destinations, capability-gated actions, and the integration boundary with
+  queue configuration.
 - [Event config & the Apple Wallet pass](./event-config-wallet.md) — the
   `event_config` singleton (identity, doors-open vs hacking window, venue) and
   how the Wallet pass renders from it (field visibility, captions, back fields),

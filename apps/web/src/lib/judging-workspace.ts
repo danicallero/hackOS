@@ -70,7 +70,7 @@ export function hasWaitedTooLong(
 export type CollaborationState = "saving" | "saved" | "offline" | "conflict" | "unsaved";
 
 /**
- * Judge access is association-based (`room_judges`), not capability-based
+ * Judge access is association-based (`enterprise_judges`), not capability-based
  * (H40): a judge added by a sponsor rep can hold zero capabilities and still
  * needs the panel, matching the API's `requireRoomJudgeOrCapability` fallback.
  */
@@ -79,15 +79,15 @@ export function workspaceAccess({
   judge,
   admin,
   exportData,
-  isRoomJudge = false,
+  isEnterpriseJudge = false,
 }: {
   operate: boolean;
   judge: boolean;
   admin: boolean;
   exportData: boolean;
-  isRoomJudge?: boolean;
+  isEnterpriseJudge?: boolean;
 }) {
-  const canJudge = judge || isRoomJudge;
+  const canJudge = judge || isEnterpriseJudge;
   return {
     canUse: operate || canJudge || admin,
     canOperate: operate,

@@ -29,6 +29,8 @@ export interface QueueEntry {
   presentation_started_at: string | null;
   completed_at: string | null;
   precalled_at: string | null;
+  /** Approximate wait in minutes, present on room queue projections. */
+  eta_minutes?: number | null;
   created_at: string;
   updated_at: string;
   /** Joined into read models. */
@@ -78,8 +80,21 @@ export interface QueueSettings {
 export interface RoomView {
   room: Room;
   state: RoomQueueState | null;
-  /** The single challenge this room judges (read-only in the panel). */
-  challenge: { id: number; title: string; enterprise_name: string } | null;
+  /**
+   * The queue this room serves (read-only in the panel), named by its queue
+   * group: a challenge title while the group holds one challenge, the
+   * admin-chosen shared name once several are merged (H46). `criteria` is the
+   * one judging form every team in this queue is scored with.
+   */
+  challenge: {
+    id: number;
+    title: string;
+    enterprise_name: string;
+    queue_group_id: number;
+    /** Operator/judge feed only — the public TV projection omits both. */
+    challenge_count?: number;
+    judging_panel_criteria?: Question[] | null;
+  } | null;
   active: QueueEntry | null;
   called: QueueEntry[];
   next: QueueEntry[];
@@ -134,6 +149,8 @@ export interface RoomChallengeAssignment {
   challenge_id: number;
   title: string;
   visibility: string;
+  queue_group_id: number;
+  queue_group_name: string;
   assigned_at: string;
   assigned_by: number | null;
   assigned_by_name: string | null;
@@ -141,9 +158,13 @@ export interface RoomChallengeAssignment {
   assigned_by_email: string | null;
 }
 
+/**
+ * Read-only: judges are rostered on the enterprise that owns the room's
+ * challenge (`/api/enterprises/:id/judges`), not on the room itself.
+ */
 export interface RoomJudgeAssignment {
-  challenge_id: number;
-  title: string;
+  queue_group_id: number;
+  enterprise_id: number;
   user_id: number;
   name: string | null;
   surname: string | null;
@@ -155,12 +176,154 @@ export interface RoomJudgeAssignment {
   assigned_by_email: string | null;
 }
 
+/** The queue group a room serves; null when the room is unassigned. */
+export interface RoomQueueGroupAssignment {
+  id: number;
+  display_name: string;
+  enterprise_id: number;
+  enterprise_name: string;
+  assigned_at: string;
+  assigned_by: number | null;
+  assigned_by_name: string | null;
+  assigned_by_surname: string | null;
+  assigned_by_email: string | null;
+}
+
 export interface RoomAssignments {
   roomId: number;
   room: Room;
+  queueGroup: RoomQueueGroupAssignment | null;
+  /** Every challenge the room judges, via its queue group. */
   challenges: RoomChallengeAssignment[];
   judges: RoomJudgeAssignment[];
 }
+
+/**
+ * One judging queue. A queue with more than one challenge is a *shared*
+ * queue: one line in every list, one call per team, one judging form (H46).
+ *
+ * `GET /api/queue/groups` returns every queue the caller may manage (all of
+ * them for a queue/sponsor administrator, their own enterprises' for a rep)
+ * and `GET /api/enterprises/:id/queue-groups` the same shape for one
+ * enterprise — so the room-assignment picker and the all-queues management
+ * view share this type.
+ */
+export interface QueueGroup {
+  id: number;
+  enterpriseId: number;
+  enterpriseName: string;
+  enterpriseLogoUrl: string | null;
+  enterpriseLogoNegativeUrl: string | null;
+  displayName: string;
+  challenges: Array<{ id: number; title: string }>;
+  rooms: Array<{ id: number; name: string }>;
+  criteria: Question[] | null;
+  /** Distinct teams queued for it — a team in two of its challenges is one. */
+  teams: number;
+  shared: boolean;
+  /**
+   * Whether any team in this queue has been evaluated. Merging, splitting and
+   * editing the merged judging form are refused from that moment — and only
+   * from that moment: a queue that exists, or is being called from, is still
+   * configurable.
+   */
+  evaluationStarted: boolean;
+}
+
+export interface AssignableRoom {
+  id: number;
+  name: string;
+  queueGroupId: number | null;
+}
+
+/**
+ * GET /api/queue/groups/:id/queue — one judging queue in call order. A team
+ * queued for several of a shared queue's challenges is one entry, at its best
+ * position, exactly as the callable queue dedupes it.
+ */
+export interface QueueGroupQueue {
+  group: {
+    id: number;
+    display_name: string;
+    enterprise_id: number;
+    enterprise_name: string;
+  };
+  challenges: Array<{ id: number; title: string }>;
+  entries: Array<{
+    id: number;
+    repo_id: number;
+    repo_name: string;
+    challenge_id: number;
+    challenge_title: string;
+    status: QueueStatus;
+    position: number | null;
+    called_at: string | null;
+    assigned_room_id: number | null;
+    room_name: string | null;
+    queued_challenge_ids: number[];
+    has_review: boolean;
+    review_status: "draft" | "submitted" | null;
+  }>;
+}
+
+export const getQueueGroupQueue = (queueGroupId: number) =>
+  api.get<QueueGroupQueue>(`/api/queue/groups/${queueGroupId}/queue`);
+
+export interface MergedPanelPreview {
+  questions: Question[];
+  duplicatesDropped: number;
+  renamedKeys: Array<{ from: string; to: string }>;
+}
+
+/** One enterprise's queues. `listQueueGroups` is the cross-enterprise view. */
+export const listEnterpriseQueueGroups = (enterpriseId: number) =>
+  api
+    .get<{ groups: QueueGroup[] }>(`/api/enterprises/${enterpriseId}/queue-groups`)
+    .then((r) => r.groups);
+
+export const previewQueueGroupMerge = (enterpriseId: number, challengeIds: number[]) =>
+  api.post<MergedPanelPreview>(`/api/enterprises/${enterpriseId}/queue-groups/preview-merge`, {
+    challengeIds,
+  });
+
+export const mergeQueueGroups = (
+  enterpriseId: number,
+  body: { challengeIds: number[]; displayName: string },
+) =>
+  api.post<QueueGroup>(`/api/enterprises/${enterpriseId}/queue-groups/merge`, body, {
+    headers: { "Idempotency-Key": crypto.randomUUID() },
+  });
+
+export const splitQueueGroup = (enterpriseId: number, queueGroupId: number) =>
+  api.post<{ groups: QueueGroup[] }>(
+    `/api/enterprises/${enterpriseId}/queue-groups/${queueGroupId}/split`,
+    {},
+    { headers: { "Idempotency-Key": crypto.randomUUID() } },
+  );
+
+export const updateQueueGroup = (
+  queueGroupId: number,
+  body: { displayName?: string; criteria?: Question[] },
+) => api.patch<QueueGroup>(`/api/queue/groups/${queueGroupId}`, body);
+
+export const getAssignableRooms = (enterpriseId: number) =>
+  api
+    .get<{ rooms: AssignableRoom[] }>(`/api/enterprises/${enterpriseId}/assignable-rooms`)
+    .then((response) => response.rooms);
+
+export const setQueueGroupRooms = (queueGroupId: number, roomIds: number[]) =>
+  api.put<QueueGroup>(
+    `/api/queue/groups/${queueGroupId}/rooms`,
+    { roomIds },
+    { headers: { "Idempotency-Key": crypto.randomUUID() } },
+  );
+
+export const moveQueueEntry = (entryId: number, position: number) =>
+  api.post(
+    `/api/queue/entries/${entryId}/move-to`,
+    { position },
+    { headers: { "Idempotency-Key": crypto.randomUUID() } },
+  );
 
 /** GET /api/queue/me — participant view (H38). */
 export interface MyQueueRoom {
@@ -181,7 +344,7 @@ export interface MyQueueEntry {
   calledAt: string | null;
   /** The concrete room the entry was called to; null while still waiting. */
   room: MyQueueRoom | null;
-  /** Every room currently judging this challenge (multi-room challenges share one queue). */
+  /** Every room serving this challenge's queue group — the full set a waiting team can be called to. */
   rooms: MyQueueRoom[];
 }
 
@@ -196,9 +359,16 @@ export const getRoomAssignments = (roomId: number) =>
   api.get<RoomAssignments>(`/api/queue/rooms/${roomId}/assignments`);
 /** GET /api/queue/repos/:id/challenges — every challenge queue a repo belongs to (H40). */
 export interface RepoChallenge {
+  entry_id: number;
+  repo_id: number;
   id: number;
   title: string;
+  queue_group_id: number | null;
+  queue_name: string | null;
   status: QueueStatus | string;
+  position: number | null;
+  called_at: string | null;
+  eta_minutes: number | null;
   room_id: number | null;
   room_name: string | null;
   judging_rooms: Array<{ id: number; name: string }>;
@@ -241,14 +411,13 @@ export const updateQueueSettings = (body: {
   preCallNotificationEtaMinutes?: number;
   requeuePromptDefault?: QueueSettings["requeue_prompt_default"];
 }) => api.patch<QueueSettings>("/api/queue/settings", body);
-export const assignRoomChallenge = (roomId: number, challengeId: number) =>
-  api.post(`/api/queue/rooms/${roomId}/challenges`, { challengeId });
-export const removeRoomChallenge = (roomId: number, challengeId: number) =>
-  api.delete(`/api/queue/rooms/${roomId}/challenges/${challengeId}`);
-export const assignRoomJudge = (roomId: number, challengeId: number, userId: number) =>
-  api.post(`/api/queue/rooms/${roomId}/judges`, { challengeId, userId });
-export const removeRoomJudge = (roomId: number, challengeId: number, userId: number) =>
-  api.delete(`/api/queue/rooms/${roomId}/judges/${challengeId}/${userId}`);
+/** Every queue the caller may manage, across enterprises. */
+export const listQueueGroups = () =>
+  api.get<{ groups: QueueGroup[] }>("/api/queue/groups").then((r) => r.groups);
+export const assignRoomQueueGroup = (roomId: number, queueGroupId: number) =>
+  api.post(`/api/queue/rooms/${roomId}/queue-group`, { queueGroupId });
+export const removeRoomQueueGroup = (roomId: number, queueGroupId: number) =>
+  api.delete(`/api/queue/rooms/${roomId}/queue-group/${queueGroupId}`);
 export const enqueueAllChallengeQueues = (idempotencyKey?: string) =>
   api.post<{
     challenges: Array<{ challengeId: number; inserted: number; alreadyQueued: number }>;
@@ -256,11 +425,36 @@ export const enqueueAllChallengeQueues = (idempotencyKey?: string) =>
     alreadyQueued: number;
   }>("/api/queue/challenges/enqueue-all", {}, idem(idempotencyKey));
 
+export interface QueueGenerationResult {
+  challenges: Array<{
+    challengeId: number;
+    inserted: number;
+    revived: number;
+    alreadyQueued: number;
+  }>;
+  inserted: number;
+  revived: number;
+  alreadyQueued: number;
+}
+
+export const generateQueue = (queueGroupId: number) =>
+  api.post<QueueGenerationResult>(
+    `/api/queue/groups/${queueGroupId}/generate`,
+    {},
+    { headers: { "Idempotency-Key": crypto.randomUUID() } },
+  );
+
+export const clearQueue = (queueGroupId: number) =>
+  api.delete<{ cleared: number }>(`/api/queue/groups/${queueGroupId}/entries`, {
+    headers: { "Idempotency-Key": crypto.randomUUID() },
+  });
+
 // ── entry transitions (H30-H34) ────────────────────────────────────────────
 // Critical mutations accept an Idempotency-Key; pass a fresh uuid to dedupe
 // double-clicks/retries (apps/api/src/lib/idempotency.ts).
 type EntryAction =
   | "notify-enter"
+  | "remind-waiting"
   | "bring-in"
   | "start"
   | "complete"
@@ -279,6 +473,17 @@ export const entryAction = <T = unknown>(
   body?: Record<string, unknown>,
   idempotencyKey?: string,
 ) => api.post<T>(`/api/queue/entries/${entryId}/${action}`, body, idem(idempotencyKey));
+export const moveQueueEntryToPosition = (
+  entryId: number,
+  position: number,
+  reason?: string,
+  idempotencyKey?: string,
+) =>
+  api.post(
+    `/api/queue/entries/${entryId}/move-to`,
+    { position, ...(reason ? { reason } : {}) },
+    idem(idempotencyKey),
+  );
 export const getEntryHistory = (entryId: number) =>
   api.get(`/api/queue/entries/${entryId}/history`);
 

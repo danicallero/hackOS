@@ -12,10 +12,6 @@ function numberParam(req: FastifyRequest, name: ParamName): number {
   return Number(params[name]);
 }
 
-function numberBody(req: FastifyRequest, name: "challengeId"): number {
-  return Number((req.body as Partial<Record<typeof name, unknown>>)[name]);
-}
-
 async function requireUser(req: FastifyRequest): Promise<number> {
   if (req.userId == null) throw new UnauthorizedError();
   return req.userId;
@@ -45,41 +41,58 @@ async function ownsChallenge(userId: number, challengeId: number): Promise<boole
   return rowCount !== 0;
 }
 
+/**
+ * A judge belongs to an enterprise roster (`enterprise_judges`), not to a
+ * challenge or a room: judging a challenge means judging for the enterprise
+ * that authored it.
+ */
 async function judgesChallenge(userId: number, challengeId: number): Promise<boolean> {
   const { rowCount } = await pool.query(
     `SELECT 1
-       FROM room_judges rj
-       JOIN room_challenges rc
-         ON rc.room_id = rj.room_id
-        AND rc.challenge_id = rj.challenge_id
-      WHERE rj.user_id = $1 AND rj.challenge_id = $2
+       FROM challenges c
+       JOIN sponsors author ON author.id = c.author
+       JOIN enterprise_judges ej ON ej.enterprise_id = author.enterprise_id
+      WHERE c.id = $2 AND ej.user_id = $1
       LIMIT 1`,
     [userId, challengeId],
   );
   return rowCount !== 0;
 }
 
-/** Room actions are physical operations: assignment to the shared challenge is not enough. */
-async function judgesRoom(userId: number, roomId: number): Promise<boolean> {
+/**
+ * Room actions resolve to the enterprise the room currently judges for
+ * (room -> its queue_group -> that group's enterprise). A room with no
+ * queue_group assigned grants nobody contextual access.
+ */
+async function judgesRoomEnterprise(userId: number, roomId: number): Promise<boolean> {
   const { rowCount } = await pool.query(
     `SELECT 1
-       FROM room_judges rj
-       JOIN room_challenges rc
-         ON rc.room_id = rj.room_id
-        AND rc.challenge_id = rj.challenge_id
-      WHERE rj.user_id = $1 AND rj.room_id = $2
+       FROM room_queue_groups rqg
+       JOIN queue_groups qg ON qg.id = rqg.queue_group_id
+       JOIN enterprise_judges ej ON ej.enterprise_id = qg.enterprise_id
+      WHERE rqg.room_id = $2 AND ej.user_id = $1
       LIMIT 1`,
     [userId, roomId],
   );
   return rowCount !== 0;
 }
 
-async function roomChallengeId(roomId: number): Promise<number | null> {
-  const { rows } = await pool.query(
-    `SELECT challenge_id FROM room_challenges WHERE room_id = $1 LIMIT 1`,
-    [roomId],
+/**
+ * The sponsor-rep counterpart of {@link judgesRoomEnterprise}. Ownership is
+ * resolved against the room's queue_group's enterprise rather than a single
+ * challenge, since a room can serve a group spanning several challenges.
+ */
+async function ownsRoomEnterprise(userId: number, roomId: number): Promise<boolean> {
+  const { rowCount } = await pool.query(
+    `SELECT 1
+       FROM room_queue_groups rqg
+       JOIN queue_groups qg ON qg.id = rqg.queue_group_id
+       JOIN sponsors mine ON mine.enterprise_id = qg.enterprise_id
+      WHERE rqg.room_id = $2 AND mine.user_id = $1
+      LIMIT 1`,
+    [userId, roomId],
   );
-  return rows[0] ? Number(rows[0].challenge_id) : null;
+  return rowCount !== 0;
 }
 
 async function entryChallengeId(entryId: number): Promise<number | null> {
@@ -116,7 +129,7 @@ export function requireRoomJudgeOrCapability(...capabilities: Capability[]): pre
     const userId = await requireUser(req);
     if (await hasAnyCapability(req, userId, capabilities)) return;
     const roomId = numberParam(req, "roomId");
-    if (await judgesRoom(userId, roomId)) return;
+    if (await judgesRoomEnterprise(userId, roomId)) return;
     denied("room", { roomId, capabilities });
   };
 }
@@ -129,11 +142,10 @@ export function requireRoomAccessOrCapability(
     const userId = await requireUser(req);
     if (await hasAnyCapability(req, userId, capabilities)) return;
     const roomId = numberParam(req, "roomId");
-    if (await judgesRoom(userId, roomId)) return;
-    const challengeId = await roomChallengeId(roomId);
-    // H46 ownership remains a read-only sponsor scope; an assigned judge is
-    // deliberately bound to the concrete room, even when rooms share a queue.
-    if (challengeId != null && (await ownsChallenge(userId, challengeId))) return;
+    if (await judgesRoomEnterprise(userId, roomId)) return;
+    // H46 ownership remains a read-only sponsor scope; a roster judge reaches
+    // every room their enterprise currently judges in.
+    if (await ownsRoomEnterprise(userId, roomId)) return;
     denied("room", { roomId, capabilities });
   };
 }
@@ -143,8 +155,7 @@ export const requireRoomAssignmentsAccess: preHandlerHookHandler = async (req) =
   const userId = await requireUser(req);
   if (await userHasCapability(userId, CAPABILITIES.QUEUE_ADMIN, req)) return;
   const roomId = numberParam(req, "roomId");
-  const challengeId = await roomChallengeId(roomId);
-  if (challengeId != null && (await ownsChallenge(userId, challengeId))) return;
+  if (await ownsRoomEnterprise(userId, roomId)) return;
   denied("room assignments", { roomId });
 };
 
@@ -191,41 +202,6 @@ export function requireEntryJudgeOrCapability(
   };
 }
 
-/** H46 sponsor owners may manage only judges of the room's own challenge. */
-export function requireRoomJudgeManager(
-  challengeSource: "room" | "params" | "body",
-): preHandlerHookHandler {
-  return async (req) => {
-    const userId = await requireUser(req);
-    const roomId = numberParam(req, "roomId");
-    const expectedChallengeId = await roomChallengeId(roomId);
-    const requestedChallengeId =
-      challengeSource === "room"
-        ? expectedChallengeId
-        : challengeSource === "params"
-          ? numberParam(req, "challengeId")
-          : numberBody(req, "challengeId");
-    // Bind the child challenge to the room before considering any grant: a
-    // mismatched parent/child pair must not become a harmless-but-audited
-    // no-op mutation, even for QUEUE_ADMIN (AC-2C parent/child isolation).
-    if (expectedChallengeId != null && expectedChallengeId !== requestedChallengeId) {
-      denied("room judge assignments", { roomId, challengeId: requestedChallengeId });
-    }
-    // H436: QUEUE_ADMIN bypasses only the "room has no challenge yet" gate below
-    // — a global admin may legitimately browse/manage judges before the room's
-    // challenge is set, unlike the sponsor-owner fallback which needs a challenge
-    // to check ownership of.
-    if (await userHasCapability(userId, CAPABILITIES.QUEUE_ADMIN, req)) return;
-    if (expectedChallengeId == null) {
-      denied("room judge assignments", { roomId, challengeId: requestedChallengeId });
-    }
-    if (await ownsChallenge(userId, expectedChallengeId)) {
-      return;
-    }
-    denied("room judge assignments", { roomId, challengeId: requestedChallengeId });
-  };
-}
-
 /** Lists are centrally filtered; an association never turns into global room access. */
 export async function accessibleRoomIds(req: FastifyRequest): Promise<number[] | null> {
   const userId = await requireUser(req);
@@ -235,15 +211,18 @@ export async function accessibleRoomIds(req: FastifyRequest): Promise<number[] |
   ) {
     return null;
   }
+  // Every room linked to a queue_group whose enterprise this user judges for
+  // or reps — the room's enterprise is now read straight off the group, with
+  // no challenge hop.
   const { rows } = await pool.query(
-    `SELECT DISTINCT rc.room_id
-       FROM room_challenges rc
-       LEFT JOIN room_judges rj ON rj.room_id = rc.room_id AND rj.challenge_id = rc.challenge_id
-       LEFT JOIN challenges c ON c.id = rc.challenge_id
-       LEFT JOIN sponsors author ON author.id = c.author
-       LEFT JOIN sponsors mine ON mine.enterprise_id = author.enterprise_id
-      WHERE rj.user_id = $1 OR mine.user_id = $1
-      ORDER BY rc.room_id ASC`,
+    `SELECT DISTINCT rqg.room_id
+       FROM room_queue_groups rqg
+       JOIN queue_groups qg ON qg.id = rqg.queue_group_id
+       LEFT JOIN enterprise_judges ej
+              ON ej.enterprise_id = qg.enterprise_id AND ej.user_id = $1
+       LEFT JOIN sponsors mine ON mine.enterprise_id = qg.enterprise_id
+      WHERE ej.user_id = $1 OR mine.user_id = $1
+      ORDER BY rqg.room_id ASC`,
     [userId],
   );
   return rows.map((row: { room_id: number }) => row.room_id);

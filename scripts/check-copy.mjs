@@ -38,7 +38,7 @@ const CAP_KEY_RE = /\b[a-z][a-z_]{2,}:[a-z][a-z_]{2,}\b/;
 // on these surfaces should go through the locale resource files.
 const RAW_COPY_GUARDS = [
   {
-    file: "apps/web/src/app/(app)/challenges/builders.tsx",
+    file: "apps/web/src/components/common/questionnaire-builder.tsx",
     pattern: /placeholder\s*=\s*["']innovation["']/,
     message: "the field-key example must use i18n",
   },

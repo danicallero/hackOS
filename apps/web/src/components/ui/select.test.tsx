@@ -35,7 +35,7 @@ describe("SelectTrigger", () => {
     const trigger = container.querySelector("button");
     expect(trigger?.className).toContain("whitespace-normal");
     expect(trigger?.className).toContain("h-auto");
-    expect(trigger?.className).toContain("*:data-[slot=select-value]:break-words");
+    expect(trigger?.className).toContain("*:data-[slot=select-value]:wrap-break-word");
     expect(trigger?.className).not.toContain("whitespace-nowrap");
     expect(trigger?.className).not.toContain("line-clamp-1");
   });

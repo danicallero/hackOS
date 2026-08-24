@@ -281,7 +281,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       schema: {
         description:
           "The caller's own profile, illustrative role, effective capabilities (H8), " +
-          "the isRoomJudge/isSponsorRep association facts nav uses for multi-capability " +
+          "the isEnterpriseJudge/isSponsorRep association facts nav uses for multi-capability " +
           "accounts (H55), whether they currently hold event access (confirmed spot or " +
           "manual attendee role), whether they have a project/queue entry of their own " +
           "(drives hiding the My project/My queue nav items, issue #424), and mobile " +
@@ -296,9 +296,9 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             // enforcement still happens on every guarded route server-side.
             capabilities: z.array(z.string()),
             // Additive association facts (H55): a multi-capability account
-            // (e.g. sponsor rep + room judge) needs both workspaces, which
+            // (e.g. sponsor rep + enterprise judge) needs both workspaces, which
             // the single-priority `role` above can't represent on its own.
-            isRoomJudge: z.boolean(),
+            isEnterpriseJudge: z.boolean(),
             isSponsorRep: z.boolean(),
             // Confirmed spot or manual attendee role — drives ticket/wallet
             // exposure and hides participant-only nav for pure applicants.

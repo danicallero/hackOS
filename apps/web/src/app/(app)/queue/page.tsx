@@ -2,45 +2,50 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { ArrowRightIcon, Building2Icon, TicketIcon } from "lucide-react";
-import Link from "next/link";
+import { SearchIcon, TicketIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AccessDenied } from "@/components/common/access-denied";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
-import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
+import { TabBar } from "@/components/common/tab-bar";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { type SseEnvelope, useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
-import {
-  enqueueAllChallengeQueues,
-  getAllRoomViews,
-  getRoomAssignments,
-  type RoomAssignments,
-  type RoomView,
-} from "@/lib/queue";
+import { enqueueAllChallengeQueues, getAllRoomViews, type RoomView } from "@/lib/queue";
 import { useSessionContext } from "@/lib/session";
+import { useUrlTab } from "@/lib/url-tab";
 import { GenerateQueuesAction } from "./generate-queues-action";
-
-import { RoomQueueCard } from "./room-queue-card";
+import { QueueOperatorConsole } from "./operator-console";
+import { queueOperationsAccess } from "./queue-access";
+import { QueuesPanel } from "./queues-panel";
+import { TeamQueueSearch } from "./team-queue-search";
 
 export default function QueueOperationsPage() {
   const { t } = useLocale();
-  const { can, canAny } = useSessionContext();
-  const canUse = canAny(
-    CAPABILITIES.QUEUE_OPERATE,
-    CAPABILITIES.QUEUE_ADMIN,
-    CAPABILITIES.JUDGE_PANEL,
-  );
+  const { can, me } = useSessionContext();
   const canAdmin = can(CAPABILITIES.QUEUE_ADMIN);
+  const { canViewRooms, canUse, defaultTab } = queueOperationsAccess({
+    canOperate: can(CAPABILITIES.QUEUE_OPERATE),
+    canAdmin,
+    canJudge: can(CAPABILITIES.JUDGE_PANEL),
+    canManageSponsors: can(CAPABILITIES.SPONSORS_MANAGE),
+    isSponsorRep: Boolean(me?.isSponsorRep),
+  });
+  // Two projections of the same thing (DESIGN §5: sub-views are a TabBar, not
+  // another nav item): rooms working queues, and the queues themselves. A
+  // queue no room serves is only reachable from the second.
+  const { tab: requestedTab, setTab } = useUrlTab({
+    values: ["rooms", "queues"] as const,
+    defaultValue: defaultTab,
+  });
+  const tab = canViewRooms ? requestedTab : "queues";
   const [busy, setBusy] = useState(false);
-  const [roomAssignments, setRoomAssignments] = useState<Record<number, RoomAssignments | null>>(
-    {},
-  );
+  const [searchOpen, setSearchOpen] = useState(false);
   const [arrivalHints, setArrivalHints] = useState(
     () => window.localStorage.getItem("queue-ops-arrival-hints") === "1",
   );
@@ -89,32 +94,10 @@ export default function QueueOperationsPage() {
       EVENTS.QUEUE_NOTIFY_ENTER,
       EVENTS.QUEUE_TEAM_CALLED,
     ],
-    { enabled: canUse, onEvent: announceTeamEnter },
+    { enabled: canViewRooms, onEvent: announceTeamEnter },
   );
 
   const rooms = useMemo(() => roomViews.data ?? [], [roomViews.data]);
-
-  const loadAdminData = useCallback(async () => {
-    if (!canAdmin) {
-      setRoomAssignments({});
-      return;
-    }
-    try {
-      const assignmentPromise =
-        rooms.length > 0 ? Promise.all(rooms.map((room) => getRoomAssignments(room.room.id))) : [];
-      const assignmentRows = await assignmentPromise;
-      const nextAssignments: Record<number, RoomAssignments> = {};
-      for (const item of assignmentRows as RoomAssignments[]) nextAssignments[item.roomId] = item;
-      setRoomAssignments(nextAssignments);
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadOperationsDetails"));
-    }
-  }, [canAdmin, rooms, t]);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- data-fetch pattern: loadAdminData wraps setState for assignment queries
-    void loadAdminData();
-  }, [loadAdminData]);
 
   const onGenerate = useCallback(async () => {
     setBusy(true);
@@ -124,19 +107,18 @@ export default function QueueOperationsPage() {
         t("queuesGenerated", { inserted: result.inserted, challenges: result.challenges.length }),
       );
       roomViews.refetch();
-      await loadAdminData();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("couldNotGenerateQueues"));
     } finally {
       setBusy(false);
     }
-  }, [loadAdminData, roomViews, t]);
+  }, [roomViews, t]);
 
   if (!canUse) {
     return <AccessDenied ask={t("queueOpsAccessDeniedDesc")} />;
   }
 
-  if (roomViews.loading) {
+  if (canViewRooms && roomViews.loading) {
     return (
       <div className="flex items-center justify-center py-20">
         <Spinner className="size-6" />
@@ -144,7 +126,7 @@ export default function QueueOperationsPage() {
     );
   }
 
-  if (roomViews.error) {
+  if (canViewRooms && roomViews.error) {
     return (
       <div className="space-y-6">
         <PageHeader title={t("queueOperations")} />
@@ -162,12 +144,12 @@ export default function QueueOperationsPage() {
       <PageHeader
         title={t("queueOperations")}
         primaryAction={
-          canAdmin ? (
+          canAdmin && tab === "queues" ? (
             <GenerateQueuesAction busy={busy} onGenerate={() => void onGenerate()} />
           ) : undefined
         }
         secondaryActions={
-          <>
+          tab === "rooms" ? (
             <label
               className="text-muted-foreground flex items-center gap-2 text-sm"
               htmlFor="arrival-hints"
@@ -180,40 +162,65 @@ export default function QueueOperationsPage() {
               />
               {t("arrivalHints")}
             </label>
-            <Button variant="outline" asChild>
-              <Link href="/judging">
-                <ArrowRightIcon className="size-4" />
-                {t("openJudging")}
-              </Link>
-            </Button>
-          </>
+          ) : undefined
         }
       />
 
-      <SectionCard title={t("roomQueues")} icon={Building2Icon} bodyClassName="space-y-4">
-        {rooms.length === 0 ? (
-          <EmptyState
-            icon={Building2Icon}
-            title={t("noRoomsYet")}
-            description={t("noRoomsYetDescription")}
+      <Tabs value={tab} onValueChange={setTab}>
+        <div className="flex items-center gap-2">
+          <TabBar aria-label={t("queueOperations")} className="min-w-0 flex-1 justify-start">
+            {canViewRooms && <TabsTrigger value="rooms">{t("rooms")}</TabsTrigger>}
+            <TabsTrigger value="queues">{t("judgingQueues")}</TabsTrigger>
+          </TabBar>
+          {canViewRooms && (
+            <Button
+              variant={searchOpen ? "secondary" : "outline"}
+              size="icon-sm"
+              aria-label={t("queueOpenSearch")}
+              aria-expanded={searchOpen}
+              onClick={() => setSearchOpen((open) => !open)}
+            >
+              <SearchIcon className="size-4" />
+            </Button>
+          )}
+        </div>
+
+        {canViewRooms && searchOpen && (
+          <TeamQueueSearch
+            rooms={rooms}
+            canOperate={can(CAPABILITIES.QUEUE_OPERATE) || canAdmin}
+            canAdmin={canAdmin}
+            onClose={() => setSearchOpen(false)}
+            onChanged={() => {
+              roomViews.refetch();
+            }}
           />
-        ) : (
-          <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">
-            {rooms.map((room) => (
-              <RoomQueueCard
-                key={room.room.id}
-                room={room}
-                assignments={roomAssignments[room.room.id] ?? null}
+        )}
+
+        {canViewRooms && (
+          <TabsContent value="rooms" className="pt-2">
+            {rooms.length === 0 ? (
+              <EmptyState
+                icon={TicketIcon}
+                title={t("noRoomsYet")}
+                description={t("noRoomsYetDescription")}
+              />
+            ) : (
+              <QueueOperatorConsole
+                rooms={rooms}
                 canOperate={can(CAPABILITIES.QUEUE_OPERATE) || canAdmin}
                 onChanged={() => {
                   roomViews.refetch();
-                  void loadAdminData();
                 }}
               />
-            ))}
-          </div>
+            )}
+          </TabsContent>
         )}
-      </SectionCard>
+
+        <TabsContent value="queues" className="pt-2">
+          <QueuesPanel />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

@@ -116,6 +116,15 @@ precedence: operator override → scheduled `tv_slots` → default rooms) all
 live here. Every queue action writes exactly one history row and emits
 exactly one broadcast (`plan/07` invariant 5).
 
+Judges are **enterprise-scoped**, not room-scoped: `enterprise_judges`
+(`enterprise_id`, `user_id`) is the roster, and a judge on it reaches every
+challenge that enterprise authored and every room currently serving one of
+those challenges. Contextual queue guards resolve the chain
+`room → room_queue_groups → queue_groups.enterprise_id →
+enterprise_judges` rather than looking a judge up per room. The roster itself
+is managed on the enterprise (`/api/enterprises/:id/judges`, sponsors module);
+the queue module has no room-scoped judge routes.
+
 ### logistics (H22–H27, H59)
 Accreditation (badge issuance, rotation, revocation), presence (door in/out
 with certainty-window derivation and conflict detection), meal/activity
@@ -190,6 +199,17 @@ saved wholesale (same "admin-edited jsonb array" shape as
 rep or a `sponsors:manage` admin, writable only by the latter; access is a
 "sponsor-portal-access" contextual policy (any row in `sponsors`, deliberately
 narrower than `challenges`' judge-inclusive `challenge-directory` policy).
+
+Also owns the **judge roster** (`/api/enterprises/:id/judges`,
+`/api/enterprises/:id/judge-candidates`): an enterprise's `enterprise_judges`
+rows, managed by a `queue:admin`/`sponsors:manage` administrator or the
+enterprise's own representatives (the `enterprise-judge-manage` contextual
+policy) and never by the roster judges themselves. The candidate pool is
+deliberately every account — enterprises may bring outside judges — and adding
+one is silent: no invitation or consent step, the judge simply finds the
+judging workspace on their next login. Roster membership is what grants
+judging access to the enterprise's challenges and rooms (see `queue` above);
+it does **not** grant sponsor-portal/FAQ access.
 
 ### event (H45, H47)
 The `event_config` singleton: event identity/tagline, the public countdown

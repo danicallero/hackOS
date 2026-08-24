@@ -296,21 +296,16 @@ describe("GET /api/repos + /api/repos/:id (PROJECTS_READ)", () => {
 });
 
 describe("GET /api/repos scoping for judges & sponsors (H8, H44/H46)", () => {
-  /** Assign `judge` to judge `challengeId` via a room + room_judges row. */
+  /** Put `judge` on the roster of the enterprise that authored `challengeId`. */
   async function assignJudge(judge: number, challengeId: number): Promise<void> {
     const { pool } = await import("../../src/db/pool.js");
-    const room = await pool.query(`INSERT INTO rooms (name, slug) VALUES ($1, $2) RETURNING id`, [
-      `Room ${crypto.randomUUID().slice(0, 8)}`,
-      `room-${crypto.randomUUID()}`,
-    ]);
-    const roomId = room.rows[0].id;
-    await pool.query(`INSERT INTO room_challenges (room_id, challenge_id) VALUES ($1, $2)`, [
-      roomId,
-      challengeId,
-    ]);
     await pool.query(
-      `INSERT INTO room_judges (room_id, challenge_id, user_id) VALUES ($1, $2, $3)`,
-      [roomId, challengeId, judge],
+      `INSERT INTO enterprise_judges (enterprise_id, user_id)
+       SELECT author.enterprise_id, $2
+         FROM challenges c JOIN sponsors author ON author.id = c.author
+        WHERE c.id = $1
+       ON CONFLICT (enterprise_id, user_id) DO NOTHING`,
+      [challengeId, judge],
     );
   }
 
@@ -555,10 +550,11 @@ describe("GET /api/me/projects (participant self-view)", () => {
       `INSERT INTO rooms (name, slug) VALUES ('Beans room', 'beans-room') RETURNING id`,
     );
     const roomId = room.rows[0].id;
-    await pool.query(`INSERT INTO room_challenges (room_id, challenge_id) VALUES ($1, $2)`, [
-      roomId,
-      challengeId,
-    ]);
+    await pool.query(
+      `INSERT INTO room_queue_groups (room_id, queue_group_id)
+       SELECT $1, queue_group_id FROM queue_group_challenges WHERE challenge_id = $2`,
+      [roomId, challengeId],
+    );
     await pool.query(
       `INSERT INTO queue_entries (challenge_id, repo_id, status, position)
        VALUES ($1, $2, 'waiting', 1)`,

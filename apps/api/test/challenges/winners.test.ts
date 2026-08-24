@@ -59,6 +59,52 @@ async function createEntrant(challengeId: number, repoName: string): Promise<num
   return repo.rows[0].id;
 }
 
+/**
+ * Two challenges of the SAME enterprise — the only shape 0410's guard trigger
+ * lets share a queue group.
+ */
+async function createSiblingChallenges(ownerUserId: number): Promise<[number, number]> {
+  const enterprise = await pool.query(`INSERT INTO enterprises (name) VALUES ($1) RETURNING id`, [
+    `ent-${crypto.randomUUID()}`,
+  ]);
+  const sponsor = await pool.query(
+    `INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2) RETURNING id`,
+    [enterprise.rows[0].id, ownerUserId],
+  );
+  const { rows } = await pool.query(
+    `INSERT INTO challenges (author, title)
+     VALUES ($1, 'Sibling A'), ($1, 'Sibling B')
+     RETURNING id`,
+    [sponsor.rows[0].id],
+  );
+  return [rows[0].id, rows[1].id];
+}
+
+async function groupOf(challengeId: number): Promise<number> {
+  const { rows } = await pool.query(
+    `SELECT queue_group_id FROM queue_group_challenges WHERE challenge_id = $1`,
+    [challengeId],
+  );
+  return rows[0].queue_group_id;
+}
+
+/**
+ * Moves `challengeId` into `targetChallengeId`'s queue group, simulating the
+ * admin "merge these challenges into one shared queue" action that PR3 of the
+ * room/judging redesign will ship. Done in raw SQL because no service or route
+ * creates a multi-challenge group yet (0410 only auto-fills 1:1 groups).
+ */
+async function mergeIntoGroup(challengeId: number, targetChallengeId: number): Promise<void> {
+  const orphan = await groupOf(challengeId);
+  const target = await groupOf(targetChallengeId);
+  await pool.query(`DELETE FROM queue_group_challenges WHERE challenge_id = $1`, [challengeId]);
+  await pool.query(`DELETE FROM queue_groups WHERE id = $1`, [orphan]);
+  await pool.query(
+    `INSERT INTO queue_group_challenges (queue_group_id, challenge_id) VALUES ($1, $2)`,
+    [target, challengeId],
+  );
+}
+
 describe("challenge winners (H46)", () => {
   it("lets the owning sponsor and admins set, replace and remove winners", async () => {
     const server = await getApp();
@@ -169,6 +215,74 @@ describe("challenge winners (H46)", () => {
       url: `/api/challenges/${challengeId}/winners/1`,
       headers: asUser(owner),
       payload: { repoId: otherRepo.rows[0].id },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("keeps 1:1 queue groups scoped to their own challenge (draft §5)", async () => {
+    const server = await getApp();
+    const owner = await createUser();
+    const [challengeA, challengeB] = await createSiblingChallenges(owner);
+    // Every challenge gets its own 1:1 group from 0410's trigger, so entering
+    // A must not make the repo eligible for the unrelated challenge B.
+    expect(await groupOf(challengeA)).not.toBe(await groupOf(challengeB));
+    const repo = await createEntrant(challengeA, "Only In A");
+
+    const inA = await server.inject({
+      method: "PUT",
+      url: `/api/challenges/${challengeA}/winners/1`,
+      headers: asUser(owner),
+      payload: { repoId: repo },
+    });
+    expect(inA.statusCode).toBe(200);
+
+    const inB = await server.inject({
+      method: "PUT",
+      url: `/api/challenges/${challengeB}/winners/1`,
+      headers: asUser(owner),
+      payload: { repoId: repo },
+    });
+    expect(inB.statusCode).toBe(400);
+  });
+
+  it("lets a repo judged through a shared queue group win a sibling challenge (draft §5)", async () => {
+    const server = await getApp();
+    const owner = await createUser();
+    const [challengeA, challengeB] = await createSiblingChallenges(owner);
+    await mergeIntoGroup(challengeB, challengeA);
+    // Entered only in B, but B shares A's queue group, so A's sponsor can
+    // still award it — the win is recorded against A.
+    const repo = await createEntrant(challengeB, "Shared Queue Team");
+
+    const res = await server.inject({
+      method: "PUT",
+      url: `/api/challenges/${challengeA}/winners/1`,
+      headers: asUser(owner),
+      payload: { repoId: repo },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ rank: 1, repoId: repo });
+
+    const stored = await pool.query(
+      `SELECT challenge_id FROM challenge_winners WHERE repo_id = $1`,
+      [repo],
+    );
+    expect(stored.rows).toEqual([{ challenge_id: challengeA }]);
+  });
+
+  it("still rejects a repo absent from every challenge in the group (draft §5)", async () => {
+    const server = await getApp();
+    const owner = await createUser();
+    const [challengeA, challengeB] = await createSiblingChallenges(owner);
+    await mergeIntoGroup(challengeB, challengeA);
+    const outsider = await createOwnedChallenge(owner);
+    const repo = await createEntrant(outsider, "Outsider");
+
+    const res = await server.inject({
+      method: "PUT",
+      url: `/api/challenges/${challengeA}/winners/1`,
+      headers: asUser(owner),
+      payload: { repoId: repo },
     });
     expect(res.statusCode).toBe(400);
   });

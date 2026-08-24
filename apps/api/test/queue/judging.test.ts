@@ -10,6 +10,7 @@ import {
   truncateAll,
 } from "../helpers.js";
 import {
+  addChallengeJudge,
   assignChallengeToRoom,
   createChallenge,
   createRepoWithTeam,
@@ -217,18 +218,14 @@ describe("collaborative review (H36)", () => {
     expect(res.statusCode).toBe(403);
   });
 
-  it("lets room-assigned judges use their scoped judging surfaces without capability groups", async () => {
+  it("lets roster judges use their scoped judging surfaces without capability groups", async () => {
     const assignedJudge = await createUser();
     const challengeId = await createChallenge({ judgingPanelCriteria: CRITERIA });
     const otherChallengeId = await createChallenge({ judgingPanelCriteria: CRITERIA });
     const roomId = await createRoom();
     await assignChallengeToRoom(roomId, challengeId);
 
-    const { pool } = await import("../../src/db/pool.js");
-    await pool.query(
-      `INSERT INTO room_judges (room_id, challenge_id, user_id) VALUES ($1, $2, $3)`,
-      [roomId, challengeId, assignedJudge],
-    );
+    await addChallengeJudge(challengeId, assignedJudge);
 
     const { repoId } = await createRepoWithTeam(
       undefined,
@@ -409,7 +406,7 @@ describe("manual search (H37)", () => {
     });
   });
 
-  it("lets a sponsor rep search their own challenge without room_judges/capabilities, but not others' (H46)", async () => {
+  it("lets a sponsor rep search their own challenge without a judge roster row/capabilities, but not others' (H46)", async () => {
     const { pool } = await import("../../src/db/pool.js");
     const owner = await createUser();
     const enterprise = await pool.query(`INSERT INTO enterprises (name) VALUES ($1) RETURNING id`, [
@@ -487,11 +484,7 @@ describe("CSV export (H40)", () => {
     const scopedExporter = await createUserWithCapabilities([CAPABILITIES.JUDGING_EXPORT]);
     const roomId = await createRoom();
     await assignChallengeToRoom(roomId, allowedChallengeId);
-    const { pool } = await import("../../src/db/pool.js");
-    await pool.query(
-      `INSERT INTO room_judges (room_id, challenge_id, user_id) VALUES ($1, $2, $3)`,
-      [roomId, allowedChallengeId, scopedExporter],
-    );
+    await addChallengeJudge(allowedChallengeId, scopedExporter);
 
     const allowed = await app.inject({
       method: "GET",

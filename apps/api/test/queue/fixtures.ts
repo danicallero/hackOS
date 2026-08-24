@@ -31,6 +31,40 @@ export async function createChallenge(
   return rows[0].id;
 }
 
+/**
+ * Several challenges authored by ONE enterprise — the only shape a shared
+ * queue group can legally take (0410's cross-enterprise guard).
+ */
+export async function createEnterpriseChallenges(
+  count: number,
+  /** Per-challenge judging panels, index-aligned; omit for panel-less challenges. */
+  panels: unknown[][] = [],
+): Promise<{ enterpriseId: number; repId: number; challengeIds: number[] }> {
+  const repId = await createUser();
+  const enterprise = await pool.query(`INSERT INTO enterprises (name) VALUES ($1) RETURNING id`, [
+    `ent-${crypto.randomUUID()}`,
+  ]);
+  const enterpriseId = Number(enterprise.rows[0].id);
+  const sponsor = await pool.query(
+    `INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2) RETURNING id`,
+    [enterpriseId, repId],
+  );
+  const challengeIds: number[] = [];
+  for (let i = 0; i < count; i++) {
+    const { rows } = await pool.query(
+      `INSERT INTO challenges (author, title, devpost_tags, judging_panel_criteria)
+       VALUES ($1, $2, '[]'::jsonb, $3) RETURNING id`,
+      [
+        sponsor.rows[0].id,
+        `Challenge ${i + 1} ${crypto.randomUUID().slice(0, 8)}`,
+        panels[i] ? JSON.stringify(panels[i]) : null,
+      ],
+    );
+    challengeIds.push(Number(rows[0].id));
+  }
+  return { enterpriseId, repId, challengeIds };
+}
+
 export async function createRoom(
   overrides: Partial<{
     name: string;
@@ -59,11 +93,75 @@ export async function createRoom(
   return roomId;
 }
 
+/**
+ * Point a room at the queue group the challenge feeds — the room->challenge
+ * link now goes through `room_queue_groups`. Every challenge has exactly one
+ * group (0410), so this remains "assign this challenge to this room".
+ */
 export async function assignChallengeToRoom(roomId: number, challengeId: number): Promise<void> {
   await pool.query(
-    `INSERT INTO room_challenges (room_id, challenge_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+    `INSERT INTO room_queue_groups (room_id, queue_group_id)
+     SELECT $1, qgc.queue_group_id FROM queue_group_challenges qgc WHERE qgc.challenge_id = $2
+     ON CONFLICT DO NOTHING`,
     [roomId, challengeId],
   );
+}
+
+/** The queue group a challenge feeds — its own 1:1 group unless merged. */
+export async function queueGroupOf(challengeId: number): Promise<number> {
+  const { rows } = await pool.query(
+    `SELECT queue_group_id FROM queue_group_challenges WHERE challenge_id = $1`,
+    [challengeId],
+  );
+  return Number(rows[0].queue_group_id);
+}
+
+/** Assign a room directly to a queue group (for merged, N>1 group tests). */
+export async function assignQueueGroupToRoom(roomId: number, queueGroupId: number): Promise<void> {
+  await pool.query(
+    `INSERT INTO room_queue_groups (room_id, queue_group_id) VALUES ($1, $2)
+     ON CONFLICT (room_id) DO UPDATE SET queue_group_id = EXCLUDED.queue_group_id`,
+    [roomId, queueGroupId],
+  );
+}
+
+/**
+ * Merge `challengeIds` into the queue group of the first one, simulating the
+ * admin merge UI that does not exist yet — the only way to build an N>1 group
+ * today. Returns that group's id.
+ */
+export async function mergeChallengesIntoOneGroup(challengeIds: number[]): Promise<number> {
+  const [primary, ...rest] = challengeIds;
+  const { rows } = await pool.query(
+    `SELECT queue_group_id FROM queue_group_challenges WHERE challenge_id = $1`,
+    [primary],
+  );
+  const groupId = Number(rows[0].queue_group_id);
+  for (const challengeId of rest) {
+    await pool.query(
+      `UPDATE queue_group_challenges SET queue_group_id = $1 WHERE challenge_id = $2`,
+      [groupId, challengeId],
+    );
+  }
+  return groupId;
+}
+
+/**
+ * Put `userId` on the judge roster of the enterprise that authored
+ * `challengeId` — the only way a judge is granted judging access now that
+ * `enterprise_judges` replaced `room_judges`.
+ */
+export async function addChallengeJudge(challengeId: number, userId: number): Promise<number> {
+  const { rows } = await pool.query(
+    `INSERT INTO enterprise_judges (enterprise_id, user_id)
+     SELECT author.enterprise_id, $2
+       FROM challenges c JOIN sponsors author ON author.id = c.author
+      WHERE c.id = $1
+     ON CONFLICT (enterprise_id, user_id) DO NOTHING
+     RETURNING enterprise_id`,
+    [challengeId, userId],
+  );
+  return rows[0]?.enterprise_id;
 }
 
 /** Repo + submissions rows for each member (creates users when not given). */

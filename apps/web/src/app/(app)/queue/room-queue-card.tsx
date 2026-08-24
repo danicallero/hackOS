@@ -7,6 +7,7 @@ import {
   RotateCcwIcon,
   SearchIcon,
 } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Modal } from "@/components/common/modal";
@@ -53,6 +54,13 @@ export function RoomQueueCard({
       : challenge.challenge_id
     : null;
   const nextEntry = room.next[0] ?? null;
+  // The queue's own name (H46) — the group's display_name, which is the
+  // challenge title for a one-challenge queue and the admin-chosen shared
+  // name once several are merged.
+  const queueName =
+    room.challenge?.title ??
+    (challenge && "queue_group_name" in challenge ? challenge.queue_group_name : null) ??
+    (challenge && "title" in challenge ? textForDisplay(challenge.title) : null);
   const { t } = useLocale();
 
   useEffect(() => {
@@ -104,41 +112,62 @@ export function RoomQueueCard({
         <div className="min-w-0 space-y-0.5">
           <div className="flex flex-wrap items-center gap-1.5">
             <h3 className="truncate text-sm font-semibold">{room.room.name}</h3>
-            {challenge && (
-              <StatusBadge tone="neutral">
-                {textForDisplay("title" in challenge ? challenge.title : "") ||
-                  t("challengeFallback")}
-              </StatusBadge>
-            )}
             <StatusBadge tone={roomState?.is_paused ? "warning" : "success"}>
               {roomState?.is_paused ? t("paused") : t("live")}
             </StatusBadge>
           </div>
-          <p className="text-muted-foreground text-xs">
-            {room.room.location ?? t("noLocation")} · {room.room.slug}
+          {/* The queue this room works, then where the room is. Two facts, not
+              a badge competing with the room's own name. */}
+          <p className="text-muted-foreground truncate text-xs">
+            {queueName ?? t("roomUnassigned")}
+            {room.room.location ? ` · ${room.room.location}` : ""}
           </p>
         </div>
+        {room.challenge && (
+          <Link
+            href={`/queue/queues/${room.challenge.queue_group_id}`}
+            className="text-primary shrink-0 text-xs font-medium hover:underline"
+          >
+            {t("openQueue")}
+          </Link>
+        )}
       </div>
 
       <Separator />
 
       <details className="group">
         <summary className="hover:bg-muted/50 flex cursor-pointer list-none items-center justify-between gap-3 px-3.5 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          <div className="flex min-w-0 items-center gap-4 text-sm">
+          {/* What an operator needs without opening anything: who is on stage,
+              who is in the waiting area, and who is next. The last column is
+              the queue itself — the reason this screen exists. */}
+          <div className="grid min-w-0 flex-1 grid-cols-3 gap-4 text-sm">
             <span className="min-w-0">
-              <span className="text-muted-foreground block text-xs">{t("presenting")}</span>
+              <span className="text-muted-foreground block text-xs">{t("nowPresenting")}</span>
               <span className="block truncate font-medium">
-                {room.active ? entryLabel(room.active, t) : t("noTeamPresenting")}
+                {room.active ? entryLabel(room.active, t) : "—"}
               </span>
             </span>
             <span className="min-w-0">
               <span className="text-muted-foreground block text-xs">
-                {t("calledTeams", { count: room.called.length })}
+                {t("inWaitingArea")} ({room.called.length})
               </span>
               <span className="block truncate font-medium">
                 {room.called.length > 0
                   ? room.called.map((entry) => entryLabel(entry, t)).join(", ")
-                  : t("noTeamsCalled")}
+                  : "—"}
+              </span>
+            </span>
+            <span className="min-w-0">
+              <span className="text-muted-foreground block text-xs">
+                {t("nextUp")} ({room.next.length})
+              </span>
+              <span className="block truncate font-medium">
+                {room.next.length > 0
+                  ? room.next
+                      .slice(0, 3)
+                      .map((entry) => entryLabel(entry, t))
+                      .join(", ")
+                  : "—"}
               </span>
             </span>
           </div>

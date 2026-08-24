@@ -107,14 +107,14 @@ export default function ProjectsPage() {
   const canEdit = can(CAPABILITIES.PROJECTS_EDIT);
   const columns = useMemo(() => buildColumns(t), [t]);
   // H8/H40/H46/H55: judges + sponsor reps get a scoped list from the backend
-  // (GET /api/repos, association-aware via room_judges/sponsors — see
+  // (GET /api/repos, association-aware via enterprise_judges/sponsors — see
   // resolveRepoScope), independent of capabilities; full access via
-  // projects:read / projects:import. isRoomJudge/isSponsorRep (not the
+  // projects:read / projects:import. isEnterpriseJudge/isSponsorRep (not the
   // single-priority `role`, which collapses a sponsor-rep-who-also-judges to
   // "judge") are what those associations actually are.
   const canView =
     canAny(CAPABILITIES.PROJECTS_READ, CAPABILITIES.PROJECTS_IMPORT, CAPABILITIES.JUDGE_PANEL) ||
-    Boolean(me?.isRoomJudge) ||
+    Boolean(me?.isEnterpriseJudge) ||
     Boolean(me?.isSponsorRep);
   const [repos, setRepos] = useState<ProjectRepo[]>([]);
   const [loading, setLoading] = useState(true);

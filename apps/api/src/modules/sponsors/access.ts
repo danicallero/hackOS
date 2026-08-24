@@ -52,6 +52,42 @@ export async function assertCanEditEnterprise(
   throw new ForbiddenError("Not allowed to edit this enterprise", { enterpriseId });
 }
 
+/**
+ * DELTA(Hxx): the judge roster is enterprise-scoped, so managing it belongs to
+ * a global queue/sponsor administrator or to the enterprise's own
+ * representatives — never a room-level grant, and deliberately NOT open to the
+ * roster judges themselves (a judge cannot recruit further judges).
+ */
+export function requireEnterpriseJudgeManager(
+  locator: ContextualResourceLocator,
+): preHandlerHookHandler {
+  return async (request) => {
+    const enterpriseId = enterpriseIdFrom(request, locator);
+    const { rowCount } = await pool.query(`SELECT 1 FROM enterprises WHERE id = $1`, [
+      enterpriseId,
+    ]);
+    if (rowCount === 0) throw new NotFoundError("Enterprise not found", { enterpriseId });
+    await assertCanManageEnterpriseJudging(request, enterpriseId);
+  };
+}
+
+/**
+ * The grant behind {@link requireEnterpriseJudgeManager}, callable directly by
+ * routes whose enterprise is derived from the row being written (a room's
+ * queue_group) rather than named in params or body. Same rule, one place:
+ * global queue/sponsor administrators, or the enterprise's own reps.
+ */
+export async function assertCanManageEnterpriseJudging(
+  request: FastifyRequest,
+  enterpriseId: number,
+): Promise<void> {
+  if (request.userId == null) throw new UnauthorizedError();
+  if (await userHasCapability(request.userId, CAPABILITIES.QUEUE_ADMIN, request)) return;
+  if (await userHasCapability(request.userId, CAPABILITIES.SPONSORS_MANAGE, request)) return;
+  if (await ownsEnterprise(request.userId, enterpriseId)) return;
+  throw new ForbiddenError("Not allowed to manage this enterprise's judging", { enterpriseId });
+}
+
 /** Shared H43/H44 enterprise resolver used by sponsor and challenge routes. */
 export const enterpriseAccessPolicy: ContextualPolicyResolver<EnterpriseResource> = {
   name: "enterprise-access",

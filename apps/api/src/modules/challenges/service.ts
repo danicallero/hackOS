@@ -3,6 +3,7 @@ import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import { challengePanelLocked } from "../queue/evaluation-lock.js";
 import type { ChallengeAccess } from "./access.js";
 import {
   CHALLENGE_GENERAL_FIELDS,
@@ -82,9 +83,15 @@ export async function judgingStartsAt(): Promise<Date | null> {
   return raw ? new Date(raw) : null;
 }
 
-export async function panelIsLocked(): Promise<boolean> {
-  const startsAt = await judgingStartsAt();
-  return startsAt !== null && Date.now() >= startsAt.getTime();
+/**
+ * A judging panel is editable until its queue produces its **first
+ * evaluation** — not from the scheduled start of judging, and not once a
+ * queue merely exists. Organisers fix questions in the last minutes before
+ * the first team walks in, and nothing is at risk until an answer has been
+ * given. See `queue/evaluation-lock.ts`.
+ */
+export function panelIsLocked(challengeId: number): Promise<boolean> {
+  return challengePanelLocked(challengeId);
 }
 
 export async function getChallenge(challengeId: number) {
@@ -138,15 +145,15 @@ export async function listOwnedChallenges(userId: number) {
   return rows.map(challengeReadModel);
 }
 
-/** Challenges assigned to a user through room_judges (H46 contextual judge access). */
+/** Challenges a user judges through `enterprise_judges` (H46 contextual judge access). */
 export async function listAssignedJudgeChallenges(userId: number) {
   const { rows } = await pool.query(
     `SELECT DISTINCT ${EDITABLE_COLUMNS_FROM_CHALLENGE}, ent.name AS enterprise_name
-       FROM room_judges rj
-       JOIN challenges c ON c.id = rj.challenge_id
-       JOIN sponsors author ON author.id = c.author
+       FROM enterprise_judges ej
+       JOIN sponsors author ON author.enterprise_id = ej.enterprise_id
+       JOIN challenges c ON c.author = author.id
        JOIN enterprises ent ON ent.id = author.enterprise_id
-      WHERE rj.user_id = $1
+      WHERE ej.user_id = $1
       ORDER BY c.id`,
     [userId],
   );
@@ -387,8 +394,8 @@ export async function updateChallenge(
   patch: UpdateChallengeBody,
   access: ChallengeAccess = "owner",
 ) {
-  if (patch.judgingPanelCriteria !== undefined && (await panelIsLocked())) {
-    throw new ConflictError("Judging panel is locked: judging has already started", {
+  if (patch.judgingPanelCriteria !== undefined && (await panelIsLocked(challengeId))) {
+    throw new ConflictError("Judging panel is locked: a team has already been evaluated", {
       code: "panel_locked",
     });
   }
@@ -486,11 +493,15 @@ export async function updateChallenge(
 
     if (patch.maxInWaitingArea !== undefined) {
       await client.query(
+        // H46: every room serving this challenge — reached through the
+        // queue_group the challenge feeds, so a shared group's rooms are all
+        // covered too (§8 Q4: capacity stays per-room, never pooled).
         `UPDATE room_queue_state rqs
             SET max_in_waiting_area = $2
-           FROM room_challenges rc
-          WHERE rc.room_id = rqs.room_id
-            AND rc.challenge_id = $1`,
+           FROM room_queue_groups rqg
+           JOIN queue_group_challenges qgc ON qgc.queue_group_id = rqg.queue_group_id
+          WHERE rqg.room_id = rqs.room_id
+            AND qgc.challenge_id = $1`,
         [challengeId, patch.maxInWaitingArea],
       );
     }
@@ -566,7 +577,7 @@ export async function previewPanel(challengeId: number) {
     challengeId,
     title: challenge.title,
     questions,
-    locked: startsAt !== null && Date.now() >= startsAt.getTime(),
+    locked: await panelIsLocked(challengeId),
     judgingStartsAt: startsAt ? startsAt.toISOString() : null,
   };
 }

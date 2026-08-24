@@ -278,7 +278,8 @@ export function registerChallengeRoutes(app: FastifyInstance): void {
         params: winnerRankParam,
         body: setWinnerBody,
         summary: "Set a challenge winner",
-        description: "Sets one rank for a repo that is entered in this exact challenge (H46).",
+        description:
+          "Sets one rank for a repo entered in any challenge sharing this challenge's queue group — every challenge has its own 1:1 group unless an enterprise merged several into one shared judging queue. The win is recorded against this challenge (H46).",
       },
     },
     async (req) => {

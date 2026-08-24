@@ -8,6 +8,7 @@ import {
   AlertTriangleIcon,
   ArrowUpToLineIcon,
   DoorOpenIcon,
+  ListOrderedIcon,
   MoreHorizontalIcon,
   RotateCcwIcon,
   SearchIcon,
@@ -16,6 +17,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
+import { Modal } from "@/components/common/modal";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -24,6 +26,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Surface } from "@/components/ui/surface";
 import { useLocale } from "@/lib/i18n";
@@ -132,6 +136,7 @@ export function QueuePanel({
   onQuery,
   onManualCall,
   onEntryAction,
+  onMoveToPosition,
   onAddTop,
   onAddWaiting,
   onReEnter,
@@ -156,6 +161,7 @@ export function QueuePanel({
     body: Record<string, unknown> | undefined,
     label: string,
   ) => void;
+  onMoveToPosition: (entry: QueueEntry, position: number) => void;
   onAddTop: (entry: QueueSearchResult) => void;
   onAddWaiting: (entry: QueueSearchResult) => void;
   onReEnter: (entry: QueueSearchResult, position: "top" | "bottom") => void;
@@ -188,6 +194,7 @@ export function QueuePanel({
               canOperate={canOperate}
               canAdmin={canAdmin}
               onEntryAction={onEntryAction}
+              onMoveToPosition={onMoveToPosition}
             />
           )}
         />
@@ -263,7 +270,7 @@ export function QueuePanel({
                     <Button
                       size="sm"
                       variant="outline"
-                      disabled={busy != null || !canOperate}
+                      disabled={busy != null || (!canOperate && !canJudge)}
                       onClick={() =>
                         onEntryAction(
                           entry,
@@ -300,6 +307,7 @@ export function CalledEntryActions({
   canOperate,
   canAdmin,
   onEntryAction,
+  onMoveToPosition,
 }: {
   entry: QueueEntry;
   busy: string | null;
@@ -312,10 +320,15 @@ export function CalledEntryActions({
     body: Record<string, unknown> | undefined,
     label: string,
   ) => void;
+  onMoveToPosition: (entry: QueueEntry, position: number) => void;
 }) {
   const { t } = useLocale();
   const [confirming, setConfirming] = useState<"no-show" | "disqualify" | null>(null);
+  const [positionOpen, setPositionOpen] = useState(false);
+  const [position, setPosition] = useState(String(entry.position ?? 1));
   const canModerate = !canJudge && !canOperate;
+  const requestedPosition = Number(position);
+  const validPosition = Number.isInteger(requestedPosition) && requestedPosition >= 1;
 
   return (
     <div className="flex flex-wrap gap-2">
@@ -377,6 +390,15 @@ export function CalledEntryActions({
             <RotateCcwIcon className="size-4" />
             {t("requeueBottom")}
           </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={() => {
+              setPosition(String(entry.position ?? 1));
+              setPositionOpen(true);
+            }}
+          >
+            <ListOrderedIcon className="size-4" />
+            {t("queueMoveToPosition")}
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" onClick={() => setConfirming("no-show")}>
             <AlertTriangleIcon className="size-4" />
@@ -389,6 +411,41 @@ export function CalledEntryActions({
           )}
         </DropdownMenuContent>
       </DropdownMenu>
+      <Modal
+        open={positionOpen}
+        onOpenChange={setPositionOpen}
+        title={t("queueMoveToPosition")}
+        description={t("queueMoveToPositionDescription")}
+        icon={ListOrderedIcon}
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setPositionOpen(false)}>
+              {t("cancel")}
+            </Button>
+            <Button
+              disabled={busy != null || canModerate || !validPosition}
+              onClick={() => {
+                onMoveToPosition(entry, requestedPosition);
+                setPositionOpen(false);
+              }}
+            >
+              {t("queueMoveToPosition")}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-2 py-1">
+          <Label htmlFor={`queue-position-${entry.id}`}>{t("position")}</Label>
+          <Input
+            id={`queue-position-${entry.id}`}
+            type="number"
+            min={1}
+            step={1}
+            value={position}
+            onChange={(event) => setPosition(event.target.value)}
+          />
+        </div>
+      </Modal>
       <AlertModal
         open={confirming === "no-show"}
         onOpenChange={(open) => !open && setConfirming(null)}

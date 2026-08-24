@@ -166,13 +166,42 @@ id) → one `primaryAction` + optional `secondaryActions`.
 ## 5. Component decision logic
 
 **Summary: the shared library is canonical — pick by job, extend by props,
-never fork. Full inventory: `apps/web/README.md` + the `/components` gallery
-in the running app.**
+never fork. Decide *whether* something is a dialog before deciding *which*
+dialog. Full inventory: `apps/web/README.md` + the `/components` gallery in
+the running app.**
+
+### Is it a dialog at all?
+
+A dialog is an **interruption**: it steals focus, hides the page behind it,
+cannot be linked to, cannot be reopened where the reader left it, and has no
+room to grow. Reach for one only when the interaction is short, self-contained
+and genuinely modal — a confirmation, a single decision, one short form.
+
+Everything else has a better home. Work down this list and stop at the first
+match:
+
+| The content is | Use | Not |
+| --- | --- | --- |
+| A record's own detail — several sections, its own data, something a reader will link to, come back to, or read alongside a list | A **route** (`/thing/[id]`, or a detail pane beside the list) | A `Modal`, however big |
+| Secondary detail that belongs *with* a section and is only sometimes wanted | Inline disclosure (`Collapsible` / `Accordion`) inside the `SectionCard` | A dialog opened from a row |
+| A whole alternative view of the same page's subject | A `TabBar` sub-view (§4) | A dialog per view |
+| One short decision, confirmation, or small form | `Modal` / `AlertModal` | A route for a two-field form |
+
+Two smells that mean a dialog has outgrown itself: it scrolls internally on a
+laptop, or it contains its own tabs, its own list *and* its own form. Both mean
+it should have been a route.
+
+**Never put a table, a live-updating list, or a record's primary content in a
+dialog.** A queue, a roster, a set of results are things people scan, sort and
+return to; behind a modal they can't be linked, shared, or kept open next to
+anything else.
+
+### Which component
 
 | Job | Use | Not |
 | --- | --- | --- |
 | Confirm an irreversible/destructive action | `AlertModal` | `Modal` with a red button, `window.confirm` |
-| Any other dialog | `Modal` (controlled or `trigger`) | Hand-rolled Radix Dialog |
+| A short, self-contained dialog that passed the test above | `Modal` (controlled or `trigger`) | Hand-rolled Radix Dialog; anything the table above sends to a route |
 | Report a failed load/submit in place | `ContextualError` (+ retry) | A toast alone |
 | Confirm a completed action | Toast (sonner) | A modal interrupting the flow |
 | Communicate entity status | `StatusBadge` with a `tone` (queue states: `QueueStatusBadge`) | Coloured text, custom pills |
@@ -574,7 +603,7 @@ rg -n 'tracking-(tight|wide|wider|widest)' apps/web/src/components
 The system never does these. Treat a diff that introduces one as a bug:
 
 1. No role-based UI. `me.role` is display-only; gating is always by
-   capability or association fact (`isRoomJudge`, `isSponsorRep`).
+   capability or association fact (`isEnterpriseJudge`, `isSponsorRep`).
 2. No hardcoded colours (hex/oklch) or off-token spacing in components.
 3. No hardcoded user-facing strings — everything through the i18n dictionary,
    all three locales at once.

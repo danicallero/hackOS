@@ -100,7 +100,13 @@ type Participant = {
   first: string;
   last: string;
   universityIndex: number;
-  studies: "high_school" | "vocational_training" | "bachelors_degree" | "masters_degree" | "phd" | "other";
+  studies:
+    | "high_school"
+    | "vocational_training"
+    | "bachelors_degree"
+    | "masters_degree"
+    | "phd"
+    | "other";
   major: string;
   gradYear: string;
   city: string;
@@ -113,53 +119,327 @@ type Participant = {
 };
 
 const PARTICIPANTS: Participant[] = [
-  { first: "Sofía", last: "Martínez", universityIndex: 0, studies: "bachelors_degree", major: "Computer Science", gradYear: "2026", city: "A Coruña, A Coruña, Spain", gender: "female", dob: "2003-04-12", motivation: "I want to finally build something end-to-end instead of just coursework projects, and meet people working on things I'd never try alone.", firstHackathon: true, firstHackUDC: true, language: "es" },
-  { first: "Diego", last: "Fernández", universityIndex: 0, studies: "bachelors_degree", major: "Software Engineering", gradYear: "2025", city: "Ferrol, A Coruña, Spain", gender: "male", dob: "2002-09-03", motivation: "HackUDC is where I got into web dev two years ago — coming back to try embedded stuff this time.", firstHackathon: false, firstHackUDC: false, language: "gl" },
-  { first: "Lucía", last: "Rodríguez", universityIndex: 1, studies: "masters_degree", major: "Data Science", gradYear: "2026", city: "Santiago de Compostela, Spain", gender: "female", dob: "2001-11-20", motivation: "I've spent a year doing research on ML models and want to see how far I can push one into an actual usable product in 24 hours.", firstHackathon: false, firstHackUDC: true, language: "es" },
-  { first: "Mateo", last: "González", universityIndex: 2, studies: "bachelors_degree", major: "Telecommunications Engineering", gradYear: "2027", city: "Vigo, Pontevedra, Spain", gender: "male", dob: "2004-02-17", motivation: "My friends keep going to hackathons without me, this is the year I finally join one.", firstHackathon: true, firstHackUDC: true, language: "gl" },
-  { first: "Carla", last: "Pérez", universityIndex: 0, studies: "bachelors_degree", major: "Computer Science", gradYear: "2025", city: "A Coruña, A Coruña, Spain", gender: "female", dob: "2002-06-29", motivation: "I want to design the UI for once instead of only reviewing other people's mockups on a team project.", firstHackathon: false, firstHackUDC: false, language: "es" },
-  { first: "Hugo", last: "Sánchez", universityIndex: 3, studies: "bachelors_degree", major: "Industrial Engineering", gradYear: "2026", city: "Barcelona, Spain", gender: "male", dob: "2003-01-08", motivation: "Traveling from Barcelona for this one — heard the hardware track is worth the trip.", firstHackathon: true, firstHackUDC: true, language: "en" },
-  { first: "Martina", last: "López", universityIndex: 1, studies: "bachelors_degree", major: "Mathematics", gradYear: "2027", city: "Santiago de Compostela, Spain", gender: "female", dob: "2004-08-14", motivation: "I want to see what a math background is actually useful for outside of exams.", firstHackathon: true, firstHackUDC: true, language: "es" },
-  { first: "Bruno", last: "Álvarez", universityIndex: 2, studies: "masters_degree", major: "Robotics", gradYear: "2025", city: "Vigo, Pontevedra, Spain", gender: "male", dob: "2001-05-22", motivation: "Building a working robot in a weekend sounds impossible, which is exactly why I want to try.", firstHackathon: false, firstHackUDC: false, language: "gl" },
-  { first: "Noa", last: "Vázquez", universityIndex: 0, studies: "bachelors_degree", major: "Software Engineering", gradYear: "2026", city: "A Coruña, A Coruña, Spain", gender: "other", dob: "2003-10-30", motivation: "Last year I came as a spectator, this year I want to actually be on a team.", firstHackathon: true, firstHackUDC: false, language: "gl" },
-  { first: "Iker", last: "Romero", universityIndex: 4, studies: "bachelors_degree", major: "Computer Science", gradYear: "2027", city: "Madrid, Spain", gender: "male", dob: "2004-03-19", motivation: "Looking for a team that wants to build something with real users, not just a demo.", firstHackathon: true, firstHackUDC: true, language: "es" },
-  { first: "Valentina", last: "Torres", universityIndex: 3, studies: "bachelors_degree", major: "Design & Multimedia", gradYear: "2026", city: "Barcelona, Spain", gender: "female", dob: "2003-07-11", motivation: "I do design work for uni projects but never for something that ships in a day — curious how that changes my process.", firstHackathon: false, firstHackUDC: true, language: "en" },
-  { first: "Adrián", last: "Castro", universityIndex: 1, studies: "bachelors_degree", major: "Computer Science", gradYear: "2025", city: "Santiago de Compostela, Spain", gender: "male", dob: "2002-12-05", motivation: "Third HackUDC in a row, this time trying to actually place in a challenge.", firstHackathon: false, firstHackUDC: false, language: "gl" },
-  { first: "Emma", last: "Silva", universityIndex: 0, studies: "bachelors_degree", major: "Biomedical Engineering", gradYear: "2027", city: "A Coruña, A Coruña, Spain", gender: "female", dob: "2004-01-25", motivation: "Want to try building something in the health-tech space with people outside my usual course group.", firstHackathon: true, firstHackUDC: true, language: "es" },
-  { first: "Marco", last: "Ferreira", universityIndex: 4, studies: "masters_degree", major: "Physics", gradYear: "2026", city: "Lisbon, Portugal", gender: "male", dob: "2002-04-02", motivation: "Crossing the border from Lisbon for this — friends who came last year said the judging panels were genuinely useful feedback.", firstHackathon: false, firstHackUDC: true, language: "en" },
-  { first: "Léa", last: "Dubois", universityIndex: 3, studies: "bachelors_degree", major: "Computer Science", gradYear: "2026", city: "Paris, France", gender: "female", dob: "2003-09-16", motivation: "On Erasmus this semester and wanted to go to a hackathon somewhere new before heading back.", firstHackathon: true, firstHackUDC: true, language: "en" },
-  { first: "Liam", last: "O'Connor", universityIndex: 2, studies: "bachelors_degree", major: "Software Engineering", gradYear: "2025", city: "Dublin, Ireland", gender: "male", dob: "2002-02-27", motivation: "Been meaning to build a real side project for months, figured a deadline would finally make it happen.", firstHackathon: false, firstHackUDC: true, language: "en" },
+  {
+    first: "Sofía",
+    last: "Martínez",
+    universityIndex: 0,
+    studies: "bachelors_degree",
+    major: "Computer Science",
+    gradYear: "2026",
+    city: "A Coruña, A Coruña, Spain",
+    gender: "female",
+    dob: "2003-04-12",
+    motivation:
+      "I want to finally build something end-to-end instead of just coursework projects, and meet people working on things I'd never try alone.",
+    firstHackathon: true,
+    firstHackUDC: true,
+    language: "es",
+  },
+  {
+    first: "Diego",
+    last: "Fernández",
+    universityIndex: 0,
+    studies: "bachelors_degree",
+    major: "Software Engineering",
+    gradYear: "2025",
+    city: "Ferrol, A Coruña, Spain",
+    gender: "male",
+    dob: "2002-09-03",
+    motivation:
+      "HackUDC is where I got into web dev two years ago — coming back to try embedded stuff this time.",
+    firstHackathon: false,
+    firstHackUDC: false,
+    language: "gl",
+  },
+  {
+    first: "Lucía",
+    last: "Rodríguez",
+    universityIndex: 1,
+    studies: "masters_degree",
+    major: "Data Science",
+    gradYear: "2026",
+    city: "Santiago de Compostela, Spain",
+    gender: "female",
+    dob: "2001-11-20",
+    motivation:
+      "I've spent a year doing research on ML models and want to see how far I can push one into an actual usable product in 24 hours.",
+    firstHackathon: false,
+    firstHackUDC: true,
+    language: "es",
+  },
+  {
+    first: "Mateo",
+    last: "González",
+    universityIndex: 2,
+    studies: "bachelors_degree",
+    major: "Telecommunications Engineering",
+    gradYear: "2027",
+    city: "Vigo, Pontevedra, Spain",
+    gender: "male",
+    dob: "2004-02-17",
+    motivation:
+      "My friends keep going to hackathons without me, this is the year I finally join one.",
+    firstHackathon: true,
+    firstHackUDC: true,
+    language: "gl",
+  },
+  {
+    first: "Carla",
+    last: "Pérez",
+    universityIndex: 0,
+    studies: "bachelors_degree",
+    major: "Computer Science",
+    gradYear: "2025",
+    city: "A Coruña, A Coruña, Spain",
+    gender: "female",
+    dob: "2002-06-29",
+    motivation:
+      "I want to design the UI for once instead of only reviewing other people's mockups on a team project.",
+    firstHackathon: false,
+    firstHackUDC: false,
+    language: "es",
+  },
+  {
+    first: "Hugo",
+    last: "Sánchez",
+    universityIndex: 3,
+    studies: "bachelors_degree",
+    major: "Industrial Engineering",
+    gradYear: "2026",
+    city: "Barcelona, Spain",
+    gender: "male",
+    dob: "2003-01-08",
+    motivation:
+      "Traveling from Barcelona for this one — heard the hardware track is worth the trip.",
+    firstHackathon: true,
+    firstHackUDC: true,
+    language: "en",
+  },
+  {
+    first: "Martina",
+    last: "López",
+    universityIndex: 1,
+    studies: "bachelors_degree",
+    major: "Mathematics",
+    gradYear: "2027",
+    city: "Santiago de Compostela, Spain",
+    gender: "female",
+    dob: "2004-08-14",
+    motivation: "I want to see what a math background is actually useful for outside of exams.",
+    firstHackathon: true,
+    firstHackUDC: true,
+    language: "es",
+  },
+  {
+    first: "Bruno",
+    last: "Álvarez",
+    universityIndex: 2,
+    studies: "masters_degree",
+    major: "Robotics",
+    gradYear: "2025",
+    city: "Vigo, Pontevedra, Spain",
+    gender: "male",
+    dob: "2001-05-22",
+    motivation:
+      "Building a working robot in a weekend sounds impossible, which is exactly why I want to try.",
+    firstHackathon: false,
+    firstHackUDC: false,
+    language: "gl",
+  },
+  {
+    first: "Noa",
+    last: "Vázquez",
+    universityIndex: 0,
+    studies: "bachelors_degree",
+    major: "Software Engineering",
+    gradYear: "2026",
+    city: "A Coruña, A Coruña, Spain",
+    gender: "other",
+    dob: "2003-10-30",
+    motivation: "Last year I came as a spectator, this year I want to actually be on a team.",
+    firstHackathon: true,
+    firstHackUDC: false,
+    language: "gl",
+  },
+  {
+    first: "Iker",
+    last: "Romero",
+    universityIndex: 4,
+    studies: "bachelors_degree",
+    major: "Computer Science",
+    gradYear: "2027",
+    city: "Madrid, Spain",
+    gender: "male",
+    dob: "2004-03-19",
+    motivation:
+      "Looking for a team that wants to build something with real users, not just a demo.",
+    firstHackathon: true,
+    firstHackUDC: true,
+    language: "es",
+  },
+  {
+    first: "Valentina",
+    last: "Torres",
+    universityIndex: 3,
+    studies: "bachelors_degree",
+    major: "Design & Multimedia",
+    gradYear: "2026",
+    city: "Barcelona, Spain",
+    gender: "female",
+    dob: "2003-07-11",
+    motivation:
+      "I do design work for uni projects but never for something that ships in a day — curious how that changes my process.",
+    firstHackathon: false,
+    firstHackUDC: true,
+    language: "en",
+  },
+  {
+    first: "Adrián",
+    last: "Castro",
+    universityIndex: 1,
+    studies: "bachelors_degree",
+    major: "Computer Science",
+    gradYear: "2025",
+    city: "Santiago de Compostela, Spain",
+    gender: "male",
+    dob: "2002-12-05",
+    motivation: "Third HackUDC in a row, this time trying to actually place in a challenge.",
+    firstHackathon: false,
+    firstHackUDC: false,
+    language: "gl",
+  },
+  {
+    first: "Emma",
+    last: "Silva",
+    universityIndex: 0,
+    studies: "bachelors_degree",
+    major: "Biomedical Engineering",
+    gradYear: "2027",
+    city: "A Coruña, A Coruña, Spain",
+    gender: "female",
+    dob: "2004-01-25",
+    motivation:
+      "Want to try building something in the health-tech space with people outside my usual course group.",
+    firstHackathon: true,
+    firstHackUDC: true,
+    language: "es",
+  },
+  {
+    first: "Marco",
+    last: "Ferreira",
+    universityIndex: 4,
+    studies: "masters_degree",
+    major: "Physics",
+    gradYear: "2026",
+    city: "Lisbon, Portugal",
+    gender: "male",
+    dob: "2002-04-02",
+    motivation:
+      "Crossing the border from Lisbon for this — friends who came last year said the judging panels were genuinely useful feedback.",
+    firstHackathon: false,
+    firstHackUDC: true,
+    language: "en",
+  },
+  {
+    first: "Léa",
+    last: "Dubois",
+    universityIndex: 3,
+    studies: "bachelors_degree",
+    major: "Computer Science",
+    gradYear: "2026",
+    city: "Paris, France",
+    gender: "female",
+    dob: "2003-09-16",
+    motivation:
+      "On Erasmus this semester and wanted to go to a hackathon somewhere new before heading back.",
+    firstHackathon: true,
+    firstHackUDC: true,
+    language: "en",
+  },
+  {
+    first: "Liam",
+    last: "O'Connor",
+    universityIndex: 2,
+    studies: "bachelors_degree",
+    major: "Software Engineering",
+    gradYear: "2025",
+    city: "Dublin, Ireland",
+    gender: "male",
+    dob: "2002-02-27",
+    motivation:
+      "Been meaning to build a real side project for months, figured a deadline would finally make it happen.",
+    firstHackathon: false,
+    firstHackUDC: true,
+    language: "en",
+  },
 ];
 
 const SPONSOR_COMPANIES = [
-  { name: "Nimbus Cloud Systems", website: "https://nimbuscloud.example", blurb: "Managed cloud infrastructure and observability tooling." },
-  { name: "Solventra Robotics", website: "https://solventra.example", blurb: "Robotics kits and embedded platforms for makers and industry." },
-  { name: "Brightline Analytics", website: "https://brightline.example", blurb: "Data pipelines and analytics for growing product teams." },
+  {
+    name: "Nimbus Cloud Systems",
+    website: "https://nimbuscloud.example",
+    blurb: "Managed cloud infrastructure and observability tooling.",
+  },
+  {
+    name: "Solventra Robotics",
+    website: "https://solventra.example",
+    blurb: "Robotics kits and embedded platforms for makers and industry.",
+  },
+  {
+    name: "Brightline Analytics",
+    website: "https://brightline.example",
+    blurb: "Data pipelines and analytics for growing product teams.",
+  },
 ];
 
 const CHALLENGES = [
   {
     title: "Best Use of AI",
-    description: "Open to any project that puts AI or ML at the center of solving a real problem, not just bolted on as a feature.",
-    criteria: "Judged on the creativity and effectiveness of the AI/ML approach, and whether it meaningfully improves the experience over a non-AI version.",
+    description:
+      "Open to any project that puts AI or ML at the center of solving a real problem, not just bolted on as a feature.",
+    criteria:
+      "Judged on the creativity and effectiveness of the AI/ML approach, and whether it meaningfully improves the experience over a non-AI version.",
   },
   {
     title: "Best Hardware Hack",
-    description: "For teams who got their hands dirty with sensors, microcontrollers, or anything that isn't purely software.",
-    criteria: "Judged on technical execution of the hardware integration and how well it's demonstrated live.",
+    description:
+      "For teams who got their hands dirty with sensors, microcontrollers, or anything that isn't purely software.",
+    criteria:
+      "Judged on technical execution of the hardware integration and how well it's demonstrated live.",
   },
   {
     title: "Best Beginner Hack",
-    description: "For teams where most members are at their first or second hackathon — polish matters less than what you learned.",
-    criteria: "Judged on scope appropriate to experience level, what the team learned, and clarity of the demo.",
+    description:
+      "For teams where most members are at their first or second hackathon — polish matters less than what you learned.",
+    criteria:
+      "Judged on scope appropriate to experience level, what the team learned, and clarity of the demo.",
   },
 ];
 
 const PROJECTS = [
-  { name: "EcoRoute", tagline: "A cycling route planner that optimizes for air quality and traffic safety instead of just distance.", repoSlug: "ecoroute" },
-  { name: "StudyBuddy AI", tagline: "Turns lecture notes and slides into flashcards and practice quizzes automatically.", repoSlug: "studybuddy-ai" },
-  { name: "SafeWalk", tagline: "A wearable + companion app that alerts chosen contacts if you go off your usual route walking home.", repoSlug: "safewalk" },
-  { name: "CampusConnect", tagline: "Helps first-year students find study groups and clubs matching their course schedule.", repoSlug: "campusconnect" },
+  {
+    name: "EcoRoute",
+    tagline:
+      "A cycling route planner that optimizes for air quality and traffic safety instead of just distance.",
+    repoSlug: "ecoroute",
+  },
+  {
+    name: "StudyBuddy AI",
+    tagline: "Turns lecture notes and slides into flashcards and practice quizzes automatically.",
+    repoSlug: "studybuddy-ai",
+  },
+  {
+    name: "SafeWalk",
+    tagline:
+      "A wearable + companion app that alerts chosen contacts if you go off your usual route walking home.",
+    repoSlug: "safewalk",
+  },
+  {
+    name: "CampusConnect",
+    tagline:
+      "Helps first-year students find study groups and clubs matching their course schedule.",
+    repoSlug: "campusconnect",
+  },
 ];
 
 // ── helpers ──────────────────────────────────────────────────────────────
@@ -189,7 +469,11 @@ async function upsertUser(row: {
   return res.rows[0].id;
 }
 
-async function ensureGroup(name: string, description: string, capabilities: string[]): Promise<number> {
+async function ensureGroup(
+  name: string,
+  description: string,
+  capabilities: string[],
+): Promise<number> {
   const group = await client.query(
     `INSERT INTO permission_groups (name, description) VALUES ($1, $2)
      ON CONFLICT (name) DO UPDATE SET description = EXCLUDED.description
@@ -253,15 +537,27 @@ async function seedUsers(): Promise<void> {
   const sponsorGroup = await ensureGroup("sponsor", "Sponsor portal access", ["sponsor:portal"]);
 
   for (const person of STAFF) {
-    const id = await upsertUser({ email: emailFor(person.first, person.last), name: person.first, surname: person.last });
+    const id = await upsertUser({
+      email: emailFor(person.first, person.last),
+      name: person.first,
+      surname: person.last,
+    });
     await addToGroup(id, staffGroup);
   }
   for (const person of JUDGES) {
-    const id = await upsertUser({ email: emailFor(person.first, person.last), name: person.first, surname: person.last });
+    const id = await upsertUser({
+      email: emailFor(person.first, person.last),
+      name: person.first,
+      surname: person.last,
+    });
     await addToGroup(id, judgeGroup);
   }
   for (const person of SPONSOR_REPS) {
-    const id = await upsertUser({ email: emailFor(person.first, person.last), name: person.first, surname: person.last });
+    const id = await upsertUser({
+      email: emailFor(person.first, person.last),
+      name: person.first,
+      surname: person.last,
+    });
     await addToGroup(id, sponsorGroup);
   }
 
@@ -320,17 +616,22 @@ async function seedEnterprises(): Promise<void> {
     );
     const enterpriseId = enterprise.rows[0].id;
 
-    const existing = await client.query(`SELECT 1 FROM sponsors WHERE enterprise_id = $1 AND user_id = $2`, [
-      enterpriseId,
-      repUser.id,
-    ]);
+    const existing = await client.query(
+      `SELECT 1 FROM sponsors WHERE enterprise_id = $1 AND user_id = $2`,
+      [enterpriseId, repUser.id],
+    );
     if (existing.rows.length === 0) {
-      await client.query(`INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2)`, [enterpriseId, repUser.id]);
+      await client.query(`INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2)`, [
+        enterpriseId,
+        repUser.id,
+      ]);
       createdSponsors++;
     }
   }
 
-  console.log(`enterprises: ${SPONSOR_COMPANIES.length} companies (tier #${tierId}), ${createdSponsors} sponsor links`);
+  console.log(
+    `enterprises: ${SPONSOR_COMPANIES.length} companies (tier #${tierId}), ${createdSponsors} sponsor links`,
+  );
 }
 
 // ── applications ─────────────────────────────────────────────────────────
@@ -348,7 +649,12 @@ function labelOf(field: FormField): string {
   return (field.label?.en ?? field.key).toLowerCase();
 }
 
-function fieldValue(field: FormField, p: Participant, index: number, universityName: string): unknown {
+function fieldValue(
+  field: FormField,
+  p: Participant,
+  index: number,
+  universityName: string,
+): unknown {
   const label = labelOf(field);
 
   if (field.kind === "university") return universityName;
@@ -365,25 +671,31 @@ function fieldValue(field: FormField, p: Participant, index: number, universityN
   if (field.kind === "textarea") return p.motivation;
 
   if (field.kind === "checkbox") {
-    if (label.includes("terms") || label.includes("privacy") || label.includes("code of conduct")) return true;
+    if (label.includes("terms") || label.includes("privacy") || label.includes("code of conduct"))
+      return true;
     if (label.includes("first") && label.includes("hackudc")) return p.firstHackUDC;
     if (label.includes("first") && label.includes("hackathon")) return p.firstHackathon;
     return true;
   }
 
   if (field.kind === "file") {
-    return { url: `https://storage.hackos.dev/cv/${slug(p.first)}-${slug(p.last)}.pdf`, filename: "cv.pdf" };
+    return {
+      url: `https://storage.hackos.dev/cv/${slug(p.first)}-${slug(p.last)}.pdf`,
+      filename: "cv.pdf",
+    };
   }
 
   if (field.kind === "text") {
     if (label.includes("major") || label.includes("degree")) return p.major;
     if (label.includes("location") || label.includes("joining")) return p.city;
     if (label.includes("phone")) return phoneFor(index);
-    if (label.includes("dni") || label.includes("passport") || label.includes("id")) return dniFor(index);
+    if (label.includes("dni") || label.includes("passport") || label.includes("id"))
+      return dniFor(index);
     if (field.validation?.text_condition === "url" || label.includes("github")) {
       if (label.includes("github")) return `https://github.com/${slug(p.first)}${slug(p.last)}`;
       if (label.includes("devpost")) return `https://devpost.com/${slug(p.first)}-${slug(p.last)}`;
-      if (label.includes("linkedin")) return `https://www.linkedin.com/in/${slug(p.first)}-${slug(p.last)}`;
+      if (label.includes("linkedin"))
+        return `https://www.linkedin.com/in/${slug(p.first)}-${slug(p.last)}`;
       if (label.includes("site")) return `https://${slug(p.first)}${slug(p.last)}.example`;
       return `https://${slug(p.first)}${slug(p.last)}.example`;
     }
@@ -395,8 +707,18 @@ function fieldValue(field: FormField, p: Participant, index: number, universityN
 
 const FALLBACK_APPLICATION_TEMPLATE: FormField[] = [
   { key: "major", kind: "text", label: { en: "What's your major/degree?" }, required: true },
-  { key: "location", kind: "text", label: { en: "Where are you joining us from?" }, required: true },
-  { key: "motivation", kind: "textarea", label: { en: "What motivates you to join?" }, required: true },
+  {
+    key: "location",
+    kind: "text",
+    label: { en: "Where are you joining us from?" },
+    required: true,
+  },
+  {
+    key: "motivation",
+    kind: "textarea",
+    label: { en: "What motivates you to join?" },
+    required: true,
+  },
   { key: "github", kind: "text", label: { en: "Github" }, validation: { text_condition: "url" } },
 ];
 
@@ -430,7 +752,9 @@ async function seedApplications(): Promise<void> {
      ORDER BY email`,
   );
   if (participantUsers.rows.length === 0) {
-    console.log("applications: form ready, but no seeded participants found — run the `users` module first");
+    console.log(
+      "applications: form ready, but no seeded participants found — run the `users` module first",
+    );
     return;
   }
 
@@ -438,7 +762,15 @@ async function seedApplications(): Promise<void> {
     PARTICIPANTS.map((p) => [emailFor(p.first, p.last), p]),
   );
 
-  const statuses = ["confirmed", "confirmed", "confirmed", "confirmed", "accepted", "submitted", "review"];
+  const statuses = [
+    "confirmed",
+    "confirmed",
+    "confirmed",
+    "confirmed",
+    "accepted",
+    "submitted",
+    "review",
+  ];
   let count = 0;
   for (let i = 0; i < participantUsers.rows.length; i++) {
     const row = participantUsers.rows[i];
@@ -462,7 +794,9 @@ async function seedApplications(): Promise<void> {
     count++;
   }
 
-  console.log(`applications: form #${applicationId} ("${existing.rows[0]?.name ?? "Participant Application"}"), ${count} responses`);
+  console.log(
+    `applications: form #${applicationId} ("${existing.rows[0]?.name ?? "Participant Application"}"), ${count} responses`,
+  );
 }
 
 // ── projects ─────────────────────────────────────────────────────────────
@@ -487,7 +821,9 @@ async function seedProjects(): Promise<void> {
   for (let i = 0; i < CHALLENGES.length; i++) {
     const challenge = CHALLENGES[i];
     if (!challenge) continue;
-    const existing = await client.query(`SELECT id FROM challenges WHERE title = $1`, [challenge.title]);
+    const existing = await client.query(`SELECT id FROM challenges WHERE title = $1`, [
+      challenge.title,
+    ]);
     if (existing.rows.length > 0) {
       challengeIds.push(existing.rows[0].id);
       continue;
@@ -513,12 +849,18 @@ async function seedProjects(): Promise<void> {
      RETURNING id`,
   );
   const roomId = room.rows[0].id;
-  await client.query(`INSERT INTO room_queue_state (room_id) VALUES ($1) ON CONFLICT DO NOTHING`, [roomId]);
+  await client.query(`INSERT INTO room_queue_state (room_id) VALUES ($1) ON CONFLICT DO NOTHING`, [
+    roomId,
+  ]);
+  // A room serves one queue group; the first challenge's group wins, same as
+  // the unique-per-room room_challenges row this replaced.
   for (const challengeId of challengeIds) {
-    await client.query(`INSERT INTO room_challenges (room_id, challenge_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [
-      roomId,
-      challengeId,
-    ]);
+    await client.query(
+      `INSERT INTO room_queue_groups (room_id, queue_group_id)
+       SELECT $1, qgc.queue_group_id FROM queue_group_challenges qgc WHERE qgc.challenge_id = $2
+       ON CONFLICT DO NOTHING`,
+      [roomId, challengeId],
+    );
   }
 
   const participants = await seededParticipants();
@@ -529,7 +871,8 @@ async function seedProjects(): Promise<void> {
     const project = PROJECTS[i];
     if (!project) continue;
 
-    let repoId = (await client.query(`SELECT id FROM repos WHERE name = $1`, [project.name])).rows[0]?.id;
+    let repoId = (await client.query(`SELECT id FROM repos WHERE name = $1`, [project.name]))
+      .rows[0]?.id;
     if (!repoId) {
       const repo = await client.query(
         `INSERT INTO repos (name, description, github_url)
@@ -544,10 +887,10 @@ async function seedProjects(): Promise<void> {
 
     const teamMembers = participants.slice(i * teamSize, i * teamSize + teamSize);
     for (const member of teamMembers) {
-      await client.query(`INSERT INTO submissions (repo_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [
-        repoId,
-        member.id,
-      ]);
+      await client.query(
+        `INSERT INTO submissions (repo_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [repoId, member.id],
+      );
     }
 
     const challengeId = challengeIds[i % Math.max(challengeIds.length, 1)];
@@ -562,7 +905,9 @@ async function seedProjects(): Promise<void> {
     if (entry.rows[0]?.id) queueCount++;
   }
 
-  console.log(`projects: ${challengeIds.length} challenges, 1 room, ${repoCount} repos, ${queueCount} queue entries`);
+  console.log(
+    `projects: ${challengeIds.length} challenges, 1 room, ${repoCount} repos, ${queueCount} queue entries`,
+  );
 }
 
 // ── tickets ──────────────────────────────────────────────────────────────
@@ -574,7 +919,9 @@ async function seedTickets(): Promise<void> {
      WHERE u.email LIKE '%@example.com' AND ar.status = 'confirmed'`,
   );
   if (confirmed.rows.length === 0) {
-    console.log("tickets: skipped — no confirmed seeded applications found, run the `applications` module first");
+    console.log(
+      "tickets: skipped — no confirmed seeded applications found, run the `applications` module first",
+    );
     return;
   }
 

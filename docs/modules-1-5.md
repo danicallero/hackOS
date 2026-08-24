@@ -168,7 +168,7 @@ confirmed|declined|expired`).
   returns `ticketToken: null` and new wallet-pass issuance 404s once
   `hasEventAccess` is false. Web nav hides wallet/queue/project/inbox for a
   "pure applicant" (`isPureApplicant` in `apps/web/src/lib/session.tsx` — no
-  confirmed spot, no capability, not a room judge or sponsor rep).
+  confirmed spot, no capability, not an enterprise judge or sponsor rep).
 - Back to submitted / accept-pending-confirmation already existed
   (`revertDecision(…, "submitted")`, `decide` + `send-decision`) — verified.
 

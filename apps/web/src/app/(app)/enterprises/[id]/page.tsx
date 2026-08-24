@@ -46,6 +46,7 @@ const editSchema = z.object({
 
 import { ChallengesSummaryCard, EditCard, LogoCard, MembersCard } from "./enterprise-cards";
 import { InviteLinksCard } from "./invite-links-card";
+import { JudgesCard } from "./judges-card";
 import { EnterpriseOverviewCard } from "./overview-card";
 
 export default function EnterpriseDetailPage() {
@@ -54,8 +55,8 @@ export default function EnterpriseDetailPage() {
   const id = Number(params.id);
   const canManage = useCan(CAPABILITIES.SPONSORS_MANAGE);
   const enterpriseTabs = canManage
-    ? (["overview", "profile", "challenges", "members", "invitations"] as const)
-    : (["overview", "profile", "challenges"] as const);
+    ? (["overview", "profile", "challenges", "judges", "members", "invitations"] as const)
+    : (["overview", "profile", "challenges", "judges"] as const);
   const { tab, setTab } = useUrlTab({ values: enterpriseTabs, defaultValue: "overview" });
 
   const [enterprise, setEnterprise] = useState<Enterprise | null>(null);
@@ -135,6 +136,7 @@ export default function EnterpriseDetailPage() {
           <TabsTrigger value="overview">{t("tabOverview")}</TabsTrigger>
           <TabsTrigger value="profile">{t("enterpriseProfileTab")}</TabsTrigger>
           <TabsTrigger value="challenges">{t("challenges")}</TabsTrigger>
+          <TabsTrigger value="judges">{t("judges")}</TabsTrigger>
           {canManage && <TabsTrigger value="members">{t("membersTitle")}</TabsTrigger>}
           {canManage && <TabsTrigger value="invitations">{t("invitationManagement")}</TabsTrigger>}
         </TabBar>
@@ -151,6 +153,9 @@ export default function EnterpriseDetailPage() {
         </TabsContent>
         <TabsContent value="challenges" className="pt-2">
           <ChallengesSummaryCard enterprise={enterprise} canManage={canManage} />
+        </TabsContent>
+        <TabsContent value="judges" className="pt-2">
+          <JudgesCard enterpriseId={enterprise.id} />
         </TabsContent>
         {canManage && (
           <TabsContent value="members" className="pt-2">

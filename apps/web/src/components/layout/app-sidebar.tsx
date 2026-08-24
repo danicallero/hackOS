@@ -58,7 +58,7 @@ function useVisible() {
     isNavItemVisible(item, {
       can,
       canAny,
-      isRoomJudge: me?.isRoomJudge ?? false,
+      isEnterpriseJudge: me?.isEnterpriseJudge ?? false,
       isSponsorRep: me?.isSponsorRep ?? false,
       hasAnyCapability: (me?.capabilities.length ?? 0) > 0,
       isPureApplicant,

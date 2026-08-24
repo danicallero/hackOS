@@ -20,6 +20,13 @@ import { DateTimeInput } from "@/components/common/datetime-input";
 import { DevpostTagsField } from "@/components/common/devpost-tags-field";
 import { DurationInput } from "@/components/common/duration-input";
 import { EmptyState } from "@/components/common/empty-state";
+import {
+  JudgingPanelBuilder,
+  MultilingualInput,
+  normalizePrizes,
+  normalizeQuestions,
+  PrizeBuilder,
+} from "@/components/common/questionnaire-builder";
 import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
@@ -53,13 +60,6 @@ import { useLocale } from "@/lib/i18n";
 import { exportUrls } from "@/lib/queue";
 import { useSessionContext } from "@/lib/session";
 import { useUrlTab } from "@/lib/url-tab";
-import {
-  JudgingPanelBuilder,
-  MultilingualInput,
-  normalizePrizes,
-  normalizeQuestions,
-  PrizeBuilder,
-} from "../builders";
 import { useChallengeRoomStatus } from "../judging-mode";
 import {
   asI18n,

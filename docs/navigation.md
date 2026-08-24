@@ -23,7 +23,8 @@ Web: `apps/web/src/lib/nav.ts` (data) + `apps/web/src/components/layout/app-side
 ## Principle
 
 Every navigation decision is a function of **effective capabilities and
-association facts** (is this account a room judge? a linked sponsor rep?),
+association facts** (is this account on an enterprise judge roster? a
+linked sponsor rep?),
 never of the illustrative `role` string (`apps/api/src/modules/identity/role.ts`
 computes a single-priority `role` for *display* only — admin > judge > sponsor
 > staff > participant — and explicitly says it must never gate a permission
@@ -31,7 +32,7 @@ check). A multi-capability account keeps every relevant destination
 simultaneously; nothing is hidden to make room for something else, and there
 is no role switcher.
 
-`GET /api/me` also returns `isRoomJudge` and `isSponsorRep` booleans
+`GET /api/me` also returns `isEnterpriseJudge` and `isSponsorRep` booleans
 (`apps/api/src/modules/identity/role.ts#computeMembershipFlags`) precisely so
 navigation can check both facts independently — the single `role` field
 collapses a sponsor rep who also judges to `"judge"`, which would hide their
@@ -79,7 +80,7 @@ workspace never over-grants access.
 | --- | --- | --- |
 | Applications | Applications | `applications:review`, `applications:decide`, or `applications:manage` |
 | Projects and imports | Projects, Resolve import | `projects:read`, `projects:import`, `judge:panel`, or an assigned-judge/sponsor-rep association |
-| Live judging | Queue operations, Judging, Rooms, Reviews, Judging window | `queue:operate`, `queue:admin`, `judge:panel`, an assigned-judge association (Judging), or a sponsor-rep association (Rooms); Judging window is `queue:admin` only |
+| Live judging | Queue operations (tabs: Rooms · Queues), Judging, Rooms, Reviews, Judging window | `queue:operate`, `queue:admin`, `judge:panel`, an assigned-judge association (Judging), or a sponsor-rep association (Rooms); Judging window is `queue:admin` only |
 | Logistics | Accreditation, Meals, Activities, Presence, Logistics stats | `accredit:scan`, `activity:scan`, `presence:scan`, `logistics:stats` (each item its own capability — H22-H27 per-station gating) |
 | Programme | Manage schedule, TV control, Announcements | Manage schedule: any account holding at least one capability (H59 `staffVisible` — full CRUD incl. hidden/draft items is further gated by `schedule:manage` inside the page itself, not at the nav level), `tv:control`, `announcements:manage` |
 | Sponsors | Enterprises, Challenges, Sponsor FAQ | `sponsors:manage`, `queue:admin`, or a sponsor-rep association (Sponsor FAQ: `sponsors:manage` only, plus sponsor-rep read access enforced server-side) |
@@ -186,19 +187,19 @@ capability.
 
 ## Association-aware domain pages
 
-Several domain pages gate access on association facts (`isRoomJudge`,
-`isSponsorRep`) in addition to capabilities, because a room judge or sponsor
+Several domain pages gate access on association facts (`isEnterpriseJudge`,
+`isSponsorRep`) in addition to capabilities, because a judge or sponsor
 rep can be granted access to a domain without holding the matching
 capability directly — the backend already authorizes them through the
-association (`room_judges`, sponsor-rep links), so the frontend gate must
+association (`enterprise_judges`, sponsor-rep links), so the frontend gate must
 check the same fact or it strands them on a client-side "no access" screen
 despite a working API.
 
 - `apps/web/src/app/(app)/judging/page.tsx` — `canUse`/`canJudge`
   (`apps/web/src/lib/judging-workspace.ts#workspaceAccess`) fold in
-  `isRoomJudge` alongside `judge:panel`/`queue:operate`/`queue:admin`.
+  `isEnterpriseJudge` alongside `judge:panel`/`queue:operate`/`queue:admin`.
 - `apps/web/src/app/(app)/projects/page.tsx` — `canView` folds in
-  `isRoomJudge` for judges (rather than `judge:panel` alone) and
+  `isEnterpriseJudge` for judges (rather than `judge:panel` alone) and
   `isSponsorRep` for sponsors (rather than `me?.role === "sponsor"`, which
   collapses to `"judge"` for a sponsor rep who also judges — see
   [Principle](#principle)). `GET /api/repos`
@@ -207,3 +208,10 @@ despite a working API.
 - `apps/web/src/app/(app)/challenges/page.tsx`,
   `apps/web/src/app/(app)/enterprises/page.tsx`, and
   `apps/web/src/app/(app)/queue/rooms/page.tsx` gate on `isSponsorRep`.
+- Queue operations (`/queue`) is one destination with two tabs (`?tab=rooms`
+  the default, `?tab=queues`), not two nav items: rooms working queues, and
+  the queues themselves (H46). The Queues tab is the only place a judging
+  queue that no room serves is reachable, and the only place a queue is named
+  or merged into a shared one. Its scope is the caller's own —
+  `GET /api/queue/groups` returns every queue for `queue:admin`/
+  `sponsors:manage` and only their own enterprises' for a sponsor rep.

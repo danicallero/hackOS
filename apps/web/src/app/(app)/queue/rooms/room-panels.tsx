@@ -2,11 +2,10 @@
 
 // Queue admin surface for rooms and assignments (H46).
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
-import { UserPicker } from "@/components/common/user-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,12 +21,11 @@ import { useLocale } from "@/lib/i18n";
 import {
   type ChallengeProgress,
   getChallengeProgress,
+  type QueueGroup,
   type QueueSearchResult,
   type RoomAssignments,
   searchTeams,
 } from "@/lib/queue";
-import type { UserList } from "@/lib/types";
-import { type Challenge, textForDisplay } from "../../challenges/shared";
 
 /**
  * Read-only progress + search for the room's assigned challenge (H46):
@@ -158,135 +156,114 @@ export function ChallengeResultsPanel({ challengeId }: { challengeId: number }) 
   );
 }
 
+/**
+ * Room -> queue group assignment plus the judges that follow from it. The
+ * roster itself lives on the enterprise (Enterprises -> Judges), so it is
+ * listed here read-only — a room no longer has judges of its own.
+ */
 export function AssignmentsEditor({
   roomId,
   assignments,
-  challengeFallback,
-  challenges,
-  users,
-  onAddChallenge,
-  onAddJudge,
-  onRemoveJudge,
-  canSetChallenge,
+  queueGroupFallback,
+  queueGroups,
+  onSetQueueGroup,
+  onClearQueueGroup,
+  canSetQueueGroup,
 }: {
   roomId: number;
   assignments: RoomAssignments | null;
-  challengeFallback: number;
-  challenges: Challenge[];
-  users: UserList["users"];
-  onAddChallenge: (challengeId: number) => Promise<void>;
-  onAddJudge: (challengeId: number, userId: number) => Promise<void>;
-  onRemoveJudge: (challengeId: number, userId: number) => Promise<void>;
-  canSetChallenge: boolean;
+  queueGroupFallback: number;
+  queueGroups: QueueGroup[];
+  onSetQueueGroup: (queueGroupId: number) => Promise<void>;
+  /** Leaves the room serving nothing — an enterprise routes its queue to the
+   *  rooms it actually wants, not to every room assigned to it. */
+  onClearQueueGroup: (queueGroupId: number) => Promise<void>;
+  canSetQueueGroup: boolean;
 }) {
   const { t } = useLocale();
-  const assignedChallenge = assignments?.challenges[0] ?? null;
-  const [challengeId, setChallengeId] = useState("");
-  const effectiveChallengeId = assignedChallenge?.challenge_id ?? Number(challengeId || 0);
-  const [userId, setUserId] = useState("");
+  const assigned = assignments?.queueGroup ?? null;
+  const [queueGroupId, setQueueGroupId] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
 
   useEffect(() => {
-    const nextChallengeId = assignments?.challenges[0]?.challenge_id ?? challengeFallback;
-    // Auto-derive selected challenge from async-loaded assignments data.
+    const next = assignments?.queueGroup?.id ?? queueGroupFallback;
+    // Auto-derive the selected queue group from async-loaded assignments data.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setChallengeId(nextChallengeId ? String(nextChallengeId) : "");
-  }, [assignments?.challenges, challengeFallback]);
+    setQueueGroupId(next ? String(next) : "");
+  }, [assignments?.queueGroup, queueGroupFallback]);
 
   const judges = assignments?.judges ?? [];
-
-  // `users` is the already-loaded judge-candidate list (no server-side query
-  // param on /judge-candidates), so UserPicker's "search" just filters it
-  // client-side by name/email instead of making a new request per keystroke.
-  const searchJudgeCandidates = useMemo(
-    () => async (query: string) => {
-      const q = query.trim().toLowerCase();
-      if (!q) return users.slice(0, 20);
-      return users
-        .filter((user) =>
-          [user.name, user.surname, user.email].filter(Boolean).join(" ").toLowerCase().includes(q),
-        )
-        .slice(0, 20);
-    },
-    [users],
-  );
 
   return (
     <div className="space-y-5">
       <div className="space-y-2">
-        <Label htmlFor={canSetChallenge ? `challenge-${roomId}` : undefined}>
-          {t("roomChallengeLabel")}
+        <Label htmlFor={canSetQueueGroup ? `queue-group-${roomId}` : undefined}>
+          {t("roomQueueGroupLabel")}
         </Label>
-        {assignedChallenge ? (
-          <p className="text-sm font-medium">{textForDisplay(assignedChallenge.title)}</p>
+        {assigned ? (
+          <p className="text-sm font-medium">
+            {assigned.enterprise_name} · {assigned.display_name}
+          </p>
         ) : (
-          <p className="text-muted-foreground text-sm">{t("noChallengeAssigned")}</p>
+          <p className="text-muted-foreground text-sm">{t("noQueueGroupAssigned")}</p>
         )}
-        {canSetChallenge && (
+        {canSetQueueGroup && (
           <div className="flex flex-col gap-2 sm:flex-row">
-            <Select value={challengeId || undefined} onValueChange={setChallengeId}>
-              <SelectTrigger id={`challenge-${roomId}`} className="w-full min-w-0 sm:flex-1">
-                <SelectValue placeholder={t("selectChallengePlaceholder")} />
+            <Select value={queueGroupId || undefined} onValueChange={setQueueGroupId}>
+              <SelectTrigger id={`queue-group-${roomId}`} className="w-full min-w-0 sm:flex-1">
+                <SelectValue placeholder={t("selectQueueGroupPlaceholder")} />
               </SelectTrigger>
               <SelectContent>
-                {challenges.map((challenge) => (
-                  <SelectItem key={challenge.id} value={String(challenge.id)}>
-                    {textForDisplay(challenge.title)}
+                {queueGroups.map((group) => (
+                  <SelectItem key={group.id} value={String(group.id)}>
+                    {group.enterpriseName} · {group.displayName}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
             <Button
               className="shrink-0"
-              disabled={busy === "challenge" || !challengeId}
+              disabled={busy !== null || !queueGroupId}
               onClick={async () => {
-                setBusy("challenge");
+                setBusy("queueGroup");
                 try {
-                  await onAddChallenge(Number(challengeId));
-                  toast.success(t("challengeAssigned"));
+                  await onSetQueueGroup(Number(queueGroupId));
+                  toast.success(t("queueGroupAssigned"));
                 } catch (err) {
-                  toast.error(err instanceof ApiError ? err.message : t("couldNotAssignChallenge"));
+                  toast.error(
+                    err instanceof ApiError ? err.message : t("couldNotAssignQueueGroup"),
+                  );
                 } finally {
                   setBusy(null);
                 }
               }}
             >
-              {t("setChallenge")}
+              {t("setQueueGroup")}
             </Button>
+            {assigned && (
+              <Button
+                variant="outline"
+                className="shrink-0"
+                disabled={busy !== null}
+                onClick={async () => {
+                  setBusy("clearQueueGroup");
+                  try {
+                    await onClearQueueGroup(assigned.id);
+                    toast.success(t("queueGroupCleared"));
+                  } catch (err) {
+                    toast.error(
+                      err instanceof ApiError ? err.message : t("couldNotAssignQueueGroup"),
+                    );
+                  } finally {
+                    setBusy(null);
+                  }
+                }}
+              >
+                {t("clearQueueGroup")}
+              </Button>
+            )}
           </div>
         )}
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor={`judge-user-${roomId}`}>{t("assignJudgeLabel")}</Label>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <UserPicker
-            id={`judge-user-${roomId}`}
-            className="w-full min-w-0 sm:flex-1"
-            value={userId}
-            onChange={setUserId}
-            search={searchJudgeCandidates}
-            placeholder={t("selectJudgePlaceholder")}
-            inDialog
-          />
-          <Button
-            className="shrink-0"
-            disabled={busy === "judge" || !userId || !effectiveChallengeId}
-            onClick={async () => {
-              setBusy("judge");
-              try {
-                await onAddJudge(effectiveChallengeId, Number(userId));
-                toast.success(t("judgeAssigned"));
-              } catch (err) {
-                toast.error(err instanceof ApiError ? err.message : t("couldNotAssignJudge"));
-              } finally {
-                setBusy(null);
-              }
-            }}
-          >
-            {t("addJudge")}
-          </Button>
-        </div>
       </div>
 
       <div className="space-y-2">
@@ -299,37 +276,11 @@ export function AssignmentsEditor({
                 .join(" ")
                 .trim();
               return (
-                <li
-                  key={`${assignment.challenge_id}:${assignment.user_id}`}
-                  className="flex items-center justify-between gap-3 px-3 py-2"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{fullName || assignment.email}</p>
-                    {fullName && (
-                      <p className="text-muted-foreground truncate text-xs">{assignment.email}</p>
-                    )}
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="shrink-0"
-                    disabled={busy === `remove-judge-${assignment.user_id}`}
-                    onClick={async () => {
-                      setBusy(`remove-judge-${assignment.user_id}`);
-                      try {
-                        await onRemoveJudge(assignment.challenge_id, assignment.user_id);
-                        toast.success(t("judgeRemoved"));
-                      } catch (err) {
-                        toast.error(
-                          err instanceof ApiError ? err.message : t("couldNotRemoveJudge"),
-                        );
-                      } finally {
-                        setBusy(null);
-                      }
-                    }}
-                  >
-                    {t("remove")}
-                  </Button>
+                <li key={assignment.user_id} className="px-3 py-2">
+                  <p className="truncate text-sm font-medium">{fullName || assignment.email}</p>
+                  {fullName && (
+                    <p className="text-muted-foreground truncate text-xs">{assignment.email}</p>
+                  )}
                 </li>
               );
             })}
