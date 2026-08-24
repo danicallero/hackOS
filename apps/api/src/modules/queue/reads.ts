@@ -390,10 +390,25 @@ async function crossRoomSkipReasons(
     });
 }
 
-/** H46 read surface: current room -> queue_group and the judges that follow. */
+/** H46 read surface: current room -> enterprise pool, serving queue_group, and the judges that follow. */
 export async function roomAssignments(roomId: number) {
   const room = (await pool.query(`SELECT * FROM rooms WHERE id = $1`, [roomId])).rows[0];
   if (!room) throw new NotFoundError("Room not found", { roomId });
+
+  const enterprise =
+    (
+      await pool.query(
+        `SELECT re.enterprise_id, e.name AS enterprise_name,
+                re.assigned_at, re.assigned_by,
+                u.name AS assigned_by_name, u.surname AS assigned_by_surname,
+                u.email AS assigned_by_email
+           FROM room_enterprises re
+           JOIN enterprises e ON e.id = re.enterprise_id
+           LEFT JOIN users u ON u.id = re.assigned_by
+          WHERE re.room_id = $1`,
+        [roomId],
+      )
+    ).rows[0] ?? null;
 
   const queueGroup =
     (
@@ -449,6 +464,7 @@ export async function roomAssignments(roomId: number) {
   return {
     roomId,
     room,
+    enterprise,
     queueGroup,
     challenges: challengeAssignments.rows,
     judges: judgeAssignments.rows,

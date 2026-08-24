@@ -551,6 +551,14 @@ describe("GET /api/me/projects (participant self-view)", () => {
     );
     const roomId = room.rows[0].id;
     await pool.query(
+      `INSERT INTO room_enterprises (room_id, enterprise_id)
+       SELECT $1, qg.enterprise_id
+         FROM queue_group_challenges qgc
+         JOIN queue_groups qg ON qg.id = qgc.queue_group_id
+        WHERE qgc.challenge_id = $2`,
+      [roomId, challengeId],
+    );
+    await pool.query(
       `INSERT INTO room_queue_groups (room_id, queue_group_id)
        SELECT $1, queue_group_id FROM queue_group_challenges WHERE challenge_id = $2`,
       [roomId, challengeId],

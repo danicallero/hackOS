@@ -80,7 +80,7 @@ workspace never over-grants access.
 | --- | --- | --- |
 | Applications | Applications | `applications:review`, `applications:decide`, or `applications:manage` |
 | Projects and imports | Projects, Resolve import | `projects:read`, `projects:import`, `judge:panel`, or an assigned-judge/sponsor-rep association |
-| Live judging | Queue operations (tabs: Rooms · Queues), Judging, Rooms, Reviews, Judging window | `queue:operate`, `queue:admin`, `judge:panel`, an assigned-judge association (Judging), or a sponsor-rep association (Rooms); Judging window is `queue:admin` only |
+| Live judging | Queue operations (tabs: Rooms · Queues), Judging, Rooms, Reviews, Judging window | `queue:operate`, `queue:admin`, `judge:panel`, an assigned-judge association (Judging); Rooms and Judging window are `queue:admin` only — a sponsor rep routes their queues to their pooled rooms from Queue operations' Queues tab, not from Rooms |
 | Logistics | Accreditation, Meals, Activities, Presence, Logistics stats | `accredit:scan`, `activity:scan`, `presence:scan`, `logistics:stats` (each item its own capability — H22-H27 per-station gating) |
 | Programme | Manage schedule, TV control, Announcements | Manage schedule: any account holding at least one capability (H59 `staffVisible` — full CRUD incl. hidden/draft items is further gated by `schedule:manage` inside the page itself, not at the nav level), `tv:control`, `announcements:manage` |
 | Sponsors | Enterprises, Challenges, Sponsor FAQ | `sponsors:manage`, `queue:admin`, or a sponsor-rep association (Sponsor FAQ: `sponsors:manage` only, plus sponsor-rep read access enforced server-side) |
@@ -205,9 +205,10 @@ despite a working API.
   [Principle](#principle)). `GET /api/repos`
   (`resolveRepoScope` in `apps/api/src/modules/projects/routes.ts`) scopes
   correctly for both already; only the frontend gate needs to match.
-- `apps/web/src/app/(app)/challenges/page.tsx`,
-  `apps/web/src/app/(app)/enterprises/page.tsx`, and
-  `apps/web/src/app/(app)/queue/rooms/page.tsx` gate on `isSponsorRep`.
+- `apps/web/src/app/(app)/challenges/page.tsx` and
+  `apps/web/src/app/(app)/enterprises/page.tsx` gate on `isSponsorRep`.
+  `apps/web/src/app/(app)/queue/rooms/page.tsx` does not (0413): pooling a
+  room into an enterprise is `queue:admin` only.
 - Queue operations (`/queue`) is one destination with two tabs (`?tab=rooms`
   the default, `?tab=queues`), not two nav items: rooms working queues, and
   the queues themselves (H46). The Queues tab is the only place a judging

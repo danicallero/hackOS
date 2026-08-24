@@ -79,16 +79,16 @@ async function judgesRoomEnterprise(userId: number, roomId: number): Promise<boo
 
 /**
  * The sponsor-rep counterpart of {@link judgesRoomEnterprise}. Ownership is
- * resolved against the room's queue_group's enterprise rather than a single
- * challenge, since a room can serve a group spanning several challenges.
+ * resolved against the room's pool (`room_enterprises`), not its serving
+ * queue_group — a room belongs to an enterprise even while serving none of
+ * its queues, or none at all.
  */
 async function ownsRoomEnterprise(userId: number, roomId: number): Promise<boolean> {
   const { rowCount } = await pool.query(
     `SELECT 1
-       FROM room_queue_groups rqg
-       JOIN queue_groups qg ON qg.id = rqg.queue_group_id
-       JOIN sponsors mine ON mine.enterprise_id = qg.enterprise_id
-      WHERE rqg.room_id = $2 AND mine.user_id = $1
+       FROM room_enterprises re
+       JOIN sponsors mine ON mine.enterprise_id = re.enterprise_id
+      WHERE re.room_id = $2 AND mine.user_id = $1
       LIMIT 1`,
     [userId, roomId],
   );

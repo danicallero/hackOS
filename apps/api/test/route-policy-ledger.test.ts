@@ -16,8 +16,8 @@ describe("final route-policy ledger", () => {
     expect(rows.filter((row) => row.policy.kind === "public")).toHaveLength(16);
     expect(rows.filter((row) => row.policy.kind === "token")).toHaveLength(12);
     expect(rows.filter((row) => row.policy.kind === "authenticated")).toHaveLength(43);
-    expect(rows.filter((row) => row.policy.kind === "capability")).toHaveLength(187);
-    expect(rows.filter((row) => row.policy.kind === "contextual")).toHaveLength(69);
+    expect(rows.filter((row) => row.policy.kind === "capability")).toHaveLength(189);
+    expect(rows.filter((row) => row.policy.kind === "contextual")).toHaveLength(67);
     expect(app.routePolicyExemptions).toEqual([
       { url: "/api/auth/*", exemption: "better-auth-generated" },
     ]);

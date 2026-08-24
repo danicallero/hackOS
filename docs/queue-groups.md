@@ -2,13 +2,26 @@
 
 The grouping layer between an enterprise's challenges and the rooms/queues that
 judge them. Added by `apps/api/db/migrations/0410_queue_groups.sql`; rooms were
-repointed onto it by `0411_room_queue_groups.sql`.
+repointed onto it by `0411_room_queue_groups.sql`; `0413_room_enterprises.sql`
+split "which enterprise a room belongs to" off from "which queue it serves".
 
 > **Status: complete.** Rooms, queue reads, ordering, the room-assignment
 > screen and the merge action all go through queue groups. An enterprise with
 > more than one challenge can merge selected challenges into one or more shared
 > queues from its judges tab; ungrouped challenges stay 1:1 and behave exactly
 > as one-queue-per-challenge always did.
+>
+> **Room ownership is a separate decision from room serving (0413).** A room's
+> enterprise (`room_enterprises`) and a room's serving queue
+> (`room_queue_groups`) used to be the same fact, read one way. They no longer
+> are: an admin assigns a room to an enterprise once (Rooms admin page,
+> `/queue/rooms`), and — only when that enterprise runs exactly one queue —
+> the server wires the room to serve it automatically. An enterprise running
+> several queues gets no automatic link; which of its pooled rooms serves
+> which queue is decided per-queue from that queue's own page (Judging queues
+> → a queue → Rooms), by admins and the enterprise's own reps alike. A room
+> can be pooled into an enterprise while serving none of its queues — the
+> enterprise may hold more rooms than it currently needs.
 
 ## Why
 
@@ -29,9 +42,13 @@ entry *is*.
 ## Tables
 
 ```
-                     ┌──< room_queue_groups >── rooms  (UNIQUE room_id)
-enterprises ──< queue_groups ──< queue_group_challenges >── challenges
-                (display_name)     (challenge_id UNIQUE)
+room_enterprises >── rooms ──< room_queue_groups >── queue_groups
+(UNIQUE room_id)                (UNIQUE room_id)      │
+      │                                                │
+      └──────────────────< enterprises >───────────────┘
+                                │
+                    queue_group_challenges >── challenges
+                       (challenge_id UNIQUE)
 ```
 
 - **`queue_groups`** — `enterprise_id`, `display_name`, `created_by`,
@@ -42,11 +59,20 @@ enterprises ──< queue_groups ──< queue_group_challenges >── challeng
   1:1 group or a shared one, never both. `ON DELETE CASCADE` on both FKs, so
   deleting a group releases its challenges and deleting a challenge leaves no
   orphan membership.
+- **`room_enterprises`** (0413) — `room_id` (PK), `enterprise_id`,
+  `assigned_at`, `assigned_by`. A room belongs to at most one enterprise at a
+  time. This is the room-pool/ownership fact, set from the Rooms admin page
+  (admin-only) and independent of whether the room is currently serving any
+  of that enterprise's queues.
 - **`room_queue_groups`** — `room_challenges` renamed and repointed by `0411`:
   `(room_id, queue_group_id)`, `assigned_at`, `assigned_by`, still `UNIQUE` on
-  `room_id`. A room serves one group, so the enterprise a room judges for is
-  derived (`room_queue_groups → queue_groups.enterprise_id`) rather than stored
-  a second time. A room with no row is unassigned, exactly as before.
+  `room_id`. A room serves at most one group at a time. Before 0413 the
+  enterprise a room judged for was *derived* from this table
+  (`room_queue_groups → queue_groups.enterprise_id`); now it must belong to
+  the enterprise the room is pooled into (`room_enterprises`) — enforced by
+  the `room_queue_groups_enterprise_guard` constraint trigger (0413). A room
+  with no row here is pooled but not currently serving anything, or not
+  pooled at all.
 
 ## Invariants enforced in the database
 
@@ -131,15 +157,32 @@ entries once any of them is called, in a room, or completed within the same
 group. The filter can never match for a 1:1 group, so today's queue and
 candidate ordering are byte-identical.
 
-### Room assignment
+### Room assignment (0413)
 
-`POST /api/queue/rooms/:roomId/queue-group` and
-`DELETE /api/queue/rooms/:roomId/queue-group/:queueGroupId` replace the old
-room→challenge routes; `GET /api/queue/groups` lists the groups the caller may
-assign. Permission is the same grant as the enterprise judge roster
-(`assertCanManageEnterpriseJudging`: `queue:admin`, `sponsors:manage`, or a rep
-of the group's enterprise) — and reassigning a room away from another
-enterprise's group requires the grant on *both* enterprises.
+Two separate route pairs now cover what one used to:
+
+- **`POST`/`DELETE /api/queue/rooms/:roomId/enterprise`** — pools a room into
+  an enterprise (`room_enterprises`), or takes it out. Global-admin only
+  (`queue:admin`); a sponsor rep manages their queue's challenges and judges
+  but never which physical rooms belong to their company. Assigning also
+  resolves the room's serving queue automatically: if the enterprise runs
+  exactly one `queue_groups` row, the room is wired to serve it
+  (`room_queue_groups`) in the same request; if it runs zero or several, no
+  serving link is created (an existing one is cleared instead of left
+  pointing at a queue outside the new enterprise). Unassigning clears both
+  the pool membership and the serving link.
+- **`PUT /api/queue/groups/:queueGroupId/rooms`** — points a *queue* at the
+  rooms that serve it, chosen from `GET /api/enterprises/:id/assignable-rooms`
+  (which now returns exactly the enterprise's pooled rooms, not "unassigned
+  rooms"). Same grant as the judge roster
+  (`assertCanManageEnterpriseJudging`: `queue:admin`, `sponsors:manage`, or a
+  rep of the group's enterprise) — so an enterprise with several queues
+  routes each of its pooled rooms to whichever queue it wants, including
+  using only some of them, from here rather than from the Rooms admin page.
+
+`GET /api/queue/groups` still lists the groups the caller may see/manage
+queue-side (challenges, judges, criteria) — unrelated to who may *pool* a
+room, which is admin-only regardless of caller.
 
 ## Merging (0412)
 
@@ -254,10 +297,12 @@ Naming and merging deliberately do **not** live on the enterprise profile: an
 admin would have to know which enterprise to open first, and one destination
 must not have two homes (§4).
 
-Room → queue linking stays on `/queue/rooms`, which is already
-`sponsorVisible: true` in `nav.ts` and already permits the enterprise's own
-reps server-side — so enterprises route their own queues to their own rooms,
-including **unlinking** a room they would rather leave idle.
+Room → **enterprise** pooling lives on `/queue/rooms` (admin-only, `queue:admin`,
+0413) — a venue-planning decision, not a judging one. Room → **queue** linking
+(routing an enterprise's pooled rooms to its specific queues, including
+**unlinking** a room an enterprise would rather leave idle) stays queue-side,
+on a queue's own page (Judging queues → a queue → Rooms), reachable by both
+`queue:admin` and the enterprise's own reps.
 
 ## Deliberately not aggregated
 

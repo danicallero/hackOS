@@ -93,13 +93,10 @@ export async function queueGroupEnterpriseId(
   return rows[0] ? Number(rows[0].enterprise_id) : null;
 }
 
-/** The enterprise a room currently judges for, or null when unassigned. */
+/** The enterprise a room's pool belongs to, or null when unassigned. */
 export async function roomEnterpriseId(client: Queryable, roomId: number): Promise<number | null> {
   const { rows } = await client.query(
-    `SELECT qg.enterprise_id
-       FROM room_queue_groups rqg
-       JOIN queue_groups qg ON qg.id = rqg.queue_group_id
-      WHERE rqg.room_id = $1`,
+    `SELECT enterprise_id FROM room_enterprises WHERE room_id = $1`,
     [roomId],
   );
   return rows[0] ? Number(rows[0].enterprise_id) : null;
