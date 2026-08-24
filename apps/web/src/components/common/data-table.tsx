@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { usePersistedState } from "@/hooks/use-persisted-state";
+import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -81,6 +83,12 @@ interface DataTableProps<T> {
   selectable?: boolean;
   selectedIds?: Set<string>;
   onSelectionChange?: (ids: Set<string>) => void;
+  /**
+   * Opt in to this table's search/sort/page and window scroll position
+   * surviving a trip to a detail page and back (BackLink's router.back()).
+   * Must be unique per table instance on the page (e.g. "audit-list").
+   */
+  stateKey?: string;
 }
 
 const alignClass = { left: "text-left", right: "text-right", center: "text-center" } as const;
@@ -115,11 +123,16 @@ export function DataTable<T>({
   selectable,
   selectedIds,
   onSelectionChange,
+  stateKey,
 }: DataTableProps<T>) {
   const { t } = useLocale();
-  const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<{ id: string; dir: "asc" | "desc" } | null>(null);
-  const [page, setPage] = useState(0);
+  const [query, setQuery] = usePersistedState(stateKey ? `${stateKey}:query` : null, "");
+  const [sort, setSort] = usePersistedState<{ id: string; dir: "asc" | "desc" } | null>(
+    stateKey ? `${stateKey}:sort` : null,
+    null,
+  );
+  const [page, setPage] = usePersistedState(stateKey ? `${stateKey}:page` : null, 0);
+  useScrollRestoration(stateKey ? `${stateKey}:scroll` : null, !loading);
   const searchId = useId();
   const searchInputRef = useRef<HTMLInputElement>(null);
   const restoreSearchFocus = useRef(false);
