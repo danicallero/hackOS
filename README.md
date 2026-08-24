@@ -173,9 +173,9 @@ tests deterministic.
 
 Pull requests and pushes to `main` run the same checks in GitHub Actions. Lint,
 the aggregate `pnpm typecheck`, and the API, web and mobile unit suites are
-separate required checks. The API job provides fresh Postgres and Valkey
-service containers with readiness healthchecks; local API runs still use
-`pnpm infra:up` and the commands above.
+separate required checks. The API job provides fresh Postgres, Valkey and
+Mailpit service containers with readiness healthchecks; local API runs still
+use `pnpm infra:up` and the commands above.
 
 ## Repository guide
 
