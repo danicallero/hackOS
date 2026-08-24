@@ -11,6 +11,13 @@ import { ContextualError } from "@/components/common/contextual-error";
 import { DevpostTagsField } from "@/components/common/devpost-tags-field";
 import { DurationInput } from "@/components/common/duration-input";
 import { EntityCombobox } from "@/components/common/entity-combobox";
+import {
+  JudgingPanelBuilder,
+  MultilingualInput,
+  normalizePrizes,
+  normalizeQuestions,
+  PrizeBuilder,
+} from "@/components/common/questionnaire-builder";
 import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
@@ -31,13 +38,6 @@ import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { type DevpostPrize, listDevpostPrizes } from "@/lib/projects";
 import { useUrlTab } from "@/lib/url-tab";
-import {
-  JudgingPanelBuilder,
-  MultilingualInput,
-  normalizePrizes,
-  normalizeQuestions,
-  PrizeBuilder,
-} from "./builders";
 import { type Challenge, EMPTY_I18N, i18nWithEnglishFallback, type Prize } from "./shared";
 
 const STEPS = ["basics", "prizes", "judging", "publish"] as const;

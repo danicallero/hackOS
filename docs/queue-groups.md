@@ -6,16 +6,17 @@ repointed onto it by `0411_room_queue_groups.sql`.
 
 > **Status: complete.** Rooms, queue reads, ordering, the room-assignment
 > screen and the merge action all go through queue groups. An enterprise with
-> more than one challenge can merge them into one shared queue from its judges
-> tab; everything else stays 1:1 and behaves exactly as one-queue-per-challenge
-> always did.
+> more than one challenge can merge selected challenges into one or more shared
+> queues from its judges tab; ungrouped challenges stay 1:1 and behave exactly
+> as one-queue-per-challenge always did.
 
 ## Why
 
 A room used to judge exactly one challenge (`room_challenges`, unique per room
 since `0401`), and each challenge had its own queue. The target model is that
 rooms serve an **enterprise**, and each enterprise decides which of its
-challenges share one judging queue and which get their own. A queue group is
+challenges share a judging queue and which get their own. Different subsets of
+an enterprise's challenges may form different shared queues. A queue group is
 that unit: one enterprise, 1..N of its challenges, one display name.
 
 Putting the group between "challenge" and "room/queue" keeps
@@ -154,11 +155,21 @@ grant as the judge roster (`assertCanManageEnterpriseJudging`: `queue:admin`,
 | `POST /api/enterprises/:id/queue-groups/merge` | performs the merge |
 | `POST /api/enterprises/:id/queue-groups/:queueGroupId/split` | gives every member challenge its own 1:1 group back |
 | `PATCH /api/queue/groups/:queueGroupId` | the admin's review: the shared name and the merged form |
+| `POST /api/queue/groups/:queueGroupId/generate` | appends newly eligible projects for every member challenge, preserving existing active positions |
+| `DELETE /api/queue/groups/:queueGroupId/entries` | clears waiting/called entries before the first evaluation while preserving the queue group and its configuration |
 
 `GET /api/queue/groups` is the cross-enterprise version of the first row and
 backs both the room-assignment picker and the all-queues management view: a
 `queue:admin`/`sponsors:manage` caller gets every queue on the platform, a
 sponsor representative only their own enterprises', anyone else none.
+
+Queue generation is deliberately incremental. It resolves each member
+challenge's Devpost prize tags, appends only projects without an active entry,
+and uses the queue ordering service for every insertion, so regenerating never
+renumbers a team that is already waiting, called, or evaluated. Clearing a
+queue cancels only waiting/called entries and records the clear action; a later
+generation can restore entries cleared by that action at the end. Clearing is
+refused after the first evaluation or while a team is in a judging room.
 
 The merge itself, in one transaction:
 

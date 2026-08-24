@@ -28,6 +28,7 @@ import {
   queueGroupRoomsBody,
   updateQueueGroupBody,
 } from "./schemas.js";
+import { clearQueueGroup, enqueueQueueGroup } from "./service.js";
 
 const enterpriseParam = { source: "params", field: "id" } as const;
 const enterpriseIdParam = z.object({ id: z.coerce.number().int().positive() });
@@ -158,6 +159,62 @@ export function registerQueueGroupRoutes(app: FastifyInstance): void {
       }
       await assertCanManageEnterpriseJudging(req, enterpriseId);
       return queueGroupQueue(req.params.queueGroupId);
+    },
+  );
+
+  typed.post(
+    "/api/queue/groups/:queueGroupId/generate",
+    {
+      preHandler: idempotencyGuard,
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "queue-group-manage",
+          resource: { source: "params", field: "queueGroupId" },
+        },
+      },
+      schema: {
+        params: queueGroupIdParam,
+        summary: "Generate one judging queue",
+        description:
+          "Adds eligible projects for every challenge in this queue group. Existing waiting, called and evaluated teams keep their current positions; repeated generation only appends projects not already queued.",
+      },
+    },
+    async (req) => {
+      const enterpriseId = await queueGroupEnterpriseId(pool, req.params.queueGroupId);
+      if (enterpriseId == null) {
+        throw new NotFoundError("Queue group not found", { queueGroupId: req.params.queueGroupId });
+      }
+      await assertCanManageEnterpriseJudging(req, enterpriseId);
+      return enqueueQueueGroup(req.params.queueGroupId, actor(req.userId));
+    },
+  );
+
+  typed.delete(
+    "/api/queue/groups/:queueGroupId/entries",
+    {
+      preHandler: idempotencyGuard,
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "queue-group-manage",
+          resource: { source: "params", field: "queueGroupId" },
+        },
+      },
+      schema: {
+        params: queueGroupIdParam,
+        summary: "Clear one judging queue",
+        description:
+          "Removes waiting and called teams from this queue while preserving the queue group and its configuration. It is refused after the first evaluation or while a team is in a judging room; a later generation can restore entries cleared by this action at the end of the queue.",
+      },
+    },
+    async (req) => {
+      const enterpriseId = await queueGroupEnterpriseId(pool, req.params.queueGroupId);
+      if (enterpriseId == null) {
+        throw new NotFoundError("Queue group not found", { queueGroupId: req.params.queueGroupId });
+      }
+      await assertCanManageEnterpriseJudging(req, enterpriseId);
+      return clearQueueGroup(req.params.queueGroupId, actor(req.userId));
     },
   );
 

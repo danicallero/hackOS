@@ -34,6 +34,8 @@ export interface QueueGroupSummary {
   id: number;
   enterpriseId: number;
   enterpriseName: string;
+  enterpriseLogoUrl: string | null;
+  enterpriseLogoNegativeUrl: string | null;
   displayName: string;
   challenges: Array<{ id: number; title: string }>;
   rooms: Array<{ id: number; name: string }>;
@@ -57,6 +59,8 @@ export interface QueueGroupSummary {
 
 const GROUP_SUMMARY_SQL = `
   SELECT qg.id, qg.enterprise_id, e.name AS enterprise_name,
+         e.logo_url AS enterprise_logo_url,
+         COALESCE(e.logo_negative_url, e.logo_url) AS enterprise_logo_negative_url,
          qg.display_name, qg.judging_panel_criteria,
          COALESCE((SELECT jsonb_agg(jsonb_build_object('id', c.id, 'title', c.title) ORDER BY c.id)
                      FROM queue_group_challenges qgc
@@ -84,6 +88,8 @@ function toSummary(row: {
   id: number;
   enterprise_id: number;
   enterprise_name: string;
+  enterprise_logo_url: string | null;
+  enterprise_logo_negative_url: string | null;
   display_name: string;
   judging_panel_criteria: unknown;
   challenges: Array<{ id: number; title: string }>;
@@ -95,6 +101,8 @@ function toSummary(row: {
     id: Number(row.id),
     enterpriseId: Number(row.enterprise_id),
     enterpriseName: row.enterprise_name,
+    enterpriseLogoUrl: row.enterprise_logo_url,
+    enterpriseLogoNegativeUrl: row.enterprise_logo_negative_url,
     displayName: row.display_name,
     challenges: row.challenges ?? [],
     rooms: row.rooms ?? [],

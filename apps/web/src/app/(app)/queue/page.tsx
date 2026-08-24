@@ -2,8 +2,7 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { ArrowRightIcon, SearchIcon, TicketIcon } from "lucide-react";
-import Link from "next/link";
+import { SearchIcon, TicketIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AccessDenied } from "@/components/common/access-denied";
@@ -141,12 +140,12 @@ export default function QueueOperationsPage() {
       <PageHeader
         title={t("queueOperations")}
         primaryAction={
-          canAdmin ? (
+          canAdmin && tab === "queues" ? (
             <GenerateQueuesAction busy={busy} onGenerate={() => void onGenerate()} />
           ) : undefined
         }
         secondaryActions={
-          <>
+          tab === "rooms" ? (
             <label
               className="text-muted-foreground flex items-center gap-2 text-sm"
               htmlFor="arrival-hints"
@@ -159,13 +158,7 @@ export default function QueueOperationsPage() {
               />
               {t("arrivalHints")}
             </label>
-            <Button variant="outline" asChild>
-              <Link href="/judging">
-                <ArrowRightIcon className="size-4" />
-                {t("openJudging")}
-              </Link>
-            </Button>
-          </>
+          ) : undefined
         }
       />
 

@@ -350,4 +350,77 @@ describe("enqueue a challenge (H29 admin)", () => {
       { challenge_id: ch2, repo_id: r2 },
     ]);
   });
+
+  it("regenerates one queue incrementally and clears it only before evaluation", async () => {
+    const challengeId = await createChallenge({ devpostTags: ["Best AI Hack"] });
+    const { repoId: first } = await createRepoWithTeam();
+    const { repoId: second } = await createRepoWithTeam();
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`INSERT INTO repo_devpost_prizes (repo_id, prize) VALUES ($1, $2), ($3, $2)`, [
+      first,
+      "Best AI Hack",
+      second,
+    ]);
+    const groupId = await queueGroupOf(challengeId);
+
+    const generated = await app.inject({
+      method: "POST",
+      url: `/api/queue/groups/${groupId}/generate`,
+      headers: asUser(adminId),
+    });
+    expect(generated.statusCode).toBe(200);
+    expect(generated.json()).toMatchObject({ inserted: 2, revived: 0 });
+    const before = await pool.query(
+      `SELECT repo_id, position FROM queue_entries WHERE challenge_id = $1 ORDER BY repo_id`,
+      [challengeId],
+    );
+
+    const { repoId: addedLater } = await createRepoWithTeam();
+    await pool.query(`INSERT INTO repo_devpost_prizes (repo_id, prize) VALUES ($1, $2)`, [
+      addedLater,
+      "Best AI Hack",
+    ]);
+    const regenerated = await app.inject({
+      method: "POST",
+      url: `/api/queue/groups/${groupId}/generate`,
+      headers: asUser(adminId),
+    });
+    expect(regenerated.json()).toMatchObject({ inserted: 1, revived: 0 });
+    const after = await pool.query(
+      `SELECT repo_id, position FROM queue_entries WHERE challenge_id = $1 ORDER BY repo_id`,
+      [challengeId],
+    );
+    expect(after.rows.slice(0, 2)).toEqual(before.rows);
+    expect(after.rows[2]).toMatchObject({ repo_id: addedLater, position: 3 });
+
+    const cleared = await app.inject({
+      method: "DELETE",
+      url: `/api/queue/groups/${groupId}/entries`,
+      headers: asUser(adminId),
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json()).toEqual({ cleared: 3 });
+    expect(
+      (await pool.query(`SELECT count(*)::int AS n FROM queue_entries WHERE status = 'waiting'`))
+        .rows[0].n,
+    ).toBe(0);
+
+    const restored = await app.inject({
+      method: "POST",
+      url: `/api/queue/groups/${groupId}/generate`,
+      headers: asUser(adminId),
+    });
+    expect(restored.json()).toMatchObject({ inserted: 0, revived: 3 });
+
+    await pool.query(
+      `UPDATE queue_entries SET status = 'completed' WHERE challenge_id = $1 AND repo_id = $2`,
+      [challengeId, first],
+    );
+    const refused = await app.inject({
+      method: "DELETE",
+      url: `/api/queue/groups/${groupId}/entries`,
+      headers: asUser(adminId),
+    });
+    expect(refused.statusCode).toBe(409);
+  });
 });

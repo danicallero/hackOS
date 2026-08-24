@@ -212,6 +212,8 @@ export interface QueueGroup {
   id: number;
   enterpriseId: number;
   enterpriseName: string;
+  enterpriseLogoUrl: string | null;
+  enterpriseLogoNegativeUrl: string | null;
   displayName: string;
   challenges: Array<{ id: number; title: string }>;
   rooms: Array<{ id: number; name: string }>;
@@ -226,6 +228,12 @@ export interface QueueGroup {
    * configurable.
    */
   evaluationStarted: boolean;
+}
+
+export interface AssignableRoom {
+  id: number;
+  name: string;
+  queueGroupId: number | null;
 }
 
 /**
@@ -297,6 +305,25 @@ export const updateQueueGroup = (
   queueGroupId: number,
   body: { displayName?: string; criteria?: Question[] },
 ) => api.patch<QueueGroup>(`/api/queue/groups/${queueGroupId}`, body);
+
+export const getAssignableRooms = (enterpriseId: number) =>
+  api
+    .get<{ rooms: AssignableRoom[] }>(`/api/enterprises/${enterpriseId}/assignable-rooms`)
+    .then((response) => response.rooms);
+
+export const setQueueGroupRooms = (queueGroupId: number, roomIds: number[]) =>
+  api.put<QueueGroup>(
+    `/api/queue/groups/${queueGroupId}/rooms`,
+    { roomIds },
+    { headers: { "Idempotency-Key": crypto.randomUUID() } },
+  );
+
+export const moveQueueEntry = (entryId: number, position: number) =>
+  api.post(
+    `/api/queue/entries/${entryId}/move-to`,
+    { position },
+    { headers: { "Idempotency-Key": crypto.randomUUID() } },
+  );
 
 /** GET /api/queue/me — participant view (H38). */
 export interface MyQueueRoom {
@@ -397,6 +424,30 @@ export const enqueueAllChallengeQueues = (idempotencyKey?: string) =>
     inserted: number;
     alreadyQueued: number;
   }>("/api/queue/challenges/enqueue-all", {}, idem(idempotencyKey));
+
+export interface QueueGenerationResult {
+  challenges: Array<{
+    challengeId: number;
+    inserted: number;
+    revived: number;
+    alreadyQueued: number;
+  }>;
+  inserted: number;
+  revived: number;
+  alreadyQueued: number;
+}
+
+export const generateQueue = (queueGroupId: number) =>
+  api.post<QueueGenerationResult>(
+    `/api/queue/groups/${queueGroupId}/generate`,
+    {},
+    { headers: { "Idempotency-Key": crypto.randomUUID() } },
+  );
+
+export const clearQueue = (queueGroupId: number) =>
+  api.delete<{ cleared: number }>(`/api/queue/groups/${queueGroupId}/entries`, {
+    headers: { "Idempotency-Key": crypto.randomUUID() },
+  });
 
 // ── entry transitions (H30-H34) ────────────────────────────────────────────
 // Critical mutations accept an Idempotency-Key; pass a fresh uuid to dedupe
