@@ -797,7 +797,9 @@ export async function roomPace(roomId: number) {
  */
 export async function repoChallenges(repoId: number) {
   const { rows } = await pool.query(
-    `SELECT qe.challenge_id AS id, c.title, qe.status,
+    `SELECT qe.id AS entry_id, qe.repo_id, qe.challenge_id AS id, c.title, qe.status,
+            qe.position, qe.called_at,
+            qgc.queue_group_id, qg.display_name AS queue_name,
             qe.assigned_room_id AS room_id, r.name AS room_name,
             COALESCE(
               (SELECT jsonb_agg(jsonb_build_object('id', rm.id, 'name', rm.name) ORDER BY rm.name ASC)
@@ -809,12 +811,32 @@ export async function repoChallenges(repoId: number) {
             ) AS judging_rooms
        FROM queue_entries qe
        JOIN challenges c ON c.id = qe.challenge_id
+       LEFT JOIN queue_group_challenges qgc ON qgc.challenge_id = qe.challenge_id
+       LEFT JOIN queue_groups qg ON qg.id = qgc.queue_group_id
        LEFT JOIN rooms r ON r.id = qe.assigned_room_id
       WHERE qe.repo_id = $1 AND qe.status != 'cancelled'
-      ORDER BY c.title ASC`,
+      ORDER BY qg.display_name ASC NULLS LAST, c.title ASC`,
     [repoId],
   );
-  return rows;
+  return Promise.all(
+    rows.map(
+      async (row: {
+        entry_id: number;
+        repo_id: number;
+        id: number;
+        title: string;
+        status: string;
+        position: number | null;
+        called_at: string | null;
+      }) => ({
+        ...row,
+        eta_minutes:
+          row.status === "waiting" && row.position != null
+            ? Math.round(Number(row.position) * (await challengeEtaMinutesPerSlot(Number(row.id))))
+            : null,
+      }),
+    ),
+  );
 }
 
 export async function entryHistory(entryId: number) {

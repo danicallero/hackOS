@@ -422,6 +422,48 @@ describe("notify_enter (H31)", () => {
     expect(inbox.rows[0].payload.roomId).toBe(roomId);
   });
 
+  it("reminds a called team to wait without asking it to enter", async () => {
+    const { challengeId, roomId } = await setup();
+    const member = await createUser();
+    const { repoId } = await createRepoWithTeam([member]);
+    const entryId = await enqueueRepo(challengeId, repoId, 1);
+    await app.inject({
+      method: "POST",
+      url: `/api/queue/rooms/${roomId}/call-next`,
+      headers: asUser(operatorId),
+      payload: {},
+    });
+
+    const { pool } = await import("../../src/db/pool.js");
+    const before = await pool.query(
+      `SELECT count(*)::int AS count FROM notification_outbox
+        WHERE user_id = $1 AND category = 'queue' AND channel = 'in_app'
+          AND payload->>'template' = 'queue.called'`,
+      [member],
+    );
+    const broadcastBefore = await broadcastCount("queue");
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/queue/entries/${entryId}/remind-waiting`,
+      headers: asUser(operatorId),
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect((await getEntry(entryId)).status).toBe("called");
+    expect(await historyRows(entryId, "remind_waiting_room")).toHaveLength(1);
+    expect(await broadcastCount("queue")).toBe(broadcastBefore + 1);
+
+    const after = await pool.query(
+      `SELECT count(*)::int AS count FROM notification_outbox
+        WHERE user_id = $1 AND category = 'queue' AND channel = 'in_app'
+          AND payload->>'template' = 'queue.called'`,
+      [member],
+    );
+    expect(after.rows[0].count).toBe(before.rows[0].count + 1);
+    expect(after.rows[0].count).toBe(2);
+  });
+
   it("pushes the room-entry alert only to staff who explicitly opted in", async () => {
     const { challengeId, roomId } = await setup();
     const subscribedStaff = await createUserWithCapabilities([CAPABILITIES.QUEUE_OPERATE]);
@@ -891,7 +933,7 @@ describe("no_show / skip / disqualify (H34)", () => {
     const res = await app.inject({
       method: "POST",
       url: `/api/queue/entries/${e1}/skip`,
-      headers: asUser(operatorId),
+      headers: asUser(judgeId),
       payload: { reason: "lo pidió el equipo" },
     });
     expect(res.statusCode).toBe(200);
@@ -1019,6 +1061,14 @@ describe("manual call (H37)", () => {
       payload: { targetStatus: "in_room", roomId },
     });
 
+    const alreadyEvaluating = await app.inject({
+      method: "POST",
+      url: `/api/queue/entries/${eA}/manual-call`,
+      headers: asUser(operatorId),
+      payload: { targetStatus: "called", roomId: room2 },
+    });
+    expect(alreadyEvaluating.statusCode).toBe(409);
+
     // H30: same member busy elsewhere
     const blocked = await app.inject({
       method: "POST",
@@ -1088,9 +1138,10 @@ describe("move_to_top (H37, H58)", () => {
     expect(moved.assigned_room_id).toBe(roomId);
   });
 
-  // H58: the searched team is called in ANOTHER room's waiting area. "Top" must
-  // NOT yank it out — block with `Busy in <room>` and leave the state untouched.
-  it("blocks with `Busy in <room>` when the team is called in another room", async () => {
+  // A called entry can be explicitly moved out of its own waiting room by the
+  // operator. H58 still blocks the same action when another entry for the team
+  // is active in a different room (covered below).
+  it("moves a called team out of its own waiting room when prioritised", async () => {
     const { challengeId, roomId } = await setup();
     const { repoId } = await createRepoWithTeam();
     const entryId = await enqueueRepo(challengeId, repoId, 1);
@@ -1102,23 +1153,50 @@ describe("move_to_top (H37, H58)", () => {
       headers: asUser(operatorId),
       payload: {},
     });
-    const { name: roomName } = await roomRow(roomId);
-
     const res = await app.inject({
       method: "POST",
       url: `/api/queue/entries/${entryId}/move-top`,
       headers: asUser(judgeId),
       payload: {},
     });
-    expect(res.statusCode).toBe(409);
-    expect(res.json().error.message).toBe(`Busy in ${roomName}`);
-    expect(res.json().error.details.roomName).toBe(roomName);
+    expect(res.statusCode).toBe(200);
 
-    // No mutation: still called in the same room, no move_to_top history row.
     const entry = await getEntry(entryId);
+    // The route tops up the room after the reorder, so an open slot may call
+    // the same entry again immediately. The queue position/history still prove
+    // that the explicit move happened.
     expect(entry.status).toBe("called");
     expect(entry.assigned_room_id).toBe(roomId);
-    expect(await historyRows(entryId, "move_to_top")).toHaveLength(0);
+    expect(await historyRows(entryId, "move_to_top")).toHaveLength(1);
+  });
+
+  it("lets a judge move a called waiting-room team to an explicit position", async () => {
+    const { challengeId, roomId } = await setup();
+    const { repoId: r1 } = await createRepoWithTeam();
+    const { repoId: r2 } = await createRepoWithTeam();
+    const { repoId: r3 } = await createRepoWithTeam();
+    const e1 = await enqueueRepo(challengeId, r1, 1);
+    await enqueueRepo(challengeId, r2, 2);
+    await enqueueRepo(challengeId, r3, 3);
+
+    await app.inject({
+      method: "POST",
+      url: `/api/queue/rooms/${roomId}/call-next`,
+      headers: asUser(operatorId),
+      payload: {},
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/queue/entries/${e1}/move-to`,
+      headers: asUser(judgeId),
+      payload: { position: 3, reason: "Judge reordered the waiting room" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().status).toBe("waiting");
+    expect(res.json().position).toBe(3);
+    expect(res.json().assigned_room_id).toBeNull();
+    expect(await historyRows(e1, "move_to_position")).toHaveLength(1);
   });
 
   // H58: the same repo is active in another room via a DIFFERENT challenge —
@@ -1131,15 +1209,16 @@ describe("move_to_top (H37, H58)", () => {
 
     const { repoId } = await createRepoWithTeam();
     const waitingHere = await enqueueRepo(challengeId, repoId, 5);
-    await enqueueRepo(ch2, repoId, 1);
+    const activeElsewhere = await enqueueRepo(ch2, repoId, 1);
     void roomId;
 
-    // The repo gets called into room2 through challenge 2.
+    // The repo gets brought into room2 through challenge 2. Being merely
+    // called in another room is not an evaluation lock; in_room is.
     await app.inject({
       method: "POST",
-      url: `/api/queue/rooms/${room2}/call-next`,
+      url: `/api/queue/entries/${activeElsewhere}/manual-call`,
       headers: asUser(operatorId),
-      payload: {},
+      payload: { targetStatus: "in_room", roomId: room2 },
     });
 
     const res = await app.inject({

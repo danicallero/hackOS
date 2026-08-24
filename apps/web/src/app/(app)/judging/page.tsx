@@ -49,6 +49,7 @@ import {
   getRoomPace,
   getRoomView,
   listRooms,
+  moveQueueEntryToPosition,
   pauseRoom,
   type QueueEntry,
   type QueueSearchResult,
@@ -419,6 +420,19 @@ export default function QueuePage() {
                   `${action}-${entry.id}`,
                   () => entryAction(entry.id, action, body, crypto.randomUUID()),
                   label,
+                )
+              }
+              onMoveToPosition={(entry, position) =>
+                mutate(
+                  `move-position-${entry.id}`,
+                  () =>
+                    moveQueueEntryToPosition(
+                      entry.id,
+                      position,
+                      "Judging panel: moved team to position",
+                      crypto.randomUUID(),
+                    ),
+                  t("queueTeamMoved"),
                 )
               }
               onAddTop={(entry) =>

@@ -2,32 +2,27 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { Building2Icon, TicketIcon } from "lucide-react";
+import { SearchIcon, TicketIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AccessDenied } from "@/components/common/access-denied";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
-import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { TabBar } from "@/components/common/tab-bar";
+import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { type SseEnvelope, useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
-import {
-  enqueueAllChallengeQueues,
-  getAllRoomViews,
-  getRoomAssignments,
-  type RoomAssignments,
-  type RoomView,
-} from "@/lib/queue";
+import { enqueueAllChallengeQueues, getAllRoomViews, type RoomView } from "@/lib/queue";
 import { useSessionContext } from "@/lib/session";
 import { useUrlTab } from "@/lib/url-tab";
 import { GenerateQueuesAction } from "./generate-queues-action";
+import { QueueOperatorConsole } from "./operator-console";
 import { QueuesPanel } from "./queues-panel";
-import { RoomQueueCard } from "./room-queue-card";
+import { TeamQueueSearch } from "./team-queue-search";
 
 export default function QueueOperationsPage() {
   const { t } = useLocale();
@@ -46,9 +41,7 @@ export default function QueueOperationsPage() {
     defaultValue: "rooms",
   });
   const [busy, setBusy] = useState(false);
-  const [roomAssignments, setRoomAssignments] = useState<Record<number, RoomAssignments | null>>(
-    {},
-  );
+  const [searchOpen, setSearchOpen] = useState(false);
   const [arrivalHints, setArrivalHints] = useState(
     () => window.localStorage.getItem("queue-ops-arrival-hints") === "1",
   );
@@ -102,28 +95,6 @@ export default function QueueOperationsPage() {
 
   const rooms = useMemo(() => roomViews.data ?? [], [roomViews.data]);
 
-  const loadAdminData = useCallback(async () => {
-    if (!canAdmin) {
-      setRoomAssignments({});
-      return;
-    }
-    try {
-      const assignmentPromise =
-        rooms.length > 0 ? Promise.all(rooms.map((room) => getRoomAssignments(room.room.id))) : [];
-      const assignmentRows = await assignmentPromise;
-      const nextAssignments: Record<number, RoomAssignments> = {};
-      for (const item of assignmentRows as RoomAssignments[]) nextAssignments[item.roomId] = item;
-      setRoomAssignments(nextAssignments);
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadOperationsDetails"));
-    }
-  }, [canAdmin, rooms, t]);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- data-fetch pattern: loadAdminData wraps setState for assignment queries
-    void loadAdminData();
-  }, [loadAdminData]);
-
   const onGenerate = useCallback(async () => {
     setBusy(true);
     try {
@@ -132,13 +103,12 @@ export default function QueueOperationsPage() {
         t("queuesGenerated", { inserted: result.inserted, challenges: result.challenges.length }),
       );
       roomViews.refetch();
-      await loadAdminData();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("couldNotGenerateQueues"));
     } finally {
       setBusy(false);
     }
-  }, [loadAdminData, roomViews, t]);
+  }, [roomViews, t]);
 
   if (!canUse) {
     return <AccessDenied ask={t("queueOpsAccessDeniedDesc")} />;
@@ -193,36 +163,50 @@ export default function QueueOperationsPage() {
       />
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabBar aria-label={t("queueOperations")} className="w-full justify-start">
-          <TabsTrigger value="rooms">{t("rooms")}</TabsTrigger>
-          <TabsTrigger value="queues">{t("judgingQueues")}</TabsTrigger>
-        </TabBar>
+        <div className="flex items-center gap-2">
+          <TabBar aria-label={t("queueOperations")} className="min-w-0 flex-1 justify-start">
+            <TabsTrigger value="rooms">{t("rooms")}</TabsTrigger>
+            <TabsTrigger value="queues">{t("judgingQueues")}</TabsTrigger>
+          </TabBar>
+          <Button
+            variant={searchOpen ? "secondary" : "outline"}
+            size="icon-sm"
+            aria-label={t("queueOpenSearch")}
+            aria-expanded={searchOpen}
+            onClick={() => setSearchOpen((open) => !open)}
+          >
+            <SearchIcon className="size-4" />
+          </Button>
+        </div>
+
+        {searchOpen && (
+          <TeamQueueSearch
+            rooms={rooms}
+            canOperate={can(CAPABILITIES.QUEUE_OPERATE) || canAdmin}
+            canAdmin={canAdmin}
+            onClose={() => setSearchOpen(false)}
+            onChanged={() => {
+              roomViews.refetch();
+            }}
+          />
+        )}
 
         <TabsContent value="rooms" className="pt-2">
-          <SectionCard title={t("roomQueues")} icon={Building2Icon} bodyClassName="space-y-4">
-            {rooms.length === 0 ? (
-              <EmptyState
-                icon={Building2Icon}
-                title={t("noRoomsYet")}
-                description={t("noRoomsYetDescription")}
-              />
-            ) : (
-              <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">
-                {rooms.map((room) => (
-                  <RoomQueueCard
-                    key={room.room.id}
-                    room={room}
-                    assignments={roomAssignments[room.room.id] ?? null}
-                    canOperate={can(CAPABILITIES.QUEUE_OPERATE) || canAdmin}
-                    onChanged={() => {
-                      roomViews.refetch();
-                      void loadAdminData();
-                    }}
-                  />
-                ))}
-              </div>
-            )}
-          </SectionCard>
+          {rooms.length === 0 ? (
+            <EmptyState
+              icon={TicketIcon}
+              title={t("noRoomsYet")}
+              description={t("noRoomsYetDescription")}
+            />
+          ) : (
+            <QueueOperatorConsole
+              rooms={rooms}
+              canOperate={can(CAPABILITIES.QUEUE_OPERATE) || canAdmin}
+              onChanged={() => {
+                roomViews.refetch();
+              }}
+            />
+          )}
         </TabsContent>
 
         <TabsContent value="queues" className="pt-2">

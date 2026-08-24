@@ -29,6 +29,8 @@ export interface QueueEntry {
   presentation_started_at: string | null;
   completed_at: string | null;
   precalled_at: string | null;
+  /** Approximate wait in minutes, present on room queue projections. */
+  eta_minutes?: number | null;
   created_at: string;
   updated_at: string;
   /** Joined into read models. */
@@ -357,9 +359,16 @@ export const getRoomAssignments = (roomId: number) =>
   api.get<RoomAssignments>(`/api/queue/rooms/${roomId}/assignments`);
 /** GET /api/queue/repos/:id/challenges — every challenge queue a repo belongs to (H40). */
 export interface RepoChallenge {
+  entry_id: number;
+  repo_id: number;
   id: number;
   title: string;
+  queue_group_id: number | null;
+  queue_name: string | null;
   status: QueueStatus | string;
+  position: number | null;
+  called_at: string | null;
+  eta_minutes: number | null;
   room_id: number | null;
   room_name: string | null;
   judging_rooms: Array<{ id: number; name: string }>;
@@ -445,6 +454,7 @@ export const clearQueue = (queueGroupId: number) =>
 // double-clicks/retries (apps/api/src/lib/idempotency.ts).
 type EntryAction =
   | "notify-enter"
+  | "remind-waiting"
   | "bring-in"
   | "start"
   | "complete"
@@ -463,6 +473,17 @@ export const entryAction = <T = unknown>(
   body?: Record<string, unknown>,
   idempotencyKey?: string,
 ) => api.post<T>(`/api/queue/entries/${entryId}/${action}`, body, idem(idempotencyKey));
+export const moveQueueEntryToPosition = (
+  entryId: number,
+  position: number,
+  reason?: string,
+  idempotencyKey?: string,
+) =>
+  api.post(
+    `/api/queue/entries/${entryId}/move-to`,
+    { position, ...(reason ? { reason } : {}) },
+    idem(idempotencyKey),
+  );
 export const getEntryHistory = (entryId: number) =>
   api.get(`/api/queue/entries/${entryId}/history`);
 

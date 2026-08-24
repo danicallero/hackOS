@@ -304,6 +304,7 @@ export async function searchChallengeQueue(challengeId: number, q: string) {
            JOIN (${REPO_MEMBER_RELATION_SQL}) s2 ON s2.user_id = s1.user_id
            JOIN queue_entries bqe ON bqe.repo_id = s2.repo_id
                                   AND bqe.status IN ('called', 'in_room', 'presenting')
+                                  AND bqe.id <> qe.id
            JOIN rooms br ON br.id = bqe.assigned_room_id
            JOIN repos brepo ON brepo.id = bqe.repo_id
           WHERE s1.repo_id = qe.repo_id
