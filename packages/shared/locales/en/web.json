@@ -448,6 +448,7 @@
   "judgeAssigned": "Judge assigned.",
   "couldNotAssignJudge": "Could not assign judge.",
   "addJudge": "Add judge",
+  "judges": "Judges",
   "judgesCount": "Judges ({count})",
   "judgeRemoved": "Judge removed.",
   "couldNotRemoveJudge": "Could not remove judge.",

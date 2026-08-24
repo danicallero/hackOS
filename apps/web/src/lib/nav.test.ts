@@ -15,7 +15,7 @@ import {
 function contextFor(
   capabilities: Capability[],
   associations: {
-    isRoomJudge?: boolean;
+    isEnterpriseJudge?: boolean;
     isSponsorRep?: boolean;
     isPureApplicant?: boolean;
     hasProject?: boolean;
@@ -27,7 +27,7 @@ function contextFor(
   return {
     can,
     canAny: (...cs: Capability[]) => cs.some(can),
-    isRoomJudge: associations.isRoomJudge ?? false,
+    isEnterpriseJudge: associations.isEnterpriseJudge ?? false,
     isSponsorRep: associations.isSponsorRep ?? false,
     hasAnyCapability: capabilities.length > 0,
     isPureApplicant: associations.isPureApplicant ?? false,
@@ -82,7 +82,7 @@ describe("pure applicant (no confirmed spot, no operational role)", () => {
   });
 
   it("a room judge or sponsor rep with the same empty capability set is not a pure applicant", () => {
-    const judge = contextFor([], { isRoomJudge: true });
+    const judge = contextFor([], { isEnterpriseJudge: true });
     const sponsor = contextFor([], { isSponsorRep: true });
     for (const item of PERSONAL_NAV) {
       expect(isNavItemVisible(item, judge)).toBe(true);
@@ -121,7 +121,7 @@ describe("no project / no queue data yet (issue #424)", () => {
 });
 
 describe("participant + judge (H8/H55)", () => {
-  const ctx = contextFor([], { isRoomJudge: true });
+  const ctx = contextFor([], { isEnterpriseJudge: true });
 
   it("keeps the personal queue and gains Live judging without any capability grant", () => {
     expect(visibleWorkspaceIds(ctx)).toEqual(expect.arrayContaining(["projects", "liveJudging"]));
@@ -139,7 +139,7 @@ describe("participant + judge (H8/H55)", () => {
 });
 
 describe("sponsor representative + judge (H8/H55)", () => {
-  const ctx = contextFor([], { isRoomJudge: true, isSponsorRep: true });
+  const ctx = contextFor([], { isEnterpriseJudge: true, isSponsorRep: true });
 
   it("sees the union of the sponsor and judging workspaces, not just one", () => {
     const ids = visibleWorkspaceIds(ctx);
@@ -302,8 +302,8 @@ describe("one name per destination (issue #297)", () => {
 
 describe("cross-capability navigation in every locale (issue #303)", () => {
   const accounts = [
-    ["participant + judge", contextFor([], { isRoomJudge: true })],
-    ["sponsor + judge", contextFor([], { isRoomJudge: true, isSponsorRep: true })],
+    ["participant + judge", contextFor([], { isEnterpriseJudge: true })],
+    ["sponsor + judge", contextFor([], { isEnterpriseJudge: true, isSponsorRep: true })],
     ["admin", contextFor([CAPABILITIES.ADMIN_ALL])],
   ] as const;
   const checks: Array<[string, NavVisibilityContext, (typeof LANGS)[number]]> = accounts.flatMap(

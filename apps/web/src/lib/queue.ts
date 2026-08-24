@@ -141,8 +141,13 @@ export interface RoomChallengeAssignment {
   assigned_by_email: string | null;
 }
 
+/**
+ * Read-only: judges are rostered on the enterprise that owns the room's
+ * challenge (`/api/enterprises/:id/judges`), not on the room itself.
+ */
 export interface RoomJudgeAssignment {
   challenge_id: number;
+  enterprise_id: number;
   title: string;
   user_id: number;
   name: string | null;
@@ -245,10 +250,6 @@ export const assignRoomChallenge = (roomId: number, challengeId: number) =>
   api.post(`/api/queue/rooms/${roomId}/challenges`, { challengeId });
 export const removeRoomChallenge = (roomId: number, challengeId: number) =>
   api.delete(`/api/queue/rooms/${roomId}/challenges/${challengeId}`);
-export const assignRoomJudge = (roomId: number, challengeId: number, userId: number) =>
-  api.post(`/api/queue/rooms/${roomId}/judges`, { challengeId, userId });
-export const removeRoomJudge = (roomId: number, challengeId: number, userId: number) =>
-  api.delete(`/api/queue/rooms/${roomId}/judges/${challengeId}/${userId}`);
 export const enqueueAllChallengeQueues = (idempotencyKey?: string) =>
   api.post<{
     challenges: Array<{ challengeId: number; inserted: number; alreadyQueued: number }>;
