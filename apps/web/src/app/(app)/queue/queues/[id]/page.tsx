@@ -9,10 +9,17 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
 import type { Question } from "@hackos/shared/questions";
-import { Building2Icon, LayersIcon, SearchIcon, TrophyIcon } from "lucide-react";
+import {
+  Building2Icon,
+  GripVerticalIcon,
+  LayersIcon,
+  SearchIcon,
+  TrophyIcon,
+  XIcon,
+} from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { type DragEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AccessDenied } from "@/components/common/access-denied";
 import { BackLink } from "@/components/common/back-link";
@@ -23,7 +30,6 @@ import { JudgingPanelBuilder, normalizeQuestions } from "@/components/common/que
 import { QueueStatusBadge } from "@/components/common/queue-status-badge";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
-import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -62,6 +68,11 @@ export default function QueueDetailPage() {
   const [criteria, setCriteria] = useState<Question[]>([]);
   const [search, setSearch] = useState("");
   const [movePositions, setMovePositions] = useState<Record<number, string>>({});
+  const [editingPosition, setEditingPosition] = useState<number | null>(null);
+  const [draggingEntryId, setDraggingEntryId] = useState<number | null>(null);
+  const [dragOver, setDragOver] = useState<{ entryId: number; side: "before" | "after" } | null>(
+    null,
+  );
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -190,6 +201,7 @@ export default function QueueDetailPage() {
   };
 
   const moveTeam = async (entryId: number, position: number) => {
+    setEditingPosition(null);
     setMovePositions((current) => ({ ...current, [entryId]: String(position) }));
     setBusy(true);
     try {
@@ -204,6 +216,7 @@ export default function QueueDetailPage() {
   };
 
   const sendTeamToEnd = async (entryId: number) => {
+    setEditingPosition(null);
     setBusy(true);
     try {
       // The API clamps out-of-range ranks to the queue's last position.
@@ -217,31 +230,87 @@ export default function QueueDetailPage() {
     }
   };
 
+  const commitPosition = (entryId: number, fallbackPosition: number) => {
+    const requested = movePositions[entryId] ?? String(fallbackPosition);
+    const position = Number(requested);
+    if (!Number.isInteger(position) || position < 1) return;
+    void moveTeam(entryId, position);
+  };
+
+  const clearDrag = () => {
+    setDraggingEntryId(null);
+    setDragOver(null);
+  };
+
+  const dropEntry = (event: DragEvent<HTMLLIElement>, targetEntryId: number) => {
+    event.preventDefault();
+    const sourceEntryId = draggingEntryId ?? Number(event.dataTransfer.getData("text/plain"));
+    const target = queue.entries.find((entry) => entry.id === targetEntryId);
+    if (
+      !Number.isFinite(sourceEntryId) ||
+      sourceEntryId === targetEntryId ||
+      !target ||
+      (target.status !== "waiting" && target.status !== "called")
+    ) {
+      clearDrag();
+      return;
+    }
+
+    const targetIndex = queue.entries.findIndex((entry) => entry.id === targetEntryId);
+    const targetPosition = target.position ?? targetIndex + 1;
+    const side =
+      event.clientY >
+      event.currentTarget.getBoundingClientRect().top + event.currentTarget.offsetHeight / 2
+        ? "after"
+        : "before";
+    const position = targetPosition + (side === "after" ? 1 : 0);
+    clearDrag();
+    void moveTeam(sourceEntryId, position);
+  };
+
   return (
     <div className="space-y-6">
       <BackLink href="/queue?tab=queues" label={t("queueOperations")} />
-      <PageHeader
-        title={queue.group.display_name}
-        meta={
-          <>
-            <span>{queue.group.enterprise_name}</span>
-            <span aria-hidden="true">·</span>
-            <span className="tabular-nums">
-              {t("queueSummary", {
-                challenges: queue.challenges.length,
-                rooms: meta?.rooms.length ?? 0,
-                teams: meta?.teams ?? queue.entries.length,
-              })}
-            </span>
-          </>
-        }
-      />
+      <PageHeader title={queue.group.display_name} meta={queue.group.enterprise_name} />
 
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         <SectionCard
           title={t("queueTeams")}
           icon={LayersIcon}
-          state={<StatusBadge>{filteredEntries.length}</StatusBadge>}
+          description={t("queueTeamCount", { count: queue.entries.length })}
+          action={
+            queue.entries.length > 0 ? (
+              <div className="relative w-full sm:w-72">
+                <Label htmlFor="queue-team-search" className="sr-only">
+                  {t("searchQueueTeams")}
+                </Label>
+                <SearchIcon
+                  aria-hidden="true"
+                  className="text-muted-foreground pointer-events-none absolute inset-y-0 start-3 my-auto size-4"
+                />
+                <Input
+                  id="queue-team-search"
+                  type="text"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder={t("searchQueueTeamsPlaceholder")}
+                  className="pe-10 ps-9"
+                />
+                {search && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    className="text-muted-foreground hover:text-foreground absolute end-1 top-1/2 -translate-y-1/2"
+                    aria-label={t("clearSearch")}
+                    onClick={() => setSearch("")}
+                  >
+                    <XIcon aria-hidden="true" className="size-4" />
+                  </Button>
+                )}
+              </div>
+            ) : undefined
+          }
           bodyClassName="p-0"
         >
           {queue.entries.length === 0 ? (
@@ -249,103 +318,141 @@ export default function QueueDetailPage() {
               <EmptyState icon={LayersIcon} title={t("queueEmpty")} />
             </div>
           ) : filteredEntries.length === 0 ? (
-            <p className="text-muted-foreground p-5 text-sm">{t("noMatchingQueueTeams")}</p>
+            <div className="space-y-3 p-5">
+              <p className="text-muted-foreground text-sm">{t("noMatchingQueueTeams")}</p>
+              <Button variant="outline" size="sm" onClick={() => setSearch("")}>
+                {t("clearSearch")}
+              </Button>
+            </div>
           ) : (
-            <>
-              <div className="border-border border-b p-4 sm:px-5">
-                <Label htmlFor="queue-team-search" className="sr-only">
-                  {t("searchQueueTeams")}
-                </Label>
-                <div className="relative">
-                  <SearchIcon
-                    aria-hidden="true"
-                    className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
-                  />
-                  <Input
-                    id="queue-team-search"
-                    type="search"
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    placeholder={t("searchQueueTeamsPlaceholder")}
-                    className="pl-9"
-                  />
-                </div>
-              </div>
-              <ol className="divide-border divide-y">
-                {filteredEntries.map((entry) => {
-                  const movable = entry.status === "waiting" || entry.status === "called";
-                  const requestedPosition = movePositions[entry.id] ?? String(entry.position ?? "");
-                  const parsedPosition = Number(requestedPosition);
-                  const canMove = Number.isInteger(parsedPosition) && parsedPosition > 0;
-                  return (
-                    <li
-                      key={entry.id}
-                      className="flex flex-wrap items-center gap-3 px-4 py-3 sm:px-5"
-                    >
-                      <span className="text-muted-foreground w-6 shrink-0 text-right text-sm tabular-nums">
-                        {entry.position ?? "—"}
+            <ol className="divide-border divide-y">
+              {filteredEntries.map((entry) => {
+                const movable = entry.status === "waiting" || entry.status === "called";
+                const queueIndex = queue.entries.findIndex(
+                  (candidate) => candidate.id === entry.id,
+                );
+                const displayPosition = entry.position ?? queueIndex + 1;
+                const requestedPosition = movePositions[entry.id] ?? String(displayPosition);
+                const parsedPosition = Number(requestedPosition);
+                const canMove = Number.isInteger(parsedPosition) && parsedPosition > 0;
+                const isDropTarget = dragOver?.entryId === entry.id;
+                return (
+                  <li
+                    key={entry.id}
+                    className={`flex flex-wrap items-center gap-3 px-4 py-3 sm:px-5 ${
+                      isDropTarget
+                        ? dragOver.side === "before"
+                          ? "border-primary border-t-2"
+                          : "border-primary border-b-2"
+                        : ""
+                    } ${draggingEntryId === entry.id ? "opacity-50" : ""}`}
+                    onDragOver={(event) => {
+                      if (!draggingEntryId || !movable || draggingEntryId === entry.id) return;
+                      event.preventDefault();
+                      event.dataTransfer.dropEffect = "move";
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      setDragOver({
+                        entryId: entry.id,
+                        side: event.clientY > rect.top + rect.height / 2 ? "after" : "before",
+                      });
+                    }}
+                    onDragLeave={(event) => {
+                      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                        setDragOver(null);
+                      }
+                    }}
+                    onDrop={(event) => dropEntry(event, entry.id)}
+                  >
+                    {movable && (
+                      <span
+                        role="img"
+                        aria-label={t("dragTeamToReorder", { team: entry.repo_name })}
+                        draggable
+                        onDragStart={(event) => {
+                          event.dataTransfer.effectAllowed = "move";
+                          event.dataTransfer.setData("text/plain", String(entry.id));
+                          setDraggingEntryId(entry.id);
+                        }}
+                        onDragEnd={clearDrag}
+                        className="text-muted-foreground hover:text-foreground cursor-grab touch-none active:cursor-grabbing"
+                      >
+                        <GripVerticalIcon className="size-4" aria-hidden="true" />
                       </span>
-                      <div className="min-w-0 flex-1">
-                        <Link
-                          href={`/projects/${entry.repo_id}`}
-                          className="truncate text-sm font-medium hover:underline"
-                        >
-                          {entry.repo_name}
-                        </Link>
-                        {shared && (
-                          <p className="text-muted-foreground truncate text-xs">
-                            {entry.challenge_title}
-                          </p>
-                        )}
-                      </div>
-                      {entry.room_name && (
-                        <span className="text-muted-foreground shrink-0 text-xs">
-                          {entry.room_name}
-                        </span>
+                    )}
+                    {editingPosition === entry.id ? (
+                      <Input
+                        autoFocus
+                        type="number"
+                        min={1}
+                        inputMode="numeric"
+                        aria-label={t("moveTeamToPosition", { team: entry.repo_name })}
+                        value={requestedPosition}
+                        onChange={(event) =>
+                          setMovePositions((current) => ({
+                            ...current,
+                            [entry.id]: event.target.value,
+                          }))
+                        }
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            if (canMove) commitPosition(entry.id, displayPosition);
+                          }
+                          if (event.key === "Escape") setEditingPosition(null);
+                        }}
+                        onBlur={() => setEditingPosition(null)}
+                        className="h-9 w-14 text-center tabular-nums"
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={!movable || busy}
+                        aria-label={t("positionHash", { position: displayPosition })}
+                        onClick={() => {
+                          setMovePositions((current) => ({
+                            ...current,
+                            [entry.id]: String(displayPosition),
+                          }));
+                          setEditingPosition(entry.id);
+                        }}
+                        className="text-foreground hover:bg-muted/60 w-10 shrink-0 rounded px-1.5 py-1 text-sm font-semibold tabular-nums transition-colors disabled:pointer-events-none disabled:opacity-100"
+                      >
+                        #{displayPosition}
+                      </button>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <Link
+                        href={`/projects/${entry.repo_id}`}
+                        className="truncate text-sm font-medium hover:underline"
+                      >
+                        {entry.repo_name}
+                      </Link>
+                      {shared && (
+                        <p className="text-muted-foreground truncate text-xs">
+                          {entry.challenge_title}
+                        </p>
                       )}
-                      <QueueStatusBadge status={entry.status} />
-                      {movable && (
-                        <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
-                          <Label htmlFor={`move-position-${entry.id}`} className="sr-only">
-                            {t("moveTeamToPosition", { team: entry.repo_name })}
-                          </Label>
-                          <Input
-                            id={`move-position-${entry.id}`}
-                            type="number"
-                            min={1}
-                            inputMode="numeric"
-                            value={requestedPosition}
-                            onChange={(event) =>
-                              setMovePositions((current) => ({
-                                ...current,
-                                [entry.id]: event.target.value,
-                              }))
-                            }
-                            className="h-8 w-20 text-center tabular-nums"
-                          />
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={busy || !canMove}
-                            onClick={() => void moveTeam(entry.id, parsedPosition)}
-                          >
-                            {t("moveTeam")}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            disabled={busy}
-                            onClick={() => void sendTeamToEnd(entry.id)}
-                          >
-                            {t("sendToEnd")}
-                          </Button>
-                        </div>
-                      )}
-                    </li>
-                  );
-                })}
-              </ol>
-            </>
+                    </div>
+                    {entry.room_name && (
+                      <span className="text-muted-foreground shrink-0 text-xs">
+                        {entry.room_name}
+                      </span>
+                    )}
+                    <QueueStatusBadge status={entry.status} />
+                    {movable && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={busy}
+                        onClick={() => void sendTeamToEnd(entry.id)}
+                      >
+                        {t("sendToEnd")}
+                      </Button>
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
           )}
         </SectionCard>
 

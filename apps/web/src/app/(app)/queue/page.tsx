@@ -2,8 +2,7 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { ArrowRightIcon, Building2Icon, TicketIcon } from "lucide-react";
-import Link from "next/link";
+import { Building2Icon, TicketIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AccessDenied } from "@/components/common/access-denied";
@@ -12,14 +11,12 @@ import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { TabBar } from "@/components/common/tab-bar";
-import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { type SseEnvelope, useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import {
-  enqueueAllChallengeQueues,
   getAllRoomViews,
   getRoomAssignments,
   type RoomAssignments,
@@ -27,7 +24,6 @@ import {
 } from "@/lib/queue";
 import { useSessionContext } from "@/lib/session";
 import { useUrlTab } from "@/lib/url-tab";
-import { GenerateQueuesAction } from "./generate-queues-action";
 import { QueuesPanel } from "./queues-panel";
 import { RoomQueueCard } from "./room-queue-card";
 
@@ -47,7 +43,6 @@ export default function QueueOperationsPage() {
     values: ["rooms", "queues"] as const,
     defaultValue: "rooms",
   });
-  const [busy, setBusy] = useState(false);
   const [roomAssignments, setRoomAssignments] = useState<Record<number, RoomAssignments | null>>(
     {},
   );
@@ -126,22 +121,6 @@ export default function QueueOperationsPage() {
     void loadAdminData();
   }, [loadAdminData]);
 
-  const onGenerate = useCallback(async () => {
-    setBusy(true);
-    try {
-      const result = await enqueueAllChallengeQueues(crypto.randomUUID());
-      toast.success(
-        t("queuesGenerated", { inserted: result.inserted, challenges: result.challenges.length }),
-      );
-      roomViews.refetch();
-      await loadAdminData();
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotGenerateQueues"));
-    } finally {
-      setBusy(false);
-    }
-  }, [loadAdminData, roomViews, t]);
-
   if (!canUse) {
     return <AccessDenied ask={t("queueOpsAccessDeniedDesc")} />;
   }
@@ -171,32 +150,19 @@ export default function QueueOperationsPage() {
     <div className="space-y-6" data-wide>
       <PageHeader
         title={t("queueOperations")}
-        primaryAction={
-          canAdmin ? (
-            <GenerateQueuesAction busy={busy} onGenerate={() => void onGenerate()} />
-          ) : undefined
-        }
         secondaryActions={
-          <>
-            <label
-              className="text-muted-foreground flex items-center gap-2 text-sm"
-              htmlFor="arrival-hints"
-              title={t("arrivalHintsDescription")}
-            >
-              <Switch
-                id="arrival-hints"
-                checked={arrivalHints}
-                onCheckedChange={toggleArrivalHints}
-              />
-              {t("arrivalHints")}
-            </label>
-            <Button variant="outline" asChild>
-              <Link href="/judging">
-                <ArrowRightIcon className="size-4" />
-                {t("openJudging")}
-              </Link>
-            </Button>
-          </>
+          <label
+            className="text-muted-foreground flex items-center gap-2 text-sm"
+            htmlFor="arrival-hints"
+            title={t("arrivalHintsDescription")}
+          >
+            <Switch
+              id="arrival-hints"
+              checked={arrivalHints}
+              onCheckedChange={toggleArrivalHints}
+            />
+            {t("arrivalHints")}
+          </label>
         }
       />
 
@@ -234,7 +200,7 @@ export default function QueueOperationsPage() {
         </TabsContent>
 
         <TabsContent value="queues" className="pt-2">
-          <QueuesPanel />
+          <QueuesPanel canGenerate={canAdmin} />
         </TabsContent>
       </Tabs>
     </div>

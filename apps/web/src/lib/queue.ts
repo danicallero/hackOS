@@ -416,6 +416,30 @@ export const enqueueAllChallengeQueues = (idempotencyKey?: string) =>
     alreadyQueued: number;
   }>("/api/queue/challenges/enqueue-all", {}, idem(idempotencyKey));
 
+export interface QueueGenerationResult {
+  challenges: Array<{
+    challengeId: number;
+    inserted: number;
+    revived: number;
+    alreadyQueued: number;
+  }>;
+  inserted: number;
+  revived: number;
+  alreadyQueued: number;
+}
+
+export const generateQueue = (queueGroupId: number) =>
+  api.post<QueueGenerationResult>(
+    `/api/queue/groups/${queueGroupId}/generate`,
+    {},
+    { headers: { "Idempotency-Key": crypto.randomUUID() } },
+  );
+
+export const clearQueue = (queueGroupId: number) =>
+  api.delete<{ cleared: number }>(`/api/queue/groups/${queueGroupId}/entries`, {
+    headers: { "Idempotency-Key": crypto.randomUUID() },
+  });
+
 // ── entry transitions (H30-H34) ────────────────────────────────────────────
 // Critical mutations accept an Idempotency-Key; pass a fresh uuid to dedupe
 // double-clicks/retries (apps/api/src/lib/idempotency.ts).

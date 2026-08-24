@@ -11,6 +11,7 @@ export function SectionCard({
   title,
   description,
   icon: Icon,
+  leading,
   state,
   action,
   footer,
@@ -22,6 +23,8 @@ export function SectionCard({
   /** Exceptional policy/risk copy only — see the header's own writing rules. */
   description?: string;
   icon?: LucideIcon;
+  /** Visual identity for the section header, in the same slot as `icon`. */
+  leading?: React.ReactNode;
   /** Status indicator next to the title, e.g. a `<StatusBadge>`. */
   state?: React.ReactNode;
   /** Header-row controls, e.g. buttons; right-aligned next to the title/description. */
@@ -39,7 +42,7 @@ export function SectionCard({
     <Section padding="none" aria-labelledby={titleId} className={cn("overflow-hidden", className)}>
       <div className="flex flex-col gap-(--space-within-section) p-4 sm:flex-row sm:items-start sm:justify-between sm:p-5">
         <div className="flex items-start gap-3">
-          {Icon && <Icon className="text-muted-foreground mt-0.5 size-5 shrink-0" />}
+          {leading ?? (Icon && <Icon className="text-muted-foreground mt-0.5 size-5 shrink-0" />)}
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-(--space-related)">
               <h2 id={titleId} className="type-section-title text-balance">

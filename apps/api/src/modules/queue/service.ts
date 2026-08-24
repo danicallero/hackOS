@@ -5,6 +5,7 @@ import { audit } from "../../lib/audit.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
 import { notify, QUEUE_STAFF_CATEGORY } from "../notifications/service.js";
+import { anyEvaluationStarted } from "./evaluation-lock.js";
 import { challengeQueueGroupId, roomChallengeIds } from "./groups.js";
 import { isRepoBlockedByBusyMember } from "./guard.js";
 import { writeQueueHistory } from "./history.js";
@@ -16,7 +17,6 @@ import {
 } from "./notify.js";
 import {
   compactQueueGroupPositions,
-  nextBottomPosition,
   placeEntriesOnTop,
   placeEntry,
   type RequeuePosition,
@@ -885,6 +885,113 @@ export async function manualCall(
 
 // ── enqueue (admin) ──────────────────────────────────────────────────────────
 
+type QueueGenerationOutcome = {
+  entry: QueueEntryRow;
+  inserted: boolean;
+  revived: boolean;
+};
+
+/**
+ * Add one repo to one challenge without changing the order of any existing
+ * team. A queue reset is the only operation allowed to revive a cancelled
+ * entry; an ordinary cancellation or disqualification remains respected on a
+ * later regeneration.
+ */
+async function enqueueQueueRepo(
+  client: pg.PoolClient,
+  actorId: number,
+  repoId: number,
+  challengeId: number,
+): Promise<QueueGenerationOutcome | null> {
+  const existing = await client.query(
+    `SELECT * FROM queue_entries WHERE repo_id = $1 AND challenge_id = $2 FOR UPDATE`,
+    [repoId, challengeId],
+  );
+  if (existing.rows[0]) {
+    const entry = existing.rows[0] as QueueEntryRow;
+    if (entry.status !== "cancelled") return null;
+    const lastAction = await client.query(
+      `SELECT action FROM queue_history WHERE queue_entry_id = $1 ORDER BY id DESC LIMIT 1`,
+      [entry.id],
+    );
+    if (lastAction.rows[0]?.action !== "queue_clear") return null;
+
+    const revived = await client.query(
+      `UPDATE queue_entries
+          SET status = 'waiting', assigned_room_id = NULL,
+              called_at = NULL, presentation_started_at = NULL, completed_at = NULL,
+              precalled_at = NULL
+        WHERE id = $1
+        RETURNING *`,
+      [entry.id],
+    );
+    const position = await placeEntry(client, challengeId, entry.id, "bottom");
+    const positioned = await client.query(`SELECT * FROM queue_entries WHERE id = $1`, [entry.id]);
+    await writeQueueHistory(client, {
+      entryId: entry.id,
+      actorId,
+      previousStatus: entry.status,
+      newStatus: "waiting",
+      action: "queue_regenerate",
+      metadata: { position: "bottom", regeneratedPosition: position },
+    });
+    await audit(client, {
+      actorId,
+      entityType: "queue_entry",
+      entityId: entry.id,
+      action: "queue_regenerate",
+      before: { status: entry.status },
+      after: { status: "waiting", position },
+      source: "admin",
+    });
+    return { entry: positioned.rows[0] ?? revived.rows[0], inserted: false, revived: true };
+  }
+
+  const inserted = await client.query(
+    `INSERT INTO queue_entries (challenge_id, repo_id, status)
+     VALUES ($1, $2, 'waiting')
+     RETURNING *`,
+    [challengeId, repoId],
+  );
+  const entry = inserted.rows[0] as QueueEntryRow;
+  const position = await placeEntry(client, challengeId, entry.id, "bottom");
+  const positioned = await client.query(`SELECT * FROM queue_entries WHERE id = $1`, [entry.id]);
+  await writeQueueHistory(client, {
+    entryId: entry.id,
+    actorId,
+    previousStatus: "none",
+    newStatus: "waiting",
+    action: "enqueue",
+    metadata: { position: "bottom", generatedPosition: position },
+  });
+  await audit(client, {
+    actorId,
+    entityType: "queue_entry",
+    entityId: entry.id,
+    action: "enqueue",
+    after: { challengeId, repoId, status: "waiting", position },
+    source: "admin",
+  });
+  return { entry: positioned.rows[0] ?? entry, inserted: true, revived: false };
+}
+
+async function challengePrizeRepoIds(
+  client: pg.PoolClient,
+  challengeId: number,
+): Promise<number[]> {
+  const challenge = await client.query(`SELECT devpost_tags FROM challenges WHERE id = $1`, [
+    challengeId,
+  ]);
+  if (challenge.rowCount === 0) throw new NotFoundError("Challenge not found", { challengeId });
+  const tags: string[] = challenge.rows[0].devpost_tags ?? [];
+  if (tags.length === 0) return [];
+  const { rows } = await client.query(
+    `SELECT DISTINCT repo_id FROM repo_devpost_prizes WHERE prize = ANY($1)`,
+    [tags],
+  );
+  return rows.map((row: { repo_id: number }) => Number(row.repo_id));
+}
+
 export async function enqueueChallenge(
   challengeId: number,
   actorId: number,
@@ -893,46 +1000,15 @@ export async function enqueueChallenge(
   const result = await withTransaction(async (client) => {
     let ids = repoIds;
     if (!ids || ids.length === 0) {
-      const challengeRes = await client.query(`SELECT devpost_tags FROM challenges WHERE id = $1`, [
-        challengeId,
-      ]);
-      if (challengeRes.rowCount === 0)
-        throw new NotFoundError("Challenge not found", { challengeId });
-      const tags: string[] = challengeRes.rows[0].devpost_tags ?? [];
-      if (tags.length === 0) {
-        return { inserted: [] as { entry: QueueEntryRow }[], alreadyQueued: [] as number[] };
-      }
-      const { rows } = await client.query(
-        `SELECT DISTINCT repo_id FROM repo_devpost_prizes WHERE prize = ANY($1)`,
-        [tags],
-      );
-      ids = rows.map((r: { repo_id: number }) => r.repo_id);
+      ids = await challengePrizeRepoIds(client, challengeId);
     }
 
     const inserted: { entry: QueueEntryRow }[] = [];
     const alreadyQueued: number[] = [];
     for (const repoId of ids) {
-      const position = await nextBottomPosition(client, challengeId);
-      const res = await client.query(
-        `INSERT INTO queue_entries (challenge_id, repo_id, status, position)
-         VALUES ($1, $2, 'waiting', $3)
-         ON CONFLICT (challenge_id, repo_id) DO NOTHING
-         RETURNING *`,
-        [challengeId, repoId, position],
-      );
-      if (res.rowCount) {
-        const entry: QueueEntryRow = res.rows[0];
-        await writeQueueHistory(client, {
-          entryId: entry.id,
-          actorId,
-          previousStatus: "none",
-          newStatus: "waiting",
-          action: "enqueue",
-        });
-        inserted.push({ entry });
-      } else {
-        alreadyQueued.push(repoId);
-      }
+      const outcome = await enqueueQueueRepo(client, actorId, repoId, challengeId);
+      if (outcome) inserted.push({ entry: outcome.entry });
+      else alreadyQueued.push(repoId);
     }
     return { inserted, alreadyQueued };
   });
@@ -941,6 +1017,150 @@ export async function enqueueChallenge(
     await broadcastEntry(entry);
   }
   return { inserted: result.inserted.map((i) => i.entry.id), alreadyQueued: result.alreadyQueued };
+}
+
+/**
+ * Generate one queue from its member challenges. Repeated calls only append
+ * newly eligible projects (and entries previously cleared by this queue's own
+ * reset); existing waiting, called, and evaluated teams keep their positions.
+ */
+export async function enqueueQueueGroup(
+  queueGroupId: number,
+  actorId: number,
+): Promise<{
+  challenges: Array<{
+    challengeId: number;
+    inserted: number;
+    revived: number;
+    alreadyQueued: number;
+  }>;
+  inserted: number;
+  revived: number;
+  alreadyQueued: number;
+}> {
+  const result = await withTransaction(async (client) => {
+    const group = await client.query(`SELECT id FROM queue_groups WHERE id = $1 FOR UPDATE`, [
+      queueGroupId,
+    ]);
+    if (group.rowCount === 0) {
+      throw new NotFoundError("Queue group not found", { queueGroupId });
+    }
+    const { rows: challenges } = await client.query(
+      `SELECT c.id FROM queue_group_challenges qgc
+        JOIN challenges c ON c.id = qgc.challenge_id
+       WHERE qgc.queue_group_id = $1 ORDER BY c.id`,
+      [queueGroupId],
+    );
+    const changed: QueueEntryRow[] = [];
+    const perChallenge: Array<{
+      challengeId: number;
+      inserted: number;
+      revived: number;
+      alreadyQueued: number;
+    }> = [];
+    for (const challenge of challenges as Array<{ id: number }>) {
+      const challengeId = Number(challenge.id);
+      const repoIds = await challengePrizeRepoIds(client, challengeId);
+      let inserted = 0;
+      let revived = 0;
+      let alreadyQueued = 0;
+      for (const repoId of repoIds) {
+        const outcome = await enqueueQueueRepo(client, actorId, repoId, challengeId);
+        if (!outcome) {
+          alreadyQueued += 1;
+          continue;
+        }
+        changed.push(outcome.entry);
+        if (outcome.revived) revived += 1;
+        else inserted += 1;
+      }
+      perChallenge.push({ challengeId, inserted, revived, alreadyQueued });
+    }
+    return { changed, perChallenge };
+  });
+
+  for (const entry of result.changed) await broadcastEntry(entry);
+  return {
+    challenges: result.perChallenge,
+    inserted: result.perChallenge.reduce((sum, row) => sum + row.inserted, 0),
+    revived: result.perChallenge.reduce((sum, row) => sum + row.revived, 0),
+    alreadyQueued: result.perChallenge.reduce((sum, row) => sum + row.alreadyQueued, 0),
+  };
+}
+
+/** Clear a queue before its first evaluation, preserving its group/configuration. */
+export async function clearQueueGroup(
+  queueGroupId: number,
+  actorId: number,
+): Promise<{ cleared: number }> {
+  const result = await withTransaction(async (client) => {
+    const group = await client.query(`SELECT id FROM queue_groups WHERE id = $1 FOR UPDATE`, [
+      queueGroupId,
+    ]);
+    if (group.rowCount === 0) {
+      throw new NotFoundError("Queue group not found", { queueGroupId });
+    }
+    const { rows: challenges } = await client.query(
+      `SELECT challenge_id FROM queue_group_challenges WHERE queue_group_id = $1 ORDER BY challenge_id`,
+      [queueGroupId],
+    );
+    const challengeIds = challenges.map((row: { challenge_id: number }) =>
+      Number(row.challenge_id),
+    );
+    if (await anyEvaluationStarted(client, challengeIds)) {
+      throw new ConflictError("Cannot clear a queue once a team has been evaluated", {
+        queueGroupId,
+      });
+    }
+
+    const entries = await client.query(
+      `SELECT * FROM queue_entries
+        WHERE challenge_id = ANY($1::int[]) AND status IN ('waiting', 'called', 'in_room', 'presenting')
+        ORDER BY id FOR UPDATE`,
+      [challengeIds],
+    );
+    const activeInRoom = (entries.rows as QueueEntryRow[]).find((entry) =>
+      ["in_room", "presenting"].includes(entry.status),
+    );
+    if (activeInRoom) {
+      throw new ConflictError("Cannot clear a queue while a team is in a room", {
+        queueGroupId,
+        entryId: activeInRoom.id,
+      });
+    }
+
+    const cleared: QueueEntryRow[] = [];
+    for (const entry of entries.rows as QueueEntryRow[]) {
+      const updated = await client.query(
+        `UPDATE queue_entries
+            SET status = 'cancelled', assigned_room_id = NULL,
+                called_at = NULL, precalled_at = NULL
+          WHERE id = $1 RETURNING *`,
+        [entry.id],
+      );
+      await writeQueueHistory(client, {
+        entryId: entry.id,
+        actorId,
+        previousStatus: entry.status,
+        newStatus: "cancelled",
+        action: "queue_clear",
+      });
+      cleared.push(updated.rows[0]);
+    }
+    if (challengeIds[0] !== undefined) await compactQueueGroupPositions(client, challengeIds[0]);
+    await audit(client, {
+      actorId,
+      entityType: "queue_group",
+      entityId: queueGroupId,
+      action: "queue_group.clear",
+      after: { cleared: cleared.length },
+      source: "admin",
+    });
+    return cleared;
+  });
+
+  for (const entry of result) await broadcastEntry(entry);
+  return { cleared: result.length };
 }
 
 // ── H35: pause / resume a room ───────────────────────────────────────────────
