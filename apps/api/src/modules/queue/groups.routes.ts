@@ -17,6 +17,7 @@ import {
   updateQueueGroup,
 } from "./group-merge.js";
 import { queueGroupEnterpriseId } from "./groups.js";
+import { queueGroupQueue } from "./reads.js";
 import {
   enterpriseQueueGroupParam,
   mergeQueueGroupsBody,
@@ -128,6 +129,33 @@ export function registerQueueGroupRoutes(app: FastifyInstance): void {
         request: auditRequest(req),
       }),
     }),
+  );
+
+  typed.get(
+    "/api/queue/groups/:queueGroupId/queue",
+    {
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "queue-group-manage",
+          resource: { source: "params", field: "queueGroupId" },
+        },
+      },
+      schema: {
+        params: queueGroupIdParam,
+        summary: "Read a judging queue in order",
+        description:
+          "Every team in the queue, in the order it will be called, with the position and status each currently holds and the room it was called into. A team queued for several challenges of a shared queue is one line, at its best position, naming every challenge it is in — the same dedupe the callable queue applies. Unlike a room's view this is keyed by the queue itself, so it also covers a queue no room serves yet and shows a queue served by two rooms once.",
+      },
+    },
+    async (req) => {
+      const enterpriseId = await queueGroupEnterpriseId(pool, req.params.queueGroupId);
+      if (enterpriseId == null) {
+        throw new NotFoundError("Queue group not found", { queueGroupId: req.params.queueGroupId });
+      }
+      await assertCanManageEnterpriseJudging(req, enterpriseId);
+      return queueGroupQueue(req.params.queueGroupId);
+    },
   );
 
   typed.patch(

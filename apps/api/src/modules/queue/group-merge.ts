@@ -36,6 +36,12 @@ export interface QueueGroupSummary {
   challenges: Array<{ id: number; title: string }>;
   rooms: Array<{ id: number; name: string }>;
   criteria: Question[] | null;
+  /**
+   * Teams queued for this queue, counted DISTINCT by repo across all its
+   * challenges: a team that applied to two of a shared queue's challenges is
+   * one team in it, exactly as it is one line item and one call.
+   */
+  teams: number;
   /** Merged criteria are only meaningful — and only editable — for N>1. */
   shared: boolean;
   /** Whether any member challenge has left the waiting state. */
@@ -53,6 +59,11 @@ const GROUP_SUMMARY_SQL = `
                      FROM room_queue_groups rqg
                      JOIN rooms rm ON rm.id = rqg.room_id
                     WHERE rqg.queue_group_id = qg.id), '[]'::jsonb) AS rooms,
+         (SELECT count(DISTINCT qe.repo_id)::int
+            FROM queue_group_challenges qgc
+            JOIN queue_entries qe ON qe.challenge_id = qgc.challenge_id
+           WHERE qgc.queue_group_id = qg.id
+             AND qe.status NOT IN ('cancelled', 'disqualified')) AS teams,
          EXISTS (SELECT 1
                    FROM queue_group_challenges qgc
                    JOIN queue_entries qe ON qe.challenge_id = qgc.challenge_id
@@ -69,6 +80,7 @@ function toSummary(row: {
   judging_panel_criteria: unknown;
   challenges: Array<{ id: number; title: string }>;
   rooms: Array<{ id: number; name: string }>;
+  teams: number;
   judging_started: boolean;
 }): QueueGroupSummary {
   return {
@@ -81,6 +93,7 @@ function toSummary(row: {
     criteria: Array.isArray(row.judging_panel_criteria)
       ? (row.judging_panel_criteria as Question[])
       : null,
+    teams: Number(row.teams ?? 0),
     shared: (row.challenges ?? []).length > 1,
     judgingStarted: Boolean(row.judging_started),
   };

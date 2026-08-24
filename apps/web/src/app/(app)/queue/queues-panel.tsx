@@ -6,17 +6,23 @@
 // manages every queue on the platform, a sponsor representative only their own
 // enterprises'. A queue serving no room is only visible here.
 //
-// What a queue is called, and whether an enterprise's challenges share one
-// queue or get one each, are edited here rather than on the enterprise
-// profile: an admin should not have to know which enterprise to open first.
+// Grouped by enterprise on purpose. "One shared queue or one per challenge" is
+// a decision about an ENTERPRISE (plan §"Enterprise queue-group
+// configuration"), not a property of any one queue: turning it on absorbs that
+// enterprise's other queues. So the switch sits on the enterprise row, with
+// the queues it would merge listed directly underneath — an enterprise with a
+// single challenge has nothing to decide and gets no switch.
+//
+// Naming and merging live here rather than on the enterprise profile so an
+// admin does not have to know which enterprise to open first.
 
 import type { Question } from "@hackos/shared/questions";
-import { LayersIcon, SearchIcon } from "lucide-react";
+import { LayersIcon } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AlertModal } from "@/components/common/alert-modal";
 import { EmptyState } from "@/components/common/empty-state";
-import { Modal } from "@/components/common/modal";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -37,18 +43,49 @@ import {
   updateQueueGroup,
 } from "@/lib/queue";
 import { textForDisplay } from "../challenges/shared";
-import { ChallengeResultsPanel } from "./rooms/room-panels";
 
 type Stage = "idle" | "pick" | "review";
+
+interface EnterpriseQueues {
+  enterpriseId: number;
+  enterpriseName: string;
+  queues: QueueGroup[];
+  challenges: Array<{ id: number; title: string }>;
+  shared: QueueGroup | null;
+  /** Merging and splitting are both refused from here on. */
+  locked: boolean;
+}
 
 function questionLabel(question: Question): string {
   return textForDisplay(question.label) || question.key;
 }
 
+function byEnterprise(groups: QueueGroup[]): EnterpriseQueues[] {
+  const map = new Map<number, EnterpriseQueues>();
+  for (const queue of groups) {
+    let entry = map.get(queue.enterpriseId);
+    if (!entry) {
+      entry = {
+        enterpriseId: queue.enterpriseId,
+        enterpriseName: queue.enterpriseName,
+        queues: [],
+        challenges: [],
+        shared: null,
+        locked: false,
+      };
+      map.set(queue.enterpriseId, entry);
+    }
+    entry.queues.push(queue);
+    entry.challenges.push(...queue.challenges);
+    if (queue.shared) entry.shared = queue;
+    if (queue.judgingStarted) entry.locked = true;
+  }
+  return [...map.values()];
+}
+
 export function QueuesPanel() {
   const { t } = useLocale();
   const [groups, setGroups] = useState<QueueGroup[] | null>(null);
-  const [openId, setOpenId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -64,17 +101,7 @@ export function QueuesPanel() {
     void load();
   }, [load]);
 
-  const open = useMemo(
-    () => (groups ?? []).find((group) => group.id === openId) ?? null,
-    [groups, openId],
-  );
-
-  // Configuring a shared queue is a per-enterprise decision, so the picker
-  // offers exactly that enterprise's queues.
-  const siblings = useMemo(
-    () => (open ? (groups ?? []).filter((group) => group.enterpriseId === open.enterpriseId) : []),
-    [groups, open],
-  );
+  const enterprises = useMemo(() => byEnterprise(groups ?? []), [groups]);
 
   if (groups === null) {
     return (
@@ -89,134 +116,47 @@ export function QueuesPanel() {
   }
 
   return (
-    <>
-      <SectionCard title={t("judgingQueues")} icon={LayersIcon} bodyClassName="p-0">
-        <ul className="divide-border divide-y">
-          {groups.map((group) => (
-            <li key={group.id}>
-              <button
-                type="button"
-                className="hover:bg-muted/50 flex w-full items-center gap-3 px-4 py-3 text-left"
-                onClick={() => setOpenId(group.id)}
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{group.displayName}</p>
-                  <p className="text-muted-foreground truncate text-xs">
-                    {group.enterpriseName}
-                    {group.shared ? ` · ${group.challenges.map((c) => c.title).join(" · ")}` : ""}
-                  </p>
-                </div>
-                {group.shared && (
-                  <StatusBadge tone="info" className="shrink-0">
-                    {t("sharedQueueBadge", { count: group.challenges.length })}
-                  </StatusBadge>
-                )}
-                <span className="text-muted-foreground shrink-0 text-xs">
-                  {group.rooms.length
-                    ? group.rooms.map((room) => room.name).join(", ")
-                    : t("noRoomServingQueue")}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      </SectionCard>
-
-      <Modal
-        open={open !== null}
-        onOpenChange={(isOpen) => {
-          if (!isOpen) setOpenId(null);
-        }}
-        title={open?.displayName ?? ""}
-        description={open?.enterpriseName}
-        size="xl"
-      >
-        {open && (
-          <QueueEditor
-            group={open}
-            siblings={siblings}
-            onChanged={async () => {
-              await load();
-            }}
-            onClose={() => setOpenId(null)}
-          />
-        )}
-      </Modal>
-    </>
+    <div className="space-y-4">
+      {enterprises.map((enterprise) => (
+        <EnterpriseQueuesCard
+          key={enterprise.enterpriseId}
+          enterprise={enterprise}
+          onChanged={load}
+        />
+      ))}
+    </div>
   );
 }
 
-/** Rename, shared-vs-per-challenge, merged-form review, and team lookup. */
-function QueueEditor({
-  group,
-  siblings,
+/** One enterprise: its shared-vs-per-challenge choice, and the queues it runs. */
+function EnterpriseQueuesCard({
+  enterprise,
   onChanged,
-  onClose,
 }: {
-  group: QueueGroup;
-  siblings: QueueGroup[];
+  enterprise: EnterpriseQueues;
   onChanged: () => Promise<void>;
-  onClose: () => void;
 }) {
   const { t } = useLocale();
   const [stage, setStage] = useState<Stage>("idle");
   const [picked, setPicked] = useState<number[]>([]);
-  const [name, setName] = useState(group.displayName);
+  const [name, setName] = useState("");
   const [preview, setPreview] = useState<MergedPanelPreview | null>(null);
   const [dropped, setDropped] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
 
-  const enterpriseChallenges = useMemo(
-    () => siblings.flatMap((sibling) => sibling.challenges),
-    [siblings],
-  );
-  // The choice only exists for an enterprise running more than one challenge.
-  const canShare = enterpriseChallenges.length > 1;
-  const locked = siblings.some((sibling) => sibling.judgingStarted);
+  const { enterpriseId, challenges, shared, locked } = enterprise;
+  // Nothing to decide for an enterprise running a single challenge.
+  const canShare = challenges.length > 1;
 
   const startConfiguring = () => {
-    setPicked(enterpriseChallenges.map((challenge) => challenge.id));
+    setPicked(challenges.map((challenge) => challenge.id));
+    setName(t("sharedQueueDefaultName", { enterprise: enterprise.enterpriseName }));
     setPreview(null);
     setDropped([]);
     setStage("pick");
   };
 
-  const toReview = async () => {
-    setBusy(true);
-    try {
-      setPreview(await previewQueueGroupMerge(group.enterpriseId, picked));
-      setDropped([]);
-      setStage("review");
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadQueues"));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const confirm = async () => {
-    if (!preview) return;
-    setBusy(true);
-    try {
-      const merged = await mergeQueueGroups(group.enterpriseId, {
-        challengeIds: picked,
-        displayName: name.trim() || group.displayName,
-      });
-      const kept = preview.questions.filter((question) => !dropped.includes(question.key));
-      if (kept.length !== preview.questions.length) {
-        await updateQueueGroup(merged.id, { criteria: kept });
-      }
-      await onChanged();
-      onClose();
-      toast.success(t("sharedQueueCreated"));
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveQueue"));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const run = async (action: () => Promise<unknown>) => {
+  const guard = async (action: () => Promise<unknown>) => {
     setBusy(true);
     try {
       await action();
@@ -228,70 +168,114 @@ function QueueEditor({
     }
   };
 
+  const toReview = () =>
+    guard(async () => {
+      setPreview(await previewQueueGroupMerge(enterpriseId, picked));
+      setDropped([]);
+      setStage("review");
+    });
+
+  const confirm = () =>
+    guard(async () => {
+      if (!preview) return;
+      const merged = await mergeQueueGroups(enterpriseId, {
+        challengeIds: picked,
+        displayName: name.trim(),
+      });
+      const kept = preview.questions.filter((question) => !dropped.includes(question.key));
+      if (kept.length !== preview.questions.length) {
+        await updateQueueGroup(merged.id, { criteria: kept });
+      }
+      setStage("idle");
+      toast.success(t("sharedQueueCreated"));
+    });
+
   return (
-    <div className="space-y-5">
-      <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-        <div className="space-y-2">
-          <Label htmlFor={`queue-name-${group.id}`}>{t("queueName")}</Label>
-          <Input
-            id={`queue-name-${group.id}`}
-            value={name}
-            disabled={!group.shared}
-            onChange={(e) => setName(e.target.value)}
-          />
-        </div>
-        {group.shared && (
-          <Button
-            variant="outline"
-            className="self-end"
-            disabled={busy || !name.trim() || name.trim() === group.displayName}
-            onClick={() => void run(() => updateQueueGroup(group.id, { displayName: name.trim() }))}
-          >
-            {t("save")}
-          </Button>
-        )}
-      </div>
-
-      {canShare && (
-        <div className="flex items-center justify-between gap-3">
-          <Label htmlFor={`shared-queue-${group.id}`}>{t("oneSharedQueue")}</Label>
-          {group.shared ? (
-            <AlertModal
-              title={t("splitSharedQueueTitle")}
-              description={t("splitSharedQueueDesc")}
-              cancelLabel={t("cancel")}
-              confirmLabel={t("splitSharedQueue")}
-              destructive
-              pending={busy}
-              trigger={<Switch id={`shared-queue-${group.id}`} checked disabled={busy || locked} />}
-              onConfirm={() =>
-                run(async () => {
-                  await splitQueueGroup(group.enterpriseId, group.id);
-                  onClose();
-                })
-              }
-            />
-          ) : (
-            <Switch
-              id={`shared-queue-${group.id}`}
-              checked={stage !== "idle"}
-              disabled={busy || locked}
-              onCheckedChange={(on) => (on ? startConfiguring() : setStage("idle"))}
-            />
-          )}
-        </div>
-      )}
-
-      {locked && !group.shared && stage === "idle" && (
-        <p className="text-muted-foreground text-sm">{t("queuesLockedOnceJudgingStarts")}</p>
+    <SectionCard
+      title={enterprise.enterpriseName}
+      icon={LayersIcon}
+      // The one rule this screen cannot undo, and the only reason a switch
+      // here is ever disabled.
+      description={locked ? t("queuesLockedOnceJudgingStarts") : undefined}
+      bodyClassName="space-y-4"
+      action={
+        canShare ? (
+          <div className="flex items-center gap-2">
+            <Label htmlFor={`shared-queue-${enterpriseId}`} className="font-normal">
+              {t("oneSharedQueue")}
+            </Label>
+            {shared ? (
+              <AlertModal
+                title={t("splitSharedQueueTitle")}
+                description={t("splitSharedQueueDesc")}
+                cancelLabel={t("cancel")}
+                confirmLabel={t("splitSharedQueue")}
+                destructive
+                pending={busy}
+                trigger={
+                  <Switch id={`shared-queue-${enterpriseId}`} checked disabled={busy || locked} />
+                }
+                onConfirm={() => guard(() => splitQueueGroup(enterpriseId, shared.id))}
+              />
+            ) : (
+              <Switch
+                id={`shared-queue-${enterpriseId}`}
+                checked={stage !== "idle"}
+                disabled={busy || locked}
+                onCheckedChange={(on) => (on ? startConfiguring() : setStage("idle"))}
+              />
+            )}
+          </div>
+        ) : undefined
+      }
+    >
+      {stage === "idle" && (
+        <ul className="divide-border divide-y">
+          {enterprise.queues.map((queue) => (
+            <li key={queue.id}>
+              <Link
+                href={`/queue/queues/${queue.id}`}
+                className="hover:bg-muted/50 -mx-2 flex items-center gap-3 rounded-md px-2 py-2.5"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{queue.displayName}</p>
+                  <p className="text-muted-foreground truncate text-xs">
+                    {queue.challenges.map((challenge) => challenge.title).join(" · ")}
+                  </p>
+                </div>
+                {queue.shared && (
+                  <StatusBadge tone="info" className="shrink-0">
+                    {t("sharedQueueBadge", { count: queue.challenges.length })}
+                  </StatusBadge>
+                )}
+                <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
+                  {t("queueTeamCount", { count: queue.teams })}
+                </span>
+                <span className="text-muted-foreground w-40 shrink-0 truncate text-right text-xs">
+                  {queue.rooms.length
+                    ? queue.rooms.map((room) => room.name).join(", ")
+                    : t("noRoomServingQueue")}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
       )}
 
       {stage === "pick" && (
         <div className="space-y-4">
           <div className="space-y-2">
+            <Label htmlFor={`queue-name-${enterpriseId}`}>{t("queueName")}</Label>
+            <Input
+              id={`queue-name-${enterpriseId}`}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
             <Label>{t("challengesInThisQueue")}</Label>
             <ul className="divide-border divide-y">
-              {enterpriseChallenges.map((challenge) => (
+              {challenges.map((challenge) => (
                 <li key={challenge.id} className="flex items-center gap-3 py-2.5">
                   <Checkbox
                     id={`queue-challenge-${challenge.id}`}
@@ -380,14 +364,6 @@ function QueueEditor({
           </div>
         </div>
       )}
-
-      {stage === "idle" && group.challenges[0] && (
-        <SectionCard title={t("queueTeams")} icon={SearchIcon}>
-          {/* Progress and team lookup read the queue through any of its
-              challenges — a shared queue is one ordering across all of them. */}
-          <ChallengeResultsPanel challengeId={group.challenges[0].id} />
-        </SectionCard>
-      )}
-    </div>
+    </SectionCard>
   );
 }

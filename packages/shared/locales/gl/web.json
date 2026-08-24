@@ -2369,5 +2369,15 @@
   "sharedQueueBadge": "{count} retos",
   "queueTeams": "Equipos",
   "clearQueueGroup": "Desvincular",
-  "queueGroupCleared": "Sala desvinculada."
+  "queueGroupCleared": "Sala desvinculada.",
+  "queueTeamCount": "{count} equipos",
+  "queueRenamed": "Cola renomeada.",
+  "sharedQueueDefaultName": "Retos de {enterprise}",
+  "queueNotFound": "Cola non atopada.",
+  "queueEmpty": "Non hai equipos nesta cola.",
+  "nowPresenting": "Presentando",
+  "inWaitingArea": "Sala de espera",
+  "nextUp": "Seguintes",
+  "openQueue": "Abrir cola",
+  "roomUnassigned": "Sen cola asignada"
 }

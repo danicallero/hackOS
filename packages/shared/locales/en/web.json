@@ -2369,5 +2369,15 @@
   "sharedQueueBadge": "{count} challenges",
   "queueTeams": "Teams",
   "clearQueueGroup": "Unlink",
-  "queueGroupCleared": "Room unlinked."
+  "queueGroupCleared": "Room unlinked.",
+  "queueTeamCount": "{count} teams",
+  "queueRenamed": "Queue renamed.",
+  "sharedQueueDefaultName": "{enterprise} challenges",
+  "queueNotFound": "Queue not found.",
+  "queueEmpty": "No teams in this queue.",
+  "nowPresenting": "Presenting",
+  "inWaitingArea": "Waiting area",
+  "nextUp": "Next up",
+  "openQueue": "Open queue",
+  "roomUnassigned": "No queue assigned"
 }

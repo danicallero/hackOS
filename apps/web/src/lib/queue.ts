@@ -214,10 +214,45 @@ export interface QueueGroup {
   challenges: Array<{ id: number; title: string }>;
   rooms: Array<{ id: number; name: string }>;
   criteria: Question[] | null;
+  /** Distinct teams queued for it — a team in two of its challenges is one. */
+  teams: number;
   shared: boolean;
   /** Merging and splitting are refused from here on. */
   judgingStarted: boolean;
 }
+
+/**
+ * GET /api/queue/groups/:id/queue — one judging queue in call order. A team
+ * queued for several of a shared queue's challenges is one entry, at its best
+ * position, exactly as the callable queue dedupes it.
+ */
+export interface QueueGroupQueue {
+  group: {
+    id: number;
+    display_name: string;
+    enterprise_id: number;
+    enterprise_name: string;
+  };
+  challenges: Array<{ id: number; title: string }>;
+  entries: Array<{
+    id: number;
+    repo_id: number;
+    repo_name: string;
+    challenge_id: number;
+    challenge_title: string;
+    status: QueueStatus;
+    position: number | null;
+    called_at: string | null;
+    assigned_room_id: number | null;
+    room_name: string | null;
+    queued_challenge_ids: number[];
+    has_review: boolean;
+    review_status: "draft" | "submitted" | null;
+  }>;
+}
+
+export const getQueueGroupQueue = (queueGroupId: number) =>
+  api.get<QueueGroupQueue>(`/api/queue/groups/${queueGroupId}/queue`);
 
 export interface MergedPanelPreview {
   questions: Question[];

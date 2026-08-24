@@ -4,12 +4,12 @@ import { buildApp } from "../src/app.js";
 import { describeRoutePolicy } from "../src/lib/route-policy.js";
 
 const EXPECTED = {
-  total: 316,
+  total: 317,
   public: 15,
   token: 12,
   authenticated: 43,
   capability: 186,
-  contextual: 60,
+  contextual: 61,
 };
 
 function table(rows: Awaited<ReturnType<typeof buildApp>>["routePolicyLedger"]): string {

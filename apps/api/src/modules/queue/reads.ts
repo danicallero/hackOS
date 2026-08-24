@@ -141,6 +141,82 @@ async function waitingQueueView(challengeIds: number[]) {
   return rows;
 }
 
+/**
+ * The whole of one queue, as a queue: every team in it, in order, with the
+ * position and status each currently holds (H46). This is the queue-keyed
+ * read behind the queue-management view — `roomView` answers "what is
+ * happening in this room", which cannot show a queue that no room serves yet,
+ * and shows a queue served by two rooms twice.
+ *
+ * Deduped per repo exactly as the callable queue is: a team queued for
+ * several of a shared queue's challenges is ONE line, at its best position,
+ * naming every challenge it is in.
+ */
+export async function queueGroupQueue(queueGroupId: number) {
+  const group = (
+    await pool.query(
+      `SELECT qg.id, qg.display_name, qg.enterprise_id, e.name AS enterprise_name
+         FROM queue_groups qg
+         JOIN enterprises e ON e.id = qg.enterprise_id
+        WHERE qg.id = $1`,
+      [queueGroupId],
+    )
+  ).rows[0];
+  if (!group) throw new NotFoundError("Queue group not found", { queueGroupId });
+
+  const { rows: challenges } = await pool.query(
+    `SELECT c.id, c.title
+       FROM queue_group_challenges qgc
+       JOIN challenges c ON c.id = qgc.challenge_id
+      WHERE qgc.queue_group_id = $1
+      ORDER BY c.id ASC`,
+    [queueGroupId],
+  );
+  const challengeIds = challenges.map((c: { id: number }) => Number(c.id));
+  if (challengeIds.length === 0) {
+    return { group, challenges, entries: [] };
+  }
+
+  // One line per team. The chosen row is the one furthest through the queue
+  // (presenting > in_room > called > waiting > done), then the best position —
+  // so a team already in a room shows as in that room, not as still waiting
+  // for the group's other challenge.
+  const { rows: entries } = await pool.query(
+    `SELECT * FROM (
+       SELECT DISTINCT ON (qe.repo_id)
+              qe.id, qe.repo_id, qe.challenge_id, qe.status, qe.position,
+              qe.called_at, qe.assigned_room_id,
+              r.name AS repo_name,
+              rm.name AS room_name,
+              c.title AS challenge_title,
+              (SELECT COALESCE(jsonb_agg(DISTINCT o.challenge_id), '[]'::jsonb)
+                 FROM queue_entries o
+                WHERE o.repo_id = qe.repo_id AND o.challenge_id = ANY($1)) AS queued_challenge_ids,
+              (ar.attempt_id IS NOT NULL) AS has_review,
+              ar.status AS review_status
+         FROM queue_entries qe
+         JOIN repos r ON r.id = qe.repo_id
+         JOIN challenges c ON c.id = qe.challenge_id
+         LEFT JOIN rooms rm ON rm.id = qe.assigned_room_id
+         LEFT JOIN attempt_review ar ON ar.attempt_id = qe.id
+        WHERE qe.challenge_id = ANY($1)
+          AND qe.status NOT IN ('cancelled', 'disqualified')
+        ORDER BY qe.repo_id,
+                 CASE qe.status
+                   WHEN 'presenting' THEN 0 WHEN 'in_room' THEN 1 WHEN 'called' THEN 2
+                   WHEN 'waiting' THEN 3 ELSE 4 END,
+                 qe.position ASC NULLS LAST, qe.id ASC
+     ) merged
+      ORDER BY CASE merged.status
+                 WHEN 'presenting' THEN 0 WHEN 'in_room' THEN 1 WHEN 'called' THEN 2
+                 WHEN 'waiting' THEN 3 ELSE 4 END,
+               merged.position ASC NULLS LAST, merged.id ASC`,
+    [challengeIds],
+  );
+
+  return { group, challenges, entries };
+}
+
 /** H40: counts by status for the challenge progress panel. */
 export async function challengeProgress(challengeId: number) {
   const { rows } = await pool.query(

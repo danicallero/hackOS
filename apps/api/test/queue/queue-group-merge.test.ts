@@ -244,6 +244,26 @@ describe("the all-queues listing", () => {
     expect(res.json().groups).toEqual([]);
   });
 
+  it("counts a team in two of a shared queue's challenges once", async () => {
+    const { enterpriseId, challengeIds } = await createEnterpriseChallenges(2);
+    const [first, second] = challengeIds as [number, number];
+    const shared = await createRepoWithTeam();
+    const other = await createRepoWithTeam();
+    await enqueueRepo(first, shared.repoId, 1);
+    await enqueueRepo(second, shared.repoId, 2);
+    await enqueueRepo(first, other.repoId, 3);
+    await merge(enterpriseId, challengeIds, "Shared");
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/queue/groups",
+      headers: asUser(adminId),
+    });
+    // Three queue_entries rows, two teams — the same dedupe the queue itself
+    // applies, so the admin's count matches what judges will be called.
+    expect((res.json().groups as Array<{ teams: number }>)[0]!.teams).toBe(2);
+  });
+
   it("names the rooms serving each queue", async () => {
     const { pool } = await import("../../src/db/pool.js");
     const { enterpriseId, challengeIds } = await createEnterpriseChallenges(2);
@@ -261,6 +281,84 @@ describe("the all-queues listing", () => {
     });
     const groups = res.json().groups as Array<{ rooms: Array<{ name: string }> }>;
     expect(groups[0]!.rooms.map((room) => room.name)).toEqual(["Sala A"]);
+  });
+});
+
+describe("reading a queue in order", () => {
+  it("shows one line per team, furthest-through first, with its room", async () => {
+    const { pool } = await import("../../src/db/pool.js");
+    const { enterpriseId, challengeIds } = await createEnterpriseChallenges(2);
+    const [first, second] = challengeIds as [number, number];
+    const roomId = await createRoom({ name: "Sala A" });
+
+    const presenting = await createRepoWithTeam(undefined, "Team Presenting");
+    const shared = await createRepoWithTeam(undefined, "Team Shared");
+    const waiting = await createRepoWithTeam(undefined, "Team Waiting");
+    const presentingEntry = await enqueueRepo(first, presenting.repoId, 1);
+    await enqueueRepo(first, shared.repoId, 2);
+    await enqueueRepo(second, shared.repoId, 5);
+    await enqueueRepo(first, waiting.repoId, 3);
+
+    const group = (await merge(enterpriseId, challengeIds, "Shared")).json();
+    await pool.query(`INSERT INTO room_queue_groups (room_id, queue_group_id) VALUES ($1, $2)`, [
+      roomId,
+      group.id,
+    ]);
+    await pool.query(
+      `UPDATE queue_entries SET status = 'presenting', assigned_room_id = $2 WHERE id = $1`,
+      [presentingEntry, roomId],
+    );
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/queue/groups/${group.id}/queue`,
+      headers: asUser(adminId),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    const entries = body.entries as Array<{
+      repo_name: string;
+      status: string;
+      room_name: string | null;
+    }>;
+
+    // Three teams, not four rows — the team queued for both challenges is one
+    // line, exactly as it is one call.
+    expect(entries.map((e) => e.repo_name)).toEqual([
+      "Team Presenting",
+      "Team Shared",
+      "Team Waiting",
+    ]);
+    expect(entries[0]).toMatchObject({ status: "presenting", room_name: "Sala A" });
+    expect(entries[1]!.status).toBe("waiting");
+    expect(body.challenges).toHaveLength(2);
+  });
+
+  it("reads a queue no room serves yet", async () => {
+    const { challengeIds } = await createEnterpriseChallenges(1);
+    const { repoId } = await createRepoWithTeam(undefined, "Team Orphan");
+    await enqueueRepo(challengeIds[0]!, repoId, 1);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/queue/groups/${await queueGroupOf(challengeIds[0]!)}/queue`,
+      headers: asUser(adminId),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().entries.map((e: { repo_name: string }) => e.repo_name)).toEqual([
+      "Team Orphan",
+    ]);
+  });
+
+  it("refuses someone who manages neither the queue nor the platform", async () => {
+    const { challengeIds } = await createEnterpriseChallenges(1);
+    const outsider = await createUser();
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/queue/groups/${await queueGroupOf(challengeIds[0]!)}/queue`,
+      headers: asUser(outsider),
+    });
+    expect(res.statusCode).toBe(403);
   });
 });
 
