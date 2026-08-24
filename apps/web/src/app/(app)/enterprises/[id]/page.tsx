@@ -10,7 +10,6 @@ import { EVENTS } from "@hackos/shared/events";
 import { Building2Icon } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { z } from "zod";
 import { BackLink } from "@/components/common/back-link";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
@@ -25,24 +24,6 @@ import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import { useUrlTab } from "@/lib/url-tab";
 import { type Enterprise, initials } from "../shared";
-
-const optionalUrl = z.string().url("Enter a valid URL").or(z.literal(""));
-const optionalPositiveInt = z
-  .string()
-  .refine((v) => v === "" || (/^\d+$/.test(v) && Number(v) > 0), "Must be a positive number");
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const editSchema = z.object({
-  name: z.string().min(1, "Required").max(200),
-  website: optionalUrl,
-  logoUrl: optionalUrl,
-  logoNegativeUrl: optionalUrl,
-  description: z.string().max(2000),
-  tierId: optionalPositiveInt,
-  displayPriority: optionalPositiveInt,
-  visibility: z.enum(["visible", "hidden"]),
-  availableFrom: z.string(),
-});
 
 import { ChallengesSummaryCard, EditCard, LogoCard, MembersCard } from "./enterprise-cards";
 import { InviteLinksCard } from "./invite-links-card";

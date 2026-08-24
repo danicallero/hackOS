@@ -101,23 +101,23 @@ declare global {
 
 export function LocaleProvider({ children }: { children: React.ReactNode }) {
   const me = useMe();
-  // Boot language: detected from SSR-injected window.__hackosInitialLanguage, overridden
-  // later if the user's persisted preference loads (me?.language). Ref tracks what
-  // the page was born with; state holds the effective language.
+  // Keep the first client render identical to the Spanish SSR shell (H7). The
+  // bootstrap script's language is applied in a layout effect before paint,
+  // so a persisted non-Spanish preference never causes a hydration mismatch.
   const bootLanguage = useRef<Language | null>(null);
 
-  const [language, setLanguage] = useState<Language>(() => {
-    if (typeof window === "undefined") return "es";
-    const initialLanguage = isLanguage(window.__hackosInitialLanguage)
-      ? window.__hackosInitialLanguage
-      : "es";
-    return initialLanguage;
-  });
+  const [language, setLanguage] = useState<Language>("es");
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: bootLanguage holds the initial value only; intentionally not re-captured when language changes.
   useLayoutEffect(() => {
-    bootLanguage.current = language;
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    const initialLanguage =
+      typeof window !== "undefined" && isLanguage(window.__hackosInitialLanguage)
+        ? window.__hackosInitialLanguage
+        : "es";
+    bootLanguage.current = initialLanguage;
+    setLanguage((currentLanguage) =>
+      currentLanguage === initialLanguage ? currentLanguage : initialLanguage,
+    );
+  }, []);
 
   useLayoutEffect(() => {
     document.documentElement.lang = language;

@@ -14,13 +14,7 @@
 
 import { sponsorShareKey } from "@hackos/shared/applications";
 import { EVENTS } from "@hackos/shared/events";
-import {
-  CheckCircle2Icon,
-  ClipboardListIcon,
-  ShieldAlertIcon,
-  WalletCardsIcon,
-  XCircleIcon,
-} from "lucide-react";
+import { ClipboardListIcon, ShieldAlertIcon } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -65,6 +59,7 @@ import {
   withLogisticsSection,
 } from "../lib";
 import { ApplicationTimeline, ReadOnlyAnswers } from "./application-sections";
+import { ApplicationStatusActions } from "./application-status-actions";
 
 export default function MyApplicationDetailPage() {
   const { t, language } = useLocale();
@@ -490,85 +485,17 @@ export default function MyApplicationDetailPage() {
 
       <ApplicationTimeline response={timelineResponse} />
 
-      {/* Confirm / decline place once accepted (H15). */}
-      {canConfirm && (
-        <SectionCard
-          icon={CheckCircle2Icon}
-          title={t("youreInConfirmTitle")}
-          description={t("youreInConfirmDesc")}
-        >
-          {response?.confirmation_expires_at && (
-            <p className="text-sm font-medium tabular-nums">
-              {t("deadlineLabel", {
-                date: fmtDateTime(response.confirmation_expires_at, language),
-              })}
-            </p>
-          )}
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={handleConfirm} disabled={acting} className="w-full sm:w-auto">
-              {acting && <Spinner />}
-              {t("confirmPlace")}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => setReleaseOpen(true)}
-              disabled={acting}
-              className="w-full sm:w-auto"
-            >
-              {t("declineInvite")}
-            </Button>
-          </div>
-        </SectionCard>
-      )}
-
-      {status === "confirmed" && (
-        <SectionCard icon={CheckCircle2Icon} title={t("placeConfirmed")}>
-          <p className="text-muted-foreground text-sm">{t("canReleaseAnytime")}</p>
-          <div className="flex flex-wrap gap-2">
-            <Button asChild>
-              <Link href="/wallet">
-                <WalletCardsIcon aria-hidden="true" />
-                {t("viewTicket")}
-              </Link>
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => setReleaseOpen(true)}
-              disabled={acting}
-              className="w-full sm:w-auto"
-            >
-              <XCircleIcon aria-hidden="true" />
-              {t("cantAttendRelease")}
-            </Button>
-          </div>
-        </SectionCard>
-      )}
-      {actionError && (actionError.action === "confirm" || actionError.action === "decline") && (
-        <ContextualError message={actionError.message} onRetry={retryAction} />
-      )}
-      {status === "declined" && (
-        <Alert role="status">
-          <XCircleIcon aria-hidden="true" />
-          <AlertTitle>{t("declinedThisPlaceTitle")}</AlertTitle>
-          <AlertDescription>{t("declinedThisPlaceDesc")}</AlertDescription>
-        </Alert>
-      )}
-      {status === "expired" && (
-        <Alert role="status">
-          <XCircleIcon aria-hidden="true" />
-          <AlertTitle>{t("confirmationExpiredTitle")}</AlertTitle>
-          <AlertDescription>{t("confirmationExpiredDesc")}</AlertDescription>
-        </Alert>
-      )}
-
-      {/* The privacy notice returned by submit (H12). */}
-      {privacyNotice && (
-        <Alert role="status">
-          <ShieldAlertIcon aria-hidden="true" />
-          <AlertTitle>{t("privacyNoticeTitle")}</AlertTitle>
-          <AlertDescription>{privacyNotice}</AlertDescription>
-        </Alert>
-      )}
+      <ApplicationStatusActions
+        response={response}
+        status={status}
+        canConfirm={canConfirm}
+        acting={acting}
+        actionError={actionError}
+        privacyNotice={privacyNotice}
+        onConfirm={() => void handleConfirm()}
+        onOpenRelease={() => setReleaseOpen(true)}
+        onRetry={retryAction}
+      />
 
       <SectionCard
         icon={ClipboardListIcon}

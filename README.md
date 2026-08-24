@@ -149,7 +149,8 @@ target. The complete setup is in
 pnpm dev                              # API :3000 and web :3001
 pnpm dev:api                          # API only
 pnpm dev:web                          # web only
-pnpm build                            # build every workspace
+pnpm build                            # build every workspace with a build script
+pnpm typecheck                        # API, web and mobile TypeScript checks
 
 pnpm lint                             # Biome, copy/i18n and page-size checks
 pnpm --filter @hackos/api test        # API integration tests
@@ -169,6 +170,12 @@ pnpm infra:down                       # stop local infrastructure
 API tests use real Postgres and Valkey. The test harness resets and migrates
 `hackos_test`, and the suite runs serially to keep state-dependent integration
 tests deterministic.
+
+Pull requests and pushes to `main` run the same checks in GitHub Actions. Lint,
+the aggregate `pnpm typecheck`, and the API, web and mobile unit suites are
+separate required checks. The API job provides fresh Postgres and Valkey
+service containers with readiness healthchecks; local API runs still use
+`pnpm infra:up` and the commands above.
 
 ## Repository guide
 
