@@ -183,6 +183,14 @@ export async function callNextForRoom(
         continue; // H30: skip, keep position
 
       let entry: QueueEntryRow;
+      // H30 backstop (one_active_entry_per_repo, plan/07 §2): the guard above
+      // should already have caught this, but a repo with no resolvable
+      // members at check time could slip through it — the unique index is
+      // the structural guarantee. A savepoint is required here because a
+      // failed statement aborts the whole outer transaction in Postgres;
+      // without it `continue` would just defer the crash to the next
+      // statement (H30, GH-525).
+      await client.query(`SAVEPOINT call_next_candidate`);
       try {
         const res = await client.query(
           `UPDATE queue_entries
@@ -193,14 +201,13 @@ export async function callNextForRoom(
         );
         entry = res.rows[0];
       } catch (err) {
-        // H30 backstop (one_active_entry_per_repo, plan/07 §2): the guard
-        // above should already have caught this, but a repo with no
-        // resolvable members at check time could slip through it — the
-        // unique index is the structural guarantee. Skip, don't crash the
-        // whole pump loop.
-        if ((err as { code?: string }).code === PG_UNIQUE_VIOLATION) continue;
+        if ((err as { code?: string }).code === PG_UNIQUE_VIOLATION) {
+          await client.query(`ROLLBACK TO SAVEPOINT call_next_candidate`);
+          continue;
+        }
         throw err;
       }
+      await client.query(`RELEASE SAVEPOINT call_next_candidate`);
       await writeQueueHistory(client, {
         entryId: entry.id,
         actorId,
