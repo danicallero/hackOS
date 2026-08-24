@@ -2,13 +2,7 @@ import "./env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
-import {
-  asUser,
-  buildTestApp,
-  createUser,
-  createUserWithCapabilities,
-  truncateAll,
-} from "../helpers.js";
+import { asUser, buildTestApp, createUserWithCapabilities, truncateAll } from "../helpers.js";
 import { createChallenge, createRepoWithTeam, queueGroupOf } from "./fixtures.js";
 
 /** Rooms & assignment admin, settings, enqueue (H29 admin surface, QUEUE_ADMIN). */

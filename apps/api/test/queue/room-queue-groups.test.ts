@@ -167,7 +167,6 @@ describe("merged N>1 group", () => {
   it("calls a room's whole group and expands possible_rooms to the group's rooms", async () => {
     const { myQueueStatus, roomView } = await import("../../src/modules/queue/reads.js");
     const { challengeIds } = await createEnterpriseChallenges(2);
-    const first = challengeIds[0]!;
     const second = challengeIds[1]!;
     const groupId = await mergeChallengesIntoOneGroup(challengeIds);
 
