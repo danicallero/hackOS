@@ -10,6 +10,7 @@
     "build": "tsc --noEmit && tsup",
     "start": "node dist/server.js",
     "migrate": "tsx scripts/migrate.ts",
+    "schema:dump": "tsx scripts/schema-dbml.ts",
     "seed": "tsx scripts/seed.ts",
     "seed:mock": "tsx scripts/seed-mock.ts",
     "superadmin:create": "tsx scripts/create-superadmin.ts",

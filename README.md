@@ -164,6 +164,7 @@ pnpm test:ui:install                  # install Playwright browsers once
 pnpm test:ui:native                   # Detox on a simulator/device
 
 pnpm migrate                          # apply pending SQL migrations
+pnpm schema:dump                      # regenerate the current-schema DBML ERD
 pnpm infra:down                       # stop local infrastructure
 ```
 

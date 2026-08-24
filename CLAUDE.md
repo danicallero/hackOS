@@ -50,6 +50,10 @@ conflict, that file wins. Hard invariants live in `plan/07-datos-relevantes-ers.
 
 - Migrations: `apps/api/db/migrations/NNNN_name.sql`, applied lexicographically
   by `pnpm migrate` (advisory-locked, one transaction per file).
+- Every active migration has a unique four-digit sequence prefix and is
+  immutable after application; `_migrations` stores a SHA-256 checksum and the
+  runner fails before later work when an applied file changes. Use a new
+  migration for a correction.
 - **Numbering bands per workstream** (avoids parallel collisions):
   `0001-0099` foundation · `01xx` identity · `02xx` applications ·
   `03xx` projects/devpost · `04xx` queue/judging · `05xx` logistics ·
