@@ -26,6 +26,11 @@ export interface AuditQueryResult {
   total: number;
 }
 
+export interface AuditVocabularyEntry {
+  action: string;
+  entity_type: string;
+}
+
 export async function queryAuditLog(
   db: Queryable,
   filters: AuditFilters,
@@ -38,7 +43,7 @@ export async function queryAuditLog(
     conditions.push(sqlFragment.replace("?", `$${params.length}`));
   }
 
-  if (filters.entityType) addCondition("al.entity_type = ?", filters.entityType);
+  if (filters.entityType) addCondition("LOWER(al.entity_type) = LOWER(?)", filters.entityType);
   if (filters.entityId) addCondition("al.entity_id = ?", filters.entityId);
   if (filters.actorId !== undefined) addCondition("al.actor_id = ?", filters.actorId);
   if (filters.actorQuery) {
@@ -48,7 +53,7 @@ export async function queryAuditLog(
       `(u.name || ' ' || u.surname ILIKE $${params.length - 1} OR u.email ILIKE $${params.length})`,
     );
   }
-  if (filters.action) addCondition("al.action = ?", filters.action);
+  if (filters.action) addCondition("LOWER(al.action) = LOWER(?)", filters.action);
   if (filters.dateFrom) addCondition("al.created_at >= ?", filters.dateFrom);
   if (filters.dateTo) addCondition("al.created_at <= ?", filters.dateTo);
 
@@ -70,4 +75,26 @@ export async function queryAuditLog(
     params,
   );
   return { items: rows, total: countRows[0].count };
+}
+
+/** Single audit_log row by id, same shape as the list query, for the detail route. */
+export async function queryAuditLogById(db: Queryable, id: number): Promise<unknown | null> {
+  const { rows } = await db.query(
+    `SELECT al.*, u.name AS actor_name, u.surname AS actor_surname, u.email AS actor_email
+     FROM audit_log al LEFT JOIN users u ON u.id = al.actor_id
+     WHERE al.id = $1`,
+    [id],
+  );
+  return rows[0] ?? null;
+}
+
+/**
+ * Distinct {action, entity_type} pairs actually present in the table, for
+ * populating filter dropdowns without maintaining a separate static registry.
+ */
+export async function queryAuditActionVocabulary(db: Queryable): Promise<AuditVocabularyEntry[]> {
+  const { rows } = await db.query(
+    `SELECT DISTINCT action, entity_type FROM audit_log ORDER BY action, entity_type`,
+  );
+  return rows;
 }

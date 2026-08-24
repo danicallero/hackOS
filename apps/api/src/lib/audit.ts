@@ -1,4 +1,5 @@
 import type { Queryable } from "../db/pool.js";
+import { getRequestContext } from "./request-context.js";
 
 export interface AuditEntry {
   actorId: number | null;
@@ -21,6 +22,7 @@ export interface AuditEntry {
  * remain the operational source; audit_log is the admin-facing read view.
  */
 export async function audit(db: Queryable, entry: AuditEntry): Promise<void> {
+  const requestContext = getRequestContext();
   await db.query(
     `INSERT INTO audit_log (actor_id, entity_type, entity_id, action, source, before, after, reason, ip, user_agent)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
@@ -33,8 +35,8 @@ export async function audit(db: Queryable, entry: AuditEntry): Promise<void> {
       entry.before === undefined ? null : JSON.stringify(entry.before),
       entry.after === undefined ? null : JSON.stringify(entry.after),
       entry.reason ?? null,
-      entry.ip ?? null,
-      entry.userAgent ?? null,
+      entry.ip ?? requestContext?.ip ?? null,
+      entry.userAgent ?? requestContext?.userAgent ?? null,
     ],
   );
 }

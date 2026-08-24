@@ -24,6 +24,7 @@ import { mutationDomainForPath, publicContentMutationForPath } from "./lib/sse-r
 import { valkey } from "./lib/valkey.js";
 import { registerModules } from "./modules/index.js";
 import { authContextPlugin } from "./plugins/auth-context.js";
+import { requestContextPlugin } from "./plugins/request-context.js";
 
 export type App = FastifyInstance;
 
@@ -250,6 +251,7 @@ export async function buildApp(): Promise<App> {
   // File uploads (H44 sponsor logos) proxied through the API so the browser
   // never needs to reach the object store directly. 5 MB cap on a logo.
   await app.register(multipart, { limits: { fileSize: 5 * 1024 * 1024, files: 1 } });
+  await app.register(requestContextPlugin);
   await app.register(authContextPlugin);
   app.addHook("onSend", idempotencyOnSend);
   app.addHook("onResponse", async (req, reply) => {

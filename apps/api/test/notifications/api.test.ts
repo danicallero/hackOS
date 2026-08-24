@@ -399,4 +399,106 @@ describe("audit surface (H53)", () => {
     });
     expect(inRange.json().total).toBe(3);
   });
+
+  it("matches action and entityType case-insensitively", async () => {
+    const readerId = await createUserWithCapabilities([CAPABILITIES.AUDIT_READ]);
+    const actorA = await createUser();
+    await audit(pool, { actorId: actorA, entityType: "badge", entityId: 1, action: "rotate" });
+
+    const byAction = await app.inject({
+      method: "GET",
+      url: "/api/audit?action=ROTATE",
+      headers: asUser(readerId),
+    });
+    expect(byAction.json().total).toBe(1);
+
+    const byEntityType = await app.inject({
+      method: "GET",
+      url: "/api/audit?entityType=Badge",
+      headers: asUser(readerId),
+    });
+    expect(byEntityType.json().total).toBe(1);
+  });
+
+  it("lists the distinct action/entityType vocabulary actually in use", async () => {
+    const readerId = await createUserWithCapabilities([CAPABILITIES.AUDIT_READ]);
+    const actorA = await createUser();
+    await audit(pool, { actorId: actorA, entityType: "badge", entityId: 1, action: "rotate" });
+    await audit(pool, { actorId: actorA, entityType: "badge", entityId: 2, action: "rotate" });
+    await audit(pool, {
+      actorId: actorA,
+      entityType: "announcement",
+      entityId: 9,
+      action: "create",
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/audit/actions",
+      headers: asUser(readerId),
+    });
+    expect(res.statusCode).toBe(200);
+    const items = res.json().items as { action: string; entity_type: string }[];
+    expect(items).toEqual(
+      expect.arrayContaining([
+        { action: "rotate", entity_type: "badge" },
+        { action: "create", entity_type: "announcement" },
+      ]),
+    );
+    // Distinct pairs only — two "rotate"/"badge" audits collapse to one entry.
+    expect(items.filter((i) => i.action === "rotate" && i.entity_type === "badge")).toHaveLength(1);
+  });
+
+  it("fetches a single audit entry by id, 404s for an unknown one", async () => {
+    const readerId = await createUserWithCapabilities([CAPABILITIES.AUDIT_READ]);
+    const actorA = await createUser();
+    await audit(pool, { actorId: actorA, entityType: "badge", entityId: 1, action: "rotate" });
+
+    const list = await app.inject({
+      method: "GET",
+      url: "/api/audit?entityType=badge",
+      headers: asUser(readerId),
+    });
+    const id = list.json().items[0].id;
+
+    const found = await app.inject({
+      method: "GET",
+      url: `/api/audit/${id}`,
+      headers: asUser(readerId),
+    });
+    expect(found.statusCode).toBe(200);
+    expect(found.json().action).toBe("rotate");
+
+    const missing = await app.inject({
+      method: "GET",
+      url: "/api/audit/999999999",
+      headers: asUser(readerId),
+    });
+    expect(missing.statusCode).toBe(404);
+  });
+
+  it("fills ip/user_agent from the request context for a call site that doesn't pass them explicitly", async () => {
+    const readerId = await createUserWithCapabilities([CAPABILITIES.AUDIT_READ]);
+    const adminId = await createUserWithCapabilities([CAPABILITIES.ANNOUNCEMENTS_MANAGE]);
+
+    // The announcement-create audit() call (routes/announcements.ts) never
+    // passes ip/userAgent explicitly — this exercises the onRequest hook
+    // (plugins/request-context.ts) populating them automatically.
+    const create = await app.inject({
+      method: "POST",
+      url: "/api/announcements",
+      headers: { ...asUser(adminId), "user-agent": "audit-context-test/1.0" },
+      payload: { title: "t", body: "b" },
+    });
+    expect(create.statusCode).toBe(201);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/audit?entityType=announcement",
+      headers: asUser(readerId),
+    });
+    const row = res.json().items[0];
+    expect(row.user_agent).toBe("audit-context-test/1.0");
+    expect(row.ip).toBeTruthy();
+  });
 });
