@@ -13,11 +13,12 @@ const envSchema = z.object({
    * Postgres pool tuning (H540). `DB_POOL_MAX` is per-process — api and
    * worker each hold their own pool, and every replica of each multiplies
    * it — so (api replicas × DB_POOL_MAX) + (worker replicas × DB_POOL_MAX)
-   * must stay under Postgres's own `max_connections` with headroom for
-   * `migrate`'s one-shot connections and admin/superuser use. See
-   * docs/env-vars.md and docs/architecture.md.
+   * must stay under Postgres's own `max_connections`, with headroom for
+   * `migrate`'s one-shot connections and admin/superuser use. Raise it for
+   * big-event load — see docs/big-event-readiness.md, docs/env-vars.md and
+   * docs/architecture.md.
    */
-  DB_POOL_MAX: z.coerce.number().int().positive().optional(),
+  DB_POOL_MAX: z.coerce.number().int().min(1).max(200).optional(),
   /** How long an idle pooled connection is kept before being closed. */
   DB_IDLE_TIMEOUT_MS: z.coerce.number().int().nonnegative().default(30_000),
   /** How long to wait for a free connection before `pool.connect()` rejects. */
@@ -133,6 +134,17 @@ const envSchema = z.object({
   SSE_WRITE_TIMEOUT_MS: z.coerce.number().int().positive().default(5_000),
 
   /**
+   * Rows claimed per outbox-dispatcher tick (H52, plan/07 §5.4), each
+   * dispatched and committed in its own transaction (dispatcher.ts) so
+   * raising this doesn't grow the duplicate-send blast radius of a mid-batch
+   * crash. The drain runs every 5s regardless of batch size; 100 covers a
+   * mass-send (an announcement fanned out to every attendee on 2-3 channels
+   * at once) without needing to bump it per event. See
+   * docs/big-event-readiness.md.
+   */
+  NOTIFICATION_OUTBOX_BATCH_SIZE: z.coerce.number().int().min(1).max(500).default(100),
+
+  /**
    * Apple Wallet / PassKit (H28). Neither platform is boot-mandatory — a
    * deploy without these just serves a clear 503 on the wallet endpoints
    * instead of an invalid/empty-signature pass. `*_PEM` values are
@@ -221,7 +233,7 @@ export const config = {
   isTest: parsed.NODE_ENV === "test",
   isProd: parsed.NODE_ENV === "production",
   workersInline: parsed.WORKERS_INLINE ?? parsed.NODE_ENV !== "production",
-  dbPoolMax: parsed.DB_POOL_MAX ?? (parsed.NODE_ENV === "test" ? 5 : 10),
+  dbPoolMax: parsed.DB_POOL_MAX ?? (parsed.NODE_ENV === "test" ? 5 : 20),
   trustProxy: parsed.TRUST_PROXY ?? parsed.NODE_ENV === "production",
   appleWalletConfigured: Boolean(
     parsed.APPLE_PASS_CERTIFICATE_PEM &&

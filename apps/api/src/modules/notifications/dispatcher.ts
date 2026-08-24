@@ -42,8 +42,18 @@ export interface DrainResult {
   superseded: number;
 }
 
-/** One claim-and-dispatch pass. Exported so tests can invoke it directly instead of waiting on BullMQ repeat timing. */
-export async function drainOutboxOnce(batchSize = 20): Promise<DrainResult> {
+type RowOutcome = "sent" | "failed" | "parked" | "superseded";
+
+/**
+ * Claim and dispatch exactly one due row, in its own transaction. Committing
+ * per row (rather than batching the whole tick into one transaction) bounds
+ * the duplicate-send window to at most this single in-flight row if the
+ * process dies mid-dispatch — that window exists at any batch size, but it
+ * doesn't grow with it, which matters once `NOTIFICATION_OUTBOX_BATCH_SIZE`
+ * is raised for a mass-send (docs/big-event-readiness.md): a crash no longer
+ * risks re-sending everything already committed earlier in the same tick.
+ */
+async function claimAndDispatchOne(): Promise<RowOutcome | null> {
   return withTransaction(async (client) => {
     const { rows } = await client.query(
       `SELECT id, user_id, category, channel, payload, attempts, created_at
@@ -51,64 +61,68 @@ export async function drainOutboxOnce(batchSize = 20): Promise<DrainResult> {
        WHERE status = 'queued' AND next_attempt_at <= now()
        ORDER BY id
        FOR UPDATE SKIP LOCKED
-       LIMIT $1`,
-      [batchSize],
+       LIMIT 1`,
     );
+    const row = rows[0] as OutboxRow | undefined;
+    if (!row) return null;
 
-    let sent = 0;
-    let failed = 0;
-    let parked = 0;
-    let superseded = 0;
-
-    for (const row of rows as OutboxRow[]) {
-      try {
-        await dispatchChannel(client, row);
+    try {
+      await dispatchChannel(client, row);
+      await client.query(
+        `UPDATE notification_outbox SET status = 'sent', sent_at = now() WHERE id = $1`,
+        [row.id],
+      );
+      return "sent";
+    } catch (err) {
+      if (err instanceof SupersededDispatchError) {
         await client.query(
-          `UPDATE notification_outbox SET status = 'sent', sent_at = now() WHERE id = $1`,
-          [row.id],
+          `UPDATE notification_outbox
+           SET status = 'superseded', attempts = $2, last_error = $3
+           WHERE id = $1`,
+          [row.id, row.attempts + 1, err.message],
         );
-        sent += 1;
-      } catch (err) {
-        if (err instanceof SupersededDispatchError) {
-          await client.query(
-            `UPDATE notification_outbox
-             SET status = 'superseded', attempts = $2, last_error = $3
-             WHERE id = $1`,
-            [row.id, row.attempts + 1, err.message],
-          );
-          superseded += 1;
-          continue;
-        }
-        const message = err instanceof Error ? err.message : String(err);
-        const attempts = row.attempts + 1;
-        const permanent = err instanceof PermanentDispatchError;
-        if (permanent || attempts >= MAX_ATTEMPTS) {
-          await client.query(
-            `UPDATE notification_outbox
-             SET status = 'failed', attempts = $2, last_error = $3
-             WHERE id = $1`,
-            [row.id, attempts, message],
-          );
-          parked += 1;
-        } else {
-          const delayMs = backoffDelayMs(attempts);
-          await client.query(
-            `UPDATE notification_outbox
-             SET attempts = $2, last_error = $3, next_attempt_at = now() + make_interval(secs => $4)
-             WHERE id = $1`,
-            [row.id, attempts, message, delayMs / 1000],
-          );
-          failed += 1;
-        }
+        return "superseded";
       }
+      const message = err instanceof Error ? err.message : String(err);
+      const attempts = row.attempts + 1;
+      const permanent = err instanceof PermanentDispatchError;
+      if (permanent || attempts >= MAX_ATTEMPTS) {
+        await client.query(
+          `UPDATE notification_outbox
+           SET status = 'failed', attempts = $2, last_error = $3
+           WHERE id = $1`,
+          [row.id, attempts, message],
+        );
+        return "parked";
+      }
+      const delayMs = backoffDelayMs(attempts);
+      await client.query(
+        `UPDATE notification_outbox
+         SET attempts = $2, last_error = $3, next_attempt_at = now() + make_interval(secs => $4)
+         WHERE id = $1`,
+        [row.id, attempts, message, delayMs / 1000],
+      );
+      return "failed";
     }
-
-    return { claimed: rows.length, sent, failed, parked, superseded };
   });
 }
 
+/** One claim-and-dispatch pass. Exported so tests can invoke it directly instead of waiting on BullMQ repeat timing. */
+export async function drainOutboxOnce(batchSize = 100): Promise<DrainResult> {
+  const result: DrainResult = { claimed: 0, sent: 0, failed: 0, parked: 0, superseded: 0 };
+
+  for (let i = 0; i < batchSize; i += 1) {
+    const outcome = await claimAndDispatchOne();
+    if (!outcome) break;
+    result.claimed += 1;
+    result[outcome] += 1;
+  }
+
+  return result;
+}
+
 registerWorker(QUEUE_NAME, async () => {
-  await drainOutboxOnce();
+  await drainOutboxOnce(config.NOTIFICATION_OUTBOX_BATCH_SIZE);
 });
 
 /** Schedules the recurring drain. Skipped in tests, which drive drainOutboxOnce() directly. */

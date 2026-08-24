@@ -125,6 +125,10 @@ Deployment:
 - [Environment variables per service](./env-vars.md) — for each container in
   an isolated deploy (`deploy/services/*`), exactly which env vars it needs and
   whether they're read at container start or baked in at build time.
+- [Big-event readiness](./big-event-readiness.md) — the concrete pre-event
+  checklist for ~600 concurrent users: what to set (`DB_POOL_MAX`, memory
+  limits, replica counts), the Postgres connection budget arithmetic, load
+  testing the hot paths, and the monitoring queries to watch during the event.
 
 See also the root [`README.md`](../README.md) for local dev setup, the API's
 own `/documentation` (Swagger UI, generated from route schemas — not a file in

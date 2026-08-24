@@ -19,7 +19,7 @@ x-app-env: &app-env
   TRUST_PROXY: "true"
   LOG_LEVEL: "${LOG_LEVEL:-info}"
   # Postgres pool sizing/timeouts (H540) — see docs/env-vars.md.
-  DB_POOL_MAX: "${DB_POOL_MAX:-10}"
+  DB_POOL_MAX: "${DB_POOL_MAX:-20}"
   DB_IDLE_TIMEOUT_MS: "${DB_IDLE_TIMEOUT_MS:-30000}"
   DB_CONNECTION_TIMEOUT_MS: "${DB_CONNECTION_TIMEOUT_MS:-10000}"
   DB_STATEMENT_TIMEOUT_MS: "${DB_STATEMENT_TIMEOUT_MS:-30000}"

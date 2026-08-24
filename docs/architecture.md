@@ -323,7 +323,8 @@ saturation (`hackos_db_pool_total/idle/waiting`), acquire-wait latency
 Headroom, in order of reach-for:
 1. Bigger box / more memory (the partial indexes keep the hot claim query cheap).
 2. A connection pooler (PgBouncer) once api+worker replica count pushes the
-   connection count up.
+   connection count up — see `docs/big-event-readiness.md` for sizing this
+   for a specific event.
 3. Read replicas once the operational read models need them; the SSE-driven
    refresh signals still keep those reads targeted, but do not pretend to be a
    correctness cache.
