@@ -29,6 +29,9 @@ function group(id: number, enterpriseId: number, enterpriseName: string, name: s
 
 const acmeSolo = group(1, 10, "ACME", "Build the future");
 const globexQueue = group(2, 20, "Globex", "Challenge A");
+// Two unmerged queues for the same enterprise — deliberately ambiguous.
+const initrodeA = group(3, 30, "Initrode", "Challenge B");
+const initrodeB = group(4, 30, "Initrode", "Challenge C");
 
 function assignedTo(g: QueueGroup): RoomAssignments {
   return {
@@ -65,14 +68,13 @@ describe("AssignmentsEditor", () => {
     container.remove();
   });
 
-  function render(assignments: RoomAssignments | null, queueGroups: QueueGroup[], fallback = 0) {
+  function render(assignments: RoomAssignments | null, queueGroups: QueueGroup[]) {
     act(() => {
       root.render(
         <LocaleProvider>
           <AssignmentsEditor
             roomId={7}
             assignments={assignments}
-            queueGroupFallback={fallback}
             queueGroups={queueGroups}
             onSetQueueGroup={async () => {}}
             onClearQueueGroup={async () => {}}
@@ -83,21 +85,55 @@ describe("AssignmentsEditor", () => {
     });
   }
 
-  const groupTrigger = () => container.querySelector("#queue-group-7");
+  const enterpriseTrigger = () => container.querySelector("#room-enterprise-7");
 
-  it("shows the queue picker and uses the first queue as an unassigned fallback", () => {
-    render(null, [acmeSolo, globexQueue], acmeSolo.id);
-    expect(groupTrigger()).not.toBeNull();
+  it("shows the enterprise picker for enterprises running a single queue", () => {
+    render(null, [acmeSolo, globexQueue]);
+    const trigger = enterpriseTrigger();
+    expect(trigger).not.toBeNull();
+    expect(trigger?.textContent).not.toMatch(/Build the future|Challenge A/);
   });
 
-  it("shows the assigned enterprise and queue name", () => {
+  it("shows only the assigned enterprise, not its queue/challenge name", () => {
     render(assignedTo(globexQueue), [acmeSolo, globexQueue]);
-    expect(container.textContent).toContain("Globex · Challenge A");
-    expect(groupTrigger()).not.toBeNull();
+    expect(container.textContent).toContain("Globex");
+    expect(container.textContent).not.toContain("Challenge A");
   });
 
-  it("keeps the queue picker hidden when there are no assignable queues", () => {
+  it("excludes an enterprise running more than one unmerged queue from the picker", () => {
+    render(null, [acmeSolo, initrodeA, initrodeB]);
+    // Radix only renders SelectContent into the DOM once opened, so assert
+    // via the eligible-options contract instead of querying closed content:
+    // the trigger exists (ACME is still pickable) …
+    expect(enterpriseTrigger()).not.toBeNull();
+    // … and Initrode, with two queues, never appears in the picker's
+    // rendered value/placeholder even though it has rooms worth linking.
+    expect(enterpriseTrigger()?.textContent).not.toContain("Initrode");
+  });
+
+  it("hides the picker and points to Judging queues once every enterprise is multi-queue", () => {
+    render(null, [initrodeA, initrodeB]);
+    expect(enterpriseTrigger()).toBeNull();
+    expect(container.textContent).toContain("Colas de evaluación");
+  });
+
+  it("keeps Unlink reachable for a room whose enterprise since gained a second queue", () => {
+    render(assignedTo(initrodeA), [initrodeA, initrodeB]);
+    expect(enterpriseTrigger()).toBeNull();
+    expect(container.textContent).toContain("Desvincular");
+    expect(container.textContent).toContain("Colas de evaluación");
+  });
+
+  it("keeps the enterprise picker hidden when there are no assignable queues at all", () => {
     render(null, []);
-    expect(groupTrigger()).toBeNull();
+    expect(enterpriseTrigger()).toBeNull();
+  });
+
+  it("still offers a real pickable value when the current assignment itself isn't pickable", () => {
+    // Room is linked into Initrode (now multi-queue, so not itself pickable
+    // here), but ACME is a single-queue enterprise the room could move to —
+    // the picker must default to that, not to the unpickable current group.
+    render(assignedTo(initrodeA), [acmeSolo, initrodeA, initrodeB]);
+    expect(enterpriseTrigger()?.textContent).toContain("ACME");
   });
 });
